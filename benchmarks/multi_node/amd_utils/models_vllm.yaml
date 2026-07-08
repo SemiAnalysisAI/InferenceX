@@ -30,6 +30,18 @@ Kimi-K2.5-MXFP4:
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
+Kimi-K2.5-MXFP4-MoRI-LMCache-Agentic:
+  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --kv-cache-dtype fp8 --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  decode_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --kv-cache-dtype fp8 --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
+  hf_dir: "Kimi-K2.5-MXFP4"
+
+Kimi-K2.7-Code-MXFP4:
+  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --kv-cache-dtype fp8 --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  decode_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --kv-cache-dtype fp8 --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
+  hf_dir: "models--amd--Kimi-K2.7-Code-MXFP4"
+
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
   # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.

@@ -1960,6 +1960,61 @@ class TestGenerateTestConfigSweep:
         assert result[0]["total-cpu-dram-gb"] == 2399
         assert result[0]["duration"] == 3600
 
+    def test_multinode_agentic_preserves_dram_kv_offload_fields(self, sample_runner_config):
+        """Multinode agentic LMCacheMP entries must carry DRAM offload metadata."""
+        config = {
+            "kimi-agentic-lmcachemp-1p2d": {
+                "image": "yukiozzz/kimi-lmc-mc-rocm:dmabuf",
+                "model": "amd/Kimi-K2.5-MXFP4",
+                "model-prefix": "kimik2.5",
+                "precision": "fp4",
+                "framework": "vllm-disagg",
+                "runner": "cluster:mi300x-amds",
+                "multinode": True,
+                "disagg": True,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "search-space": [{
+                            "spec-decoding": "none",
+                            "kv-offloading": "dram",
+                            "kv-offload-backend": "lmcache",
+                            "total-cpu-dram-gb": 1200,
+                            "conc-list": [32, 64],
+                            "prefill": {
+                                "num-worker": 1,
+                                "tp": 8,
+                                "ep": 1,
+                                "dp-attn": False,
+                            },
+                            "decode": {
+                                "num-worker": 2,
+                                "tp": 8,
+                                "ep": 1,
+                                "dp-attn": False,
+                            },
+                        }],
+                    }],
+                },
+            }
+        }
+        args = argparse.Namespace(
+            config_keys=["kimi-agentic-lmcachemp-1p2d"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        assert len(result) == 1
+        assert result[0]["scenario-type"] == "agentic-coding"
+        assert result[0]["kv-offloading"] == "dram"
+        assert result[0]["kv-offload-backend"] == "lmcache"
+        assert result[0]["total-cpu-dram-gb"] == 1200
+        assert result[0]["conc"] == [32, 64]
+        assert result[0]["exp-name"].endswith("_kvdram-lmcache")
+
     def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
         config = {
             "dsv4-b300-agentic": {

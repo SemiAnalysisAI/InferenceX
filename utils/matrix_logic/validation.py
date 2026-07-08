@@ -240,7 +240,15 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
-    kv_offloading: Literal["none"] = Field(alias=Fields.KV_OFFLOADING.value)
+    kv_offloading: Literal["none", "dram"] = Field(
+        alias=Fields.KV_OFFLOADING.value
+    )
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
+    )
+    total_cpu_dram_gb: int = Field(
+        default=0, alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0
+    )
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -249,6 +257,10 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
         return _validate_worker_hardware_pair(self)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
@@ -465,6 +477,9 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     kv_offload_backend: Optional[str] = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
+    total_cpu_dram_gb: Optional[int] = Field(
+        default=None, alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0
+    )
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
@@ -521,10 +536,11 @@ class AgenticCodingConfig(BaseModel):
         for entry in self.search_space:
             if entry.kv_offloading != "dram":
                 continue
-            if self.dram_utilization is None:
+            if entry.total_cpu_dram_gb is None and self.dram_utilization is None:
                 raise ValueError(
                     f"{Fields.KV_OFFLOADING.value}='dram' requires "
-                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
+                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata "
+                    f"or an explicit {Fields.TOTAL_CPU_DRAM_GB.value}"
                 )
         return self
 

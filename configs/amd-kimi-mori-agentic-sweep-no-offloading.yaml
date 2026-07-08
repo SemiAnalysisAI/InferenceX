@@ -1,0 +1,30 @@
+kimik2.5-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
+  image: yukiozzz/kimi-lmc-mc-rocm:dmabuf
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: "none"
+        conc-list: [ 16, 32, 48, 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_KV_CONNECTOR=moriio"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_KV_CONNECTOR=moriio"

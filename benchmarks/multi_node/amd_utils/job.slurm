@@ -106,6 +106,9 @@ DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
 ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
+VLLM_ROUTER_PREFILL_POLICY="${VLLM_ROUTER_PREFILL_POLICY:-consistent_hash}"
+VLLM_ROUTER_DECODE_POLICY="${VLLM_ROUTER_DECODE_POLICY:-round_robin}"
 
 # =============================================================================
 # Model Path Resolution
@@ -131,11 +134,26 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         found && /^[^ ]/{exit}
         found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
     DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
+    DISK_DIR_NAME="${MODEL_DISK_DIR_NAME:-$DISK_DIR_NAME}"
     echo "Looking for model: $MODEL_NAME (disk dir: $DISK_DIR_NAME)"
 
     resolve_hf_cache_path() {
         local base_path=$1
         if [[ -d "${base_path}/snapshots" ]]; then
+            if [[ -f "${base_path}/refs/main" ]]; then
+                local ref_snapshot
+                ref_snapshot="$(cat "${base_path}/refs/main" 2>/dev/null | tr -d '[:space:]')"
+                if [[ -n "$ref_snapshot" && -d "${base_path}/snapshots/${ref_snapshot}" ]]; then
+                    echo "${base_path}/snapshots/${ref_snapshot}"
+                    return 0
+                fi
+            fi
+            local processor_snapshot
+            processor_snapshot=$(find "${base_path}/snapshots" -mindepth 2 -maxdepth 2 -name preprocessor_config.json -print -quit 2>/dev/null | xargs -r dirname)
+            if [[ -n "$processor_snapshot" ]]; then
+                echo "$processor_snapshot"
+                return 0
+            fi
             local snapshot=$(ls -1 "${base_path}/snapshots" 2>/dev/null | head -1)
             if [[ -n "$snapshot" ]]; then
                 echo "${base_path}/snapshots/${snapshot}"
@@ -147,20 +165,26 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     }
 
     MODEL_PATH=""
-    SEARCH_PATHS=(
-        "${MODEL_DIR}/${DISK_DIR_NAME}"
-        "${MODEL_DIR}/${MODEL_NAME}"
-        "/nfsdata/hf_hub_cache-0/${DISK_DIR_NAME}"
-        "/nfsdata/hf_hub_cache-0/${MODEL_NAME}"
-    )
+    MODEL_MOUNT_DIR=""
+    SEARCH_ROOTS=("$MODEL_DIR")
+    if [[ "$(hostname -s)" == mia1* ]]; then
+        SEARCH_ROOTS+=("/it-share/models" "/it-share/hf_cache" "/it-share/data")
+    fi
+    SEARCH_ROOTS+=("/nfsdata/hf_hub_cache-0" "/nfsdata/hf_hub_cache" "/nfsdata")
 
-    for search_path in "${SEARCH_PATHS[@]}"; do
-        if [[ -d "$search_path" ]]; then
-            RESOLVED=$(resolve_hf_cache_path "$search_path")
-            MODEL_PATH="$RESOLVED"
-            echo "Found MODEL_PATH: $MODEL_PATH"
-            break
-        fi
+    SEARCH_PATHS=()
+    for search_root in "${SEARCH_ROOTS[@]}"; do
+        SEARCH_PATHS+=("${search_root}/${DISK_DIR_NAME}" "${search_root}/${MODEL_NAME}")
+        for search_path in "${search_root}/${DISK_DIR_NAME}" "${search_root}/${MODEL_NAME}"; do
+            if [[ -d "$search_path" ]]; then
+                RESOLVED=$(resolve_hf_cache_path "$search_path")
+                MODEL_PATH="$RESOLVED"
+                MODEL_MOUNT_DIR="$search_root"
+                echo "Found MODEL_PATH: $MODEL_PATH"
+                echo "Found MODEL_MOUNT_DIR: $MODEL_MOUNT_DIR"
+                break 2
+            fi
+        done
     done
 
     if [[ -z "$MODEL_PATH" ]]; then
@@ -270,11 +294,13 @@ echo "NNODES:      ${NNODES}"
 echo "REPO DIR:    ${DI_REPO_DIR}"
 echo "USER:        ${USER_NAME}"
 
+
 # Reduce log spam
 export TQDM_MININTERVAL=20
 
 # Translate the host-resolved MODEL_PATH to the Docker mount namespace
-DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_DIR//models}"
+MODEL_MOUNT_DIR="${MODEL_MOUNT_DIR:-$MODEL_DIR}"
+DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_MOUNT_DIR//models}"
 
 export DI_REPO_DIR=$DI_REPO_DIR
 export WS_PATH=$WS_PATH
@@ -282,6 +308,7 @@ export NNODES=$NNODES
 export NODE0_ADDR=$NODE0_ADDR
 export MODEL_PATH=$MODEL_PATH
 export MODEL_DIR=$MODEL_DIR
+export MODEL_MOUNT_DIR=$MODEL_MOUNT_DIR
 export xP=$xP
 export yD=$yD
 export MODEL_NAME=$MODEL_NAME
@@ -310,6 +337,34 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+
+# Agentic / custom vLLM-disagg connector knobs (threaded from submit.sh)
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export IS_AGENTIC="${IS_AGENTIC:-0}"
+export CONC="${CONC:-}"
+export DURATION="${DURATION:-1800}"
+export KV_OFFLOADING="${KV_OFFLOADING:-}"
+export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
+export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-}"
+export MODEL="${MODEL:-}"
+export ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
+export ROUTER_PORT="${ROUTER_PORT:-30000}"
+export VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
+export VLLM_ROUTER_PREFILL_POLICY="${VLLM_ROUTER_PREFILL_POLICY:-consistent_hash}"
+export VLLM_ROUTER_DECODE_POLICY="${VLLM_ROUTER_DECODE_POLICY:-round_robin}"
+export ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
+export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
+export VLLM_BIND_IP="${VLLM_BIND_IP:-}"
+export MODEL_DISK_DIR_NAME="${MODEL_DISK_DIR_NAME:-}"
+export SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-}"
+export PREFILL_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio}"
+export DECODE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
+export MORI_RDMA_DEVICES="${MORI_RDMA_DEVICES:-}"
+export MORI_IO_TC="${MORI_IO_TC:-}"
+export MORI_RDMA_SL="${MORI_RDMA_SL:-}"
+export MORI_IO_SL="${MORI_IO_SL:-}"
+export UCX_IB_GID_INDEX="${UCX_IB_GID_INDEX:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -379,6 +434,13 @@ DOCKER_ENV_COMMON=(
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    -e SCENARIO_TYPE=\$SCENARIO_TYPE
+    -e IS_AGENTIC=\$IS_AGENTIC
+    -e CONC=\$CONC
+    -e DURATION=\$DURATION
+    -e KV_OFFLOADING=\$KV_OFFLOADING
+    -e KV_OFFLOAD_BACKEND=\$KV_OFFLOAD_BACKEND
+    -e TOTAL_CPU_DRAM_GB=\$TOTAL_CPU_DRAM_GB
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
@@ -387,7 +449,37 @@ DOCKER_ENV_COMMON=(
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e MODEL=\$MODEL
+    -e ROUTER_TYPE=\$ROUTER_TYPE
+    -e ROUTER_PORT=\$ROUTER_PORT
+    -e VLLM_ROUTER_POLICY=\$VLLM_ROUTER_POLICY
+    -e VLLM_ROUTER_PREFILL_POLICY=\$VLLM_ROUTER_PREFILL_POLICY
+    -e VLLM_ROUTER_DECODE_POLICY=\$VLLM_ROUTER_DECODE_POLICY
+    -e ENABLE_PREFIX_CACHING=\$ENABLE_PREFIX_CACHING
+    -e MAX_NUM_SEQS=\$MAX_NUM_SEQS
+    -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
+    -e VLLM_BIND_IP=\$VLLM_BIND_IP
+    -e MODEL_DISK_DIR_NAME=\$MODEL_DISK_DIR_NAME
+    -e SERVED_MODEL_NAME=\$SERVED_MODEL_NAME
+    -e PREFILL_KV_CONNECTOR=\$PREFILL_KV_CONNECTOR
+    -e DECODE_KV_CONNECTOR=\$DECODE_KV_CONNECTOR
+    -e MORI_RDMA_DEVICES=\$MORI_RDMA_DEVICES
+    -e MORI_IO_TC=\$MORI_IO_TC
+    -e MORI_RDMA_SL=\$MORI_RDMA_SL
+    -e MORI_IO_SL=\$MORI_IO_SL
+    -e UCX_IB_GID_INDEX=\$UCX_IB_GID_INDEX
+    -e LMCACHE_HOST=\${LMCACHE_HOST:-}
+    -e LMCACHE_PORT=\${LMCACHE_PORT:-}
+    -e LMCACHE_HTTP_PORT=\${LMCACHE_HTTP_PORT:-}
+    -e LMCACHE_L1_SIZE_GB=\${LMCACHE_L1_SIZE_GB:-}
+    -e LMCACHE_L1_INIT_SIZE_GB=\${LMCACHE_L1_INIT_SIZE_GB:-}
+    -e LMCACHE_L1_READ_TTL_SECONDS=\${LMCACHE_L1_READ_TTL_SECONDS:-}
+    -e LMCACHE_CHUNK_SIZE=\${LMCACHE_CHUNK_SIZE:-}
+    -e LMCACHE_MAX_WORKERS=\${LMCACHE_MAX_WORKERS:-}
+    -e LMCACHE_MP_MQ_TIMEOUT=\${LMCACHE_MP_MQ_TIMEOUT:-}
 )
+
+echo "[AGENTIC_ENV] SCENARIO_TYPE=${SCENARIO_TYPE:-} IS_AGENTIC=${IS_AGENTIC:-0} CONC=${CONC:-} DURATION=${DURATION:-} MAX_MODEL_LEN=${MAX_MODEL_LEN:-}"
 
 # Engine-specific env vars
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
@@ -403,6 +495,13 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e UCX_LOG_LEVEL=warn
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
+        -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
+        -e IBDEVICES=\${IBDEVICES:-}
+        -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
+        -e MORI_IO_TC=\${MORI_IO_TC:-}
+        -e MORI_RDMA_SL=\${MORI_RDMA_SL:-}
+        -e MORI_IO_SL=\${MORI_IO_SL:-}
+        -e NCCL_IB_DISABLE=\${NCCL_IB_DISABLE:-}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
@@ -523,12 +622,15 @@ fi
 fi  # end: if ENGINE == atom-disagg
 
 # Pre-clean (idempotent)
-\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+\$DOCKER_CMD rm -f \"$DOCKER_CONT_NAME\" 2>/dev/null || true
+if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
+    \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+fi
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+    echo \"[ROUTER_CMD] image=$VLLM_ROUTER_IMAGE vllm-router --vllm-pd-disaggregation --kv-connector moriio --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} --port ${ROUTER_PORT} --host 0.0.0.0 --policy ${VLLM_ROUTER_POLICY} --prefill-policy ${VLLM_ROUTER_PREFILL_POLICY} --decode-policy ${VLLM_ROUTER_DECODE_POLICY} --log-level info\"
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
@@ -540,9 +642,9 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
             --port ${ROUTER_PORT} \
             --host 0.0.0.0 \
-            --policy consistent_hash \
-            --prefill-policy consistent_hash \
-            --decode-policy consistent_hash \
+            --policy ${VLLM_ROUTER_POLICY} \
+            --prefill-policy ${VLLM_ROUTER_PREFILL_POLICY} \
+            --decode-policy ${VLLM_ROUTER_DECODE_POLICY} \
             --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
@@ -580,7 +682,7 @@ fi
     --privileged \
     -v /sys:/sys \
     $(command -v nicctl >/dev/null 2>&1 && echo "-v $(which nicctl):/usr/sbin/nicctl") \
-    -v ${MODEL_DIR}:/models \
+    -v ${MODEL_MOUNT_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
     -v /tmp:/run_logs \
