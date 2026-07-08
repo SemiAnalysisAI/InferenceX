@@ -89,7 +89,6 @@ run_ep_suite() {
       --scope "${CX_SCOPE:-scale-up}" --scale-up-transport "${CX_SCALE_UP_TRANSPORT:-unknown}"
       --scale-out-transport "${CX_SCALE_OUT_TRANSPORT:-}"
       --case-id "${CX_CASE_ID:-}" --suite "${CX_SUITE:-}" --workload-name "${CX_WORKLOAD_NAME:-}"
-      --required-publication "${CX_REQUIRED_PUBLICATION:-}"
       --qualification-index "${CX_QUALIFICATION_INDEX:-1}"
       --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
       --out "$out")
@@ -994,25 +993,6 @@ dispatch_bench() {
   esac
 }
 
-run_precision_probe() {
-  local fields probe_id backend sku ep mode profile out rc_run
-  fields="$(cx_precision_probe_control_fields "$PWD")" || return 1
-  IFS='|' read -r probe_id backend sku ep mode profile <<< "$fields"
-  [ "$backend" = "$CX_BENCH" ] && [ "$sku" = "$CX_RUNNER" ] && [ "$ep" = "$CX_NGPUS" ] \
-    || { cx_log "ERROR: precision probe control differs from runtime placement"; return 1; }
-  out="results/${probe_id}.json"
-  cx_write_runtime_stage execution || return 1
-  if timeout -k 30 "${CX_RUN_TIMEOUT:-900}" torchrun --nproc_per_node="$CX_NGPUS" \
-      tests/probe_precision.py --backend "$backend" --sku "$sku" --ep "$ep" \
-      --mode "$mode" --precision-profile "$profile" --out "$out"; then
-    rc_run=0
-  else
-    rc_run=$?
-  fi
-  [ "$rc_run" = 0 ] || return "$rc_run"
-  python3 tests/probe_precision.py --validate-manifest "$out"
-}
-
 rc=0
 cx_validate_shard_control "$PWD"
 cx_load_network_control_mode "$PWD" || cx_die "cannot resolve network control mode"
@@ -1028,13 +1008,7 @@ if [ -n "${CX_BUILD_ONLY:-}" ]; then
   cx_log "backend preparation: bench=${CX_BENCH:-unknown} rc=$rc"
   exit "$rc"
 fi
-if [ "${CX_PRECISION_PROBE:-0}" = 1 ]; then
-  if cx_probe_scaleout_network && cx_prepare_backend "${CX_BENCH:-}"; then
-    run_precision_probe || rc=$?
-  else
-    rc=1
-  fi
-elif [ -n "${CX_SHARD_FILE:-}" ]; then
+if [ -n "${CX_SHARD_FILE:-}" ]; then
   # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
   # All cases share (sku, backend, nodes), so backend preparation is paid once and cached.
   ncases="$(python3 -c "import json;print(len(json.load(open('$CX_SHARD_FILE'))['cases']))")"
@@ -1059,7 +1033,6 @@ env = {
   "CX_EP": g("ep", "1"),
   "CX_EPLB": "1" if c.get("eplb") else "",
   "CX_CASE_ID": g("case_id"), "CX_SUITE": g("suite"), "CX_WORKLOAD_NAME": g("workload"),
-  "CX_REQUIRED_PUBLICATION": g("required_publication"),
   "CX_PRECISION_PROFILE": g("precision_profile"),
   "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
   "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
@@ -1119,7 +1092,5 @@ else
 fi
 
 # Summary table for the log; also fails the job if no valid results were produced.
-if [ "${CX_PRECISION_PROBE:-0}" != 1 ]; then
-  python3 summarize.py --results-dir results --runner "$CX_RUNNER" --ts "$CX_TS" || rc=1
-fi
+python3 summarize.py --results-dir results --runner "$CX_RUNNER" --ts "$CX_TS" || rc=1
 exit "$rc"
