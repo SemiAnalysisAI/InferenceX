@@ -4,10 +4,10 @@ CollectiveX is an experimental MoE expert-parallel communication benchmark. It m
 combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
 neutral result artifacts.
 
-CollectiveX schedules benchmarks, executes them on real allocations, validates what each run emits,
-and uploads neutral artifacts. It does not promote, rank, recommend, select, or decide what a
-consumer displays. Any downstream display or comparison is the consumer's responsibility. The full
-measurement and validation contract is in [docs/methodology.md](docs/methodology.md).
+CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
+artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
+decide what a consumer displays. Any downstream display or comparison is the consumer's
+responsibility. The full measurement methodology is in [docs/methodology.md](docs/methodology.md).
 
 ## Execution Profile
 
@@ -28,8 +28,8 @@ iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and 
 headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
 
 Correctness is checked against the reference activation. The combine gate is `rtol=0.05, atol=0.02`
-for the BF16 communication path. Any failed rank or point makes the case ineligible and is
-recorded as a terminal outcome.
+for the BF16 communication path. Any failed rank or point makes the case ineligible in the result
+it writes.
 
 The matrix covers H100, H200, B200, B300, GB200, GB300, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
@@ -68,7 +68,7 @@ hybrid path with GIN, two logical scale-out domains represented by two physical 
 scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. The isolated build
 records the API, source, loaded libraries, generated JIT source, and executable SASS; raw CUBIN bytes
 stay private diagnostics. Whether a given SKU/backend/EP cell is attempted is a capability fact;
-whether it succeeded is decided only by the emitted artifact.
+whether it succeeded is decided by the benchmark's return code.
 
 ## Workflow And Artifacts
 
@@ -76,14 +76,14 @@ whether it succeeded is decided only by the emitted artifact.
 (`backend`, `suites`, `only_sku`, `exclude_skus`, `ep_sizes` inputs), fetches the pinned backend
 source archive, and uploads the matrix.
 `sweep` extracts a strict ignored `.shards/<id>.json` control per matrix entry, executes one
-allocation per shard, runs `contracts.py validate-delivery`, and uploads the result artifacts with
-`always()` so a red or partial run still uploads.
+allocation per shard, and uploads the result artifacts with `always()` so a red or partial run still
+uploads.
 
-Each shard emits per-case result and terminal JSON, detached sample JSON, and a small mechanical
-summary. `validate-delivery` asserts strict schemas, one terminal record per scheduled case,
-detached-sample path/SHA-256 consistency, and privacy before upload. No step promotes a run, builds a
-dataset, or advances a channel; the neutral artifacts are the output. A consumer downloads them and
-decides what to display.
+Each shard emits per-case result JSON, detached sample JSON, and a small mechanical summary. A case
+counts as successful on the benchmark's own return code; there is no schema, completeness, or privacy
+validation step, and failed or unsupported cells produce no synthetic record. No step promotes a run,
+builds a dataset, or advances a channel; the neutral artifacts are the output. A consumer downloads
+them and decides what to display.
 
 Private host, address, device, NIC, credential, workspace, and path data stays in encrypted config,
 ignored operator notes, or bounded mode-0600 runner logs; it is never uploaded.
@@ -159,5 +159,5 @@ uv run --with-requirements experimental/CollectiveX/requirements.txt \
 bash -n experimental/CollectiveX/runtime/*.sh experimental/CollectiveX/launchers/*.sh
 ```
 
-Core paths are `capability.py`, `configs/`, `contracts.py`, `identity.py`, `schemas/`,
-`sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `launchers/`, and `tests/`.
+Core paths are `capability.py`, `configs/`, `identity.py`, `sweep_matrix.py`, `summarize.py`,
+`bench/`, `runtime/`, `launchers/`, and `tests/`.

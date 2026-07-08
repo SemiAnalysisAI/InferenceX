@@ -59,21 +59,13 @@ cx_stage_canonical() {
 # run_ep_suite <backend>
 # One bench/run_ep.py invocation per phase (decode/prefill/both); dispatch and
 # combine are timed separately inside it. One JSON per (backend, phase).
-# Preserve a failed case with its full scheduled identity instead of letting it vanish.
-emit_failed_case() {  # backend phase rc
-  cx_emit_ep_failed_case \
-    "results/failed_${CX_RUNNER}_${1}_${2}_${CX_TS}.json" "$1" "$2" "$3" || true
-}
-
 run_ep_suite() {
     local backend="$1" phase phases ladder failure_kind rc=0 rc_run
   ladder="$(cx_ep_ladder)"
   phases="${CX_PHASE:-decode}"
   [ "$phases" = "both" ] && phases="decode prefill"
   if ! cx_stage_canonical; then
-    for phase in $phases; do
-      emit_failed_case "$backend" "$phase" 2
-    done
+    cx_log "ERROR: $backend canonical workload staging failed"
     return 1
   fi
   for phase in $phases; do
@@ -99,14 +91,10 @@ run_ep_suite() {
     else
       rc_run=$?
     fi
-    if [ "$rc_run" = 0 ] && cx_result_doc_is "$out" invalid; then
-      cx_log "WARN: $backend $phase completed with invalid semantic evidence"
-      rc=1
-      continue
-    fi
-    if [ "$rc_run" = 0 ] && ! cx_result_doc_is "$out" success; then
-      rc_run=1
-    fi
+    # Result-document gating and terminal-outcome emission were removed with
+    # contracts.py; success is now the run_ep.py return code alone. Any result
+    # document it wrote is left in place for the summary renderer, which validates
+    # nothing.
     if [ "$rc_run" != 0 ]; then
       failure_kind=failed
       [ "$rc_run" != 124 ] && [ "$rc_run" != 137 ] || failure_kind="timed out"
@@ -114,14 +102,6 @@ run_ep_suite() {
         cx_log "WARN: $backend $phase run timed out rc=$rc_run (limit=${CX_RUN_TIMEOUT:-900}s)"
       else
         cx_log "WARN: $backend $phase run failed rc=$rc_run"
-      fi
-      if cx_has_result_doc "$out"; then
-        cx_demote_result_doc "$out" "$rc_run" \
-          || { cx_quarantine_result_doc "$out"; emit_failed_case "$backend" "$phase" "$rc_run"; }
-        cx_log "preserved benchmark output as a failed attempt"
-      else
-        cx_quarantine_result_doc "$out"
-        emit_failed_case "$backend" "$phase" "$rc_run"
       fi
       rc=1
     fi
@@ -963,16 +943,12 @@ cx_prepare_backend() {
 }
 
 prepare_backend_or_record() {
-  local backend="$1" phases="${CX_PHASE:-decode}" phase
+  local backend="$1"
   cx_write_runtime_stage backend-setup || return 1
   if cx_prepare_backend "$backend"; then
     return 0
   fi
   cx_log "WARN: $backend preparation failed"
-  [ "$phases" = "both" ] && phases="decode prefill"
-  for phase in $phases; do
-    CX_FAILURE_MODE=backend-setup emit_failed_case "$backend" "$phase" 6
-  done
   return 1
 }
 

@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""Matrix, subset, shard extraction, and unsupported-delivery tests."""
+"""Matrix, subset, and shard-extraction tests."""
 from __future__ import annotations
 
 import json
-import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import contracts  # noqa: E402
 import sweep_matrix  # noqa: E402
 
 
@@ -63,36 +60,6 @@ class MatrixTests(unittest.TestCase):
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):
                 sweep_matrix.resolve_matrix(**options)
-
-    def test_unsupported_emission_is_complete_and_delivery_valid(self):
-        document = matrix(suites="all", backends="all", only_sku="h100-dgxc")
-        expected = [x for x in document["requested_cases"] if x["disposition"] == "unsupported"]
-        environment = {
-            "COLLECTIVEX_ARTIFACT_NAME": "cxunsupported-123-1",
-            "COLLECTIVEX_EXECUTION_ID": "123_1_unsupported",
-            "COLLECTIVEX_SOURCE_SHA": "a" * 40,
-            "GITHUB_JOB": "setup", "GITHUB_REF_NAME": "collectivex",
-            "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
-            "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_ID": "123",
-        }
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(
-            os.environ, environment, clear=False
-        ):
-            root = Path(temporary)
-            source = root / "matrix.json"
-            source.write_text(json.dumps(document, sort_keys=True, separators=(",", ":")))
-            paths = sweep_matrix.emit_unsupported(source, root / "unsupported")
-            self.assertEqual(
-                contracts.validate_delivery(
-                    [str(path) for path in paths], str(source), disposition="unsupported"
-                ),
-                len(expected),
-            )
-            emitted = [contracts.validate_result(path) for path in paths]
-        self.assertEqual(
-            {item["identity"]["case_id"] for item in emitted},
-            {item["case"]["case_id"] for item in expected},
-        )
 
 
 if __name__ == "__main__":

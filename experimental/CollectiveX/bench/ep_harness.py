@@ -45,7 +45,6 @@ import math
 import os
 import types
 
-import contracts
 import ep_provenance
 import identity
 import workload as workload_contract
@@ -81,10 +80,14 @@ LOW_LATENCY_CORRECTNESS_SCOPE = "expert-assignment-and-weighted-combine"
 # clean log x-axis; clamped to the backend buffer ceiling (MoRI's registerable heap).
 DECODE_LADDER = [1, 2, 4, 8, 16, 32, 64, 128]
 PREFILL_LADDER = [128, 256, 512, 1024, 2048, 4096]
+# Conditioning replays a fixed phase ramp before each measured shape to settle
+# clocks and routing state; these rounds are never timed or emitted. The ladders
+# and round count are the frozen v1 measurement contract (see conditioning_contract).
 CONDITIONING_LADDERS = {
-    phase: list(ladder) for phase, ladder in contracts.V1_CONDITIONING_LADDERS.items()
+    "decode": [1, 2, 4, 8, 16, 32, 64, 128],
+    "prefill": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
 }
-CONDITIONING_ROUNDS_PER_SHAPE = contracts.V1_CONDITIONING_ROUNDS_PER_SHAPE
+CONDITIONING_ROUNDS_PER_SHAPE = 8
 CONDITIONING_CONTRACT = identity.V1_CASE_PROFILE["conditioning_contract"]
 ORACLE_CONTRACT = identity.V1_CASE_PROFILE["oracle_contract"]
 # Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
@@ -1765,7 +1768,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "validity": validity,
         },
     }
-    contracts.validate_raw_document(doc, samples_document)
     if rank == 0:
         _write_bytes_atomic(samples_path, samples_payload)
         _write_json_atomic(args.out, doc)

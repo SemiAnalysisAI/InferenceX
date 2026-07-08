@@ -8,7 +8,6 @@ import sys
 
 import torch
 import torch.distributed as dist
-import contracts
 import ep_provenance
 from ep_deepep_family import DeepEPFamilyBackend
 
@@ -49,7 +48,7 @@ def _mnnvl_buffer_configuration() -> tuple[dict[str, bool], str]:
             requested=True, signature_parameters=parameters,
             deepep_commit=os.environ.get("DEEPEP_COMMIT"),
         )
-    except contracts.ContractError as exc:
+    except ep_provenance.ContractError as exc:
         raise RuntimeError(str(exc)) from exc
 
 

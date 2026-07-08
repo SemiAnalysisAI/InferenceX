@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
-import contracts
+# Emitted document format this summary reads. This is a best-effort renderer over
+# whatever raw attempts a shard produced; it validates nothing.
+RAW_FORMAT = "collectivex.ep.v1"
 
 
 def load_results(directory: str, runner: str | None, timestamp: str | None) -> list[dict]:
@@ -16,24 +19,19 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
         if timestamp and timestamp not in path.name:
             continue
         try:
-            document = contracts.strict_json_load(path)
-            if document.get("format") == contracts.RAW_FORMAT:
-                documents.append(contracts.load_raw_attempt(path))
-            elif document.get("format") == contracts.TERMINAL_FORMAT:
-                documents.append(contracts.validate_terminal_document(document))
-        except (contracts.ContractError, OSError):
+            with path.open() as handle:
+                document = json.load(handle)
+        except (OSError, ValueError):
             continue
+        if isinstance(document, dict) and document.get("format") == RAW_FORMAT:
+            documents.append(document)
     return documents
 
 
 def _identity(document: dict) -> tuple[str, str, str, str, bool, int]:
     case = document["case"]
-    if document["format"] == contracts.RAW_FORMAT:
-        routing = case["shape"]["routing"]
-        eplb = case["eplb"]["enabled"]
-    else:
-        routing = case["routing"]
-        eplb = case["eplb"]
+    routing = case["shape"]["routing"]
+    eplb = case["eplb"]["enabled"]
     sku = document["identity"]["case_factors"]["sku"]
     return (
         sku, case["suite"], routing, case["phase"], eplb,
@@ -42,8 +40,6 @@ def _identity(document: dict) -> tuple[str, str, str, str, bool, int]:
 
 
 def _headline(document: dict) -> tuple[int | str, float | str, float | str]:
-    if document["format"] != contracts.RAW_FORMAT:
-        return "-", "-", "-"
     rows = document["measurement"]["rows"]
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
     latency = row["components"]["roundtrip"]["percentiles_us"]
@@ -95,8 +91,7 @@ def main() -> int:
     if args.markdown:
         return 0
     return 0 if any(
-        document["format"] == contracts.RAW_FORMAT
-        and document["outcome"]["status"] == "success"
+        document["outcome"]["status"] == "success"
         for document in documents
     ) else 1
 

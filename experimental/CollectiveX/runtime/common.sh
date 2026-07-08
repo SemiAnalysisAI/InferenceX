@@ -5,7 +5,6 @@
 # model-serving. Logging goes to stderr so functions can `echo` a single
 # result on stdout.
 
-_CX_COMMON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CX_SQUASH_FORMAT_VERSION="repro-v1"
 CX_SQUASH_SOURCE_DATE_EPOCH=1
 CX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6" # pragma: allowlist secret
@@ -2758,196 +2757,6 @@ PY
   cx_log "removed generated per-execution stage directory"
 }
 
-# Return success only when a benchmark output is a complete JSON result object.
-# Callers use this before synthesizing a terminal outcome so an emitted invalid result
-# is not shadowed by a second record for the same attempt.
-cx_has_result_doc() {
-  local path="$1"
-  python3 "$_CX_COMMON_ROOT/contracts.py" probe "$path" >/dev/null 2>&1
-}
-
-cx_result_doc_is() {
-  local path="$1" expected="$2"
-  python3 "$_CX_COMMON_ROOT/contracts.py" probe "$path" --status "$expected" \
-    >/dev/null 2>&1
-}
-
-# A rank-zero result can be written before another rank or backend teardown fails. Preserve its
-# measurements, but make the distributed command's nonzero terminal status authoritative.
-cx_demote_result_doc() {
-  local path="$1" rc="$2"
-  python3 "$_CX_COMMON_ROOT/contracts.py" demote "$path" --return-code "$rc"
-}
-
-cx_quarantine_result_doc() {
-  python3 "$_CX_COMMON_ROOT/contracts.py" quarantine-invalid "$1"
-}
-
-# cx_emit_ep_failed_case <out> <backend> <phase> <return-code>
-# Preserve failures from rack launchers that invoke run_ep.py directly and therefore cannot use
-# run_in_container.sh's emitter. Case identity is read from the exported CX_* variables.
-cx_emit_ep_failed_case() {
-  local out="$1" backend="$2" phase="$3" rc="$4"
-  local -a args=(emit-terminal --out "$out" --backend "$backend" --phase "$phase"
-    --return-code "$rc")
-  [ -z "${CX_FAILURE_MODE:-}" ] || args+=(--failure-mode "$CX_FAILURE_MODE")
-  if ! python3 "$_CX_COMMON_ROOT/contracts.py" "${args[@]}"
-  then
-    cx_log "ERROR: could not preserve terminal outcome"
-    return 1
-  fi
-}
-
-cx_case_attempt_exists() {
-  local out_dir="$1" case_id="$2"
-  python3 - "$_CX_COMMON_ROOT" "$out_dir" "$case_id" <<'PY'
-import pathlib, sys
-
-sys.path.insert(0, sys.argv[1])
-import contracts
-
-sample_paths = set()
-referenced_samples = set()
-found = False
-
-def quarantine(path, document):
-    sample = document.get("sample_artifact") if isinstance(document, dict) else None
-    if (
-        isinstance(sample, dict)
-        and isinstance(sample.get("path"), str)
-        and pathlib.Path(sample["path"]).name == sample["path"]
-    ):
-        sample_path = path.with_name(sample["path"])
-        if sample_path.is_file():
-            sample_path.replace(sample_path.with_name(sample_path.name + ".quarantine"))
-    if path.is_file():
-        path.replace(path.with_name(path.name + ".quarantine"))
-
-for path in pathlib.Path(sys.argv[2]).glob("*.json"):
-    document = None
-    try:
-        document = contracts.strict_load(path)
-        if not isinstance(document, dict):
-            continue
-        if document.get("format") == contracts.RAW_FORMAT:
-            document = contracts.load_raw_attempt(path)
-            referenced_samples.add(path.with_name(document["sample_artifact"]["path"]))
-        elif document.get("format") == contracts.TERMINAL_FORMAT:
-            document = contracts.validate_terminal_document(document)
-        elif document.get("format") == contracts.SAMPLES_FORMAT:
-            contracts.validate_samples_document(document)
-            sample_paths.add(path)
-            continue
-        else:
-            continue
-    except (contracts.ContractError, OSError, ValueError):
-        quarantine(path, document)
-        continue
-    if document["identity"]["case_id"] == sys.argv[3]:
-        found = True
-for orphan in sample_paths - referenced_samples:
-    quarantine(orphan, {})
-raise SystemExit(0 if found else 1)
-PY
-}
-
-# Emit one setup-failure record per requested case. Rack launchers call this when
-# backend preparation fails before rank processes can start.
-cx_emit_setup_failures() {
-  local root="$1" out_dir="$2" backend="$3" rc="$4" shard="${CX_SHARD_FILE:-}" path
-  local phase case_id suite workload required routing eplb ep hidden topk experts nodes
-  local gpn domain ladder canonical timing mode scope scale_up_transport scale_out_transport
-  local warmup_semantics
-  local transport topology_class
-  local cases_file expected emitted=0 covered=0
-  mkdir -p "$out_dir" || return 1
-  export CX_FAILURE_MODE="${CX_FAILSAFE_MODE:-setup}" CX_ATTEMPT_ID=1
-  if [ -z "$shard" ]; then
-    local phases="${CX_PHASE:-decode}"
-    [ "$phases" = both ] && phases="decode prefill"
-    for phase in $phases; do
-      if [ -n "${CX_CASE_ID:-}" ] && cx_case_attempt_exists "$out_dir" "$CX_CASE_ID"; then
-        continue
-      fi
-      cx_emit_ep_failed_case "$out_dir/failed_${backend}_${phase}_${CX_TS:-setup}-a01.json" \
-        "$backend" "$phase" "$rc" || return 1
-    done
-    unset CX_FAILURE_MODE
-    return 0
-  fi
-  path="$shard"
-  [ -f "$path" ] || path="${root%/}/$shard"
-  [ -f "$path" ] || {
-    unset CX_FAILURE_MODE
-    cx_log "ERROR: cannot emit setup failures without shard control"
-    return 1
-  }
-  export COLLECTIVEX_CONTROL_SHA256
-  COLLECTIVEX_CONTROL_SHA256="$(sha256sum "$path" | awk '{print $1}')"
-  [[ "$COLLECTIVEX_CONTROL_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
-    unset CX_FAILURE_MODE COLLECTIVEX_CONTROL_SHA256
-    cx_log "ERROR: cannot hash shard for setup-failure records"
-    return 1
-  }
-  # Setup-failure terminal outcomes carry the shard's iterable benchmark version.
-  CX_VERSION="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$path")"
-  export CX_VERSION
-  cases_file="$(mktemp)" || return 1
-  if ! python3 - "$path" > "$cases_file" <<'PY'
-import json, sys
-
-with open(sys.argv[1]) as handle:
-    cases = json.load(handle)["cases"]
-for case in cases:
-    fields = (
-        case["phase"], case["mode"], case["case_id"], case["suite"], case["workload"],
-        case["routing"], "1" if case["eplb"] else "",
-        case["ep"], case["hidden"], case["topk"], case["experts"], case["nodes"],
-        case["gpus_per_node"], case["scale_up_domain"], case["scope"],
-        case["scale_up_transport"], case.get("scale_out_transport") or "",
-        case["transport"], case["topology_class"], case["ladder"],
-        case["warmup_semantics"],
-        "1" if case["canonical"] else "", case["timing"],
-    )
-    print("|".join(map(str, fields)))
-PY
-  then
-    rm -f "$cases_file"
-    unset CX_FAILURE_MODE
-    return 1
-  fi
-  expected="$(wc -l < "$cases_file" | tr -d ' ')"
-  [ "$expected" -gt 0 ] || { rm -f "$cases_file"; unset CX_FAILURE_MODE; return 1; }
-  while IFS='|' read -r phase mode case_id suite workload routing eplb ep hidden topk \
-      experts nodes gpn domain scope scale_up_transport scale_out_transport transport \
-      topology_class ladder warmup_semantics canonical timing; do
-    export CX_CASE_ID="$case_id" CX_SUITE="$suite" CX_WORKLOAD_NAME="$workload"
-    export CX_ROUTING="$routing" CX_EPLB="$eplb"
-    export CX_EP="$ep" CX_NGPUS="$ep" CX_HIDDEN="$hidden" CX_TOPK="$topk" CX_EXPERTS="$experts"
-    export CX_MODE="$mode" CX_NODES="$nodes" CX_GPUS_PER_NODE="$gpn"
-    export CX_SCALE_UP_DOMAIN="$domain" CX_SCOPE="$scope"
-    export CX_SCALE_UP_TRANSPORT="$scale_up_transport"
-    export CX_SCALE_OUT_TRANSPORT="$scale_out_transport"
-    export CX_TRANSPORT="$transport" CX_TOPO="$topology_class"
-    export CX_TOKENS_LADDER="$ladder" CX_CANONICAL="$canonical"
-    export CX_WARMUP_SEMANTICS="$warmup_semantics"
-    IFS=: read -r CX_ITERS CX_TRIALS CX_WARMUP <<< "$timing"
-    export CX_ITERS CX_TRIALS CX_WARMUP CX_SAMPLES_PER_POINT="$((CX_ITERS * CX_TRIALS))"
-    if cx_case_attempt_exists "$out_dir" "$case_id"; then
-      covered=$((covered + 1))
-      continue
-    fi
-    cx_emit_ep_failed_case "$out_dir/failed_${case_id}-a01.json" "$backend" "$phase" "$rc" || return 1
-    emitted=$((emitted + 1))
-  done < "$cases_file"
-  rm -f "$cases_file"
-  unset CX_FAILURE_MODE
-  [ "$((emitted + covered))" -eq "$expected" ] || {
-    cx_log "ERROR: covered $((emitted + covered))/$expected terminal cases"
-    return 1
-  }
-}
-
 # Run one validated shard with one Slurm task per GPU. Launchers provide only
 # allocation/container policy through globals and CX_DISTRIBUTED_CONTAINER_ARGS.
 # shellcheck disable=SC2153
@@ -2956,8 +2765,8 @@ cx_run_distributed_shard() {
   local ph mode routing eplb hidden topk experts ladder suite workload
   local canonical case_id ep timing case_iters case_trials case_warmup case_stem
   local scope scale_up_transport scale_out_transport transport topology_class nodes gpn domain
-  local workload_dir workload_ladder workload_log stage_rc attempt_tag out failure_out
-  local runtime_log run_rc expected_out case_ok summary_log
+  local workload_dir workload_ladder workload_log stage_rc attempt_tag out
+  local runtime_log run_rc summary_log
   local -a container_args workload_args ep_args
   [ "${NODES:-0}" -gt 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
     || cx_die "invalid distributed launcher placement"
@@ -2996,8 +2805,6 @@ cx_run_distributed_shard() {
   set -e
   if [ "$build_rc" != 0 ]; then
     cx_fail_stage backend-setup "$build_log" || true
-    cx_emit_setup_failures "$CX_DIR" "$MOUNT_SRC/experimental/CollectiveX/results" \
-      "$CX_BENCH" "$build_rc"
     return "$build_rc"
   fi
   cx_set_failure_stage execution
@@ -3082,9 +2889,7 @@ PY
     cx_log "EP${NGPUS}[$ci] id=${case_id:-manual} $mode/$ph $CX_BENCH"
     if [ "$ep" != "$NGPUS" ] || [ "$nodes" != "$NODES" ] || [ "$gpn" != "$GPN" ] \
         || [ "$domain" != "$SCALE_UP_DOMAIN" ]; then
-      export CX_ATTEMPT_ID=1
-      failure_out="$MOUNT_SRC/experimental/CollectiveX/results/failed_${case_stem}-a01.json"
-      cx_emit_ep_failed_case "$failure_out" "$CX_BENCH" "$ph" 5
+      cx_log "ERROR: EP${NGPUS}[$ci] topology mismatch (ep=$ep nodes=$nodes gpn=$gpn domain=$domain); skipping case"
       failed_cases=$((failed_cases + 1))
       continue
     fi
@@ -3108,9 +2913,7 @@ PY
       stage_rc=$?
       set -e
       if [ "$stage_rc" != 0 ]; then
-        export CX_ATTEMPT_ID=1
-        failure_out="$MOUNT_SRC/experimental/CollectiveX/results/failed_${case_stem}-a01.json"
-        cx_emit_ep_failed_case "$failure_out" "$CX_BENCH" "$ph" "$stage_rc"
+        cx_log "ERROR: EP${NGPUS}[$ci] workload staging failed (rc=$stage_rc)"
         failed_cases=$((failed_cases + 1))
         continue
       fi
@@ -3130,7 +2933,6 @@ PY
     export CX_ATTEMPT_ID=1
     attempt_tag=a01
     out="results/${case_stem}_${attempt_tag}.json"
-    failure_out="$MOUNT_SRC/experimental/CollectiveX/results/failed_${case_stem}-${attempt_tag}.json"
     runtime_log="$(cx_private_log_path "runtime-c$(printf '%03d' "$ci")-$attempt_tag")"
     set +e
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
@@ -3142,24 +2944,12 @@ PY
       </dev/null >"$runtime_log" 2>&1
     run_rc=$?
     set -e
-    expected_out="$MOUNT_SRC/experimental/CollectiveX/$out"
-    case_ok=0
-    if [ "$run_rc" = 0 ] && cx_result_doc_is "$expected_out" success; then
-      case_ok=1
-    elif [ "$run_rc" = 0 ] && cx_result_doc_is "$expected_out" invalid; then
-      cx_log "ERROR: EP${NGPUS}[$ci] completed with invalid semantic evidence"
-    else
-      [ "$run_rc" != 0 ] || run_rc=1
-      if cx_has_result_doc "$expected_out"; then
-        cx_demote_result_doc "$expected_out" "$run_rc" \
-          || { cx_quarantine_result_doc "$expected_out"; cx_emit_ep_failed_case "$failure_out" "$CX_BENCH" "$ph" "$run_rc"; }
-      else
-        cx_quarantine_result_doc "$expected_out"
-        cx_emit_ep_failed_case "$failure_out" "$CX_BENCH" "$ph" "$run_rc"
-      fi
-    fi
-    if [ "$case_ok" = 0 ]; then
-      [ "$run_rc" = 0 ] || cx_fail_stage execution "$runtime_log" || true
+    # Terminal-outcome emission and result-document gating were removed with
+    # contracts.py; a case now counts as run purely on the distributed command's
+    # return code. The rank-zero result the harness wrote (if any) is left in place
+    # for the summary renderer, which validates nothing.
+    if [ "$run_rc" != 0 ]; then
+      cx_fail_stage execution "$runtime_log" || true
       failed_cases=$((failed_cases + 1))
     fi
   done < "$cases_file"
@@ -3177,7 +2967,7 @@ PY
 }
 
 cx_launcher_cleanup() {
-  local rc="$1" stage_root="${MOUNT_SRC:-}" source_root out_dir allocation_stopped=1
+  local rc="$1" stage_root="${MOUNT_SRC:-}" source_root allocation_stopped=1
   source_root="${stage_root:-${REPO_ROOT:-}}"
   trap - EXIT HUP INT TERM
   if [ -n "${COLLECTIVEX_EPHEMERAL_CONFIG_PATH:-}" ]; then
@@ -3206,9 +2996,6 @@ cx_launcher_cleanup() {
       && [ -n "${REPO_ROOT:-}" ] && [ -n "${CX_BENCH:-}" ]; then
     cx_log "ERROR: terminal-failure-class=${CX_FAILSAFE_MODE:-setup}"
     [ -d "$source_root/experimental/CollectiveX" ] || source_root="$REPO_ROOT"
-    out_dir="$source_root/experimental/CollectiveX/results"
-    cx_emit_setup_failures \
-      "$source_root/experimental/CollectiveX" "$out_dir" "$CX_BENCH" "$rc" || true
     [ "$source_root" = "$REPO_ROOT" ] \
       || cx_collect_results "$source_root" "$REPO_ROOT" || true
   fi

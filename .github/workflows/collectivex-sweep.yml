@@ -1,9 +1,9 @@
 # CollectiveX Sweep — one structured run instead of thousands of dispatches.
 #
 # Shape: setup resolves the suites into a shard matrix, then one GPU cell runs per
-# shard, executes the benchmark, validates the emitted neutral artifacts, and uploads
-# them. This repo only schedules, executes, validates, and uploads — it does not
-# promote, rank, recommend, or decide what a frontend displays. This file is registered
+# shard, executes the benchmark, and uploads the emitted neutral artifacts as-is.
+# This repo only schedules, executes, and uploads — it does not validate, promote,
+# rank, recommend, or decide what a frontend displays. This file is registered
 # on the default branch, so its collectivex branch revision can be dispatched with --ref.
 name: CollectiveX Sweep
 permissions:
@@ -49,10 +49,8 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
       - name: Install matrix dependencies
-        # jsonschema is required by contracts.py (make_terminal_document via
-        # --emit-unsupported-from, and validate-delivery) once it is exercised;
         # PyYAML is used by sweep_matrix.py to read the suites config.
-        run: python3 -m pip install --quiet PyYAML==6.0.2 jsonschema==4.25.1
+        run: python3 -m pip install --quiet PyYAML==6.0.2
       - id: gen
         working-directory: experimental/CollectiveX
         env:
@@ -61,9 +59,6 @@ jobs:
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
-          COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-          COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
-          COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
         run: |
           set -euo pipefail
           args=(--suites "$INPUT_SUITES")
@@ -82,12 +77,6 @@ jobs:
             echo "source_backends=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(' '.join(sorted({x['backend'] for x in m['include']} & {'deepep-v2','deepep-hybrid'})))")"
             echo "max_parallel=$(python3 -c "import json;m=json.load(open('matrix_full.json'));w=max(x['execution_weight'] for x in m['include']);print(max(1,min(10,4096//w)))")"
           } >> "$GITHUB_OUTPUT"
-          unsupported_n=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(sum(x['disposition']=='unsupported' for x in m['requested_cases']))")
-          echo "unsupported_n=$unsupported_n" >> "$GITHUB_OUTPUT"
-          if [ "$unsupported_n" -gt 0 ]; then
-            python3 sweep_matrix.py --emit-unsupported-from matrix_full.json \
-              --out-dir unsupported
-          fi
           python3 -c "import json;m=json.load(open('matrix_full.json'));print('execution-cells:',len(m['include']))"
       - name: Prepare pinned backend source archive
         if: ${{ steps.gen.outputs.source_backends != '' }}
@@ -142,24 +131,6 @@ jobs:
           if-no-files-found: error
           overwrite: true
           retention-days: 14
-      - name: Validate unsupported outcomes
-        id: unsupported_contracts
-        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 }}
-        env:
-          COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
-          COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
-        run: |
-          python3 experimental/CollectiveX/contracts.py validate-delivery \
-            --source experimental/CollectiveX/matrix_full.json \
-            --disposition unsupported \
-            experimental/CollectiveX/unsupported/*.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 && steps.unsupported_contracts.outcome == 'success' }}
-        with:
-          name: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
-          path: experimental/CollectiveX/unsupported/*.json
-          if-no-files-found: error
-          retention-days: 14
 
   # ---- sweep: ONE matrix cell per shard (the parent job with child jobs) ----
   sweep:
@@ -191,13 +162,11 @@ jobs:
       CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
       HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
-      - name: Provision host Python for contract validation
-        # P2 moved contracts.py onto jsonschema (host-only publisher schemas that,
-        # per requirements.txt, are never imported by GPU execution). The self-hosted
-        # runners ship a bare python3 with no system pip, so build a venv and put it on
-        # PATH for every later step: the launcher fail-safe (emit-terminal),
-        # validate-delivery, and summarize.py all invoke bare `python3` and must resolve
-        # jsonschema. venv + ensurepip are available even where system pip is not.
+      - name: Provision host Python
+        # The self-hosted runners ship a bare python3 with no system pip. The host
+        # launcher and summarize.py invoke bare `python3` and need PyYAML/numpy, so
+        # build a venv and put it on PATH for every later step. venv + ensurepip are
+        # available even where system pip is not.
         env:
           HOME: ${{ runner.temp }}
         run: |
@@ -206,7 +175,7 @@ jobs:
           python3 -m venv --clear "$venv"
           "$venv/bin/python3" -m pip install --quiet --no-cache-dir --upgrade pip
           "$venv/bin/python3" -m pip install --quiet --no-cache-dir \
-            jsonschema==4.25.1 PyYAML==6.0.2 "numpy>=1.26,<3"
+            PyYAML==6.0.2 "numpy>=1.26,<3"
           echo "$venv/bin" >> "$GITHUB_PATH"
       - name: Prepare isolated source
         id: source
@@ -486,17 +455,8 @@ jobs:
           set -euo pipefail
           [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
             || { echo "CollectiveX allocation cleanup was not confirmed" >&2; exit 1; }
-      - name: Validate shard delivery completeness
-        id: delivery_contracts
-        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
-        run: |
-          cd "$CX_SOURCE_ROOT" 2>/dev/null \
-            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          python3 experimental/CollectiveX/contracts.py validate-delivery \
-            --source "experimental/CollectiveX/${CX_SHARD_FILE}" \
-            experimental/CollectiveX/results/*.json
       - name: Shard summary
-        if: ${{ always() && steps.delivery_contracts.outcome == 'success' }}
+        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
         run: |
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
@@ -504,7 +464,7 @@ jobs:
             --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
       - name: Stage shard artifact
         id: stage_artifact
-        if: ${{ always() && steps.delivery_contracts.outcome == 'success' }}
+        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
         run: |
           set -euo pipefail
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
@@ -512,7 +472,7 @@ jobs:
           cp -- experimental/CollectiveX/results/*.json "$CX_JOB_ROOT/artifact/"
       - name: Upload shard results
         id: upload_artifact
-        if: always() && steps.stage_artifact.outcome == 'success' && steps.delivery_contracts.outcome == 'success'
+        if: always() && steps.stage_artifact.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
@@ -536,7 +496,6 @@ jobs:
             || { echo "CollectiveX allocation cleanup was not confirmed; retaining isolated files" >&2; exit 1; }
           if [ '${{ steps.sweep_shard.outcome }}' = success ] \
               && [ '${{ steps.allocation_cleanup.outcome }}' = success ] \
-              && [ '${{ steps.delivery_contracts.outcome }}' = success ] \
               && [ '${{ steps.stage_artifact.outcome }}' = success ] \
               && [ '${{ steps.upload_artifact.outcome }}' = success ] \
               && [ -f "$CX_SOURCE_ROOT/experimental/CollectiveX/runtime/common.sh" ]; then

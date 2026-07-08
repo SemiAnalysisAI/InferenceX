@@ -1,8 +1,8 @@
 # CollectiveX EP Benchmark Methodology
 
 CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
-accelerator allocations, validates the results each run emits, and uploads neutral artifacts. It
-does **not** promote, rank, recommend, select, hide, or decide what any consumer displays. The
+accelerator allocations, and uploads the neutral artifacts each run emits. It does **not** validate
+those artifacts, promote, rank, recommend, select, hide, or decide what any consumer displays. The
 frontend reads the neutral matrix, result, summary, and catalog artifacts and makes its own coverage
 and display decisions. This document describes how a case is scheduled, measured, checked, and
 recorded — not a publication or qualification contract.
@@ -13,7 +13,7 @@ CollectiveX is a communication microbenchmark for:
 
 - comparing EP libraries on one chip/topology;
 - comparing EP latency and logical payload bandwidth across systems under the same workload; and
-- recording unsupported, failed, invalid, and unstable cases as explicit terminal evidence.
+- surfacing unsupported, failed, invalid, and unstable cases rather than hiding them.
 
 It does not predict serving throughput without a separate correlation study.
 
@@ -43,7 +43,7 @@ Physical host count does not define scope. Both GB cells remain inside one 72-GP
 domain. The MI325X launcher/configuration path is retained for future versions but is not referenced
 by any current suite or shard.
 
-Unsupported combinations are terminal outcomes, not silently skipped coverage. DeepEP V2 is the
+Unsupported combinations are explicitly classified in the matrix, not silently skipped coverage. DeepEP V2 is the
 `ElasticBuffer` introduced by PR #605, pinned with upstream PR #630's minimal pure-scale-up fix and
 the exact upstream PR #640 library matcher that excludes NCCL shared-memory mappings. Scale-up cases
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
@@ -133,7 +133,7 @@ checks the dispatch metadata and transformed output. Low-latency adapters separa
 expert-packed source/expert assignment, native gate weights, and gate-weighted combined output. Both
 contracts compare against the reference activation. The combine gate is `rtol=0.05, atol=0.02` for
 the BF16 communication path. This threshold is a correctness gate, not an estimate of transport
-error. Any failed rank or point makes the case ineligible and is recorded as such.
+error. Any failed rank or point makes the case ineligible in the result it writes.
 Pre/post dispatch evidence is hashed in canonical source-token order. Native receive slots may be
 assigned nondeterministically, so physical receive order is not treated as a correctness property.
 
@@ -153,8 +153,8 @@ unknown fields, and contains:
 - `outcome`: `success`, `failed`, `invalid`, `unsupported`, with `diagnostic` and reasons.
 
 Exact per-point samples are emitted as detached `collectivex.samples.v1` documents referenced by path
-and SHA-256, so the raw document stays compact. Every scheduled case produces exactly one terminal
-record; every attempt is retained (a superseded retry does not overwrite an earlier failure). Private
+and SHA-256, so the raw document stays compact. Each dispatched case writes its raw result document;
+unsupported or never-run cells produce no synthetic record. Private
 environment details (hosts, addresses, device selectors, credentials, workspace paths) remain in
 local mode-0600 logs and ignored operator notes and never enter an emitted artifact.
 
@@ -229,14 +229,10 @@ files it is using.
 ## Neutral Artifact Delivery
 
 There is no results server, attached store, or managed object store. Each shard runs one allocation,
-emits per-case result and terminal JSON plus detached sample JSON and a small mechanical summary, and
-uploads them as GitHub artifacts with `always()` so a red or partial run still uploads. Before upload,
-`contracts.py validate-delivery` checks, for the scheduled shard:
-
-- strict schema validity of every result, terminal, and samples document;
-- exactly one terminal record per scheduled case, with no missing, extra, or duplicate case;
-- detached-sample path and SHA-256 consistency (`point_id` / `sample_sha256`); and
-- privacy — no private host, address, selector, credential, or path leaks into any artifact.
+emits per-case result JSON plus detached sample JSON and a small mechanical summary, and uploads them
+as GitHub artifacts with `always()` so a red or partial run still uploads. A case counts as successful
+on the benchmark's own return code; there is no schema, completeness, detached-sample, or privacy
+validation step before upload, and failed or unsupported cells produce no synthetic record.
 
 No step promotes a run, builds a dataset, or advances a channel; the artifacts are the output. Any
 downstream display or comparison is the consumer's responsibility.

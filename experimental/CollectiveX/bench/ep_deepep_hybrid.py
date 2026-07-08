@@ -38,7 +38,6 @@ import types
 
 import torch
 import torch.distributed as dist
-import contracts
 import ep_provenance
 from ep_backend import EPBackend
 

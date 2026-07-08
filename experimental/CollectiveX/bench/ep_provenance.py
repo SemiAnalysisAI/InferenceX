@@ -5,10 +5,8 @@ The EP benchmark emitter builds and self-checks the implementation-provenance
 evidence it embeds in each raw attempt document: which backend libraries were
 loaded, that a deepep-v2 attempt carries internally consistent JIT cubins, that
 a hybrid attempt realized its kernels, and so on. Those are cross-field facts a
-JSON Schema cannot express, so they live in Python — but they are an emitter
-concern, not part of the neutral cross-file validation boundary. They are kept
-here, beside the executable bench modules that call them, so ``contracts.py``
-holds only the neutral document/delivery validation.
+JSON Schema cannot express, so they live in Python here, beside the executable
+bench modules that build and self-check them.
 """
 from __future__ import annotations
 
@@ -21,7 +19,14 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
-from contracts import ContractError, GIT_RUN_FIELDS
+class ContractError(ValueError):
+    """A provenance payload differs from the CollectiveX emitter contract."""
+
+
+# Git run-identity fields an emitted attempt carries when produced under CI.
+GIT_RUN_FIELDS = {
+    "artifact", "job", "ref", "repo", "run_attempt", "run_id", "source_sha",
+}
 
 
 def _finite_tree(value: Any, path: str = "$") -> None:

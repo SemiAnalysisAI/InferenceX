@@ -8,8 +8,6 @@ suite/workload/backend/topology only; the matrix schedules, it never ranks.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
-import hashlib
 import itertools
 import json
 import os
@@ -28,7 +26,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the workflow envi
     yaml = None
 
 import capability as cap  # noqa: E402
-import contracts  # noqa: E402
 import ep_harness  # noqa: E402
 import identity  # noqa: E402
 
@@ -902,82 +899,6 @@ def extract_shard(
     return control
 
 
-def emit_unsupported(
-    matrix_path: str | os.PathLike[str], output_dir: str | os.PathLike[str]
-) -> list[Path]:
-    """Materialize one strict terminal outcome for each unsupported requested case."""
-    source = Path(matrix_path)
-    document = validate_matrix_document(_strict_json_load(source))
-    control_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
-    generated_at = dt.datetime.now(dt.timezone.utc).isoformat()
-    git_run = {
-        "run_id": os.environ.get("GITHUB_RUN_ID"),
-        "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
-        "ref": os.environ.get("GITHUB_REF_NAME") or os.environ.get("GITHUB_REF"),
-        "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
-        "repo": os.environ.get("GITHUB_REPOSITORY"),
-        "job": os.environ.get("GITHUB_JOB"),
-        "artifact": os.environ.get("COLLECTIVEX_ARTIFACT_NAME"),
-    }
-    if not any(value is not None for value in git_run.values()):
-        git_run = None
-    allocation_factors = {
-        "artifact": git_run["artifact"] if git_run is not None else None,
-        "execution_id": os.environ.get("COLLECTIVEX_EXECUTION_ID"),
-        "job": git_run["job"] if git_run is not None else None,
-        "repo": git_run["repo"] if git_run is not None else None,
-        "run_attempt": git_run["run_attempt"] if git_run is not None else None,
-        "run_id": git_run["run_id"] if git_run is not None else None,
-        "runner": "capability-resolver",
-        "source_sha": git_run["source_sha"] if git_run is not None else None,
-    }
-    destination = Path(output_dir)
-    destination.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-    for wrapper in document["requested_cases"]:
-        if wrapper["disposition"] != "unsupported":
-            continue
-        scheduled = wrapper["case"]
-        case = {key: value for key, value in scheduled.items() if key != "case_id"}
-        case_factors = {
-            "case": case,
-            "profile": identity.profile_for_case(case),
-            "sku": wrapper["sku"],
-        }
-        case_id = identity.case_id_from_factors(case_factors)
-        if case_id != scheduled["case_id"]:
-            raise MatrixError(f"unsupported case identity differs for {scheduled['case_id']}")
-        record = contracts.make_terminal_document(
-            allocation_factors=allocation_factors,
-            attempt_ordinal=1,
-            case=case,
-            case_factors=case_factors,
-            control_sha256=control_sha256,
-            failure_mode="capability",
-            generated_at=generated_at,
-            git_run=git_run,
-            reason=wrapper["reason"],
-            return_code=5,
-            source="matrix-capability-resolver",
-            status="unsupported",
-            version=document["version"],
-            expected_case_id=case_id,
-        )
-        path = destination / f"unsupported_{case_id}.json"
-        temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
-        try:
-            with temporary.open("x") as handle:
-                json.dump(record, handle, allow_nan=False, sort_keys=True, separators=(",", ":"))
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
-        written.append(path)
-    return written
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
     parser.add_argument("--suites", default="all", help="'all' or comma-list of suites")
@@ -997,24 +918,12 @@ def main() -> int:
     parser.add_argument("--max-cases", type=int, default=128)
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--validate-control", default="", metavar="SHARD")
-    parser.add_argument("--emit-unsupported-from", default="", metavar="MATRIX")
-    parser.add_argument("--out-dir", default="")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--expect-sku", default="")
     parser.add_argument("--expect-backend", default="")
     parser.add_argument("--expect-nodes", type=int, default=0)
     parser.add_argument("--out", default="")
     args = parser.parse_args()
-
-    if args.emit_unsupported_from:
-        if not args.out_dir:
-            parser.error("unsupported outcome emission requires --out-dir")
-        try:
-            written = emit_unsupported(args.emit_unsupported_from, args.out_dir)
-        except MatrixError as exc:
-            parser.error(str(exc))
-        print(f"emitted {len(written)} unsupported terminal outcomes", file=sys.stderr)
-        return 0
 
     if args.validate_control:
         if not all((args.expect_sku, args.expect_backend, args.expect_nodes)):
