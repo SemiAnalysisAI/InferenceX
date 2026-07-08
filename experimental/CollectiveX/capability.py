@@ -190,6 +190,10 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ("mi300x", "mori", 16): (
         "Pinned MoRI distributed initialization does not complete on MI300X EP16"
     ),
+    ("mi355x", "mori", 16): (
+        "MoRI InterNodeV1 EP16 scale-out needs device-initiated cross-node RDMA "
+        "(ROCm SHMEM), which does not complete on MI355X hosts"
+    ),
 }
 
 
