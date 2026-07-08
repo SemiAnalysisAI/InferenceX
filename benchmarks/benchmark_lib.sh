@@ -1181,12 +1181,16 @@ _install_swebench_agent_deps() {
 #   Best-effort: the post-generation sweep still bounds the damage if an
 #   anchor ever drifts.
 #
-# Budget-exhaustion fallback (6/50 instances in the first 50-run burned all
-# steps and submitted NOTHING -- forensics showed at least one had a correct
-# fix sitting in the tree): when an instance ends abnormally with a live
-# sandbox, submit `git diff` of the tree as the patch. Empty scores zero
-# anyway, so this is strictly >=; guarded to require rc 0 and a real diff so
-# an error message can never be submitted as a patch.
+# Budget-exhaustion fallback (6/50 instances per 50-run burn all steps and
+# submit NOTHING -- forensics showed correct fixes can be sitting in the
+# tree): when an instance ends without a submission but with a live sandbox,
+# submit `git diff` of the tree as the patch. Empty scores zero anyway, so
+# this is strictly >=; guarded to require rc 0 and a real diff so an error
+# message can never be submitted as a patch. NOTE: LimitsExceeded does NOT
+# raise into process_instance -- mini's run loop absorbs InterruptAgentFlow
+# and returns normally with an empty submission (verified: 0 fallbacks fired
+# when this hook lived only on the except path) -- so the primary hook is on
+# the normal-return path; the except-path hook stays for real exceptions.
 _patch_swebench_agent() {
     python3 - <<'PYPATCH'
 import sys
@@ -1219,6 +1223,23 @@ mini_ok = patch(mini_sb.__file__, [
     (
         "    agent = None\n    exit_status = None",
         "    agent = None\n    env = None  # inferencex sandbox cleanup\n    exit_status = None",
+    ),
+    (
+        '        info = agent.run(task)\n'
+        '        exit_status = info.get("exit_status")\n'
+        '        result = info.get("submission")',
+        '        info = agent.run(task)\n'
+        '        exit_status = info.get("exit_status")\n'
+        '        result = info.get("submission")\n'
+        "        if not result and env is not None:  # budget-exhaustion fallback: submit the tree's diff\n"
+        "            try:\n"
+        '                _fb = env.execute("git diff")\n'
+        '                _fb_out = (_fb.get("output") or "").strip()\n'
+        '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
+        "                    result = _fb_out + \"\\n\"\n"
+        '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
+        "            except Exception:\n"
+        "                pass",
     ),
     (
         '        exit_status, result = type(e).__name__, ""\n'
