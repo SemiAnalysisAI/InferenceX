@@ -4601,3 +4601,11 @@
     - "Image: lmsysorg/sglang:v0.5.12"
     - "14 topologies across 1k/1k and 8k/1k: prefill TP8 STP + decode wide-EP (DEP16/DEP32 high-throughput) and per-node TP8 low-latency, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1895
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic
+  description:
+    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
+    - "Image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1"
+  pr-link: To-Be-Added
+  

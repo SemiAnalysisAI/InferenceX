@@ -3041,3 +3041,20 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
+
+minimaxm3-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, kv-offloading: none, conc-list: [1, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [1, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96] }
+      
