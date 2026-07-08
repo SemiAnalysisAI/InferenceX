@@ -4614,13 +4614,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
 
 - config-keys:
-    - dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe
-    - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
-    - dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe
-    - dsv4-fp4-gb200-llm-d-vllm-low-middle
-    - dsv4-fp4-gb200-llm-d-vllm-low-latency
+    - dsv4-fp4-gb200-llmd-vllm
   description:
-    - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm disaggregated multinode benchmarks (full curve)"
+    - "Add DeepSeek-V4-Pro FP4 GB200 llmd-vllm disaggregated multinode benchmarks (full curve)"
     - "Low-latency 1P1D pure-TP8 decode (conc 1)"
     - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
     - "Low-middle 1P4D pure-TP8 decode (conc 256/512)"

@@ -1,8 +1,8 @@
-# DeepSeek-V4-Pro (FP4) on GB200, low-latency P/D disagg via llm-d-vllm.
+# DeepSeek-V4-Pro (FP4) on GB200, low-latency P/D disagg via llmd-vllm.
 #
 # Latency end of the curve. Engine config mirrors the upstream srt-slurm
 # recipe disagg-gb200-low-latency.yaml (less the dynamo-only frontend keys),
-# served via the InferenceX llm-d-vllm path (no NATS/etcd infra node). It is
+# served via the InferenceX llmd-vllm path (no NATS/etcd infra node). It is
 # the direct sibling of the dsv4-fp4-gb200-dynamo-vllm conc=1 low-latency
 # point (same topology: 1 prefill DEP8 + 1 decode pure-TP8).
 #

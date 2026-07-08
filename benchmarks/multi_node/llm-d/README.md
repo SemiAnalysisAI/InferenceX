@@ -1,6 +1,6 @@
-# llm-d-vllm multi-node SLURM scaffolding
+# llmd-vllm multi-node SLURM scaffolding
 
-This directory holds the SLURM-side orchestration for the `llm-d-vllm`
+This directory holds the SLURM-side orchestration for the `llmd-vllm`
 benchmark framework. It mirrors the AMD `sglang-disagg` pattern under
 `benchmarks/multi_node/amd_utils/` (NOT the Dynamo / srt-slurm pattern):
 InferenceX itself owns the SLURM job, no vendor multi-node tool involved.

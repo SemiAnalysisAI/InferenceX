@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Per-node entrypoint for the llm-d-vllm wide-EP P/D disagg benchmark.
+# Per-node entrypoint for the llmd-vllm wide-EP P/D disagg benchmark.
 # NODE_RANK is set by srun (= $SLURM_PROCID) in job.slurm.
 #
 # Roles:

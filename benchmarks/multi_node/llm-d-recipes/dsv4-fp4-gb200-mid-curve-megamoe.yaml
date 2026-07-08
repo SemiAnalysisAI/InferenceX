@@ -1,4 +1,4 @@
-# DeepSeek-V4-Pro (FP4) on GB200, MegaMOE P/D disagg via llm-d-vllm.
+# DeepSeek-V4-Pro (FP4) on GB200, MegaMOE P/D disagg via llmd-vllm.
 #
 # This file defines only the COMMON per-engine shape + engine env. The
 # multi-engine topology (how many prefill/decode engines, node counts,

@@ -1,4 +1,4 @@
-# Envoy front door for the llm-d-vllm framework.
+# Envoy front door for the llmd-vllm framework.
 #
 # Listener  : 0.0.0.0:8080  (benchmark client target)
 # ext_proc  : EPP on 127.0.0.1:9002

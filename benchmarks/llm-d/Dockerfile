@@ -1,4 +1,4 @@
-# Combined image for the InferenceX llm-d-vllm framework.
+# Combined image for the InferenceX llmd-vllm framework.
 #
 # Base = vllm/vllm-openai (vLLM with the OpenAI-compatible API server).
 # We add the EPP, the routing-sidecar, and Envoy on top so every node in

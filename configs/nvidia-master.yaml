@@ -8639,28 +8639,15 @@ dsv4-fp4-gb200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-# llm-d-vllm sibling of dsv4-fp4-gb200-dynamo-vllm topology #3
-# (mid-curve-megamoe, conc-list [256, 512, 1024]). 1 prefill (DEP=8) +
-# 1 decode (DEP=8) on 4 GB200 nodes / 16 GPUs - same shape as the
-# upstream srt-slurm recipe disagg-gb200-mid-curve-megamoe.yaml, served
-# via the InferenceX llm-d-vllm path (no NATS/etcd infra node).
-#
-# Engine config differs from the conc=1 low-latency entry above:
-#   * Decode flips from pure TP=8 to DEP=8 (TP=1 DP=8 EP).
-#   * moe-backend=deep_gemm_mega_moe, enable-ep-weight-filter on both
-#     sides (the mid-curve points only fit on HBM with weight-filter).
-#   * max-model-len=9280, decode max-num-seqs=512.
-# PR follow-up (merge-blocking): the `image:` on both llm-d-vllm keys below
-# (mid-curve + high-tpt) is a personal build. Republish it to the org registry
-# (ghcr.io/semianalysisai/...) and update these `image:` lines before merge.
+# TODO: change image to official llmd image.
 # Build source: benchmarks/llm-d/Dockerfile.
-dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe:
+dsv4-fp4-gb200-llmd-vllm:
   image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
   precision: fp4
-  framework: llm-d-vllm
+  framework: llmd-vllm
   multinode: true
   disagg: true
   scenarios:
@@ -8668,6 +8655,56 @@ dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe:
     - isl: 8192
       osl: 1024
       search-space:
+      # Low latency: 1 prefill DEP8 + 1 decode TP8.
+      - spec-decoding: "none"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "RANDOM_RANGE_RATIO=1.0"
+          - "CONFIG_FILE=dsv4-fp4-gb200-low-latency.yaml"
+          - "BENCH_NUM_PROMPTS_MULTIPLIER=100"
+          - "MAX_FAILURE_RATE=0.5"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
+      # Low-middle: 1 prefill DEP8 + 4 decode TP8.
+      - spec-decoding: "none"
+        conc-list: [256, 512]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "RANDOM_RANGE_RATIO=1.0"
+          - "CONFIG_FILE=dsv4-fp4-gb200-low-latency.yaml"
+          - "BENCH_NUM_PROMPTS_MULTIPLIER=10"
+          - "MAX_FAILURE_RATE=0.5"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=8"
+          - "DECODE_WORKERS=4"
+          - "GPUS_PER_NODE=4"
+
+      # Mid curve: 1 prefill DEP8 + 1 decode DEP8.
       - spec-decoding: "none"
         conc-list: [256, 512, 1024]
         prefill:
@@ -8691,28 +8728,7 @@ dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
-# V11 (2026-06-27): high-throughput 2P+1D, Option B (true multi-engine). Reuses
-# the mid-curve recipe BYTE-FOR-BYTE (same engine/env: rc, decode fan-out,
-# NCCL_NET_GDR_C2C, NVSHMEM none + NIC-PE-map, gpu-mem 0.9/0.85, no DeepEP). 4
-# prefill nodes + 2 decode nodes (6 nodes / 24 GPUs), conc 4096. PREFILL_WORKERS=2
-# splits the 4 prefill nodes into TWO INDEPENDENT DEP8 engines (2 nodes each) -
-# matching upstream oci-high-tpt ("2 prefill : 1 decode, DEP8 each"), Dynamo
-# (prefill_workers:2), and AMD (PREFILL_WORKERS). server.sh does the per-engine
-# DP grouping; ep:8 is therefore PER ENGINE (not 16).
-dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe:
-  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: gb200
-  precision: fp4
-  framework: llm-d-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
+      # High throughput: 2 prefill DEP8 + 1 decode DEP8.
       - spec-decoding: "none"
         conc-list: [4096]
         prefill:
@@ -8737,26 +8753,7 @@ dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
-# Max-throughput sibling of dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe.
-# Mirrors NVIDIA/srt-slurm disagg-gb200-max-tpt-megamoe.yaml, whose ONLY
-# diff from high-tpt is prefill scale-out (prefill_workers 2->3); the vLLM
-# engine args are identical, so this reuses the same CONFIG_FILE. 3 prefill
-# (DEP8 each) + 1 decode (DEP8) = 6 prefill + 2 decode = 8 GB200 nodes.
-# Validated standalone via e2e run 28711505502: 8797 tok/s/GPU at conc=4096.
-dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe:
-  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: gb200
-  precision: fp4
-  framework: llm-d-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
+      # Max throughput: 3 prefill DEP8 + 1 decode DEP8.
       - spec-decoding: "none"
         conc-list: [4096]
         prefill:
@@ -8779,98 +8776,6 @@ dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=2"
-          - "GPUS_PER_NODE=4"
-
-# Low-latency sibling of the dsv4-fp4-gb200-dynamo-vllm conc=1 point (the
-# latency end of the curve). 1 prefill (DEP=8) + 1 decode (PURE TP=8) on
-# 4 GB200 nodes / 16 GPUs - no NATS/etcd infra node. This is Family A of the
-# llm-d-vllm curve: the DECODE flips from DEP8 (mid/high/max) to pure TP=8
-# (one replica across 8 GPUs / 2 nodes, launched headless multi-node TP).
-# decode ep:1 + dp-attn:false is what selects the pure-TP path in server.sh.
-# Engine config mirrors srt-slurm disagg-gb200-low-latency.yaml; served via
-# the InferenceX llm-d-vllm path. conc=1 uses a 100x prompt multiplier so the
-# single-stream latency percentiles are stable (100 prompts).
-# PR follow-up (merge-blocking): personal image; republish to the org
-# registry and update `image:` before merge (same as the DEP8 keys above).
-dsv4-fp4-gb200-llm-d-vllm-low-latency:
-  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: gb200
-  precision: fp4
-  framework: llm-d-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - spec-decoding: "none"
-        conc-list: [1]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-          - "GPUS_PER_NODE=4"
-          - "RANDOM_RANGE_RATIO=1.0"
-          - "CONFIG_FILE=dsv4-fp4-gb200-low-latency.yaml"
-          - "BENCH_NUM_PROMPTS_MULTIPLIER=100"
-          - "MAX_FAILURE_RATE=0.5"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "GPUS_PER_NODE=4"
-
-# Low-middle sibling of the dsv4-fp4-gb200-dynamo-vllm low-middle-curve point.
-# Same Family A as low-latency (pure-TP8 decode) but scaled out on the DECODE
-# side: 1 prefill (DEP=8) + 4 decode (each pure TP=8) on 10 GB200 nodes / 40
-# GPUs, at conc 256/512. Reuses the low-latency CONFIG_FILE verbatim - the only
-# difference from low-latency is DECODE_WORKERS 1->4 (and conc), set here.
-# decode ep:1 + dp-attn:false selects the pure-TP path in server.sh.
-dsv4-fp4-gb200-llm-d-vllm-low-middle:
-  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: gb200
-  precision: fp4
-  framework: llm-d-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - spec-decoding: "none"
-        conc-list: [256, 512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-          - "GPUS_PER_NODE=4"
-          - "RANDOM_RANGE_RATIO=1.0"
-          - "CONFIG_FILE=dsv4-fp4-gb200-low-latency.yaml"
-          - "BENCH_NUM_PROMPTS_MULTIPLIER=10"
-          - "MAX_FAILURE_RATE=0.5"
-        decode:
-          num-worker: 4
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=8"
-          - "DECODE_WORKERS=4"
           - "GPUS_PER_NODE=4"
 
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image

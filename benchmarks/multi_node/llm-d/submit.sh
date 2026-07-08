@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Submit a multi-node llm-d-vllm wide-EP P/D disagg benchmark job to SLURM.
+# Submit a multi-node llmd-vllm wide-EP P/D disagg benchmark job to SLURM.
 # Modeled after benchmarks/multi_node/amd_utils/submit.sh; prints JOB_ID on
 # stdout so the runner can poll for completion.
 #
@@ -90,7 +90,7 @@ export MAX_FAILURE_RATE="${MAX_FAILURE_RATE:-0.05}"
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
-export FRAMEWORK="${FRAMEWORK:-llm-d-vllm}"
+export FRAMEWORK="${FRAMEWORK:-llmd-vllm}"
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"
 export RUNNER_TYPE="${RUNNER_TYPE:-}"

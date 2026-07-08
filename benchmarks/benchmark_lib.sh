@@ -888,7 +888,7 @@ run_lm_eval() {
         esac
     done
 
-    # Anchor a relative task-yaml to the repo root. On the llm-d-vllm path
+    # Anchor a relative task-yaml to the repo root. On the llmd-vllm path
     # the eval runs inside the serving container, whose WORKDIR is
     # /vllm-workspace, not the repo bind-mount (/workspace) - so a relative
     # path like "utils/evals/gsm8k.yaml" resolves to a nonexistent file and

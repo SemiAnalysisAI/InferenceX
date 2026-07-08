@@ -5,30 +5,30 @@
 set -x
 
 # ----------------------------------------------------------------------
-# llm-d-vllm: InferenceX-owned multi-node path (no srt-slurm).
+# llmd-vllm: InferenceX-owned multi-node path (no srt-slurm).
 # Mirrors the H200 launcher branch in launch_h200-dgxc-slurm.sh - wrapper
 # script -> benchmarks/multi_node/llm-d/submit.sh -> sbatch -> JOB_ID,
 # then tail the slurm log and bundle server logs on exit.
 # Kept as the first FRAMEWORK gate so it doesn't fall through into the
 # srt-slurm path used by dynamo-{sglang,trt,vllm} below.
 # ----------------------------------------------------------------------
-if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
+if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         # Candidate model dirs, probed per-node in job.slurm (AMD-style
         # SEARCH_PATHS): per-node NVMe FIRST (local, fast - the path the dynamo
         # block below uses), then shared Lustre as fallback. Self-heals when one
-        # is unmounted/missing on the GB200 nodes 
+        # is unmounted/missing on the GB200 nodes
         export MODEL_PATH_CANDIDATES="/mnt/numa1/models/deepseek-v4-pro /mnt/lustre01/models/DeepSeek-V4-Pro"
         export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
     else
-        echo "Unsupported MODEL_PREFIX/PRECISION for llm-d-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
+        echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
         exit 1
     fi
 
     # SLURM partition + account: same values the rest of this launcher
     # uses for the dynamo-* paths below. Setting them here because our
-    # llm-d-vllm branch exits before reaching the file-level export
+    # llmd-vllm branch exits before reaching the file-level export
     # block, and submit.sh requires both to be present.
     export SLURM_PARTITION="${SLURM_PARTITION:-batch}"
     export SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
@@ -92,11 +92,11 @@ if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
     export LLMD_CONTAINER_ENGINE=pyxis
     export LLMD_SQUASH_FILE="$SQUASH_FILE"
 
-    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible); 
+    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible);
     export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
     mkdir -p "$BENCHMARK_LOGS_DIR"
 
-    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llm-d-vllm-disagg.sh"
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
     BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2

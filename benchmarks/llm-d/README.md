@@ -1,7 +1,7 @@
-# llm-d-vllm framework artifacts
+# llmd-vllm framework artifacts
 
 This directory holds the static, baked-into-the-image pieces of the
-`llm-d-vllm` benchmark framework.
+`llmd-vllm` benchmark framework.
 
 | File | Purpose |
 |---|---|
