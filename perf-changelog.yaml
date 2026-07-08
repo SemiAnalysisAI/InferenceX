@@ -4643,3 +4643,11 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026 (gb300_nvfp4 MTP recipes)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1799
 
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d-tep8-tp8
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8
+  description:
+    - "Full agentic-coding sweep of the DSv4 FP4 GB200 dynamo-vllm disagg topologies on the June 21 AgentX corpus"
+    - "3p2d TEP8 prefill / TP8 decode (40 inference GPUs): c4-c80"
+    - "2p1d DEP8 prefill / DEP8 decode (24 inference GPUs): c32-c256 including exploratory tail past the c160 normalized-throughput peak"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2122
