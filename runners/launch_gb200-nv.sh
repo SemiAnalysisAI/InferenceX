@@ -19,7 +19,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
 
     SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    # Enroot uses '#' between the registry and repository.
+    # Enroot uses '#' between the registry and repository, e.g. docker://ghcr.io#org/image:tag.
     case "$IMAGE" in
         */*)
             _registry="${IMAGE%%/*}"
