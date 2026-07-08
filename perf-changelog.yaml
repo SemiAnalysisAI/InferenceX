@@ -4612,3 +4612,11 @@
     - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
     - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache
+    - dsv4-fp4-b300-sglang-agentic-hicache
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.13-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
+    - "Enable SGLANG_ENABLE_UNIFIED_RADIX_TREE=1 unconditionally (previously hicache-only) and SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 to free out-of-window SWA KV slots during chunked prefill, relieving SWA pool pressure and restoring prefix-cache hit rate on multi-turn agentic workloads"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2112
