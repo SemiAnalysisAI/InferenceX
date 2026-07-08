@@ -91,6 +91,7 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_MINIMAX_M3_BF16_ROUTER_GEMM=1
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
