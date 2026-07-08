@@ -46,9 +46,9 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     export SERVED_MODEL_NAME="glm-5-nvfp4"
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" && $SPEC_DECODING == "mtp" ]]; then
-    # GLM-5.1 NVFP4 MTP config — distinct weights from the GLM-5 STP
-    # config below, which stays on /scratch/models/GLM-5-NVFP4.
+elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+    # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+    # in our GLM-5.1 sglang recipes.
     export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
@@ -169,6 +169,12 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
         mkdir -p recipes/sglang/glm5/gb300-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4" recipes/sglang/glm5/gb300-fp4
     fi
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    # GLM-5.1 MTP recipe (recipes/gb300-fp4/glm5-mtp.yaml) lives on
+    # NVIDIA/srt-slurm:main — check it out; no in-repo overlay needed.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Overlay our version-controlled Qwen3.5 recipes onto the submission branch.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
