@@ -1,8 +1,10 @@
 # CollectiveX Sweep — one structured run instead of thousands of dispatches.
 #
-# Shape: sweep/probe runs setup -> GPU cells; publish and refresh stay on disposable
-# GitHub-hosted storage and skip GPU jobs. This file is registered on the default
-# branch, so its collectivex branch revision can be dispatched with --ref.
+# Shape: setup resolves the suites into a shard matrix, then one GPU cell runs per
+# shard, executes the benchmark, validates the emitted neutral artifacts, and uploads
+# them. This repo only schedules, executes, validates, and uploads — it does not
+# promote, rank, recommend, or decide what a frontend displays. This file is registered
+# on the default branch, so its collectivex branch revision can be dispatched with --ref.
 name: CollectiveX Sweep
 permissions:
   actions: read
@@ -10,11 +12,6 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
-      operation:
-        description: Operation to execute
-        type: choice
-        default: sweep
-        options: [sweep, probe-precision, publish, refresh]
       backend:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
@@ -25,62 +22,24 @@ on:
         type: string
         default: all
       only_sku:
-        description: Restrict to one V1 GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi300x|mi355x); blank = all
+        description: Restrict to one GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi300x|mi355x); blank = all
         type: string
         default: ''
       exclude_skus:
         description: Comma-list of runner pools to drop from the matrix (partial run, e.g. b300); disjoint from only_sku; blank = none
         type: string
         default: ''
-      probe_id:
-        description: Optional exact provisional probe ID; valid only for probe-precision
-        type: string
-        default: ''
-      min_nodes:
-        description: Keep only shards with at least this node/tray count (2 keeps every EP16 and GB EP8; blank = all)
-        type: string
-        default: ''
-      max_nodes:
-        description: Keep only shards with at most this node/tray count (1 keeps non-GB EP8; blank = all)
-        type: string
-        default: ''
       ep_sizes:
         description: Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
         type: string
         default: ''
-      max_cases:
-        description: Max cases per shard cell before chunking into another GHA job (128 = no chunking for current suites)
-        type: string
-        default: '128'
-      release_tag:
-        description: "Release version: 'unversioned' (diagnostic, cannot publish) or a positive integer N to publish as version N (incrementable: 1, 2, 3, ...)"
-        type: string
-        default: unversioned
-      qualification_index:
-        description: Deterministic execution-order index; V1 qualification uses 1, then 2, then 3
-        type: choice
-        default: '1'
-        options: ['1', '2', '3']
-      publish_run_id:
-        description: For publish, one successful versioned sweep run ID (qualification index 1)
-        type: string
-        default: ''
-      refresh_run_id:
-        description: For refresh, source publication workflow run ID
-        type: string
-        default: ''
-      refresh_digest:
-        description: For refresh, exact publication dataset SHA-256
-        type: string
-        default: ''
 concurrency:
-  group: cx-${{ inputs.operation }}-${{ github.ref }}-${{ inputs.release_tag }}-${{ inputs.backend }}-${{ inputs.only_sku }}-${{ inputs.probe_id }}
+  group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
 
 jobs:
   # ---- setup: resolve the suites into the shard matrix (the "pending jobs" node) ----
   setup:
-    if: ${{ inputs.operation == 'sweep' || inputs.operation == 'probe-precision' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
@@ -95,82 +54,32 @@ jobs:
         working-directory: experimental/CollectiveX
         env:
           INPUT_BACKEND: ${{ inputs.backend }}
-          INPUT_OPERATION: ${{ inputs.operation }}
           INPUT_SUITES: ${{ inputs.suites }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
-          INPUT_PROBE_ID: ${{ inputs.probe_id }}
-          INPUT_MIN_NODES: ${{ inputs.min_nodes }}
-          INPUT_MAX_NODES: ${{ inputs.max_nodes }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
-          INPUT_MAX_CASES: ${{ inputs.max_cases }}
-          INPUT_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
-          CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
           COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
           COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
           COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
         run: |
           set -euo pipefail
-          if [ "$INPUT_OPERATION" = probe-precision ] && [ "${{ inputs.release_tag }}" != unversioned ]; then
-            echo 'precision probes cannot carry a release version' >&2
-            exit 1
-          fi
-          if [ "$INPUT_OPERATION" = sweep ] && [ "${{ inputs.release_tag }}" != unversioned ]; then
-            # The release version is a positive integer N (v1, v2, v3, ...); it is
-            # incrementable, never a hardcoded tag. 'unversioned' stays diagnostic.
-            [[ "${{ inputs.release_tag }}" =~ ^[1-9][0-9]*$ ]] || {
-              echo 'release_tag must be "unversioned" or a positive integer version N' >&2
-              exit 1
-            }
-            [[ "$INPUT_QUALIFICATION_INDEX" =~ ^[123]$ ]] || {
-              echo 'versioned sweeps require qualification_index 1, 2, or 3' >&2
-              exit 1
-            }
-            # A versioned sweep may be filtered to a subset of the canonical matrix
-            # ("tagged + success" contract) — a full run and a partial run (e.g.
-            # only_sku, or a single backend) are both publishable. The publisher
-            # binds every promoted case to the canonical catalog, so a filtered
-            # matrix cannot invent or reclassify cases; it only narrows coverage.
-            python3 - <<'PY'
-          import capability
-
-          if capability.provisional_precision_targets():
-              raise SystemExit("versioned sweeps require every precision capability cell to be resolved")
-          PY
-          fi
-          if [ "$INPUT_OPERATION" = probe-precision ]; then
-            args=(--workflow-plan --backend "$INPUT_BACKEND" --out matrix_full.json)
-            [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
-            [ -n "$INPUT_PROBE_ID" ] && args+=(--probe-id "$INPUT_PROBE_ID")
-            [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
-            [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
-            python3 tests/probe_precision.py "${args[@]}"
-          else
-            [ -z "$INPUT_PROBE_ID" ] || { echo 'probe_id requires probe-precision' >&2; exit 1; }
-            args=(--suites "$INPUT_SUITES" --max-cases "$INPUT_MAX_CASES")
-            case "$INPUT_BACKEND" in
-              all) args+=(--backends all) ;;
-              *) args+=(--backend "$INPUT_BACKEND") ;;
-            esac
-            [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
-            [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
-            [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
-            [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
-            [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
-            python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
-          fi
-          python3 artifact_safety.py matrix_full.json
+          args=(--suites "$INPUT_SUITES")
+          case "$INPUT_BACKEND" in
+            all) args+=(--backends all) ;;
+            *) args+=(--backend "$INPUT_BACKEND") ;;
+          esac
+          [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+          [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
+          [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
+          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='case_ids'} for x in m['include']]}))")
           {
             echo "matrix=$SLIM"
             echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")"
             echo "source_backends=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(' '.join(sorted({x['backend'] for x in m['include']} & {'deepep-v2','deepep-hybrid'})))")"
-            echo "max_parallel=$(python3 -c "import json;m=json.load(open('matrix_full.json'));w=max(x['execution_weight'] for x in m['include']);b=64 if '$INPUT_OPERATION' == 'probe-precision' else 4096;print(max(1,min(10,b//w)))")"
+            echo "max_parallel=$(python3 -c "import json;m=json.load(open('matrix_full.json'));w=max(x['execution_weight'] for x in m['include']);print(max(1,min(10,4096//w)))")"
           } >> "$GITHUB_OUTPUT"
-          unsupported_n=0
-          if [ "$INPUT_OPERATION" = sweep ]; then
-            unsupported_n=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(sum(x['disposition']=='unsupported' for x in m['requested_cases']))")
-          fi
+          unsupported_n=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(sum(x['disposition']=='unsupported' for x in m['requested_cases']))")
           echo "unsupported_n=$unsupported_n" >> "$GITHUB_OUTPUT"
           if [ "$unsupported_n" -gt 0 ]; then
             python3 sweep_matrix.py --emit-unsupported-from matrix_full.json \
@@ -222,90 +131,17 @@ jobs:
           path: ${{ runner.temp }}/collectivex-backend-sources.tar
           if-no-files-found: error
           overwrite: true
-          retention-days: ${{ inputs.release_tag != 'unversioned' && 90 || 3 }}
+          retention-days: 14
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxsweep-matrix-${{ github.run_id }}
           path: experimental/CollectiveX/matrix_full.json
           if-no-files-found: error
           overwrite: true
-          retention-days: ${{ inputs.release_tag != 'unversioned' && 90 || 3 }}
-      - name: Create release marker
-        if: ${{ inputs.operation == 'sweep' && inputs.release_tag != 'unversioned' }}
-        env:
-          EXPECTED_MATRIX_SHA256: 5894bab58d3deb2bcee51baa075ca5f5d324b4292ac1cef9f6bc08a07ab1d9a3
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-          SOURCE_SHA: ${{ github.sha }}
-          QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
-          RELEASE_VERSION: ${{ inputs.release_tag }}
-        run: |
-          set -euo pipefail
-          destination="$RUNNER_TEMP/collectivex-release"
-          install -d -m 700 "$destination"
-          python3 - "$destination/release.json" <<'PY'
-          import hashlib
-          import json
-          import os
-          import pathlib
-          import sys
-
-          sys.path.insert(0, str(pathlib.Path("experimental/CollectiveX").resolve()))
-          import sweep_matrix
-
-          matrix = pathlib.Path("experimental/CollectiveX/matrix_full.json").read_bytes()
-          matrix_sha256 = hashlib.sha256(matrix).hexdigest()
-          # A versioned run may cover the full canonical matrix or a filtered subset.
-          # A full run stays pinned to the locked matrix + execution plan (strict
-          # integrity); a partial run records its own matrix + plan digests so a
-          # "tagged + success" subset is still a verifiable, publishable marker.
-          coverage_scope = (
-              "full" if matrix_sha256 == os.environ["EXPECTED_MATRIX_SHA256"] else "partial"
-          )
-          version = int(os.environ["RELEASE_VERSION"])
-          if version < 1:
-              raise SystemExit("release version must be a positive integer")
-          qualification_index = int(os.environ["QUALIFICATION_INDEX"])
-          execution_plan_sha256 = sweep_matrix.qualification_execution_plan_sha256(
-              json.loads(matrix), qualification_index
-          )
-          if coverage_scope == "full" and (
-              execution_plan_sha256
-              != sweep_matrix.CANONICAL_V1_EXECUTION_PLAN_SHA256.get(qualification_index)
-          ):
-              raise SystemExit("a full release version requires the locked execution plan")
-          marker = {
-              "coverage_scope": coverage_scope,
-              "execution_plan_sha256": execution_plan_sha256,
-              "format": "collectivex.release-tag.v1",
-              "matrix_sha256": matrix_sha256,
-              "qualification_index": qualification_index,
-              "run_attempt": os.environ["RUN_ATTEMPT"],
-              "run_id": os.environ["RUN_ID"],
-              "source_sha": os.environ["SOURCE_SHA"],
-              "version": version,
-          }
-          pathlib.Path(sys.argv[1]).write_text(
-              json.dumps(marker, sort_keys=True, separators=(",", ":")) + "\n"
-          )
-          PY
-          python3 experimental/CollectiveX/artifact_safety.py "$destination/release.json"
-      - name: Upload release marker
-        if: ${{ inputs.operation == 'sweep' && inputs.release_tag != 'unversioned' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cxrelease-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/collectivex-release/release.json
-          if-no-files-found: error
-          retention-days: 90
-      - name: Validate unsupported artifact safety
-        id: unsupported_safety
-        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 }}
-        run: |
-          python3 experimental/CollectiveX/artifact_safety.py experimental/CollectiveX/unsupported/*.json
+          retention-days: 14
       - name: Validate unsupported outcomes
         id: unsupported_contracts
-        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 && steps.unsupported_safety.outcome == 'success' }}
+        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 }}
         env:
           COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
           COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
@@ -315,17 +151,17 @@ jobs:
             --disposition unsupported \
             experimental/CollectiveX/unsupported/*.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 && steps.unsupported_contracts.outcome == 'success' && steps.unsupported_safety.outcome == 'success' }}
+        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 && steps.unsupported_contracts.outcome == 'success' }}
         with:
           name: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
           path: experimental/CollectiveX/unsupported/*.json
           if-no-files-found: error
-          retention-days: ${{ inputs.release_tag != 'unversioned' && 90 || 3 }}
+          retention-days: 14
 
   # ---- sweep: ONE matrix cell per shard (the parent job with child jobs) ----
   sweep:
     needs: setup
-    if: ${{ (inputs.operation == 'sweep' || inputs.operation == 'probe-precision') && fromJSON(needs.setup.outputs.n) > 0 }}
+    if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
       max-parallel: ${{ fromJSON(needs.setup.outputs.max_parallel) }}
@@ -339,16 +175,14 @@ jobs:
       CX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
       CX_SHARD_FILE: .shards/${{ matrix.id }}.json
       CX_SHARD_SKU: ${{ matrix.sku }}
-      CX_PRECISION_PROBE: ${{ inputs.operation == 'probe-precision' && '1' || '0' }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      COLLECTIVEX_ARTIFACT_NAME: ${{ inputs.operation == 'probe-precision' && format('cxprobe-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) || format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
+      COLLECTIVEX_ARTIFACT_NAME: ${{ format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
       # Consolidated shards run one bounded build-group in one Slurm allocation.
       # MI300X's compute partition has a 180-minute ceiling; the other production
       # pools accept 300 minutes. Allocations release as soon as the shard finishes.
-      CX_TIME: ${{ inputs.operation == 'probe-precision' && '90' || (matrix.sku == 'mi300x' && '180' || '300') }}
+      CX_TIME: ${{ matrix.sku == 'mi300x' && '180' || '300' }}
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
-      CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
       CX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
       CX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
       CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
@@ -495,24 +329,14 @@ jobs:
           set -euo pipefail
           cd "$CX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          if [ '${{ inputs.operation }}' = probe-precision ]; then
-            python3 tests/probe_precision.py \
-              --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
-              --probe-id '${{ matrix.id }}' \
-              --expect-sku '${{ matrix.sku }}' \
-              --expect-backend '${{ matrix.backend }}' \
-              --expect-nodes '${{ matrix.nodes }}' \
-              --out '${{ env.CX_SHARD_FILE }}'
-          else
-            python3 sweep_matrix.py \
-              --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
-              --shard-id '${{ matrix.id }}' \
-              --expect-sku '${{ matrix.sku }}' \
-              --expect-backend '${{ matrix.backend }}' \
-              --expect-nodes '${{ matrix.nodes }}' \
-              --out '${{ env.CX_SHARD_FILE }}' >/dev/null
-          fi
-      - name: Execute ${{ inputs.operation }} cell ${{ matrix.id }}
+          python3 sweep_matrix.py \
+            --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
+            --shard-id '${{ matrix.id }}' \
+            --expect-sku '${{ matrix.sku }}' \
+            --expect-backend '${{ matrix.backend }}' \
+            --expect-nodes '${{ matrix.nodes }}' \
+            --out '${{ env.CX_SHARD_FILE }}' >/dev/null
+      - name: Execute sweep cell ${{ matrix.id }}
         id: sweep_shard
         env:
           COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
@@ -642,29 +466,17 @@ jobs:
           set -euo pipefail
           [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
             || { echo "CollectiveX allocation cleanup was not confirmed" >&2; exit 1; }
-      - name: Validate shard artifact safety
-        id: artifact_safety
-        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' && (inputs.operation != 'probe-precision' || steps.sweep_shard.outcome == 'success') }}
-        run: |
-          cd "$CX_SOURCE_ROOT" 2>/dev/null \
-            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          python3 experimental/CollectiveX/artifact_safety.py experimental/CollectiveX/results/*.json
       - name: Validate shard delivery completeness
         id: delivery_contracts
-        if: ${{ always() && steps.artifact_safety.outcome == 'success' }}
+        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
         run: |
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          if [ '${{ inputs.operation }}' = probe-precision ]; then
-            python3 experimental/CollectiveX/tests/probe_precision.py \
-              --validate-manifest experimental/CollectiveX/results/*.json
-          else
-            python3 experimental/CollectiveX/contracts.py validate-delivery \
-              --source "experimental/CollectiveX/${CX_SHARD_FILE}" \
-              experimental/CollectiveX/results/*.json
-          fi
+          python3 experimental/CollectiveX/contracts.py validate-delivery \
+            --source "experimental/CollectiveX/${CX_SHARD_FILE}" \
+            experimental/CollectiveX/results/*.json
       - name: Shard summary
-        if: ${{ inputs.operation == 'sweep' && always() && steps.artifact_safety.outcome == 'success' && steps.delivery_contracts.outcome == 'success' }}
+        if: ${{ always() && steps.delivery_contracts.outcome == 'success' }}
         run: |
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
@@ -672,7 +484,7 @@ jobs:
             --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
       - name: Stage shard artifact
         id: stage_artifact
-        if: ${{ always() && steps.delivery_contracts.outcome == 'success' && steps.artifact_safety.outcome == 'success' }}
+        if: ${{ always() && steps.delivery_contracts.outcome == 'success' }}
         run: |
           set -euo pipefail
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
@@ -680,14 +492,14 @@ jobs:
           cp -- experimental/CollectiveX/results/*.json "$CX_JOB_ROOT/artifact/"
       - name: Upload shard results
         id: upload_artifact
-        if: always() && steps.stage_artifact.outcome == 'success' && steps.delivery_contracts.outcome == 'success' && steps.artifact_safety.outcome == 'success'
+        if: always() && steps.stage_artifact.outcome == 'success' && steps.delivery_contracts.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ${{ inputs.operation == 'probe-precision' && format('cxprobe-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) || format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
+          name: ${{ format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
           path: |
             ${{ env.CX_JOB_ROOT }}/artifact/*.json
           if-no-files-found: error
-          retention-days: ${{ inputs.release_tag != 'unversioned' && 90 || 3 }}
+          retention-days: 14
       - name: Cleanup isolated workspace
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
@@ -704,7 +516,6 @@ jobs:
             || { echo "CollectiveX allocation cleanup was not confirmed; retaining isolated files" >&2; exit 1; }
           if [ '${{ steps.sweep_shard.outcome }}' = success ] \
               && [ '${{ steps.allocation_cleanup.outcome }}' = success ] \
-              && [ '${{ steps.artifact_safety.outcome }}' = success ] \
               && [ '${{ steps.delivery_contracts.outcome }}' = success ] \
               && [ '${{ steps.stage_artifact.outcome }}' = success ] \
               && [ '${{ steps.upload_artifact.outcome }}' = success ] \
@@ -723,449 +534,3 @@ jobs:
           rm -rf -- "$CX_JOB_ROOT"
           [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"
 
-  probe-summary:
-    needs: [setup, sweep]
-    if: ${{ always() && inputs.operation == 'probe-precision' && needs.sweep.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with: { clean: true, persist-credentials: false }
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: cxsweep-matrix-${{ github.run_id }}
-          path: ${{ runner.temp }}/collectivex-probes/control
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: cxprobe-*-${{ github.run_id }}-${{ github.run_attempt }}
-          merge-multiple: true
-          path: ${{ runner.temp }}/collectivex-probes/results
-      - name: Validate exact precision probe coverage
-        run: |
-          set -euo pipefail
-          plan="$RUNNER_TEMP/collectivex-probes/control/matrix_full.json"
-          shopt -s nullglob
-          manifests=("$RUNNER_TEMP"/collectivex-probes/results/*.json)
-          [ "${#manifests[@]}" -gt 0 ] || {
-            echo 'precision probe artifacts are empty' >&2
-            exit 1
-          }
-          python3 experimental/CollectiveX/artifact_safety.py "$plan" "${manifests[@]}"
-          python3 experimental/CollectiveX/tests/probe_precision.py \
-            --validate-bundle "$plan" --validate-manifest "${manifests[@]}"
-      - name: Upload validated precision probe bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cxprecision-probes-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/collectivex-probes
-          if-no-files-found: error
-          retention-days: 30
-
-  # ---- autopublish: a successful versioned sweep self-publishes its own run ----
-  # A "tagged + success" sweep (full OR partial) emits its own promoted
-  # publication artifact from the same run, so the frontend can discover many
-  # independent runs of a version Just-In-Time without a separate manual publish step.
-  autopublish:
-    needs: [setup, sweep]
-    if: ${{ inputs.operation == 'sweep' && inputs.release_tag != 'unversioned' && inputs.qualification_index == '1' && needs.sweep.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      REPOSITORY: ${{ github.repository }}
-      RUN_ID: ${{ github.run_id }}
-      RUN_ATTEMPT: ${{ github.run_attempt }}
-      SOURCE_SHA: ${{ github.sha }}
-      QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
-      RELEASE_VERSION: ${{ inputs.release_tag }}
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with:
-          ref: ${{ github.sha }}
-          clean: true
-          persist-credentials: false
-      - name: Install publisher dependencies
-        run: python3 -m pip install --quiet -r experimental/CollectiveX/requirements.txt
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: ${{ runner.temp }}/collectivex-downloads
-      - name: Build promoted publication
-        run: |
-          set -euo pipefail
-          store="$RUNNER_TEMP/collectivex-publisher"
-          run_dir="$RUNNER_TEMP/collectivex-downloads"
-          output="$RUNNER_TEMP/collectivex-publication"
-          umask 027
-          mkdir -m 750 "$store" "$output"
-          matrix="$run_dir/cxsweep-matrix-$RUN_ID/matrix_full.json"
-          [ -f "$matrix" ] || {
-            echo 'run is missing its exact matrix artifact' >&2
-            exit 1
-          }
-          mapfile -t artifacts < <(
-            find "$run_dir" -mindepth 1 -maxdepth 1 -type d \
-              \( -name "cxshard-*-$RUN_ID-$RUN_ATTEMPT" \
-              -o -name "cxunsupported-$RUN_ID-$RUN_ATTEMPT" \) -print | sort
-          )
-          [ "${#artifacts[@]}" -gt 0 ] || {
-            echo 'run has no result artifacts' >&2
-            exit 1
-          }
-          artifact_args=()
-          for artifact in "${artifacts[@]}"; do
-            artifact_args+=(--artifact "$artifact")
-          done
-          result=$(
-            python3 experimental/CollectiveX/publisher.py --store-root "$store" ingest \
-              --matrix "$matrix" \
-              "${artifact_args[@]}" \
-              --repository "$REPOSITORY" \
-              --run-id "$RUN_ID" \
-              --run-attempt "$RUN_ATTEMPT" \
-              --qualification-index "$QUALIFICATION_INDEX" \
-              --source-sha "$SOURCE_SHA"
-          )
-          bundle_id=$(jq -er '.bundle_id' <<< "$result")
-          result=$(
-            python3 experimental/CollectiveX/publisher.py --store-root "$store" promote \
-              --bundle "$bundle_id"
-          )
-          dataset_id=$(jq -er '.dataset_sha256' <<< "$result")
-          dataset="$store/public/datasets/$dataset_id/dataset.json"
-          [ -f "$dataset" ] || {
-            echo 'publisher did not install the promoted dataset' >&2
-            exit 1
-          }
-          publication="$output/collectivex_public_v1_$dataset_id.ndjson"
-          cp -- "$dataset" "$publication"
-          python3 experimental/CollectiveX/artifact_safety.py "$publication"
-          python3 experimental/CollectiveX/publisher.py --store-root "$store" verify \
-            --channel dev-latest --bundle "$bundle_id"
-          [ "$(stat -c %s "$publication")" -le 33554432 ] || {
-            echo 'publication exceeds the 32 MiB frontend limit' >&2
-            exit 1
-          }
-          sha256sum "$publication"
-          {
-            echo "## CollectiveX publication (auto) — version $RELEASE_VERSION"
-            echo
-            echo "Dataset: \`$dataset_id\`"
-            echo
-            echo "Source run: \`$RUN_ID\` attempt \`$RUN_ATTEMPT\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload JIT publication artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cxpublication-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/collectivex-publication/*.ndjson
-          if-no-files-found: error
-          retention-days: 90
-
-  publish:
-    if: ${{ inputs.operation == 'publish' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      GH_TOKEN: ${{ github.token }}
-      RUN_ID: ${{ inputs.publish_run_id }}
-    steps:
-      - name: Verify source run
-        id: runs
-        env:
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          run_id="$RUN_ID"
-          [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || {
-            echo 'publish_run_id must be a single decimal run ID' >&2
-            exit 1
-          }
-
-          : > "$RUNNER_TEMP/collectivex-runs.tsv"
-          metadata=$(gh api "repos/$REPOSITORY/actions/runs/$run_id")
-          name=$(jq -r '.name' <<< "$metadata")
-          path=$(jq -r '.path' <<< "$metadata")
-          branch=$(jq -r '.head_branch' <<< "$metadata")
-          status=$(jq -r '.status' <<< "$metadata")
-          conclusion=$(jq -r '.conclusion' <<< "$metadata")
-          sha=$(jq -r '.head_sha' <<< "$metadata")
-          attempt=$(jq -r '.run_attempt' <<< "$metadata")
-          [ "$name" = 'CollectiveX Sweep' ] \
-            && [ "$path" = '.github/workflows/collectivex-sweep.yml' ] \
-            && [ "$branch" = 'collectivex' ] \
-            && [ "$status" = 'completed' ] \
-            && [ "$conclusion" = 'success' ] \
-            && [[ "$attempt" =~ ^[1-9][0-9]*$ ]] \
-            && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "run $run_id is not an eligible V1 sweep" >&2
-              exit 1
-            }
-          source_sha="$sha"
-          printf '%s\t%s\t%s\n' "$run_id" "$attempt" "$sha" \
-            >> "$RUNNER_TEMP/collectivex-runs.tsv"
-          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with:
-          ref: ${{ steps.runs.outputs.source_sha }}
-          clean: true
-          persist-credentials: false
-
-      - name: Install publisher dependencies
-        run: python3 -m pip install --quiet -r experimental/CollectiveX/requirements.txt
-
-      - name: Build promoted publication
-        id: build
-        env:
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          store="$RUNNER_TEMP/collectivex-publisher"
-          downloads="$RUNNER_TEMP/collectivex-downloads"
-          output="$RUNNER_TEMP/collectivex-publication"
-          umask 027
-          mkdir -m 750 "$store" "$downloads" "$output"
-          : > "$RUNNER_TEMP/collectivex-bundles.txt"
-          : > "$RUNNER_TEMP/collectivex-qualification-indices.txt"
-          : > "$RUNNER_TEMP/collectivex-versions.txt"
-
-          while IFS=$'\t' read -r run_id attempt source_sha; do
-            run_dir="$downloads/$run_id"
-            mkdir -m 750 "$run_dir"
-            gh run download "$run_id" --repo "$REPOSITORY" --dir "$run_dir"
-            matrix="$run_dir/cxsweep-matrix-$run_id/matrix_full.json"
-            # The release marker's version is embedded in its artifact name
-            # (cxrelease-<version>-<run>-<attempt>); discover it version-agnostically.
-            marker=$(
-              find "$run_dir" -mindepth 2 -maxdepth 2 -type f \
-                -regextype posix-extended \
-                -regex ".*/cxrelease-[1-9][0-9]*-$run_id-$attempt/release\.json" -print -quit
-            )
-            [ -f "$matrix" ] || {
-              echo "run $run_id is missing its exact matrix artifact" >&2
-              exit 1
-            }
-            [ -n "$marker" ] && [ -f "$marker" ] || {
-              echo "run $run_id is not tagged for a release version" >&2
-              exit 1
-            }
-            version=$(jq -r '.version' "$marker")
-            [[ "$version" =~ ^[1-9][0-9]*$ ]] || {
-              echo "run $run_id has a non-integer release version" >&2
-              exit 1
-            }
-            matrix_sha=$(sha256sum "$matrix" | cut -d' ' -f1)
-            qualification_index=$(jq -r '.qualification_index' "$marker")
-            execution_plan_sha=$(
-              PYTHONPATH=experimental/CollectiveX python3 -c \
-                'import json,sys,sweep_matrix as s; print(s.qualification_execution_plan_sha256(json.load(open(sys.argv[1], encoding="utf-8")), int(sys.argv[2])))' \
-                "$matrix" "$qualification_index"
-            )
-            jq -e \
-              --arg run_id "$run_id" \
-              --arg attempt "$attempt" \
-              --arg source_sha "$source_sha" \
-              --arg matrix_sha "$matrix_sha" \
-              --arg execution_plan_sha "$execution_plan_sha" \
-              'keys == ["coverage_scope","execution_plan_sha256","format","matrix_sha256","qualification_index","run_attempt","run_id","source_sha","version"]
-               and .format == "collectivex.release-tag.v1"
-               and (.version | type == "number" and . >= 1)
-               and (.coverage_scope == "full" or .coverage_scope == "partial")
-               and .run_id == $run_id
-               and .run_attempt == $attempt
-               and .source_sha == $source_sha
-               and .qualification_index == 1
-               and .matrix_sha256 == $matrix_sha
-               and .execution_plan_sha256 == $execution_plan_sha' \
-              "$marker" >/dev/null || {
-                echo "run $run_id has an invalid release marker" >&2
-                exit 1
-              }
-            printf '%s\n' "$version" >> "$RUNNER_TEMP/collectivex-versions.txt"
-            jq -r '.qualification_index' "$marker" \
-              >> "$RUNNER_TEMP/collectivex-qualification-indices.txt"
-
-            mapfile -t artifacts < <(
-              find "$run_dir" -mindepth 1 -maxdepth 1 -type d \
-                \( -name "cxshard-*-$run_id-$attempt" \
-                -o -name "cxunsupported-$run_id-$attempt" \) -print | sort
-            )
-            [ "${#artifacts[@]}" -gt 0 ] || {
-              echo "run $run_id has no result artifacts" >&2
-              exit 1
-            }
-            artifact_args=()
-            for artifact in "${artifacts[@]}"; do
-              artifact_args+=(--artifact "$artifact")
-            done
-            result=$(
-              python3 experimental/CollectiveX/publisher.py --store-root "$store" ingest \
-                --matrix "$matrix" \
-                "${artifact_args[@]}" \
-                --repository "$REPOSITORY" \
-                --run-id "$run_id" \
-                --run-attempt "$attempt" \
-                --qualification-index "$qualification_index" \
-                --source-sha "$source_sha"
-            )
-            bundle_id=$(jq -er '.bundle_id' <<< "$result")
-            printf '%s\n' "$bundle_id" >> "$RUNNER_TEMP/collectivex-bundles.txt"
-          done < "$RUNNER_TEMP/collectivex-runs.tsv"
-
-          [ "$(sort -n "$RUNNER_TEMP/collectivex-qualification-indices.txt" | tr '\n' ' ')" = '1 ' ] || {
-            echo 'source run must be qualification index 1 exactly once' >&2
-            exit 1
-          }
-
-          release_version=$(sort -un "$RUNNER_TEMP/collectivex-versions.txt")
-          [ "$(printf '%s\n' "$release_version" | wc -l)" -eq 1 ] || {
-            echo 'publish source runs disagree on the release version' >&2
-            exit 1
-          }
-          echo "version=$release_version" >> "$GITHUB_OUTPUT"
-
-          mapfile -t bundle_ids < "$RUNNER_TEMP/collectivex-bundles.txt"
-          promote_args=()
-          for bundle_id in "${bundle_ids[@]}"; do
-            promote_args+=(--bundle "$bundle_id")
-          done
-          result=$(
-            python3 experimental/CollectiveX/publisher.py --store-root "$store" promote \
-              "${promote_args[@]}"
-          )
-          dataset_id=$(jq -er '.dataset_sha256' <<< "$result")
-          dataset="$store/public/datasets/$dataset_id/dataset.json"
-          [ -f "$dataset" ] || {
-            echo 'publisher did not install the promoted dataset' >&2
-            exit 1
-          }
-          publication="$output/collectivex_public_v1_$dataset_id.ndjson"
-          cp -- "$dataset" "$publication"
-          python3 experimental/CollectiveX/artifact_safety.py "$publication"
-          python3 experimental/CollectiveX/publisher.py --store-root "$store" verify \
-            --channel dev-latest "${promote_args[@]}"
-          [ "$(stat -c %s "$publication")" -le 33554432 ] || {
-            echo 'publication exceeds the 32 MiB frontend limit' >&2
-            exit 1
-          }
-          sha256sum "$publication"
-          {
-            echo "## CollectiveX publication — version $release_version"
-            echo
-            echo "Dataset: \`$dataset_id\`"
-            echo
-            echo 'Source run:'
-            sed 's/^/- `/' "$RUNNER_TEMP/collectivex-runs.tsv" | sed 's/$/`/'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload JIT publication artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cxpublication-${{ steps.build.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/collectivex-publication/*.ndjson
-          if-no-files-found: error
-          retention-days: 90
-
-  refresh:
-    if: ${{ inputs.operation == 'refresh' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    env:
-      GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN_ID: ${{ inputs.refresh_run_id }}
-      EXPECTED_DIGEST: ${{ inputs.refresh_digest }}
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with: { clean: true, persist-credentials: false }
-
-      - name: Revalidate promoted publication
-        id: refresh
-        env:
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]] || {
-            echo 'refresh_run_id must be a decimal workflow run ID' >&2
-            exit 1
-          }
-          [[ "$EXPECTED_DIGEST" =~ ^[0-9a-f]{64}$ ]] || {
-            echo 'refresh_digest must be a SHA-256 digest' >&2
-            exit 1
-          }
-          metadata=$(gh api "repos/$REPOSITORY/actions/runs/$SOURCE_RUN_ID")
-          path=$(jq -r '.path' <<< "$metadata")
-          branch=$(jq -r '.head_branch' <<< "$metadata")
-          status=$(jq -r '.status' <<< "$metadata")
-          conclusion=$(jq -r '.conclusion' <<< "$metadata")
-          attempt=$(jq -r '.run_attempt' <<< "$metadata")
-          [ "$path" = '.github/workflows/collectivex-sweep.yml' ] \
-            && [ "$branch" = 'collectivex' ] \
-            && [ "$status" = completed ] \
-            && [ "$conclusion" = success ] \
-            && [[ "$attempt" =~ ^[1-9][0-9]*$ ]] || {
-              echo 'refresh source is not an eligible CollectiveX workflow run' >&2
-              exit 1
-            }
-
-          # The publication artifact carries its version in its name
-          # (cxpublication-<version>-<run>-<attempt>); discover it from the run.
-          pub_name=$(
-            gh api --paginate "repos/$REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" \
-              --jq '.artifacts[].name' \
-              | grep -E "^cxpublication-[1-9][0-9]*-$SOURCE_RUN_ID-$attempt$" \
-              | sort -u
-          )
-          [ "$(printf '%s\n' "$pub_name" | grep -c .)" -eq 1 ] || {
-            echo 'refresh source has no single versioned publication artifact' >&2
-            exit 1
-          }
-          release_version=$(printf '%s\n' "$pub_name" | sed -E 's/^cxpublication-([1-9][0-9]*)-.*/\1/')
-          echo "version=$release_version" >> "$GITHUB_OUTPUT"
-
-          source="$RUNNER_TEMP/collectivex-refresh-source"
-          output="$RUNNER_TEMP/collectivex-publication"
-          install -d -m 750 "$source" "$output"
-          gh run download "$SOURCE_RUN_ID" --repo "$REPOSITORY" \
-            --name "$pub_name" --dir "$source"
-          mapfile -t files < <(find "$source" -mindepth 1 -maxdepth 1 -type f -print)
-          [ "${#files[@]}" -eq 1 ] || {
-            echo 'refresh source must contain exactly one root file' >&2
-            exit 1
-          }
-          expected_name="collectivex_public_v1_${EXPECTED_DIGEST}.ndjson"
-          [ "$(basename "${files[0]}")" = "$expected_name" ] || {
-            echo 'refresh source filename differs from its requested digest' >&2
-            exit 1
-          }
-          [ "$(sha256sum "${files[0]}" | cut -d' ' -f1)" = "$EXPECTED_DIGEST" ] || {
-            echo 'refresh source bytes differ from their requested digest' >&2
-            exit 1
-          }
-          [ "$(stat -c %s "${files[0]}")" -le 33554432 ] || {
-            echo 'refresh source exceeds the 32 MiB frontend limit' >&2
-            exit 1
-          }
-          python3 - "${files[0]}" <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text(encoding="utf-8")
-          if not text.endswith("\n") or text.count("\n") != 1:
-              raise SystemExit("publication must contain exactly one NDJSON record")
-          document = json.loads(text)
-          if document.get("format") != "collectivex.public.v1":
-              raise SystemExit("publication format is invalid")
-          if document.get("promotion", {}).get("status") != "promoted":
-              raise SystemExit("publication is not promoted")
-          PY
-          python3 experimental/CollectiveX/artifact_safety.py "${files[0]}"
-          cp -- "${files[0]}" "$output/$expected_name"
-
-      - name: Upload refreshed JIT publication artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cxpublication-${{ steps.refresh.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/collectivex-publication/*.ndjson
-          if-no-files-found: error
-          retention-days: 90
