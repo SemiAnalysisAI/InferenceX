@@ -1419,17 +1419,14 @@ CX_IMAGE_MULTIARCH_DIGEST="sha256:061fb71f838e82000a1768c159654d526c2f17ebe751c2
 # Runtime setup verifies the image-bundled DeepEP build for the detected GPU target.
 CX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 
-# AMD (ROCm/CDNA): separate single-arch images bundle MoRI.
-CX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2"
-CX_IMAGE_AMD_MORI_DIGEST="sha256:24c3b30d64475937abbb6498e3b29528649adcb836dde7a468979f767809b0e8"
-CX_MORI_COMMIT_MI355="99bc0a3a6e7a70aacc6372cd9a4275ccfb4de567" # pragma: allowlist secret
+# AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for all three CDNA
+# SKUs (gfx942 mi300x/mi325x + gfx950 mi355x).
 CX_IMAGE_AMD_MORI_MI325="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
 CX_IMAGE_AMD_MORI_MI325_DIGEST="sha256:ea42375343c2ef8f73b3bdb9e1b7b435556e3ca92aba5e3f74ada29ba217fabc"
 CX_MORI_COMMIT_MI325="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
 cx_default_image() {
   case "$1" in
-    mi300x*|mi325x*) echo "$CX_IMAGE_AMD_MORI_MI325" ;;
-    mi355x*) echo "$CX_IMAGE_AMD_MORI" ;;
+    mi300x*|mi325x*|mi355x*) echo "$CX_IMAGE_AMD_MORI_MI325" ;;
     b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$CX_IMAGE_MULTIARCH" ;;
     *) cx_die "no default image for runner prefix: $1" ;;
   esac
@@ -1486,7 +1483,6 @@ cx_verify_registry_image() {
 cx_default_image_digest() {
   case "$1" in
     "$CX_IMAGE_MULTIARCH") printf '%s' "$CX_IMAGE_MULTIARCH_DIGEST" ;;
-    "$CX_IMAGE_AMD_MORI") printf '%s' "$CX_IMAGE_AMD_MORI_DIGEST" ;;
     "$CX_IMAGE_AMD_MORI_MI325") printf '%s' "$CX_IMAGE_AMD_MORI_MI325_DIGEST" ;;
   esac
 }
@@ -2131,10 +2127,13 @@ cx_lock_canonical_gha_env() {
       CX_NCCL_HOME=/usr
       CX_MASTER_PORT=29551
       ;;
-    mi300x|mi325x)
+    mi300x|mi325x|mi355x)
       expected_nodes="${CX_NODES:-}"; expected_gpn=8
       [ "$expected_nodes" = 1 ] || [ "$expected_nodes" = 2 ] \
         || cx_die "canonical AMD execution requires one or two nodes"
+      # All three CDNA SKUs run the same MoRI-bundled image (mi35x tag covers
+      # gfx942 + gfx950); mi355x was migrated off the older 0227 image (sglang
+      # 0.5.9), whose MoRI build hung during EpDispatchCombineOp construction.
       CX_IMAGE="$CX_IMAGE_AMD_MORI_MI325"
       CX_IMAGE_DIGEST="$CX_IMAGE_AMD_MORI_MI325_DIGEST"
       if [ "$expected_nodes" = 2 ]; then
@@ -2148,19 +2147,6 @@ cx_lock_canonical_gha_env() {
       MORI_APP_LOG_LEVEL=info
       MORI_SHMEM_LOG_LEVEL=info
       MORI_IO_LOG_LEVEL=info
-      ;;
-    mi355x)
-      expected_nodes="${CX_NODES:-}"; expected_gpn=8
-      [ "$expected_nodes" = 1 ] || [ "$expected_nodes" = 2 ] \
-        || cx_die "canonical AMD execution requires one or two nodes"
-      CX_IMAGE="$CX_IMAGE_AMD_MORI"
-      CX_IMAGE_DIGEST="$CX_IMAGE_AMD_MORI_DIGEST"
-      if [ "$expected_nodes" = 2 ]; then
-        CX_MORI_KERNEL_TYPE=internode-v1
-      else
-        CX_MORI_KERNEL_TYPE=intranode
-      fi
-      MORI_COMMIT="$CX_MORI_COMMIT_MI355"
       ;;
     *) cx_die "canonical CollectiveX runner is not registered" ;;
   esac
@@ -2195,11 +2181,10 @@ cx_lock_canonical_gha_env() {
   case "$runner" in
     h100-dgxc|h200-dgxc|b200-dgxc|b300) export CX_NCCL_HOME ;;
     gb200|gb300) export CX_NCCL_HOME CX_MASTER_PORT ;;
-    mi300x|mi325x)
+    mi300x|mi325x|mi355x)
       export CX_MORI_KERNEL_TYPE MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;
-    mi355x) export CX_MORI_KERNEL_TYPE MORI_COMMIT ;;
   esac
 }
 

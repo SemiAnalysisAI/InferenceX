@@ -187,9 +187,6 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
         "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
         "unprovisioned on B300 hosts"
     ),
-    ("mi355x", "mori", 8): (
-        "Pinned MoRI backend construction does not complete on MI355X EP8"
-    ),
     ("mi355x", "mori", 16): (
         "Pinned MoRI backend construction does not complete on MI355X EP16"
     ),
