@@ -4,6 +4,8 @@
 
 set -x
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
@@ -64,56 +66,21 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     fi
     echo "Submitted llm-d job: $JOB_ID"
 
-    # Preserve server logs when the workflow is cancelled.
-    bundle_server_logs() {
-        if [[ -d "$BENCHMARK_LOGS_DIR" ]] && compgen -G "$BENCHMARK_LOGS_DIR/*" >/dev/null 2>&1; then
-            tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
-                -C "$BENCHMARK_LOGS_DIR" . 2>/dev/null || \
-                echo "WARNING: failed to bundle multinode_server_logs.tar.gz" >&2
-        fi
-    }
-    trap 'bundle_server_logs; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
+    trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
 
     LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID" || true
-            exit 1
-        fi
-        sleep 5
-    done
-
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-    wait $POLL_PID
-
-    for result_file in $(find "${BENCHMARK_LOGS_DIR}" -name "${RESULT_FILENAME}*.json" 2>/dev/null); do
-        file_name=$(basename "$result_file")
-        cp "$result_file" "$GITHUB_WORKSPACE/${file_name}"
-        echo "Copied result: $file_name"
-    done
+    while IFS= read -r -d '' result_file; do
+        copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
+    done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
 
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results 2>/dev/null | head -1)
-        if [[ -n "$EVAL_DIR" && -d "$EVAL_DIR" ]]; then
-            shopt -s nullglob
-            for eval_file in "$EVAL_DIR"/*; do
-                [ -f "$eval_file" ] || continue
-                cp "$eval_file" "$GITHUB_WORKSPACE/"
-                echo "Copied eval artifact: $(basename "$eval_file")"
-            done
-            shopt -u nullglob
-        else
-            echo "WARNING: RUN_EVAL=true but no eval_results found under $BENCHMARK_LOGS_DIR"
+        EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
+        if [[ -z "$EVAL_DIR" ]]; then
+            EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
         fi
+        copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
     fi
 
     scancel "$JOB_ID" 2>/dev/null || true
@@ -564,31 +531,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Wait for log file to appear (also check job is still alive)
-while ! ls "$LOG_FILE" &>/dev/null; do
-    if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-        echo "ERROR: Job $JOB_ID failed before creating log file"
-        scontrol show job "$JOB_ID"
-        exit 1
-    fi
-    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-    sleep 5
-done
-
-# Poll for job completion in background
-(
-    while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-        sleep 10
-    done
-) &
-POLL_PID=$!
-
-echo "Tailing LOG_FILE: $LOG_FILE"
-
-# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-wait $POLL_PID
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
 set -x
 
@@ -598,7 +541,7 @@ echo "Collecting results..."
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
@@ -641,9 +584,7 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
                     else
                         WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
                     fi
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                    copy_to_workspace "$result_file" "$WORKSPACE_RESULT_FILE" || exit 1
                 fi
             done
         done
@@ -656,17 +597,5 @@ fi
 
 # Collect eval results if eval was requested
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
-    EVAL_DIR="$LOGS_DIR/eval_results"
-    if [ -d "$EVAL_DIR" ]; then
-        echo "Extracting eval results from $EVAL_DIR"
-        shopt -s nullglob
-        for eval_file in "$EVAL_DIR"/*; do
-            [ -f "$eval_file" ] || continue
-            cp "$eval_file" "$GITHUB_WORKSPACE/"
-            echo "Copied eval artifact: $(basename "$eval_file")"
-        done
-        shopt -u nullglob
-    else
-        echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
-    fi
+    copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi
