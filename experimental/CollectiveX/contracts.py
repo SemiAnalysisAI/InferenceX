@@ -29,8 +29,6 @@ import re
 import sys
 from typing import Any, Iterable
 
-from jsonschema import Draft202012Validator
-
 import identity
 
 RAW_FORMAT = "collectivex.ep.v1"
@@ -382,6 +380,11 @@ _VALIDATOR_CACHE: dict[str, Draft202012Validator] = {}
 
 
 def _validator(schema_file: str) -> Draft202012Validator:
+    # Imported lazily so that importing this module (e.g. for the stdlib-only
+    # shard-control path in sweep_matrix.py) does not require jsonschema; it is
+    # only needed once a document is actually validated.
+    from jsonschema import Draft202012Validator
+
     validator = _VALIDATOR_CACHE.get(schema_file)
     if validator is None:
         try:
