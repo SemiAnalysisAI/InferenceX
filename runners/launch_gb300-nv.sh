@@ -46,6 +46,11 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     export SERVED_MODEL_NAME="glm-5-nvfp4"
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" && $SPEC_DECODING == "mtp" ]]; then
+    # GLM-5.1 NVFP4 MTP config — distinct weights from the GLM-5 STP
+    # config below, which stays on /scratch/models/GLM-5-NVFP4.
+    export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
