@@ -4622,5 +4622,4 @@
     - "Low-middle 1P4D pure-TP8 decode (conc 256/512)"
     - "High-tpt 2P+1D DEP8 (conc 4096)"
     - "Max-tpt 3P+1D DEP8 (conc 4096); same engine config as high-tpt, one more prefill instance"
-    - "Unique SLURM job-name (includes GITHUB_RUN_ID/ATTEMPT) so a name-scoped scancel from another job on the shared cluster cannot cancel the allocation; fixes the max-tpt in-sweep kill (re-test run 28918650203 = 8730 tok/s/GPU)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050
