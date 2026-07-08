@@ -1,7 +1,7 @@
-name: "b200-fp4-mtp-low-latency-1p-tp4-3d-tp8"
+name: "b200-fp4-mtp2-throughput-1p-dep4-1d-dep8"
 
 # Derived from the srt-slurm b200-fp4 8k1k recipe (recipes/b200-fp4/8k1k.yaml
-# base + zip_override_mtp_lowlat[1], 1p-tp4 prefill / 3d-tp8 decode).
+# base + override_mtp2_throughput_1p1d, DEP4 prefill / DEP8 decode, MTP2).
 # One flat YAML per concrete topology, matching the InferenceX glm5 disagg
 # layout (sglang/<model>/<hw>-<precision>/<seq>/disagg/<variant>/...).
 
@@ -23,9 +23,9 @@ model:
 resources:
   gpu_type: "b200"
   prefill_nodes: 1
-  decode_nodes: 3
+  decode_nodes: 1
   prefill_workers: 1
-  decode_workers: 3
+  decode_workers: 1
   gpus_per_prefill: 4
   gpus_per_node: 8
 
@@ -83,20 +83,21 @@ backend:
       max-total-tokens: 32768
       chunked-prefill-size: 24576
       cuda-graph-max-bs: 256
-      max-running-requests: 512
-      scheduler-recv-interval: 10
+      max-running-requests: 2048
+      scheduler-recv-interval: 1
       load-balance-method: "round_robin"
-      disaggregation-bootstrap-port: 30001
-      data-parallel-size: 1
+      disaggregation-bootstrap-port: null
+      data-parallel-size: 4
       tensor-parallel-size: 4
-      expert-parallel-size: 1
-      enable-dp-attention: false
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
       fp4-gemm-backend: "flashinfer_trtllm"
       disaggregation-transfer-backend: nixl
       speculative-algorithm: "EAGLE"
-      speculative-num-steps: 3
+      speculative-num-steps: 2
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 3
 
     decode:
       disaggregation-mode: "decode"
@@ -114,18 +115,20 @@ backend:
       context-length: 9600
       mem-fraction-static: 0.85
       chunked-prefill-size: 8192
-      cuda-graph-max-bs: 128
-      max-running-requests: 512
-      scheduler-recv-interval: 10
+      cuda-graph-max-bs: 1024
+      max-running-requests: 2048
+      scheduler-recv-interval: 1
+      data-parallel-size: 8
       tensor-parallel-size: 8
-      expert-parallel-size: 1
-      enable-dp-attention: false
+      expert-parallel-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
       fp4-gemm-backend: "flashinfer_trtllm"
       disaggregation-transfer-backend: nixl
       speculative-algorithm: "EAGLE"
-      speculative-num-steps: 3
+      speculative-num-steps: 2
       speculative-eagle-topk: 1
-      speculative-num-draft-tokens: 4
+      speculative-num-draft-tokens: 3
 
 health_check:
   max_attempts: 360
@@ -136,5 +139,5 @@ benchmark:
   isl: 8192
   osl: 1024
   req_rate: 300
-  concurrencies: "32x64"
+  concurrencies: "512"
   use_chat_template: true
