@@ -100,7 +100,7 @@ jobs:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     name: >-
       ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
-      TP${{ matrix.config.tp }}/DCP${{ matrix.config.dcp-size }}/PCP${{ matrix.config.pcp-size }} c${{ matrix.config.conc }}
+      TP${{ matrix.config.tp }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
     runs-on: ${{ matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
