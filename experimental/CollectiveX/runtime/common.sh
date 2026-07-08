@@ -2976,6 +2976,23 @@ PY
   return 0
 }
 
+# Remove this allocation's persistent pyxis container before the allocation is
+# released. The cluster runs pyxis with container_scope=global, so a named
+# --container-writable container (the distributed path's cxep_<jobid>) survives
+# job teardown and its unpacked rootfs — tens of GB per node — would otherwise
+# accumulate on every allocated node's local image store until it fills and the
+# next writable extraction fails with ENOSPC. Best-effort and bounded: teardown
+# must never hang or fail on this. Single-node legs use an unnamed, ephemeral
+# container that pyxis reclaims on its own, so only NODES>1 needs removal.
+cx_remove_distributed_container() {
+  local job_id="$1" nodes="${2:-1}"
+  [ -n "$job_id" ] || return 0
+  [ "$nodes" -gt 1 ] 2>/dev/null || return 0
+  timeout 120 srun --jobid="$job_id" --nodes="$nodes" --ntasks-per-node=1 \
+    --chdir=/tmp enroot remove -f "pyxis_cxep_${job_id}" \
+    </dev/null >/dev/null 2>&1 || true
+}
+
 cx_launcher_cleanup() {
   local rc="$1" stage_root="${MOUNT_SRC:-}" source_root allocation_stopped=1
   source_root="${stage_root:-${REPO_ROOT:-}}"
@@ -2985,6 +3002,7 @@ cx_launcher_cleanup() {
     unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
   fi
   if [ -n "${JOB_ID:-}" ]; then
+    cx_remove_distributed_container "$JOB_ID" "${NODES:-1}"
     if ! cx_cancel_job "$JOB_ID"; then
       allocation_stopped=0
       [ "$rc" != 0 ] || rc=1
