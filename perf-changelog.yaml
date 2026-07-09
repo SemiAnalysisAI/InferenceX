@@ -4650,4 +4650,5 @@
     - "Full agentic-coding sweep of the DSv4 FP4 GB200 dynamo-vllm disagg topologies on the June 21 AgentX corpus"
     - "3p2d TEP8 prefill / TP8 decode (40 inference GPUs): c4-c80"
     - "2p1d DEP8 prefill / DEP8 decode (24 inference GPUs): c32-c256 including exploratory tail past the c160 normalized-throughput peak"
+    - "Lower 3p2d prefill gpu-memory-utilization 0.9 -> 0.85: both first-pass attempts OOMed on prefill serving-time transients (sparse-indexer logits at c64, DeepGEMM JIT at c4) with <1 GiB free per GPU"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2122

@@ -110,7 +110,11 @@ backend:
       # FULL capture conflicts with NCCL symmetric-memory registration on the
       # TP prefill path; PIECEWISE preserves compilation and safe graph regions.
       compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
-      gpu-memory-utilization: 0.9
+      # 0.9 leaves <1 GiB free per GPU on the TEP8 prefill workers and both
+      # sweep attempts died to serving-time transients (sparse-indexer logits
+      # alloc at c64, DeepGEMM JIT module load at c4). MLA KV is compact, so
+      # trading KV space for allocator headroom costs prefill nothing.
+      gpu-memory-utilization: 0.85
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
     decode:
