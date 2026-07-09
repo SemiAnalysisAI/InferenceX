@@ -1,0 +1,86 @@
+diff --git a/python/sglang/srt/managers/schedule_batch.py b/python/sglang/srt/managers/schedule_batch.py
+index b376e4069f18..3c577178002e 100755
+--- a/python/sglang/srt/managers/schedule_batch.py
++++ b/python/sglang/srt/managers/schedule_batch.py
+@@ -1168,6 +1168,14 @@ def init_next_round_input(
+         if tree_cache is not None:
+             if cow_mamba is None:
+                 cow_mamba = tree_cache.supports_mamba()
++            # unified_kv SWA lives in a per-request ring that is not content-stable
++            # and never cached in the radix tree, so a reused prefix carries stale
++            # SWA. Cap the match by the trailing sliding window so it is re-prefilled
++            # into this request's ring. No-op for other layouts (returns 0).
++            reprefill_tail = tree_cache.swa_reprefill_tail_tokens()
++            if reprefill_tail:
++                capped = max(0, input_len - reprefill_tail)
++                key_limit = capped if key_limit is None else min(key_limit, capped)
+             match_result = tree_cache.match_prefix(
+                 MatchPrefixParams(
+                     key=RadixKey(
+diff --git a/python/sglang/srt/managers/schedule_policy.py b/python/sglang/srt/managers/schedule_policy.py
+index ef31b32c7af5..c12bd9513e16 100644
+--- a/python/sglang/srt/managers/schedule_policy.py
++++ b/python/sglang/srt/managers/schedule_policy.py
+@@ -99,9 +99,15 @@ def match_prefix_for_req(
+     if token_ids is None:
+         token_ids = req.origin_input_ids + req.output_ids
+ 
++    # unified_kv SWA lives in a per-request ring (not content-stable, never cached
++    # in the radix tree), so a reused prefix carries stale SWA. Cap the match by the
++    # trailing sliding window so it is re-prefilled. No-op for other layouts.
++    reprefill_tail = tree_cache.swa_reprefill_tail_tokens()
++    key_limit = max(0, len(token_ids) - reprefill_tail) if reprefill_tail else None
++
+     match_result = tree_cache.match_prefix(
+         MatchPrefixParams(
+-            key=RadixKey(token_ids=token_ids, extra_key=req.extra_key),
++            key=RadixKey(token_ids=token_ids, extra_key=req.extra_key, limit=key_limit),
+             cow_mamba=cow_mamba,
+             req=req if include_req else None,
+         )
+diff --git a/python/sglang/srt/mem_cache/base_prefix_cache.py b/python/sglang/srt/mem_cache/base_prefix_cache.py
+index b5c66a349509..4afb762d301d 100644
+--- a/python/sglang/srt/mem_cache/base_prefix_cache.py
++++ b/python/sglang/srt/mem_cache/base_prefix_cache.py
+@@ -328,6 +328,9 @@ def take_events(self):
+     def supports_swa(self) -> bool:
+         return False
+ 
++    def swa_reprefill_tail_tokens(self) -> int:
++        return 0
++
+     def supports_mamba(self) -> bool:
+         return False
+ 
+diff --git a/python/sglang/srt/mem_cache/swa_radix_cache.py b/python/sglang/srt/mem_cache/swa_radix_cache.py
+index ea898c7593a5..013a87001f6f 100644
+--- a/python/sglang/srt/mem_cache/swa_radix_cache.py
++++ b/python/sglang/srt/mem_cache/swa_radix_cache.py
+@@ -370,6 +370,27 @@ def supports_swa(self) -> bool:
+         ), "sliding_window_size must be set for SWARadixCache"
+         return True
+ 
++    def swa_reprefill_tail_tokens(self) -> int:
++        """Tokens at the tail of a matched prefix that must NOT be reused.
++
++        The DeepSeek-V4 unified_kv layout keeps SWA in a per-request ring
++        (addressed by ``req_pool_idx * window + pos % window``), which is NOT
++        content-stable and is never stored in the radix tree. A reused prefix
++        therefore carries another request's stale SWA in the ring. Hold back the
++        trailing sliding window from the match so it gets re-prefilled into THIS
++        request's ring, making the decode window read freshly-written data.
++
++        No-op (0) for the index-addressed SWA pool, whose slots are
++        content-stable and safe to reuse.
++        """
++        from sglang.srt.layers.attention.dsv4.unified_kv_kernels.env_gate import (
++            is_unified_kv_triton,
++        )
++
++        if self.sliding_window_size and is_unified_kv_triton():
++            return self.sliding_window_size
++        return 0
++
+     def reset(self) -> None:
+         self.root_node = TreeNode()
+         self.root_node.key = []

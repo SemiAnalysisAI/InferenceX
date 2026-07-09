@@ -8,6 +8,12 @@ block our benchmark + accuracy configs — so we can keep reusing the
 
 - `mori_conn.py` — single-file overlay (bind-mounted) for the **sglang**
   MoRI backend.
+- `decode_tp_queue_agree.patch`, `swa_reprefill_tail_unified_kv.patch`,
+  `dsv4_unified_kv_hicache.patch` — reference-only unified diffs. Each
+  mirrors a `patch_*()` function in `../setup_deps.sh`, which is what
+  actually gets applied (idempotently, in-container, at startup); the
+  `.patch` file here is kept as a human-readable copy of the same edit, not
+  something that gets `git apply`'d.
 
 > Note: the vLLM MoRIIO `minimax-m3` overlay (`moriio/`) was retired once the
 > upstream fixes (vLLM #46039 / #46290 / #46332) shipped in the ROCm nightly
@@ -66,6 +72,56 @@ in progress under
 This is a stop-gap. The proper upstream fix is to migrate MoRI to the
 plural `state_types: List[StateType]` API (full design + diff in
 `scripts/sglang_disagg/docs/03-upstream-pr-proposal.md`).
+
+## `swa_reprefill_tail_unified_kv.patch`
+
+Reference mirror of upstream
+[sgl-project/sglang#30339](https://github.com/sgl-project/sglang/pull/30339)
+(open, not yet merged). Applied via `setup_deps.sh`'s
+`patch_swa_reprefill_tail_unified_kv()`, unconditionally (the fix is a no-op
+unless `SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton` on HIP with a
+sliding-window model and HiCache off).
+
+Fixes a stale SWA ring buffer read on DeepSeek-V4 with the unified_kv
+backend: unified_kv keeps SWA in a per-request ring
+(`req_pool_idx * window + pos % window`) that is not content-addressed and
+never stored in the radix tree, so a request that reuses a cached prefix can
+read another request's stale SWA if its decode sliding window reaches back
+into the reused-prefix region. Adds a generic
+`tree_cache.swa_reprefill_tail_tokens()` hook (base: no-op) used by the
+scheduler's prefix-match paths to hold back the trailing sliding window from
+reuse, and overrides it on `SWARadixCache` (plain radix, HiCache off).
+
+## `dsv4_unified_kv_hicache.patch`
+
+Reference mirror of upstream
+[sgl-project/sglang#29417](https://github.com/sgl-project/sglang/pull/29417)
+(open, not yet merged). Applied via `setup_deps.sh`'s
+`patch_dsv4_unified_kv_hicache()`, gated on
+`KV_OFFLOADING=dram` + `KV_OFFLOAD_BACKEND=hicache` +
+`SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton`.
+
+Enables unified-KV HiCache (host-offload) on DeepSeek-V4: removes the
+previous hard fallback that disabled `unified_kv_triton` whenever
+`--enable-hierarchical-cache` was set, teaches
+`hybrid_pool_assembler.py`/`deepseek_v4_memory_pool.py` to page the
+compressed (C4/C128) region of the unified buffer into a HiCache host pool
+(unified_kv has no separate SWA host pool, so that pool/entry is skipped),
+and adds `UnifiedRadixCache`'s own `swa_reprefill_tail_tokens()` override
+(mutually exclusive with `SWARadixCache`'s — see above — since one is for
+HiCache off, the other for HiCache on). **Depends on**
+`patch_swa_reprefill_tail_unified_kv()` running first (provides the shared
+base hook); `setup_deps.sh` always calls them in that order.
+
+This is the largest/riskiest patch in this directory — upstream restructures
+~150 lines of `hybrid_pool_assembler.py` across several hunks, and a couple
+of the hunk boundaries in the upstream PR diff fell mid-statement with
+unshown unchanged context on either side. Each hunk in
+`patch_dsv4_unified_kv_hicache()` is applied independently and will
+WARN-and-skip (not corrupt the file) if its anchor text doesn't match
+byte-for-byte — check the container startup log for
+`[SETUP] Patched: hybrid_pool_assembler.py` (and the other touched files) to
+confirm it actually applied before relying on unified_kv + HiCache.
 
 ## How to enable
 
