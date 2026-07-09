@@ -4,7 +4,7 @@
   description:
     - "Apply the DeepSeek-V4 vLLM sparse-attention, Mega-MoE, full decode-only CUDA graph, cuMem/NUMA, fastsafetensors, and scheduler tuning flags."
     - "Expand B200 and B300 AgentX concurrency points to cover the corresponding SGLang search spaces."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/REPLACE_ME
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2138
 
 - config-keys:
     - 70b-fp8-*-vllm
