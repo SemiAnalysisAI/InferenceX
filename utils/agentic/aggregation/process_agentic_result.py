@@ -175,6 +175,7 @@ def build_agg(
 
     agg["request_metrics"] = request_nested
     agg["server_metrics"] = server_nested
+    agg["kv_cache_pool_tokens"] = server_nested["kv_cache"]["gpu_total_tokens"]
     if warnings:
         agg["warnings"] = warnings
     return agg
