@@ -206,14 +206,12 @@ VLLM_CMD=(
     "${EP_ARGS[@]}"
     --prefill-schedule-interval 8
     --numa-bind
-    --enable-cumem-allocator
     --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
     --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
-    --load-format fastsafetensors
     --no-enable-flashinfer-autotune
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
