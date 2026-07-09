@@ -327,9 +327,9 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            LOGS/agentic/conc_*/**
-            !LOGS/agentic/conc_*/**/aiperf_artifacts/inputs.json
-            !LOGS/agentic/conc_*/**/aiperf_artifacts/profile_export_raw.jsonl
+            LOGS/agentic/**
+            !LOGS/agentic/**/aiperf_artifacts/inputs.json
+            !LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
