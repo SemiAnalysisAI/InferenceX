@@ -4,7 +4,7 @@ set -x
 
 # Agentic trace replay benchmark for Kimi-K2.7 FP4 on MI355X using vLLM.
 #
-# Variant of kimik2.7_fp4_mi355x.sh that supports TWO KV configs:
+# Variant of kimik2.5_fp4_mi355x.sh that supports TWO KV configs:
 #   KV_OFFLOADING=none                              -> GPU KV only
 #   KV_OFFLOADING=dram KV_OFFLOAD_BACKEND=lmcache   -> LMCache MP server + connector
 #
