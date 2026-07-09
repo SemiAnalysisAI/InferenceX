@@ -46,15 +46,17 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     export SERVED_MODEL_NAME="glm-5-nvfp4"
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
+elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+    # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+    # in our GLM-5.1 sglang recipes.
+    export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-FP8
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
-elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5.1-FP8
-    export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -73,7 +75,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.1-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
     exit 1
 fi
 
@@ -167,12 +169,20 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
         mkdir -p recipes/sglang/glm5/gb300-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4" recipes/sglang/glm5/gb300-fp4
     fi
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+    # GLM-5.1 FP8 (gb300) recipes are version-controlled in-repo; overlay them
+    # onto the pinned submission branch.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/glm5.1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.1" recipes/sglang/glm5.1
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    # GLM-5.1 MTP recipe (recipes/gb300-fp4/glm5-mtp.yaml) lives on
+    # NVIDIA/srt-slurm:main — check it out; no in-repo overlay needed.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Overlay our version-controlled Qwen3.5 recipes onto the submission branch.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
@@ -264,6 +274,7 @@ containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
   v0.5.11: ${SQUASH_FILE}
+  v0.5.13.post1: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
@@ -286,20 +297,28 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+# Override the job name in the config file with the runner name.
+# CONFIG_FILE may carry a ":zip_override_...[i]" selector suffix that only
+# `srtctl apply -f` parses; strip it to the real path for the sed. srtctl
+# below still receives the full CONFIG_FILE (with selector).
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
-# --no-preflight is only safe on the agentic path, where the recipe
-# resolves model.path to /scratch (compute-node-only NVMe) and the
-# srtctl process running on the GHA runner pod can't see it. Fixed-
-# seq-len recipes still resolve model.path to an NFS-visible location
-# where the precheck is a useful sanity guard, so keep enforcement on
-# for them.
+# --no-preflight skips srtctl's pre-submit model-path stat, which runs on
+# the GHA runner host (im-gb300-login-02, an x86 login node). It's required
+# whenever model.path resolves to the node-local /scratch NVMe that the login
+# node can't see:
+#   - the agentic path (DSv4-Pro checkpoint), and
+#   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
+#     /scratch/models.
+# The engine still fails loudly at runtime if the path is genuinely missing on
+# the compute node. Other fixed-seq-len recipes resolve model.path to a
+# login-visible location, so keep the precheck enforced for them.
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
