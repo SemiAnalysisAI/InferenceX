@@ -3,8 +3,6 @@ set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for Kimi-K2.7 FP4 on MI355X using vLLM.
-#
-# Variant of kimik2.5_fp4_mi355x.sh that supports TWO KV configs:
 #   KV_OFFLOADING=none                              -> GPU KV only
 #   KV_OFFLOADING=dram KV_OFFLOAD_BACKEND=lmcache   -> LMCache MP server + connector
 #
@@ -25,9 +23,6 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -120,8 +115,6 @@ wait_for_lmcache_ready() {
     exit 1
 }
 
-# Resolve the effective offload backend. When KV_OFFLOADING=none there is no
-# backend; when dram, KV_OFFLOAD_BACKEND selects native vs lmcache.
 if [[ "$KV_OFFLOADING" == "none" ]]; then
     OFFLOAD_MODE="none"
 else
@@ -130,21 +123,16 @@ fi
 
 case "$OFFLOAD_MODE" in
     none)
-        # GPU-only KV, no DRAM offload. Leave prefix caching at vLLM's
-        # default (ON) so this is an honest no-offload baseline that still
-        # reuses shared prefixes on-GPU — apples-to-apples vs the lmcache
-        # cell, which extends that same reuse into DRAM. (Matches the
-        # kimik2.5 / dsv4 agentic recipes.)
+        # GPU-only KV baseline: keep on-GPU prefix caching ON (no DRAM offload)
+        # so it's apples-to-apples vs the lmcache cell.
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         ;;
     lmcache)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        # Build LMCache against ROCm if the connector isn't already importable
-        # (prebuilt kimi-lmcache images already ship it). Clone to a
-        # container-local dir (NOT the bind-mounted /workspace) so the CI
-        # checkout's `clean: true` never trips over root-owned build artifacts
-        # on the next job. Pin a ref for reproducibility.
+        # Build LMCache against ROCm if the connector isn't importable. Clone to
+        # a container-local dir (NOT bind-mounted /workspace) so the next job's
+        # checkout `clean: true` won't trip over root-owned build artifacts.
         if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
             LMCACHE_SRC_DIR="${LMCACHE_SRC_DIR:-/opt/lmcache-src}"
             LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-aaf7c0d3}"
@@ -161,11 +149,9 @@ case "$OFFLOAD_MODE" in
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        # Let the external MP server own the whole CPU KV pool. The requested
-        # budget is TOTAL_CPU_DRAM_GB, but LMCache's L1 is SHM-backed: if L1 >
-        # /dev/shm free it silently disables SHM and falls back to the slow
-        # pickle path (crashes at load — see kimik27 CI shm-overflow note).
-        # Cap L1 to 90% of current /dev/shm free space so SHM stays enabled.
+        # LMCache L1 is SHM-backed: if L1 > /dev/shm free it silently disables
+        # SHM and falls back to the pickle path (crashes at load). Cap L1 to 90%
+        # of /dev/shm free so SHM stays enabled.
         SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
         SHM_CAP_GB=$(( SHM_FREE_GB * 90 / 100 ))
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
