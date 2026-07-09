@@ -120,7 +120,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
+        # Pin srt-slurm: newer commits stopped honoring the hash-pinned dynamo
+        # build and fall back to a dynamo release that is incompatible with this
+        # sglang image (worker fails at import). This is the last commit before
+        # that change. Do not float on main -- the srtctl + dynamo-install
+        # toolchain is unpinned there.
+        git checkout a98738de9b2233459b5456e9ed71af09ce893f92
         mkdir -p recipes/sglang/dsr1/b200-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
     else
