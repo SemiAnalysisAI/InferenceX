@@ -1777,9 +1777,9 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
       # Match the SGLang low-concurrency and cache-transition coverage.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [8, 10, 16, 32, 40, 44] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 24, 32, 38, 44, 48, 50, 52] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [24, 32, 38, 44, 48, 50, 52] }
       # Retain the external-cache transition and peak-throughput region.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32, 38, 44, 50, 56, 64, 66, 68] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -14561,4 +14561,3 @@ glm5-fp4-gb300-dynamo-trt-mtp:
           tp: 16
           ep: 16
           dp-attn: true
-
