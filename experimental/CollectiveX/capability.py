@@ -17,7 +17,6 @@ DEEPEP_V2_SKU_CAPABILITIES = {
     "gb200": {"schedulable": True, "basis": "upstream-sm100-result"},
     "b300": {"schedulable": True, "basis": "pinned-pr605-pr630-sm103-maps-sm100f"},
     "gb300": {"schedulable": True, "basis": "pinned-pr605-pr630-sm103-maps-sm100f"},
-    "mi325x": {"schedulable": False, "basis": "nvidia-only"},
     "mi300x": {"schedulable": False, "basis": "nvidia-only"},
     "mi355x": {"schedulable": False, "basis": "nvidia-only"},
 }
@@ -122,11 +121,6 @@ PLATFORMS = {
         vendor="nvidia", arch="sm103", machine="arm64", product="gb300",
         gpus_per_node=4, scale_up_domain=72, scale_up_transport="mnnvl",
         launcher="gb-nv",
-    ),
-    "mi325x": _platform(
-        vendor="amd", arch="gfx942", machine="amd64", product="mi325x",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
-        launcher="mi-amds",
     ),
     "mi300x": _platform(
         vendor="amd", arch="gfx942", machine="amd64", product="mi300x",

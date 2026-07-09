@@ -269,7 +269,7 @@ jobs:
           cx_reconcile_recorded_allocation "$CX_JOB_ROOT" \
             || { echo "CollectiveX allocation cleanup could not be reconciled; results may still be changing" >&2; exit 1; }
           python3 experimental/CollectiveX/summarize.py \
-            --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
+            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
           shopt -s nullglob
           results=(experimental/CollectiveX/results/*.json)
           if [ "${#results[@]}" -eq 0 ]; then

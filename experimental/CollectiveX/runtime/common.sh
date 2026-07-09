@@ -233,7 +233,7 @@ cx_apply_network_profile() {
     export NVSHMEM_HCA_LIST="$CX_RDMA_DEVICES"
     export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
     if [ "$scaleout" = 1 ]; then
-      if [ "${CX_SHARD_SKU:-}" = mi300x ] || [ "${CX_SHARD_SKU:-}" = mi325x ] \
+      if [ "${CX_SHARD_SKU:-}" = mi300x ] \
           || [ "${CX_SHARD_SKU:-}" = mi355x ]; then
         unset NCCL_NET
       else
@@ -679,13 +679,13 @@ cx_reconcile_recorded_allocation() {
 # Runtime setup verifies the image-bundled DeepEP build for the detected GPU target.
 CX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 
-# AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for all three CDNA
-# SKUs (gfx942 mi300x/mi325x + gfx950 mi355x).
-CX_IMAGE_AMD_MORI_MI325="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
-CX_MORI_COMMIT_MI325="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
+# AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for both CDNA
+# SKUs (gfx942 mi300x + gfx950 mi355x).
+CX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
+CX_MORI_COMMIT_AMD="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
 cx_default_image() {
   case "$1" in
-    mi300x*|mi325x*|mi355x*) echo "$CX_IMAGE_AMD_MORI_MI325" ;;
+    mi300x*|mi355x*) echo "$CX_IMAGE_AMD_MORI" ;;
     b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$CX_IMAGE_MULTIARCH" ;;
     *) cx_die "no default image for runner prefix: $1" ;;
   esac
@@ -934,7 +934,7 @@ cx_lock_canonical_gha_env() {
         trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
-      mi300x|mi325x|mi355x)
+      mi300x|mi355x)
         # AMD self-hosted runners and compute nodes share the runner filesystem,
         # while the image cache may be root-owned. Derive a runner-owned base
         # outside _work instead of weakening stage ownership validation.
@@ -957,7 +957,7 @@ cx_lock_canonical_gha_env() {
     || cx_die "cannot derive canonical SKU policy"
   if ! python3 "$CX_RUNTIME_DIR/config.py" canonical-policy "$runner" \
       "${CX_NODES:-0}" "${CX_GPUS_PER_NODE:-0}" \
-      "$CX_IMAGE_MULTIARCH" "$CX_IMAGE_AMD_MORI_MI325" "$CX_MORI_COMMIT_MI325" \
+      "$CX_IMAGE_MULTIARCH" "$CX_IMAGE_AMD_MORI" "$CX_MORI_COMMIT_AMD" \
       > "$policy_file"; then
     rm -f -- "$policy_file"
     cx_die "canonical CollectiveX placement differs from the SKU policy"
@@ -967,7 +967,7 @@ cx_lock_canonical_gha_env() {
   done < "$policy_file"
   rm -f -- "$policy_file"
   case "$runner:$trusted_lock_dir" in
-    mi300x:?*|mi325x:?*|mi355x:?*) export CX_LOCK_DIR="$trusted_lock_dir" ;;
+    mi300x:?*|mi355x:?*) export CX_LOCK_DIR="$trusted_lock_dir" ;;
   esac
   CX_STAGE_DIR="$trusted_stage_dir"
   [ -z "$trusted_qos" ] || export CX_QOS="$trusted_qos"
@@ -987,7 +987,7 @@ cx_lock_canonical_gha_env() {
   export CX_IMAGE CX_NGPUS CX_SEED CX_RUN_TIMEOUT
   case "$runner" in
     gb200|gb300) export CX_MASTER_PORT ;;
-    mi300x|mi325x|mi355x)
+    mi300x|mi355x)
       export CX_MORI_KERNEL_TYPE MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;

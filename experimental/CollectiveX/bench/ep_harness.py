@@ -1007,6 +1007,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
               f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
               f"headline T={headline['tokens_per_rank']} {component_summary}"
               f"-> {args.out}")
-    # A complete invalid document is still a successfully captured terminal outcome. Launchers
-    # inspect its status to fail the case without conflating it with an execution failure.
-    return 0
+    # CI honesty: run_sweep's return code is the only success signal cx_run_shard (and thus CI)
+    # reads — the doc is uploaded regardless, via the launcher's always() stage step. A captured
+    # `invalid` outcome (semantic correctness or cross-rank routing identity failed) must therefore
+    # fail the leg, not ride as a green success; otherwise a persistent oracle failure is invisible
+    # in CI and could autopublish an invalid doc. Agree the verdict across ranks (MIN) so every
+    # rank exits identically and the distributed case fails as one.
+    outcome_ok = bool(_reduce_int(torch, dist, device, int(all_ok), dist.ReduceOp.MIN))
+    return 0 if outcome_ok else 3

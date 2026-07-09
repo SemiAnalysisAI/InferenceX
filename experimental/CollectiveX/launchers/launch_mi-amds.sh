@@ -11,7 +11,7 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${CX_SHARD_SKU:-${CX_PUBLIC_RUNNER:-}}"
 case "$RUNNER" in
-  mi300x|mi325x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  mi300x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi355x) CPUS_PER_TASK=128; DEVICE_MOUNTS="" ;;
   *) cx_die "set CX_SHARD_SKU or CX_PUBLIC_RUNNER to a registered AMD SKU" ;;
 esac
@@ -44,19 +44,19 @@ case "$CX_BENCH" in
 esac
 cx_apply_timing_profile
 
-if [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
+if [ "$RUNNER" = mi300x ]; then
   export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
   export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
   export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
   export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
   export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
   [ "$CX_BENCH" != mori ] \
-    || export CX_IMAGE="${CX_IMAGE:-$CX_IMAGE_AMD_MORI_MI325}"
+    || export CX_IMAGE="${CX_IMAGE:-$CX_IMAGE_AMD_MORI}"
 fi
 if [ "$CX_BENCH" = mori ]; then
   if [ "$NODES" -gt 1 ]; then
     export CX_MORI_KERNEL_TYPE=internode-v1
-  elif [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
+  elif [ "$RUNNER" = mi300x ]; then
     export CX_MORI_KERNEL_TYPE="${CX_MORI_KERNEL_TYPE:-asyncll}"
   else
     export CX_MORI_KERNEL_TYPE="${CX_MORI_KERNEL_TYPE:-intranode}"

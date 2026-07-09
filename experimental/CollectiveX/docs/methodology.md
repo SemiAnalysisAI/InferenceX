@@ -3,7 +3,7 @@
 CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
 accelerator allocations, and uploads the neutral artifacts each run emits. It does **not** validate
 those artifacts, promote, rank, recommend, select, hide, or decide what any consumer displays. The
-frontend reads the neutral matrix, result, summary, and catalog artifacts and makes its own coverage
+frontend reads the neutral matrix, result, and summary artifacts and makes its own coverage
 and display decisions. This document describes how a case is scheduled, measured, checked, and
 recorded — not a publication or qualification contract.
 
@@ -38,8 +38,7 @@ matrix is generated per dispatch; there is no frozen matrix digest or locked cas
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
-domain. The MI325X launcher/configuration path is retained for future versions but is not referenced
-by any current suite or shard.
+domain.
 
 Unsupported combinations are explicitly classified in the matrix, not silently skipped coverage. DeepEP V2 is the
 `ElasticBuffer` introduced by PR #605, pinned with upstream PR #630's minimal pure-scale-up fix and
@@ -80,12 +79,13 @@ Every measured component uses `fixed-512-v1`:
 - 64 trials x 8 timed iterations = 512 observations;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at
   every trial/point;
-- roundtrip first, then isolated dispatch and combine, with a fixed per-phase conditioning ladder; and
+- component measurement order rotates each trial (`trial_order`) so every timed component occupies
+  every position in the sequence, over a per-trial-rotated token ladder; and
 - per-iteration maximum latency across ranks before nearest-rank p50/p90/p95/p99.
 
-Measured roundtrip p99 is the headline latency. Retries remain separate attempts; a later success
-does not erase earlier failures. Decode and prefill identify the serving regime represented by one
-MoE-layer collective; they do not change the timed primitive at an otherwise identical shape.
+Measured roundtrip p99 is the headline latency. Decode and prefill identify the serving regime
+represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
+identical shape.
 
 The versioned conditioning contract is part of scheduled and evidence identity.
 
@@ -123,39 +123,39 @@ as a correctness property.
 
 ## Result Artifact
 
-One raw case document carries `record_type: "case-attempt"` and the single `version`, rejects
-unknown fields, and contains:
+One raw case document carries `record_type: "case-attempt"` and the single `version`, and contains:
 
-- `case`: stable case ID, suite, and coordinate;
-- `workload`: canonical identity and logical MoE shape;
-- `measurement`: sampling, component states, timing, and byte accounting;
+- `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and scheduled case), and
+  `allocation_factors` (run id, run attempt, source SHA);
+- `case`: backend, EP size, mode, phase, runner, suite, workload name, and the routing/shape
+  coordinate;
+- `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks;
+- `measurement`: dispatch/combine dtype and semantics, `sampling`, and the per-point `rows`;
 - `implementation`: backend name and kernel generation;
 - `topology`: requested and realized SKU, devices, placement, scale-up domain, and transport;
-- `provenance`: source SHA, image/squash hashes, allocation, run, and attempt;
-- `rows`: point latency, byte accounting, token rate, correctness, load, fanout, and anomaly
-  evidence; and
-- `outcome`: `success`, `failed`, `invalid`, `unsupported`, with `diagnostic` and reasons.
+- `provenance`: the mounted image tag and source SHA; and
+- `outcome`: `status` (`success` or `invalid`), `reasons`, and a structured `validity` (execution,
+  semantic-correctness, workload-identity, and conformance states).
 
-Exact per-point samples are emitted as detached `record_type: "samples"` documents referenced by path
-and byte count, so the raw document stays compact. Each dispatched case writes its raw result document;
-unsupported or never-run cells produce no synthetic record. Private
-environment details (hosts, addresses, device selectors, credentials, workspace paths) remain in
-local mode-0600 logs and ignored operator notes and never enter an emitted artifact.
+Each `rows` entry carries point latency, byte accounting, token rate, correctness, load, fanout, and
+anomaly evidence; per-point statistics are summarized in place, not emitted as separate documents.
+Each dispatched case writes exactly this one raw result document; unsupported or never-run cells
+produce no synthetic record. Private environment details (hosts, addresses, device selectors,
+credentials, workspace paths) remain in local mode-0600 logs and ignored operator notes and never
+enter an emitted artifact.
 
 ## Identity
 
 Identifiers are readable factor strings:
 
-- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}` with the remaining
-  case factors appended in stable key order;
-- `attempt_id`: `case_id` plus `-a{ordinal:02d}`; and
-- `point_id`: `case_id` plus `-t{tokens_per_rank}`.
+- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}`, each factor
+  slug-normalized; and
+- `attempt_ordinal`: a positive integer distinguishing repeat executions of one `case_id`.
 
 Canonical workload files use readable routing and shape coordinates and are validated against the
-deterministic generator. Detached sample documents are referenced by path and byte count. Content
-SHA-256 is retained only for the mounted squash; source and library revisions use Git commits and
-trees. DeepEP V2 uses a fixed NVCC random seed for reproducible JIT builds. Pinned source trees,
-build recipes, runtime versions, and dependencies remain bound to the case factors.
+deterministic generator. Source and library revisions use Git commits and trees; DeepEP V2 uses a
+fixed NVCC random seed for reproducible JIT builds. Pinned source trees, build recipes, runtime
+versions, and dependencies remain bound to the case factors.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
 not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or
@@ -191,9 +191,9 @@ execution-specific private base beneath the validated compute-visible account ho
 
 ## Image Pinning And Build Isolation
 
-Enroot imports configured container tags with a fixed `SOURCE_DATE_EPOCH` and versioned cache
-generation; every mounted squash is freshly hashed. Image-provided DeepEP is also checked against
-exact package versions and its expected API. Source-built DeepEP V2 uses
+Enroot imports configured container tags into a per-run-scoped squash keyed by the image tag and
+image platform, so one run never reuses another run's imported filesystem. Image-provided DeepEP is
+also checked against exact package versions and its expected API. Source-built DeepEP V2 uses
 a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its content key binds a
 versioned build recipe, CPU/GPU architecture, upstream source trees, and pinned
 build dependencies. The cache is never an artifact; per-execution source/results stages remain
@@ -206,10 +206,10 @@ files it is using.
 ## Neutral Artifact Delivery
 
 There is no results server, attached store, or managed object store. Each shard runs one allocation,
-emits per-case result JSON plus detached sample JSON and a small mechanical summary, and uploads them
-as GitHub artifacts with `always()` so a red or partial run still uploads. A case counts as successful
-on the benchmark's own return code; there is no schema, completeness, detached-sample, or privacy
-validation step before upload, and failed or unsupported cells produce no synthetic record.
+emits per-case result JSON and a small mechanical summary, and uploads them as GitHub artifacts with
+`always()` so a red or partial run still uploads. A case counts as successful on the benchmark's own
+return code; there is no completeness or privacy validation step before upload, and failed or
+unsupported cells produce no synthetic record.
 
 No step promotes a run, builds a dataset, or advances a channel; the artifacts are the output. Any
 downstream display or comparison is the consumer's responsibility.

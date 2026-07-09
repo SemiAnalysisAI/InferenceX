@@ -19,15 +19,16 @@ precision is not a swept dimension. Every case runs the single normal-mode contr
   combine. Coverage is uniform routing only.
 
 Cases use `fixed-512-v1`: 64 trials x 8 timed iterations with 32 synchronized full roundtrip
-warmups before each measured component at every trial/point. Roundtrip is measured first; each
-iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the
-headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
+warmups before each measured component at every trial/point. Component measurement order rotates each
+trial so every timed component occupies every position in the sequence; each iteration takes the
+cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the headline latency. A
+stdlib integer counter produces byte-identical routing and gate weights.
 
 Correctness is checked against the reference activation. The combine gate is `rtol=0.05, atol=0.02`
 for the BF16 communication path. Any failed rank or point makes the case ineligible in the result
 it writes.
 
-The matrix covers H100, H200, B200, B300, GB200, GB300, and MI355X. `sweep_matrix.py` materializes
+The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
 and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`, and
 `--ep-sizes` select a subset; the matrix is generated per dispatch, with no frozen digest or locked
@@ -36,18 +37,17 @@ case count.
 | Systems | EP8 | EP16 |
 |---|---|---|
 | H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
-| MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
+| MI300X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not determine scope: both GB topologies stay inside one 72-GPU MNNVL
-scale-up domain. The MI325X launcher/configuration path is retained for future versions but is not
-referenced by any current suite or shard.
+scale-up domain.
 
 | Backend | Current scope |
 |---|---|
 | DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out; source/SASS-bound reproducible JIT |
 | DeepEP Hybrid | Pinned `HybridEPBuffer`: x86 EP16 multi-domain RDMA/DOCA; GB EP8/EP16 in one MNNVL communication domain |
-| MoRI | MI355X EP8 uses IntraNode; EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
+| MoRI | AMD EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X asyncLL); EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.
@@ -71,9 +71,9 @@ whether it succeeded is decided by the benchmark's return code.
 allocation per shard, fetches pinned DeepEP source before allocation when required, and uploads the
 result artifacts with `always()` so a red or partial run still uploads.
 
-Each shard emits per-case result JSON, detached sample JSON, and a small mechanical summary. A case
-counts as successful on the benchmark's own return code; there is no schema, completeness, or privacy
-validation step, and failed or unsupported cells produce no synthetic record. No step promotes a run,
+Each shard emits per-case result JSON and a small mechanical summary. A case counts as successful on
+the benchmark's own return code; there is no completeness or privacy validation step, and failed or
+unsupported cells produce no synthetic record. No step promotes a run,
 builds a dataset, or advances a channel; the neutral artifacts are the output. A consumer downloads
 them and decides what to display.
 
@@ -98,7 +98,7 @@ copy before allocation. Required JSON fields are:
 | `b300` | `partition`, `account`, `squash_dir` |
 | `gb200` | `partition`, `account`, ordered `storage_roots` |
 | `gb300` | `partition`, `account`, `squash_dir`, `enroot_cache_path` |
-| `mi325x`, `mi355x` | `partition`, `squash_dir`, `stage_dir` |
+| `mi300x`, `mi355x` | `partition`, `squash_dir`, `stage_dir` |
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
 its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class`
@@ -131,8 +131,8 @@ ignores its legacy group-writable `stage_dir` and derives an execution-specific 
 validated compute-visible account home. The workflow proves every derived base is visible from all
 allocated nodes before launch.
 
-Enroot imports the configured image tag with a fixed filesystem epoch and a versioned cache name.
-Every mounted squash is freshly hashed. Image-provided
+Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
+platform, so one run never reuses another run's imported filesystem. Image-provided
 DeepEP is checked by package/API versions; source-built backends use pinned commits, trees, and
 runtime-verified GPU targets. DeepEP V2's mode-0700 cluster-local build cache is named from its
 build recipe, architecture, upstream trees, and dependency pins; only its
