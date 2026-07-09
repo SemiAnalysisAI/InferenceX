@@ -4597,6 +4597,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
 
 - config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic
+  description:
+    - "Update vLLM ROCm image from v0.22.0 to nightly-09663abde0f50944a8d5ea30120666024b503faa"
+    - "Pin LMCache to commit 1720917e to fix scheduler ValueError with hybrid KV cache manager"
+    - "Add LMCache KV offload backend with tuned config (blocking timeout, transfer mode)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2109
+
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
     - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override; without it the drafter falls back to a slow default backend."
@@ -4621,6 +4629,13 @@
     - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
     - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:v0.24.0 (MoRI-IO fixes upstreamed in vllm#40344)"
+    - "Rename a2a backend mori to mori_low_latency; set read_mode via kv_connector_extra_config instead of VLLM_MORIIO_CONNECTOR_READ_MODE env var"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1585
 
 - config-keys:
     - dsr1-fp4-b200-dynamo-sglang-mtp
@@ -4653,6 +4668,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1799
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2108
+
+- config-keys:
     - dsv4-fp4-b200-sglang-agentic-hicache
     - dsv4-fp4-b300-sglang-agentic-hicache
   description:
@@ -4678,3 +4700,11 @@
     - "Image: lmsysorg/sglang:v0.5.11-cu130"
     - "11 topologies across 1k/1k and 8k/1k (prefill TP4 + decode wide-EP: 8k/1k DEP16/24/32/40, 1k/1k DEP48/56; per-node TP4 low-latency); MTP flags: speculative-algorithm EAGLE, num-steps 2, eagle-topk 1, num-draft-tokens 3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1907
+  
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093

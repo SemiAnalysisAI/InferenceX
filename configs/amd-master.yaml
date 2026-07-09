@@ -1177,7 +1177,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  image: vllm/vllm-openai-rocm:v0.24.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1200,7 +1200,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1221,7 +1220,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1791,7 +1789,7 @@ dsv4-fp4-mi355x-sglang-disagg:
 
 
 dsv4-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1819,16 +1817,8 @@ dsv4-fp4-mi355x-sglang:
 # graph + sparse triton attn optimizations, merged to main 2026-05-27). That PR
 # fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
 # #20404) and validates GSM8K 0.950 with MTP on.
-#
-# #26383 is on sglang `main`, NOT the amd/deepseek_v4 branch the rocm/sgl-dev:*-DSv4
-# builds are cut from (latest da28108 = f96ac98 + build fixes + an unrelated
-# MLA-decode refactor, still pre-#26383 -> kv_score crash, run 26723126211). So we
-# pin the mainline ROCm nightly, which carries #26383. Mainline omits deep_gemm,
-# but the recipe detects that and routes the DSv4 fp8 wo_a / topk paths to their
-# torch fallbacks (see dsv4_fp4_mi355x_sglang_mtp.sh). When a -DSv4 image carrying
-# #26383 ships, bump to it; the recipe auto-restores the deep_gemm perf path.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260601
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2082,11 +2072,8 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 
-# CONC ranges mirror dsv4-fp4-b200-vllm-agentic for cross-hardware
-# comparability. Offload sweep is none-only (SGLang has no equivalent of
-# vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -2095,10 +2082,11 @@ dsv4-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
-      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 32, 40, 48] }
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48] }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [64, 72] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40, 48] }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
