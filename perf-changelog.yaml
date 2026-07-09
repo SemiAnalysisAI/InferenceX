@@ -4635,7 +4635,7 @@
     - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2114
   
-  - config-keys:
+- config-keys:
     - minimaxm3-fp4-b300-vllm
   description:
     - "update vllm image"
