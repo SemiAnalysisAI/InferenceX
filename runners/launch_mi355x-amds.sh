@@ -205,12 +205,14 @@ else
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
+    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
     set -x
     # Exclude known-bad mi355x compute nodes (KLAUD_DEBUG §5.1 / §5.2):
     #   mia1-p01-g09: pyxis broken (persistently fails to create container filesystem)
     #   mia1-p01-g11: docker.sock permissions denied (cluster-cleanup step fails)
     # Both have been root-caused via #1431/#1432/#1440/#1441/#1443 sweep failures.
-    salloc --partition=$PARTITION --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:$TP --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$PARTITION --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -242,8 +244,9 @@ else
     fi
 
     # MiniMax-M3 weights are not staged on the node-local /var/lib NVMe cache;
-    # they are pre-downloaded once to the NFS share instead.
-    if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* ]]; then
+    # they are pre-downloaded once to the NFS share instead. Covers both the
+    # MiniMaxAI MXFP8 checkpoint and the amd MXFP4 atom checkpoint.
+    if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* || "$MODEL" == amd/MiniMax-M3* ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 

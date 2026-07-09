@@ -80,7 +80,11 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
     else
         if [ "$IS_MTP" = "true" ]; then
-            extra_flags="--use-chat-template"
+            if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+                extra_flags="--dsv4"
+            else
+                extra_flags="--use-chat-template"
+            fi
         fi
     fi
 

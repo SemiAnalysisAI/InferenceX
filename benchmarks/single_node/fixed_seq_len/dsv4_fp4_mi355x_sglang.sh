@@ -22,13 +22,14 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # sglang ships in the image at the SHA encoded in the image tag (built
 # from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
-# bump the image tag in .github/configs/amd-master.yaml.
+# bump the image tag in configs/amd-master.yaml.
 
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=max
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=0
+export SGLANG_DP_USE_GATHERV=1
 export SGLANG_OPT_USE_FUSED_COMPRESS=true
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export SGLANG_OPT_FP8_WO_A_GEMM=false
@@ -60,9 +61,9 @@ start_gpu_monitor
 PARALLEL_ARGS=(
     --tensor-parallel-size "$TP"
 )
-CHUNKED_PREFILL_SIZE=8192
+CHUNKED_PREFILL_SIZE=$ISL
 if [ "${DP_ATTENTION}" = "true" ]; then
-    CHUNKED_PREFILL_SIZE=$((8192 * TP))
+    CHUNKED_PREFILL_SIZE=$((ISL * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import find_reusable_sweep_run as reuse
 
 
@@ -165,6 +167,51 @@ def test_find_latest_successful_pr_run_skips_gated_noop_run(monkeypatch) -> None
         )
         == real_run
     )
+
+
+def test_find_latest_successful_pr_run_accepts_agentic_only_run(
+    monkeypatch,
+) -> None:
+    agentic_run = {
+        "id": 444,
+        "conclusion": "success",
+        "head_sha": "abc123",
+    }
+
+    monkeypatch.setattr(
+        reuse,
+        "paginated_github_api",
+        lambda *args, **kwargs: [agentic_run],
+    )
+    monkeypatch.setattr(
+        reuse,
+        "artifact_names",
+        lambda *args: {"bmk_agentic_dsv4_tp8_conc16"},
+    )
+
+    assert (
+        reuse.find_latest_successful_pr_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            "feature-branch",
+            {"abc123"},
+            "token",
+        )
+        == agentic_run
+    )
+
+
+def test_artifact_names_excludes_expired_artifacts(monkeypatch) -> None:
+    monkeypatch.setattr(
+        reuse,
+        "paginated_github_api",
+        lambda *args, **kwargs: [
+            {"name": "results_bmk", "expired": True},
+            {"name": "run-stats", "expired": False},
+        ],
+    )
+
+    assert reuse.artifact_names("repo", 123, "token") == {"run-stats"}
 
 
 def test_main_skips_pr_synchronize_with_reuse_authorization(
@@ -770,7 +817,10 @@ def test_main_disables_reuse_without_pinned_comment(monkeypatch, tmp_path) -> No
     assert outputs["reuse-reason"] == "PR #1321 has no /reuse-sweep-run authorization"
 
 
-def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None:
+def test_main_accepts_all_evals_with_non_canary_full_sweep_label(
+    monkeypatch,
+    tmp_path,
+) -> None:
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
@@ -796,7 +846,10 @@ def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None
         if path == "/pulls/1321":
             return {
                 "merged_at": "2026-05-13T00:01:00Z",
-                "labels": [{"name": "non-canary-full-sweep-enabled"}],
+                "labels": [
+                    {"name": "non-canary-full-sweep-enabled"},
+                    {"name": "all-evals"},
+                ],
                 "head": {"sha": "abc123"},
             }
         if path == "/actions/runs/25763404168":
@@ -838,6 +891,63 @@ def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None
 
     outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
     assert outputs["reuse-enabled"] == "true"
+
+
+def test_main_rejects_evals_only_for_reuse(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    comments = [
+        {
+            "created_at": "2026-05-13T00:00:00Z",
+            "author_association": "OWNER",
+            "body": "/reuse-sweep-run 25763404168",
+        },
+    ]
+
+    def fake_github_api(repo, path, token, params=None):
+        if path == "/commits/merge-sha/pulls":
+            return [{"number": 1321}]
+        if path == "/pulls/1321":
+            return {
+                "merged_at": "2026-05-13T00:01:00Z",
+                "labels": [
+                    {"name": "full-sweep-enabled"},
+                    {"name": "evals-only"},
+                ],
+                "head": {"sha": "abc123"},
+            }
+        raise AssertionError(f"unexpected GitHub API path: {path}")
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        if path == "/issues/1321/comments":
+            return comments
+        raise AssertionError(f"unexpected paginated GitHub API path: {path}")
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "github_api", fake_github_api)
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "merge-sha",
+            "--event-name",
+            "push",
+            "--ref",
+            "refs/heads/main",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match=r"reuse-incompatible.*evals-only"):
+        reuse.main()
 
 
 def test_main_rejects_pr_with_neither_full_sweep_label(monkeypatch, tmp_path) -> None:

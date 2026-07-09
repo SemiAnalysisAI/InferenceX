@@ -8,6 +8,55 @@ InferenceX benchmark jobs on the GPU clusters.
 - [`start_runners.sh`](start_runners.sh) — starts the configured runners inside a tmux session,
   one tiled pane per runner.
 
+> **This is the standard way the SemiAnalysis team sets up runners — it is not the only
+> way.** This guide is written primarily for **Slurm clusters**, where the GHA runner
+> listener processes all run on the **login/controller node** and each benchmark job is
+> dispatched onto the **compute nodes** via `srun`. The same runners can also be brought
+> up on a **bare-metal single node** (with Docker) or on **Kubernetes** — those setups
+> differ enough that they aren't covered here yet (more docs to be added in future).
+
+> **Runner setup is node-specific and varies a lot from cluster to cluster** —
+> storage mounts, the runner user, weight-staging paths, container runtime, and Slurm
+> defaults all differ. If you're an agent (or new team member) following this doc,
+> **ask the user for clarification** whenever a step's specifics aren't obvious for the
+> target cluster rather than guessing. The per-cluster choices are ultimately encoded in
+> that cluster's `runners/launch_<cluster>.sh`.
+
+## Viewing the current runners
+
+The live list of registered runners (name, status, labels) is at:
+
+> https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners
+
+Or via the `gh` CLI / REST API:
+
+```bash
+gh api repos/SemiAnalysisAI/InferenceX/actions/runners \
+  --jq '.runners[] | "\(.name)\t\(.status)\t\([.labels[].name] | join(","))"'
+```
+
+## GitHub access (token / permissions)
+
+Provisioning runners hits authenticated GitHub endpoints (listing runners, minting the
+registration token, removing runners), so you need a GitHub credential with sufficient
+permissions. Provide it one of two ways:
+
+- **`gh` CLI logged in** as a user with **admin access to the repo** (`gh auth login`),
+  which `gh api` uses automatically; or
+- a **personal access token (PAT)** exported as `GH_TOKEN` / `GITHUB_TOKEN` (or pasted
+  into the CLI when prompted).
+
+Required permissions (all of these endpoints require **admin access to the repository**):
+
+| Token type | What it needs |
+|------------|---------------|
+| **Classic PAT** | `repo` scope (covers list runners, create registration/remove tokens, delete runners — all require repo admin) |
+| **Fine-grained PAT** | Repository **Administration** permission — **Read** to list runners, **Read & write** to create the registration/remove token and to add/delete runners |
+
+> If you're an agent, you will need the user to supply this credential (pasted in the CLI
+> or via an env var) — you cannot create the runner registration token without it. Ask
+> for it explicitly. The registration token produced from it expires after ~1 hour.
+
 ## Prerequisites
 
 1. **Decide which user the GitHub Actions processes will run under.** This user's home
@@ -39,7 +88,7 @@ InferenceX benchmark jobs on the GPU clusters.
 
    ![Where to find the runner URL and token](assets/new-runner-page.png)
 
-   > ⚠️ The registration token expires after ~1 hour. If `config.sh` starts failing with
+   > Note: the registration token expires after ~1 hour. If `config.sh` starts failing with
    > authentication errors partway through, refresh the page and re-run with a new token.
 
 4. Configure the runners:
@@ -95,13 +144,13 @@ key off that name:
    ```
 
    so everything before the first `_` must match an existing script in
-   [`runners/`](../../runners) — e.g. runner `b300-nv_07` → `runners/launch_b300-nv.sh`.
+   [`runners/`](../../runners) — e.g. runner `b300-nv_07` -> `runners/launch_b300-nv.sh`.
    For a brand-new cluster, add a `runners/launch_<BASE_RUNNER_NAME>.sh` first.
    Corollary: `BASE_RUNNER_NAME` itself must not contain `_` (use hyphens).
 
-2. **Sweep scheduling looks runners up by exact name.** Jobs are distributed across the
-   runner names listed per SKU in
-   [`.github/configs/runners.yaml`](../../.github/configs/runners.yaml). New runners do
+2. **Sweep scheduling looks runner nodes up by label.** Jobs are distributed across the
+   runner names listed under each `labels` entry in
+   [`configs/runners.yaml`](../../configs/runners.yaml). New runners do
    **not** receive sweep jobs until they are added there, and the entries must match the
    registered names exactly — including zero-padding. (Some older fleets predate the
    padded convention, e.g. `h200-dgxc-slurm_0`; `setup.sh` always zero-pads, so new
@@ -114,15 +163,19 @@ key off that name:
 
 - `slurm` — the runner submits work through Slurm.
 - The SKU name (`b200`, `b300`, `h200`, `gb300`, …) — coarse hardware targeting.
-- Optional sub-fleet tags, e.g. `b200-dgxc`, `b200-dsv4` — used to carve out dedicated
-  capacity.
+- Exactly one `cluster:<name>` label, e.g. `cluster:b200-dgxc` — required exact
+  hardware/fleet identity for success-rate reporting and hardware-specific config.
+  Every runner in the same physical cluster with identical hardware should use the same
+  cluster label.
+- Optional capacity tags, e.g. `b200-dsv4`, `b300-p1` — used to carve out dedicated
+  benchmark subsets.
 
 The per-runner name label (`b300-nv_07`) is what `runs-on` resolves for sweep jobs, so
 always keep it (the script appends it automatically). A typical registered runner ends
 up with labels like:
 
 ```
-self-hosted, Linux, X64, slurm, b200, b200-dsv4, b200-dgxc, b200-dgxc_00
+self-hosted, Linux, X64, slurm, b200, b200-dsv4, cluster:b200-dgxc, b200-dgxc_00
 ```
 
 Labels can be edited later on the runners settings page without re-registering.
@@ -177,4 +230,29 @@ the new `runners/launch_<cluster>.sh`.
   `SESSION_NAME` argument.
 - **Removing runners:** from the runner directory, stop the process and run
   `./config.sh remove --token <removal-token>` (token from the runners settings page).
-  Remember to also delete the name from `.github/configs/runners.yaml`.
+  Remember to also delete the name from the matching `labels` entry in `configs/runners.yaml`.
+
+## Record the cluster in the team canvas (SemiAnalysis only)
+
+There is an internal **InferenceX Clusters** Slack canvas that tracks every cluster's
+hardware, node count, login address, runner user, runner directory, and per-node host RAM.
+The link is intentionally not stored in this repo — **if you are a SemiAnalysis employee,
+ask the user for the Slack link to the InferenceX Clusters canvas.**
+
+**If you have authenticated access to that canvas, add the corresponding cluster
+information to it** after provisioning —
+a new row in the Clusters table (and the Host-RAM table), plus any access notes (jumpbox,
+non-Slurm/bare-metal, Tailscale, etc.). Keep the canvas consistent with
+[`configs/runners.yaml`](../../configs/runners.yaml) and the live
+[runners settings page](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners),
+which remain the sources of truth.
+
+- If you **do not** have access to that canvas, ignore this step.
+- If you **don't have a Slack integration available**, or you're otherwise **unsure
+  whether you have access**, **confirm with the user** before attempting it — don't guess.
+
+> Note for agents: editing this canvas via the Slack `update_canvas` tool has a data-loss
+> footgun — replacing a table section leaves a stray empty table, and replacing a
+> non-header section can swallow trailing content. Prefer a full-document replace
+> (reconstructed from a fresh read, omitting the leading `# InferenceX Clusters` H1) and
+> re-read the canvas afterward to verify.

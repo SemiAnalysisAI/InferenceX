@@ -31,7 +31,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
@@ -53,7 +53,7 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-opus-4-6'
+            --model 'claude-fable-5'
             --allowedTools "mcp__github_inline_comment__create_inline_comment,mcp__inferencemax-repos__*,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           prompt: |
             REPO: ${{ github.repository }}
@@ -116,14 +116,14 @@ jobs:
 
             ## Master Config and Perf Changelog Validation:
             When reviewing a PR, check if any of the following master config files were modified:
-            - `.github/configs/amd-master.yaml`
-            - `.github/configs/nvidia-master.yaml`
+            - `configs/amd-master.yaml`
+            - `configs/nvidia-master.yaml`
 
             If either master config file was edited AND `perf-changelog.yaml` was NOT edited in the same PR:
             - This is a 🔴 **BLOCKING** issue
             - Comment that `perf-changelog.yaml` must also be updated when master config files are changed
             - The perf-changelog entry should document what changed in the config and include the PR link
-            - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `.github/configs/amd-master.yaml` or `.github/configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
+            - Format: "Master config files were modified but `perf-changelog.yaml` was not updated. When changing `configs/amd-master.yaml` or `configs/nvidia-master.yaml`, you must add a corresponding entry to `perf-changelog.yaml` documenting the changes."
 
             ### Perf Changelog Entry Position:
             `perf-changelog.yaml` is read in chronological order — oldest entries at the top, newest at the bottom. New entries MUST be appended to the END of the file. Never insert in the middle or prepend.
@@ -161,7 +161,7 @@ jobs:
             Remember: Silence is golden. No comment is better than a low-value comment.
 
             ## Container Image Accessibility Validation:
-            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL `image:` values are publicly accessible:
+            When reviewing changes to `configs/*-master.yaml` files, verify that ALL `image:` values are publicly accessible:
 
             **Valid image formats (publicly accessible):**
             - Docker Hub: `organization/image:tag` (e.g., `lmsysorg/sglang:v0.5.7-rocm700-mi35x`)
@@ -296,7 +296,7 @@ jobs:
             - Comment: "MTP benchmark scripts MUST include `--use-chat-template` flag in the benchmark client configuration. This ensures proper tokenization for speculative decoding. Please add `--use-chat-template` to the benchmark command."
 
             ## Model Prefix Validation:
-            When reviewing changes to `.github/configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
+            When reviewing changes to `configs/*-master.yaml` files, verify that ALL config keys use valid model prefixes.
 
             **Valid model prefixes:**
             - `dsr1` - DeepSeek R1 models

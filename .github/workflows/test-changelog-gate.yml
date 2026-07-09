@@ -1,0 +1,77 @@
+name: Test Changelog Gate
+run-name: Test Changelog Gate - ${{ github.ref_name }} @ ${{ github.sha }}
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - ".claude/commands/recover-failed-ingest.md"
+      - ".github/workflows/benchmark-multinode-tmpl.yml"
+      - ".github/workflows/e2e-tests.yml"
+      - ".github/workflows/run-sweep.yml"
+      - ".github/workflows/test-changelog-gate.yml"
+      - "benchmarks/benchmark_lib.sh"
+      - "benchmarks/multi_node/amd_utils/job.slurm"
+      - "utils/find_reusable_sweep_run.py"
+      - "utils/test_find_reusable_sweep_run.py"
+      - "utils/process_changelog.py"
+      - "utils/test_process_changelog.py"
+      - "utils/collect_eval_results.py"
+      - "utils/test_collect_eval_results.py"
+      - "utils/evals/validate_scores.py"
+      - "utils/evals/test_batched_eval.py"
+      - "utils/prepare_perf_changelog_merge.py"
+      - "utils/recover_failed_ingest.py"
+      - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
+      - "utils/changelog_gate_tests/test_recover_failed_ingest.py"
+      - "utils/test_validate_reusable_sweep_artifacts.py"
+      - "utils/validate_perf_changelog.py"
+      - "utils/validate_reusable_sweep_artifacts.py"
+      - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
+      - "utils/changelog_gate_tests/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/conftest.py"
+      - "utils/merge_with_reuse.sh"
+      - "utils/matrix_logic/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: test-changelog-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-changelog:
+    name: Test changelog validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pydantic pyyaml tabulate
+
+      - name: Run validator, reuse, and gating tests
+        run: |
+          python -m pytest \
+            utils/changelog_gate_tests/test_validate_perf_changelog.py \
+            utils/test_find_reusable_sweep_run.py \
+            utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py \
+            utils/changelog_gate_tests/test_recover_failed_ingest.py \
+            utils/test_validate_reusable_sweep_artifacts.py \
+            utils/changelog_gate_tests/test_run_sweep_gating.py \
+            utils/test_process_changelog.py \
+            utils/test_collect_eval_results.py \
+            utils/evals/test_batched_eval.py \
+            -v

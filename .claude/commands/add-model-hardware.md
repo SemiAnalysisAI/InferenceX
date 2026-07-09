@@ -1,5 +1,5 @@
 ---
-description: Add a new model+hardware single-node benchmark recipe (script + master-config entry + perf-changelog + launcher routing), open a [Klaud Cold] PR, label full-sweep-enabled, and monitor CI
+description: Add a new model+hardware single-node benchmark recipe (script + master-config entry + perf-changelog + launcher routing), open a [Klaud Cold] PR, label full-sweep-fail-fast, and monitor CI
 argument-hint: <model-link> <gpu-sku> [recipes-link] [draft-model-link] [mtp]
 ---
 
@@ -26,7 +26,7 @@ Inputs from `$ARGUMENTS` (links first, then SKU; the rest optional and order-tol
 
 **engine** defaults to `vllm`; infer otherwise from the sibling / recipes page.
 
-Standing prefs: PR title prefixed `[Klaud Cold]`; add `full-sweep-enabled` via the REST API
+Standing prefs: PR title prefixed `[Klaud Cold]`; add `full-sweep-fail-fast` (strongly recommended over `full-sweep-enabled`) via the REST API
 (`gh pr edit` hits the projects-classic GraphQL bug); fill the perf-changelog `pr-link` after
 the PR exists; then monitor the sweep to a fail/success conclusion and report the job
 breakdown. Do **not** invent image tags — verify on the registry first.
@@ -41,7 +41,7 @@ the external sources. Read *several* similar files, not just one, and copy what 
 # similar benchmark scripts: same model on other SKUs, AND same SKU on other models
 ls benchmarks/single_node/fixed_seq_len/<model>_*.sh benchmarks/single_node/fixed_seq_len/*_<sku>*.sh
 # similar master-config entries (search spaces, image, parallelism), this model + analogues
-grep -nE "<model>-|.*-<sku>-" .github/configs/{nvidia,amd}-master.yaml
+grep -nE "<model>-|.*-<sku>-" configs/{nvidia,amd}-master.yaml
 # the runner launcher for this SKU (script-name routing, env, mounts, MODEL_PATH rewrite)
 sed -n '1,80p' runners/launch_<sku>*.sh
 # shared helpers the scripts rely on
@@ -73,8 +73,8 @@ This research directly feeds Step 2 (script flags/env) and Step 3 (search space)
 ## What you're producing (4–5 files)
 
 1. `benchmarks/single_node/fixed_seq_len/<model>_<precision>_<sku>[_<engine>][_mtp].sh`
-2. an entry in the master config — **`.github/configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
-   **`.github/configs/amd-master.yaml`** (mi* SKUs)
+2. an entry in the master config — **`configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
+   **`configs/amd-master.yaml`** (mi* SKUs)
 3. a `perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
 4. (if missing) `SPEC_SUFFIX`/framework-suffix routing in `runners/launch_<sku>*.sh`
 
@@ -86,7 +86,7 @@ git checkout -b feat/<model>-<sku>[-mtp]-dayzero
 # nearest sibling: same model other SKU, or same SKU other model
 ls benchmarks/single_node/fixed_seq_len/<model>_*           # same model, other hardware
 ls benchmarks/single_node/fixed_seq_len/*_<sku>*.sh         # same hardware, other model
-grep -n "<model>-<precision>-<sku>" .github/configs/{nvidia,amd}-master.yaml
+grep -n "<model>-<precision>-<sku>" configs/{nvidia,amd}-master.yaml
 ```
 Read the closest sibling script **and** its master-config entry — copy their flag shapes and
 search-space structure rather than inventing. The right model is "same model on a sibling SKU,
@@ -148,10 +148,10 @@ new entry is **required** for CI to run your config.
 
 ```bash
 bash -n benchmarks/single_node/fixed_seq_len/<script>
-python3 -c "import yaml; yaml.safe_load(open('.github/configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
+python3 -c "import yaml; yaml.safe_load(open('configs/<nvidia|amd>-master.yaml')); yaml.safe_load(open('perf-changelog.yaml'))"
 uv run --no-project --with pydantic --with pyyaml --python 3.12 \
   utils/matrix_logic/generate_sweep_configs.py test-config \
-  --config-files .github/configs/<nvidia|amd>-master.yaml --config-keys <key>
+  --config-files configs/<nvidia|amd>-master.yaml --config-keys <key>
 ```
 Sanity-check the generated matrix: expected layouts/concurrencies, `max-model-len` = scenario
 values, `spec-decoding` set where intended. Ensure both yaml files keep a trailing newline.
@@ -164,7 +164,7 @@ git push -u origin feat/<model>-<sku>[-mtp]-dayzero
 gh pr create --repo SemiAnalysisAI/InferenceX --base main \
   --title "[Klaud Cold] <key>: day-zero <MODEL> <SKU> recipe" --body "<summary>"
 # fill perf-changelog pr-link with the real URL → commit → push
-gh api -X POST repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels -f "labels[]=full-sweep-enabled" --jq '.[].name'
+gh api -X POST repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels -f "labels[]=full-sweep-fail-fast" --jq '.[].name'
 ```
 Wait for the sweep run to register on the head SHA, then monitor to a conclusion and report
 the job breakdown (e.g. 24 success / 6 skipped / 0 fail). If the **canary** fails, pull its log

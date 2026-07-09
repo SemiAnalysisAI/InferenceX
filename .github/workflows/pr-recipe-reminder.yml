@@ -4,8 +4,8 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, review_requested]
     paths:
-      - '.github/configs/amd-master.yaml'
-      - '.github/configs/nvidia-master.yaml'
+      - 'configs/amd-master.yaml'
+      - 'configs/nvidia-master.yaml'
       - 'benchmarks/**'
       - 'perf-changelog.yaml'
 
@@ -34,18 +34,18 @@ jobs:
             }
 
             const body = `${marker}
-            Thanks for the contribution! For vLLM & SGLang, please ensure that your recipes is similar to the official vLLM recipes and/or the SGLang cookbook
-            - https://docs.sglang.io/cookbook/intro
-            - https://recipes.vllm.ai/
+            Thanks for the contribution! Please reach out to respective companies' [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) to fill in the latest [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md) before pinging core maintainer on Slack for review. In order for the signoff PR check bot to trigger, you must follow the PR_REVIEW_CHECKLIST.md template correctly, including the phrase \`As a PR reviewer and CODEOWNER, I have reviewed this and have\`.
 
-            If it is not, please create a PR first before we can merge your single node PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
-            - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sglang/tree/main/docs_new
+            For PR verification, add the \`full-sweep-fail-fast\` label (strongly recommended) to this PR — the benchmark sweep only runs on labeled PRs. Use \`full-sweep-enabled\` only if you need matrix jobs to keep running past a failure.
 
-            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. If re-running failed jobs is attempted, PR authors are responsible for ensuring it passes. See GitHub's docs on re-running failed jobs: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
+            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. [See GitHub's docs on re-running failed jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)
 
-            As a rule of thumb, generally, PR authors should request a review & get a PR approval from the respective companies' [CODEOWNERS](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) before requesting a review from core maintainers.
+            ---
 
-            If additional help is needed, PR authors can reach out to core maintainers over Slack.`.replace(/^            /gm, '');
+            感谢你的贡献！请联系相应公司的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 填写最新的 [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md)，然后再在 Slack 上联系核心维护者进行审阅。为了触发 signoff PR 检查机器人，你必须正确遵循 PR_REVIEW_CHECKLIST.md 模板，包括保留英文语句 \`As a PR reviewer and CODEOWNER, I have reviewed this and have\`。
+
+            如需进行 PR 验证，请为此 PR 添加 \`full-sweep-fail-fast\` 标签（强烈推荐）— 基准测试 sweep 仅在带有标签的 PR 上运行。仅当需要矩阵任务在失败后继续运行时才使用 \`full-sweep-enabled\`。
+
+            **PR 作者有责任确保合并后所有 GitHub Action 任务完全通过。** 很多时候失败只是偶发抖动（flake），重新运行失败的任务即可解决。[参见 GitHub 关于重新运行失败任务的文档](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)`.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body });

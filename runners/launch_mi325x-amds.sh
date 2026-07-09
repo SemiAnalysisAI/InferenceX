@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_HUB_CACHE_MOUNT="/local-nvme/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 
 PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/raid/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
+export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
 set -x
 
-JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job" >&2

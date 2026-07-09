@@ -11,6 +11,8 @@ concurrency:
           github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.event.label.name != 'full-sweep-fail-fast' &&
           github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
+          github.event.label.name != 'all-evals' &&
+          github.event.label.name != 'evals-only' &&
           github.run_id ||
           'active'
         }}
@@ -34,16 +36,96 @@ on:
             - "perf-changelog.yaml"
 
 jobs:
+    check-changelog:
+        runs-on: ubuntu-latest
+        if: >-
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only'
+            )
+        outputs:
+            skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
+        steps:
+            - name: Reject conflicting sweep labels
+              env:
+                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+              run: |
+                  count=$(jq '
+                    [
+                      .[] |
+                      select(
+                        . == "sweep-enabled" or
+                        . == "full-sweep-enabled" or
+                        . == "non-canary-full-sweep-enabled" or
+                        . == "full-sweep-fail-fast" or
+                        . == "full-sweep-fail-fast-no-canary"
+                      )
+                    ] |
+                    length
+                  ' <<<"$SWEEP_LABELS")
+                  if [ "$count" -gt 1 ]; then
+                      echo "::error::PR has multiple conflicting sweep labels. Pick exactly one."
+                      exit 1
+                  fi
+
+            - name: Checkout code
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+
+            - name: Read PR sweep policy
+              id: sweep_policy
+              env:
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  if git log -1 --format=%B "$HEAD_SHA" | grep -Fq '[skip-sweep]'; then
+                      echo "skip-pr-sweep=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "skip-pr-sweep=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Validate perf-changelog matrix
+              env:
+                  ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
+                  EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
+              run: |
+                  pip install pydantic pyyaml
+                  CMD=(
+                      python3 utils/validate_perf_changelog.py
+                      --changelog-file perf-changelog.yaml
+                      --base-ref "origin/${{ github.base_ref }}"
+                      --head-ref "${{ github.event.pull_request.head.sha }}"
+                  )
+                  if [ "$ALL_EVALS" = "true" ]; then
+                      CMD+=(--all-evals)
+                  fi
+                  if [ "$EVALS_ONLY" = "true" ]; then
+                      CMD+=(--evals-only)
+                  fi
+                  "${CMD[@]}"
+
     reuse-sweep-gate:
+        needs: check-changelog
         runs-on: ubuntu-latest
         permissions:
             contents: read
             issues: read
             pull-requests: read
         if: >-
+            always() &&
+            needs.check-changelog.result == 'success' &&
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !github.event.pull_request.draft &&
+            !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
@@ -54,7 +136,7 @@ jobs:
             skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Check for reusable sweep authorization
               id: gate
@@ -70,45 +152,15 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-    check-newline:
-        needs: reuse-sweep-gate
-        runs-on: ubuntu-latest
-        if: >-
-            always() &&
-            (
-              needs.reuse-sweep-gate.result == 'skipped' ||
-              (
-                needs.reuse-sweep-gate.result == 'success' &&
-                needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
-              )
-            ) &&
-            github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
-            (
-              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-              github.event.label.name == 'sweep-enabled' ||
-              github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
-              github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary'
-            )
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-            - name: Check perf-changelog.yaml ends with newline
-              run: |
-                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
-                      echo "::error::perf-changelog.yaml must end with a newline character"
-                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
-                      exit 1
-                  fi
-
     setup:
-        needs: reuse-sweep-gate
+        needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest
         if: >-
             always() &&
+            (
+              needs.check-changelog.result == 'success' ||
+              needs.check-changelog.result == 'skipped'
+            ) &&
             (
               needs.reuse-sweep-gate.result == 'skipped' ||
               (
@@ -120,6 +172,7 @@ jobs:
               (
                 github.event_name == 'pull_request' &&
                 !github.event.pull_request.draft &&
+                needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
                 (
                   contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
                   contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
@@ -133,12 +186,13 @@ jobs:
                   github.event.label.name == 'full-sweep-enabled' ||
                   github.event.label.name == 'non-canary-full-sweep-enabled' ||
                   github.event.label.name == 'full-sweep-fail-fast' ||
-                  github.event.label.name == 'full-sweep-fail-fast-no-canary'
+                  github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+                  github.event.label.name == 'all-evals' ||
+                  github.event.label.name == 'evals-only'
                 )
               ) ||
               (
-                github.event_name != 'pull_request' &&
-                !contains(github.event.head_commit.message, '[skip-sweep]')
+                github.event_name == 'push'
               )
             )
         outputs:
@@ -150,27 +204,8 @@ jobs:
             reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
-            - name: Reject conflicting sweep labels
-              if: >-
-                  github.event_name == 'pull_request' &&
-                  (
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary'))
-                  )
-              run: |
-                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), 'non-canary-full-sweep-enabled' (full sweep, no canary gate), 'full-sweep-fail-fast' (full sweep behind the canary gate, first failure in a matrix cancels that matrix's remaining jobs), or 'full-sweep-fail-fast-no-canary' (the same, without the canary gate)."
-                  exit 1
-
             - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   fetch-depth: 0
 
@@ -181,6 +216,16 @@ jobs:
                       ${{
                         github.event_name == 'pull_request' &&
                         contains(github.event.pull_request.labels.*.name, 'sweep-enabled')
+                      }}
+                  ALL_EVALS: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'all-evals')
+                      }}
+                  EVALS_ONLY: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'evals-only')
                       }}
               run: |
                   pip install pydantic
@@ -201,6 +246,12 @@ jobs:
                   )
                   if [ "$TRIM_CONC" = "true" ]; then
                       CMD+=(--trim-conc)
+                  fi
+                  if [ "$ALL_EVALS" = "true" ]; then
+                      CMD+=(--all-evals)
+                  fi
+                  if [ "$EVALS_ONLY" = "true" ]; then
+                      CMD+=(--evals-only)
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
@@ -280,6 +331,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -318,6 +371,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
@@ -381,6 +436,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -434,10 +491,14 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
-            offloading: ${{ matrix.config.offloading }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
@@ -478,6 +539,8 @@ jobs:
             conc-list: '[${{ matrix.config.conc }}]'
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
@@ -489,6 +552,8 @@ jobs:
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -523,6 +588,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -563,6 +630,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
@@ -575,7 +644,7 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config.eval-conc }}
+            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     collect-results:
         needs:
@@ -614,19 +683,20 @@ jobs:
 
     reuse-ingest-artifacts:
         needs: setup
-        # `setup` runs via always() and depends on `reuse-sweep-gate`, which is
-        # skipped on every push-to-main. Without always() here, that skipped
-        # gate poisons this job's implicit success() check and it is skipped
-        # even when setup succeeded with reuse-enabled=true — silently breaking
-        # the merge-time ingest. Guard explicitly on setup success instead
-        # (same pattern as comment-unofficial-run-visualizer).
+        # `setup` runs via always() and depends on `check-changelog` and
+        # `reuse-sweep-gate`, which are skipped on every push-to-main. Without
+        # always() here, those skipped jobs poison this job's implicit
+        # success() check and it is skipped even when setup succeeded with
+        # reuse-enabled=true — silently breaking the merge-time ingest. Guard
+        # explicitly on setup success instead (same pattern as
+        # comment-unofficial-run-visualizer).
         if: >-
             always() &&
             needs.setup.result == 'success' &&
             needs.setup.outputs.reuse-enabled == 'true'
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Download reusable source artifacts
               env:
@@ -645,7 +715,7 @@ jobs:
                       [ -e "$artifact_dir" ] || continue
                       name=$(basename "$artifact_dir")
                       case "$name" in
-                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|server_logs_*|multinode_server_logs_*|agentic_aggregated)
+                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|agentic_*|server_logs_*|multinode_server_logs_*)
                               ;;
                           *)
                               rm -rf "$artifact_dir"
@@ -671,12 +741,10 @@ jobs:
                   find source-artifacts -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort
 
             - name: Validate reusable artifacts
+              # Collapses reran (flaky) eval duplicates to the latest result
+              # per identity, then validates consistency for ingest.
               run: |
-                  cat <<'CONFIGEOF' > _full_config.json
-                  ${{ needs.setup.outputs.search-space-config }}
-                  CONFIGEOF
                   python3 utils/validate_reusable_sweep_artifacts.py \
-                    --config-json _full_config.json \
                     --artifacts-dir source-artifacts
 
             - name: Upload reusable ingest artifacts
@@ -715,7 +783,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
@@ -753,7 +821,7 @@ jobs:
             DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }}
 
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Download results artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -801,6 +869,67 @@ jobs:
                       }
                     }'
 
+    trigger-agentic-ingest:
+        needs:
+            [
+                setup,
+                sweep-agentic,
+                sweep-multi-node-agentic,
+                upload-changelog-metadata,
+                reuse-ingest-artifacts,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main' &&
+            needs.setup.result == 'success' &&
+            needs.upload-changelog-metadata.result == 'success' &&
+            (
+              (
+                needs.reuse-ingest-artifacts.result == 'success' &&
+                (
+                  (
+                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
+                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
+                  ) ||
+                  (
+                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
+                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
+                  )
+                )
+              ) ||
+              (
+                (
+                  needs.sweep-agentic.result == 'success' ||
+                  needs.sweep-multi-node-agentic.result == 'success'
+                ) &&
+                (
+                  needs.sweep-agentic.result == 'success' ||
+                  needs.sweep-agentic.result == 'skipped'
+                ) &&
+                (
+                  needs.sweep-multi-node-agentic.result == 'success' ||
+                  needs.sweep-multi-node-agentic.result == 'skipped'
+                )
+              )
+            )
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger agentic database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
+                    -d '{
+                      "ref": "feat/agentx",
+                      "inputs": {
+                        "run-id": "${{ github.run_id }}",
+                        "run-attempt": "${{ github.run_attempt }}",
+                        "database-target": "production"
+                      }
+                    }'
+
     comment-unofficial-run-visualizer:
         needs:
             [
@@ -828,7 +957,9 @@ jobs:
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary'
+              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only'
             )
         runs-on: ubuntu-latest
         permissions:
