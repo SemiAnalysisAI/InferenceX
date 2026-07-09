@@ -180,7 +180,10 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    EP_ARGS=(
+        --enable-expert-parallel
+        --moe-backend deep_gemm_mega_moe
+    )
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -210,7 +213,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --enable-cumem-allocator \
 --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}' \
 --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}' \
---moe-backend deep_gemm_mega_moe \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
