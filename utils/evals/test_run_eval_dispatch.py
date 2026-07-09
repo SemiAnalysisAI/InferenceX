@@ -485,7 +485,7 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
-export EVAL_LIMIT=10 MODEL_NAME=test-model SWEBENCH_SANDBOX_SWEEP=0
+export EVAL_LIMIT=10 MODEL_NAME=test-model SWEBENCH_SANDBOX_SWEEP=0 SWEBENCH_WATCHDOG_POLL=1
 _run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
 [ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
 grep -q 'api_base: http://0.0.0.0:8899/v1' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
@@ -506,3 +506,80 @@ echo AGENTIC_GEN_OK
     assert "--slice 0:10" in argv
     assert "--environment-class swerex_modal" in argv
     assert "--subset lite" in argv
+
+
+def _agentic_shim(tmp_path, mini_body):
+    """Shared scaffolding for watchdog/salvage tests: shim dir with a scripted
+    mini-extra, a python3 that answers mini's config-path probe, and a gen dir."""
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    (shim / "mini-extra").write_text("#!/bin/bash\n" + mini_body)
+    (shim / "mini-extra").chmod(0o755)
+    default_yaml = shim / "default.yaml"
+    default_yaml.write_text("agent: {}\n")
+    (shim / "python3").write_text(
+        "#!/bin/bash\n"
+        f'if [[ "$*" == *minisweagent* ]]; then echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
+    )
+    (shim / "python3").chmod(0o755)
+    gen_dir = tmp_path / "gen"
+    gen_dir.mkdir()
+    return shim, gen_dir
+
+
+def _run_agentic(shim, gen_dir, extra_env=None):
+    script = r"""
+source "$BENCHMARK_LIB" 2>/dev/null
+_install_swebench_agent_deps() { :; }
+_ensure_modal_credentials() { :; }
+_run_swebench_agentic_generation "$GEN_DIR" --port 8899
+echo "GEN_RC=$?"
+"""
+    env = {**os.environ,
+           "BENCHMARK_LIB": str(BENCHMARK_LIB),
+           "GEN_DIR": str(gen_dir),
+           "MODEL_NAME": "test-model",
+           "SWEBENCH_SANDBOX_SWEEP": "0",
+           "SWEBENCH_WATCHDOG_POLL": "1",
+           "PATH": f"{shim}:{os.environ['PATH']}",
+           **(extra_env or {})}
+    return subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+
+
+def test_agentic_watchdog_kills_hung_mini(tmp_path):
+    """mini-extra hangs after writing all expected preds (observed at
+    workers=144): the watchdog must kill it and count generation as success."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+        # hang-on-exit emulation; exec + detached stdio so the pytest capture
+        # pipe isn't held open by an orphan after the watchdog kills us
+        "exec sleep 600 </dev/null >/dev/null 2>&1\n"
+    )
+    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"})
+    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+    assert "hung after completing all instances" in res.stdout + res.stderr
+
+
+def test_agentic_salvage_partial_preds_on_failure(tmp_path):
+    """Generation dies mid-run with some preds written: salvage and proceed
+    (rc 0) instead of discarding real work."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+        "exit 7\n"  # crash after 1 of 2 expected instances
+    )
+    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
+    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+    assert "scoring the partial set" in res.stdout + res.stderr
+
+
+def test_agentic_no_preds_still_fails(tmp_path):
+    """Generation fails with zero preds: must still fail (nothing to salvage)."""
+    shim, gen_dir = _agentic_shim(tmp_path, "exit 7\n")
+    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
+    assert "GEN_RC=7" in res.stdout, res.stdout + res.stderr

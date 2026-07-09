@@ -1405,6 +1405,10 @@ maybe_run_eval() {
 #   SWEBENCH_AGENT_STEP_LIMIT  (default 30)    per-instance agent step cap
 #   SWEBENCH_AGENT_TIMEOUT     (default 14400) whole-generation guard, seconds
 #   SWEBENCH_AGENT_RUNTIME_TIMEOUT (default 3600) max sandbox lifetime backstop
+#   SWEBENCH_AGENT_EXIT_GRACE  (default 300)   wait for mini-extra exit after
+#                              all preds are written, then kill (hang-on-exit)
+#   SWEBENCH_EXPECTED_INSTANCES (default 300)  full-split size for the watchdog
+#   SWEBENCH_WATCHDOG_POLL     (default 30)    watchdog poll interval, seconds
 #   EVAL_LIMIT                 first-N instances only (--slice 0:N)
 _run_swebench_agentic_generation() {
     local gen_dir="$1"; shift
@@ -1487,16 +1491,59 @@ PYGEN
     fi
 
     export MSWEA_COST_TRACKING=ignore_errors
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-8} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-30} slice=${EVAL_LIMIT:-full}"
+    # Expected instance count: the EVAL_LIMIT slice, else the full Lite test
+    # split (override via SWEBENCH_EXPECTED_INSTANCES for other datasets).
+    local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-8} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-30} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
-    timeout "${SWEBENCH_AGENT_TIMEOUT:-14400}" \
     mini-extra swebench \
         -c "$cfg" \
         --subset lite --split test \
         --environment-class swerex_modal \
         "${slice_args[@]}" \
         -w "${SWEBENCH_AGENT_WORKERS:-8}" \
-        -o "$gen_dir/agent_out" || agen_rc=$?
+        -o "$gen_dir/agent_out" &
+    local mini_pid=$!
+    # Completion watchdog: mini-extra can hang on exit AFTER all instances
+    # finish (observed at workers=144, run 29039988325: all 300 preds written
+    # by t+60min, process idled 3h into the outer timeout -- probabilistic
+    # thread/asyncio teardown race). preds.json is written incrementally per
+    # instance, so completion is observable from outside: once it holds all
+    # expected instances, grant SWEBENCH_AGENT_EXIT_GRACE seconds for a clean
+    # exit, then kill the process and count generation as complete.
+    local preds_file="$gen_dir/agent_out/preds.json"
+    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-14400} ))
+    local grace_until=0
+    local killed_after_complete=0
+    while kill -0 "$mini_pid" 2>/dev/null; do
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-14400}s); killing mini-extra" >&2
+            kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
+            agen_rc=124
+            break
+        fi
+        local done_count
+        done_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$preds_file" 2>/dev/null || echo 0)
+        if [ "${done_count:-0}" -ge "$expected" ]; then
+            if [ "$grace_until" -eq 0 ]; then
+                grace_until=$(( $(date +%s) + ${SWEBENCH_AGENT_EXIT_GRACE:-300} ))
+                echo "[swebench-agentic] all $expected predictions written; waiting ${SWEBENCH_AGENT_EXIT_GRACE:-300}s for mini-extra to exit"
+            elif [ "$(date +%s)" -ge "$grace_until" ]; then
+                echo "WARN: mini-extra hung after completing all instances; killing (known hang-on-exit)" >&2
+                kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
+                killed_after_complete=1
+                break
+            fi
+        fi
+        sleep "${SWEBENCH_WATCHDOG_POLL:-30}"
+    done
+    wait "$mini_pid" 2>/dev/null
+    local wait_rc=$?
+    if [ "$killed_after_complete" -eq 1 ]; then
+        agen_rc=0
+    elif [ "$agen_rc" -eq 0 ] && [ "$wait_rc" -ne 0 ]; then
+        agen_rc=$wait_rc
+    fi
     # Reap sandboxes still running after generation (crashed workers, outer
     # timeout kills, anything the in-process cleanup missed). Nothing else is
     # using Modal at this point -- scoring creates its own containers later --
@@ -1517,8 +1564,19 @@ except Exception as e:
     print(f"[swebench-agentic] sandbox sweep skipped: {e}")
 PYSWEEP
     if [ "$agen_rc" -ne 0 ]; then
-        echo "ERROR: agentic generation (mini-swe-agent) failed with $agen_rc" >&2
-        return "$agen_rc"
+        # Salvage: preds.json is written incrementally, so whatever finished
+        # before the failure is real, scoreable work -- run 29039988325 died
+        # at the timeout with ALL 300 predictions on disk and threw them away.
+        # Score the partial set (the resolved-rate denominator is submitted
+        # instances, so a partial run reports over what actually ran).
+        local salvage_count
+        salvage_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$gen_dir/agent_out/preds.json" 2>/dev/null || echo 0)
+        if [ "${salvage_count:-0}" -gt 0 ]; then
+            echo "WARN: generation exited rc=$agen_rc but $salvage_count/$expected predictions exist; scoring the partial set" >&2
+        else
+            echo "ERROR: agentic generation (mini-swe-agent) failed with $agen_rc" >&2
+            return "$agen_rc"
+        fi
     fi
     if [ ! -s "$gen_dir/agent_out/preds.json" ]; then
         echo "ERROR: agentic generation produced no preds.json" >&2
