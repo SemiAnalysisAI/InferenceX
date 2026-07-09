@@ -13698,7 +13698,7 @@ minimaxm3-fp8-b300-vllm:
 # weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
 # the STAGED_MODELS allow-list in launch_b300-nv.sh).
 minimaxm3-fp4-b300-vllm:
-  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
+  image: vllm/vllm-openai:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300

@@ -4750,3 +4750,11 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update the vLLM image to nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
+    - "Install FlashInfer 0.6.15.dev20260710 with upstream SM100 low-M MXFP8 split-K support"
+    - "Remove the explicit FlashInfer TRT-LLM all-reduce backend override"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
