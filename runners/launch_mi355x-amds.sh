@@ -78,7 +78,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
-        BENCHMARK_SUBDIR="multi_node"
+        # Agentic recipes live under multi_node/agentic/ and export the
+        # HiCache tunables (page-size, io-backend, ...); fixed-seq-len recipes
+        # live at the multi_node/ root. Honor SCENARIO_SUBDIR so agentic-coding
+        # configs pick the agentic recipe instead of the root one.
+        if [[ "${SCENARIO_SUBDIR}" == "agentic/" ]]; then
+            BENCHMARK_SUBDIR="multi_node/agentic"
+        else
+            BENCHMARK_SUBDIR="multi_node"
+        fi
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
@@ -126,7 +134,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     # Find the latest log directory that contains the data
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY:-false}" != "true" && "${IS_AGENTIC:-0}" != "1" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
 job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
@@ -178,6 +186,58 @@ PY
             shopt -u nullglob
         else
             echo "WARNING: RUN_EVAL=true but no eval results found under $BENCHMARK_LOGS_DIR/logs"
+        fi
+    fi
+
+    # Stage agentic raw artifacts + server logs for the CI upload steps.
+    # server_sglang.sh copies /run_logs/slurm_job-<id> to
+    # $BENCHMARK_LOGS_DIR/logs/slurm_job-<id> on shared storage, and
+    # trace_replay.sh writes each concurrency's aiperf artifacts under
+    # agentic/conc_<N>/ (mirroring agentic_srt.sh). benchmark-multinode-tmpl.yml
+    # uploads them from $GITHUB_WORKSPACE/LOGS/agentic/conc_*/... plus a
+    # multinode_server_logs.tar.gz, so preserve the conc_<N>/ nesting here
+    # before the logs dir is removed below. The agg result JSON is already
+    # written straight to the mounted workspace by the existing agentic
+    # aggregation module.
+    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+        JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
+        if [ -d "$JOB_LOGS_DIR" ]; then
+            # trace_replay.sh always nests artifacts under agentic/conc_<N>/.
+            # Copy the whole agentic/ tree so the conc_<N>/ subdirs are
+            # preserved for the LOGS/agentic/conc_*/... upload globs.
+            AGENTIC_SRC="$JOB_LOGS_DIR/agentic"
+            if [ -d "$AGENTIC_SRC" ] && find "$AGENTIC_SRC" -mindepth 1 -maxdepth 1 -type d -name 'conc_*' -print -quit 2>/dev/null | grep -q .; then
+                echo "Staging agentic raw artifacts from $AGENTIC_SRC"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+                cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
+                # The source artifacts are created inside the container as root
+                # (--container-remap-root), so depending on how the runner
+                # invokes this script the copies can end up root-owned and/or
+                # read-only (aiperf/server_sglang make some dirs mode 0555). If
+                # the staged tree isn't owned+writable by the runner user, the
+                # next checkout's `git clean` fails with
+                #   EACCES: permission denied, rmdir '.../LOGS/agentic'.
+                # chown to the invoking user (the same one that runs git clean)
+                # via sudo (already passwordless here for rm -rf). The follow-up
+                # chmod uses a+rwX (not just u+rwX): the *next* job against this
+                # same $GITHUB_WORKSPACE may be picked up by a different runner
+                # process running as a different OS user, which would otherwise
+                # fall outside the owner bits and still fail the same
+                # `git clean` with EACCES despite the chown above.
+                sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                chmod -R a+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
+            else
+                echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
+            fi
+            # Server/router/prefill/decode logs for the multinode_server_logs_* artifact.
+            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$JOB_LOGS_DIR" . 2>/dev/null; then
+                echo "Created multinode_server_logs.tar.gz"
+            else
+                echo "WARNING: failed to create multinode_server_logs.tar.gz"
+            fi
+        else
+            echo "WARNING: agentic staging skipped; $JOB_LOGS_DIR not found"
         fi
     fi
 
