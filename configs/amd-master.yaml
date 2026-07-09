@@ -2022,16 +2022,13 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
 
-# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
-# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
-# image tag, so bumping sglang is just an image tag bump here. Sweeps
-# DP-attention on/off and EP=8.
-
-# CONC ranges mirror dsv4-fp4-b200-vllm-agentic for cross-hardware
-# comparability. Offload sweep is none-only (SGLang has no equivalent of
-# vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
+# DSv4-Pro FP4 on MI355X via single-node vLLM (benchmarks/single_node/agentic/
+# dsv4_fp4_mi355x_vllm.sh). TP8/EP1, DP-attention on/off. kvnone is the
+# baseline; the dram+lmcache row exercises vLLM's LMCacheMPConnector KV
+# offload path (see amd_utils/*mooncake* naming convention note: lmcache runs
+# an external LMCache MP server, not Mooncake).
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -2040,10 +2037,10 @@ dsv4-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
-      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 32, 40, 48] }
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [40, 56, 72] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40] }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
