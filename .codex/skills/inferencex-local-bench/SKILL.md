@@ -38,6 +38,7 @@ Use this skill for local or cluster-side reproduction. Keep local replay behavio
    - Use durable storage such as `/it-share/yichaozhu/kimi-agentic` or `/data/yichaozhu`; avoid `/tmp`.
    - Archive server/router/LMCache logs, Slurm stdout/stderr, benchmark JSON, raw agentic traces, profile exports, metrics snapshots, and the launch env.
    - Record conclusions and paths in the experiment roadmap.
+   - Treat `workspace_artifacts` as potentially polluted unless the result filename exactly matches the current `RESULT_FILENAME`.
 
 ## Commands
 
@@ -46,6 +47,10 @@ For launch, monitor, validation, and cleanup templates, read [references/command
 ## Experiment Notes
 
 For Kimi MoRI/LMCache and Mooncake lessons learned, read [references/kimi-disagg-notes.md](references/kimi-disagg-notes.md).
+
+## Result Hygiene
+
+For result comparison and plotting, only use JSON files whose filename matches the current run's `RESULT_FILENAME`. Later runs may copy stale JSON files from the workspace root into `workspace_artifacts`; do not infer run identity from the containing directory alone.
 
 ## Safety Rules
 

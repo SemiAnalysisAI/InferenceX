@@ -51,3 +51,16 @@ Agentic 262k requests can spend a long time in decode. Do not declare a hang onl
 - output token counters
 - cache usage
 - router timeout or backend error logs
+
+## Result Interpretation
+
+Keep these counters separate:
+
+- `profile_export.jsonl` line count: total records, may include invalid/error/cancelled metadata records.
+- `num_requests_successful`: successful completed requests in the aggregate result.
+- AIPerf phase `completed`: successful completed requests at phase end.
+- AIPerf phase `cancelled`: in-flight credits cancelled when profiling duration expires.
+
+For clean runs these can match, but AgentX/K2.5 artifacts can have `profile_export.jsonl` lines greater than successful requests. Do not use JSONL line count as completed request count without checking errors/cancelled records.
+
+The K2.7 1P2D data collected in this investigation has no discovered 60-minute LMCache conc32 result. Found LMCache conc32 JSONs were short runs (`duration_seconds` around 629s or 930s). Keep short K2.7 conc32 and K2.5 AgentX conc32 separate from the K2.7 60-minute plots.

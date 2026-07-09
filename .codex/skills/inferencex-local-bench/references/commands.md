@@ -89,6 +89,15 @@ Use the repository aiperf/agentic path configured by the recipe. For each run, r
 - GPU prefix hit, external hit/query, LMCache hit/miss if available
 - run directory and log archive path
 
+When parsing completed runs, prefer the current run's exact result filename:
+
+```bash
+find "$RUN_ROOT" -path "*/workspace_artifacts/${RESULT_FILENAME}.json" -print
+find "$RUN_ROOT" -path "*/workspace_artifacts/${RESULT_FILENAME}_conc*.json" -print
+```
+
+Do not use every `*.json` under `workspace_artifacts`: local replay workspaces can contain stale JSON copied from previous runs.
+
 ## Archive
 
 ```bash

@@ -230,6 +230,11 @@ PY
             shopt -s nullglob
             for result_file in "$JOB_LOGS_DIR"/workspace_artifacts/*.json "$JOB_LOGS_DIR"/*.json; do
                 [ -f "$result_file" ] || continue
+                result_base="$(basename "$result_file")"
+                if [[ "$result_base" != "${RESULT_FILENAME}.json" && "$result_base" != "${RESULT_FILENAME}"_conc*.json ]]; then
+                    echo "Skipping stale/unrelated agentic result JSON: $result_file"
+                    continue
+                fi
                 echo "Staging agentic result JSON from $result_file"
                 cp "$result_file" "$GITHUB_WORKSPACE/"
             done

@@ -689,8 +689,20 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then
         WORKSPACE_ARTIFACT_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/workspace_artifacts"
         mkdir -p "$WORKSPACE_ARTIFACT_DIR"
-        find /workspace -maxdepth 1 -type f \( -name '*.json' -o -name '*.jsonl' -o -name '*.csv' -o -name '*.png' \) \
-            -exec cp -f {} "$WORKSPACE_ARTIFACT_DIR/" \; 2>/dev/null || true
+        if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+            shopt -s nullglob
+            for result_file in \
+                "/workspace/${RESULT_FILENAME}.json" \
+                "/workspace/${RESULT_FILENAME}"_conc*.json; do
+                [ -f "$result_file" ] || continue
+                cp -f "$result_file" "$WORKSPACE_ARTIFACT_DIR/"
+            done
+            shopt -u nullglob
+            [ -f "/workspace/meta_env.json" ] && cp -f "/workspace/meta_env.json" "$WORKSPACE_ARTIFACT_DIR/" || true
+        else
+            find /workspace -maxdepth 1 -type f \( -name '*.json' -o -name '*.jsonl' -o -name '*.csv' -o -name '*.png' \) \
+                -exec cp -f {} "$WORKSPACE_ARTIFACT_DIR/" \; 2>/dev/null || true
+        fi
     fi
 
     # Copy benchmark/eval results to BENCHMARK_LOGS_DIR (mounted from host)
