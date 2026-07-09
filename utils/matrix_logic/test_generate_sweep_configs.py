@@ -2057,7 +2057,7 @@ class TestGenerateTestConfigSweep:
             generate_test_config_sweep(args, config, runner_config)
 
     def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
-        """One server allocation should run the selected concurrency batch."""
+        """One server allocation should run exactly one concurrency (one task per conc)."""
         config = {
             "dsv4-agentic-2p1d": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2093,11 +2093,15 @@ class TestGenerateTestConfigSweep:
 
         result = generate_test_config_sweep(args, config)
 
-        assert len(result) == 2
-        assert result[0]["conc"] == [16, 32, 64, 128]
-        assert result[0]["exp-name"] == "dsv4_p2x8_d1x8_conc16x32x64x128"
-        assert result[1]["conc"] == [256]
-        assert result[1]["exp-name"] == "dsv4_p2x8_d1x8_conc256"
+        assert len(result) == 5
+        assert [entry["conc"] for entry in result] == [[16], [32], [64], [128], [256]]
+        assert [entry["exp-name"] for entry in result] == [
+            "dsv4_p2x8_d1x8_conc16",
+            "dsv4_p2x8_d1x8_conc32",
+            "dsv4_p2x8_d1x8_conc64",
+            "dsv4_p2x8_d1x8_conc128",
+            "dsv4_p2x8_d1x8_conc256",
+        ]
 
 
 # =============================================================================
@@ -2220,7 +2224,7 @@ class TestGenerateFullSweepMixed:
                     "agentic-coding": [{
                         "search-space": [
                             {
-                                "conc-list": [16, 32],
+                                "conc-list": [16],
                                 "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
                                 "decode": {"hardware": "h100", "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                             },
