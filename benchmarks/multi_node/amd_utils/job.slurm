@@ -179,11 +179,41 @@ else
         fi
     }
 
-    if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+    # Extract hf_dir from models.yaml (same as vllm-disagg path above)
+    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+        found && /^[^ ]/{exit}
+        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+    SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
+
+    # Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
+    # fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
+    if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
+        # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
+        # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
+        if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
+            echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
+        elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
+            MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
+            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
+            MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
+            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        else
+            echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+            echo "  - $MODEL_PATH"
+            echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
+            echo "  - $MODEL_PATH/$MODEL_NAME"
+            exit 1
+        fi
+    elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
+        MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+        echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+    elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
         MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
     else
         echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+        echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
         echo "  - $MODEL_DIR/$MODEL_NAME"
         exit 1
     fi
@@ -350,7 +380,6 @@ DOCKER_ENV_COMMON=(
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
     -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
-    -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
     -e ENGINE=\$ENGINE
     -e WS_PATH=${WS_PATH}
@@ -363,14 +392,44 @@ DOCKER_ENV_COMMON=(
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    # DISAGG was never forwarded into the container at all (not even under a
+    # different name), so process_agentic_result.py's env_bool("DISAGG") always
+    # defaulted to false in the result JSON regardless of the actual topology.
+    -e DISAGG=\${DISAGG:-false}
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
+    # PREFILL_TP/DECODE_TP/*_NUM_WORKERS (below, undecorated -- distinct from the
+    # *_SIZE vars server_sglang.sh uses for launch args) are what
+    # process_agentic_result.py's _gpu_shape() reads for multinode runs. Without
+    # these the container never sees them (only *_SIZE was passed), so agentic
+    # result JSONs silently recorded tp=0 / prefill_tp=0 / prefill_num_workers=0
+    # for every multinode run.
+    -e PREFILL_TP=\$PREFILL_TP
+    -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
+    -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
+    -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-0}
+    -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-0}
+    -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
+    -e DURATION=\${DURATION:-1800}
+    -e IS_AGENTIC=\${IS_AGENTIC:-0}
+    -e KV_OFFLOADING=\${KV_OFFLOADING:-none}
+    -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
+    -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
+    -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
+    -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
+    -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
+    -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
+    -e DECODE_TP=\$DECODE_TP
+    -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e DRY_RUN=\${DRY_RUN:-0}
 )
 
 # Engine-specific env vars
@@ -410,6 +469,35 @@ else
         -e SGLANG_WS_PATH=${WS_PATH}
     )
 fi
+
+# HiCache / Mooncake settings are delivered via a bind-mounted config file rather
+# than a long list of docker -e flags. Write it once to the shared benchmark-logs
+# dir (already a host path, visible on every node) and mount it read-only at
+# /config/hicache_mc.env, where env.sh sources it before applying its defaults.
+# Empty values are preserved so env.sh's "${VAR:-default}" fallbacks still apply.
+HICACHE_MC_CONFIG="${BENCHMARK_LOGS_DIR}/hicache_mc_${SLURM_JOB_ID}.env"
+cat > "$HICACHE_MC_CONFIG" <<EOF
+HICACHE_RATIO=${HICACHE_RATIO:-}
+HICACHE_HOST_POOL_COUNT=${HICACHE_HOST_POOL_COUNT:-}
+HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-}
+HICACHE_IO_BACKEND=${HICACHE_IO_BACKEND:-}
+HICACHE_MEM_LAYOUT=${HICACHE_MEM_LAYOUT:-}
+HICACHE_WRITE_POLICY=${HICACHE_WRITE_POLICY:-}
+HICACHE_STORAGE_BACKEND=${HICACHE_STORAGE_BACKEND:-}
+HICACHE_PREFETCH_POLICY=${HICACHE_PREFETCH_POLICY:-}
+MC_PATCH_HOSTPOOL=${MC_PATCH_HOSTPOOL:-}
+MC_MASTER_PORT=${MC_MASTER_PORT:-}
+MC_METADATA_PORT=${MC_METADATA_PORT:-}
+MC_METRICS_PORT=${MC_METRICS_PORT:-}
+MC_MASTER_THREADS=${MC_MASTER_THREADS:-}
+MC_EVICTION_HIGH_WATERMARK=${MC_EVICTION_HIGH_WATERMARK:-}
+MC_PROTOCOL=${MC_PROTOCOL:-}
+MC_GLOBAL_SEG=${MC_GLOBAL_SEG:-}
+MC_DEVICE=${MC_DEVICE:-}
+MC_MASTER_ADDR=${MC_MASTER_ADDR:-}
+MC_METADATA_SERVER=${MC_METADATA_SERVER:-}
+EOF
+echo "[config] wrote HiCache/Mooncake settings -> $HICACHE_MC_CONFIG"
 
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
@@ -572,6 +660,7 @@ fi
     -v /tmp:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
+    -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
     ${EXTRA_DOCKER_MOUNTS:-} \
     \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
