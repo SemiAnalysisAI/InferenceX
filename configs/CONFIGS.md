@@ -18,8 +18,8 @@ entry-name:
       osl: int
       search-space:
       - { tp: int, conc-start: int, conc-end: int }
-      # Optionally, specify 'ep' (expert-parallelism) and 'dp-attn' (data parallel attention)
-      - { tp: int, ep: int, dp-attn: bool, conc-start: int, conc-end: int }
+      # Optionally, specify expert/data-parallel attention and context-parallel sizes
+      - { tp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
       - ...
     - ...
     agentic-coding:  # optional
@@ -28,6 +28,33 @@ entry-name:
       - { tp: int, conc-start: int, conc-end: int }
       - ...
 ```
+
+Heterogeneous disaggregated search-space entries declare hardware on each
+worker pool. Omit both `hardware` fields for homogeneous hardware:
+
+```yaml
+multinode: true
+disagg: true
+scenarios:
+  fixed-seq-len:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - conc-list: [64]
+      prefill:
+        hardware: b200
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+      decode:
+        hardware: h100
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: false
+```
+
 Note: while not required, `entry-name` typically takes the format `<INFMAX_MODEL_PREFIX>-<PRECISION>-<GPU>-<FRAMEWORK>`.
 
 The below list describes what each field is:
@@ -41,6 +68,13 @@ The below list describes what each field is:
   fleet.
 - `precision`: The precision to run the benchmark. Again, this is used to find which script to run in `benchmarks/`.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
+- `disagg`: Enables disaggregated serving and may only be `true` when
+  `multinode` is also `true`.
+- `hardware`: Optional metadata within each `prefill` and `decode` worker block
+  for heterogeneous disaggregated deployments. If one worker declares a GPU
+  SKU, the other must also declare one. Omit both fields for homogeneous
+  hardware. These values flow into aggregate results but do not affect runner
+  scheduling.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
   - `fixed-seq-len`: Fixed input/output sequence length benchmarks. Each entry must have:
     - `isl`: An integer representing the input sequence length, e.g., `1024`
@@ -52,6 +86,9 @@ The below list describes what each field is:
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.
       - (Optional) `ep`: An integer representing the expert parallelism level that the configuration will be served at. Default is 1 (no expert parallelism) when not specified.
       - (Optional) `dp-attn`: A boolean representing whether or not to activate data parallel attention for the configuration. Default is false when not specified.
+      - (Optional) `dcp-size`: Decode context-parallel size. Default is 1. It must be a positive divisor of `tp`; DCP reuses the TP GPUs.
+      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A single-node job allocates `tp * pcp-size` GPUs.
+      - `dcp-size` and `pcp-size` are single-node fields. They are not accepted inside multinode `prefill` or `decode` worker blocks.
   - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry must have:
     - `trace-source`: Identifier for the trace dataset to use.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries.
@@ -62,7 +99,7 @@ input.
 
 Notes:
 - No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
-- Setting the fields above, particularly `ep` and `dp-attn`, only guarantee that the respective values will be passed as environment variables to the benchmark scripts! Actually using those environment variables is an implementation detail at the level of the benchmark Bash script.
+- Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts (`ep` as `EP_SIZE`, `dp-attn` as `DP_ATTENTION`, `dcp-size` as `DCP_SIZE`, and `pcp-size` as `PCP_SIZE`). Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ## Runners
 

@@ -77,7 +77,7 @@ jobs:
                   fi
 
             - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   fetch-depth: 0
 
@@ -136,7 +136,7 @@ jobs:
             skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Check for reusable sweep authorization
               id: gate
@@ -205,7 +205,7 @@ jobs:
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
             - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   fetch-depth: 0
 
@@ -331,6 +331,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -369,6 +371,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
@@ -432,6 +436,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -485,12 +491,14 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
-            kv-offloading: ${{ matrix.config['kv-offloading'] }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'] }}
-            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
@@ -531,6 +539,8 @@ jobs:
             conc-list: '[${{ matrix.config.conc }}]'
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
@@ -542,6 +552,8 @@ jobs:
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -576,6 +588,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -616,6 +630,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
@@ -680,7 +696,7 @@ jobs:
             needs.setup.outputs.reuse-enabled == 'true'
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Download reusable source artifacts
               env:
@@ -767,7 +783,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
@@ -805,7 +821,7 @@ jobs:
             DATABASE_URL: ${{ secrets.NEON_PROD_RO_URL }}
 
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Download results artifacts
               uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -825,6 +841,7 @@ jobs:
                 collect-results,
                 collect-evals,
                 calc-success-rate,
+                setup,
                 upload-changelog-metadata,
                 reuse-ingest-artifacts,
             ]
@@ -832,6 +849,17 @@ jobs:
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
+            needs.setup.result == 'success' &&
+            (
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == '[]'
+              ) &&
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
+              )
+            ) &&
             (
               needs.collect-results.result != 'skipped' ||
               needs.collect-evals.result != 'skipped' ||
@@ -910,7 +938,7 @@ jobs:
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
-                        "database-target": "production"
+                        "database-target": "agentx-v1"
                       }
                     }'
 

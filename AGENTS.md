@@ -2,6 +2,30 @@
 
 Guidance for AI agents working with InferenceX.
 
+> **Mandatory reading: [`CONTRIBUTING.md`](CONTRIBUTING.md)** — read it before opening or reviewing any PR. It covers the full PR review flow, the CODEOWNER sign-off process, the `/reuse-sweep-run` merge path, post-merge responsibilities, and critical cluster rules (e.g. never leaving root-owned files on AMD runners).
+
+> **PR and GitHub-issue titles & descriptions must be bilingual — include a Simplified Chinese version in addition to English.** Title format: `<English title> / <中文标题>`. In the PR/issue body, follow the English content with its Chinese translation (e.g. a `## 中文说明` section mirroring the summary; don't translate code blocks, logs, or stack traces — summarize around them). **PR comments must include a Chinese translation too** — conversation comments, review summaries, and inline review comments alike: short comments as a single `<English> / <中文>` line, longer ones with the Chinese translation as a trailing paragraph (`中文：...`). Exception: the CODEOWNER sign-off template stays English-verbatim (the sign-off verifier triggers on its exact phrase); bot-generated comments follow their own workflow templates. This applies to every PR and every issue, matching the bilingual docs rule in Code Conventions.
+
+> **Translation quality bar:** write natural technical Chinese as used by ML infra engineers, not word-for-word machine translation. Follow the style of [`vllm-project/vllm-ascend` `README.zh.md`](https://github.com/vllm-project/vllm-ascend/blob/main/README.zh.md): translate concepts into idiomatic Chinese while preserving model names, hardware SKUs (MI355X, B300, GB200 ...), framework names (vLLM, SGLang, ATOM ...), flags, and CLI/env-var identifiers in English. Use parenthetical English clarification for acronyms on first use, e.g. 混合专家(MOE), 专家并行(EP). Preferred term mappings:
+>
+> | English | Chinese |
+> |---|---|
+> | benchmark | 基准测试 |
+> | image (Docker) | 镜像 |
+> | config / configuration | 配置 |
+> | single-node / multi-node | 单节点 / 多节点 |
+> | speculative decoding | 投机解码 |
+> | inference | 推理 |
+> | throughput | 吞吐量 |
+> | latency | 延迟 |
+> | prefill / decode | 预填充 / 解码 |
+> | disaggregated (serving) | 分离式（推理） |
+> | expert parallelism | 专家并行 |
+> | sweep | 扫描 |
+> | launcher | 启动器 |
+> | artifact | 产物 |
+> | evaluation / eval | 评估 |
+
 > **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
 
 ## Project Overview
@@ -55,18 +79,20 @@ YAML: kebab-case field names (`model-prefix`, `conc-start`, `dp-attn`). Master c
 
 Bash: source shared utilities via `source benchmark_lib.sh` (`check_env_vars`, `wait_for_server_ready`, `run_benchmark_serving`, `run_eval`, `append_lm_eval_summary`); parameters passed via env vars. **MTP scripts MUST pass `--use-chat-template` to `run_benchmark_serving`** - EAGLE-style spec decoding is trained against chat-formatted inputs; benchmarking against raw prompts silently regresses acceptance rate. Applies to every `*_mtp.sh`.
 
-Git: conventional commit messages. `[skip-sweep]` in the latest PR head commit skips that PR's benchmark setup after changelog validation. It is ignored on pushes to `main`. Changes to `perf-changelog.yaml` trigger benchmark runs.
+Git: conventional commit messages. **Commit messages must include a Simplified Chinese translation in addition to English** — keep the subject line in English (conventional-commit style), then include the Chinese translation of the subject and key body points in the commit body (e.g. a trailing `中文：<translation>` paragraph), following the same translation quality bar as PRs/issues. Squash-merge commits inherit the bilingual PR title, which satisfies the subject requirement automatically. `[skip-sweep]` in the latest PR head commit skips that PR's benchmark setup after changelog validation. It is ignored on pushes to `main`. Changes to `perf-changelog.yaml` trigger benchmark runs.
 
-Docs: the README is bilingual — `README.md` (English, default) and `README_zh.md` (Simplified Chinese), with an `English | 中文` switcher under the badges. **Any edit to `README.md` MUST be mirrored in `README_zh.md`, and vice versa** — keep the two in sync (same sections, links, badges, images) and update both in the same PR.
+Docs: all contributor-facing docs are bilingual — **every such Markdown doc MUST have a Simplified Chinese version** named `<name>_zh.md` alongside it, with an `English | 中文` switcher at the top. Current pairs: `README.md`/`README_zh.md`, `CONTRIBUTING.md`/`CONTRIBUTING_zh.md`, `docs/PR_REVIEW_CHECKLIST.md`/`docs/PR_REVIEW_CHECKLIST_zh.md`. **Any edit to an English doc MUST be mirrored in its `_zh` counterpart (and vice versa) in the same PR** — same sections, links, badges, images — and a new doc must ship with its `_zh` version in the same PR. Exceptions: agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`) and internal references under `.github/`/`utils/` are English-only; the sign-off template inside `docs/PR_REVIEW_CHECKLIST*.md` stays in English verbatim in BOTH versions, because `codeowner-signoff-verify.yml` triggers on its exact English opening phrase.
+
+Checklist ↔ sign-off verifier sync: `docs/PR_REVIEW_CHECKLIST.md` is the source of truth for the merge standard, and `.github/workflows/codeowner-signoff-verify.yml` encodes it as independently-verified checks in its Claude prompt. **Whenever `docs/PR_REVIEW_CHECKLIST.md` is updated — an item added, removed, or materially reworded — agents are allowed and expected to update `codeowner-signoff-verify.yml` to match, ideally in the same PR.** Cosmetic edits (formatting, typos, `_zh` translation sync) need no verifier change. The verifier's Check 5 already compares sign-offs against the live checklist file, so stale sign-off templates are caught automatically — but a new or removed policy item needs its own check logic added to / removed from the workflow prompt. To validate a verifier change: merge it, open a throwaway `[DO NOT MERGE]` test PR, post a sign-off comment (it must contain the exact phrase `As a PR reviewer and CODEOWNER` or the workflow won't trigger), read the posted verdict comment, then close the test PR.
 
 ### Pull Request Sweep Labels
 
-PRs do not run the sweep automatically - `run-sweep.yml` is gated on a primary sweep label. Pick exactly one of the five primary labels below; setting multiple primary labels is rejected by the workflow.
+PRs do not run the sweep automatically - `run-sweep.yml` is gated on a primary sweep label. Pick exactly one of the five primary labels below; setting multiple primary labels is rejected by the workflow. **For full sweeps, `full-sweep-fail-fast` is the strongly recommended default** - a broken change burns one canary job plus at most one job per matrix instead of the whole fan-out. Reach for `full-sweep-enabled` only when you specifically need every matrix job to run to completion despite failures (e.g. a flaky config where one flake would kill a matrix's in-flight results).
 
 - `sweep-enabled` - runs the sweep with `--trim-conc` (each parallelism config reduced to its single lowest concurrency). Default for most PRs.
-- `full-sweep-enabled` - runs the full intermediate concurrency sweep behind a sequential single-node canary gate. Use when intermediate points matter (e.g. a recipe change shifts the throughput/latency curve, not just its endpoints).
+- `full-sweep-enabled` - runs the full intermediate concurrency sweep behind a sequential single-node canary gate, with every matrix job running to completion regardless of failures. **Not the recommended default** - prefer `full-sweep-fail-fast`; use this only when a single flaky job killing its matrix's in-flight results is worse than burning GPU time on a broken change.
 - `non-canary-full-sweep-enabled` - runs the full intermediate concurrency sweep without the canary gate. Use when the canary is flaky or not representative of the affected configuration.
-- `full-sweep-fail-fast` - runs the full intermediate concurrency sweep behind the same sequential single-node canary gate as `full-sweep-enabled` (so a globally broken change burns one job, not the whole fan-out), and with `strategy.fail-fast` enabled on every matrix: the first failure in a matrix cancels that matrix's remaining jobs. Fail-fast is matrix-scoped, so the other matrices (1k1k vs 8k1k vs agentic vs evals) keep running and self-terminate on their own first failure; their completed results remain valid. The failing job keeps its red *failure* conclusion and the run concludes failed. Use when a failure means the rest of that matrix is wasted GPU time (e.g. new image bring-up). Note one flaky job kills its matrix's in-flight results.
+- `full-sweep-fail-fast` - runs the full intermediate concurrency sweep behind the same sequential single-node canary gate as `full-sweep-enabled` (so a globally broken change burns one job, not the whole fan-out), and with `strategy.fail-fast` enabled on every matrix: the first failure in a matrix cancels that matrix's remaining jobs. Fail-fast is matrix-scoped, so the other matrices (1k1k vs 8k1k vs agentic vs evals) keep running and self-terminate on their own first failure; their completed results remain valid. The failing job keeps its red *failure* conclusion and the run concludes failed. **This is the strongly recommended default for full sweeps** (image bumps, recipe changes, bring-up) - a failure means the rest of that matrix is wasted GPU time. Caveat: one flaky job kills its matrix's in-flight results; if that repeatedly bites a specific config, fall back to `full-sweep-enabled` for that PR.
 - `full-sweep-fail-fast-no-canary` - same as `full-sweep-fail-fast` but without the canary gate: all matrices fan out immediately. Use when the canary is flaky or not representative of the affected configuration but you still want per-matrix fail-fast.
 
 `all-evals` and `evals-only` are optional modifier labels. Combine either or both with one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset; combining both runs every eval and no throughput. `all-evals` remains eligible for artifact reuse when paired with an eligible full-sweep label. Runs with `evals-only`, including runs with both modifiers, are not eligible.

@@ -21,9 +21,24 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # DSV4 sglang recipes.
         export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5.1-fp8")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-FP8"
+        export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -302,25 +317,22 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/glm5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout main || exit 1
-    if [[ $PRECISION == "fp8" ]]; then
-        mkdir -p recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200-fp8" recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-    elif [[ $PRECISION == "fp4" ]]; then
-        mkdir -p recipes/vllm/minimax-m2.5-gb200 || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200 || exit 1
-    else
-        echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
-        exit 1
-    fi
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    mkdir -p recipes/sglang/glm5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -495,7 +507,10 @@ fi
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
-    -f "$CONFIG_PATH"
+    # Pass the full CONFIG_FILE (not the stripped CONFIG_PATH): srtctl needs the
+    # ":zip_override_...[i]" selector to pick the recipe block. For plain-file
+    # recipes CONFIG_FILE == CONFIG_PATH, so this is a no-op for them.
+    -f "$CONFIG_FILE"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then

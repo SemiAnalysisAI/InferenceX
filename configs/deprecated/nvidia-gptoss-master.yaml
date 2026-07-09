@@ -1,0 +1,417 @@
+# Deprecated gpt-oss-120b entries archived from nvidia-master.yaml.
+# Removed from the active master config so sweep generation no longer selects them.
+
+gptoss-fp4-b200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: b200
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    # Low ==> high TP from Left to Right of pareto
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 256, conc-end: 256 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 256 }
+      - { tp: 2, conc-start:  4, conc-end: 256 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 4 }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+    # Low ==> high TP from Left to Right of pareto
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start:   4, conc-end: 256}
+      - { tp: 2, conc-start:   4, conc-end: 256}
+      - { tp: 4, conc-start:   4, conc-end:  32}
+      - { tp: 8, conc-start:   4, conc-end:   4}
+
+gptoss-fp4-b200-vllm:
+  image: vllm/vllm-openai:v0.22.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: b200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 128 }
+      - { tp: 2, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 8 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 128 }
+      - { tp: 2, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+
+gptoss-fp4-h100-vllm:
+  image: vllm/vllm-openai:v0.21.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: h100
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 2, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 2, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 16 }
+
+# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# M3 support has not shipped in a stable vLLM release; the dedicated
+# vllm/vllm-openai:minimax-m3 image is the supported path. MXFP8 variant
+# (NVIDIA-quantized, ~427 GB weights) is the lowest precision available —
+# BF16 (~854 GB) does not fit 8x H100 (640 GB) at all, so H100 is TP8-only:
+# weights alone take ~56 GB of each 80 GB GPU, leaving no room below TP8.
+# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode
+# (vLLM --data-parallel-size 8 --enable-expert-parallel).
+
+gptoss-fp4-h200-trt:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: h200
+  precision: fp4
+  framework: trt
+  multinode: false
+  # For all sequence lengths, EP=TP, DP_ATTENTION=false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
+      - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
+      - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
+      - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
+      - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
+
+gptoss-fp4-h200-vllm:
+  image: vllm/vllm-openai:v0.22.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: h200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 4 }
+      - { tp: 2, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 1, conc-start: 4, conc-end: 64 }
+      - { tp: 2, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 32 }
+
+# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# Dedicated vllm/vllm-openai:minimax-m3 image (no stable release has M3 yet).
+# MXFP8 variant (~427 GB weights) is the lowest precision available; on
+# 8x H200 (1128 GB) it leaves ample KV headroom where BF16 is a tight fit.
+# TP4 (~112 GB weights/GPU) is memory-tight — swept only at low/mid conc.
+# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode.
+
+gptoss-fp4-gb200-dynamo-trt:
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: gb200
+  precision: fp4
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      #Right of pareto
+      #P: 1xTP1   D:1xTP4
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=256"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+  # P: 1xTP1   D:4xTP2
+      - spec-decoding: "none"
+        conc-list: [ 16 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 4
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=32"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+    # P: 1xTP1   D:1xDEP2
+      - spec-decoding: "none"
+        conc-list: [ 256, 512, 1024, 2048, 2560 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=1536"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+    # P: 1xTP1   D:2xDEP2
+      - spec-decoding: "none"
+        conc-list: [ 512, 1024, 2048, 2560 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=1536"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+    # P: 1xTP1   D:1xDEP4
+      - spec-decoding: "none"
+        conc-list: [ 256, 1024, 1536 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=512"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+  # P: 1xTP1   D:3xDEP4
+      - spec-decoding: "none"
+        conc-list: [ 3072 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=1024"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # Right side of pareto
+      - spec-decoding: "none"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1  
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=4"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+      - spec-decoding: "none"
+        conc-list: [2, 4, 8, 16, 32, 64]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1  
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=128"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+  # Middle of pareto
+  # P: 2xTP1   D:1xTP4
+      - spec-decoding: "none"
+        conc-list: [128, 512]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1  
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=1024"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+  # P: 2xTP1   D:1xTP2
+      - spec-decoding: "none"
+        conc-list: [256, 384]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1  
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=512"
+          - "DECODE_GPU_MEM_FRACTION=0.9"
+
+  # P: 2xTP1   D:1xDEP2
+      - spec-decoding: "none"
+        conc-list: [128, 512]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_MAX_NUM_TOKENS=20000"
+          - "PREFILL_MAX_BATCH_SIZE=32"
+        decode:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MAX_NUM_TOKENS=20000"
+          - "DECODE_MAX_BATCH_SIZE=512"
+          - "DECODE_GPU_MEM_FRACTION=0.9"

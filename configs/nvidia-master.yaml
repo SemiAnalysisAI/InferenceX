@@ -384,7 +384,6 @@ dsr1-fp4-b200-dynamo-trt:
           ep: 8
           dp-attn: true
 
-
 dsr1-fp8-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1783,7 +1782,6 @@ dsv4-fp4-b200-vllm-agentic:
       # Retain the external-cache transition and peak-throughput region.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 38, 44, 56, 64, 66, 68] }
 
-
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2052,7 +2050,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2071,7 +2069,7 @@ qwen3.5-bf16-b200-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2090,7 +2088,7 @@ qwen3.5-bf16-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2123,9 +2121,8 @@ qwen3.5-fp8-b200-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
-
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2146,7 +2143,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2634,7 +2631,7 @@ glm5-fp4-gb300-dynamo-trt:
           dp-attn: true
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2653,7 +2650,6 @@ qwen3.5-fp8-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
 
 qwen3.5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2694,7 +2690,7 @@ qwen3.5-fp8-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2715,7 +2711,7 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2778,7 +2774,7 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.24.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b200
@@ -2815,9 +2811,8 @@ kimik2.5-int4-b200-vllm-agentic:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 64, 96, 128] }
 
-
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.24.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
@@ -2870,7 +2865,6 @@ kimik2.5-int4-h200-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
-
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -2983,7 +2977,6 @@ kimik2.5-fp4-b300-vllm-agentic:
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -3135,7 +3128,6 @@ dsv4-fp8-h200-vllm-agentic:
     - search-space:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
-
 # MTP variant of dsv4-fp8-h200-sglang. Mirrors the non-MTP recipe (same image,
 # runner pool, search space) and adds EAGLE speculative decoding via
 # --speculative-algorithm EAGLE with the (3,1,4) chain matching dsv4-fp4-b300-sglang-mtp.
@@ -3237,7 +3229,6 @@ dsv4-fp4-b300-vllm-agentic:
       # TP8 DEP retains representative low, peak, and transition points.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144] }
 
-
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3309,7 +3300,7 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
 qwen3.5-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -3328,7 +3319,7 @@ qwen3.5-fp8-h200-sglang:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -4420,91 +4411,6 @@ dsr1-fp8-h100-dynamo-trt:
           ep: 16
           dp-attn: true
 
-gptoss-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: b200
-  precision: fp4
-  framework: trt
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    # Low ==> high TP from Left to Right of pareto
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 256, conc-end: 256 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 256 }
-      - { tp: 2, conc-start:  4, conc-end: 256 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 4 }
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-    # Low ==> high TP from Left to Right of pareto
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start:   4, conc-end: 256}
-      - { tp: 2, conc-start:   4, conc-end: 256}
-      - { tp: 4, conc-start:   4, conc-end:  32}
-      - { tp: 8, conc-start:   4, conc-end:   4}
-
-gptoss-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.22.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: b200
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 8 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 2, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-
-gptoss-fp4-h100-vllm:
-  image: vllm/vllm-openai:v0.21.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: h100
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
-
-# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# M3 support has not shipped in a stable vLLM release; the dedicated
-# vllm/vllm-openai:minimax-m3 image is the supported path. MXFP8 variant
-# (NVIDIA-quantized, ~427 GB weights) is the lowest precision available —
-# BF16 (~854 GB) does not fit 8x H100 (640 GB) at all, so H100 is TP8-only:
-# weights alone take ~56 GB of each 80 GB GPU, leaving no room below TP8.
-# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode
-# (vLLM --data-parallel-size 8 --enable-expert-parallel).
 minimaxm3-fp8-h100-vllm:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -4665,63 +4571,6 @@ dsr1-fp8-h100-dynamo-sglang:
           ep: 16
           dp-attn: true
 
-gptoss-fp4-h200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: h200
-  precision: fp4
-  framework: trt
-  multinode: false
-  # For all sequence lengths, EP=TP, DP_ATTENTION=false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
-      - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 32 }
-      - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 64 }
-      - { tp: 2, ep: 2, dp-attn: false, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 64 }
-      - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
-
-gptoss-fp4-h200-vllm:
-  image: vllm/vllm-openai:v0.22.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: h200
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 4 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 32 }
-
-# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# Dedicated vllm/vllm-openai:minimax-m3 image (no stable release has M3 yet).
-# MXFP8 variant (~427 GB weights) is the lowest precision available; on
-# 8x H200 (1128 GB) it leaves ample KV headroom where BF16 is a tight fit.
-# TP4 (~112 GB weights/GPU) is memory-tight — swept only at low/mid conc.
-# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode.
 minimaxm3-fp8-h200-vllm:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -6845,277 +6694,6 @@ dsr1-fp8-gb300-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
-gptoss-fp4-gb200-dynamo-trt:
-  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: gb200
-  precision: fp4
-  framework: dynamo-trt
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      #Right of pareto
-      #P: 1xTP1   D:1xTP4
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 16, 32, 64, 128 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=256"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-  # P: 1xTP1   D:4xTP2
-      - spec-decoding: "none"
-        conc-list: [ 16 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 4
-          tp: 2
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=32"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-    # P: 1xTP1   D:1xDEP2
-      - spec-decoding: "none"
-        conc-list: [ 256, 512, 1024, 2048, 2560 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=1536"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-    # P: 1xTP1   D:2xDEP2
-      - spec-decoding: "none"
-        conc-list: [ 512, 1024, 2048, 2560 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=1536"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-    # P: 1xTP1   D:1xDEP4
-      - spec-decoding: "none"
-        conc-list: [ 256, 1024, 1536 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=512"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-  # P: 1xTP1   D:3xDEP4
-      - spec-decoding: "none"
-        conc-list: [ 3072 ]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=1024"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # Right side of pareto
-      - spec-decoding: "none"
-        conc-list: [1]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1  
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=4"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-      - spec-decoding: "none"
-        conc-list: [2, 4, 8, 16, 32, 64]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1  
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=128"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-  # Middle of pareto
-  # P: 2xTP1   D:1xTP4
-      - spec-decoding: "none"
-        conc-list: [128, 512]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1  
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=1024"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-  # P: 2xTP1   D:1xTP2
-      - spec-decoding: "none"
-        conc-list: [256, 384]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1  
-          tp: 2
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=512"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
-  # P: 2xTP1   D:1xDEP2
-      - spec-decoding: "none"
-        conc-list: [128, 512]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-          - "PREFILL_MAX_NUM_TOKENS=20000"
-          - "PREFILL_MAX_BATCH_SIZE=32"
-        decode:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MAX_NUM_TOKENS=20000"
-          - "DECODE_MAX_BATCH_SIZE=512"
-          - "DECODE_GPU_MEM_FRACTION=0.9"
-
 dsr1-fp8-h200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -7955,7 +7533,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
       search-space:
       # 1p5d low-latency (decode-heavy).
       - spec-decoding: "mtp"
-        conc-list: [4, 8, 16, 32, 64]
+        conc-list: [4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 4
@@ -7970,7 +7548,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: false
       # 1p3d low-latency.
       - spec-decoding: "mtp"
-        conc-list: [32, 64, 128, 256, 512]
+        conc-list: [32, 64]
         prefill:
           num-worker: 1
           tp: 4
@@ -7985,7 +7563,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: false
       # 1p1d low-latency.
       - spec-decoding: "mtp"
-        conc-list: [32, 64, 128, 256, 512]
+        conc-list: [32]
         prefill:
           num-worker: 1
           tp: 4
@@ -7999,6 +7577,21 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 1
           dp-attn: false
       # MTP2 high-throughput (DEP4 prefill / DEP8 decode), one Pareto point each.
+      # 1p1d throughput.
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp2_throughput_1p1d.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
       # 2p1d throughput.
       - spec-decoding: "mtp"
         conc-list: [768]
@@ -8029,6 +7622,21 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+      # 4p1d throughput.
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp2_throughput_4p1d.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
       # 5p1d throughput.
       - spec-decoding: "mtp"
         conc-list: [2048]
@@ -8039,6 +7647,21 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp2_throughput_5p1d.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4p1d high-throughput (dedicated c2048 tune).
+      - spec-decoding: "mtp"
+        conc-list: [2048]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp_4p1d_c2048.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -9378,7 +9001,6 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           ep: 16
           dp-attn: true
 
-
 # MTP variant of dsv4-fp4-gb200-dynamo-sglang.
 dsv4-fp4-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85
@@ -9515,6 +9137,290 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
           tp: 16
           ep: 16
           dp-attn: true
+
+glm5-fp4-gb200-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.13.post1-cu130
+  model: nvidia/GLM-5.1-NVFP4
+  model-prefix: glm5.1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=16 decode, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p1d dep16. 5 nodes (1P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [109]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 2p1d dep16. 6 nodes (2P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [398]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 4p1d dep16. 8 nodes (4P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [853]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[2]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 8p1d dep16. 12 nodes (8P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [2132]
+        prefill:
+          num-worker: 8
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[3]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p4d tp4. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [104]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[0]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p4d tp4, conc16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [82]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[1]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [87]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[2]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [47]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[3]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [74]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[4]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4, conc1. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [26]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[5]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP decode, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1742]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep16, conc1024. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1150]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep16, conc256. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [302]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[2]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep32. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1263]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[3]"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p16d tp4, conc1. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [26]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[0]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4, conc16. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [343]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[1]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4, conc4. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [94]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[2]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 dsv4-fp4-b300-dynamo-vllm:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9572,7 +9478,7 @@ dsv4-fp4-b300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-nv
@@ -9605,9 +9511,9 @@ dsv4-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p17d-tep4-tp4.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p9d-tep4-tp4.yaml"
         decode:
-          num-worker: 17
+          num-worker: 9
           tp: 4
           ep: 1
           dp-attn: false
@@ -10618,7 +10524,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_1k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 8
@@ -10631,7 +10537,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_1.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_1k1k_hightpt[1]"
         decode:
           num-worker: 2
           tp: 8
@@ -10644,7 +10550,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_2.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_1k1k_hightpt[2]"
         decode:
           num-worker: 3
           tp: 8
@@ -10657,7 +10563,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_maxtpt_3.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_1k1k_hightpt[3]"
         decode:
           num-worker: 4
           tp: 8
@@ -10670,7 +10576,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_1k1k_lowlat[0]"
         decode:
           num-worker: 8
           tp: 8
@@ -10683,7 +10589,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_1k1k_lowlat[1]"
         decode:
           num-worker: 8
           tp: 8
@@ -10699,7 +10605,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 8
@@ -10712,7 +10618,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_hightpt[1]"
         decode:
           num-worker: 1
           tp: 8
@@ -10725,7 +10631,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_hightpt[2]"
         decode:
           num-worker: 2
           tp: 8
@@ -10738,7 +10644,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_lowlat[0]"
         decode:
           num-worker: 2
           tp: 8
@@ -10751,7 +10657,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_lowlat[1]"
         decode:
           num-worker: 3
           tp: 8
@@ -10764,7 +10670,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_lowlat[2]"
         decode:
           num-worker: 4
           tp: 8
@@ -10777,7 +10683,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_lowlat[3]"
         decode:
           num-worker: 5
           tp: 8
@@ -10790,7 +10696,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_4.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_lowlat[4]"
         decode:
           num-worker: 7
           tp: 8
@@ -10803,7 +10709,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/b200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_5.yaml"
+          - "CONFIG_FILE=recipes/b200-fp8/glm5.yaml:zip_override_8k1k_lowlat[5]"
         decode:
           num-worker: 8
           tp: 8
@@ -10947,7 +10853,6 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
 
-
 kimik2.5-int4-h100-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
@@ -10965,9 +10870,8 @@ kimik2.5-int4-h100-vllm:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 12, 16, 20] }
 
-
 qwen3.5-fp8-h100-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h100
@@ -10988,7 +10892,7 @@ qwen3.5-fp8-h100-sglang:
       - { tp: 8, ep: 8, conc-start: 16, conc-end: 256 }
 
 qwen3.5-fp8-h100-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h100
@@ -11005,6 +10909,272 @@ qwen3.5-fp8-h100-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
+
+glm5-fp4-gb200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.11-cu130
+  model: nvidia/GLM-5.1-NVFP4
+  model-prefix: glm5.1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 4p1d wide-EP. 12 nodes.
+      - conc-list: [989]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 4p1d wide-EP, mrr512. 12 nodes.
+      - conc-list: [686]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 6p1d wide-EP. 14 nodes.
+      - conc-list: [1497]
+        prefill:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 10p1d wide-EP. 18 nodes.
+      - conc-list: [2674]
+        prefill:
+          num-worker: 10
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p4d. 5 nodes.
+      - conc-list: [133]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p6d. 7 nodes.
+      - conc-list: [146]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p6d, mrr16. 7 nodes.
+      - conc-list: [103]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d. 9 nodes.
+      - conc-list: [130]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d. 17 nodes.
+      - conc-list: [113]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d, mrr1 (single-stream). 17 nodes.
+      - conc-list: [23]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 2p1d wide-EP. 10 nodes.
+      - conc-list: [3160]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d wide-EP dep16. 5 nodes.
+      - conc-list: [2115]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d wide-EP dep32, mrr1024. 9 nodes.
+      - conc-list: [1156]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 1p1d wide-EP dep32, mrr512. 9 nodes.
+      - conc-list: [556]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 1p16d, mrr1 (single-stream). 17 nodes.
+      - conc-list: [23]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d, mrr16. 17 nodes.
+      - conc-list: [290]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d, mrr4. 17 nodes.
+      - conc-list: [73]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
 
 qwen3.5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
@@ -11088,7 +11258,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
 
 glm5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
-  model: nvidia/GLM-5-NVFP4
+  model: nvidia/GLM-5.1-NVFP4
   model-prefix: glm5
   runner: gb300-nv
   precision: fp4
@@ -11109,7 +11279,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_8k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 32
@@ -11123,7 +11293,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_8k1k_hightpt[1]"
         decode:
           num-worker: 1
           tp: 32
@@ -11137,7 +11307,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_8k1k_hightpt[2]"
         decode:
           num-worker: 1
           tp: 32
@@ -11229,7 +11399,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 32
@@ -11243,7 +11413,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_hightpt[1]"
         decode:
           num-worker: 1
           tp: 32
@@ -11257,7 +11427,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_2.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_hightpt[2]"
         decode:
           num-worker: 1
           tp: 32
@@ -11275,7 +11445,7 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_lowlat[0]"
         decode:
           num-worker: 17
           tp: 4
@@ -11289,9 +11459,501 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_lowlat[1]"
         decode:
           num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+glm5-fp8-gb200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.12
+  model: zai-org/GLM-5.1-FP8
+  model-prefix: glm5.1
+  runner: gb200
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP decode) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 3p1d wide-EP (dep32, mrr256). 14 nodes.
+      - conc-list: [519]
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 4p1d wide-EP (dep16). 12 nodes.
+      - conc-list: [1484]
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 5p1d wide-EP (dep32). 18 nodes.
+      - conc-list: [1688]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 7p1d wide-EP (dep16). 18 nodes.
+      - conc-list: [2699]
+        prefill:
+          num-worker: 7
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_3.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=8 decode workers) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p8d, mrr1 (single-stream). 18 nodes.
+      - conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p8d, mrr16. 18 nodes.
+      - conc-list: [90]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p8d, mrr4. 18 nodes.
+      - conc-list: [9]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP decode) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 2p1d wide-EP (dep32, mrr1024). 12 nodes.
+      - conc-list: [2161]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d wide-EP (dep16). 6 nodes.
+      - conc-list: [1955]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d wide-EP (dep16, mrr1024). 6 nodes.
+      - conc-list: [1170]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d wide-EP (dep16, mrr256). 6 nodes.
+      - conc-list: [298]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p6d per-node TP=8, mrr1 (single-stream). 14 nodes.
+      - conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 6
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p6d per-node TP=8, mrr16. 14 nodes.
+      - conc-list: [72]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 6
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p6d per-node TP=8, mrr4. 14 nodes.
+      - conc-list: [20]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 6
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+glm5-fp4-gb300-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.13.post1-cu130
+  model: nvidia/GLM-5.1-NVFP4
+  model-prefix: glm5.1
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=16 decode, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 4p1d dep16. 6 nodes (2P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [364]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 8p1d dep16. 8 nodes (4P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 8
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p2d tp4. 3 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [66]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[0]"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p2d tp4, conc16. 3 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [41]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[1]"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p4d tp4. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [55]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[2]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p4d tp4, conc4. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [23]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[3]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [44]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[4]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc1. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [12]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[5]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP decode, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [773]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep16, conc512. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [578]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep32. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [677]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[2]"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 2p1d dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [2048]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[3]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 2p1d dep16, conc1024. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1362]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[4]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 1k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p8d tp4, conc1. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [13]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[0]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc16. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [162]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[1]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [44]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[2]"
+        decode:
+          num-worker: 8
           tp: 4
           ep: 1
           dp-attn: false
@@ -11318,7 +11980,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 16
@@ -11331,7 +11993,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_hightpt[1]"
         decode:
           num-worker: 1
           tp: 24
@@ -11344,7 +12006,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_2.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_hightpt[2]"
         decode:
           num-worker: 1
           tp: 32
@@ -11357,7 +12019,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_3.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_hightpt[3]"
         decode:
           num-worker: 1
           tp: 40
@@ -11374,7 +12036,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_lowlat[0]"
         decode:
           num-worker: 9
           tp: 4
@@ -11387,7 +12049,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_lowlat[1]"
         decode:
           num-worker: 17
           tp: 4
@@ -11400,7 +12062,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_8k1k_lowlat[2]"
         decode:
           num-worker: 17
           tp: 4
@@ -11417,7 +12079,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_hightpt[0]"
         decode:
           num-worker: 1
           tp: 24
@@ -11430,7 +12092,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_hightpt[1]"
         decode:
           num-worker: 1
           tp: 32
@@ -11443,7 +12105,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_2.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_hightpt[2]"
         decode:
           num-worker: 1
           tp: 40
@@ -11456,7 +12118,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_3.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_hightpt[3]"
         decode:
           num-worker: 1
           tp: 48
@@ -11469,7 +12131,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_4.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_hightpt[4]"
         decode:
           num-worker: 1
           tp: 56
@@ -11486,7 +12148,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_lowlat[0]"
         decode:
           num-worker: 17
           tp: 4
@@ -11499,7 +12161,7 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+          - "CONFIG_FILE=recipes/gb300-fp8/glm5.yaml:zip_override_1k1k_lowlat[1]"
         decode:
           num-worker: 17
           tp: 4
@@ -11528,7 +12190,6 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
 
-
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.22.0
   model: nvidia/Kimi-K2.5-NVFP4
@@ -11545,7 +12206,6 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 24, 32, 36] }
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
-
 
 # CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
 # subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
@@ -11615,8 +12275,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
           ep: 8
           dp-attn: true
 
-
-
 qwen3.5-fp8-h100-sglang-agentic:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -11631,7 +12289,6 @@ qwen3.5-fp8-h100-sglang-agentic:
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
-
 
 # MiniMax-M3 NVFP4 disagg sweep on the same B300 topology matrix as the MXFP8
 # baseline above. The image includes vLLM PR #46380, so no runtime patch is
@@ -12609,11 +13266,11 @@ minimaxm3-fp4-b300-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 2 }
-      - { tp: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 1, conc-end: 64 }
       - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 64, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
       - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 4096, conc-end: 4096 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -12631,7 +13288,7 @@ minimaxm3-fp4-b300-vllm:
 # /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
 # launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
+  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -12640,24 +13297,32 @@ minimaxm3-fp4-b300-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
+    # Search space trimmed to the (parallelism, concurrency) points that lie on
+    # the Total-TPS/GPU vs median-interactivity Pareto frontier of the EAGLE3
+    # offline sweep (bench_results.json). The best num_speculative_tokens varies
+    # along the frontier (1 at the throughput end, up to 4 at the latency end);
+    # the recipe shell (minimaxm3_fp4_b300_mtp.sh) selects it per point from the
+    # same ISL:TP:EP_SIZE:DP_ATTENTION:CONC key. TP2 (plain / EP / DP-attention)
+    # carries the throughput-to-mid front; TP4/TP8 only survive at the
+    # low-concurrency, high-interactivity tail.
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 2, 4, 8, 16, 32, 64, 512], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [1, 2, 4, 8, 16, 128, 512], spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-list: [256, 512], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8, 16, 32], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 32], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 2, 4, 8, 16, 32, 128, 256], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [1, 2, 4, 8, 32, 64, 128], spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-list: [128], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
@@ -12787,17 +13452,19 @@ minimaxm3-fp4-b200-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 2, 4, 8, 16, 64, 128, 256, 512], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [8, 256, 512], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8, 16, 32, 64, 256], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8, 256], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 8, 16, 32, 256], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [1, 2, 4, 16, 32, 64, 128, 256, 512], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8, 16, 256], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8, 256], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-b300-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
@@ -13079,7 +13746,6 @@ minimaxm3-fp8-h100-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
 
-
 minimaxm3-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -13100,10 +13766,8 @@ minimaxm3-fp8-h200-vllm-agentic:
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
-
-
 dsv4-fp4-b200-sglang-agentic-hicache:
-  image: lmsysorg/sglang:v0.5.13-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
@@ -13121,13 +13785,11 @@ dsv4-fp4-b200-sglang-agentic-hicache:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,    conc-list: [16, 24, 32, 38, 44, 48, 50, 52] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
 
-
-
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP
 # throughput curves below. Each engine start carries at most four concurrencies.
 dsv4-fp4-b300-sglang-agentic-hicache:
-  image: lmsysorg/sglang:v0.5.13-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv
@@ -13143,7 +13805,6 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [8, 16, 24, 32, 40, 64] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [52, 72, 100, 128, 144, 196, 512] }
-
 
 # DEP8 prefill uses an 8K batch because 16K OOMs in the FP4 MoE intermediate;
 # decode uses FULL_DECODE_ONLY after the controlled graph test restored decode
@@ -13260,3 +13921,339 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           tp: 8
           ep: 8
           dp-attn: true
+
+glm5-fp4-gb300-dynamo-trt-mtp:
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
+  model: nvidia/GLM-5-NVFP4
+  model-prefix: glm5
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # MTP configurations
+      - spec-decoding: "mtp"
+        conc-list: [ 8 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch1_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch1_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 12 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch2_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch2_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 24 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch4_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch4_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 84 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch16_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen4tep8_batch16_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 180 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen1dep32_batch4_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen1dep32_batch4_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 333 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen1dep32_batch8_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx1dep2_gen1dep32_batch8_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 666 ]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx2dep2_gen1dep16_batch32_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx2dep2_gen1dep16_batch32_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 1229 ]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx2dep2_gen1dep16_batch64_eplb0_mtp2.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx2dep2_gen1dep16_batch64_eplb0_mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 2253 ]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx3dep2_gen1dep16_batch128_eplb0_mtp1.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx3dep2_gen1dep16_batch128_eplb0_mtp1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 4301 ]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx3dep2_gen1dep8_batch512_eplb0_mtp1.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx3dep2_gen1dep8_batch512_eplb0_mtp1.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 4301 ]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx4dep2_gen1dep16_batch256_eplb256_mtp1.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL1K_OSL1K/MTP/ctx4dep2_gen1dep16_batch256_eplb256_mtp1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # MTP configurations
+      - spec-decoding: "mtp"
+        conc-list: [ 5 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx1dep2_gen5tep4_batch1_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx1dep2_gen5tep4_batch1_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 15 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx1dep2_gen5tep4_batch2_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx1dep2_gen5tep4_batch2_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 30 ]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx1dep2_gen5tep4_batch4_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx1dep2_gen5tep4_batch4_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [ 84 ]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx2dep2_gen1dep32_batch2_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx2dep2_gen1dep32_batch2_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 180 ]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx4dep2_gen1dep32_batch4_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx4dep2_gen1dep32_batch4_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 333 ]
+        prefill:
+          num-worker: 6
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx6dep2_gen1dep32_batch8_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx6dep2_gen1dep32_batch8_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 615 ]
+        prefill:
+          num-worker: 10
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx10dep2_gen1dep16_batch32_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx10dep2_gen1dep16_batch32_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 1229 ]
+        prefill:
+          num-worker: 14
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx14dep2_gen1dep16_batch64_eplb0_mtp1.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx14dep2_gen1dep16_batch64_eplb0_mtp1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 615 ]
+        prefill:
+          num-worker: 11
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx11dep2_gen1dep32_batch16_eplb0_mtp3.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx11dep2_gen1dep32_batch16_eplb0_mtp3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [ 2253 ]
+        prefill:
+          num-worker: 21
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx21dep2_gen1dep16_batch128_eplb0_mtp1.yaml
+          - "CONFIG_FILE=recipes/GLM5/disagg/trtllm_dynamo/gb300_nvfp4/ISL8K_OSL1K/MTP/ctx21dep2_gen1dep16_batch128_eplb0_mtp1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+
