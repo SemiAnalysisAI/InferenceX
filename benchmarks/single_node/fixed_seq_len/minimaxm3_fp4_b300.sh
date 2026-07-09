@@ -23,53 +23,40 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# # --- FlashInfer nightly + CuTeDSL split-K gemm patch -------------------------
-# # Pinned to nightly release nightly-v0.6.14-20260708. The wheels are not yet on
-# # the flashinfer.ai/whl/nightly flat index, so install by direct release URL.
-# FLASHINFER_VERSION=0.6.14.dev20260708
-# FLASHINFER_NIGHTLY_TAG=nightly-v0.6.14-20260708
-# FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
+# --- FlashInfer nightly + CuTeDSL split-K gemm patch -------------------------
+# Pinned to nightly release nightly-v0.6.14-20260708. The wheels are not yet on
+# the flashinfer.ai/whl/nightly flat index, so install by direct release URL.
+FLASHINFER_VERSION=0.6.14.dev20260708
+FLASHINFER_NIGHTLY_TAG=nightly-v0.6.14-20260708
+FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
 
-# # The flashinfer-jit-cache wheel is CUDA-version-specific; derive cuXYZ from
-# # the torch build inside the container (e.g. 13.0 -> cu130).
-# CUDA_MAJOR_MINOR="cu$(python3 -c 'import torch; print(torch.version.cuda.replace(".", ""))')" \
-#     || { echo "Failed to determine CUDA version from torch" >&2; exit 1; }
+# The flashinfer-jit-cache wheel is CUDA-version-specific; derive cuXYZ from
+# the torch build inside the container (e.g. 13.0 -> cu130).
+CUDA_MAJOR_MINOR="cu$(python3 -c 'import torch; print(torch.version.cuda.replace(".", ""))')" \
+    || { echo "Failed to determine CUDA version from torch" >&2; exit 1; }
 
-# python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
+python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
 
-# python3 -m pip install --pre \
-#     "${FLASHINFER_RELEASE_URL}/flashinfer_python-${FLASHINFER_VERSION}-py3-none-any.whl" \
-#     "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
-#     "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+${CUDA_MAJOR_MINOR}-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
-#     || { echo "FlashInfer nightly install failed" >&2; exit 1; }
+python3 -m pip install --pre \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_python-${FLASHINFER_VERSION}-py3-none-any.whl" \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+${CUDA_MAJOR_MINOR}-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
+    || { echo "FlashInfer nightly install failed" >&2; exit 1; }
 
-# # Apply CuTeDSL split-K gemm patch (jiahanc/flashinfer branch cutedsl-splitK,
-# # flashinfer/gemm changes only) on top of the pinned nightly. The reinstall
-# # above guarantees pristine files, so the patch always applies cleanly.
-# FLASHINFER_PATCH="$(dirname "$0")/patches/flashinfer-cutedsl-splitk-gemm.patch"
-# if ! command -v patch >/dev/null 2>&1; then
-#     apt-get update -y && apt-get install -y --no-install-recommends patch \
-#         || { echo "Failed to install patch(1)" >&2; exit 1; }
-# fi
-# SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
-#     || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
-# patch -p1 -d "${SITE_PACKAGES}" < "$FLASHINFER_PATCH" \
-#     || { echo "FlashInfer CuTeDSL split-K gemm patch failed" >&2; exit 1; }
-# # -----------------------------------------------------------------------------
+python -m pip install "nvidia-cutlass-dsl[cu13]>=4.5.2"
 
-# --- vLLM MiniMax-M3 GateLinear bf16 patch (vllm-project/vllm#47393) ----------
-VLLM_GATE_PATCH="$(dirname "$0")/patches/vllm-minimaxm3-gate-bf16.patch"
+# Apply CuTeDSL split-K gemm patch (jiahanc/flashinfer branch cutedsl-splitK,
+# flashinfer/gemm changes only) on top of the pinned nightly. The reinstall
+# above guarantees pristine files, so the patch always applies cleanly.
+FLASHINFER_PATCH="$(dirname "$0")/patches/flashinfer-cutedsl-splitk-gemm.patch"
 if ! command -v patch >/dev/null 2>&1; then
     apt-get update -y && apt-get install -y --no-install-recommends patch \
         || { echo "Failed to install patch(1)" >&2; exit 1; }
 fi
-VLLM_PACKAGE_DIR=$(python3 -c "import importlib.util; print(importlib.util.find_spec(\"vllm\").submodule_search_locations[0])") \
-    || { echo "Could not locate the installed vllm package" >&2; exit 1; }
-VLLM_SITE_PACKAGES=$(dirname "$VLLM_PACKAGE_DIR")
-patch --dry-run -p1 -d "$VLLM_SITE_PACKAGES" < "$VLLM_GATE_PATCH" >/dev/null \
-    || { echo "vLLM MiniMax-M3 GateLinear bf16 patch does not apply" >&2; exit 1; }
-patch -p1 -d "$VLLM_SITE_PACKAGES" < "$VLLM_GATE_PATCH" \
-    || { echo "vLLM MiniMax-M3 GateLinear bf16 patch failed" >&2; exit 1; }
+SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
+    || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
+patch -p1 -d "${SITE_PACKAGES}" < "$FLASHINFER_PATCH" \
+    || { echo "FlashInfer CuTeDSL split-K gemm patch failed" >&2; exit 1; }
 # -----------------------------------------------------------------------------
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
