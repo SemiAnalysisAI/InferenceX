@@ -186,12 +186,13 @@ Remove and re-add the sweep label to force one.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 
-The main run verifies the source, validates and uploads its ingest artifacts,
-then ingests them with merge-run changelog metadata. Source coverage is
-authoritative, so later matrix/eval policy changes do not invalidate reuse.
-Validation rejects duplicate fixed rows, missing run stats, inconsistent
-agentic artifacts, malformed eval metadata, and raw/aggregate eval mismatches.
-Batched evals use only `completed_eval_concs`.
+The main run passes the source and merge run IDs to the ingest workflow. That
+workflow downloads the source artifacts once, validates them, and ingests them
+with merge-run changelog metadata. Source coverage is authoritative, so later
+matrix/eval policy changes do not invalidate reuse. Validation rejects
+duplicate fixed rows, missing run stats, inconsistent agentic artifacts,
+malformed eval metadata, and raw/aggregate eval mismatches. Batched evals use
+only `completed_eval_concs`.
 
 Reuse fails closed when authorized but ineligible or invalid; without
 authorization, `main` runs the normal full sweep.
