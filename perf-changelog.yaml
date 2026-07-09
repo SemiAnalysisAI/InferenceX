@@ -4061,7 +4061,10 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg
   description:
-    - "initial submission of dsv4 sglang disagg "
+    - "Initial submission: DeepSeek-V4-Pro FP4 multi-node SGLang PD-disaggregated (prefill/decode) on MI355X (8k1k, STP / no-MTP)."
+    - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701"
+    - "Launcher: server_sglang.sh + sync.py node coordination, mori KV transfer + MoE a2a, sglang_router (--pd-disaggregation) on :30000."
+    - "Topologies: 1P1D pure-TP8/EP1 over 2 nodes (conc 1-128); 1P1D DEP8 (TP8/EP8 + dp-attention) over 3 nodes (conc 128,256)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1818
 
 - config-keys:
