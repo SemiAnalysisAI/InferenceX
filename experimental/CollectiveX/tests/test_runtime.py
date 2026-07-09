@@ -216,5 +216,51 @@ class NetworkProfileContract(unittest.TestCase):
             self.assertTrue(any("rdma-port-1=gid-empty" in line for line in lines), lines)
 
 
+class StageContract(unittest.TestCase):
+    # runtime/common.sh drives runtime/stage.py purely by literal subcommand name and positional
+    # argv — there are no optional flags. That argv shape is a string contract: a subcommand or
+    # flag the launcher passes but stage.py does not declare fails with "unrecognized arguments"
+    # and aborts the leg at repository-stage. This extracts every stage.py call out of common.sh
+    # and proves stage.py's parser accepts it — the guard that would have caught the --allow-*
+    # flags surviving on the callers after they were dropped from stage.py's argparse.
+    @staticmethod
+    def _invocations(text: str) -> list:
+        calls = []
+        for line in text.splitlines():
+            if "stage.py" not in line or line.lstrip().startswith("#"):
+                continue
+            subcommand, flags = None, []
+            for raw in line.split("stage.py", 1)[1].split():
+                token = raw.strip('"').strip("'")
+                if token.startswith("--"):
+                    flags.append(token.split("=", 1)[0])
+                elif subcommand is None and token and not token.startswith(("$", "${")):
+                    subcommand = token
+            if subcommand:
+                calls.append((subcommand, flags))
+        return calls
+
+    def test_launcher_only_invokes_declared_subcommands_and_flags(self) -> None:
+        invocations = self._invocations((RUNTIME / "common.sh").read_text())
+        self.assertGreaterEqual(len(invocations), len(stage.SPECS), invocations)
+        parser = stage.build_parser()
+        for subcommand, flags in invocations:
+            self.assertIn(subcommand, stage.SPECS, subcommand)
+            argv = [subcommand] + ["x"] * len(stage.SPECS[subcommand]) + flags
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    parser.parse_args(argv)
+                except SystemExit:
+                    self.fail(f"common.sh invokes stage.py with an argv shape it rejects: {argv}")
+
+    def test_contract_test_has_teeth(self) -> None:
+        # A flag common.sh must never pass has to be rejected by the parser — this is the exact
+        # failure (unrecognized arguments: --allow-parent-owner) the reconcile removed.
+        parser = stage.build_parser()
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parser.parse_args(["validate-stage-path", "x", "x", "x", "--allow-parent-owner"])
+
+
 if __name__ == "__main__":
     unittest.main()

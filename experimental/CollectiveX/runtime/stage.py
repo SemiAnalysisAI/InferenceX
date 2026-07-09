@@ -9,7 +9,6 @@ import os
 import pwd
 from pathlib import Path
 import shutil
-import sys
 
 
 EXCLUDES = {"__pycache__", "results", ".cx_workloads", ".cx_backend", ".cx_sources",
@@ -76,23 +75,35 @@ def rewrite_deepep_v2(args) -> None:
     path.write_text(text.replace(old, new))
 
 
-def main() -> None:
+# The runtime/common.sh launcher shells out to these subcommands by literal name and
+# positional argv; there are no optional flags. That argv shape is a string contract with
+# common.sh — a subcommand or flag common.sh passes but this parser does not declare fails
+# with "unrecognized arguments" and aborts the leg at repository-stage. Keep the two halves in
+# lockstep (see tests/test_runtime.py::StageContract), which is exactly the contract that broke
+# when the --allow-* flags were dropped here but left on the common.sh callers.
+SPECS = {
+    "implicit-stage-base": (("home", "?"), ("isolation_key", "?")),
+    "resolve-directory": (("path",),),
+    "validate-stage-path": (("repo",), ("base",), ("child",), ("job_root", "?"), ("workspace", "?")),
+    "create-stage": (("stage",), ("tag",)), "copy-repository": (("source",), ("target",)),
+    "validate-cleanup": (("root",), ("tag",)), "rewrite-deepep-v2": (("path",),),
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
-    specs = {
-        "implicit-stage-base": (("home", "?"), ("isolation_key", "?")),
-        "resolve-directory": (("path",),),
-        "validate-stage-path": (("repo",), ("base",), ("child",), ("job_root", "?"), ("workspace", "?")),
-        "create-stage": (("stage",), ("tag",)), "copy-repository": (("source",), ("target",)),
-        "validate-cleanup": (("root",), ("tag",)), "rewrite-deepep-v2": (("path",),),
-    }
     handlers = globals()
-    for name, arguments in specs.items():
+    for name, arguments in SPECS.items():
         command = commands.add_parser(name)
         for item in arguments:
             command.add_argument(item[0], nargs=item[1] if len(item) > 1 else None, default="")
         command.set_defaults(handler=handlers[name.replace("-", "_")])
-    args = parser.parse_args(); args.handler(args)
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args(); args.handler(args)
 
 
 if __name__ == "__main__": main()
