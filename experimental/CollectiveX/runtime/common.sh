@@ -2302,7 +2302,15 @@ cx_ensure_squash_on_job() {
   [ -n "$lock_dir" ] || lock_dir="$squash_dir/.locks"
   lock="$lock_dir/${key}.lock"
   log="$(cx_private_log_path "$log_label")"
-  if ! srun --jobid="$job_id" --nodes=1 --ntasks=1 --chdir=/tmp \
+  # Import (or verify) the squash on EVERY allocated node, not just one. On SKUs
+  # whose squash_dir is node-local (e.g. mi355x/mi300x /var/lib/squash) a single-
+  # node import leaves the remaining nodes without the squash, so the per-node
+  # container-hash check and the benchmark itself then fail with "No such file"
+  # on whichever node was missed. The per-node script below is flock-guarded and
+  # idempotent: on shared-FS SKUs the first node imports and every other node
+  # short-circuits on the unsquashfs check, so no redundant import occurs.
+  if ! srun --jobid="$job_id" --nodes="${CX_NODES:-1}" --ntasks="${CX_NODES:-1}" \
+      --ntasks-per-node=1 --chdir=/tmp \
       --export="$(cx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$CX_SQUASH_SOURCE_DATE_EPOCH" \
       "$CX_IMAGE_PLATFORM" \
@@ -2324,7 +2332,11 @@ export ENROOT_RUNTIME_PATH="$compute_home/enroot-run"
 mkdir -p "$(dirname "$sq")" "$(dirname "$lock")" \
   "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
 exec 9>"$lock"
-flock -w 900 9
+# Wait indefinitely: with a shared-FS squash_dir every node contends on the same
+# lock, and a slow cold import must not spuriously time out the waiters. The lock
+# is tied to fd 9, so a crashed importer releases it automatically. Node-local
+# squash_dirs use independent per-node locks, so there is no contention there.
+flock 9
 if unsquashfs -l "$sq" >/dev/null 2>&1; then
   echo 'container squash ready'
 else
