@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
+import pwd
 from pathlib import Path
 import shutil
 import sys
@@ -18,27 +20,16 @@ def safe_name(value: str) -> bool:
     return bool(value) and all(char.isalnum() or char in "._-" for char in value)
 
 
-def private_root() -> Path:
-    job = os.environ.get("CX_JOB_ROOT")
-    return Path(job) / "control/private-logs" if job else Path(f"/tmp/inferencex-collectivex-{os.getuid()}")
-
-
-def private_log(args) -> None:
-    if not safe_name(args.tag) or not safe_name(args.label): raise SystemExit(1)
-    path = private_root() / args.tag / f"{args.label}.log"
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path.touch(mode=0o600, exist_ok=False)
-    print(path, end="")
-
-
-def cleanup_private_logs(args) -> None:
-    if not safe_name(args.tag): raise SystemExit(1)
-    shutil.rmtree(private_root() / args.tag, ignore_errors=True)
-
-
 def implicit_stage_base(args) -> None:
-    home = Path(args.home or Path.home()).resolve()
-    suffix = f"-{args.isolation_key}" if args.isolation_key else ""
+    # Resolve the account home from /etc/passwd, not $HOME. The GHA launcher deliberately
+    # points $HOME at a runner-local /tmp sandbox; honoring it (Path.home()) would land the
+    # stage on node-local /tmp, invisible to the allocated compute node, and the preflight
+    # probe fails at repository-stage. The passwd home is the compute-visible account root.
+    base = args.home or pwd.getpwuid(os.getuid()).pw_dir
+    home = Path(base).resolve()
+    suffix = ""
+    if args.isolation_key:
+        suffix = "-" + hashlib.sha256(args.isolation_key.encode("utf-8")).hexdigest()[:16]
     path = home / f".inferencex-collectivex-stage{suffix}"
     path.mkdir(mode=0o700, exist_ok=True)
     print(path, end="")
@@ -89,7 +80,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     specs = {
-        "private-log": (("tag",), ("label",)), "cleanup-private-logs": (("tag",),),
         "implicit-stage-base": (("home", "?"), ("isolation_key", "?")),
         "resolve-directory": (("path",),),
         "validate-stage-path": (("repo",), ("base",), ("child",), ("job_root", "?"), ("workspace", "?")),

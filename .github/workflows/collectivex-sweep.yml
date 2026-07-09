@@ -150,7 +150,6 @@ jobs:
           mkdir -m 700 "$CX_JOB_ROOT"
           trap 'rc=$?; if [ "$rc" != 0 ]; then rm -rf -- "$CX_JOB_ROOT"; [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"; fi; exit "$rc"' EXIT
           mkdir -m 700 "$HOME" "$CX_JOB_ROOT/control" "$CX_JOB_ROOT/artifact" "$CX_SOURCE_ROOT"
-          : > "$CX_JOB_ROOT/cleanup-safe"
           export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
           if ! git init -q "$CX_SOURCE_ROOT" \
               || ! git -C "$CX_SOURCE_ROOT" remote add origin \
@@ -169,7 +168,7 @@ jobs:
         with:
           name: cxsweep-matrix-${{ github.run_id }}
           path: ${{ env.CX_JOB_ROOT }}/control
-      - name: Extract and validate this execution control
+      - name: Extract execution control
         run: |
           set -euo pipefail
           cd "$CX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
@@ -177,9 +176,6 @@ jobs:
           python3 sweep_matrix.py \
             --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
             --shard-id '${{ matrix.id }}' \
-            --expect-sku '${{ matrix.sku }}' \
-            --expect-backend '${{ matrix.backend }}' \
-            --expect-nodes '${{ matrix.nodes }}' \
             --out '${{ env.CX_SHARD_FILE }}' >/dev/null
       - name: Execute sweep cell ${{ matrix.id }}
         id: sweep_shard
@@ -257,8 +253,6 @@ jobs:
           unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
           export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
           export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
-          : > "$CX_JOB_ROOT/cleanup-unsafe"
-          rm -f -- "$CX_JOB_ROOT/cleanup-safe"
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
@@ -310,7 +304,5 @@ jobs:
           source experimental/CollectiveX/runtime/common.sh
           cx_reconcile_recorded_allocation "$CX_JOB_ROOT" \
             || { echo "CollectiveX allocation cleanup could not be reconciled; retaining isolated files" >&2; exit 1; }
-          [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
-            || { echo "CollectiveX allocation cleanup was not confirmed; retaining isolated files" >&2; exit 1; }
           rm -rf -- "$CX_JOB_ROOT"
           [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"

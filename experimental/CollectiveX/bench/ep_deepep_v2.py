@@ -35,7 +35,6 @@ DEEPEP_V2_TREE = "29809e75c5874e6609dac4804e7b651d5226959f"
 DEEPEP_V2_FMT_COMMIT = "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
 DEEPEP_V2_VERSION = "2.0.0"
 DEEPEP_V2_DISTRIBUTIONS = frozenset({"2.0.0+fa8a9b1", "2.0.0+local"})
-DEEPEP_V2_JIT_RANDOM_SEED = "collectivex-deepep-v2-fa8a9b1"
 TORCH_VERSION = "2.10.0+cu130"
 NCCL_VERSION = "2.30.4"
 NVSHMEM_VERSION = "3.3.9"
@@ -203,8 +202,6 @@ def _require_runtime() -> tuple[str, str]:
         "DEEPEP_V2_TREE": DEEPEP_V2_TREE,
         "DEEPEP_V2_FMT_COMMIT": DEEPEP_V2_FMT_COMMIT,
         "DEEPEP_V2_NCCL_CHECK_COMMIT": DEEPEP_V2_NCCL_CHECK_COMMIT,
-        "DEEPEP_V2_JIT_RANDOM_SEED": DEEPEP_V2_JIT_RANDOM_SEED,
-        "EP_JIT_DUMP_SASS": "1",
     }
     mismatches = [
         f"{name}={os.environ.get(name)!r}, expected {value!r}"

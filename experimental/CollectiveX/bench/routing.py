@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import torch
 
+_MASK64 = (1 << 64) - 1
+
 SOURCE_ID_BITS = 32
 SOURCE_ID_COLUMNS = SOURCE_ID_BITS
 SOURCE_ID_CONTRACT = "bounded-sign-bit-source-v2"
@@ -36,16 +38,43 @@ def build_global_routing(
     token_offset: int = 0,
 ):
     """Return one byte-stable counter-generated routing window on CPU."""
-    import workload
+    if routing != "uniform":
+        raise ValueError(f"unknown routing {routing!r} (uniform)")
+    if global_tokens <= 0 or experts <= 0 or topk <= 0 or topk > experts:
+        raise ValueError("global_tokens/experts/topk must be positive and topk <= experts")
+    if token_offset < 0:
+        raise ValueError("token_offset must be non-negative")
 
-    indices, weights = workload.canonical_routing_rows(
-        int(global_tokens),
-        int(experts),
-        int(topk),
-        routing,
-        int(seed),
-        token_offset=token_offset,
-    )
+    def counter(token: int, slot: int, attempt: int, stream: int) -> int:
+        value = (
+            (int(seed) & _MASK64)
+            ^ (((token + 1) * 0xD2B74407B1CE6E93) & _MASK64)
+            ^ (((slot + 1) * 0xCA5A826395121157) & _MASK64)
+            ^ (((attempt + 1) * 0x9E3779B185EBCA87) & _MASK64)
+            ^ (((stream + 1) * 0xA24BAED4963EE407) & _MASK64)
+        )
+        value = (value + 0x9E3779B97F4A7C15) & _MASK64
+        value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & _MASK64
+        value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & _MASK64
+        return value ^ (value >> 31)
+
+    indices, weights = [], []
+    for local_token in range(int(global_tokens)):
+        token = int(token_offset) + local_token
+        selected, used = [], set()
+        for slot in range(int(topk)):
+            attempt = 0
+            while True:
+                expert = counter(token, slot, attempt, 0) % int(experts)
+                if expert not in used:
+                    used.add(expert)
+                    selected.append(expert)
+                    break
+                attempt += 1
+        raw = [1 + counter(token, slot, 0, 1) % 65535 for slot in range(int(topk))]
+        denominator = float(sum(raw))
+        indices.append(selected)
+        weights.append([value / denominator for value in raw])
     return (
         torch.tensor(indices, dtype=torch.int64),
         torch.tensor(weights, dtype=torch.float32),

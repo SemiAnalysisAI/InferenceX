@@ -156,13 +156,6 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    if args.qualification_index not in range(1, ep_harness.QUALIFICATION_RUNS + 1):
-        print(
-            f"ERROR: qualification index must be in 1..{ep_harness.QUALIFICATION_RUNS}",
-            file=sys.stderr,
-        )
-        return 2
-
     sampling_error = ep_harness.sampling_error(
         args.iters, args.trials, args.warmup
     )
@@ -333,8 +326,7 @@ def main() -> int:
                 f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
                 f"world={world_size} ep_size={world_size} hidden={args.hidden} "
                 f"topk={args.topk} experts={args.experts} dtype=bf16 "
-                f"routing={args.routing} seed={args.seed} "
-                f"qualification_index={args.qualification_index}"
+                f"routing={args.routing} seed={args.seed}"
             )
         rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)
     except Exception:

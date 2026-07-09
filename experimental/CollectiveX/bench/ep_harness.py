@@ -77,7 +77,6 @@ TIMED_ITERS_PER_TRIAL = 8
 TRIALS_PER_POINT = 64
 WARMUP_ITERS_PER_TRIAL = 32
 WARMUP_SEMANTICS = "full-roundtrip-before-each-component-trial-point-v1"
-QUALIFICATION_RUNS = 3
 ROUTING_SEED = 67
 PLACEMENT = "packed"
 
@@ -137,21 +136,10 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
     ap.add_argument("--routing", default="uniform", choices=["uniform"])
-    # Canonical workloads consume validated pre-generated arrays instead of the
-    # seeded runtime generator. Files use readable coordinate-derived names.
-    ap.add_argument("--workload-dir", default="",
-                    help="dir of canonical workload traces; empty = seeded runtime generation (dev)")
     ap.add_argument("--case-id", default="")
     ap.add_argument("--suite", default="")
     ap.add_argument("--workload-name", default="")
     ap.add_argument("--seed", type=int, default=ROUTING_SEED)
-    ap.add_argument(
-        "--qualification-index",
-        type=int,
-        choices=range(1, QUALIFICATION_RUNS + 1),
-        default=os.environ.get("CX_QUALIFICATION_INDEX", "1"),
-        help="one-based qualification repeat used for deterministic measurement ordering",
-    )
     ap.add_argument(
         "--version",
         type=int,
@@ -207,29 +195,14 @@ def sampling_error(iters: int, trials: int, warmup: int) -> str | None:
     return None
 
 
-def qualification_order(
-    values: list, qualification_index: int, trial_index: int, *, identity_key: str = ""
-) -> list:
-    """Return a deterministic, position-balanced order for one qualification trial.
-
-    Official runs bind the base permutation to the case identity. The cyclic schedule then gives
-    every value every position equally often over 64 trials while qualification repeats start at
-    different offsets. Keeping the empty-key behavior stable preserves local diagnostic fixtures.
-    """
+def trial_order(values: list, trial_index: int) -> list:
+    """Rotate and reverse values so each occupies every timing position."""
     if not values or len(values) != len(set(values)):
-        raise ValueError("qualification order requires non-empty unique values")
-    if qualification_index not in range(1, QUALIFICATION_RUNS + 1):
-        raise ValueError(f"qualification_index must be in 1..{QUALIFICATION_RUNS}")
+        raise ValueError("trial order requires non-empty unique values")
     if type(trial_index) is not int or trial_index < 0:
         raise ValueError("trial_index must be a non-negative integer")
-    if not isinstance(identity_key, str):
-        raise ValueError("qualification identity_key must be a string")
-    base_values = list(values)
-    if identity_key:
-        base_values.sort(key=lambda value: str(value))
-    position = trial_index + qualification_index - 1
-    cycle, offset = divmod(position, len(values))
-    base = base_values if cycle % 2 == 0 else list(reversed(base_values))
+    cycle, offset = divmod(trial_index, len(values))
+    base = list(values) if cycle % 2 == 0 else list(reversed(values))
     return base[offset:] + base[:offset]
 
 
@@ -579,21 +552,6 @@ def _run_expert_oracle(
     }
 
 
-def _histogram(xs: list[float], nbins: int = 40) -> dict:
-    """Compact equal-width summary of the exact private cross-rank-max samples."""
-    if not xs:
-        return {"n": 0}
-    lo, hi = min(xs), max(xs)
-    if hi <= lo:
-        return {"n": len(xs), "min": lo, "max": hi, "bins": nbins, "counts": [len(xs)]}
-    counts = [0] * nbins
-    span = hi - lo
-    for x in xs:
-        b = min(nbins - 1, int((x - lo) / span * nbins))
-        counts[b] += 1
-    return {"n": len(xs), "min": round(lo, 3), "max": round(hi, 3), "bins": nbins, "counts": counts}
-
-
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = getattr(args, "mode", "normal")
@@ -638,15 +596,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     if rank == 0 and dropped:
         print(f"NOTE: dropped tokens/rank {dropped} — exceed {backend.name} buffer cap {cap} "
               f"(hidden={args.hidden}); not silently truncated.")
-    loaded_workloads = spec.loaded_workloads
-    canonical = bool(getattr(args, "workload_dir", ""))
     MAX, MIN, SUM = dist.ReduceOp.MAX, dist.ReduceOp.MIN, dist.ReduceOp.SUM
 
     # Size the communicator from the resolved numeric shape. Buffer sizing needs the
     # ladder numbers (not the input tensors), so it runs after make_inputs rather than
     # in __init__ — resolving the historical build-buffers-before-inputs inversion.
-    # make_inputs already materialized the per-rank routing/activation inputs (canonical
-    # bytes when a workload_dir was staged, else seeded generation) on `spec`.
+    # make_inputs already materialized deterministic per-rank routing and activations.
     backend.create_buffer(spec)
 
     for wt in conditioning_ladder:
@@ -719,24 +674,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_trials = {T: [] for T in ladder}
     comb_trials = {T: [] for T in ladder}
     rt_trials = {T: [] for T in ladder}
-    order_identity = args.case_id or "|".join(
-        (args.runner, backend.name, args.suite, mode, args.phase, str(ep_size))
-    )
     for trial_index in range(args.trials):
-        order = qualification_order(
-            list(ladder), args.qualification_index, trial_index,
-            identity_key=f"{order_identity}:tokens",
-        )
+        order = trial_order(list(ladder), trial_index)
         for T in order:
             problem = problems[T]
             # timed_components() encodes the roundtrip-only vs full-component contract
             # (and whether stage launches device work) once, in the base class.
-            component_order = qualification_order(
-                backend.timed_components(),
-                args.qualification_index,
-                trial_index,
-                identity_key=f"{order_identity}:components:{T}",
-            )
+            component_order = trial_order(backend.timed_components(), trial_index)
             measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
             for component_name in component_order:
                 # The base template gives every component the same synchronized
@@ -805,8 +749,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "sample_count": 0 if derived else count,
         }
     rows = []
-    all_anomalies = []
-    thr_rt = 3.0
     for T in ladder:
         gt = gts[T]
         g = gate[T]
@@ -827,17 +769,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
-        rank_evidence = [None] * world_size
-        dist.all_gather_object(
-            rank_evidence,
-            {
-                "input_unchanged": g["input_unchanged"],
-                "order_stable": g["order_stable"],
-                "post_timing": g["oracle_post"],
-                "pre_timing": g["oracle_pre"],
-                "rank": rank,
-            },
-        )
         # Canonical LOGICAL payload byte contracts (from the routing trace, NOT backend recv
         # tensors): token-rank = one copy per unique (token,dest-rank); token-expert = one copy
         # per routed (token,expert). routed_copies = token-rank copies; gt*topk = token-expert.
@@ -863,25 +794,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 )
             },
         }
-        # Contract-level anomalies are attached to the row and rolled into validity.
-        #   roundtrip_gt_isolated_sum: measured RT p99 >> Σ(isolated dispatch+combine) p99.
-        #   roundtrip_lt_component_floor: measured RT p50 < max(dispatch,combine) p50 — a chained
-        #     op can't finish faster than its slowest required component (sync semantics violated).
-        row_anoms = []
-        if isum and isum["p99"] > 0 and rtp["p99"] > thr_rt * isum["p99"]:
-            row_anoms.append({"type": "roundtrip_gt_isolated_sum", "T": T,
-                              "roundtrip_p99": round(rtp["p99"], 2), "isolated_sum_p99": round(isum["p99"], 2),
-                              "ratio": round(rtp["p99"] / isum["p99"], 2), "threshold": thr_rt})
-        floor = (
-            max(dp["p50"], cp["p50"], sp["p50"] if sp is not None else 0.0)
-            if dp and cp else None
-        )
-        if floor and rtp["p50"] > 0 and rtp["p50"] < 0.95 * floor:
-            row_anoms.append({"type": "roundtrip_lt_component_floor", "T": T,
-                              "roundtrip_p50": round(rtp["p50"], 2), "component_floor_p50": round(floor, 2)})
-        all_anomalies.extend(row_anoms)
         rows.append({
-            "anomalies": row_anoms,
             "components": {
                 "combine": component(cp, len(c)),
                 "dispatch": component(dp, len(d)),
@@ -892,7 +805,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "correctness": {
                 "max_relative_error": max_rel,
                 "passed": point_ok,
-                "rank_evidence": rank_evidence,
             },
             "global_tokens": gt,
             "byte_provenance": {
@@ -927,12 +839,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "routed_copies": rstats["routed_copies"],
                 "source_token_stats": rstats.get("source_token_stats"),
             },
-            "sample_histograms": {
-                "dispatch": _histogram(d) if d else None,
-                "stage": _histogram(s) if s else None,
-                "combine": _histogram(c) if c else None,
-                "roundtrip": _histogram(rt),
-            },
             "token_rate_at_latency_percentile": throughput,
             "tokens_per_rank": T,
         })
@@ -948,21 +854,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # status=valid requires correctness AND a proven-identical routing trace across ranks.
     all_ok = bool(rows) and all(r["correctness"]["passed"] for r in rows) and routing_consistent
 
-    if canonical and loaded_workloads:
-        args.workload_members = sorted(loaded_workloads)
-    canonical_workload = bool(getattr(args, "workload_members", None))
-    anomaly_free = len(all_anomalies) == 0
     validity = {
         "execution_status": "complete" if rows else "failed",
         "semantic_correctness": (
             "pass" if rows and all(r["correctness"]["passed"] for r in rows) else "fail"
         ),
         "workload_identity": "consistent-across-ranks" if routing_consistent else "inconsistent",
-        "workload_source": "canonical-serialized" if canonical_workload else "seeded-runtime",
         "measurement_conformance": "conformant",   # run_ep gate rejects nonconformant pre-run
         "sampling_conformance": "conformant",      # fixed-512-v1 gate rejects any other profile
-        # anomaly-free unless a contract-level timing anomaly fired (then diagnostic, see above).
-        "anomaly_free": anomaly_free,
     }
 
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
@@ -1047,10 +946,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "workload_name": args.workload_name or "manual",
         },
         "workload": {
-            "activation_profile": "canonical-counter-source-v4",
             "cross_rank_consistent": routing_consistent,
-            "members": getattr(args, "workload_members", None),
-            "source": validity["workload_source"],
         },
         "measurement": {
             "combine_dtype": "bf16",

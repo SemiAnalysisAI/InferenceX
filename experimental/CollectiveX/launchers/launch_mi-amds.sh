@@ -73,7 +73,6 @@ else
   unset CX_SCALE_OUT_TRANSPORT
 fi
 export CX_RUN_TIMEOUT="${CX_RUN_TIMEOUT:-1800}"
-cx_validate_shard_control "$CX_DIR"
 cx_load_network_control_mode "$CX_DIR" || cx_die "cannot resolve network control mode"
 cx_apply_network_profile "$NODES" "$CX_TRANSPORT"
 cx_require_vars CX_PARTITION CX_SQUASH_DIR CX_STAGE_DIR
@@ -83,7 +82,6 @@ cx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$CX_BENCH"
 cx_set_failure_stage repository-stage
 MOUNT_SRC="$(cx_stage_path "$REPO_ROOT" "$CX_STAGE_DIR")"
 cx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
-cx_prepare_runtime_marker "$MOUNT_SRC"
 [ "${CX_DRYRUN:-0}" != 1 ] || { cx_log "CX_DRYRUN=1 - not allocating"; exit 0; }
 cx_set_failure_stage setup
 cx_select_image "$IMAGE"
@@ -170,7 +168,6 @@ else
   cx_run_distributed_shard || run_rc=$?
 fi
 
-cx_adopt_runtime_stage "$MOUNT_SRC"
 if [ "$NODES" = 1 ] && [ "$run_rc" != 0 ]; then
   cx_fail_stage "$CX_FAILSAFE_MODE" "$runtime_log" || true
 fi

@@ -67,7 +67,6 @@ else
   unset CX_SCALE_OUT_TRANSPORT
 fi
 export CX_NCCL_HOME="${CX_NCCL_HOME:-/usr}" NCCL_CUMEM_ENABLE=1
-cx_validate_shard_control "$CX_DIR"
 cx_load_network_control_mode "$CX_DIR" || cx_die "cannot resolve network control mode"
 cx_apply_network_profile "$NODES" "$CX_TRANSPORT"
 cx_require_vars CX_PARTITION CX_SQUASH_DIR
@@ -82,7 +81,6 @@ SQUASH_FILE=""
 cx_set_failure_stage repository-stage
 MOUNT_SRC="$(cx_stage_path "$REPO_ROOT" "${CX_STAGE_DIR:-}")"
 cx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
-cx_prepare_runtime_marker "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
 if [ "$CX_BENCH" = deepep-v2 ] || [ "$CX_BENCH" = deepep-hybrid ]; then
   cx_set_failure_stage backend-setup
@@ -174,7 +172,6 @@ else
   cx_run_distributed_shard || run_rc=$?
 fi
 
-cx_adopt_runtime_stage "$MOUNT_SRC"
 if [ "$NODES" = 1 ] && [ "$run_rc" != 0 ]; then
   cx_fail_stage "$CX_FAILSAFE_MODE" "$runtime_log" || true
 fi

@@ -18,7 +18,7 @@ from ep_backend import EPBackend, RankInputs  # noqa: E402
 def args(**updates):
     values = dict(
         experts=8, phase="decode", tokens_ladder="", routing="uniform", seed=0,
-        hidden=16, topk=2, mode="normal", workload_dir="",
+        hidden=16, topk=2, mode="normal",
     )
     values.update(updates)
     return types.SimpleNamespace(**values)
@@ -57,16 +57,16 @@ class FakeBackend(EPBackend):
     def buffer_cap(self, options):
         return self.cap
 
-    def _build_rank_inputs(self, options, tokens, *, canonical, retain_global):
+    def _build_rank_inputs(self, options, tokens, *, retain_global):
         return RankInputs(
             tokens_per_rank=tokens, topk_idx=None, topk_weights=None,
-            activations=None, workload_name=f"workload-{tokens}" if canonical else None,
+            activations=None,
         )
 
 
 class BackendTests(unittest.TestCase):
     def test_input_plan_sizes_for_measured_and_conditioning_ladders(self):
-        backend = FakeBackend(args(tokens_ladder="8 16", workload_dir="/tmp"), world_size=2)
+        backend = FakeBackend(args(tokens_ladder="8 16"), world_size=2)
         spec = backend.make_inputs(backend.args)
         self.assertTrue(spec.ok)
         self.assertEqual(spec.ladder, [8, 16])

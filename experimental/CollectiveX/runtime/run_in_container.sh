@@ -17,7 +17,6 @@ cd /ix/experimental/CollectiveX
 # shellcheck source=../runtime/common.sh
 source runtime/common.sh
 mkdir -p results
-cx_write_runtime_stage backend-setup || cx_die "cannot record runtime stage"
 
 : "${CX_RUNNER:?CX_RUNNER not set}"
 : "${CX_NGPUS:?CX_NGPUS not set}"
@@ -35,27 +34,6 @@ cx_ep_ladder() {
   printf '%s' "${CX_TOKENS_LADDER:-}"
 }
 
-# Canonical workload staging. Every SKU/backend generates the same deterministic arrays
-# in-container. When CX_CANONICAL=1
-# (and CX_WORKLOAD_DIR not already provided) we generate routing traces for the run's ladder
-# into a NON-results dir (.cx_workloads/ — so the *.manifest.json never pollute the results glob) and
-# point run_ep at it. Raw attempts remain diagnostic until the publisher validates full coverage.
-cx_stage_canonical() {
-  cx_bool_enabled "${CX_CANONICAL:-0}" || return 0
-  [ -n "${CX_WORKLOAD_DIR:-}" ] && return 0
-  local dir="$PWD/.cx_workloads"
-  local ladder; ladder="$(cx_ep_ladder)"
-  # cover both phase ladders when none is given, so either phase finds its files.
-  [ -z "$ladder" ] && ladder="1 2 4 8 16 32 64 128 256 512 1024 2048 4096"
-  cx_log "staging canonical workloads (routing=${CX_ROUTING:-uniform} ep=$CX_NGPUS ladder='$ladder')"
-  python3 bench/make_workloads.py --out-dir "$dir" --routing "${CX_ROUTING:-uniform}" \
-    --ep "$CX_NGPUS" --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" \
-    --experts "${CX_EXPERTS:-256}" --seed "${CX_SEED:-67}" --tokens-ladder "$ladder" \
-    || { cx_log "ERROR: canonical workload staging failed"; return 1; }
-  export CX_WORKLOAD_DIR="$dir"
-  cx_log "canonical workloads staged at $dir"
-}
-
 # run_ep_suite <backend>
 # One bench/run_ep.py invocation per phase (decode/prefill/both); dispatch and
 # combine are timed separately inside it. One JSON per (backend, phase).
@@ -64,10 +42,6 @@ run_ep_suite() {
   ladder="$(cx_ep_ladder)"
   phases="${CX_PHASE:-decode}"
   [ "$phases" = "both" ] && phases="decode prefill"
-  if ! cx_stage_canonical; then
-    cx_log "ERROR: $backend canonical workload staging failed"
-    return 1
-  fi
   for phase in $phases; do
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
     local out="results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
@@ -80,11 +54,9 @@ run_ep_suite() {
       --scope "${CX_SCOPE:-scale-up}" --scale-up-transport "${CX_SCALE_UP_TRANSPORT:-unknown}"
       --scale-out-transport "${CX_SCALE_OUT_TRANSPORT:-}"
       --case-id "${CX_CASE_ID:-}" --suite "${CX_SUITE:-}" --workload-name "${CX_WORKLOAD_NAME:-}"
-      --qualification-index "${CX_QUALIFICATION_INDEX:-1}" --version "${CX_VERSION:-1}"
+      --version "${CX_VERSION:-1}"
       --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
       --out "$out")
-    [ -n "${CX_WORKLOAD_DIR:-}" ] && EPARGS+=(--workload-dir "$CX_WORKLOAD_DIR")
-    cx_write_runtime_stage execution || cx_die "cannot record runtime stage"
     if timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
       torchrun --nproc_per_node="$CX_NGPUS" bench/run_ep.py "${EPARGS[@]}"; then
       rc_run=0
@@ -275,26 +247,6 @@ cx_activate_deepep_v2() {
   unset EP_SUPPRESS_NCCL_CHECK
 }
 
-cx_enable_deepep_v2_jit_reproducibility() {
-  local seed="collectivex-deepep-v2-fa8a9b1" cccl
-  [ -n "${CUDA_HOME:-}" ] \
-    || { cx_log "ERROR: active CUDA toolkit is unavailable"; return 1; }
-  cccl="${CX_CUDA_CCCL:-}"
-  case "$cccl" in
-    "$CUDA_HOME"/targets/*/include/cccl) ;;
-    *) cx_log "ERROR: CUDA CCCL headers differ from the active toolkit"; return 1 ;;
-  esac
-  [ -d "$cccl" ] || { cx_log "ERROR: CUDA CCCL headers are unavailable"; return 1; }
-  CPATH="$cccl"
-  NVCC_PREPEND_FLAGS="--frandom-seed=$seed -I$cccl"
-  DEEPEP_V2_JIT_RANDOM_SEED="$seed"
-  EP_JIT_DUMP_SASS=1
-  unset EP_JIT_DEBUG EP_JIT_DUMP_ASM EP_JIT_DUMP_PTX EP_JIT_WITH_LINEINFO
-  unset EP_JIT_PTXAS_VERBOSE EP_JIT_PRINT_COMPILER_COMMAND EP_JIT_NVCC_COMPILER
-  unset EP_JIT_CPP_STANDARD EP_JIT_PTXAS_CHECK EP_GIN_GDAKI_DEBUG EP_NUM_TOPK_IDX_BITS
-  export CPATH DEEPEP_V2_JIT_RANDOM_SEED EP_JIT_DUMP_SASS NVCC_PREPEND_FLAGS
-}
-
 cx_probe_deepep_v2() {
   python3 - <<'PY'
 import ctypes
@@ -328,73 +280,12 @@ assert runtime_version.value == 23004, runtime_version.value
 PY
 }
 
-cx_deepep_v2_marker_is_valid() {
-  local root="$1" marker="$2" revision="$3" tree="$4" fmt_revision="$5" cache_key="$6"
-  python3 - "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key" <<'PY'
-import os
-import stat
-import sys
-
-root, marker, revision, tree, fmt_revision, cache_key = sys.argv[1:]
-try:
-    root_item = os.lstat(root)
-    marker_item = os.lstat(marker)
-    children = [os.lstat(os.path.join(root, name)) for name in ("source", "venv")]
-    if (
-        not stat.S_ISDIR(root_item.st_mode)
-        or stat.S_IMODE(root_item.st_mode) & 0o777 != 0o700
-        or not stat.S_ISREG(marker_item.st_mode)
-        or marker_item.st_uid != root_item.st_uid
-        or stat.S_IMODE(marker_item.st_mode) & 0o777 != 0o600
-        or marker_item.st_size > 1024
-        or any(
-            not stat.S_ISDIR(child.st_mode)
-            or child.st_uid != root_item.st_uid
-            or stat.S_IMODE(child.st_mode) & 0o022
-            for child in children
-        )
-    ):
-        raise OSError
-    descriptor = os.open(marker, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (marker_item.st_dev, marker_item.st_ino):
-            raise OSError
-        payload = os.read(descriptor, 1025)
-    finally:
-        os.close(descriptor)
-    lines = payload.decode("ascii").splitlines()
-    if lines != [revision, tree, fmt_revision, cache_key]:
-        raise ValueError
-except (OSError, UnicodeError, ValueError):
-    raise SystemExit(1)
-PY
-}
-
-cx_deepep_v2_cache_is_valid() {
-  local root="$1" marker="$2" revision="$3" tree="$4" fmt_revision="$5" cache_key="$6"
-  cx_deepep_v2_marker_is_valid \
-    "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key" || return 1
-  [ -d "$root/source" ] && [ ! -L "$root/source" ] \
-    && [ "$(cx_git_in_tree "$root/source" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$tree" ] \
-    && [ "$(cx_git_in_tree "$root/source/third-party/fmt" rev-parse HEAD 2>/dev/null)" = "$fmt_revision" ] \
-    || return 1
-  cx_activate_deepep_v2 || return 1
-  cx_probe_deepep_v2
-}
-
 cx_build_deepep_v2() {
-  local root venv source marker marker_tmp lock_path arch cache_key cache_ready
+  local root venv source ready lock_path arch cache_ready
   local revision="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
-  local tree="29809e75c5874e6609dac4804e7b651d5226959f"
-  local fmt_revision="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
-  cx_verify_backend_cache_mount \
-    || { cx_log "ERROR: DeepEP V2 cache mount identity validation failed"; return 1; }
   arch="$(cx_cuda_arch)" || return 1
   root="$(cx_deepep_v2_root)" || return 1
-  cache_key="${root##*/deepep-v2-}"
-  [[ "$cache_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
-  venv="$root/venv"; source="$root/source"; marker="$root/.collectivex-complete"
+  venv="$root/venv"; source="$root/source"; ready="$root/.ready"
   lock_path="${root}.lock"
   command -v flock >/dev/null || { cx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
@@ -409,17 +300,7 @@ cx_build_deepep_v2() {
     flock 9 \
       || { cx_log "ERROR: DeepEP V2 cache-lock-acquire failed"; exit 1; }
     cache_ready=0
-    if [ -e "$marker" ] || [ -L "$marker" ]; then
-      if (
-        cx_deepep_v2_cache_is_valid \
-          "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key"
-      ); then
-        cache_ready=1
-      else
-        cx_log "ERROR: published DeepEP V2 cache failed integrity validation; refusing reset"
-        exit 1
-      fi
-    fi
+    [ -f "$ready" ] && [ -x "$venv/bin/python" ] && [ -d "$source" ] && cache_ready=1
     if [ "$cache_ready" != 1 ]; then
       if [ -e "$root" ] || [ -L "$root" ]; then
         rm -rf "$root" \
@@ -449,32 +330,19 @@ cx_build_deepep_v2() {
       export EP_NVSHMEM_ROOT_DIR
       cx_materialize_backend_source deepep-v2 "$source" \
         || { cx_log "ERROR: DeepEP V2 staged source is invalid"; exit 1; }
-      (cd "$source" && SOURCE_DATE_EPOCH="$(cx_git_in_tree "$source" show -s --format=%ct HEAD)" \
-        TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+      (cd "$source" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
         python3 -m pip install -q --no-build-isolation --no-deps --force-reinstall .) >&2 2>&1 \
         || { cx_log "ERROR: DeepEP V2 build failed"; exit 1; }
       cx_probe_deepep_v2 \
-        || { cx_log "ERROR: DeepEP V2 ElasticBuffer/runtime probe failed"; exit 1; }
-      marker_tmp="$(mktemp "$root/.collectivex-complete.tmp.XXXXXX")" \
-        || { cx_log "ERROR: DeepEP V2 cache-marker-create failed"; exit 1; }
-      chmod 600 "$marker_tmp" \
-        || { cx_log "ERROR: DeepEP V2 cache-marker-permission failed"; exit 1; }
-      printf '%s\n%s\n%s\n%s\n' \
-        "$revision" "$tree" "$fmt_revision" "$cache_key" > "$marker_tmp" \
-        || { cx_log "ERROR: DeepEP V2 cache-marker-write failed"; exit 1; }
-      mv -f -- "$marker_tmp" "$marker" \
-        || { cx_log "ERROR: DeepEP V2 cache-marker-publish failed"; exit 1; }
+        || { cx_log "ERROR: DeepEP V2 import probe failed"; exit 1; }
+      : > "$ready"
     fi
-    cx_deepep_v2_cache_is_valid \
-      "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key" \
-      || { cx_log "ERROR: DeepEP V2 cache validation failed"; exit 1; }
   ); then
     cx_log "ERROR: shared DeepEP V2 environment is incomplete"
     return 1
   fi
   cx_activate_deepep_v2 || return 1
   cx_prepare_deepep_toolchain || return 1
-  cx_enable_deepep_v2_jit_reproducibility || return 1
   EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"
   export EP_NVSHMEM_ROOT_DIR
   cx_probe_deepep_v2 || { cx_log "ERROR: DeepEP V2 shared runtime probe failed"; return 1; }
@@ -522,73 +390,14 @@ PY
   export DEEPEP_HYBRID_BUILD_MODE=multinode-doca
 }
 
-cx_deepep_hybrid_marker_is_valid() {
-  python3 - "$1" "$2" "$3" "$4" "${5:-}" <<'PY'
-import os
-import stat
-import sys
-
-root, marker, revision, tree, build_mode = sys.argv[1:]
-try:
-    root_item = os.lstat(root)
-    marker_item = os.lstat(marker)
-    if (
-        not stat.S_ISDIR(root_item.st_mode)
-        or stat.S_IMODE(root_item.st_mode) & 0o777 != 0o700
-        or not stat.S_ISREG(marker_item.st_mode)
-        or marker_item.st_uid != root_item.st_uid
-        or stat.S_IMODE(marker_item.st_mode) & 0o777 != 0o600
-        or marker_item.st_size > 512
-    ):
-        raise OSError
-    descriptor = os.open(marker, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (marker_item.st_dev, marker_item.st_ino):
-            raise OSError
-        payload = os.read(descriptor, 513)
-    finally:
-        os.close(descriptor)
-    lines = payload.decode("ascii").splitlines()
-    expected = [revision, tree, build_mode] if build_mode else [revision, tree]
-    if lines != expected:
-        raise ValueError
-except (OSError, UnicodeError, ValueError):
-    raise SystemExit(1)
-PY
-}
-
-cx_deepep_hybrid_cache_is_valid() {
-  local root="$1" marker="$2" revision="$3" tree="$4" build_mode="${5:-}"
-  local status extra path
-  cx_deepep_hybrid_marker_is_valid \
-    "$root" "$marker" "$revision" "$tree" "$build_mode" || return 1
-  [ "$(cx_git_in_tree "$root" rev-parse HEAD 2>/dev/null)" = "$revision" ] \
-    && [ "$(cx_git_in_tree "$root" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$tree" ] \
-    || return 1
-  status="$(cx_git_in_tree "$root" status --porcelain --untracked-files=no \
-    --ignore-submodules=none 2>/dev/null)" || return 1
-  [ -z "$status" ] || return 1
-  extra="$(cx_git_in_tree "$root" ls-files --others --exclude-standard -- \
-    'deep_ep/*.py' 'deep_ep/*.so' 2>/dev/null)" || return 1
-  [ -z "$extra" ] || return 1
-  extra="$(cx_git_in_tree "$root" ls-files --others --ignored --exclude-standard -- \
-    'deep_ep/*.py' 'deep_ep/*.so' 2>/dev/null)" || return 1
-  [ -z "$extra" ] || return 1
-  for path in "$root"/deep_ep_cpp*.so "$root"/hybrid_ep_cpp*.so; do
-    [ -f "$path" ] && [ ! -L "$path" ] && [ -s "$path" ] || return 1
-  done
-}
-
 cx_build_deepep_hybrid() {
   local arch revision="$CX_DEEPEP_HYBRID_COMMIT" tree="$CX_DEEPEP_HYBRID_TREE"
-  local build_root marker marker_tmp lock_path cache_ready build_mode
+  local build_root lock_path cache_ready build_mode
   export DEEPEP_COMMIT="$revision" DEEPEP_TREE="$tree"
   arch="$(cx_cuda_arch)" || return 1
   cx_configure_deepep_hybrid_build || return 1
   build_mode="$DEEPEP_HYBRID_BUILD_MODE"
   build_root="$PWD/.cx_backend/deepep-hybrid-${arch/./}-${build_mode}"
-  marker="$build_root/.collectivex-complete"
   lock_path="${build_root}.lock"
   cx_log "DeepEP hybrid-ep: building $revision for CUDA target $arch"
   unset NVSHMEM_DIR
@@ -601,12 +410,8 @@ cx_build_deepep_hybrid() {
     exec 9<>"$lock_path" || exit 1
     flock 9 || exit 1
     cache_ready=0
-    if [ -e "$marker" ] || [ -L "$marker" ]; then
-      cx_deepep_hybrid_cache_is_valid \
-        "$build_root" "$marker" "$revision" "$tree" "$build_mode" \
-        || exit 1
-      cache_ready=1
-    fi
+    [ -f "$build_root/deep_ep_cpp.so" ] && [ -f "$build_root/hybrid_ep_cpp.so" ] \
+      && cache_ready=1
     if [ "$cache_ready" != 1 ]; then
       cx_materialize_backend_source deepep-hybrid "$build_root" \
         || { cx_log "ERROR: hybrid-ep staged source is invalid"; exit 1; }
@@ -615,20 +420,10 @@ cx_build_deepep_hybrid() {
           = "$CX_DEEPEP_HYBRID_NCCL_COMMIT" ] \
           || { cx_log "ERROR: pinned hybrid-ep NCCL transport source is absent"; exit 1; }
       fi
-      (cd "$build_root" && \
-        SOURCE_DATE_EPOCH="$(cx_git_in_tree "$build_root" show -s --format=%ct HEAD)" \
-        TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+      (cd "$build_root" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
         python3 setup.py build_ext --inplace) >&2 2>&1 \
         || { cx_log "ERROR: hybrid-ep build failed"; exit 1; }
-      marker_tmp="$(mktemp "$build_root/.collectivex-complete.tmp.XXXXXX")" || exit 1
-      chmod 600 "$marker_tmp" || exit 1
-      printf '%s\n%s\n%s\n' \
-        "$revision" "$tree" "$build_mode" > "$marker_tmp" \
-        || exit 1
-      mv -f -- "$marker_tmp" "$marker" || exit 1
     fi
-    cx_deepep_hybrid_cache_is_valid \
-      "$build_root" "$marker" "$revision" "$tree" "$build_mode"
   ); then
     cx_log "ERROR: shared hybrid-ep build is incomplete"
     return 1
@@ -646,10 +441,8 @@ cx_persist_backend_env() {
   local -a names=(PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
     NVSHMEM_DIR DEEPEP_COMMIT DEEPEP_TREE
     EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM
-    EP_JIT_DUMP_SASS
     DEEPEP_V2_PR DEEPEP_V2_FIX_PR DEEPEP_V2_NCCL_CHECK_FIX_PR DEEPEP_V2_COMMIT
     DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT DEEPEP_V2_NCCL_CHECK_COMMIT
-    DEEPEP_V2_JIT_RANDOM_SEED
     HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE)
   [[ "$node_id" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$root" || return 1
@@ -714,7 +507,6 @@ cx_prepare_backend() {
 
 prepare_backend_or_record() {
   local backend="$1"
-  cx_write_runtime_stage backend-setup || return 1
   if cx_prepare_backend "$backend"; then
     return 0
   fi
@@ -736,7 +528,6 @@ dispatch_bench() {
 }
 
 rc=0
-cx_validate_shard_control "$PWD"
 cx_load_network_control_mode "$PWD" || cx_die "cannot resolve network control mode"
 cx_apply_network_profile "${CX_NODES:-1}" "${CX_TRANSPORT:-}"
 # Build-only mode: rack launchers run the shared backend preparation hook once per
@@ -806,11 +597,6 @@ PY
 )"
     eval "$_exports"
     cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT"
-    # Each case has its OWN routing/dims -> its own canonical workload manifest. cx_stage_canonical
-    # short-circuits when CX_WORKLOAD_DIR is already set, so without this unset the first case's
-    # staged dir is reused for the rest and run_ep.py can't find the later cases' manifests.
-    # Unset so every case re-stages its own.
-    unset CX_WORKLOAD_DIR 2>/dev/null || true
     cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_MODE/$CX_PHASE routing=$CX_ROUTING"
     _cx_case_ts="$CX_TS"
     CX_TS="${_cx_case_ts}-a01"

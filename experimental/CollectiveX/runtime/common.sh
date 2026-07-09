@@ -5,8 +5,6 @@
 # model-serving. Logging goes to stderr so functions can `echo` a single
 # result on stdout.
 
-CX_SQUASH_FORMAT_VERSION="repro-v1"
-CX_SQUASH_SOURCE_DATE_EPOCH=1
 CX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6" # pragma: allowlist secret
 CX_DEEPEP_V2_TREE="29809e75c5874e6609dac4804e7b651d5226959f" # pragma: allowlist secret
 CX_DEEPEP_V2_FMT_COMMIT="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa" # pragma: allowlist secret
@@ -137,66 +135,28 @@ cx_load_operator_config() {
 }
 
 cx_private_log_path() {
-  local label="$1" tag="${COLLECTIVEX_EXECUTION_ID:-manual_$$}" path
-  path="$(python3 "$CX_RUNTIME_DIR/stage.py" private-log "$tag" "$label" 2>/dev/null)" \
-    || cx_die "cannot create private runtime log"
+  local label="$1" root="${CX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}" path
+  [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || cx_die "invalid private log label"
+  path="$root/logs/$label.log"
+  mkdir -m 700 -p "${path%/*}" || cx_die "cannot create private log directory"
+  (umask 077; : > "$path") || cx_die "cannot create private runtime log"
   printf '%s' "$path"
 }
 
-# Manual successes delete diagnostics immediately. Canonical workflow logs survive
-# until artifact upload succeeds; failed logs remain private for debugging, and a
-# later run prunes abandoned directories older than 24 hours.
 cx_cleanup_private_logs() {
-  local rc="$1" tag="${COLLECTIVEX_EXECUTION_ID:-manual_$$}"
-  [ "$rc" = 0 ] || return 0
-  python3 "$CX_RUNTIME_DIR/stage.py" cleanup-private-logs "$tag" \
-    >/dev/null 2>&1 || true
+  [ "$1" != 0 ] || rm -rf -- "${CX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}/logs"
 }
 
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
 cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
+  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_MORI_KERNEL_TYPE,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
 # the complete Actions or runner environment.
 cx_host_exports() {
   printf '%s' 'HOME,PATH,USER,XDG_CACHE_HOME,ENROOT_CACHE_PATH'
-}
-
-cx_prepare_runtime_marker() {
-  local mount_src="$1" tag="${COLLECTIVEX_EXECUTION_ID:-${CX_TS:-}}" marker
-  [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
-    || cx_die "cannot create runtime stage marker"
-  marker=".shards/runtime-stage-${tag}.txt"
-  mkdir -p "$mount_src/experimental/CollectiveX/.shards" >/dev/null 2>&1 \
-    || cx_die "cannot create runtime stage marker"
-  rm -f -- "$mount_src/experimental/CollectiveX/$marker" >/dev/null 2>&1 \
-    || cx_die "cannot reset runtime stage marker"
-  export CX_RUNTIME_MARKER="$marker"
-}
-
-cx_write_runtime_stage() {
-  local stage="$1" marker="${CX_RUNTIME_MARKER:-}"
-  [ -n "$marker" ] || return 0
-  [[ "$marker" =~ ^\.shards/runtime-stage-[A-Za-z0-9][A-Za-z0-9._-]*\.txt$ ]] \
-    || return 1
-  case "$stage" in backend-setup|execution) ;; *) return 1 ;; esac
-  printf '%s\n' "$stage" > "$marker"
-}
-
-cx_adopt_runtime_stage() {
-  local mount_src="$1" marker="${CX_RUNTIME_MARKER:-}" stage=""
-  [ -n "$marker" ] || return 0
-  if [[ "$marker" =~ ^\.shards/runtime-stage-[A-Za-z0-9][A-Za-z0-9._-]*\.txt$ ]] \
-      && [ -f "$mount_src/experimental/CollectiveX/$marker" ]; then
-    IFS= read -r stage < "$mount_src/experimental/CollectiveX/$marker" || true
-    rm -f -- "$mount_src/experimental/CollectiveX/$marker" >/dev/null 2>&1 || true
-    case "$stage" in
-      backend-setup|execution) cx_set_failure_stage "$stage" ;;
-    esac
-  fi
 }
 
 cx_require_vars() {
@@ -470,32 +430,10 @@ if [ "${CX_NODES:-1}" -gt 1 ] && [ "${CX_TRANSPORT:-}" != mnnvl ]; then
   fi
   cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT" || exit 68
 fi
-cx_write_runtime_stage execution || exit 68
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$CX_GPUS_PER_NODE"
 exec python3 bench/run_ep.py "$@"
 BASH
-}
-
-# A set shard path is an execution contract, never a hint. Validate it before
-# staging/allocation and again in-container so a missing or stale control file
-# cannot silently fall back to a manual single-case run.
-cx_validate_shard_control() {
-  local cx_root="$1" shard="${CX_SHARD_FILE:-}" path expected_sku
-  [ -n "$shard" ] || return 0
-  expected_sku="${CX_SHARD_SKU:-}"
-  [ -n "$expected_sku" ] || cx_die "CX_SHARD_SKU is required with CX_SHARD_FILE"
-  [ -n "${CX_BENCH:-}" ] || cx_die "CX_BENCH is required with CX_SHARD_FILE"
-  [[ "${CX_NODES:-}" =~ ^[1-9][0-9]*$ ]] \
-    || cx_die "positive CX_NODES is required with CX_SHARD_FILE"
-  path="$shard"
-  [ -f "$path" ] || path="${cx_root%/}/$shard"
-  [ -f "$path" ] || cx_die "shard control does not exist"
-  [ -s "$path" ] || cx_die "shard control is empty"
-  python3 "${cx_root%/}/sweep_matrix.py" \
-    --validate-control "$path" --expect-sku "$expected_sku" \
-    --expect-backend "$CX_BENCH" --expect-nodes "$CX_NODES" >/dev/null 2>&1 \
-    || cx_die "invalid shard control"
 }
 
 # Load the case mode needed to choose the allocation/network profile. Every
@@ -663,8 +601,8 @@ cx_record_allocation_jobid() {
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   [ -n "$root" ] || return 0
   cx_job_root_is_safe "$root" || return 1
-  path="$root/allocation-job-id"
-  temporary="$(mktemp "$root/.allocation-job-id.XXXXXX")" || return 1
+  path="$root/jobid"
+  temporary="$(mktemp "$root/.jobid.XXXXXX")" || return 1
   chmod 600 "$temporary" || { rm -f -- "$temporary"; return 1; }
   printf '%s\n' "$job_id" > "$temporary" \
     || { rm -f -- "$temporary"; return 1; }
@@ -675,7 +613,7 @@ cx_clear_allocation_jobid() {
   local root="${CX_JOB_ROOT:-}" path
   [ -n "$root" ] || return 0
   cx_job_root_is_safe "$root" || return 1
-  path="$root/allocation-job-id"
+  path="$root/jobid"
   [ ! -e "$path" ] || {
     [ -f "$path" ] && [ ! -L "$path" ] \
       && [ "$(stat -c '%u:%a' "$path" 2>/dev/null)" = "$(id -u):600" ] || return 1
@@ -699,19 +637,6 @@ cx_cancel_job() {
   return 1
 }
 
-cx_write_cleanup_guard() {
-  local state="$1" root="${CX_JOB_ROOT:-}" safe unsafe
-  cx_job_root_is_safe "$root" || return 0
-  safe="$root/cleanup-safe"
-  unsafe="$root/cleanup-unsafe"
-  umask 077
-  case "$state" in
-    safe) : > "$safe" && rm -f -- "$unsafe" ;;
-    unsafe) rm -f -- "$safe" && : > "$unsafe" ;;
-    *) return 1 ;;
-  esac
-}
-
 # A workflow cancellation may kill a foreground Slurm step before Bash can run
 # the launcher trap. Reconcile the mode-0600 allocation record from an always()
 # workflow step before isolated source cleanup is allowed.
@@ -719,28 +644,14 @@ cx_reconcile_recorded_allocation() {
   local root="$1" path job_id
   cx_job_root_is_safe "$root" || return 1
   export CX_JOB_ROOT="$root"
-  path="$root/allocation-job-id"
-  if [ ! -e "$path" ]; then
-    [ -f "$root/cleanup-safe" ] && [ ! -e "$root/cleanup-unsafe" ]
-    return
-  fi
+  path="$root/jobid"
+  [ -e "$path" ] || return 0
   [ -f "$path" ] && [ ! -L "$path" ] \
     && [ "$(stat -c '%u:%a' "$path" 2>/dev/null)" = "$(id -u):600" ] \
-    || { cx_write_cleanup_guard unsafe || true; return 1; }
-  IFS= read -r job_id < "$path" || {
-    cx_write_cleanup_guard unsafe || true
-    return 1
-  }
-  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || {
-    cx_write_cleanup_guard unsafe || true
-    return 1
-  }
-  if cx_cancel_job "$job_id" && cx_clear_allocation_jobid; then
-    cx_write_cleanup_guard safe
-    return
-  fi
-  cx_write_cleanup_guard unsafe || true
-  return 1
+    || return 1
+  IFS= read -r job_id < "$path" || return 1
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  cx_cancel_job "$job_id" && cx_clear_allocation_jobid
 }
 
 # Single multi-arch container for ALL NVIDIA SKUs: tag `v0.5.11-cu130` is an OCI
@@ -783,10 +694,6 @@ cx_prepare_backend_cache() {
   export CX_PREPARED_BACKEND_CACHE="$cache"
 }
 
-cx_verify_backend_cache_mount() {
-  python3 "$CX_RUNTIME_DIR/probe.py" verify-cache-mount "${CX_BACKEND_CACHE_ROOT:-}"
-}
-
 cx_git() {
   GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
     git -c credential.helper= "$@"
@@ -822,14 +729,8 @@ cx_fetch_revision() {
 
 cx_backend_source_pin() {
   case "$1" in
-    deepep-v2)
-      printf '%s|%s|%s' \
-        "$CX_DEEPEP_V2_COMMIT" "$CX_DEEPEP_V2_TREE" "$CX_DEEPEP_V2_FMT_COMMIT"
-      ;;
-    deepep-hybrid)
-      printf '%s|%s||%s' "$CX_DEEPEP_HYBRID_COMMIT" "$CX_DEEPEP_HYBRID_TREE" \
-        "$CX_DEEPEP_HYBRID_NCCL_COMMIT"
-      ;;
+    deepep-v2) printf '%s||%s' "$CX_DEEPEP_V2_COMMIT" "$CX_DEEPEP_V2_FMT_COMMIT" ;;
+    deepep-hybrid) printf '%s|||%s' "$CX_DEEPEP_HYBRID_COMMIT" "$CX_DEEPEP_HYBRID_NCCL_COMMIT" ;;
     *) return 1 ;;
   esac
 }
@@ -841,34 +742,6 @@ cx_backend_source_path() {
   printf '%s/%s-%s' "$root" "$backend" "$revision"
 }
 
-cx_backend_source_is_valid() {
-  local backend="$1" source="$2" revision tree fmt nccl pin status ignored
-  pin="$(cx_backend_source_pin "$backend")" || return 1
-  IFS='|' read -r revision tree fmt nccl <<< "$pin"
-  [ -d "$source" ] && [ ! -L "$source" ] \
-    && [ "$(cx_git_in_tree "$source" rev-parse HEAD 2>/dev/null)" = "$revision" ] \
-    && [ "$(cx_git_in_tree "$source" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$tree" ] \
-    || return 1
-  status="$(GIT_OPTIONAL_LOCKS=0 cx_git_in_tree "$source" \
-    status --porcelain --untracked-files=all --ignore-submodules=none \
-    2>/dev/null)" || return 1
-  if [ "$backend" = deepep-v2 ]; then
-    [ "$status" = " M deep_ep/__init__.py" ] \
-      && [ "$(grep -Fc "if 'libnccl' in line" "$source/deep_ep/__init__.py")" = 1 ] \
-      || return 1
-  else
-    [ -z "$status" ] || return 1
-  fi
-  ignored="$(cx_git_in_tree "$source" ls-files --others --ignored --exclude-standard \
-    2>/dev/null)" || return 1
-  [ -z "$ignored" ] || return 1
-  [ -z "$fmt" ] \
-    || [ "$(cx_git_in_tree "$source/third-party/fmt" rev-parse HEAD 2>/dev/null)" = "$fmt" ] \
-    || return 1
-  [ -z "$nccl" ] \
-    || [ "$(cx_git_in_tree "$source/third-party/nccl" rev-parse HEAD 2>/dev/null)" = "$nccl" ]
-}
-
 cx_apply_deepep_v2_nccl_check_fix() {
   python3 "$CX_RUNTIME_DIR/stage.py" rewrite-deepep-v2 "$1/deep_ep/__init__.py"
 }
@@ -876,42 +749,17 @@ cx_apply_deepep_v2_nccl_check_fix() {
 # Acquire source before compute allocation, preferring the verified same-run GHA seed.
 _cx_prepare_backend_source() {
   local mount_src="$1" backend="$2" root source temporary revision tree fmt nccl pin
-  local root_mode stage_mode root_owner stage_owner
   root="$mount_src/experimental/CollectiveX/.cx_sources"
   CX_BACKEND_SOURCE_STEP="source mount creation"
   if [ ! -e "$root" ] && [ ! -L "$root" ]; then
     mkdir -m 700 -- "$root" || return 1
   fi
-  CX_BACKEND_SOURCE_STEP="source mount ownership validation"
-  [ -d "$mount_src" ] && [ ! -L "$mount_src" ] \
-    && [ -d "$root" ] && [ ! -L "$root" ] || return 1
-  stage_owner="$(stat -c '%u' "$mount_src" 2>/dev/null)" || return 1
-  root_owner="$(stat -c '%u' "$root" 2>/dev/null)" || return 1
-  [ "$root_owner" = "$stage_owner" ] || return 1
-  stage_mode="$(stat -c '%a' "$mount_src" 2>/dev/null)" || return 1
-  case "$stage_mode" in 700|[1-7]700) ;; *) return 1 ;; esac
-  # Shared stage parents may retain harmless special bits despite mkdir -m.
-  CX_BACKEND_SOURCE_STEP="source mount permission inspection"
-  root_mode="$(stat -c '%a' "$root" 2>/dev/null)" || return 1
-  case "$root_mode" in
-    700|[1-7]700) ;;
-    *)
-      CX_BACKEND_SOURCE_STEP="source mount permission normalization"
-      chmod 700 "$root" || return 1
-      CX_BACKEND_SOURCE_STEP="source mount permission validation"
-      root_mode="$(stat -c '%a' "$root" 2>/dev/null)" || return 1
-      case "$root_mode" in 700|[1-7]700) ;; *) return 1 ;; esac
-      ;;
-  esac
+  [ -d "$mount_src" ] && [ -d "$root" ] || return 1
   CX_BACKEND_SOURCE_STEP="git lookup"
   command -v git >/dev/null || return 1
   CX_BACKEND_SOURCE_STEP="source pin resolution"
   source="$(cx_backend_source_path "$root" "$backend")" || return 1
-  if [ -e "$source" ] || [ -L "$source" ]; then
-    CX_BACKEND_SOURCE_STEP="existing source validation"
-    cx_backend_source_is_valid "$backend" "$source"
-    return
-  fi
+  [ ! -d "$source" ] || return 0
   CX_BACKEND_SOURCE_STEP="source checkout creation"
   temporary="$(mktemp -d "$root/.${backend}.XXXXXX")" || return 1
   CX_BACKEND_SOURCE_STEP="source pin resolution"
@@ -946,9 +794,8 @@ _cx_prepare_backend_source() {
       return 1
     }
   fi
-  CX_BACKEND_SOURCE_STEP="source publication validation"
-  if ! cx_backend_source_is_valid "$backend" "$temporary" \
-      || ! mv -- "$temporary" "$source"; then
+  CX_BACKEND_SOURCE_STEP="source publication"
+  if ! mv -- "$temporary" "$source"; then
     rm -rf -- "$temporary"
     return 1
   fi
@@ -969,13 +816,12 @@ cx_materialize_backend_source() {
   local backend="$1" destination="$2" source parent temporary
   [ -n "${CX_BACKEND_SOURCE_ROOT:-}" ] || return 1
   source="$(cx_backend_source_path "$CX_BACKEND_SOURCE_ROOT" "$backend")" || return 1
-  cx_backend_source_is_valid "$backend" "$source" || return 1
+  [ -d "$source" ] || return 1
   parent="${destination%/*}"
   [ "$parent" != "$destination" ] && [ -d "$parent" ] && [ ! -L "$parent" ] \
     || return 1
   temporary="$(mktemp -d "$parent/.collectivex-source.XXXXXX")" || return 1
-  if ! cp -R -- "$source/." "$temporary/" \
-      || ! cx_backend_source_is_valid "$backend" "$temporary"; then
+  if ! cp -R -- "$source/." "$temporary/"; then
     rm -rf -- "$temporary"
     return 1
   fi
@@ -983,11 +829,7 @@ cx_materialize_backend_source() {
     rm -rf -- "$temporary"
     return 1
   fi
-  if ! cx_backend_source_is_valid "$backend" "$destination"; then
-    rm -rf -- "$destination"
-    return 1
-  fi
-  return 0
+  [ -d "$destination" ]
 }
 
 cx_prepare_implicit_stage_base() {
@@ -1155,7 +997,7 @@ cx_squash_path() {
   run_scope="$(printf '%s' "$run_scope" | tr -cs 'A-Za-z0-9_.-' '-')" || return 1
   run_scope="${run_scope#-}"; run_scope="${run_scope%-}"
   [ -n "$run_scope" ] || return 1
-  key="${CX_SQUASH_FORMAT_VERSION}${platform}_${run_scope}_$(
+  key="${platform}_${run_scope}_$(
     printf '%s' "$image" | sed 's#[/:@#]#_#g'
   )"
   printf '%s' "$squash_dir/${key}.sqsh"
@@ -1203,15 +1045,13 @@ cx_ensure_squash() {
         export ENROOT_RUNTIME_PATH="$enroot_local/run"
         mkdir -p "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" \
           "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
-        SOURCE_DATE_EPOCH="$CX_SQUASH_SOURCE_DATE_EPOCH" \
-          enroot import -o "$sq" "docker://$image" </dev/null
+        enroot import -o "$sq" "docker://$image" </dev/null
       ) >> "$log" 2>&1 || import_rc=$?
       rm -rf -- "$enroot_local" >/dev/null 2>&1 || true
       [ "$import_rc" = 0 ] \
         || { cx_fail_stage container-import "$log"; return 1; }
     else
-      SOURCE_DATE_EPOCH="$CX_SQUASH_SOURCE_DATE_EPOCH" \
-        enroot import -o "$sq" "docker://$image" </dev/null >> "$log" 2>&1 \
+      enroot import -o "$sq" "docker://$image" </dev/null >> "$log" 2>&1 \
         || { cx_fail_stage container-import "$log"; return 1; }
     fi
     unsquashfs -l "$sq" >> "$log" 2>&1 \
@@ -1249,11 +1089,10 @@ cx_ensure_squash_on_job() {
   if ! srun --jobid="$job_id" --nodes="${CX_NODES:-1}" --ntasks="${CX_NODES:-1}" \
       --ntasks-per-node=1 --chdir=/tmp \
       --export="$(cx_host_exports)" \
-      bash -s -- "$sq" "$lock" "$image" "$CX_SQUASH_SOURCE_DATE_EPOCH" \
-      "$CX_IMAGE_PLATFORM" \
+      bash -s -- "$sq" "$lock" "$image" "$CX_IMAGE_PLATFORM" \
       > "$log" 2>&1 <<'BASH'
 set -euo pipefail
-sq="$1"; lock="$2"; image="$3"; source_date_epoch="$4"; platform="$5"
+sq="$1"; lock="$2"; image="$3"; platform="$4"
 machine="$(uname -m)"
 case "$platform:$machine" in
   linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
@@ -1278,8 +1117,7 @@ if unsquashfs -l "$sq" >/dev/null 2>&1; then
   echo 'container squash ready'
 else
   rm -f -- "$sq"
-  SOURCE_DATE_EPOCH="$source_date_epoch" \
-    enroot import -o "$sq" "docker://$image" </dev/null
+  enroot import -o "$sq" "docker://$image" </dev/null
   unsquashfs -l "$sq" >/dev/null 2>&1
 fi
 BASH
@@ -1396,7 +1234,6 @@ cx_stage_path() {
 # child. A runner-owned marker makes recursive cleanup an explicit capability.
 cx_stage_repo() {
   local repo_root="$1" stage_dir="$2" expected log tag copy_error
-  cx_validate_shard_control "$repo_root/experimental/CollectiveX"
   expected="$(cx_stage_path "$repo_root" "${CX_STAGE_DIR:-}")" \
     || cx_die "configured stage base is unavailable or unsafe"
   [ "$stage_dir" = "$expected" ] \
@@ -1478,9 +1315,9 @@ cx_run_distributed_shard() {
   local ph mode routing hidden topk experts ladder suite workload
   local canonical case_id ep timing case_iters case_trials case_warmup case_stem
   local scope scale_up_transport scale_out_transport transport topology_class nodes gpn domain
-  local workload_dir workload_ladder workload_log stage_rc attempt_tag out
+  local attempt_tag out
   local runtime_log run_rc summary_log
-  local -a container_args workload_args ep_args
+  local -a container_args ep_args
   [ "${NODES:-0}" -gt 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
     || cx_die "invalid distributed launcher placement"
   [ -n "${JOB_ID:-}" ] && [ -n "${SQUASH_FILE:-}" ] \
@@ -1588,31 +1425,6 @@ cx_run_distributed_shard() {
       continue
     fi
 
-    workload_dir=""
-    if cx_bool_enabled "$canonical"; then
-      workload_dir=".cx_workloads/c$(printf '%03d' "$ci")"
-      workload_ladder="$ladder"
-      [ -n "$workload_ladder" ] \
-        || workload_ladder="1 2 4 8 16 32 64 128 256 512 1024 2048 4096"
-      workload_args=(python3 bench/make_workloads.py --out-dir "$workload_dir"
-        --routing "$routing" --ep "$ep" --hidden "$hidden" --topk "$topk"
-        --experts "$experts" --seed "${CX_SEED:-67}" --tokens-ladder "$workload_ladder")
-      workload_log="$(cx_private_log_path "workload-c$(printf '%03d' "$ci")")"
-      set +e
-      srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --chdir=/tmp \
-        --container-name="$container_name" --container-image="$SQUASH_FILE" \
-        "${container_args[@]}" \
-        --export="$(cx_container_exports)" "${workload_args[@]}" \
-        </dev/null >"$workload_log" 2>&1
-      stage_rc=$?
-      set -e
-      if [ "$stage_rc" != 0 ]; then
-        cx_log "ERROR: EP${NGPUS}[$ci] workload staging failed (rc=$stage_rc)"
-        failed_cases=$((failed_cases + 1))
-        continue
-      fi
-    fi
-
     ep_args=(--backend "$CX_BENCH" --mode "$mode" --phase "$ph" --routing "$routing"
       --gpus-per-node "$gpn" --scale-up-domain "$domain" --scope "$scope"
       --scale-up-transport "$scale_up_transport" --scale-out-transport "$scale_out_transport"
@@ -1620,9 +1432,7 @@ cx_run_distributed_shard() {
       --warmup "$case_warmup" --iters "$case_iters" --trials "$case_trials"
       --seed "${CX_SEED:-67}" --runner "$RUNNER" --topology-class "$topology_class"
       --transport "$transport" --case-id "$case_id" --suite "$suite"
-      --workload-name "$workload"
-      --qualification-index "${CX_QUALIFICATION_INDEX:-1}" --version "${CX_VERSION:-1}")
-    [ -z "$workload_dir" ] || ep_args+=(--workload-dir "$workload_dir")
+      --workload-name "$workload" --version "${CX_VERSION:-1}")
     export CX_ATTEMPT_ID=1
     attempt_tag=a01
     out="results/${case_stem}_${attempt_tag}.json"
@@ -1696,11 +1506,6 @@ cx_launcher_cleanup() {
   elif [ "${CX_ALLOCATION_UNCERTAIN:-0}" = 1 ]; then
     allocation_stopped=0
     [ "$rc" != 0 ] || rc=1
-  fi
-  if [ "$allocation_stopped" = 1 ]; then
-    cx_write_cleanup_guard safe || true
-  else
-    cx_write_cleanup_guard unsafe || true
   fi
   [ "$allocation_stopped" = 1 ] || source_root="${REPO_ROOT:-$source_root}"
   if [ "$rc" != 0 ] \

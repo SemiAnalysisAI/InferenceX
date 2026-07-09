@@ -47,7 +47,6 @@ case "$CX_BENCH" in
   deepep|deepep-v2|deepep-hybrid) ;;
   *) cx_die "unsupported $PRODUCT EP backend: $CX_BENCH" ;;
 esac
-cx_validate_shard_control "$CX_DIR"
 cx_load_network_control_mode "$CX_DIR" || cx_die "cannot resolve network control mode"
 cx_require_vars CX_PARTITION CX_ACCOUNT CX_SQUASH_DIR CX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || cx_require_vars CX_ENROOT_CACHE_PATH
@@ -63,7 +62,6 @@ cx_select_image "$IMAGE"
 cx_set_failure_stage repository-stage
 MOUNT_SRC="$(cx_stage_path "$REPO_ROOT" "$CX_STAGE_DIR")"
 cx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
-cx_prepare_runtime_marker "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
 if [ "$CX_BENCH" = deepep-v2 ] || [ "$CX_BENCH" = deepep-hybrid ]; then
   cx_set_failure_stage backend-setup
@@ -99,7 +97,6 @@ run_rc=0
 cx_set_failure_stage container-launch
 cx_run_distributed_shard || run_rc=$?
 
-cx_adopt_runtime_stage "$MOUNT_SRC"
 collect_rc=0
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT" || collect_rc=$?
 [ "$run_rc" != 0 ] || [ "$collect_rc" = 0 ] || cx_set_failure_stage artifact-collection

@@ -15,9 +15,7 @@ import sweep_matrix  # noqa: E402
 
 
 def matrix(**options):
-    return sweep_matrix.validate_matrix_document(
-        sweep_matrix.resolve_matrix(max_cases=128, **options)
-    )
+    return sweep_matrix.resolve_matrix(max_cases=128, **options)
 
 
 class MatrixTests(unittest.TestCase):
@@ -31,7 +29,6 @@ class MatrixTests(unittest.TestCase):
             outputs = [
                 sweep_matrix.extract_shard(
                     source, cell["id"], root / f"shard-{index}.json",
-                    sku=cell["sku"], backend=cell["backend"], nodes=cell["nodes"],
                 )
                 for index in range(2)
             ]
