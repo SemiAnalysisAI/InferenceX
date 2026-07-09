@@ -841,6 +841,7 @@ jobs:
                 collect-results,
                 collect-evals,
                 calc-success-rate,
+                setup,
                 upload-changelog-metadata,
                 reuse-ingest-artifacts,
             ]
@@ -848,6 +849,17 @@ jobs:
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
+            needs.setup.result == 'success' &&
+            (
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == '[]'
+              ) &&
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
+              )
+            ) &&
             (
               needs.collect-results.result != 'skipped' ||
               needs.collect-evals.result != 'skipped' ||
