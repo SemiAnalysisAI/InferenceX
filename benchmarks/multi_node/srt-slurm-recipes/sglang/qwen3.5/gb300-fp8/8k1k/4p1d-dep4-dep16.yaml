@@ -17,7 +17,7 @@ frontend:
 
 model:
   path: "qwen3.5-fp8"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
   precision: "fp8"
 
 resources:
