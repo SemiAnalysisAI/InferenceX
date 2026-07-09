@@ -411,6 +411,36 @@ BASH
   export MASTER_ADDR="$master_addr" MASTER_PORT="$master_port"
 }
 
+# Printed into `bash -c` ahead of the rank wrapper or backend probe. Sources the
+# per-node loader/import environment persisted by cx_persist_backend_env, refusing
+# a file whose directory shape, ownership, or mode differs from what that step wrote.
+cx_source_backend_env() {
+  cat <<'BASH'
+case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac
+env_file="/ix/experimental/CollectiveX/.cx_backend/env/node-${SLURM_NODEID}.sh"
+env_root="${env_file%/*}"
+[ -d "$env_root" ] && [ ! -L "$env_root" ] || exit 66
+case "$(stat -c "%a" "$env_root")" in 700|[1-7]700) ;; *) exit 66;; esac
+[ -f "$env_file" ] && [ -r "$env_file" ] && [ ! -L "$env_file" ] \
+  && [ "$(stat -c "%u:%a" "$env_file")" = "$(stat -c "%u" "$env_root"):600" ] || exit 66
+. "$env_file" || exit 66
+BASH
+}
+
+# Per-node backend import probe, run inside the persistent container after the
+# build step. Selects on the runtime CX_BENCH so every launcher shares one probe.
+cx_backend_probe() {
+  cx_source_backend_env
+  cat <<'BASH'
+case "$CX_BENCH" in
+  deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, 'ElasticBuffer')" ;;
+  deepep-hybrid) python3 -c "import deep_ep; assert hasattr(deep_ep, 'HybridEPBuffer')" ;;
+  mori) python3 -c "import mori" ;;
+  *) exit 69 ;;
+esac
+BASH
+}
+
 # Printed into `bash -c` for one Slurm task per GPU. Every rank derives its
 # identity from Slurm rather than accepting caller-supplied rank values.
 cx_slurm_rank_wrapper() {
@@ -879,7 +909,6 @@ cx_lock_canonical_gha_env() {
   # compute-visible account home is the canonical source for its private base.
   case "$runner" in b300|gb300) trusted_stage_dir="" ;; esac
   unset CX_MASTER_PORT CX_MORI_KERNEL_TYPE CX_LOCK_DIR CX_STAGE_DIR CX_QOS
-  unset CX_STAGE_PARENT_OWNER_OK
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
   unset CX_RDMA_TRAFFIC_CLASS
@@ -936,9 +965,6 @@ cx_lock_canonical_gha_env() {
     trusted_stage_dir="$(python3 "$CX_RUNTIME_DIR/stage.py" resolve-directory \
       "$trusted_stage_dir")" \
       || cx_die "canonical MI300X execution cannot resolve the shared stage directory"
-  fi
-  if [ "$runner" = b300 ]; then
-    CX_STAGE_PARENT_OWNER_OK=1
   fi
 
   local policy_file policy_key policy_value
@@ -1221,10 +1247,8 @@ cx_stage_path() {
   else
     stage_path="${stage_base%/}/job_$safe_tag"
   fi
-  local -a args=(validate-stage-path "$repo_root" "$stage_base" "$stage_path"
-    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}")
-  [ "${CX_STAGE_PARENT_OWNER_OK:-0}" != 1 ] || args+=(--allow-parent-owner)
-  python3 "$CX_RUNTIME_DIR/stage.py" "${args[@]}"
+  python3 "$CX_RUNTIME_DIR/stage.py" validate-stage-path "$repo_root" "$stage_base" \
+    "$stage_path" "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}"
 }
 
 # Stage only the public benchmark tree into a pre-resolved, private execution
@@ -1291,9 +1315,7 @@ cx_cleanup_stage() {
     cx_log "ERROR: refusing to remove an unrecognized stage directory"
     return 1
   fi
-  local -a args=(validate-cleanup "$mount_src" "$tag")
-  [ "${CX_STAGE_PARENT_OWNER_OK:-0}" != 1 ] || args+=(--allow-uid-mapped-root)
-  if ! python3 "$CX_RUNTIME_DIR/stage.py" "${args[@]}"; then
+  if ! python3 "$CX_RUNTIME_DIR/stage.py" validate-cleanup "$mount_src" "$tag"; then
     cx_log "ERROR: refusing to remove an unowned stage directory"
     return 1
   fi
