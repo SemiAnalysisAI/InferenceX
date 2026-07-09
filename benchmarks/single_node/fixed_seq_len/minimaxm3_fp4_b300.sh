@@ -28,14 +28,14 @@ FLASHINFER_VERSION=0.6.14
 
 python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
 
-python3 -m pip install "flashinfer-python[cu13]==${FLASHINFER_VERSION}" \
+python3 -m pip install --no-deps "flashinfer-python[cu13]==${FLASHINFER_VERSION}" \
     || { echo "FlashInfer ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
 
-python3 -m pip install "flashinfer-cubin==${FLASHINFER_VERSION}" \
+python3 -m pip install --no-deps "flashinfer-cubin==${FLASHINFER_VERSION}" \
     --index-url https://flashinfer.ai/whl \
     || { echo "FlashInfer cubin ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
 
-python3 -m pip install "flashinfer-jit-cache==${FLASHINFER_VERSION}+cu130" \
+python3 -m pip install --no-deps "flashinfer-jit-cache==${FLASHINFER_VERSION}+cu130" \
     --index-url https://flashinfer.ai/whl/cu130 \
     || { echo "FlashInfer JIT cache ${FLASHINFER_VERSION}+cu130 install failed" >&2; exit 1; }
 
