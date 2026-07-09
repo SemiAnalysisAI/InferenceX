@@ -11,10 +11,14 @@ block our benchmark + accuracy configs — so we can keep reusing the
 - `decode_tp_queue_agree.patch`, `swa_reprefill_tail_unified_kv.patch`,
   `dsv4_unified_kv_hicache.patch`, `dsa_paged_mqa_logits_backend.patch`,
   `deepseek_v4_compress_state_coldstart.patch` — reference-only unified
-  diffs. Each mirrors a `patch_*()` function in `../setup_deps.sh`, which is
-  what actually gets applied (idempotently, in-container, at startup); the
-  `.patch` file here is kept as a human-readable copy of the same edit, not
-  something that gets `git apply`'d.
+  diffs, kept as human-readable copies of the four DSv4 patches below for
+  archaeology (upstream PR links, rationale). Not applied directly (no
+  `git apply`) — `files/` below is what actually gets applied.
+- `files/` — whole-file, known-good post-patch copies of every file touched
+  by the four DSv4 patches (see "`files/` — whole-file overlay" below).
+  This is what `../setup_deps.sh`'s `patch_*()` functions actually apply,
+  via the `_copy_patched_file()` helper, idempotently, in-container, at
+  startup.
 
 > Note: the vLLM MoRIIO `minimax-m3` overlay (`moriio/`) was retired once the
 > upstream fixes (vLLM #46039 / #46290 / #46332) shipped in the ROCm nightly
@@ -182,6 +186,69 @@ last-row-only behavior.
 Same version-drift situation as `dsa_paged_mqa_logits_backend.patch` above:
 missing from images built before this PR merged upstream (between
 `20260706` and `20260708`), a no-op once already present.
+
+## `files/` — whole-file overlay (replaces anchor-hunk patching)
+
+`files/python/sglang/<rel_path>` mirrors
+`/sgl-workspace/sglang/python/sglang/<rel_path>` inside the container, one
+file per path touched by the four DSv4 patches above (14 files total).
+Each holds the complete, known-good, POST-PATCH content of that file —
+not a diff.
+
+`setup_deps.sh`'s `_copy_patched_file()` helper drops these in directly
+(`cp`, skipped if the target already matches — see the helper's own
+comment block at the top of `setup_deps.sh`), instead of the previous
+approach of applying anchor-matched string-replace hunks in place.
+
+**Why:** the hunk-based approach is safe against *unrelated* upstream
+drift (a non-matching hunk WARNs and skips instead of corrupting the
+file), but fragile against *any* drift near an anchor. E.g. the
+`20260706` image inserted a new `DEEPSEEK_V4_C4_INDEXER` pool
+`build_pool_entry()` call in the middle of one of
+`hybrid_pool_assembler.py`'s hunks in
+`patch_dsv4_unified_kv_hicache()`, which silently no-op'd patching that
+file entirely (the anchor text no longer matched anywhere) — the server
+still started, but silently without HiCache paging for the compressed
+region. A whole-file copy has no anchors to drift.
+
+**Trade-off:** unlike hunk-based patching, this is all-or-nothing per
+file and has no graceful degradation — it assumes the container's base
+image is close enough to the one `files/` was captured from that
+copying the whole file doesn't clobber unrelated upstream changes. Only
+rely on it for the exact base image tag below; regenerate for anything
+else.
+
+Captured from: `lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706`.
+
+### Regenerating `files/` for a different base image
+
+1. Start a throwaway container from the target base image with this repo
+   bind-mounted (same setup as `job.slurm` uses), e.g.:
+
+   ```bash
+   docker run --rm -it -v "$DI_REPO_DIR:/workspace" \
+     lmsysorg/sglang-rocm:<new-tag> bash
+   ```
+
+2. Inside the container, temporarily restore the anchor-hunk versions of
+   the four `patch_*()` functions from git history (`git log -- \
+   benchmarks/multi_node/amd_utils/setup_deps.sh`, find the commit before
+   they were replaced by `_copy_patched_file()` calls) and source that
+   version of `setup_deps.sh` with every relevant patch's gating env vars
+   set (`KV_OFFLOADING=dram`, `KV_OFFLOAD_BACKEND=hicache`,
+   `SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton`, etc. — so
+   `patch_dsv4_unified_kv_hicache()` isn't skipped).
+3. Watch the container log for `[SETUP] Patched: ...` / `[SETUP] Wrote:
+   ...` lines confirming every hunk applied — any `WARN: anchor ... not
+   found` means upstream drifted and the hunk needs manual reconciliation
+   before trusting the output.
+4. Copy each patched file at
+   `/sgl-workspace/sglang/python/sglang/<rel_path>` out to
+   `patches/files/python/sglang/<rel_path>` in this repo, overwriting the
+   existing copy.
+5. `diff` the new files against the old ones and sanity-check the diff
+   only contains the expected upstream-version delta, then update the
+   "Captured from" tag above.
 
 ## How to enable
 
