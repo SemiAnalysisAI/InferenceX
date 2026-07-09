@@ -144,7 +144,7 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
     elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias
         # ("nvidia/GLM-5-NVFP4") in the upstream GLM5 trtllm_dynamo recipes.
-        export MODEL_PATH="/home/sa-shared/glm-model/GLM-5-NVFP4"
+        export MODEL_PATH="/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4"
         export SERVED_MODEL_NAME="glm-5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
     else
