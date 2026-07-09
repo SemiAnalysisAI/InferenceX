@@ -9,9 +9,10 @@ block our benchmark + accuracy configs — so we can keep reusing the
 - `mori_conn.py` — single-file overlay (bind-mounted) for the **sglang**
   MoRI backend.
 - `decode_tp_queue_agree.patch`, `swa_reprefill_tail_unified_kv.patch`,
-  `dsv4_unified_kv_hicache.patch` — reference-only unified diffs. Each
-  mirrors a `patch_*()` function in `../setup_deps.sh`, which is what
-  actually gets applied (idempotently, in-container, at startup); the
+  `dsv4_unified_kv_hicache.patch`, `dsa_paged_mqa_logits_backend.patch`,
+  `deepseek_v4_compress_state_coldstart.patch` — reference-only unified
+  diffs. Each mirrors a `patch_*()` function in `../setup_deps.sh`, which is
+  what actually gets applied (idempotently, in-container, at startup); the
   `.patch` file here is kept as a human-readable copy of the same edit, not
   something that gets `git apply`'d.
 
@@ -122,6 +123,65 @@ WARN-and-skip (not corrupt the file) if its anchor text doesn't match
 byte-for-byte — check the container startup log for
 `[SETUP] Patched: hybrid_pool_assembler.py` (and the other touched files) to
 confirm it actually applied before relying on unified_kv + HiCache.
+
+## `dsa_paged_mqa_logits_backend.patch`
+
+Reference mirror of upstream
+[sgl-project/sglang#30374](https://github.com/sgl-project/sglang/pull/30374).
+Applied via `setup_deps.sh`'s `patch_dsa_paged_mqa_logits_backend()`,
+unconditionally.
+
+Adds the `sglang.jit_kernel.dsa` package (`paged_mqa_logits.py` +
+`paged_mqa_logits_backend.py`'s `DSAPagedMQALogitsBackend` enum) and rewires
+`dsa_indexer.py`'s paged-MQA-logits dispatch — previously an inline
+`if _is_hip: ... elif use_dg_native: ... else: ...` chain — through it, plus
+a new `--dsa-paged-mqa-logits-backend` server arg (default `"auto"`). On
+ROCm this is a pure refactor: `DSAPagedMQALogitsBackend.resolve()` always
+resolves to `AITER` on HIP (raising for anything else the arg could be set
+to), and the new `is_aiter()` branch calls the exact same
+`aiter.ops.triton.pa_mqa_logits.deepgemm_fp8_paged_mqa_logits` kernel the old
+`if _is_hip:` branch called directly.
+
+Needed because upstream landed this refactor between the `20260706` and
+`20260708` `lmsysorg/sglang-rocm` image tags — images built from `20260706`
+or earlier are missing it entirely (`sglang.jit_kernel.dsa` doesn't exist),
+while `20260708`+ already has it baked in and this patch is a no-op
+(gated by the `sglang.jit_kernel.dsa` package's presence).
+
+The CUTE DSL backend (`jit_kernel/dsa/cutedsl_paged_mqa_logits.py`,
+SM100/Blackwell-only) is intentionally **not** installed by this patch:
+both `jit_kernel/dsa/__init__.py` and `paged_mqa_logits.py`'s
+`cutedsl_paged_mqa_logits()` gate its import behind `is_hip()` / a local
+(deferred) import, so it is never imported or executed on ROCm — shipping
+~16KB of dead NVIDIA-only code would add risk (e.g. an import error if a
+transitive dependency is missing) for zero behavioral benefit on our
+hardware.
+
+Verified byte-for-byte identical to the actual patched files baked into
+`rocm/pytorch-private:sglang-0.5.14-rocm720-mi35x-mori-0706` by running the
+patch function inside a fresh `lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706`
+container and diffing the result.
+
+## `deepseek_v4_compress_state_coldstart.patch`
+
+Reference mirror of upstream
+[sgl-project/sglang#30333](https://github.com/sgl-project/sglang/pull/30333).
+Applied via `setup_deps.sh`'s
+`patch_deepseek_v4_compress_state_coldstart()`, unconditionally.
+
+`CompressStatePool.clear_all_state()` only clears the last row of
+`kv_score_buffer` (the "empty state" sentinel row) — correct for the
+index-addressed C4 pool, but the ROCm/HIP C128 layout addresses
+request-scoped state by `req_pool_idx` (a per-request ring, not
+content-addressed). Since the pool is allocated via `torch.empty()`, a cold
+server can read uninitialized garbage as a request's "previous" compress
+state before that request's slot has ever been written. Initializes every
+C128 row to the sentinel on HIP; C4 (and non-HIP) keep the original
+last-row-only behavior.
+
+Same version-drift situation as `dsa_paged_mqa_logits_backend.patch` above:
+missing from images built before this PR merged upstream (between
+`20260706` and `20260708`), a no-op once already present.
 
 ## How to enable
 

@@ -1012,6 +1012,18 @@ if os.path.isfile(hpa_path):
             ),
             (
                 "gate c4 state pools by is_unified_kv + c128 helper call",
+                "        c4_indexer_host_pool = DeepSeekV4PagedHostPool(\n"
+                "            pool_name=str(PoolName.DEEPSEEK_V4_C4_INDEXER),\n"
+                "            device_buffers=kvcache.c4_indexer_kv_pool.index_k_with_scale_buffer,\n"
+                "            item_bytes=(\n"
+                "                kvcache.c4_indexer_kv_pool.index_k_with_scale_buffer[0].shape[1]\n"
+                "                * kvcache.c4_indexer_kv_pool.index_k_with_scale_buffer[0].element_size()\n"
+                "            ),\n"
+                "            num_host_pages=num_host_pages,\n"
+                "            slot_page_size=page_size,\n"
+                "            layout=server_args.hicache_mem_layout,\n"
+                "            allocator_type=server_args.hicache_storage_backend,\n"
+                "        )\n"
                 "        c4_state_host_pool = DeepSeekV4StateHostPool(\n"
                 "            pool_name=str(PoolName.DEEPSEEK_V4_C4_STATE),\n"
                 "            state_pools=[\n"
@@ -1044,6 +1056,13 @@ if os.path.isfile(hpa_path):
                 "                    transfer_layer_num=transfer_layer_num,\n"
                 "                ),\n"
                 "                build_pool_entry(\n"
+                "                    name=PoolName.DEEPSEEK_V4_C4_INDEXER,\n"
+                "                    host_pool=c4_indexer_host_pool,\n"
+                "                    device_pool=kvcache.c4_indexer_kv_pool,\n"
+                "                    layer_mapping=c4_layer_mapping,\n"
+                "                    transfer_layer_num=transfer_layer_num,\n"
+                "                ),\n"
+                "                build_pool_entry(\n"
                 "                    name=PoolName.DEEPSEEK_V4_C4_STATE,\n"
                 "                    host_pool=c4_state_host_pool,\n"
                 "                    device_pool=None,\n"
@@ -1071,6 +1090,13 @@ if os.path.isfile(hpa_path):
                 "                    name=PoolName.DEEPSEEK_V4_C4,\n"
                 "                    host_pool=c4_host_pool,\n"
                 "                    device_pool=kvcache.c4_kv_pool,\n"
+                "                    layer_mapping=c4_layer_mapping,\n"
+                "                    transfer_layer_num=transfer_layer_num,\n"
+                "                ),\n"
+                "                build_pool_entry(\n"
+                "                    name=PoolName.DEEPSEEK_V4_C4_INDEXER,\n"
+                "                    host_pool=c4_indexer_host_pool,\n"
+                "                    device_pool=kvcache.c4_indexer_kv_pool,\n"
                 "                    layer_mapping=c4_layer_mapping,\n"
                 "                    transfer_layer_num=transfer_layer_num,\n"
                 "                ),\n"
@@ -1229,6 +1255,645 @@ PYEOF
 }
 
 # ---------------------------------------------------------------------------
+# SGLang: DSA indexer paged-MQA-logits backend abstraction (AITER on ROCm).
+# Mirrors upstream sgl-project/sglang#30374.
+#
+# Adds the sglang.jit_kernel.dsa package (paged_mqa_logits.py +
+# paged_mqa_logits_backend.py's DSAPagedMQALogitsBackend enum) and rewires
+# dsa_indexer.py's paged-MQA-logits dispatch (previously an inline
+# `if _is_hip: ... elif use_dg_native: ... else: ...` chain) through it, plus
+# a new `--dsa-paged-mqa-logits-backend` server arg (default "auto").
+#
+# On ROCm this is a refactor, not a behavior change: DSAPagedMQALogitsBackend
+# .resolve() always resolves to AITER on HIP (raises for anything else), and
+# the new `is_aiter()` branch calls the same
+# aiter.ops.triton.pa_mqa_logits.deepgemm_fp8_paged_mqa_logits kernel the old
+# `if _is_hip:` branch called directly. The CUTE DSL backend
+# (jit_kernel/dsa/cutedsl_paged_mqa_logits.py, SM100/Blackwell-only) is
+# intentionally NOT installed here: jit_kernel/dsa/__init__.py and
+# paged_mqa_logits.py's cutedsl_paged_mqa_logits() both gate its import
+# behind `is_hip()`/local-import, so it is never imported/executed on ROCm.
+#
+# Depends on nothing else in this file; safe to run unconditionally.
+# ---------------------------------------------------------------------------
+patch_dsa_paged_mqa_logits_backend() {
+    python3 - <<'PYEOF'
+import os
+
+SGLANG_ROOT = "/sgl-workspace/sglang/python/sglang"
+
+
+def write_new_file(rel_path, marker, content):
+    path = os.path.join(SGLANG_ROOT, rel_path)
+    if os.path.isfile(path) and marker in open(path).read():
+        print(f"[SETUP] {rel_path} already present")
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(content)
+    print(f"[SETUP] Wrote: {rel_path}")
+
+
+def patch_file(path, marker, hunks):
+    if not os.path.isfile(path):
+        print(f"[SETUP] {path} not found, skipping")
+        return
+    src = open(path).read()
+    if marker in src:
+        print(f"[SETUP] {os.path.basename(path)} dsa-paged-mqa-logits-backend patch already applied")
+        return
+    for label, old, new in hunks:
+        if old not in src:
+            print(
+                f"[SETUP] WARN: {os.path.basename(path)} anchor for '{label}' not "
+                "found — sglang version may have changed"
+            )
+            return
+        src = src.replace(old, new, 1)
+    open(path, "w").write(src)
+    print(f"[SETUP] Patched: {os.path.basename(path)} dsa-paged-mqa-logits-backend")
+
+
+# --- new file: srt/layers/attention/dsa/paged_mqa_logits_backend.py -------
+write_new_file(
+    "srt/layers/attention/dsa/paged_mqa_logits_backend.py",
+    marker="class DSAPagedMQALogitsBackend",
+    content='''from __future__ import annotations
+
+from enum import Enum
+
+from sglang.srt.utils import is_hip, is_sm100_supported
+
+
+class DSAPagedMQALogitsBackend(Enum):
+    DEEPGEMM = "deepgemm"
+    CUTEDSL = "cutedsl"
+    AITER = "aiter"
+
+    def is_deepgemm(self) -> bool:
+        return self == DSAPagedMQALogitsBackend.DEEPGEMM
+
+    def is_cutedsl(self) -> bool:
+        return self == DSAPagedMQALogitsBackend.CUTEDSL
+
+    def is_aiter(self) -> bool:
+        return self == DSAPagedMQALogitsBackend.AITER
+
+    @staticmethod
+    def resolve(value: str) -> DSAPagedMQALogitsBackend:
+        if is_hip():
+            if value not in ("auto", "aiter"):
+                raise ValueError(
+                    f"dsa_paged_mqa_logits_backend={value!r} is not supported on "
+                    "ROCm; only 'aiter' is implemented."
+                )
+            return DSAPagedMQALogitsBackend.AITER
+
+        if value == "auto" or value == "deepgemm":
+            return DSAPagedMQALogitsBackend.DEEPGEMM
+        if value == "aiter":
+            raise ValueError("dsa_paged_mqa_logits_backend='aiter' requires ROCm.")
+        if value == "cutedsl":
+            if not is_sm100_supported():
+                raise ValueError(
+                    "dsa_paged_mqa_logits_backend='cutedsl' requires SM100 (Blackwell)."
+                )
+            return DSAPagedMQALogitsBackend.CUTEDSL
+        raise ValueError(f"Unknown dsa_paged_mqa_logits_backend: {value!r}")
+''',
+)
+
+# --- new file: jit_kernel/dsa/__init__.py ---------------------------------
+# NOTE: omits the `from .cutedsl_paged_mqa_logits import ...` branch's target
+# module (cutedsl_paged_mqa_logits.py, SM100/Blackwell-only) since that
+# import is gated by `if not is_hip()` and is therefore dead code on ROCm.
+write_new_file(
+    "jit_kernel/dsa/__init__.py",
+    marker="aiter_paged_mqa_logits",
+    content='''from sglang.srt.utils import is_hip
+
+from .paged_mqa_logits import (
+    aiter_paged_mqa_logits,
+    cutedsl_paged_mqa_logits,
+    deepgemm_paged_mqa_logits_native,
+    deepgemm_paged_mqa_logits_split,
+)
+
+if not is_hip():
+    # Preserve the original eager import behavior on non-ROCm platforms.
+    from .cutedsl_paged_mqa_logits import CuteDSLPagedMQALogitsRunner, pick_dsl_expand
+
+__all__ = [
+    "CuteDSLPagedMQALogitsRunner",
+    "pick_dsl_expand",
+    "aiter_paged_mqa_logits",
+    "cutedsl_paged_mqa_logits",
+    "deepgemm_paged_mqa_logits_native",
+    "deepgemm_paged_mqa_logits_split",
+]
+''',
+)
+
+# --- new file: jit_kernel/dsa/paged_mqa_logits.py -------------------------
+write_new_file(
+    "jit_kernel/dsa/paged_mqa_logits.py",
+    marker="def aiter_paged_mqa_logits",
+    content='''# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+from __future__ import annotations
+
+from collections.abc import Callable
+
+import torch
+
+
+def deepgemm_paged_mqa_logits_native(
+    fp8_paged_mqa_logits_fn: Callable[..., torch.Tensor],
+    q_fp8: torch.Tensor,
+    kv_cache_fp8: torch.Tensor,
+    weights: torch.Tensor,
+    ctx_lens_2d: torch.Tensor,
+    block_tables: torch.Tensor,
+    schedule_metadata: torch.Tensor,
+    max_seq_len: int,
+    *,
+    q_offset: int,
+    B: int,
+    next_n: int,
+) -> torch.Tensor:
+    # block_tables[::next_n] de-expands the caller's repeat_interleave without a
+    # copy (DeepGEMM only checks `stride(1) == 1`).
+    return fp8_paged_mqa_logits_fn(
+        q_fp8[:q_offset].view(B, next_n, q_fp8.shape[1], q_fp8.shape[2]),
+        kv_cache_fp8,
+        weights[:q_offset],
+        ctx_lens_2d,
+        block_tables[::next_n],
+        schedule_metadata,
+        max_seq_len,
+        clean_logits=False,
+    )
+
+
+def deepgemm_paged_mqa_logits_split(
+    fp8_paged_mqa_logits_fn: Callable[..., torch.Tensor],
+    q_fp8: torch.Tensor,
+    kv_cache_fp8: torch.Tensor,
+    weights: torch.Tensor,
+    ctx_lens_2d: torch.Tensor,
+    block_tables: torch.Tensor,
+    schedule_metadata: torch.Tensor,
+    max_seq_len: int,
+    *,
+    q_offset: int,
+) -> torch.Tensor:
+    q_fp8 = q_fp8.unsqueeze(1)
+    return fp8_paged_mqa_logits_fn(
+        q_fp8[:q_offset],
+        kv_cache_fp8,
+        weights[:q_offset],
+        ctx_lens_2d,
+        block_tables,
+        schedule_metadata,
+        max_seq_len,
+        clean_logits=False,
+    )
+
+
+def aiter_paged_mqa_logits(
+    q_fp8: torch.Tensor,
+    kv_cache_fp8: torch.Tensor,
+    weights: torch.Tensor,
+    seq_lens: torch.Tensor,
+    block_tables: torch.Tensor,
+    max_seq_len: int,
+    *,
+    preshuffle: bool,
+    kv_block_size: int,
+) -> torch.Tensor:
+    from aiter.ops.triton.pa_mqa_logits import deepgemm_fp8_paged_mqa_logits
+
+    q_fp8 = q_fp8.unsqueeze(1)
+    batch_size, next_n, _, _ = q_fp8.shape
+    logits = torch.empty(
+        (batch_size * next_n, max_seq_len),
+        device=q_fp8.device,
+        dtype=torch.float32,
+    )
+    deepgemm_fp8_paged_mqa_logits(
+        q_fp8,
+        kv_cache_fp8,
+        weights,
+        logits,
+        seq_lens,
+        block_tables,
+        max_seq_len,
+        Preshuffle=preshuffle,
+        KVBlockSize=kv_block_size,
+    )
+    return logits
+
+
+def cutedsl_paged_mqa_logits(
+    q_fp8: torch.Tensor,
+    kv_cache_fp8: torch.Tensor,
+    weights: torch.Tensor,
+    ctx_lens_1d: torch.Tensor,
+    block_tables: torch.Tensor,
+    schedule_metadata: torch.Tensor | None,
+    max_seq_len: int,
+    *,
+    q_offset: int,
+    B: int,
+    next_n: int,
+    is_target_verify: bool,
+    dsl_expand_factor: int,
+    dsl_atom: int,
+    blocksize: int,
+    sm_count: int,
+    get_paged_mqa_logits_metadata_fn: Callable[..., torch.Tensor],
+) -> torch.Tensor:
+    from sglang.jit_kernel.dsa.cutedsl_paged_mqa_logits import (
+        CuteDSLPagedMQALogitsRunner,
+    )
+
+    dsl_atom_split = dsl_expand_factor > 1 and next_n == dsl_expand_factor * dsl_atom
+    if is_target_verify and dsl_atom_split:
+        exp_B = B * dsl_expand_factor
+        q_dsl = q_fp8[:q_offset].view(exp_B, dsl_atom, q_fp8.shape[1], q_fp8.shape[2])
+        ctx_lens_1d = ctx_lens_1d.repeat_interleave(dsl_expand_factor)
+        block_tables_dsl = block_tables[::next_n].repeat_interleave(
+            dsl_expand_factor, dim=0
+        )
+        schedule_metadata = get_paged_mqa_logits_metadata_fn(
+            ctx_lens_1d.unsqueeze(-1), blocksize, sm_count
+        )
+    elif is_target_verify and next_n >= 2:
+        # Native single-launch: one task per batch entry (the kernel iterates
+        # next_n internally), so the schedule must be built from B-length
+        # context lens, not the caller's [B, next_n] or per-token layout.
+        q_dsl = q_fp8[:q_offset].view(B, next_n, q_fp8.shape[1], q_fp8.shape[2])
+        block_tables_dsl = block_tables[::next_n]
+        schedule_metadata = get_paged_mqa_logits_metadata_fn(
+            ctx_lens_1d.unsqueeze(-1), blocksize, sm_count
+        )
+    else:
+        q_dsl = q_fp8[:q_offset].unsqueeze(1)
+        block_tables_dsl = block_tables[:B]
+
+    return CuteDSLPagedMQALogitsRunner.forward(
+        q_dsl,
+        kv_cache_fp8.view(torch.uint8),
+        weights[:q_offset],
+        ctx_lens_1d,
+        block_tables_dsl,
+        schedule_metadata,
+        max_seq_len,
+    )
+''',
+)
+
+# --- dsa_indexer.py: rewire the paged-MQA-logits dispatch through the ------
+# --- new backend abstraction -----------------------------------------------
+patch_file(
+    "/sgl-workspace/sglang/python/sglang/srt/layers/attention/dsa/dsa_indexer.py",
+    marker="self.paged_mqa_logits_backend = DSAPagedMQALogitsBackend.resolve",
+    hunks=[
+        (
+            "imports: jit_kernel.dsa + paged_mqa_logits_backend",
+            "from sglang.jit_kernel.fused_store_index_cache import (\n"
+            "    can_use_dsa_fused_store,\n"
+            "    fused_store_index_k_cache,\n"
+            ")\n"
+            "from sglang.srt.compilation.compilation_config import register_split_op\n"
+            "from sglang.srt.environ import envs\n"
+            "from sglang.srt.layers.attention.dsa.utils import (\n",
+            "from sglang.jit_kernel.dsa import (\n"
+            "    aiter_paged_mqa_logits,\n"
+            "    cutedsl_paged_mqa_logits,\n"
+            "    deepgemm_paged_mqa_logits_native,\n"
+            "    deepgemm_paged_mqa_logits_split,\n"
+            ")\n"
+            "from sglang.jit_kernel.fused_store_index_cache import (\n"
+            "    can_use_dsa_fused_store,\n"
+            "    fused_store_index_k_cache,\n"
+            ")\n"
+            "from sglang.srt.compilation.compilation_config import register_split_op\n"
+            "from sglang.srt.environ import envs\n"
+            "from sglang.srt.layers.attention.dsa.paged_mqa_logits_backend import (\n"
+            "    DSAPagedMQALogitsBackend,\n"
+            ")\n"
+            "from sglang.srt.layers.attention.dsa.utils import (\n",
+        ),
+        (
+            "imports: get_server_args",
+            "from sglang.srt.runtime_context import get_parallel\n",
+            "from sglang.srt.runtime_context import get_parallel, get_server_args\n",
+        ),
+        (
+            "module-level: conditional pick_dsl_expand import",
+            "_is_cuda = is_cuda()\n"
+            "_is_hip = is_hip()\n"
+            "_is_npu = is_npu()\n"
+            '_use_aiter = get_bool_env_var("SGLANG_USE_AITER") and _is_hip\n',
+            "_is_cuda = is_cuda()\n"
+            "_is_hip = is_hip()\n"
+            "_is_npu = is_npu()\n"
+            "if not _is_hip:\n"
+            "    # Preserve the original eager import behavior on non-ROCm platforms.\n"
+            "    from sglang.jit_kernel.dsa import pick_dsl_expand\n"
+            '_use_aiter = get_bool_env_var("SGLANG_USE_AITER") and _is_hip\n',
+        ),
+        (
+            "__init__: resolve paged_mqa_logits_backend",
+            "        self.block_size = block_size\n"
+            "        self.scale_fmt = scale_fmt\n"
+            "        self.softmax_scale = self.head_dim**-0.5\n"
+            "\n"
+            "    @contextlib.contextmanager\n"
+            "    def _with_real_sm_count(self):\n",
+            "        self.block_size = block_size\n"
+            "        self.scale_fmt = scale_fmt\n"
+            "        self.softmax_scale = self.head_dim**-0.5\n"
+            "\n"
+            "        self.paged_mqa_logits_backend = DSAPagedMQALogitsBackend.resolve(\n"
+            "            get_server_args().dsa_paged_mqa_logits_backend\n"
+            "        )\n"
+            "\n"
+            "    @contextlib.contextmanager\n"
+            "    def _with_real_sm_count(self):\n",
+        ),
+        (
+            "forward: compute use_cute_dsl / dsl_expand_factor before use_dg_native",
+            "        # Reuse pre-computed schedule metadata if available (from init_forward_metadata),\n"
+            "        # otherwise fall back to computing it here.\n"
+            '        schedule_metadata = getattr(metadata, "paged_mqa_schedule_metadata", None)\n'
+            "\n"
+            "        assert len(q_fp8.shape) == 3\n"
+            "        # attn_tp_size > 1 or MAX_LEN padding mode can leave padding in the\n"
+            "        # hidden states; q_offset is the real (unpadded) q length.\n"
+            "        q_offset = sum(metadata.get_dsa_extend_len_cpu())\n"
+            "\n"
+            "        # DG-native q=[B,next_n,H,D] is faster than expanded q=[B*next_n,1,H,D]\n"
+            "        # for target_verify with next_n>=2 (bigger MMA tile, fewer atoms). The\n"
+            "        # precomputed ctx_lens_2d's shape is the single source of truth — if\n"
+            "        # dsa_backend chose the per-token layout (e.g. non-SM100), fall through\n"
+            "        # to the expanded path.\n"
+            "        B = metadata.get_seqlens_int32().shape[0]\n"
+            "        next_n = q_offset // B if B > 0 else 0\n"
+            '        ctx_2d = getattr(metadata, "paged_mqa_ctx_lens_2d", None)\n'
+            "        use_dg_native = (\n"
+            "            _is_cuda\n"
+            "            and forward_batch.forward_mode.is_target_verify()\n"
+            "            and next_n >= 2\n"
+            "            and ctx_2d is not None\n",
+            "        # Reuse pre-computed schedule metadata if available (from init_forward_metadata),\n"
+            "        # otherwise fall back to computing it here.\n"
+            '        schedule_metadata = getattr(metadata, "paged_mqa_schedule_metadata", None)\n'
+            "        assert len(q_fp8.shape) == 3\n"
+            "        # attn_tp_size > 1 or MAX_LEN padding mode can leave padding in the\n"
+            "        # hidden states; q_offset is the real (unpadded) q length.\n"
+            "        q_offset = sum(metadata.get_dsa_extend_len_cpu())\n"
+            "\n"
+            "        B = metadata.get_seqlens_int32().shape[0]\n"
+            "        next_n = q_offset // B if B > 0 else 0\n"
+            "        use_cute_dsl = (\n"
+            "            self.paged_mqa_logits_backend.is_cutedsl()\n"
+            "            and not forward_batch.forward_mode.is_draft_extend_v2()\n"
+            "        )\n"
+            "        dsl_expand_factor, dsl_atom = 1, 1\n"
+            "        if (\n"
+            "            use_cute_dsl\n"
+            "            and forward_batch.forward_mode.is_target_verify()\n"
+            "            and next_n >= 2\n"
+            "        ):\n"
+            "            dsl_expand_factor, dsl_atom = pick_dsl_expand(\n"
+            "                next_n,\n"
+            "                batch_size=B,\n"
+            "                max_ctx=max_seq_len,\n"
+            "                num_sms=self.sm_count,\n"
+            "                kernel_atoms=(1, 2, 3, 4),\n"
+            "                num_heads=self.n_heads,\n"
+            "            )\n"
+            '        ctx_2d = getattr(metadata, "paged_mqa_ctx_lens_2d", None)\n'
+            "        use_dg_native = (\n"
+            "            not use_cute_dsl\n"
+            "            and _is_cuda\n"
+            "            and forward_batch.forward_mode.is_target_verify()\n"
+            "            and next_n >= 2\n"
+            "            and ctx_2d is not None\n",
+        ),
+        (
+            "forward: dispatch chain -> backend abstraction",
+            "        assert len(weights.shape) == 3\n"
+            "        weights = weights.squeeze(2)\n"
+            "\n"
+            "        if _is_hip:\n"
+            "            from aiter.ops.triton.pa_mqa_logits import deepgemm_fp8_paged_mqa_logits\n"
+            "\n"
+            "            q_fp8 = q_fp8.unsqueeze(1)\n"
+            "            batch_size, next_n, heads, _ = q_fp8.shape\n"
+            "            logits = torch.empty(\n"
+            "                (batch_size * next_n, max_seq_len),\n"
+            "                device=q_fp8.device,\n"
+            "                dtype=torch.float32,\n"
+            "            )\n"
+            "            deepgemm_fp8_paged_mqa_logits(\n"
+            "                q_fp8,\n"
+            "                kv_cache_fp8,\n"
+            "                weights,\n"
+            "                logits,\n"
+            "                seqlens_32,\n"
+            "                block_tables,\n"
+            "                max_seq_len,\n"
+            "                Preshuffle=_use_aiter_preshuffle,\n"
+            "                KVBlockSize=block_kv,\n"
+            "            )\n"
+            "        elif use_dg_native:\n"
+            "            # block_tables[::next_n] de-expands dsa_backend's repeat_interleave\n"
+            "            # without a copy (DG only checks `stride(1) == 1`).\n"
+            "            logits = deep_gemm.fp8_paged_mqa_logits(\n"
+            "                q_fp8[:q_offset].view(B, next_n, q_fp8.shape[1], q_fp8.shape[2]),\n"
+            "                kv_cache_fp8,\n"
+            "                weights[:q_offset],\n"
+            "                seqlens_32_2d,\n"
+            "                block_tables[::next_n],\n"
+            "                schedule_metadata,\n"
+            "                max_seq_len,\n"
+            "                clean_logits=False,\n"
+            "            )\n"
+            "        else:\n"
+            "            q_fp8 = q_fp8.unsqueeze(1)\n"
+            "            logits = deep_gemm.fp8_paged_mqa_logits(\n"
+            "                q_fp8[:q_offset],\n"
+            "                kv_cache_fp8,\n"
+            "                weights[:q_offset],\n"
+            "                seqlens_32_2d,\n"
+            "                block_tables,\n"
+            "                schedule_metadata,\n"
+            "                max_seq_len,\n"
+            "                clean_logits=False,\n"
+            "            )\n",
+            "        assert len(weights.shape) == 3\n"
+            "        weights = weights.squeeze(2)\n"
+            "\n"
+            "        if self.paged_mqa_logits_backend.is_aiter():\n"
+            "            logits = aiter_paged_mqa_logits(\n"
+            "                q_fp8,\n"
+            "                kv_cache_fp8,\n"
+            "                weights,\n"
+            "                seqlens_32,\n"
+            "                block_tables,\n"
+            "                max_seq_len,\n"
+            "                preshuffle=_use_aiter_preshuffle,\n"
+            "                kv_block_size=block_kv,\n"
+            "            )\n"
+            "        elif use_cute_dsl:\n"
+            "            logits = cutedsl_paged_mqa_logits(\n"
+            "                q_fp8,\n"
+            "                kv_cache_fp8,\n"
+            "                weights,\n"
+            "                metadata.get_seqlens_int32(),\n"
+            "                block_tables,\n"
+            "                schedule_metadata,\n"
+            "                max_seq_len,\n"
+            "                q_offset=q_offset,\n"
+            "                B=B,\n"
+            "                next_n=next_n,\n"
+            "                is_target_verify=forward_batch.forward_mode.is_target_verify(),\n"
+            "                dsl_expand_factor=dsl_expand_factor,\n"
+            "                dsl_atom=dsl_atom,\n"
+            "                blocksize=blocksize,\n"
+            "                sm_count=self.sm_count,\n"
+            "                get_paged_mqa_logits_metadata_fn=deep_gemm.get_paged_mqa_logits_metadata,\n"
+            "            )\n"
+            "        elif use_dg_native:\n"
+            "            logits = deepgemm_paged_mqa_logits_native(\n"
+            "                deep_gemm.fp8_paged_mqa_logits,\n"
+            "                q_fp8,\n"
+            "                kv_cache_fp8,\n"
+            "                weights,\n"
+            "                seqlens_32_2d,\n"
+            "                block_tables,\n"
+            "                schedule_metadata,\n"
+            "                max_seq_len,\n"
+            "                q_offset=q_offset,\n"
+            "                B=B,\n"
+            "                next_n=next_n,\n"
+            "            )\n"
+            "        else:\n"
+            "            logits = deepgemm_paged_mqa_logits_split(\n"
+            "                deep_gemm.fp8_paged_mqa_logits,\n"
+            "                q_fp8,\n"
+            "                kv_cache_fp8,\n"
+            "                weights,\n"
+            "                seqlens_32_2d,\n"
+            "                block_tables,\n"
+            "                schedule_metadata,\n"
+            "                max_seq_len,\n"
+            "                q_offset=q_offset,\n"
+            "            )\n",
+        ),
+    ],
+)
+
+# --- server_args.py: add --dsa-paged-mqa-logits-backend --------------------
+patch_file(
+    "/sgl-workspace/sglang/python/sglang/srt/server_args.py",
+    marker="DSA_PAGED_MQA_LOGITS_BACKEND_CHOICES",
+    hunks=[
+        (
+            "add DSA_PAGED_MQA_LOGITS_BACKEND_CHOICES constant",
+            "DSA_TOPK_BACKEND_CHOICES = [\"sgl-kernel\", \"torch\", \"flashinfer\"]\n",
+            "DSA_TOPK_BACKEND_CHOICES = [\"sgl-kernel\", \"torch\", \"flashinfer\"]\n"
+            "\n"
+            'DSA_PAGED_MQA_LOGITS_BACKEND_CHOICES = ["auto", "deepgemm", "cutedsl", "aiter"]\n',
+        ),
+        (
+            "add dsa_paged_mqa_logits_backend field",
+            "    dsa_topk_backend: A[\n"
+            "        str,\n"
+            "        Arg(\n"
+            '            help="DSA indexer top-k backend. Options: \'sgl-kernel\', \'torch\', \'flashinfer\'. The \'torch\' backend currently requires SGLANG_DSA_FUSE_TOPK=false.",\n'
+            "            choices=DSA_TOPK_BACKEND_CHOICES,\n"
+            "        ),\n"
+            '    ] = "sgl-kernel"\n',
+            "    dsa_paged_mqa_logits_backend: A[\n"
+            "        str,\n"
+            "        Arg(\n"
+            '            help="DSA indexer paged MQA logits kernel backend. Options: \'auto\' (default; DeepGEMM on CUDA, aiter on ROCm), \'deepgemm\', \'cutedsl\' (CuTe DSL kernel, SM 100 (Blackwell) only; wins at low batch size and long context), \'aiter\' (ROCm only).",\n'
+            "            choices=DSA_PAGED_MQA_LOGITS_BACKEND_CHOICES,\n"
+            "        ),\n"
+            '    ] = "auto"\n'
+            "    dsa_topk_backend: A[\n"
+            "        str,\n"
+            "        Arg(\n"
+            '            help="DSA indexer top-k backend. Options: \'sgl-kernel\', \'torch\', \'flashinfer\'. The \'torch\' backend currently requires SGLANG_DSA_FUSE_TOPK=false.",\n'
+            "            choices=DSA_TOPK_BACKEND_CHOICES,\n"
+            "        ),\n"
+            '    ] = "sgl-kernel"\n',
+        ),
+    ],
+)
+PYEOF
+    _SETUP_INSTALLED+=("dsa-paged-mqa-logits-backend-fix")
+}
+
+# ---------------------------------------------------------------------------
+# SGLang: fix cold-start uninitialized C128 compress-state read on HIP.
+# Mirrors upstream sgl-project/sglang#30333.
+#
+# CompressStatePool.clear_all_state() only clears the LAST row of
+# kv_score_buffer (the historical "empty state" sentinel row). That is
+# correct for the index-addressed C4 pool, but the ROCm/HIP C128 layout
+# addresses request-scoped state by req_pool_idx (a per-request ring, not
+# content-addressed) — with the pool allocated via torch.empty(), a cold
+# server can read uninitialized garbage as a request's "previous" compress
+# state before that request's slot has ever been written. Initialize every
+# C128 row to the sentinel on HIP; C4 (and non-HIP) keep the original
+# last-row-only behavior.
+# ---------------------------------------------------------------------------
+patch_deepseek_v4_compress_state_coldstart() {
+    python3 -c '
+import os, sys
+
+target = "/sgl-workspace/sglang/python/sglang/srt/mem_cache/deepseek_v4_compress_state.py"
+if not os.path.isfile(target):
+    print("[SETUP] deepseek_v4_compress_state.py not found, skipping")
+    sys.exit(0)
+
+src = open(target).read()
+
+if "Request-scoped C128 state is addressed by req_pool_idx" in src:
+    print("[SETUP] deepseek_v4_compress_state.py cold-start patch already applied")
+    sys.exit(0)
+
+old = "        if not online:\n            self.kv_score_buffer[-1].clear()\n"
+new = (
+    "        if not online:\n"
+    "            if _is_hip and ratio == 128:\n"
+    "                # Request-scoped C128 state is addressed by req_pool_idx (or a\n"
+    "                # per-request ring).  The pool is allocated with torch.empty(),\n"
+    "                # so a cold server can otherwise read uninitialized partial\n"
+    "                # states before a request slot has been written for the first\n"
+    "                # time.  Initialize all C128 rows to the empty-state sentinel;\n"
+    "                # C4 keeps the historical last-row sentinel behavior.\n"
+    "                self.kv_score_buffer.clear()\n"
+    "            else:\n"
+    "                self.kv_score_buffer[-1].clear()\n"
+)
+
+if old not in src:
+    print("[SETUP] WARN: deepseek_v4_compress_state.py anchor not found — sglang version may have changed")
+    sys.exit(0)
+
+open(target, "w").write(src.replace(old, new, 1))
+print("[SETUP] Patched: deepseek_v4_compress_state.py cold-start C128 init")
+'
+    _SETUP_INSTALLED+=("dsv4-compress-state-coldstart-fix")
+}
+
+# ---------------------------------------------------------------------------
 # SGLang: soften host>device KV pool assert (Mooncake / page_first_direct).
 #
 # With page_first_direct + a storage backend, SGLang asserts the host KV pool
@@ -1308,6 +1973,8 @@ else
     patch_gluon_pa_mqa_logits_instr_shape
     patch_disagg_prefill_bootstrap_desync
     # patch_decode_tp_queue_agree
+    patch_dsa_paged_mqa_logits_backend
+    patch_deepseek_v4_compress_state_coldstart
     patch_swa_reprefill_tail_unified_kv
     patch_dsv4_unified_kv_hicache
     patch_memory_pool_host_assert

@@ -1,0 +1,447 @@
+diff --git a/python/sglang/srt/layers/attention/dsa/dsa_indexer.py b/python/sglang/srt/layers/attention/dsa/dsa_indexer.py
+index 523d055..d11a4d0 100644
+--- a/python/sglang/srt/layers/attention/dsa/dsa_indexer.py
++++ b/python/sglang/srt/layers/attention/dsa/dsa_indexer.py
+@@ -8,12 +8,21 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+ import torch
+ from einops import rearrange
+ 
++from sglang.jit_kernel.dsa import (
++    aiter_paged_mqa_logits,
++    cutedsl_paged_mqa_logits,
++    deepgemm_paged_mqa_logits_native,
++    deepgemm_paged_mqa_logits_split,
++)
+ from sglang.jit_kernel.fused_store_index_cache import (
+     can_use_dsa_fused_store,
+     fused_store_index_k_cache,
+ )
+ from sglang.srt.compilation.compilation_config import register_split_op
+ from sglang.srt.environ import envs
++from sglang.srt.layers.attention.dsa.paged_mqa_logits_backend import (
++    DSAPagedMQALogitsBackend,
++)
+ from sglang.srt.layers.attention.dsa.utils import (
+     aiter_can_use_preshuffle_paged_mqa,
+     is_dsa_enable_prefill_cp,
+@@ -34,7 +43,7 @@ from sglang.srt.model_executor.runner_backend_utils.tc_piecewise_cuda_graph impo
+     get_tc_piecewise_forward_context,
+     is_in_tc_piecewise_cuda_graph,
+ )
+-from sglang.srt.runtime_context import get_parallel
++from sglang.srt.runtime_context import get_parallel, get_server_args
+ from sglang.srt.state_capturer.indexer_topk import (
+     maybe_capture_indexer_topk,
+ )
+@@ -55,6 +64,9 @@ global _use_multi_stream
+ _is_cuda = is_cuda()
+ _is_hip = is_hip()
+ _is_npu = is_npu()
++if not _is_hip:
++    # Preserve the original eager import behavior on non-ROCm platforms.
++    from sglang.jit_kernel.dsa import pick_dsl_expand
+ _use_aiter = get_bool_env_var("SGLANG_USE_AITER") and _is_hip
+ _is_fp8_fnuz = is_fp8_fnuz()
+ _is_gfx95_supported = is_gfx95_supported()
+@@ -431,6 +443,10 @@ class Indexer(MultiPlatformOp):
+         self.scale_fmt = scale_fmt
+         self.softmax_scale = self.head_dim**-0.5
+ 
++        self.paged_mqa_logits_backend = DSAPagedMQALogitsBackend.resolve(
++            get_server_args().dsa_paged_mqa_logits_backend
++        )
++
+     @contextlib.contextmanager
+     def _with_real_sm_count(self):
+         # When pipeline parallelism is enabled, each PP rank initiates a recv operation after the _pp_launch_batch
+@@ -818,22 +834,35 @@ class Indexer(MultiPlatformOp):
+         # Reuse pre-computed schedule metadata if available (from init_forward_metadata),
+         # otherwise fall back to computing it here.
+         schedule_metadata = getattr(metadata, "paged_mqa_schedule_metadata", None)
+-
+         assert len(q_fp8.shape) == 3
+         # attn_tp_size > 1 or MAX_LEN padding mode can leave padding in the
+         # hidden states; q_offset is the real (unpadded) q length.
+         q_offset = sum(metadata.get_dsa_extend_len_cpu())
+ 
+-        # DG-native q=[B,next_n,H,D] is faster than expanded q=[B*next_n,1,H,D]
+-        # for target_verify with next_n>=2 (bigger MMA tile, fewer atoms). The
+-        # precomputed ctx_lens_2d's shape is the single source of truth — if
+-        # dsa_backend chose the per-token layout (e.g. non-SM100), fall through
+-        # to the expanded path.
+         B = metadata.get_seqlens_int32().shape[0]
+         next_n = q_offset // B if B > 0 else 0
++        use_cute_dsl = (
++            self.paged_mqa_logits_backend.is_cutedsl()
++            and not forward_batch.forward_mode.is_draft_extend_v2()
++        )
++        dsl_expand_factor, dsl_atom = 1, 1
++        if (
++            use_cute_dsl
++            and forward_batch.forward_mode.is_target_verify()
++            and next_n >= 2
++        ):
++            dsl_expand_factor, dsl_atom = pick_dsl_expand(
++                next_n,
++                batch_size=B,
++                max_ctx=max_seq_len,
++                num_sms=self.sm_count,
++                kernel_atoms=(1, 2, 3, 4),
++                num_heads=self.n_heads,
++            )
+         ctx_2d = getattr(metadata, "paged_mqa_ctx_lens_2d", None)
+         use_dg_native = (
+-            _is_cuda
++            not use_cute_dsl
++            and _is_cuda
+             and forward_batch.forward_mode.is_target_verify()
+             and next_n >= 2
+             and ctx_2d is not None
+@@ -862,51 +891,61 @@ class Indexer(MultiPlatformOp):
+         assert len(weights.shape) == 3
+         weights = weights.squeeze(2)
+ 
+-        if _is_hip:
+-            from aiter.ops.triton.pa_mqa_logits import deepgemm_fp8_paged_mqa_logits
+-
+-            q_fp8 = q_fp8.unsqueeze(1)
+-            batch_size, next_n, heads, _ = q_fp8.shape
+-            logits = torch.empty(
+-                (batch_size * next_n, max_seq_len),
+-                device=q_fp8.device,
+-                dtype=torch.float32,
+-            )
+-            deepgemm_fp8_paged_mqa_logits(
++        if self.paged_mqa_logits_backend.is_aiter():
++            logits = aiter_paged_mqa_logits(
+                 q_fp8,
+                 kv_cache_fp8,
+                 weights,
+-                logits,
+                 seqlens_32,
+                 block_tables,
+                 max_seq_len,
+-                Preshuffle=_use_aiter_preshuffle,
+-                KVBlockSize=block_kv,
++                preshuffle=_use_aiter_preshuffle,
++                kv_block_size=block_kv,
++            )
++        elif use_cute_dsl:
++            logits = cutedsl_paged_mqa_logits(
++                q_fp8,
++                kv_cache_fp8,
++                weights,
++                metadata.get_seqlens_int32(),
++                block_tables,
++                schedule_metadata,
++                max_seq_len,
++                q_offset=q_offset,
++                B=B,
++                next_n=next_n,
++                is_target_verify=forward_batch.forward_mode.is_target_verify(),
++                dsl_expand_factor=dsl_expand_factor,
++                dsl_atom=dsl_atom,
++                blocksize=blocksize,
++                sm_count=self.sm_count,
++                get_paged_mqa_logits_metadata_fn=deep_gemm.get_paged_mqa_logits_metadata,
+             )
+         elif use_dg_native:
+-            # block_tables[::next_n] de-expands dsa_backend's repeat_interleave
+-            # without a copy (DG only checks `stride(1) == 1`).
+-            logits = deep_gemm.fp8_paged_mqa_logits(
+-                q_fp8[:q_offset].view(B, next_n, q_fp8.shape[1], q_fp8.shape[2]),
++            logits = deepgemm_paged_mqa_logits_native(
++                deep_gemm.fp8_paged_mqa_logits,
++                q_fp8,
+                 kv_cache_fp8,
+-                weights[:q_offset],
++                weights,
+                 seqlens_32_2d,
+-                block_tables[::next_n],
++                block_tables,
+                 schedule_metadata,
+                 max_seq_len,
+-                clean_logits=False,
++                q_offset=q_offset,
++                B=B,
++                next_n=next_n,
+             )
+         else:
+-            q_fp8 = q_fp8.unsqueeze(1)
+-            logits = deep_gemm.fp8_paged_mqa_logits(
+-                q_fp8[:q_offset],
++            logits = deepgemm_paged_mqa_logits_split(
++                deep_gemm.fp8_paged_mqa_logits,
++                q_fp8,
+                 kv_cache_fp8,
+-                weights[:q_offset],
++                weights,
+                 seqlens_32_2d,
+                 block_tables,
+                 schedule_metadata,
+                 max_seq_len,
+-                clean_logits=False,
++                q_offset=q_offset,
+             )
+ 
+         # NOTE(dark): logits should be cleaned in topk_transform
+diff --git a/python/sglang/srt/server_args.py b/python/sglang/srt/server_args.py
+index 0000000..0000000 100644
+--- a/python/sglang/srt/server_args.py
++++ b/python/sglang/srt/server_args.py
+@@ -293,6 +293,8 @@ NSA_CHOICES = DSA_CHOICES  # deprecated alias
+ 
+ DSA_TOPK_BACKEND_CHOICES = ["sgl-kernel", "torch", "flashinfer"]
+ 
++DSA_PAGED_MQA_LOGITS_BACKEND_CHOICES = ["auto", "deepgemm", "cutedsl", "aiter"]
++
+ MAMBA_RADIX_CACHE_STRATEGY_CHOICES = [
+     "auto",
+     "no_buffer",
+@@ -1362,6 +1364,13 @@ class ServerArgs:
+             resolvable=True,
+         ),
+     ] = None
++    dsa_paged_mqa_logits_backend: A[
++        str,
++        Arg(
++            help="DSA indexer paged MQA logits kernel backend. Options: 'auto' (default; DeepGEMM on CUDA, aiter on ROCm), 'deepgemm', 'cutedsl' (CuTe DSL kernel, SM 100 (Blackwell) only; wins at low batch size and long context), 'aiter' (ROCm only).",
++            choices=DSA_PAGED_MQA_LOGITS_BACKEND_CHOICES,
++        ),
++    ] = "auto"
+     dsa_topk_backend: A[
+         str,
+         Arg(
+diff --git a/python/sglang/srt/layers/attention/dsa/paged_mqa_logits_backend.py b/python/sglang/srt/layers/attention/dsa/paged_mqa_logits_backend.py
+new file mode 100644
+index 0000000..8f46d16
+--- /dev/null
++++ b/python/sglang/srt/layers/attention/dsa/paged_mqa_logits_backend.py
+@@ -0,0 +1,42 @@
++from __future__ import annotations
++
++from enum import Enum
++
++from sglang.srt.utils import is_hip, is_sm100_supported
++
++
++class DSAPagedMQALogitsBackend(Enum):
++    DEEPGEMM = "deepgemm"
++    CUTEDSL = "cutedsl"
++    AITER = "aiter"
++
++    def is_deepgemm(self) -> bool:
++        return self == DSAPagedMQALogitsBackend.DEEPGEMM
++
++    def is_cutedsl(self) -> bool:
++        return self == DSAPagedMQALogitsBackend.CUTEDSL
++
++    def is_aiter(self) -> bool:
++        return self == DSAPagedMQALogitsBackend.AITER
++
++    @staticmethod
++    def resolve(value: str) -> DSAPagedMQALogitsBackend:
++        if is_hip():
++            if value not in ("auto", "aiter"):
++                raise ValueError(
++                    f"dsa_paged_mqa_logits_backend={value!r} is not supported on "
++                    "ROCm; only 'aiter' is implemented."
++                )
++            return DSAPagedMQALogitsBackend.AITER
++
++        if value == "auto" or value == "deepgemm":
++            return DSAPagedMQALogitsBackend.DEEPGEMM
++        if value == "aiter":
++            raise ValueError("dsa_paged_mqa_logits_backend='aiter' requires ROCm.")
++        if value == "cutedsl":
++            if not is_sm100_supported():
++                raise ValueError(
++                    "dsa_paged_mqa_logits_backend='cutedsl' requires SM100 (Blackwell)."
++                )
++            return DSAPagedMQALogitsBackend.CUTEDSL
++        raise ValueError(f"Unknown dsa_paged_mqa_logits_backend: {value!r}")
+diff --git a/python/sglang/jit_kernel/dsa/__init__.py b/python/sglang/jit_kernel/dsa/__init__.py
+new file mode 100644
+index 0000000..9edc55a
+--- /dev/null
++++ b/python/sglang/jit_kernel/dsa/__init__.py
+@@ -0,0 +1,21 @@
++from sglang.srt.utils import is_hip
++
++from .paged_mqa_logits import (
++    aiter_paged_mqa_logits,
++    cutedsl_paged_mqa_logits,
++    deepgemm_paged_mqa_logits_native,
++    deepgemm_paged_mqa_logits_split,
++)
++
++if not is_hip():
++    # Preserve the original eager import behavior on non-ROCm platforms.
++    from .cutedsl_paged_mqa_logits import CuteDSLPagedMQALogitsRunner, pick_dsl_expand
++
++__all__ = [
++    "CuteDSLPagedMQALogitsRunner",
++    "pick_dsl_expand",
++    "aiter_paged_mqa_logits",
++    "cutedsl_paged_mqa_logits",
++    "deepgemm_paged_mqa_logits_native",
++    "deepgemm_paged_mqa_logits_split",
++]
+diff --git a/python/sglang/jit_kernel/dsa/paged_mqa_logits.py b/python/sglang/jit_kernel/dsa/paged_mqa_logits.py
+new file mode 100644
+index 0000000..0c8fc7c
+--- /dev/null
++++ b/python/sglang/jit_kernel/dsa/paged_mqa_logits.py
+@@ -0,0 +1,152 @@
++# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
++# SPDX-License-Identifier: Apache-2.0
++from __future__ import annotations
++
++from collections.abc import Callable
++
++import torch
++
++
++def deepgemm_paged_mqa_logits_native(
++    fp8_paged_mqa_logits_fn: Callable[..., torch.Tensor],
++    q_fp8: torch.Tensor,
++    kv_cache_fp8: torch.Tensor,
++    weights: torch.Tensor,
++    ctx_lens_2d: torch.Tensor,
++    block_tables: torch.Tensor,
++    schedule_metadata: torch.Tensor,
++    max_seq_len: int,
++    *,
++    q_offset: int,
++    B: int,
++    next_n: int,
++) -> torch.Tensor:
++    # block_tables[::next_n] de-expands the caller's repeat_interleave without a
++    # copy (DeepGEMM only checks `stride(1) == 1`).
++    return fp8_paged_mqa_logits_fn(
++        q_fp8[:q_offset].view(B, next_n, q_fp8.shape[1], q_fp8.shape[2]),
++        kv_cache_fp8,
++        weights[:q_offset],
++        ctx_lens_2d,
++        block_tables[::next_n],
++        schedule_metadata,
++        max_seq_len,
++        clean_logits=False,
++    )
++
++
++def deepgemm_paged_mqa_logits_split(
++    fp8_paged_mqa_logits_fn: Callable[..., torch.Tensor],
++    q_fp8: torch.Tensor,
++    kv_cache_fp8: torch.Tensor,
++    weights: torch.Tensor,
++    ctx_lens_2d: torch.Tensor,
++    block_tables: torch.Tensor,
++    schedule_metadata: torch.Tensor,
++    max_seq_len: int,
++    *,
++    q_offset: int,
++) -> torch.Tensor:
++    q_fp8 = q_fp8.unsqueeze(1)
++    return fp8_paged_mqa_logits_fn(
++        q_fp8[:q_offset],
++        kv_cache_fp8,
++        weights[:q_offset],
++        ctx_lens_2d,
++        block_tables,
++        schedule_metadata,
++        max_seq_len,
++        clean_logits=False,
++    )
++
++
++def aiter_paged_mqa_logits(
++    q_fp8: torch.Tensor,
++    kv_cache_fp8: torch.Tensor,
++    weights: torch.Tensor,
++    seq_lens: torch.Tensor,
++    block_tables: torch.Tensor,
++    max_seq_len: int,
++    *,
++    preshuffle: bool,
++    kv_block_size: int,
++) -> torch.Tensor:
++    from aiter.ops.triton.pa_mqa_logits import deepgemm_fp8_paged_mqa_logits
++
++    q_fp8 = q_fp8.unsqueeze(1)
++    batch_size, next_n, _, _ = q_fp8.shape
++    logits = torch.empty(
++        (batch_size * next_n, max_seq_len),
++        device=q_fp8.device,
++        dtype=torch.float32,
++    )
++    deepgemm_fp8_paged_mqa_logits(
++        q_fp8,
++        kv_cache_fp8,
++        weights,
++        logits,
++        seq_lens,
++        block_tables,
++        max_seq_len,
++        Preshuffle=preshuffle,
++        KVBlockSize=kv_block_size,
++    )
++    return logits
++
++
++def cutedsl_paged_mqa_logits(
++    q_fp8: torch.Tensor,
++    kv_cache_fp8: torch.Tensor,
++    weights: torch.Tensor,
++    ctx_lens_1d: torch.Tensor,
++    block_tables: torch.Tensor,
++    schedule_metadata: torch.Tensor | None,
++    max_seq_len: int,
++    *,
++    q_offset: int,
++    B: int,
++    next_n: int,
++    is_target_verify: bool,
++    dsl_expand_factor: int,
++    dsl_atom: int,
++    blocksize: int,
++    sm_count: int,
++    get_paged_mqa_logits_metadata_fn: Callable[..., torch.Tensor],
++) -> torch.Tensor:
++    from sglang.jit_kernel.dsa.cutedsl_paged_mqa_logits import (
++        CuteDSLPagedMQALogitsRunner,
++    )
++
++    dsl_atom_split = dsl_expand_factor > 1 and next_n == dsl_expand_factor * dsl_atom
++    if is_target_verify and dsl_atom_split:
++        exp_B = B * dsl_expand_factor
++        q_dsl = q_fp8[:q_offset].view(exp_B, dsl_atom, q_fp8.shape[1], q_fp8.shape[2])
++        ctx_lens_1d = ctx_lens_1d.repeat_interleave(dsl_expand_factor)
++        block_tables_dsl = block_tables[::next_n].repeat_interleave(
++            dsl_expand_factor, dim=0
++        )
++        schedule_metadata = get_paged_mqa_logits_metadata_fn(
++            ctx_lens_1d.unsqueeze(-1), blocksize, sm_count
++        )
++    elif is_target_verify and next_n >= 2:
++        # Native single-launch: one task per batch entry (the kernel iterates
++        # next_n internally), so the schedule must be built from B-length
++        # context lens, not the caller's [B, next_n] or per-token layout.
++        q_dsl = q_fp8[:q_offset].view(B, next_n, q_fp8.shape[1], q_fp8.shape[2])
++        block_tables_dsl = block_tables[::next_n]
++        schedule_metadata = get_paged_mqa_logits_metadata_fn(
++            ctx_lens_1d.unsqueeze(-1), blocksize, sm_count
++        )
++    else:
++        q_dsl = q_fp8[:q_offset].unsqueeze(1)
++        block_tables_dsl = block_tables[:B]
++
++    return CuteDSLPagedMQALogitsRunner.forward(
++        q_dsl,
++        kv_cache_fp8.view(torch.uint8),
++        weights[:q_offset],
++        ctx_lens_1d,
++        block_tables_dsl,
++        schedule_metadata,
++        max_seq_len,
++    )

@@ -3040,7 +3040,7 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
