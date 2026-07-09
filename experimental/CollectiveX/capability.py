@@ -142,7 +142,6 @@ PLATFORMS = {
 }
 
 BACKENDS = {
-    "deepep": {"vendors": {"nvidia"}},
     "deepep-v2": {
         "vendors": {"nvidia"},
         "implementation": "deep_ep.ElasticBuffer",
@@ -167,15 +166,8 @@ TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {}
 # Keep these narrower than platform overrides so working reference paths remain
 # measurable on the same fabric.
 BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
-    ("b200-dgxc", "deepep", 16): (
-        "DeepEP V1 EP16 requires unavailable GPU doorbell mapping or GDRCopy on B200"
-    ),
     ("b200-dgxc", "deepep-hybrid", 16): (
         "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200"
-    ),
-    ("b300", "deepep", 16): (
-        "DeepEP V1 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
-        "unprovisioned on B300 hosts"
     ),
     ("b300", "deepep-v2", 16): (
         "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
@@ -238,10 +230,8 @@ def _resolve_base(
         return False, f"unknown GHA runner label {sku!r}"
     if implementation is None:
         return False, f"unknown backend {backend!r}"
-    if mode not in {"normal", "low-latency"}:
+    if mode not in {"normal"}:
         return False, f"unknown benchmark mode {mode!r}"
-    if mode == "low-latency" and backend != "deepep":
-        return False, f"{backend} has no distinct low-latency API"
     if ep is None:
         if nodes is None:
             ep = platform["ep_degrees"][0]

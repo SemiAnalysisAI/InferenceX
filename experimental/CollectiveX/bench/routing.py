@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import torch
 
-ACTIVATION_GENERATOR = "collectivex-activation-counter-v4"
 SOURCE_ID_BITS = 32
 SOURCE_ID_COLUMNS = SOURCE_ID_BITS
 SOURCE_ID_CONTRACT = "bounded-sign-bit-source-v2"
@@ -145,7 +144,7 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
     payload_load = onehot.sum(dim=0).float()
     # One-number imbalance summaries so a row is self-describing for the distribution-sensitivity
     # suite (no need to read the full histograms): CV = std/mean of the load; hotspot_ratio =
-    # worst expert load over the mean. Zipf should be more concentrated than uniform.
+    # worst expert load over the mean.
     def _cv(t):
         m = float(t.mean())
         return float(t.std(unbiased=False) / m) if m > 0 else 0.0

@@ -7,7 +7,7 @@ the serialized arrays after validating their manifest, dtype, shape, and value c
 
 Layout on disk (one workload = two files):
   <dir>/<workload_name>.npz            topk_idx [gt,topk] int32, topk_weights [gt,topk] float32
-  <dir>/<workload_name>.manifest.json  dims, routing profile, generator version, and seed
+  <dir>/<workload_name>.manifest.json  dims, routing profile, and seed
 
 Routing and gate weights come from a stdlib integer counter, not a framework RNG. The same
 parameters therefore produce the same int32/float32 bytes across PyTorch and accelerator images.
@@ -18,11 +18,7 @@ import json
 import os
 import sys
 
-WORKLOAD_SCHEMA_VERSION = 1
-# Bump when the counter or serialized layout changes.
-GENERATOR_VERSION = "collectivex-routing-counter-v3"
 GATE_WEIGHT_FORMAT = "counter-u16-normalized-f32"
-ACTIVATION_GENERATOR = "collectivex-activation-counter-v4"
 _MASK64 = (1 << 64) - 1
 
 
@@ -88,11 +84,8 @@ def canonical_routing_rows(
 
 def workload_name(routing: str, hidden: int, topk: int, experts: int,
                   ep_size: int, global_tokens: int, seed: int,
-                  generator: str = GENERATOR_VERSION,
                   token_offset: int = 0) -> str:
     """Return a readable filename stem for one canonical workload."""
-    if generator != GENERATOR_VERSION:
-        raise ValueError(f"unsupported workload generator {generator!r}")
     if type(token_offset) is not int or token_offset < 0:
         raise ValueError("token_offset must be a non-negative integer")
     tokens_per_rank, remainder = divmod(global_tokens, ep_size)
@@ -111,19 +104,15 @@ def build_manifest(routing, hidden, topk, experts, global_tokens, seed, experts_
         raise ValueError("experts must be divisible by experts_per_rank")
     ep_size = experts // experts_per_rank
     return {
-        "schema_version": WORKLOAD_SCHEMA_VERSION,
         "workload_name": workload_name(
             routing, hidden, topk, experts, ep_size, global_tokens, seed
         ),
-        "generator_version": GENERATOR_VERSION,
         "gate_weight_format": GATE_WEIGHT_FORMAT,
         "dims": {"hidden": hidden, "topk": topk, "experts": experts, "ep_size": ep_size,
                  "tokens_per_rank": int(global_tokens) // ep_size,
                  "global_tokens": int(global_tokens), "experts_per_rank": experts_per_rank},
         "routing_profile": routing,
         "seed": seed,
-        "activation_profile": "canonical-counter-source-v3",
-        "activation_generator": ACTIVATION_GENERATOR,
     }
 
 
@@ -176,16 +165,14 @@ def verify_workload(manifest, idx_np, weights_np):
     """Validate manifest coordinates and serialized arrays. Returns (ok, reason)."""
     import numpy as np
     expected_fields = {
-        "schema_version", "workload_name", "generator_version", "gate_weight_format", "dims",
-        "routing_profile", "seed", "activation_profile", "activation_generator",
+        "workload_name", "gate_weight_format", "dims",
+        "routing_profile", "seed",
     }
     if not isinstance(manifest, dict) or set(manifest) != expected_fields:
         return False, "manifest fields differ from the v1 contract"
-    if (manifest["schema_version"] != WORKLOAD_SCHEMA_VERSION
-            or manifest["generator_version"] != GENERATOR_VERSION
-            or manifest["gate_weight_format"] != GATE_WEIGHT_FORMAT
+    if (manifest["gate_weight_format"] != GATE_WEIGHT_FORMAT
             or manifest["routing_profile"] != "uniform"):
-        return False, "manifest version or generator is unsupported"
+        return False, "manifest gate-weight format or routing profile is unsupported"
     if isinstance(manifest["seed"], bool) or not isinstance(manifest["seed"], int):
         return False, "manifest seed is invalid"
     dims = manifest["dims"]
@@ -210,9 +197,6 @@ def verify_workload(manifest, idx_np, weights_np):
     if (not np.isfinite(weights_np).all() or np.any(weights_np < 0)
             or not np.allclose(weights_np.sum(axis=1), 1.0, rtol=1e-5, atol=1e-6)):
         return False, "gate weights are invalid"
-    if (manifest["activation_profile"] != "canonical-counter-source-v3"
-            or manifest["activation_generator"] != ACTIVATION_GENERATOR):
-        return False, "activation generator is invalid"
     expected_indices, expected_weights = canonical_routing_rows(
         dims["global_tokens"], dims["experts"], dims["topk"],
         manifest["routing_profile"], manifest["seed"],
@@ -223,7 +207,6 @@ def verify_workload(manifest, idx_np, weights_np):
     expected_name = workload_name(
         manifest["routing_profile"], dims["hidden"], dims["topk"], dims["experts"],
         dims["ep_size"], dims["global_tokens"], manifest["seed"],
-        manifest["generator_version"],
     )
     if expected_name != manifest["workload_name"]:
         return False, "workload name differs from manifest coordinates"

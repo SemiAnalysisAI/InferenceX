@@ -6,9 +6,10 @@ import argparse
 import json
 from pathlib import Path
 
-# Emitted document format this summary reads. This is a best-effort renderer over
-# whatever raw attempts a shard produced; it validates nothing.
-RAW_FORMAT = "collectivex.ep.v1"
+# Emitted case-attempt documents this summary reads, discriminated by record_type.
+# This is a best-effort renderer over whatever raw attempts a shard produced; it
+# validates nothing.
+CASE_RECORD_TYPE = "case-attempt"
 
 
 def load_results(directory: str, runner: str | None, timestamp: str | None) -> list[dict]:
@@ -23,7 +24,7 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
                 document = json.load(handle)
         except (OSError, ValueError):
             continue
-        if isinstance(document, dict) and document.get("format") == RAW_FORMAT:
+        if isinstance(document, dict) and document.get("record_type") == CASE_RECORD_TYPE:
             documents.append(document)
     return documents
 

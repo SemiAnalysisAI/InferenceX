@@ -146,18 +146,6 @@ for allocation_attempt in 1 2 3; do
   excluded_nodes+="$rejected_nodes"
 done
 unset CX_SALLOC_ATTEMPT CX_NETWORK_VALIDATION_ATTEMPT
-cx_set_failure_stage container-hash
-import_log="$(cx_private_log_path image-hash)"
-if ! COLLECTIVEX_SQUASH_SHA256="$(
-  srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --chdir=/tmp \
-    --export="$(cx_host_exports)" sha256sum "$SQUASH_FILE" \
-    2>>"$import_log" | awk 'NR==1 {print $1}'
-)"; then
-  cx_fail_stage container-hash "$import_log"
-fi
-[[ "$COLLECTIVEX_SQUASH_SHA256" =~ ^[0-9a-f]{64}$ ]] \
-  || cx_fail_stage container-hash "$import_log"
-export COLLECTIVEX_SQUASH_SHA256
 cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${CX_SHARD_FILE:-}"
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"

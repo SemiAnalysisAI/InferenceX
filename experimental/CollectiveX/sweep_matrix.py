@@ -27,7 +27,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by the workflow envi
 
 import capability as cap  # noqa: E402
 import ep_harness  # noqa: E402
-import identity  # noqa: E402
 
 
 EP_TIMING_PROFILE = (
@@ -47,14 +46,10 @@ V1_SUITE_CONTRACTS = {
             "prefill": (256, 512),
         },
     },
-    "ep-low-latency": {
-        "mode": "low-latency",
-        "backends": {"deepep"},
-        "coordinates": {("low-latency", "decode", "uniform")},
-        "ladders": {"decode": tuple(ep_harness.DECODE_LADDER)},
-    },
 }
 IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9.-]*")
+CASE_ID = re.compile(r"[a-z0-9][a-z0-9.-]*")
+MODES = {"normal"}
 SUITE_FIELDS = {
     "backends", "ep_degrees", "mode", "phases", "platforms",
     "routings", "token_points", "token_points_decode", "token_points_prefill",
@@ -138,20 +133,17 @@ def validate_config_documents(
     """Reject configuration that is ambiguous, unused, or outside the v1 grid."""
     _fields(
         suites_document, "configs/suites.yaml",
-        {"schema_version", "version", "suites"}, {"schema_version", "version", "suites"},
+        {"version", "suites"}, {"version", "suites"},
     )
     _fields(
         workloads, "configs/workloads.yaml",
-        {"schema_version", "synthetic", "model_derived"}, {"schema_version"},
+        {"synthetic", "model_derived"}, set(),
     )
-    if type(suites_document["schema_version"]) is not int or suites_document["schema_version"] != 1:
-        raise SystemExit("configs/suites.yaml schema_version must be integer 1")
-    # The iterable benchmark version is independent of the JSON schema_version: it
-    # is any positive integer the operator bumps to mark a new, incomparable grid.
+    # `version` is the single authoritative CollectiveX version: any positive integer
+    # the operator bumps to mark a new, incomparable grid. It is copied verbatim into
+    # the matrix, shards, and emitted artifacts; it is never derived or auto-incremented.
     if type(suites_document["version"]) is not int or suites_document["version"] < 1:
         raise SystemExit("configs/suites.yaml version must be a positive integer")
-    if type(workloads["schema_version"]) is not int or workloads["schema_version"] != 1:
-        raise SystemExit("configs/workloads.yaml schema_version must be integer 1")
     registry: dict[str, dict[str, Any]] = {}
     for section, expert_field in (
         ("synthetic", "experts"),
@@ -189,7 +181,7 @@ def validate_config_documents(
         if contract is None:
             raise SystemExit(f"suite {name} is outside the frozen v1 catalog")
         mode = suite["mode"]
-        if mode not in identity.V1_CASE_PROFILES or mode != contract["mode"]:
+        if mode not in MODES or mode != contract["mode"]:
             raise SystemExit(f"suite {name}.mode differs from the frozen v1 catalog")
         suite_backends = _list(
             suite.get("backends", list(cap.SWEEP_BACKENDS)),
@@ -300,9 +292,22 @@ def _expected_disposition(
 
 
 def _case_id(sku: str, case: dict[str, Any]) -> str:
-    return identity.case_id(
-        sku=sku, profile=identity.profile_for_case(case), case=case
+    parts = (
+        sku,
+        case["backend"],
+        case.get("workload") or "manual",
+        case["mode"],
+        case["phase"],
+        f"ep{int(case['ep'])}",
+        case["routing"],
     )
+    values = [
+        re.sub(r"[^a-z0-9]+", "-", str(part).strip().lower()).strip("-")
+        for part in parts
+    ]
+    if not all(values):
+        raise MatrixError("case identity contains an empty factor")
+    return "-".join(values)
 
 
 def _semantic_points(sku: str, case: dict[str, Any]) -> list[str]:
@@ -329,7 +334,7 @@ def _select_backends(backend: str, backends: str) -> list[str]:
             value.strip() for value in backends.split(",") if value.strip()
         ]
     else:
-        names = [backend or "deepep"]
+        names = [backend or "deepep-v2"]
     unknown = sorted(set(names) - set(available))
     if unknown:
         raise SystemExit(f"unknown backend values {unknown}; have {available}")
@@ -517,8 +522,6 @@ def resolve_matrix(
         if round_index < len(shards_by_sku[sku])
     ]
     return {
-        "format": "collectivex.matrix.v1",
-        "schema_version": 1,
         "version": suites_document["version"],
         "requested_cases": requested_cases,
         "include": include,
@@ -586,15 +589,11 @@ def validate_shard_control(
     if sku not in cap.PLATFORMS or backend not in cap.SWEEP_BACKENDS:
         raise MatrixError("shard platform/backend is not registered")
     top_fields = {
-        "schema_version", "version", "id", "sku", "backend", "nodes", "n", "cases",
+        "version", "id", "sku", "backend", "nodes", "n", "cases",
         "execution_weight",
     }
-    if (
-        set(shard) != top_fields
-        or type(shard.get("schema_version")) is not int
-        or shard["schema_version"] != 1
-    ):
-        raise MatrixError("shard fields or schema version differ from v1 contract")
+    if set(shard) != top_fields:
+        raise MatrixError("shard fields differ from the v1 contract")
     if type(shard.get("version")) is not int or shard["version"] < 1:
         raise MatrixError("shard benchmark version must be a positive integer")
     if not isinstance(shard.get("id"), str) or not IDENTIFIER.fullmatch(shard["id"]):
@@ -629,7 +628,7 @@ def validate_shard_control(
                 f"missing={sorted(required - fields)}, extra={sorted(fields - required)}"
             )
         case_id = case["case_id"]
-        if not identity.is_case_id(case_id):
+        if not isinstance(case_id, str) or not CASE_ID.fullmatch(case_id):
             raise MatrixError(f"case {index} has invalid case_id")
         if case_id in seen:
             raise MatrixError(f"duplicate case_id {case_id}")
@@ -650,7 +649,7 @@ def validate_shard_control(
             raise MatrixError(f"case {index} case_id does not match its contents")
         if case["backend"] != backend:
             raise MatrixError(f"case {index} backend does not match shard")
-        if case["mode"] not in identity.V1_CASE_PROFILES:
+        if case["mode"] not in MODES:
             raise MatrixError(f"case {index} mode is invalid")
         if _positive_int(case["nodes"], f"case {index}.nodes") != nodes:
             raise MatrixError(f"case {index} nodes does not match shard")
@@ -711,15 +710,9 @@ def validate_shard_control(
 def validate_matrix_document(document: Any) -> dict[str, Any]:
     """Validate the complete requested grid and its runnable shard partition."""
     if not isinstance(document, dict) or set(document) != {
-        "format", "schema_version", "version", "requested_cases", "include"
+        "version", "requested_cases", "include"
     }:
         raise MatrixError("matrix fields differ from the v1 contract")
-    if (
-        document["format"] != "collectivex.matrix.v1"
-        or type(document["schema_version"]) is not int
-        or document["schema_version"] != 1
-    ):
-        raise MatrixError("matrix format/schema differs from v1")
     if type(document["version"]) is not int or document["version"] < 1:
         raise MatrixError("matrix benchmark version must be a positive integer")
     requested = document["requested_cases"]
@@ -765,7 +758,6 @@ def validate_matrix_document(document: Any) -> dict[str, Any]:
         requested_case_plan = [case]
         validate_shard_control(
             {
-                "schema_version": 1,
                 "version": document["version"],
                 "id": "requested-case",
                 "sku": sku,
@@ -867,7 +859,6 @@ def extract_shard(
     }
     cases = [requested[case_id]["case"] for case_id in source["case_ids"]]
     control = {
-        "schema_version": 1,
         "version": document["version"],
         "id": source.get("id"),
         "sku": source.get("sku"),

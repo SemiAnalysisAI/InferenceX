@@ -23,7 +23,7 @@ cx_write_runtime_stage backend-setup || cx_die "cannot record runtime stage"
 : "${CX_NGPUS:?CX_NGPUS not set}"
 : "${CX_TS:?CX_TS not set}"
 : "${CX_TOPO:?CX_TOPO not set}"
-CX_BENCH="${CX_BENCH:-deepep}"
+CX_BENCH="${CX_BENCH:-deepep-v2}"
 CX_TRANSPORT="${CX_TRANSPORT:-}"
 
 cx_apply_timing_profile
@@ -215,48 +215,6 @@ cx_prepare_deepep_toolchain() {
   export NVSHMEM_DIR
   cx_prepare_cuda_cccl || return 1
   export LD_LIBRARY_PATH="$NVSHMEM_DIR/lib:${LD_LIBRARY_PATH:-}"
-}
-
-cx_probe_deepep() {
-  local expected_version
-  if [ "${COLLECTIVEX_IMAGE:-}" != "$CX_IMAGE_MULTIARCH" ]; then
-    cx_log "ERROR: DeepEP V1 requires the configured multi-architecture image"
-    return 1
-  fi
-  cx_cuda_arch >/dev/null || return 1
-  case "$CX_RUNNER" in
-    gb200|gb300)
-      expected_version="1.1.0+814e508"
-      DEEPEP_COMMIT="814e508537c6ffc775d59f6f1b9ba43f3a65968c"
-      ;;
-    *)
-      expected_version="1.2.1"
-      DEEPEP_COMMIT="9af0e0d0e74f3577af1979c9b9e1ac2cad0104ee"
-      ;;
-  esac
-  export DEEPEP_COMMIT
-  python3 - "$expected_version" <<'PY' || {
-import importlib.metadata as metadata
-from pathlib import Path
-import sys
-
-import deep_ep
-from deep_ep import Buffer
-
-distribution = metadata.distribution("deep_ep")
-assert distribution.version == sys.argv[1]
-assert Buffer.__name__ == "Buffer"
-recorded_files = {
-    Path(distribution.locate_file(entry)).resolve() for entry in distribution.files or ()
-}
-buffer_module = sys.modules.get(Buffer.__module__)
-assert Path(deep_ep.__file__).resolve() in recorded_files
-assert buffer_module is not None and Path(buffer_module.__file__).resolve() in recorded_files
-PY
-    cx_log "ERROR: container DeepEP build does not match its pinned image contract"
-    return 1
-  }
-  cx_log "DeepEP image build ready ($DEEPEP_COMMIT)"
 }
 
 # DeepEP V2 is PR #605's ElasticBuffer implementation with upstream PR #630's pure scale-up
@@ -737,9 +695,6 @@ cx_probe_scaleout_network() {
 cx_prepare_backend() {
   local backend="${1:-}"
   case "$backend" in
-    deepep)
-      cx_probe_deepep || return 1
-      ;;
     deepep-v2)
       cx_build_deepep_v2 || return 1
       ;;
@@ -771,11 +726,11 @@ prepare_backend_or_record() {
 # of these per allocation (SHARD mode below), reusing this single container + its built backend.
 dispatch_bench() {
   case "$CX_BENCH" in
-    deepep|deepep-v2|deepep-hybrid|mori)
+    deepep-v2|deepep-hybrid|mori)
       prepare_backend_or_record "$CX_BENCH" && run_ep_suite "$CX_BENCH"
       ;;
     *)
-      cx_die "unknown CX_BENCH=$CX_BENCH (want deepep|deepep-v2|mori|deepep-hybrid)"
+      cx_die "unknown CX_BENCH=$CX_BENCH (want deepep-v2|deepep-hybrid|mori)"
       ;;
   esac
 }

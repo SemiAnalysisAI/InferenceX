@@ -16,7 +16,6 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 import ep_harness
-import ep_provenance
 from ep_backend import EPBackend
 
 try:
@@ -40,7 +39,12 @@ DEEPEP_V2_JIT_RANDOM_SEED = "collectivex-deepep-v2-fa8a9b1"
 TORCH_VERSION = "2.10.0+cu130"
 NCCL_VERSION = "2.30.4"
 NVSHMEM_VERSION = "3.3.9"
-DEEPEP_V2_JIT_KERNELS = ep_provenance.DEEPEP_V2_JIT_KERNELS
+# The exact JIT kernel set a healthy deepep-v2 build materializes; the cubin-set
+# gate in ``_jit_kernel_names`` fails closed if the realized set differs.
+DEEPEP_V2_JIT_KERNELS = frozenset({
+    "barrier", "combine", "combine_reduce_epilogue", "dispatch",
+    "dispatch_copy_epilogue",
+})
 
 
 def _loaded_library_paths() -> set[str]:
@@ -105,7 +109,7 @@ def _jit_kernel_names() -> list[str]:
             raise RuntimeError("DeepEP V2 JIT evidence is empty")
         kernel_names.add(match.group(1))
     if kernel_names != DEEPEP_V2_JIT_KERNELS:
-        raise RuntimeError("DeepEP V2 JIT kernel set differs from the v1 contract")
+        raise RuntimeError("DeepEP V2 JIT kernel set differs from the expected contract")
     return sorted(kernel_names)
 
 
@@ -257,13 +261,7 @@ class DeepEPV2Backend(EPBackend):
     def __init__(self, args, rank, world_size, local_rank, device):
         # deepep-v2 is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
         super().__init__(args, rank, world_size, local_rank, device)
-        ep_provenance.require_keyword(
-            ElasticBuffer.__init__,
-            "use_fp8_dispatch",
-            api="deep_ep.ElasticBuffer.__init__",
-        )
         self.group = dist.group.WORLD
-        self._deferred_jit_snapshot = None
 
     def create_buffer(self, spec):
         # Local aliases keep the moved buffer-construction body byte-verbatim. The cap
@@ -271,7 +269,7 @@ class DeepEPV2Backend(EPBackend):
         # (token_ladder(.., None) + conditioning), so the JIT directory stays stable.
         args, world_size, device = self.args, self.world_size, self.device
         self.max_tokens = spec.max_tokens_per_rank
-        torch_version, nccl_runtime_version = _require_runtime()
+        _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
         scale_up_domain = int(
             getattr(args, "scale_up_domain", None)
@@ -280,7 +278,6 @@ class DeepEPV2Backend(EPBackend):
         )
         allow_hybrid_mode = _configure_gin_mode(args, world_size)
         gin_enabled = allow_hybrid_mode
-        communication_backend = "nccl-gin" if gin_enabled else "nccl-device-lsa"
         self.buffer = ElasticBuffer(
             self.group,
             num_max_tokens_per_rank=self.max_tokens,
@@ -339,59 +336,7 @@ class DeepEPV2Backend(EPBackend):
             **jit_config,
         }
         _require_cross_rank_equal(realized_config, "realized tuning/topology")
-        comm = getattr(self.buffer, "nccl_comm_handle", None)
-        communicator = (
-            "deepep-managed" if getattr(comm, "managed", True) else "pytorch-reused"
-        )
-
         _validate_loaded_libraries()
-        self.backend_provenance = {
-            "deepep_version": DEEPEP_V2_VERSION,
-            "deepep_distribution_version": importlib.metadata.version("deep_ep"),
-            "deepep_commit": DEEPEP_V2_COMMIT,
-            "deepep_tree": DEEPEP_V2_TREE,
-            "deepep_pr": DEEPEP_V2_PR,
-            "deepep_fix_pr": DEEPEP_V2_FIX_PR,
-            "deepep_nccl_check_fix_pr": DEEPEP_V2_NCCL_CHECK_FIX_PR,
-            "deepep_nccl_check_commit": DEEPEP_V2_NCCL_CHECK_COMMIT,
-            "fmt_commit": DEEPEP_V2_FMT_COMMIT,
-            "api": "deep_ep.ElasticBuffer",
-            "communication_backend": communication_backend,
-            "gin_enabled": gin_enabled,
-            "nccl_communicator": communicator,
-            "torch_version": torch_version,
-            "torch_git_version": str(torch.version.git_version),
-            "cuda_version": str(torch.version.cuda),
-            "nccl_package_version": importlib.metadata.version("nvidia-nccl-cu13"),
-            "nccl_version": nccl_runtime_version,
-            "nvshmem_package_version": importlib.metadata.version("nvidia-nvshmem-cu12"),
-            "jit_kernels": [],
-            "jit_random_seed": DEEPEP_V2_JIT_RANDOM_SEED,
-            "num_experts": int(args.experts),
-            "mode": "normal",
-            "dispatch_dtype": "bf16",
-            "combine_dtype": "bf16",
-            "deterministic": False,
-            "resource_mode": "fixed-profile",
-            "requested_num_sms": self.num_sms,
-            "tuning_num_experts": tuning_num_experts,
-            "num_sms": self.num_sms,
-            "num_qps": self.num_qps,
-            "allocated_qps": int(self.buffer.num_allocated_qps),
-            "device_sms": device_sms,
-            "sm_fraction": self.num_sms / device_sms,
-            "tuned_source": "deepep-v2-analytical-sm-qp-logical-experts-v1",
-            "num_max_tokens_per_rank": self.max_tokens,
-            "allow_hybrid_mode": bool(self.buffer.allow_hybrid_mode),
-            "allow_multiple_reduction": bool(self.buffer.allow_multiple_reduction),
-            "prefer_overlap_with_compute": bool(
-                self.buffer.prefer_overlap_with_compute
-            ),
-            "logical_scaleout_ranks": int(self.buffer.num_scaleout_ranks),
-            "logical_scaleup_ranks": int(self.buffer.num_scaleup_ranks),
-            "physical_rdma_ranks": int(self.buffer.num_rdma_ranks),
-            "physical_nvlink_ranks": int(self.buffer.num_nvlink_ranks),
-        }
 
     def _topk_idx_dtype(self):
         # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.
@@ -432,21 +377,6 @@ class DeepEPV2Backend(EPBackend):
             async_with_compute_stream=False,
         )
         return combined_x
-
-    def capture_deferred_provenance(self):
-        # destroy() uses this same barrier. Materialize its JIT kernel before recording the
-        # implementation so the first and later routing cases see identical evidence.
-        self.buffer.barrier(use_comm_stream=True, with_cpu_sync=True)
-        torch.cuda.synchronize()
-        jit_kernels = _jit_kernel_names()
-        _require_cross_rank_equal(jit_kernels, "JIT kernels")
-        if (
-            self._deferred_jit_snapshot is not None
-            and jit_kernels != self._deferred_jit_snapshot
-        ):
-            raise RuntimeError("DeepEP V2 JIT kernel set changed after measurement")
-        self._deferred_jit_snapshot = jit_kernels
-        self.backend_provenance["jit_kernels"] = jit_kernels
 
     def inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)

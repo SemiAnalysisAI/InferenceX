@@ -30,7 +30,7 @@ case "$RUNNER" in
     ;;
   *) cx_die "set CX_SHARD_SKU or CX_PUBLIC_RUNNER to a registered NVIDIA SKU" ;;
 esac
-export CX_RUNNER="$RUNNER" CX_BENCH="${CX_BENCH:-deepep}"
+export CX_RUNNER="$RUNNER" CX_BENCH="${CX_BENCH:-deepep-v2}"
 export CX_IMAGE_PLATFORM=linux/amd64
 JOB_ID=""
 cx_install_launcher_fail_safe
@@ -144,27 +144,12 @@ for allocation_attempt in 1 2 3; do
   excluded_nodes+="$rejected_nodes"
 done
 unset CX_SALLOC_ATTEMPT CX_NETWORK_VALIDATION_ATTEMPT
-if [ "$RUNNER" = b200-dgxc ] && [ "$CX_BENCH" = deepep ] && [ "$NODES" -gt 1 ]; then
-  gdrcopy_log="$(cx_private_log_path gdrcopy-preflight)"
-  if ! srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$NODES" --ntasks-per-node=1 \
-      --chdir=/tmp --export="$(cx_host_exports)" test -c /dev/gdrdrv \
-      >"$gdrcopy_log" 2>&1; then
-    cx_log "ERROR: allocated B200 nodes do not expose the required GDRCopy device"
-    cx_fail_stage setup "$gdrcopy_log" || true
-    cx_die "B200 DeepEP CPU NIC handling requires GDRCopy"
-  fi
-  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,/dev/gdrdrv:/dev/gdrdrv"
-fi
 if [ "$LOCAL_IMPORT" = 1 ]; then
   cx_set_failure_stage container-import
   SQUASH_FILE="$(CX_ENROOT_LOCAL_IMPORT=1 cx_ensure_squash "$CX_SQUASH_DIR" "$IMAGE")"
-  cx_set_failure_stage container-hash
-  cx_export_squash_identity "$SQUASH_FILE"
 else
   cx_set_failure_stage container-import
   SQUASH_FILE="$(cx_ensure_squash_on_job "$JOB_ID" "$CX_SQUASH_DIR" "$IMAGE")"
-  cx_set_failure_stage container-hash
-  cx_export_squash_identity "$SQUASH_FILE"
 fi
 cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${CX_SHARD_FILE:-}"

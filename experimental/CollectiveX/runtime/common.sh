@@ -17,6 +17,7 @@ CX_DEEPEP_HYBRID_COMMIT="e0a5b1d9848ab3e7b4a67842bf06f067bfac67f8" # pragma: all
 CX_DEEPEP_HYBRID_TREE="d77aeab7f1bb52b615666fe178d26ced41fae08e" # pragma: allowlist secret
 CX_DEEPEP_HYBRID_NCCL_COMMIT="1e0c869c39bb33f1034cb9920bd2a8a8406f04a3" # pragma: allowlist secret
 unset COLLECTIVEX_OPERATOR_CONFIG_LOADED COLLECTIVEX_EPHEMERAL_CONFIG_PATH
+CX_RUNTIME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 cx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 cx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
@@ -109,217 +110,9 @@ cx_load_operator_config() {
     cx_die "cannot parse runner configuration"
   }
   config_log="$(cx_private_log_path operator-config)"
-  if ! python3 - "$config_path" "${CX_RUNNER:-${CX_SHARD_SKU:-${CX_PUBLIC_RUNNER:-}}}" \
-      > "$parsed_path" 2> "$config_log" <<'PY'
-import json
-import os
-import posixpath
-import re
-import stat
-import sys
-
-RUNNERS = {
-    "h100-dgxc", "h200-dgxc", "b200-dgxc", "b300",
-    "gb200", "gb300", "mi300x", "mi325x", "mi355x",
-}
-FIELDS = {
-    "partition": "CX_PARTITION",
-    "account": "CX_ACCOUNT",
-    "qos": "CX_QOS",
-    "squash_dir": "CX_SQUASH_DIR",
-    "stage_dir": "CX_STAGE_DIR",
-    "enroot_cache_path": "CX_ENROOT_CACHE_PATH",
-    "exclude_nodes": "CX_EXCLUDE_NODES",
-    "nodelist": "CX_NODELIST",
-    "lock_dir": "CX_LOCK_DIR",
-    "socket_ifname": "CX_SOCKET_IFNAME",
-    "rdma_devices": "CX_RDMA_DEVICES",
-    "ib_gid_index": "CX_IB_GID_INDEX",
-    "rdma_service_level": "CX_RDMA_SERVICE_LEVEL",
-    "rdma_traffic_class": "CX_RDMA_TRAFFIC_CLASS",
-}
-NETWORK_FIELDS = {
-    "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
-    "rdma_traffic_class",
-}
-REQUIRED = {
-    "h100-dgxc": {"partition", "account", "squash_dir"},
-    "h200-dgxc": {"partition", "squash_dir"},
-    "b200-dgxc": {"partition", "account", "squash_dir"},
-    "b300": {"partition", "account", "squash_dir"},
-    "gb200": {"partition", "account", "storage_roots"},
-    "gb300": {"partition", "account", "squash_dir", "enroot_cache_path"},
-    "mi300x": {"partition", "squash_dir"},
-    "mi325x": {"partition", "squash_dir"},
-    "mi355x": {"partition", "squash_dir"},
-}
-ALLOWED = {
-    "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
-    "h200-dgxc": REQUIRED["h200-dgxc"] | {"account", "exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
-    "b200-dgxc": REQUIRED["b200-dgxc"] | {
-        "exclude_nodes", "nodelist", "stage_dir", "qos",
-    } | NETWORK_FIELDS,
-    "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
-    "gb200": REQUIRED["gb200"] | NETWORK_FIELDS,
-    "gb300": REQUIRED["gb300"] | {"stage_dir"} | NETWORK_FIELDS,
-    "mi300x": REQUIRED["mi300x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
-    "mi325x": REQUIRED["mi325x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
-    "mi355x": REQUIRED["mi355x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
-}
-TOKEN = re.compile(r"^[A-Za-z0-9_.\[\],-]+$")
-PATH = re.compile(r"^/[A-Za-z0-9._/+\-]+$")
-IPV4 = re.compile(r"(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)")
-INTERFACES = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}(?:,[A-Za-z][A-Za-z0-9_.-]{0,31})*$")
-RDMA_DEVICES = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?(?:,[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?)*$")
-
-def pairs(items):
-    result = {}
-    for key, value in items:
-        if key in result:
-            raise ValueError
-        result[key] = value
-    return result
-
-def valid_path(value):
-    return (
-        isinstance(value, str) and len(value) <= 1024 and PATH.fullmatch(value)
-        and posixpath.normpath(value) == value and not IPV4.search(value)
-    )
-
-def bounded_integer(value, maximum):
-    if type(value) is int:
-        result = value
-    elif isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", value):
-        result = int(value)
-    else:
-        raise ValueError
-    if not 0 <= result <= maximum:
-        raise ValueError
-    return result
-
-try:
-    path, runner = sys.argv[1:]
-    if runner not in RUNNERS:
-        raise ValueError
-    metadata = os.lstat(path)
-    if (
-        not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
-        or stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_size > 65536
-    ):
-        raise ValueError
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
-    try:
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
-            raise ValueError
-        payload = b""
-        while len(payload) <= 65536:
-            chunk = os.read(descriptor, 65537 - len(payload))
-            if not chunk:
-                break
-            payload += chunk
-        document = json.loads(
-            payload.decode("utf-8"),
-            object_pairs_hook=pairs,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()),
-        )
-    finally:
-        os.close(descriptor)
-    if (
-        set(document) != {"schema_version", "runners"}
-        or type(document["schema_version"]) is not int
-        or document["schema_version"] != 1
-    ):
-        raise ValueError
-    runners = document["runners"]
-    if (
-        not isinstance(runners, dict) or not runners or set(runners) - RUNNERS
-        or runner not in runners
-    ):
-        raise ValueError
-    selected = None
-    for name, config in runners.items():
-        if not isinstance(config, dict):
-            raise ValueError
-        if name == runner:
-            missing = sorted(REQUIRED[name] - set(config))
-            if missing:
-                print(
-                    "validation-missing-required-" + "-".join(missing),
-                    file=sys.stderr,
-                )
-                raise SystemExit(1)
-        if set(config) - ALLOWED[name]:
-            raise ValueError
-        for field, value in config.items():
-            if field == "storage_roots":
-                if (
-                    not isinstance(value, list) or not 1 <= len(value) <= 16
-                    or len(value) != len(set(value)) or not all(valid_path(item) for item in value)
-                ):
-                    raise ValueError
-            elif field == "socket_ifname":
-                if not isinstance(value, str) or not INTERFACES.fullmatch(value):
-                    raise ValueError
-            elif field == "rdma_devices":
-                if not isinstance(value, str) or not RDMA_DEVICES.fullmatch(value):
-                    raise ValueError
-            elif field == "ib_gid_index":
-                config[field] = bounded_integer(value, 255)
-            elif field == "rdma_service_level":
-                config[field] = bounded_integer(value, 15)
-            elif field == "rdma_traffic_class":
-                config[field] = bounded_integer(value, 255)
-            elif field.endswith(("_dir", "_path")):
-                if not valid_path(value):
-                    raise ValueError
-            elif (
-                not isinstance(value, str) or not value or len(value) > 512
-                or not TOKEN.fullmatch(value) or IPV4.search(value)
-            ):
-                raise ValueError
-        if name == runner:
-            selected = dict(config)
-    if selected is None:
-        raise ValueError
-    roots = selected.pop("storage_roots", None)
-    if roots is not None:
-        for root in roots:
-            squash = posixpath.join(root, "collectivex", "containers")
-            stage = posixpath.join(root, "collectivex", "stage")
-            probes = []
-            try:
-                for directory in (squash, stage):
-                    os.makedirs(directory, mode=0o700, exist_ok=True)
-                    probe = posixpath.join(directory, f".write-probe-{os.getpid()}")
-                    fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                    os.close(fd)
-                    probes.append(probe)
-                selected.update(squash_dir=squash, stage_dir=stage)
-                break
-            except OSError:
-                pass
-            finally:
-                for probe in probes:
-                    try:
-                        os.unlink(probe)
-                    except OSError:
-                        pass
-        else:
-            raise ValueError
-    for field, value in selected.items():
-        key = FIELDS[field]
-        sys.stdout.buffer.write(
-            key.encode() + b"\0" + str(value).encode() + b"\0"
-        )
-except (KeyError, OSError, TypeError, UnicodeError, ValueError):
-    import traceback
-
-    location = traceback.extract_tb(sys.exc_info()[2])[-1].lineno
-    print(f"validation-line-{location}", file=sys.stderr)
-    raise SystemExit(1)
-PY
+  if ! python3 "$CX_RUNTIME_DIR/config.py" operator-config "$config_path" \
+      "${CX_RUNNER:-${CX_SHARD_SKU:-${CX_PUBLIC_RUNNER:-}}}" \
+      > "$parsed_path" 2> "$config_log"
   then
     validation_code="$(head -n 1 "$config_log" 2>/dev/null || true)"
     rm -f -- "$parsed_path"
@@ -345,86 +138,8 @@ PY
 
 cx_private_log_path() {
   local label="$1" tag="${COLLECTIVEX_EXECUTION_ID:-manual_$$}" path
-  path="$(python3 - "$tag" "$label" <<'PY' 2>/dev/null
-import os
-import re
-import shutil
-import stat
-import sys
-import time
-
-tag, label = sys.argv[1:]
-if not all(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) for value in (tag, label)):
-    raise SystemExit(1)
-root = f"/tmp/inferencex-collectivex-{os.getuid()}"
-job_root = os.environ.get("CX_JOB_ROOT", "")
-job_parent = os.environ.get("CX_JOB_PARENT", "")
-if (
-    os.environ.get("COLLECTIVEX_CANONICAL_GHA") == "1"
-    and job_parent
-    and job_parent != "/tmp"
-):
-    if (
-        not os.path.isabs(job_root)
-        or os.path.dirname(job_root) != job_parent
-        or not re.fullmatch(
-            r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+",
-            os.path.basename(job_root),
-        )
-    ):
-        raise SystemExit(1)
-    control = os.path.join(job_root, "control")
-    control_metadata = os.stat(control, follow_symlinks=False)
-    if (
-        not stat.S_ISDIR(control_metadata.st_mode)
-        or control_metadata.st_uid != os.getuid()
-        or stat.S_IMODE(control_metadata.st_mode) != 0o700
-    ):
-        raise SystemExit(1)
-    root = os.path.join(control, "private-logs")
-old_umask = os.umask(0o077)
-flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-try:
-    try:
-        os.mkdir(root, 0o700)
-    except FileExistsError:
-        pass
-    root_fd = os.open(root, flags)
-    try:
-        metadata = os.fstat(root_fd)
-        if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o700:
-            raise OSError("unsafe root")
-        cutoff = time.time() - 86400
-        for entry in os.scandir(root):
-            try:
-                if (
-                    entry.name != tag and entry.is_dir(follow_symlinks=False)
-                    and entry.stat(follow_symlinks=False).st_mtime < cutoff
-                ):
-                    shutil.rmtree(entry.path)
-            except OSError:
-                pass
-        try:
-            os.mkdir(tag, 0o700, dir_fd=root_fd)
-        except FileExistsError:
-            pass
-        directory_fd = os.open(tag, flags, dir_fd=root_fd)
-        try:
-            metadata = os.fstat(directory_fd)
-            if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o700:
-                raise OSError("unsafe directory")
-            log_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-            log_fd = os.open(f"{label}.log", log_flags, 0o600, dir_fd=directory_fd)
-            os.close(log_fd)
-        finally:
-            os.close(directory_fd)
-    finally:
-        os.close(root_fd)
-finally:
-    os.umask(old_umask)
-print(f"{root}/{tag}/{label}.log", end="")
-PY
-)" || cx_die "cannot create private runtime log"
+  path="$(python3 "$CX_RUNTIME_DIR/stage.py" private-log "$tag" "$label" 2>/dev/null)" \
+    || cx_die "cannot create private runtime log"
   printf '%s' "$path"
 }
 
@@ -434,60 +149,14 @@ PY
 cx_cleanup_private_logs() {
   local rc="$1" tag="${COLLECTIVEX_EXECUTION_ID:-manual_$$}"
   [ "$rc" = 0 ] || return 0
-  python3 - "$tag" <<'PY' >/dev/null 2>&1 || true
-import os
-import re
-import shutil
-import stat
-import sys
-
-tag = sys.argv[1]
-if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", tag):
-    raise SystemExit(1)
-root = f"/tmp/inferencex-collectivex-{os.getuid()}"
-job_root = os.environ.get("CX_JOB_ROOT", "")
-job_parent = os.environ.get("CX_JOB_PARENT", "")
-if (
-    os.environ.get("COLLECTIVEX_CANONICAL_GHA") == "1"
-    and job_parent
-    and job_parent != "/tmp"
-):
-    if (
-        not os.path.isabs(job_root)
-        or os.path.dirname(job_root) != job_parent
-        or not re.fullmatch(
-            r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+",
-            os.path.basename(job_root),
-        )
-    ):
-        raise SystemExit(1)
-    control = os.path.join(job_root, "control")
-    control_metadata = os.stat(control, follow_symlinks=False)
-    if (
-        not stat.S_ISDIR(control_metadata.st_mode)
-        or control_metadata.st_uid != os.getuid()
-        or stat.S_IMODE(control_metadata.st_mode) != 0o700
-    ):
-        raise SystemExit(1)
-    root = os.path.join(control, "private-logs")
-flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-root_fd = os.open(root, flags)
-try:
-    metadata = os.fstat(root_fd)
-    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o700:
-        raise SystemExit(1)
-finally:
-    os.close(root_fd)
-path = os.path.join(root, tag)
-if os.path.isdir(path) and not os.path.islink(path):
-    shutil.rmtree(path)
-PY
+  python3 "$CX_RUNTIME_DIR/stage.py" cleanup-private-logs "$tag" \
+    >/dev/null 2>&1 || true
 }
 
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
 cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
+  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
@@ -599,17 +268,6 @@ cx_apply_network_profile() {
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
-  elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ]; then
-    # All 8 b300 GPUs share one NVLink domain, so single-node EP has no
-    # cross-node peers and NVSHMEM must stay on intranode P2P/NVLink. DeepEP v1
-    # low-latency kernels otherwise make NVSHMEM bring up the IBRC remote
-    # transport, which loops on RoCE-HCA loopback QP setup (ibrc ibv_modify_qp
-    # status 110) until the 900s case timeout. NVSHMEM_REMOTE_TRANSPORT=none is
-    # the documented switch that disables the remote transport entirely (no
-    # remote ranks exist to serve); DeepEP's allow_nvlink_for_low_latency_mode
-    # then runs low-latency over NVLink. NVSHMEM_DISABLE_IB is not a recognized
-    # NVSHMEM variable and had no effect, which is why the IBRC path still ran.
-    export NVSHMEM_REMOTE_TRANSPORT=none
   fi
   [ "$scaleout" = 1 ] || return 0
   [ -n "${CX_RDMA_DEVICES:-}" ] \
@@ -662,9 +320,6 @@ cx_apply_network_profile() {
       && export MORI_RDMA_TC="$CX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$CX_RDMA_TRAFFIC_CLASS"
   fi
   local nic_handler=gpu
-  if [ "${CX_SHARD_SKU:-}" = b200-dgxc ] && [ "${CX_BENCH:-}" = deepep ]; then
-    nic_handler=cpu
-  fi
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
   if [ -n "${CX_RDMA_LINK_LAYER:-}" ]; then
     case "$CX_RDMA_LINK_LAYER" in
@@ -690,13 +345,7 @@ cx_restore_exact_hca_selector() {
 }
 
 cx_default_route_interface() {
-  python3 - <<'PY'
-from pathlib import Path
-for line in Path('/proc/net/route').read_text().splitlines()[1:]:
-    fields = line.split()
-    if len(fields) >= 4 and fields[1] == '00000000' and int(fields[3], 16) & 1:
-        print(fields[0], end=''); break
-PY
+  python3 "$CX_RUNTIME_DIR/probe.py" default-route-interface
 }
 
 # Prove that the operator-pinned scale-out fabric exists on every allocated
@@ -720,94 +369,10 @@ cx_validate_network_profile_on_job() {
   log="$(cx_private_log_path "$log_label")" || return 1
   CX_NETWORK_PROFILE_LOG="$log"
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
-    --chdir=/tmp --input=all \
-    --export="$(cx_host_exports),CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX" \
-    bash -s > "$log" 2>&1 <<'BASH' || rc=$?
-set -euo pipefail
-if [ -z "${CX_SOCKET_IFNAME:-}" ]; then
-  CX_SOCKET_IFNAME="$(python3 - <<'PY'
-from pathlib import Path
-
-for line in Path('/proc/net/route').read_text().splitlines()[1:]:
-    fields = line.split()
-    if len(fields) >= 4 and fields[1] == '00000000' and int(fields[3], 16) & 1:
-        print(fields[0], end='')
-        break
-PY
-)"
-  [ -n "$CX_SOCKET_IFNAME" ] \
-    || { printf '[collectivex-private] socket-interface-1=default-route-missing\n'; exit 1; }
-fi
-[[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]]
-printf '[collectivex-private] socket-interface-selected=%s\n' "$CX_SOCKET_IFNAME"
-[[ "$CX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]]
-if [ -n "${CX_IB_GID_INDEX:-}" ]; then
-  [[ "$CX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$CX_IB_GID_INDEX" -le 255 ]
-fi
-if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
-  IFS=, read -r -a interfaces <<< "$CX_SOCKET_IFNAME"
-  socket_ordinal=0
-  for interface in "${interfaces[@]}"; do
-    socket_ordinal=$((socket_ordinal + 1))
-    [ -d "/sys/class/net/$interface" ] \
-      || { printf '[collectivex-private] socket-interface-%s=missing\n' "$socket_ordinal"; exit 1; }
-    state="$(cat "/sys/class/net/$interface/operstate")"
-    [ "$state" = up ] || [ "$state" = unknown ] \
-      || { printf '[collectivex-private] socket-interface-%s=down\n' "$socket_ordinal"; exit 1; }
-  done
-fi
-check_port() {
-  local port_path="$1" ordinal="$2" state gid link_layer
-  [ -d "$port_path" ] \
-    || { printf '[collectivex-private] rdma-port-%s=missing\n' "$ordinal"; return 1; }
-  read -r state _ < "$port_path/state"
-  [ "$state" = 4: ] \
-    || { printf '[collectivex-private] rdma-port-%s=inactive\n' "$ordinal"; return 1; }
-  if [ -n "${CX_IB_GID_INDEX:-}" ]; then
-    [ -r "$port_path/gids/$CX_IB_GID_INDEX" ] \
-      || { printf '[collectivex-private] rdma-port-%s=gid-missing\n' "$ordinal"; return 1; }
-    gid="$(tr -d ':0[:space:]' < "$port_path/gids/$CX_IB_GID_INDEX")"
-    [ -n "$gid" ] \
-      || { printf '[collectivex-private] rdma-port-%s=gid-empty\n' "$ordinal"; return 1; }
-  fi
-  [ -r "$port_path/link_layer" ] \
-    || { printf '[collectivex-private] rdma-port-%s=link-layer-missing\n' "$ordinal"; return 1; }
-  link_layer="$(< "$port_path/link_layer")"
-  case "$link_layer" in
-    Ethernet) link_layer=roce ;;
-    InfiniBand) link_layer=infiniband ;;
-    *) printf '[collectivex-private] rdma-port-%s=link-layer-invalid\n' "$ordinal"; return 1 ;;
-  esac
-  [ -z "${profile:-}" ] || [ "$profile" = "$link_layer" ] \
-    || { printf '[collectivex-private] rdma-port-%s=link-layer-mixed\n' "$ordinal"; return 1; }
-  profile="$link_layer"
-}
-profile=""
-IFS=, read -r -a devices <<< "$CX_RDMA_DEVICES"
-ordinal=0
-for selector in "${devices[@]}"; do
-  ordinal=$((ordinal + 1))
-  device="${selector%%:*}"
-  configured_port=""
-  [ "$selector" = "$device" ] || configured_port="${selector#*:}"
-  ports="/sys/class/infiniband/$device/ports"
-  [ -d "$ports" ] \
-    || { printf '[collectivex-private] rdma-device-%s=missing\n' "$ordinal"; exit 1; }
-  if [ -n "$configured_port" ]; then
-    check_port "$ports/$configured_port" "$ordinal"
-  else
-    active=0
-    for port_path in "$ports"/*; do
-      if check_port "$port_path" "$ordinal"; then
-        active=1
-      fi
-    done
-    [ "$active" = 1 ]
-  fi
-done
-[ -n "$profile" ]
-printf '[collectivex-private] rdma-link-layer=%s\n' "$profile"
-BASH
+    --chdir=/tmp --input=all --export="$(cx_host_exports)" \
+    python3 /dev/stdin network-profile "${CX_SOCKET_IFNAME:-}" \
+      "$CX_RDMA_DEVICES" "${CX_IB_GID_INDEX:-}" \
+    < "$CX_RUNTIME_DIR/probe.py" > "$log" 2>&1 || rc=$?
   if [ "$rc" != 0 ]; then
     marker="$(grep -aoE '(socket-interface|rdma-(device|port))-[0-9]+=(missing|down|inactive|default-route-missing|gid-missing|gid-empty|link-layer-missing|link-layer-invalid|link-layer-mixed)' "$log" \
       | tail -n 1 || true)"
@@ -933,30 +498,18 @@ cx_validate_shard_control() {
     || cx_die "invalid shard control"
 }
 
-# Load only the case mode needed to choose the allocation/network profile. A
-# consolidated shard may contain normal and low-latency cases; selecting the
-# strictest mode here makes allocation preflight prove every required device.
-# The in-container dispatcher reapplies the profile for each individual case.
+# Load the case mode needed to choose the allocation/network profile. Every
+# case runs in normal mode; the in-container dispatcher reapplies the profile
+# for each individual case.
 cx_load_network_control_mode() {
   local cx_root="$1" shard="${CX_SHARD_FILE:-}" path mode
   [ -n "$shard" ] || return 0
   path="$shard"
   [ -f "$path" ] || path="${cx_root%/}/$shard"
   [ -f "$path" ] || return 1
-  mode="$(python3 - "$path" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1]) as stream:
-    cases = json.load(stream)["cases"]
-modes = {case["mode"] for case in cases}
-if not modes or modes - {"normal", "low-latency"}:
-    raise SystemExit("invalid shard mode")
-print("low-latency" if "low-latency" in modes else "normal")
-PY
-)" || return 1
+  mode="$(python3 "$CX_RUNTIME_DIR/config.py" network-mode "$path")" || return 1
   case "$mode" in
-    normal|low-latency) export CX_MODE="$mode" ;;
+    normal) export CX_MODE="$mode" ;;
     *) return 1 ;;
   esac
 }
@@ -1225,112 +778,13 @@ cx_select_image() {
 cx_prepare_backend_cache() {
   local cache
   unset CX_PREPARED_BACKEND_CACHE
-  cache="$(python3 - "$1" <<'PY'
-import os
-import stat
-import sys
-
-parent = os.path.realpath(sys.argv[1])
-marker_name = ".collectivex-cache-v1"
-marker_value = b"collectivex-cache-v1\n"
-flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-try:
-    parent_fd = os.open(parent, flags)
-    try:
-        probe = f".collectivex-owner-probe-{os.getpid()}"
-        os.mkdir(probe, 0o700, dir_fd=parent_fd)
-        try:
-            probe_fd = os.open(probe, flags, dir_fd=parent_fd)
-            owner = os.fstat(probe_fd).st_uid
-            os.close(probe_fd)
-        finally:
-            os.rmdir(probe, dir_fd=parent_fd)
-        name = f".collectivex-backend-cache-v4-{os.getuid()}"
-        try:
-            os.mkdir(name, 0o700, dir_fd=parent_fd)
-        except FileExistsError:
-            pass
-        cache_fd = os.open(name, flags, dir_fd=parent_fd)
-        try:
-            cache = os.fstat(cache_fd)
-            if cache.st_uid != owner or stat.S_IMODE(cache.st_mode) != 0o700:
-                raise OSError
-            create = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-            try:
-                marker_fd = os.open(marker_name, create, 0o600, dir_fd=cache_fd)
-                os.write(marker_fd, marker_value)
-                os.close(marker_fd)
-            except FileExistsError:
-                pass
-            marker_fd = os.open(
-                marker_name,
-                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-                dir_fd=cache_fd,
-            )
-            try:
-                marker = os.fstat(marker_fd)
-                payload = os.read(marker_fd, len(marker_value) + 1)
-                if (
-                    not stat.S_ISREG(marker.st_mode)
-                    or marker.st_uid != owner
-                    or stat.S_IMODE(marker.st_mode) != 0o600
-                    or payload != marker_value
-                ):
-                    raise OSError
-            finally:
-                os.close(marker_fd)
-        finally:
-            os.close(cache_fd)
-    finally:
-        os.close(parent_fd)
-except OSError:
-    raise SystemExit(1)
-print(os.path.join(parent, name), end="")
-PY
-  )" || return 1
+  cache="$(python3 "$CX_RUNTIME_DIR/probe.py" prepare-cache "$1")" || return 1
   [[ "$cache" = /* ]] || return 1
   export CX_PREPARED_BACKEND_CACHE="$cache"
 }
 
 cx_verify_backend_cache_mount() {
-  python3 - "${CX_BACKEND_CACHE_ROOT:-}" <<'PY'
-import os
-import stat
-import sys
-
-root = sys.argv[1]
-marker_value = b"collectivex-cache-v1\n"
-try:
-    if root != "/cx-cache" or os.path.realpath(root) != root:
-        raise OSError
-    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
-    root_fd = os.open(root, flags)
-    try:
-        cache = os.fstat(root_fd)
-        if stat.S_IMODE(cache.st_mode) != 0o700:
-            raise OSError
-        marker_fd = os.open(
-            ".collectivex-cache-v1",
-            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=root_fd,
-        )
-        try:
-            marker = os.fstat(marker_fd)
-            payload = os.read(marker_fd, len(marker_value) + 1)
-            if (
-                not stat.S_ISREG(marker.st_mode)
-                or marker.st_uid != cache.st_uid
-                or stat.S_IMODE(marker.st_mode) != 0o600
-                or payload != marker_value
-            ):
-                raise OSError
-        finally:
-            os.close(marker_fd)
-    finally:
-        os.close(root_fd)
-except OSError:
-    raise SystemExit(1)
-PY
+  python3 "$CX_RUNTIME_DIR/probe.py" verify-cache-mount "${CX_BACKEND_CACHE_ROOT:-}"
 }
 
 cx_git() {
@@ -1416,19 +870,7 @@ cx_backend_source_is_valid() {
 }
 
 cx_apply_deepep_v2_nccl_check_fix() {
-  local source="$1"
-  python3 - "$source/deep_ep/__init__.py" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-old = "for so in [line.strip().split(' ')[-1] for line in f if 'nccl' in line]:"
-new = "for so in [line.strip().split(' ')[-1] for line in f if 'libnccl' in line]:"
-payload = path.read_text(encoding="utf-8")
-if payload.count(old) != 1 or new in payload:
-    raise SystemExit(1)
-path.write_text(payload.replace(old, new), encoding="utf-8")
-PY
+  python3 "$CX_RUNTIME_DIR/stage.py" rewrite-deepep-v2 "$1/deep_ep/__init__.py"
 }
 
 # Acquire source before compute allocation, preferring the verified same-run GHA seed.
@@ -1549,71 +991,7 @@ cx_materialize_backend_source() {
 }
 
 cx_prepare_implicit_stage_base() {
-  python3 - "${1:-}" "${2:-}" <<'PY'
-import os
-from pathlib import Path
-import pwd
-import stat
-import sys
-
-def reject(reason):
-    print(f"[collectivex] FATAL: implicit-stage-validation={reason}", file=sys.stderr)
-    raise SystemExit(1)
-
-try:
-    configured_home = Path(sys.argv[1] or pwd.getpwuid(os.getuid()).pw_dir)
-except (KeyError, OSError):
-    reject("account-home")
-if not configured_home.is_absolute():
-    reject("path-shape")
-home = Path(os.path.realpath(configured_home))
-try:
-    metadata = os.stat(home, follow_symlinks=False)
-except OSError:
-    reject("home-stat")
-if not stat.S_ISDIR(metadata.st_mode):
-    reject("home-type")
-if metadata.st_uid != os.getuid():
-    reject("home-owner")
-if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
-    reject("home-group-writable")
-if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
-    reject("home-world-writable")
-home_owner = metadata.st_uid
-try:
-    isolation_key = sys.argv[2]
-    suffix = ""
-    if isolation_key:
-        safe = "".join(character if character.isalnum() or character in "_.-" else "-"
-                       for character in isolation_key).strip("-")
-        if not safe:
-            reject("isolation-key")
-        if len(safe) > 48:
-            safe = safe[:24] + "-" + safe[-23:]
-        suffix = "-" + safe
-    current = home / f".inferencex-collectivex-stage{suffix}"
-    created = False
-    try:
-        os.mkdir(current, mode=0o700)
-        created = True
-    except FileExistsError:
-        pass
-    metadata = os.stat(current, follow_symlinks=False)
-    if not stat.S_ISDIR(metadata.st_mode):
-        reject("child-type")
-    if metadata.st_uid not in {os.getuid(), home_owner} and not (
-        isolation_key and created and metadata.st_uid == 0
-    ):
-        reject("child-owner")
-    if Path(os.path.realpath(current)) != current:
-        reject("child-symlink")
-    if stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH):
-        reject("child-writable")
-    os.chmod(current, 0o700)
-except OSError:
-    reject("child-access")
-print(current, end="")
-PY
+  python3 "$CX_RUNTIME_DIR/stage.py" implicit-stage-base "${1:-}" "${2:-}"
 }
 
 cx_prepare_runner_shared_stage_base() {
@@ -1628,7 +1006,7 @@ cx_prepare_runner_shared_stage_base() {
 }
 
 cx_lock_canonical_gha_env() {
-  local runner="$1" expected_nodes expected_gpn expected_world trusted_lock_dir=""
+  local runner="$1" trusted_lock_dir=""
   local trusted_stage_dir=""
   local trusted_qos=""
   local trusted_socket_ifname="" trusted_rdma_devices=""
@@ -1715,8 +1093,7 @@ cx_lock_canonical_gha_env() {
     # The MI300X runner home is a shared-filesystem symlink. Resolve the
     # operator-selected base once; cx_stage_path still validates the canonical
     # directory's ownership, permissions, overlap, and per-run child path.
-    trusted_stage_dir="$(python3 -c \
-      'import os,sys; p=os.path.realpath(sys.argv[1]); assert os.path.isdir(p); print(p,end="")' \
+    trusted_stage_dir="$(python3 "$CX_RUNTIME_DIR/stage.py" resolve-directory \
       "$trusted_stage_dir")" \
       || cx_die "canonical MI300X execution cannot resolve the shared stage directory"
   fi
@@ -1724,44 +1101,20 @@ cx_lock_canonical_gha_env() {
     CX_STAGE_PARENT_OWNER_OK=1
   fi
 
-  case "$runner" in
-    h100-dgxc|h200-dgxc|b200-dgxc|b300)
-      expected_nodes="${CX_NODES:-}"; expected_gpn=8
-      [ "$expected_nodes" = 1 ] || [ "$expected_nodes" = 2 ] \
-        || cx_die "canonical NVIDIA execution requires one or two nodes"
-      CX_IMAGE="$CX_IMAGE_MULTIARCH"
-      CX_NCCL_HOME=/usr
-      ;;
-    gb200|gb300)
-      expected_nodes="${CX_NODES:-}"; expected_gpn=4
-      [ "$expected_nodes" = 2 ] || [ "$expected_nodes" = 4 ] \
-        || cx_die "canonical GB execution requires two or four trays"
-      CX_IMAGE="$CX_IMAGE_MULTIARCH"
-      CX_NCCL_HOME=/usr
-      CX_MASTER_PORT=29551
-      ;;
-    mi300x|mi325x|mi355x)
-      expected_nodes="${CX_NODES:-}"; expected_gpn=8
-      [ "$expected_nodes" = 1 ] || [ "$expected_nodes" = 2 ] \
-        || cx_die "canonical AMD execution requires one or two nodes"
-      # All three CDNA SKUs run the same MoRI-bundled image (mi35x tag covers
-      # gfx942 + gfx950); mi355x was migrated off the older 0227 image (sglang
-      # 0.5.9), whose MoRI build hung during EpDispatchCombineOp construction.
-      CX_IMAGE="$CX_IMAGE_AMD_MORI_MI325"
-      if [ "$expected_nodes" = 2 ]; then
-        CX_MORI_KERNEL_TYPE=internode-v1
-      else
-        CX_MORI_KERNEL_TYPE=asyncll
-      fi
-      MORI_COMMIT="$CX_MORI_COMMIT_MI325"
-      MORI_DISABLE_AUTO_XGMI=0
-      MORI_ENABLE_SDMA=1
-      MORI_APP_LOG_LEVEL=info
-      MORI_SHMEM_LOG_LEVEL=info
-      MORI_IO_LOG_LEVEL=info
-      ;;
-    *) cx_die "canonical CollectiveX runner is not registered" ;;
-  esac
+  local policy_file policy_key policy_value
+  policy_file="$(mktemp /tmp/inferencex-collectivex-policy.XXXXXX)" \
+    || cx_die "cannot derive canonical SKU policy"
+  if ! python3 "$CX_RUNTIME_DIR/config.py" canonical-policy "$runner" \
+      "${CX_NODES:-0}" "${CX_GPUS_PER_NODE:-0}" \
+      "$CX_IMAGE_MULTIARCH" "$CX_IMAGE_AMD_MORI_MI325" "$CX_MORI_COMMIT_MI325" \
+      > "$policy_file"; then
+    rm -f -- "$policy_file"
+    cx_die "canonical CollectiveX placement differs from the SKU policy"
+  fi
+  while IFS= read -r -d '' policy_key && IFS= read -r -d '' policy_value; do
+    printf -v "$policy_key" '%s' "$policy_value"
+  done < "$policy_file"
+  rm -f -- "$policy_file"
   case "$runner:$trusted_lock_dir" in
     mi300x:?*|mi325x:?*|mi355x:?*) export CX_LOCK_DIR="$trusted_lock_dir" ;;
   esac
@@ -1778,15 +1131,8 @@ cx_lock_canonical_gha_env() {
   [ -z "$trusted_rdma_traffic_class" ] \
     || export CX_RDMA_TRAFFIC_CLASS="$trusted_rdma_traffic_class"
   export CX_STAGE_DIR
-  [ "${CX_NODES:-}" = "$expected_nodes" ] \
-    && [ "${CX_GPUS_PER_NODE:-}" = "$expected_gpn" ] \
-    || cx_die "canonical CollectiveX placement differs from the shard"
-  expected_world=$((expected_nodes * expected_gpn))
-  CX_NGPUS="$expected_world"
-  CX_SEED=67
-  case "$runner" in mi300x|mi325x|mi355x) CX_RUN_TIMEOUT=1800 ;; *) CX_RUN_TIMEOUT=900 ;; esac
   unset CX_PUBLIC_RUNNER CX_GB_PRODUCT CX_DRYRUN CX_TIMING CX_ALLOW_MNNVL
-  unset CX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE COLLECTIVEX_SQUASH_SHA256
+  unset CX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE
   export CX_IMAGE CX_NGPUS CX_SEED CX_RUN_TIMEOUT
   case "$runner" in
     h100-dgxc|h200-dgxc|b200-dgxc|b300) export CX_NCCL_HOME ;;
@@ -1796,15 +1142,6 @@ cx_lock_canonical_gha_env() {
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;
   esac
-}
-
-cx_export_squash_identity() {
-  local image="$1" digest log
-  log="$(cx_private_log_path container-hash)"
-  digest="$(sha256sum "$image" 2>> "$log" | awk '{print $1}')"
-  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] \
-    || { cx_fail_stage container-hash "$log"; return 1; }
-  export COLLECTIVEX_SQUASH_SHA256="$digest"
 }
 
 cx_squash_path() {
@@ -2028,59 +1365,8 @@ cx_validate_cuda_context_on_job() {
   CX_CUDA_CONTEXT_LOG="$log"
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
     --gres=gpu:"$gpus_per_node" --chdir=/tmp --input=all \
-    --export="$(cx_host_exports)" python3 - "$gpus_per_node" \
-    >"$log" 2>&1 <<'PY'
-import ctypes
-import socket
-import sys
-
-expected = int(sys.argv[1])
-cuda = ctypes.CDLL("libcuda.so.1")
-cuda.cuInit.argtypes = [ctypes.c_uint]
-cuda.cuInit.restype = ctypes.c_int
-cuda.cuDeviceGetCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
-cuda.cuDeviceGetCount.restype = ctypes.c_int
-cuda.cuDeviceGet.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_int]
-cuda.cuDeviceGet.restype = ctypes.c_int
-cuda.cuDevicePrimaryCtxRetain.argtypes = [
-    ctypes.POINTER(ctypes.c_void_p), ctypes.c_int,
-]
-cuda.cuDevicePrimaryCtxRetain.restype = ctypes.c_int
-cuda.cuDevicePrimaryCtxRelease.argtypes = [ctypes.c_int]
-cuda.cuDevicePrimaryCtxRelease.restype = ctypes.c_int
-
-
-def check(result: int, operation: str) -> None:
-    if result != 0:
-        raise RuntimeError(f"{operation} failed with CUDA result {result}")
-
-
-check(cuda.cuInit(0), "CUDA initialization")
-count = ctypes.c_int()
-check(cuda.cuDeviceGetCount(ctypes.byref(count)), "CUDA device count")
-if count.value != expected:
-    raise RuntimeError(
-        f"CUDA device count mismatch on {socket.gethostname()}: "
-        f"expected {expected}, found {count.value}"
-    )
-
-devices: list[int] = []
-try:
-    for ordinal in range(expected):
-        device = ctypes.c_int()
-        context = ctypes.c_void_p()
-        check(cuda.cuDeviceGet(ctypes.byref(device), ordinal), "CUDA device lookup")
-        result = cuda.cuDevicePrimaryCtxRetain(ctypes.byref(context), device.value)
-        if result != 0:
-            raise RuntimeError(
-                f"CUDA primary context retain failed on {socket.gethostname()} "
-                f"device {ordinal} with CUDA result {result}"
-            )
-        devices.append(device.value)
-finally:
-    for device in reversed(devices):
-        check(cuda.cuDevicePrimaryCtxRelease(device), "CUDA primary context release")
-PY
+    --export="$(cx_host_exports)" python3 /dev/stdin cuda-context "$gpus_per_node" \
+    < "$CX_RUNTIME_DIR/probe.py" >"$log" 2>&1
 }
 
 # Resolve the exact per-execution child before any copy starts, so the parent
@@ -2100,130 +1386,29 @@ cx_stage_path() {
   else
     stage_path="${stage_base%/}/job_$safe_tag"
   fi
-  python3 - "$repo_root" "$stage_base" "$stage_path" \
-    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" \
-    "${CX_STAGE_PARENT_OWNER_OK:-0}" <<'PY'
-import os
-import stat
-import sys
-
-repo, base, child, job_root, workspace, allow_parent_owner = sys.argv[1:]
-def reject(reason):
-    print(f"[collectivex] FATAL: stage-base-validation={reason}", file=sys.stderr)
-    raise SystemExit(1)
-
-try:
-    if (
-        not os.path.isabs(repo)
-        or os.path.realpath(repo) != repo
-        or not os.path.isabs(base)
-        or os.path.realpath(base) != base
-        or not os.path.isabs(child)
-        or os.path.dirname(child) != base.rstrip("/")
-    ):
-        reject("path-shape")
-    if os.path.lexists(child):
-        reject("child-exists")
-    try:
-        metadata = os.stat(base, follow_symlinks=False)
-    except OSError:
-        reject("base-stat")
-    excluded = [repo]
-    excluded.extend(path for path in (job_root, workspace) if path)
-    for path in excluded:
-        resolved = os.path.realpath(path)
-        if os.path.commonpath((base, resolved)) == resolved:
-            reject("overlap")
-    if not stat.S_ISDIR(metadata.st_mode):
-        reject("not-directory")
-    if metadata.st_uid != os.getuid():
-        if allow_parent_owner != "1":
-            reject("owner")
-        parent = os.path.dirname(base.rstrip("/"))
-        parent_metadata = os.stat(parent, follow_symlinks=False)
-        if (
-            not stat.S_ISDIR(parent_metadata.st_mode)
-            or metadata.st_uid not in {parent_metadata.st_uid, 0}
-            or stat.S_IMODE(parent_metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
-        ):
-            reject("parent-owner")
-    if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
-        reject("group-writable")
-    if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
-        reject("world-writable")
-    if not os.access(base, os.W_OK | os.X_OK):
-        reject("access")
-except ValueError:
-    reject("path-shape")
-print(child, end="")
-PY
+  local -a args=(validate-stage-path "$repo_root" "$stage_base" "$stage_path"
+    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}")
+  [ "${CX_STAGE_PARENT_OWNER_OK:-0}" != 1 ] || args+=(--allow-parent-owner)
+  python3 "$CX_RUNTIME_DIR/stage.py" "${args[@]}"
 }
 
 # Stage only the public benchmark tree into a pre-resolved, private execution
 # child. A runner-owned marker makes recursive cleanup an explicit capability.
 cx_stage_repo() {
-  local repo_root="$1" stage_dir="$2" expected log tag marker
+  local repo_root="$1" stage_dir="$2" expected log tag copy_error
   cx_validate_shard_control "$repo_root/experimental/CollectiveX"
   expected="$(cx_stage_path "$repo_root" "${CX_STAGE_DIR:-}")" \
     || cx_die "configured stage base is unavailable or unsafe"
   [ "$stage_dir" = "$expected" ] \
     || cx_die "execution stage differs from the configured stage base"
   tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
-  if [ -e "$stage_dir" ] || [ -L "$stage_dir" ]; then
-    cx_die "refusing to reuse a pre-existing execution stage"
-  fi
-  mkdir -m 700 "$stage_dir" 2>/dev/null \
-    || cx_die "cannot create the configured stage directory"
-  chmod 700 "$stage_dir" 2>/dev/null \
-    || cx_die "cannot protect the configured stage directory"
-  marker="$stage_dir/.collectivex-stage-v1"
-  umask 077
-  (set -C; printf 'collectivex-stage-v1\n%s\n' "$tag" > "$marker") 2>/dev/null \
-    || cx_die "cannot claim the configured stage directory"
-  chmod 600 "$marker" 2>/dev/null \
-    || cx_die "cannot protect the configured stage directory"
-  mkdir -m 700 "$stage_dir/experimental" 2>/dev/null \
+  python3 "$CX_RUNTIME_DIR/stage.py" create-stage "$stage_dir" "$tag" \
     || cx_die "cannot create the configured stage directory"
   cx_log "staging CollectiveX on compute-visible storage"
   log="$(cx_private_log_path repository-stage)"
-  if ! python3 - "$repo_root/experimental/CollectiveX" \
-      "$stage_dir/experimental/CollectiveX" > "$log" 2>&1 <<'PY'
-import os
-from pathlib import Path
-import shutil
-import sys
-
-def report_error(kind, value, trace):
-    error_number = getattr(value, "errno", 0)
-    print(f"collectivex-stage-copy-error={kind.__name__}:{error_number or 0}", file=sys.stderr)
-
-sys.excepthook = report_error
-source, target = map(Path, sys.argv[1:])
-excluded = {
-    Path("__pycache__"), Path("results"), Path(".cx_workloads"),
-    Path(".cx_backend"), Path(".cx_sources"), Path("configs/platforms.yaml"),
-    Path("private-infra.md"), Path("goal.md"), Path("notes.md"),
-}
-for root, directories, files in os.walk(source, followlinks=False):
-    root_path = Path(root)
-    relative_root = root_path.relative_to(source)
-    directories[:] = [
-        name for name in directories
-        if relative_root / name not in excluded and not (root_path / name).is_symlink()
-    ]
-    destination = target / relative_root
-    destination.mkdir(mode=0o700, parents=True, exist_ok=True)
-    for name in files:
-        relative = relative_root / name
-        if relative in excluded:
-            continue
-        source_file = root_path / name
-        if source_file.is_symlink() or not source_file.is_file():
-            raise RuntimeError("unsupported source entry")
-        with source_file.open("rb") as input_file, (destination / name).open("xb") as output_file:
-            shutil.copyfileobj(input_file, output_file)
-PY
-  then
+  if ! python3 "$CX_RUNTIME_DIR/stage.py" copy-repository \
+      "$repo_root/experimental/CollectiveX" \
+      "$stage_dir/experimental/CollectiveX" > "$log" 2>&1; then
     copy_error="$(grep -aoE 'collectivex-stage-copy-error=[A-Za-z]+:[0-9]+' "$log" \
       | tail -n 1 || true)"
     [ -z "$copy_error" ] || cx_log "ERROR: repository-stage-$copy_error"
@@ -2272,56 +1457,9 @@ cx_cleanup_stage() {
     cx_log "ERROR: refusing to remove an unrecognized stage directory"
     return 1
   fi
-  if ! python3 - "$mount_src" "$tag" "${CX_STAGE_PARENT_OWNER_OK:-0}" <<'PY'
-import os
-from pathlib import Path
-import stat
-import sys
-
-root = Path(sys.argv[1])
-expected = f"collectivex-stage-v1\n{sys.argv[2]}\n"
-allow_uid_mapped_root = sys.argv[3] == "1"
-try:
-    metadata = os.stat(root, follow_symlinks=False)
-    marker = root / ".collectivex-stage-v1"
-    owner_ok = metadata.st_uid == os.getuid()
-    if not owner_ok and allow_uid_mapped_root and metadata.st_uid == 0:
-        base = root.parent
-        private_parent = base.parent
-        base_metadata = os.stat(base, follow_symlinks=False)
-        parent_metadata = os.stat(private_parent, follow_symlinks=False)
-        owner_ok = (
-            stat.S_ISDIR(base_metadata.st_mode)
-            and base_metadata.st_uid == 0
-            and stat.S_IMODE(base_metadata.st_mode) == 0o700
-            and stat.S_ISDIR(parent_metadata.st_mode)
-            and parent_metadata.st_uid != 0
-            and not stat.S_IMODE(parent_metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
-        )
-    if (
-        not stat.S_ISDIR(metadata.st_mode)
-        or not owner_ok
-        or (stat.S_IMODE(metadata.st_mode) & 0o777) != 0o700
-    ):
-        raise OSError
-    entries = list(root.iterdir())
-    if marker.exists():
-        marker_metadata = os.stat(marker, follow_symlinks=False)
-        if (
-            not stat.S_ISREG(marker_metadata.st_mode)
-            or marker_metadata.st_uid != metadata.st_uid
-            or stat.S_IMODE(marker_metadata.st_mode) != 0o600
-        ):
-            raise OSError
-        marker_content = marker.read_text()
-        if marker_content != expected and entries != [marker]:
-            raise OSError
-    elif entries:
-        raise OSError
-except (OSError, UnicodeError):
-    raise SystemExit(1)
-PY
-  then
+  local -a args=(validate-cleanup "$mount_src" "$tag")
+  [ "${CX_STAGE_PARENT_OWNER_OK:-0}" != 1 ] || args+=(--allow-uid-mapped-root)
+  if ! python3 "$CX_RUNTIME_DIR/stage.py" "${args[@]}"; then
     cx_log "ERROR: refusing to remove an unowned stage directory"
     return 1
   fi
@@ -2390,31 +1528,12 @@ cx_run_distributed_shard() {
   # Iterable benchmark version is a shard-level scalar; export it once so the
   # harness copies it verbatim into every emitted result for this shard.
   if [ -n "$shard" ] && [ -f "$shard" ]; then
-    CX_VERSION="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$shard")"
+    CX_VERSION="$(python3 "$CX_RUNTIME_DIR/config.py" shard-version "$shard")"
     export CX_VERSION
   fi
   if [ -n "$shard" ]; then
-    if [ ! -f "$shard" ] || ! python3 - "$shard" > "$cases_file" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1]) as handle:
-    cases = json.load(handle)["cases"]
-for case in cases:
-    get = lambda key, default="": str(case.get(key) or default)
-    fields = (
-        get("phase", "decode"), get("mode", "normal"), get("routing", "uniform"),
-        get("hidden", "7168"),
-        get("topk", "8"), get("experts", "256"), get("ladder"),
-        get("suite"), get("workload"),
-        "1" if case.get("canonical") else "", get("case_id"), get("ep"),
-        get("timing", "8:64:32"), get("nodes"), get("gpus_per_node"),
-        get("scale_up_domain"), get("scope"), get("scale_up_transport"),
-        get("scale_out_transport"), get("transport"), get("topology_class"),
-    )
-    print("|".join(fields))
-PY
-    then
+    if [ ! -f "$shard" ] || ! python3 "$CX_RUNTIME_DIR/config.py" \
+        shard-cases "$shard" > "$cases_file"; then
       rm -f "$cases_file"
       cx_die "could not enumerate validated shard cases"
     fi

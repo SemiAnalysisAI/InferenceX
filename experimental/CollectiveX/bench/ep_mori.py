@@ -47,19 +47,6 @@ def _mori_source_commit() -> str:
     raise RuntimeError("MoRI image source revision is unavailable")
 
 
-def _mori_input_capacity(args, world_size: int) -> int:
-    """Reserve enough rows for the worst legal Zipf destination rank."""
-    base = 512
-    if getattr(args, "routing", "uniform") != "zipf":
-        return base
-    spec = str(getattr(args, "tokens_ladder", "")).replace(",", " ").split()
-    if spec:
-        largest = max(int(token) for token in spec)
-    else:
-        largest = 128 if getattr(args, "phase", "decode") == "decode" else 4096
-    return max(base, largest * world_size)
-
-
 class MoRIBackend(EPBackend):
     name = "mori"
     stage_device_work = False
@@ -270,39 +257,11 @@ class MoRIBackend(EPBackend):
         expected_mori_commit = os.environ.get("MORI_COMMIT")
         mori_commit = _mori_source_commit()
         if expected_mori_commit and mori_commit != expected_mori_commit:
-            raise RuntimeError("MoRI image source revision differs from canonical provenance")
-        self.backend_provenance = {
-            "mori_commit": mori_commit,
-            "api": (
-                "mori.ops.EpDispatchCombineOp/external-input"
-                if self._external_input
-                else "mori.ops.EpDispatchCombineOp/registered-input"
-            ),
-            "mode": "normal",
-            "dispatch_dtype": "bf16",
-            "combine_dtype": "bf16",
-            "kernel_type": self._kernel_type_label,
-            "enable_sdma": os.environ.get("MORI_ENABLE_SDMA"),
-            "heap_size": os.environ.get("MORI_SHMEM_HEAP_SIZE"),
-            "max_num_inp_token_per_rank": max(512, self._cap),
-            "max_total_recv_tokens": config_kwargs.get("max_total_recv_tokens"),
-            "gpus_per_node": gpus_per_node,
-            "rdma_block_num": self.rdma_block_num,
-            "use_external_inp_buf": self._external_input,
-            "num_qps": self.num_qps,
-            "resource_mode": "fixed-profile",
-            "block_num": self.block_num,
-            "block_num_target": self._block_target,
-            "block_num_floored": self._block_floored,
-            "dispatch_warps": self.dispatch_warps,
-            "combine_warps": self.combine_warps,
-            "device_cus": device_cus,
-            "sm_fraction": None if self._async_ll else self.block_num / device_cus,
-            "tuned_source": self._tuned_source,
-        }
+            raise RuntimeError("MoRI image source revision differs from the pinned revision")
 
     def buffer_cap(self, args):
-        return _mori_input_capacity(args, self.world_size)
+        # Rows reserved per rank for a uniformly routed dispatch.
+        return 512
 
     def make_problem(self, T, idx, weights, x):
         indices = idx.to(torch.int32)

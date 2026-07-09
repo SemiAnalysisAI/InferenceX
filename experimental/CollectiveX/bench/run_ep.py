@@ -8,10 +8,7 @@ import ctypes
 import json
 import os
 import platform
-import re
-import shlex
 import socket
-import subprocess
 import sys
 
 # Make the sibling bench/ modules importable when run as `bench/run_ep.py` under
@@ -20,20 +17,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
 import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
-import identity  # noqa: E402
-
-
-def _numeric_version(command: list[str]) -> str | None:
-    try:
-        result = subprocess.run(
-            command, capture_output=True, check=False, text=True, timeout=10
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0:
-        return None
-    match = re.search(r"\b[0-9]+(?:\.[0-9]+){1,3}\b", result.stdout)
-    return match.group(0) if match else None
 
 
 def _loaded_collective_version() -> str | None:
@@ -56,44 +39,14 @@ def _loaded_collective_version() -> str | None:
         return None
 
 
-def _runtime_fingerprint(
-    torch, device, *, machine: str, vendor: str, arch: str
-) -> dict:
-    """Return strict runtime facts without hosts, addresses, UUIDs, or paths."""
-    properties = torch.cuda.get_device_properties(device)
-    if vendor == "nvidia":
-        driver = _numeric_version(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]
-        )
-        runtime_kind, runtime_version, collective_kind = (
-            "cuda",
-            torch.version.cuda,
-            "nccl",
-        )
-    else:
-        driver = _numeric_version(["rocm-smi", "--showdriverversion"])
-        runtime_kind, runtime_version, collective_kind = (
-            "hip",
-            torch.version.hip,
-            "rccl",
-        )
+def _runtime_info(torch, *, vendor: str) -> dict:
+    """Return the runtime versions needed to compare and debug results."""
+    runtime_kind = "cuda" if vendor == "nvidia" else "hip"
+    collective_kind = "nccl" if vendor == "nvidia" else "rccl"
     return {
-        "accelerator_runtime": {"kind": runtime_kind, "version": runtime_version},
-        "collective_library": {
-            "kind": collective_kind,
-            "version": _loaded_collective_version(),
-        },
-        "device": {
-            "arch": arch,
-            "compute_units": int(properties.multi_processor_count),
-            "memory_bytes": int(properties.total_memory),
-            "product": torch.cuda.get_device_name(device),
-            "warp_size": int(properties.warp_size),
-        },
-        "driver_version": driver,
-        "framework": {"kind": "torch", "version": str(torch.__version__)},
-        "machine": machine,
-        "python_version": platform.python_version(),
+        "accelerator_runtime": getattr(torch.version, runtime_kind),
+        "collective_library": {"kind": collective_kind, "version": _loaded_collective_version()},
+        "framework": str(torch.__version__),
         "vendor": vendor,
     }
 
@@ -142,19 +95,6 @@ def _summarize_realized_placement(
     }
 
 
-def _common_runtime_fingerprint(records: list[dict]) -> dict:
-    """Return the shared sanitized fingerprint, rejecting heterogeneous ranks."""
-    if not records:
-        raise ValueError("runtime fingerprint evidence is empty")
-    canonical = {
-        json.dumps(record, allow_nan=False, sort_keys=True, separators=(",", ":"))
-        for record in records
-    }
-    if len(canonical) != 1:
-        raise ValueError("runtime fingerprint differs across distributed ranks")
-    return records[0]
-
-
 def _all_gather_json(
     value,
     *,
@@ -199,7 +139,6 @@ def main() -> int:
         "--backend",
         required=True,
         choices=[
-            "deepep",
             "deepep-v2",
             "deepep-hybrid",
             "mori",
@@ -208,17 +147,7 @@ def main() -> int:
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
-    if args.mode == ep_harness.LOW_LATENCY_MODE:
-        if args.backend != "deepep":
-            print(
-                "ERROR: low-latency mode is supported only by deepep",
-                file=sys.stderr,
-            )
-            return 2
-        if args.phase != "decode":
-            print("ERROR: low-latency mode requires --phase decode", file=sys.stderr)
-            return 2
-    if args.case_id and not identity.is_case_id(args.case_id):
+    if args.case_id and not ep_harness.is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
     if args.case_id and args.seed != ep_harness.ROUTING_SEED:
@@ -234,7 +163,7 @@ def main() -> int:
         )
         return 2
 
-    sampling_error = ep_harness.sampling_contract_error(
+    sampling_error = ep_harness.sampling_error(
         args.iters, args.trials, args.warmup
     )
     if sampling_error:
@@ -334,32 +263,12 @@ def main() -> int:
         return 5
     args.runtime_device_product = device_name
     args.runtime_device_count = device_count
-    args.allocation_execution_id = os.environ.get("COLLECTIVEX_EXECUTION_ID")
-
-    # Reproduction provenance (recorded in the artifact). Rack launchers provide ranks directly
-    # through srun, while single-node launchers use torchrun; do not claim torchrun for both.
-    if os.environ.get("TORCHELASTIC_RUN_ID"):
-        args.distributed_launcher = "torchrun"
-        prefix = f"torchrun --nproc_per_node={world_size}"
-    else:
-        args.distributed_launcher = "rank-environment"
-        prefix = f"RANK={rank} WORLD_SIZE={world_size} LOCAL_RANK={local_rank} python3"
-    args.reproduction_command = f"{prefix} bench/run_ep.py {shlex.join(sys.argv[1:])}"
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
-    # Container architecture and local squash hash for Enroot/Pyxis.
-    args.image_arch = machine
-    args.squash_sha256 = os.environ.get("COLLECTIVEX_SQUASH_SHA256")
-    # GitHub provenance: repo, run ID, attempt, ref, source SHA, job,
-    # artifact. A result is only publication-'official' when these are present (validity gate).
     _run = {
         "run_id": os.environ.get("GITHUB_RUN_ID"),
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
-        "ref": os.environ.get("GITHUB_REF_NAME") or os.environ.get("GITHUB_REF"),
         "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA")
         or os.environ.get("GITHUB_SHA"),
-        "repo": os.environ.get("GITHUB_REPOSITORY"),
-        "job": os.environ.get("GITHUB_JOB"),
-        "artifact": os.environ.get("COLLECTIVEX_ARTIFACT_NAME"),
     }
     if any(_run.values()):
         args.git_run = _run
@@ -370,12 +279,10 @@ def main() -> int:
     # explicit case dimension; adapters do not infer it from the token ladder.
     if args.backend == "mori":
         from ep_mori import MoRIBackend as Backend
-    elif args.backend == "deepep-hybrid":
-        from ep_deepep_hybrid import DeepEPHybridBackend as Backend
     elif args.backend == "deepep-v2":
         from ep_deepep_v2 import DeepEPV2Backend as Backend
     else:
-        from ep_deepep import DeepEPBackend as Backend
+        from ep_deepep_hybrid import DeepEPHybridBackend as Backend
 
     # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
     # group device-only so scale-out does not also depend on a host Gloo fabric.
@@ -394,9 +301,7 @@ def main() -> int:
         else:
             dist.init_process_group("nccl")
 
-    args.runtime_fingerprint = _runtime_fingerprint(
-        torch, device, machine=machine, vendor=vendor, arch=accelerator
-    )
+    args.runtime = _runtime_info(torch, vendor=vendor)
 
     gpus_per_node = args.gpus_per_node or sku["gpus_per_node"]
     try:
@@ -406,7 +311,7 @@ def main() -> int:
     except ValueError as exc:
         raise ValueError("SLURM_NNODES must be a positive integer") from exc
     realized_records = _all_gather_json(
-        [socket.gethostname(), local_rank, args.runtime_fingerprint],
+        [socket.gethostname(), local_rank],
         torch_module=torch,
         dist_module=dist,
         device=device,
@@ -417,9 +322,6 @@ def main() -> int:
         expected_nodes=expected_nodes,
         expected_gpus_per_node=gpus_per_node,
         expected_world_size=world_size,
-    )
-    args.runtime_fingerprint = _common_runtime_fingerprint(
-        [record[2] for record in realized_records]
     )
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an

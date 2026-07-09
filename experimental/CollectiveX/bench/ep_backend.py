@@ -21,11 +21,11 @@ built in ``__init__`` before any input existed.
 The base class carries the contract flags the driver reads (``stage_device_work``,
 ``combine_needs_redispatch``, ``dispatch_needs_combine_cleanup``,
 ``combine_weight_semantics``, ``oracle_layout``/``payload_unit``, ``roundtrip_only``)
-with defaults matching the common (non-fp8, normal-mode) case; subclasses and the
-low-latency path override them. The two Pass-2 timing branch rules — untimed
-stage+combine cleanup after a timed dispatch (MoRI), and per-iter re-dispatch for
-stateful combine (MoRI + DeepEP low-latency) — are encoded once in
-``benchmark_dispatch``/``benchmark_combine`` so subclasses supply only the raw op.
+with defaults matching the common (non-fp8, normal-mode) case; subclasses override
+them. The two Pass-2 timing branch rules — untimed stage+combine cleanup after a
+timed dispatch (MoRI), and per-iter re-dispatch for stateful combine (MoRI) — are
+encoded once in ``benchmark_dispatch``/``benchmark_combine`` so subclasses supply
+only the raw op.
 
 ``torch`` and ``routing`` are imported lazily inside the methods that touch a
 device, mirroring ``ep_harness`` — so this module byte-compiles and imports under
@@ -108,7 +108,7 @@ class EPBackend(abc.ABC):
     Dispatch and combine are fixed BF16, so no adapter selects a precision codec.
     """
 
-    # ---- Contract flags (class defaults; subclasses / low-latency override) ----
+    # ---- Contract flags (class defaults; subclasses override) ----
     name: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     stage_device_work = False
@@ -142,7 +142,7 @@ class EPBackend(abc.ABC):
 
     @abc.abstractmethod
     def create_buffer(self, spec: WorkloadSpec):
-        """Size the communicator from ``spec``; must leave ``backend_provenance`` complete."""
+        """Size the communicator from ``spec`` before the first dispatch."""
 
     @abc.abstractmethod
     def dispatch(self, problem):
@@ -389,18 +389,6 @@ class EPBackend(abc.ABC):
         hh = prep_combine()
         torch.cuda.synchronize()
         return time_us(torch, lambda p=problem, hx=hh: self.combine(p, hx), 0, iters)
-
-    # ---- Correctness hooks (shared) --------------------------------------------------
-
-    def inspect_expert_dispatch(self, problem, handle):
-        """Expert-packed post-dispatch view; only low-latency backends provide one."""
-        raise RuntimeError("expert-packed inspection requires low-latency mode")
-
-    def capture_deferred_provenance(self):
-        """Resolve provenance materialized only after conditioning (e.g. JIT CUBINs).
-
-        No-op by default; JIT backends override to record and cross-rank-check it.
-        """
 
     def finalize(self, rc):
         """Barrier and tear down the process group; returns ``rc``."""

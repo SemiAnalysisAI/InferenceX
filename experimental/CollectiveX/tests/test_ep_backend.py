@@ -114,7 +114,7 @@ class BackendTests(unittest.TestCase):
 
     def test_mode_is_fail_closed(self):
         with self.assertRaises(ValueError):
-            FakeBackend(args(mode="low-latency"))
+            FakeBackend(args(mode="unsupported"))
 
 
 if __name__ == "__main__":

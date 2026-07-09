@@ -13,15 +13,12 @@ responsibility. The full measurement methodology is in [docs/methodology.md](doc
 
 The workload uses packed placement and one pinned `fixed-profile` resource configuration per
 backend/topology; there is no tuning sweep. Dispatch and combine are fixed BF16 on every backend;
-precision is not a swept dimension. The explicit mode selects one of two contracts:
+precision is not a swept dimension. Every case runs the single normal-mode contract:
 
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Coverage is uniform routing only.
-- Low-latency mode uses `expert-packed-weighted-combine-v1`, token-expert payloads, and gate-weighted
-  combine through genuine DeepEP V1 low-latency APIs. It is decode-only. Other backends are
-  recorded as unsupported for this suite.
 
-Both modes use `fixed-512-v1`: 64 trials x 8 timed iterations with 32 synchronized full roundtrip
+Cases use `fixed-512-v1`: 64 trials x 8 timed iterations with 32 synchronized full roundtrip
 warmups before each measured component at every trial/point. Roundtrip is measured first; each
 iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the
 headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
@@ -48,7 +45,6 @@ referenced by any current suite or shard.
 
 | Backend | Current scope |
 |---|---|
-| DeepEP V1 | Image-pinned `deep_ep.Buffer`: normal and native low-latency APIs; upstream v1.2.1 on x86 and the image's GB fork on arm64 |
 | DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out; source/SASS-bound reproducible JIT |
 | DeepEP Hybrid | Pinned `HybridEPBuffer`: x86 EP16 multi-domain RDMA/DOCA; GB EP8/EP16 in one MNNVL communication domain |
 | MoRI | MI355X EP8 uses IntraNode; EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
@@ -154,5 +150,5 @@ uv run --with-requirements experimental/CollectiveX/requirements.txt \
 bash -n experimental/CollectiveX/runtime/*.sh experimental/CollectiveX/launchers/*.sh
 ```
 
-Core paths are `capability.py`, `configs/`, `identity.py`, `sweep_matrix.py`, `summarize.py`,
+Core paths are `capability.py`, `configs/`, `sweep_matrix.py`, `summarize.py`,
 `bench/`, `runtime/`, `launchers/`, and `tests/`.

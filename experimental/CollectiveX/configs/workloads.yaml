@@ -1,6 +1,4 @@
 # CollectiveX EP canonical workload and phase metadata.
-schema_version: 1
-
 model_derived:
   deepseek-v3:
     hidden: 7168

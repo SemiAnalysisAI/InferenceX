@@ -26,10 +26,8 @@ one MNNVL domain or x86 scale-out between two eight-GPU NVLink domains.
 from __future__ import annotations
 
 import importlib
-import json
 import os
 from pathlib import Path
-import re
 import shutil
 import sys
 import tempfile
@@ -37,7 +35,6 @@ import types
 
 import torch
 import torch.distributed as dist
-import ep_provenance
 from ep_backend import EPBackend
 
 try:
@@ -48,10 +45,6 @@ except Exception as exc:  # pragma: no cover - needs the hybrid-ep build
           "setup (cx_build_deepep_hybrid). "
           f"{exc!r}", file=sys.stderr)
     raise
-
-
-def _deepep_hybrid_version() -> str:
-    return os.environ.get("DEEPEP_COMMIT", getattr(deep_ep, "__version__", "hybrid-ep"))
 
 
 def _validate_hybrid_build() -> None:
@@ -107,36 +100,6 @@ def _hybrid_realized_config(config) -> dict[str, str | int | bool]:
     return realized
 
 
-def _hybrid_jit_kernel_keys(root: Path) -> list[str]:
-    if not root.is_dir():
-        raise RuntimeError("DeepEP Hybrid produced no JIT cache directory")
-    kernel_keys = []
-    for path in sorted(root.iterdir(), key=lambda item: item.name):
-        if path.suffix != ".so":
-            continue
-        if path.is_symlink() or not path.is_file():
-            raise RuntimeError("DeepEP Hybrid JIT artifact is not a regular file")
-        kernel_key = path.stem
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,511}", kernel_key):
-            raise RuntimeError("DeepEP Hybrid JIT kernel key is invalid")
-        if path.stat().st_size <= 0:
-            raise RuntimeError("DeepEP Hybrid JIT artifact is empty")
-        kernel_keys.append(kernel_key)
-    if len(kernel_keys) != 3:
-        raise RuntimeError(
-            f"DeepEP Hybrid expected 3 final JIT libraries, found {len(kernel_keys)}"
-        )
-    return kernel_keys
-
-
-def _require_cross_rank_equal(value, label: str) -> None:
-    gathered = [None] * dist.get_world_size()
-    dist.all_gather_object(gathered, value)
-    canonical = {json.dumps(item, sort_keys=True, separators=(",", ":")) for item in gathered}
-    if len(canonical) != 1:
-        raise RuntimeError(f"DeepEP Hybrid {label} differs across ranks")
-
-
 def _hybrid_topology(args, world_size: int) -> dict[str, int | str]:
     """Translate physical placement into HybridEP communication-domain geometry."""
     gpus_per_node = int(args.gpus_per_node or world_size)
@@ -174,16 +137,6 @@ class DeepEPHybridBackend(EPBackend):
     def __init__(self, args, rank, world_size, local_rank, device):
         # deepep-hybrid is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
         super().__init__(args, rank, world_size, local_rank, device)
-        ep_provenance.require_keyword(
-            HybridEPBuffer.__init__,
-            "use_fp8",
-            api="deep_ep.HybridEPBuffer.__init__",
-        )
-        ep_provenance.require_keyword(
-            HybridEPBuffer.dispatch,
-            "scaling_factor",
-            api="deep_ep.HybridEPBuffer.dispatch",
-        )
         self.group = dist.group.WORLD
         self.tolerance = 5e-2
         self.top_k = int(args.topk)
@@ -210,17 +163,12 @@ class DeepEPHybridBackend(EPBackend):
             raise RuntimeError("DeepEP Hybrid MNNVL runtime enablement is incomplete")
         # Token cap (per rank) for the symmetric buffer; the sweep is capped here (buffer_cap).
         self.max_tokens = 4096
-        # Stash the topology so the moved create_buffer provenance can read it back.
-        self._topology = topology
 
     def create_buffer(self, spec):
         # Local aliases re-expose the __init__ names so the moved tempdir / buffer /
-        # geometry / monkeypatch / provenance body below stays byte-verbatim.
+        # geometry / monkeypatch body below stays byte-verbatim.
         args, world_size, rank, device = self.args, self.world_size, self.rank, self.device
-        topology = self._topology
         assert spec.max_tokens_per_rank <= self.max_tokens
-        dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
-        ver = _deepep_hybrid_version()
         _validate_hybrid_build()
 
         # HybridEP's compiler uses a process-specific child of HYBRID_EP_CACHE_DIR. Give every
@@ -232,12 +180,6 @@ class DeepEPHybridBackend(EPBackend):
         self._jit_cache_dir = tempfile.mkdtemp(prefix=f"collectivex-hybrid-r{rank}-")
         os.environ["HYBRID_EP_CACHE_DIR"] = self._jit_cache_dir
         os.environ["NUM_OF_HYBRID_EP_RANKS_PER_NVLINK_DOMAIN"] = str(self.domain_ranks)
-        self._jit_root = (
-            Path(self._jit_cache_dir) / ".deepep" / "hybrid_ep" / "jit"
-            / f"proc-{os.getpid()}"
-        )
-        self._realized_config = None
-        self._deferred_semantic_snapshot = None
 
         try:
             self.buffer = HybridEPBuffer(
@@ -296,9 +238,6 @@ class DeepEPHybridBackend(EPBackend):
                 raise RuntimeError(
                     "DeepEP Hybrid realized token dtype is not the BF16 UINT16 wire type"
                 )
-            if self._realized_config is not None and realized != self._realized_config:
-                raise RuntimeError("DeepEP Hybrid realized autotune config changed within one case")
-            self._realized_config = realized
             return config
 
         self.buffer.update_template_config = tracked_update_template_config
@@ -310,23 +249,6 @@ class DeepEPHybridBackend(EPBackend):
                 f"world={world_size} local_experts={self.local_experts} hidden={self.hidden})",
                 file=sys.stderr,
             )
-
-        self.backend_provenance = {
-            "deepep_commit": ver, "branch": "hybrid-ep",
-            "deepep_tree": os.environ.get("DEEPEP_TREE"),
-            "backend_lineage": "deepep-hybrid",
-            "impl": "deep_ep.HybridEPBuffer (NVIDIA TMA + warp-pipeline)",
-            "mode": "normal", "transport": topology["transport"],
-            "dispatch_dtype": "bf16",
-            "combine_dtype": "bf16",
-            "resource_mode": "fixed-profile",
-            "num_sms": None, "device_sms": dev_sms,
-            "tuned_source": "deepep-hybrid-configurer-autotune-v1",
-            "realized_config": None, "jit_kernel_keys": [],
-            "max_num_tokens": self.max_tokens, "top_k": self.top_k,
-            "num_experts": self.num_experts, "local_experts": self.local_experts,
-            "routing_factor": "ranks",
-        }
 
     def buffer_cap(self, args):
         return self.max_tokens
@@ -367,22 +289,6 @@ class DeepEPHybridBackend(EPBackend):
         # combine(hidden, handle=) -> [T, H] per-source-token reduction (no gate re-weight: "ranks").
         comb = self.buffer.combine(h.combine_input, handle=h.handle)
         return comb[0] if isinstance(comb, (tuple, list)) else comb
-
-    def capture_deferred_provenance(self):
-        torch.cuda.synchronize()
-        dist.barrier()
-        if self._realized_config is None:
-            raise RuntimeError("DeepEP Hybrid autotune config was not materialized")
-        kernel_keys = _hybrid_jit_kernel_keys(self._jit_root)
-        semantic = {
-            "jit_kernel_keys": kernel_keys,
-            "realized_config": dict(self._realized_config),
-        }
-        _require_cross_rank_equal(semantic, "realized config/JIT kernel keys")
-        if self._deferred_semantic_snapshot is not None and semantic != self._deferred_semantic_snapshot:
-            raise RuntimeError("DeepEP Hybrid config/JIT kernel set changed after measurement")
-        self._deferred_semantic_snapshot = semantic
-        self.backend_provenance.update(semantic)
 
     def inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)

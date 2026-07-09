@@ -21,12 +21,10 @@ It does not predict serving throughput without a separate correlation study.
 
 The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Dispatch and combine are
-fixed BF16 on every backend; precision is not a swept dimension. Each case explicitly selects normal
-`layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
+fixed BF16 on every backend; precision is not a swept dimension. Every case uses the normal
+`layout-and-dispatch-v1` semantics.
 
 - `ep-core`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
-- `ep-low-latency`: DeepEP V1 native low-latency APIs; uniform decode T=1..128 powers of
-  two; other backends are recorded as unsupported rather than fabricating a low-latency path.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`, and
@@ -51,16 +49,15 @@ x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
 scale-up and uses LSA. MoRI EP8 uses MI355X IntraNode in normal mode; EP16 uses pinned InterNodeV1
 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external input.
-MoRI's AsyncLL transport is not the low-latency suite contract and is never labeled as such. Whether
-a given SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is decided only
-by the emitted artifact.
+Whether a given SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is
+decided only by the emitted artifact.
 
 ## Workload Identity
 
 One canonical workload is generated over the global token batch and sliced by source rank. Expert
-indices and gate weights are serialized. Activations use a versioned integer counter formula whose
-BF16 values are exact across runtimes. The manifest records shape, EP, generator, and oracle
-coordinates, and loading regenerates the expected routing arrays for direct equality validation.
+indices and gate weights are serialized. Activations use an integer counter formula whose
+BF16 values are exact across runtimes. The manifest records shape, EP, and routing coordinates,
+and loading regenerates the expected routing arrays for direct equality validation.
 
 Routing traffic distinguishes:
 
@@ -72,13 +69,11 @@ Adapters may not generate routing or reinterpret one quantity as the other.
 ## Measurement
 
 Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
-combine returns activation payload through an unweighted rank-sum path. Low-latency mode uses
-`expert-packed-weighted-combine-v1`: native DeepEP V1 APIs dispatch token-expert assignments
-and perform gate-weighted combine. Expert-output staging is outside isolated combine timing and
-inside the measured paired roundtrip. Each component declares availability, origin, start/end states,
-stage scope, and sample count. A paired-only API reports null isolated components. `isolated_sum` is
-derived. Normal and low-latency evidence describe different measurement contracts and are not
-directly comparable; the artifact records the mode so a reader can keep them separate.
+combine returns activation payload through an unweighted rank-sum path. Expert-output staging is
+outside isolated combine timing and inside the measured paired roundtrip. Each component declares
+availability, origin, start/end states, stage scope, and sample count. A paired-only API reports null
+isolated components. `isolated_sum` is derived. The artifact records the mode so a reader can keep
+distinct measurement contracts separate.
 
 Every measured component uses `fixed-512-v1`:
 
@@ -98,9 +93,8 @@ Logical payload bandwidth is:
 
 `logical_payload_bytes / measured_latency_seconds`
 
-Normal-mode payload bytes use rank-deduplicated token-rank activations; low-latency bytes use
-token-expert assignments. Both add required scale bytes at the named boundary and exclude expert
-metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire
+Normal-mode payload bytes use rank-deduplicated token-rank activations. They add required scale bytes
+at the named boundary and exclude expert metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire
 utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
 rates are named `rate_at_latency_percentile`: bytes or tokens divided by the matching latency
@@ -120,10 +114,8 @@ routing cannot pass an identity roundtrip. For every rank and point it verifies:
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine, independently derives `sum(gate * expert(token))`, and
-checks the dispatch metadata and transformed output. Low-latency adapters separately verify the
-expert-packed source/expert assignment, native gate weights, and gate-weighted combined output. Both
-contracts compare against the reference activation. The combine gate is `rtol=0.05, atol=0.02` for
-the BF16 communication path. This threshold is a correctness gate, not an estimate of transport
+checks the dispatch metadata and transformed output. It compares against the reference activation.
+The combine gate is `rtol=0.05, atol=0.02` for the BF16 communication path. This threshold is a correctness gate, not an estimate of transport
 error. Any failed rank or point makes the case ineligible in the result it writes.
 Pre/post dispatch behavior is checked against canonical source-token metadata and expected output.
 Native receive slots may be assigned nondeterministically, so physical receive order is not treated
@@ -131,20 +123,20 @@ as a correctness property.
 
 ## Result Artifact
 
-One raw case document uses `format: "collectivex.ep.v1"`, carries `schema_version: 1`, rejects
+One raw case document carries `record_type: "case-attempt"` and the single `version`, rejects
 unknown fields, and contains:
 
 - `case`: stable case ID, suite, and coordinate;
 - `workload`: canonical identity and logical MoE shape;
 - `measurement`: sampling, component states, timing, and byte accounting;
-- `implementation`: instantiated class/API, pinned source, loaded libraries, and resources;
+- `implementation`: backend name and kernel generation;
 - `topology`: requested and realized SKU, devices, placement, scale-up domain, and transport;
 - `provenance`: source SHA, image/squash hashes, allocation, run, and attempt;
 - `rows`: point latency, byte accounting, token rate, correctness, load, fanout, and anomaly
   evidence; and
 - `outcome`: `success`, `failed`, `invalid`, `unsupported`, with `diagnostic` and reasons.
 
-Exact per-point samples are emitted as detached `collectivex.samples.v1` documents referenced by path
+Exact per-point samples are emitted as detached `record_type: "samples"` documents referenced by path
 and byte count, so the raw document stays compact. Each dispatched case writes its raw result document;
 unsupported or never-run cells produce no synthetic record. Private
 environment details (hosts, addresses, device selectors, credentials, workspace paths) remain in
@@ -162,9 +154,8 @@ Identifiers are readable factor strings:
 Canonical workload files use readable routing and shape coordinates and are validated against the
 deterministic generator. Detached sample documents are referenced by path and byte count. Content
 SHA-256 is retained only for the mounted squash; source and library revisions use Git commits and
-trees. DeepEP V2 uses a fixed NVCC random seed and validates the complete generated-kernel set.
-Hybrid binds its realized auto-tuned config and complete kernel-key set. Pinned source trees, build
-recipes, runtime versions, and dependencies remain bound to the case factors.
+trees. DeepEP V2 uses a fixed NVCC random seed for reproducible JIT builds. Pinned source trees,
+build recipes, runtime versions, and dependencies remain bound to the case factors.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
 not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or
