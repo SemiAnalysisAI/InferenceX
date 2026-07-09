@@ -42,6 +42,7 @@ case "$CX_BENCH" in
   mori) ;;
   *) cx_die "unsupported AMD EP backend: $CX_BENCH" ;;
 esac
+cx_apply_timing_profile
 
 if [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
   export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
@@ -89,14 +90,10 @@ cx_set_failure_stage scheduler-allocation
 command -v salloc >/dev/null || cx_die "salloc not found on this runner"
 
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
-  --time="$TIME_MIN")
+  --time="$TIME_MIN" --ntasks-per-node="$GPN"
+  --cpus-per-task="$((CPUS_PER_TASK / GPN))")
 if [ "$RUNNER" = mi355x ]; then
   allocation+=(--exclusive)
-fi
-if [ "$NODES" = 1 ]; then
-  allocation+=(--cpus-per-task="$CPUS_PER_TASK")
-else
-  allocation+=(--ntasks-per-node="$GPN" --cpus-per-task="$((CPUS_PER_TASK / GPN))")
 fi
 excluded_nodes="$EXCLUDE_NODES"
 for allocation_attempt in 1 2 3; do
@@ -148,29 +145,11 @@ cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${CX_SHARD_FILE:-}"
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
 
-if [ "$NODES" = 1 ]; then
-  run_rc=0
-  cx_set_failure_stage container-launch
-  runtime_log="$(cx_private_log_path runtime)"
-  srun --jobid="$JOB_ID" --chdir=/tmp --container-image="$SQUASH_FILE" \
-    --container-mounts="$CONTAINER_MOUNTS" --container-writable --container-remap-root \
-    --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
-    --no-container-entrypoint --export="$(cx_container_exports)" \
-    bash "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh" \
-    >"$runtime_log" 2>&1 || run_rc=$?
-else
-  SOURCE_BACKEND_ENV="$(cx_source_backend_env)"
-  BACKEND_PROBE="$(cx_backend_probe)"
-  WRAP="${SOURCE_BACKEND_ENV}"$'\n'"$(cx_slurm_rank_wrapper)"
-  CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
-  run_rc=0
-  cx_set_failure_stage container-launch
-  cx_run_distributed_shard || run_rc=$?
-fi
+CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
+run_rc=0
+cx_set_failure_stage container-launch
+cx_run_shard || run_rc=$?
 
-if [ "$NODES" = 1 ] && [ "$run_rc" != 0 ]; then
-  cx_fail_stage "$CX_FAILSAFE_MODE" "$runtime_log" || true
-fi
 collect_rc=0
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT" || collect_rc=$?
 [ "$run_rc" != 0 ] || [ "$collect_rc" = 0 ] || cx_set_failure_stage artifact-collection

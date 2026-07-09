@@ -87,13 +87,10 @@ SQUASH_FILE="$(cx_ensure_squash_on_job "$JOB_ID" "$SQUASH_DIR" "$IMAGE")"
 cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${CX_SHARD_FILE:-}"
 
-SOURCE_BACKEND_ENV="$(cx_source_backend_env)"
-BACKEND_PROBE="$(cx_backend_probe)"
-WRAP="${SOURCE_BACKEND_ENV}"$'\n'"$(cx_slurm_rank_wrapper)"
 CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 run_rc=0
 cx_set_failure_stage container-launch
-cx_run_distributed_shard || run_rc=$?
+cx_run_shard || run_rc=$?
 
 collect_rc=0
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT" || collect_rc=$?

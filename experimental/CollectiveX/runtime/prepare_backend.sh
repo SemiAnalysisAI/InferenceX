@@ -1,85 +1,25 @@
 #!/usr/bin/env bash
-# CollectiveX — generic in-container benchmark dispatcher (single-node).
+# CollectiveX — in-container backend preparation, one task per node.
 #
-# Runs INSIDE the container under `srun` for single-node shards. The GB EP8 launcher invokes
-# run_ep.py directly across nodes. The SKU adapter handles allocation/container/transport-env;
-# this script selects one EP backend from CX_BENCH and writes result JSON under results/.
+# Runs INSIDE the persistent named container once per allocated node before any
+# benchmark case: builds or validates the CX_BENCH backend, then persists the
+# loader environment to .cx_backend/env/node-N.sh for the per-case rank steps
+# (cx_source_backend_env). Benchmark cases are driven from the host by
+# cx_run_shard with run_ep.py argv decoded from the shard control; no per-case
+# configuration enters the container as environment.
 #
-# Required env (exported by the adapter): CX_RUNNER CX_NGPUS CX_TS CX_TOPO
+# Required env (exported by the adapter): CX_RUNNER
 # Selector: CX_BENCH = deepep-v2 | deepep-hybrid | mori
-# EP knobs passed to bench/run_ep.py:
-#   CX_PHASE = decode | prefill | both (default decode)   <- picks the token sweep
-#   CX_TOKENS_LADDER (space/comma sep; blank = phase default)
-#   CX_HIDDEN CX_TOPK CX_EXPERTS CX_ROUTING CX_SEED CX_ITERS
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
 # shellcheck source=../runtime/common.sh
 source runtime/common.sh
-mkdir -p results
 
 : "${CX_RUNNER:?CX_RUNNER not set}"
-: "${CX_NGPUS:?CX_NGPUS not set}"
-: "${CX_TS:?CX_TS not set}"
-: "${CX_TOPO:?CX_TOPO not set}"
-CX_BENCH="${CX_BENCH:-deepep-v2}"
-CX_TRANSPORT="${CX_TRANSPORT:-}"
+: "${CX_BENCH:?CX_BENCH not set}"
 
-cx_apply_timing_profile
-
-cx_log "in-container: runner=$CX_RUNNER ngpus=$CX_NGPUS bench=$CX_BENCH topo=$CX_TOPO"
-
-# Blank ladders use the phase default in bench/run_ep.py.
-cx_ep_ladder() {
-  printf '%s' "${CX_TOKENS_LADDER:-}"
-}
-
-# run_ep_suite <backend>
-# One bench/run_ep.py invocation per phase (decode/prefill/both); dispatch and
-# combine are timed separately inside it. One JSON per (backend, phase).
-run_ep_suite() {
-    local backend="$1" phase phases ladder failure_kind rc=0 rc_run
-  ladder="$(cx_ep_ladder)"
-  phases="${CX_PHASE:-decode}"
-  [ "$phases" = "both" ] && phases="decode prefill"
-  for phase in $phases; do
-    cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
-    local out="results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
-    local -a EPARGS=(--backend "$backend" --mode "${CX_MODE:-normal}" --phase "$phase"
-      --tokens-ladder "$ladder"
-      --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}"
-      --routing "${CX_ROUTING:-uniform}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-8}"
-      --trials "${CX_TRIALS:-64}" --warmup "${CX_WARMUP:-32}"
-      --gpus-per-node "${CX_GPUS_PER_NODE:-0}" --scale-up-domain "${CX_SCALE_UP_DOMAIN:-0}"
-      --scope "${CX_SCOPE:-scale-up}" --scale-up-transport "${CX_SCALE_UP_TRANSPORT:-unknown}"
-      --scale-out-transport "${CX_SCALE_OUT_TRANSPORT:-}"
-      --case-id "${CX_CASE_ID:-}" --suite "${CX_SUITE:-}" --workload-name "${CX_WORKLOAD_NAME:-}"
-      --version "${CX_VERSION:-1}"
-      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
-      --out "$out")
-    if timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
-      torchrun --nproc_per_node="$CX_NGPUS" bench/run_ep.py "${EPARGS[@]}"; then
-      rc_run=0
-    else
-      rc_run=$?
-    fi
-    # Result-document gating and terminal-outcome emission were removed with
-    # contracts.py; success is now the run_ep.py return code alone. Any result
-    # document it wrote is left in place for the summary renderer, which validates
-    # nothing.
-    if [ "$rc_run" != 0 ]; then
-      failure_kind=failed
-      [ "$rc_run" != 124 ] && [ "$rc_run" != 137 ] || failure_kind="timed out"
-      if [ "$failure_kind" = "timed out" ]; then
-        cx_log "WARN: $backend $phase run timed out rc=$rc_run (limit=${CX_RUN_TIMEOUT:-900}s)"
-      else
-        cx_log "WARN: $backend $phase run failed rc=$rc_run"
-      fi
-      rc=1
-    fi
-  done
-  return "$rc"
-}
+cx_log "backend preparation: runner=$CX_RUNNER bench=$CX_BENCH nodes=${CX_NODES:-1}"
 
 # Resolve and verify the actual CUDA target before compiling source kernels.
 cx_cuda_arch() {
@@ -483,8 +423,7 @@ cx_probe_scaleout_network() {
   done
 }
 
-# Prepare and probe one backend without running a benchmark. The same hook is used
-# by normal in-container runs and by rack launchers' persistent build-only step.
+# Prepare and probe one backend without running a benchmark.
 cx_prepare_backend() {
   local backend="${1:-}"
   case "$backend" in
@@ -505,122 +444,12 @@ cx_prepare_backend() {
   esac
 }
 
-prepare_backend_or_record() {
-  local backend="$1"
-  if cx_prepare_backend "$backend"; then
-    return 0
-  fi
-  cx_log "WARN: $backend preparation failed"
-  return 1
-}
-
-# dispatch_bench runs the CURRENT CX_BENCH (+ CX_* config env) once. The sweep workflow runs many
-# of these per allocation (SHARD mode below), reusing this single container + its built backend.
-dispatch_bench() {
-  case "$CX_BENCH" in
-    deepep-v2|deepep-hybrid|mori)
-      prepare_backend_or_record "$CX_BENCH" && run_ep_suite "$CX_BENCH"
-      ;;
-    *)
-      cx_die "unknown CX_BENCH=$CX_BENCH (want deepep-v2|deepep-hybrid|mori)"
-      ;;
-  esac
-}
-
 rc=0
-cx_load_network_control_mode "$PWD" || cx_die "cannot resolve network control mode"
 cx_apply_network_profile "${CX_NODES:-1}" "${CX_TRANSPORT:-}"
-# Build-only mode: rack launchers run the shared backend preparation hook once per
-# node inside a persistent named container, then direct rank processes reuse it.
-if [ -n "${CX_BUILD_ONLY:-}" ]; then
-  if cx_probe_scaleout_network && cx_prepare_backend "${CX_BENCH:-}"; then
-    cx_persist_backend_env || rc=1
-  else
-    rc=1
-  fi
-  cx_log "backend preparation: bench=${CX_BENCH:-unknown} rc=$rc"
-  exit "$rc"
-fi
-if [ -n "${CX_SHARD_FILE:-}" ]; then
-  # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
-  # All cases share (sku, backend, nodes), so backend preparation is paid once and cached.
-  ncases="$(python3 -c "import json;print(len(json.load(open('$CX_SHARD_FILE'))['cases']))")"
-  # The iterable benchmark version is a shard-level scalar (identical for every case);
-  # export it once so run_ep copies it verbatim into each emitted result.
-  CX_VERSION="$(python3 -c "import json;print(json.load(open('$CX_SHARD_FILE'))['version'])")"
-  export CX_VERSION
-  cx_log "SHARD mode: $ncases case(s) in one allocation (shard=$CX_SHARD_FILE, version=$CX_VERSION)"
-  _cx_ts_base="$CX_TS"   # per-case CX_TS suffix below keeps each case's result file UNIQUE (else
-                         # cases sharing backend+phase overwrite each other at the same timestamp).
-  ci=0
-  failed_cases=0
-  while [ "$ci" -lt "$ncases" ]; do
-    CX_TS="${_cx_ts_base}-c$(printf '%03d' "$ci")"
-    export CX_TS
-    # Map varying case fields plus the frozen v1 defaults into CX_* env.
-    _exports="$(python3 - "$CX_SHARD_FILE" "$ci" <<'PY'
-import json, sys, shlex
-c = json.load(open(sys.argv[1]))["cases"][int(sys.argv[2])]
-def g(k, d=""):
-    v = c.get(k, d); return "" if v is None else str(v)
-env = {
-  "CX_BENCH": g("backend"),
-  "CX_MODE": g("mode", "normal"),
-  "CX_ROUTING": g("routing", "uniform"), "CX_PHASE": g("phase", "decode"),
-  "CX_EP": g("ep", "1"),
-  "CX_CASE_ID": g("case_id"), "CX_SUITE": g("suite"), "CX_WORKLOAD_NAME": g("workload"),
-  "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
-  "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
-  "CX_NODES": g("nodes"), "CX_GPUS_PER_NODE": g("gpus_per_node"),
-  "CX_SCALE_UP_DOMAIN": g("scale_up_domain"), "CX_SCOPE": g("scope"),
-  "CX_SCALE_UP_TRANSPORT": g("scale_up_transport"),
-  "CX_SCALE_OUT_TRANSPORT": g("scale_out_transport"),
-  "CX_TRANSPORT": g("transport"), "CX_TOPO": g("topology_class"),
-  "CX_SAMPLES_PER_POINT": g("samples_per_point"),
-  "CX_WARMUP_SEMANTICS": g("warmup_semantics"),
-}
-lines = [f"export {k}={shlex.quote(v)}" for k, v in env.items()]
-# Per-case timing "iters:trials:warmup" (fixed-512-v1 requires 8:64:32 everywhere);
-# cases without one must fall back to the harness defaults, so UNSET rather than export-empty
-# (an empty CX_ITERS would defeat the 8-iter default and break the run_ep argparse; NOTE no
-# apostrophes in this heredoc — bash command-substitution scanning chokes on unbalanced quotes).
-timing = g("timing")
-if timing:
-    parts = (timing.split(":") + ["", "", ""])[:3]
-    for k, v in zip(("CX_ITERS", "CX_TRIALS", "CX_WARMUP"), parts):
-        if v:
-            lines.append(f"export {k}={shlex.quote(v)}")
-else:
-    lines.append("unset CX_ITERS CX_TRIALS CX_WARMUP 2>/dev/null || true")
-print("\n".join(lines))
-PY
-)"
-    eval "$_exports"
-    cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT"
-    cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_MODE/$CX_PHASE routing=$CX_ROUTING"
-    _cx_case_ts="$CX_TS"
-    CX_TS="${_cx_case_ts}-a01"
-    export CX_ATTEMPT_ID=1 CX_TS
-    dispatch_bench || {
-      failed_cases=$((failed_cases+1))
-      cx_log "  [$((ci+1))/$ncases] $CX_BENCH case FAILED; failed-case record preserved"
-    }
-    export CX_TS="$_cx_case_ts"
-    ci=$((ci + 1))
-  done
-  if [ "${failed_cases:-0}" -gt 0 ]; then
-    cx_log "SHARD done: $failed_cases/$ncases case(s) failed"
-    rc=1
-  fi
-  # The base timestamp matches every per-case file, so the final summary covers the whole shard.
-  export CX_TS="$_cx_ts_base"
+if cx_probe_scaleout_network && cx_prepare_backend "$CX_BENCH"; then
+  cx_persist_backend_env || rc=1
 else
-  _cx_single_ts="$CX_TS"
-  CX_TS="${_cx_single_ts}-a01"
-  export CX_ATTEMPT_ID=1 CX_TS
-  dispatch_bench || rc=1
+  rc=1
 fi
-
-# Summary table for the log; also fails the job if no valid results were produced.
-python3 summarize.py --results-dir results --runner "$CX_RUNNER" --ts "$CX_TS" || rc=1
+cx_log "backend preparation: bench=$CX_BENCH rc=$rc"
 exit "$rc"

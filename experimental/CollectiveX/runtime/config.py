@@ -84,23 +84,85 @@ def network_mode(path: str) -> None:
     print("normal", end="")
 
 
-def shard_version(path: str) -> None:
-    print(load(path)["version"], end="")
+def case_count(path: str) -> None:
+    print(len(load(path)["cases"]), end="")
 
 
-def shard_cases(path: str) -> None:
-    for case in load(path)["cases"]:
-        get = lambda key, default="": str(case.get(key) or default)
-        fields = (
-            get("phase", "decode"), get("mode", "normal"), get("routing", "uniform"),
-            get("hidden", "7168"), get("topk", "8"), get("experts", "256"), get("ladder"),
-            get("suite"), get("workload"), "1" if case.get("canonical") else "",
-            get("case_id"), get("ep"), get("timing", "8:64:32"), get("nodes"),
-            get("gpus_per_node"), get("scale_up_domain"), get("scope"),
-            get("scale_up_transport"), get("scale_out_transport"), get("transport"),
-            get("topology_class"),
-        )
-        print("|".join(fields))
+def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, index: int) -> None:
+    """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
+    get = lambda key, default="": str(case.get(key) or default)
+    argv = [
+        "--backend", get("backend"),
+        "--mode", get("mode", "normal"),
+        "--phase", get("phase", "decode"),
+        "--routing", get("routing", "uniform"),
+        "--gpus-per-node", get("gpus_per_node", "0"),
+        "--scale-up-domain", get("scale_up_domain", "0"),
+        "--scope", get("scope", "scale-up"),
+        "--scale-up-transport", get("scale_up_transport", "unknown"),
+        "--scale-out-transport", get("scale_out_transport"),
+        "--tokens-ladder", get("ladder"),
+        "--hidden", get("hidden", "7168"),
+        "--topk", get("topk", "8"),
+        "--experts", get("experts", "256"),
+        "--seed", seed,
+        "--runner", runner,
+        "--topology-class", get("topology_class", "manual"),
+        "--transport", get("transport", "unknown"),
+        "--case-id", get("case_id"),
+        "--suite", get("suite"),
+        "--workload-name", get("workload"),
+        "--version", str(version),
+    ]
+    iters, trials, warmup = (get("timing", "8:64:32").split(":") + ["", "", ""])[:3]
+    for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
+        if value:
+            argv += [flag, value]
+    out = f"results/{runner}_{get('backend')}_{get('phase', 'decode')}_{ts}-c{index:03d}.json"
+    argv += ["--out", out]
+    sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
+
+
+def case_args(
+    path: str, index: int, runner: str, ts: str, seed: str,
+    ngpus: str, nodes: str, gpus_per_node: str, scale_up_domain: str,
+) -> None:
+    document = load(path)
+    cases = document["cases"]
+    if not 0 <= index < len(cases):
+        raise SystemExit(1)
+    case = cases[index]
+    placement = tuple(
+        str(case.get(field, ""))
+        for field in ("ep", "nodes", "gpus_per_node", "scale_up_domain")
+    )
+    if placement != (ngpus, nodes, gpus_per_node, scale_up_domain):
+        print(f"case placement {placement} differs from the allocation", file=sys.stderr)
+        raise SystemExit(1)
+    _emit_argv(case, document["version"], runner, ts, seed, index)
+
+
+def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None:
+    """Ad-hoc (shard-less) runs take one case per phase from the operator's CX_* env."""
+    env = os.environ.get
+    case = {
+        "backend": env("CX_BENCH", ""), "mode": env("CX_MODE", "normal"),
+        "phase": phase, "routing": env("CX_ROUTING", "uniform"),
+        "gpus_per_node": env("CX_GPUS_PER_NODE", "0"),
+        "scale_up_domain": env("CX_SCALE_UP_DOMAIN", "0"),
+        "scope": env("CX_SCOPE", "scale-up"),
+        "scale_up_transport": env("CX_SCALE_UP_TRANSPORT", "unknown"),
+        "scale_out_transport": env("CX_SCALE_OUT_TRANSPORT", ""),
+        "ladder": env("CX_TOKENS_LADDER", ""),
+        "hidden": env("CX_HIDDEN", "7168"), "topk": env("CX_TOPK", "8"),
+        "experts": env("CX_EXPERTS", "256"),
+        "topology_class": env("CX_TOPO", "manual"),
+        "transport": env("CX_TRANSPORT", "unknown"),
+        "case_id": env("CX_CASE_ID", ""), "suite": env("CX_SUITE", ""),
+        "workload": env("CX_WORKLOAD_NAME", ""),
+        "timing": f"{env('CX_ITERS', '8')}:{env('CX_TRIALS', '64')}:{env('CX_WARMUP', '32')}",
+    }
+    _emit_argv(case, env("CX_VERSION", "1"), runner, ts, seed, index)
 
 
 def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str, amd: str, mori: str) -> None:
@@ -130,7 +192,10 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     for name, names in {
         "operator-config": ("path", "runner"), "network-mode": ("path",),
-        "shard-version": ("path",), "shard-cases": ("path",),
+        "case-count": ("path",),
+        "case-args": ("path", "index", "runner", "ts", "seed",
+                      "ngpus", "nodes", "gpus_per_node", "scale_up_domain"),
+        "manual-args": ("phase", "index", "runner", "ts", "seed"),
         "canonical-policy": ("runner", "nodes", "gpus_per_node", "multiarch", "amd", "mori"),
     }.items():
         command = commands.add_parser(name)
@@ -138,8 +203,12 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "operator-config": operator_config(args.path, args.runner)
     elif args.command == "network-mode": network_mode(args.path)
-    elif args.command == "shard-version": shard_version(args.path)
-    elif args.command == "shard-cases": shard_cases(args.path)
+    elif args.command == "case-count": case_count(args.path)
+    elif args.command == "case-args":
+        case_args(args.path, int(args.index), args.runner, args.ts, args.seed,
+                  args.ngpus, args.nodes, args.gpus_per_node, args.scale_up_domain)
+    elif args.command == "manual-args":
+        manual_args(args.phase, int(args.index), args.runner, args.ts, args.seed)
     else: canonical_policy(args.runner, int(args.nodes), int(args.gpus_per_node), args.multiarch, args.amd, args.mori)
 
 

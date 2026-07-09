@@ -8,7 +8,7 @@
 CX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6" # pragma: allowlist secret
 CX_DEEPEP_V2_TREE="29809e75c5874e6609dac4804e7b651d5226959f" # pragma: allowlist secret
 CX_DEEPEP_V2_FMT_COMMIT="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa" # pragma: allowlist secret
-# Consumed by run_in_container.sh after this helper is sourced.
+# Consumed by prepare_backend.sh after this helper is sourced.
 # shellcheck disable=SC2034
 CX_DEEPEP_V2_NCCL_CHECK_COMMIT="93d0564188f7a0a6288c6e316484861b0efa042e" # pragma: allowlist secret
 CX_DEEPEP_HYBRID_COMMIT="e0a5b1d9848ab3e7b4a67842bf06f067bfac67f8" # pragma: allowlist secret
@@ -149,8 +149,11 @@ cx_cleanup_private_logs() {
 
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
+# Per-case benchmark configuration travels as run_ep.py argv, not env, so the
+# boundary carries only shard-level identity, placement, backend-build inputs,
+# and validated network selectors.
 cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_ATTEMPT_ID,CX_MORI_KERNEL_TYPE,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
+  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SHARD_SKU,CX_NGPUS,CX_TRANSPORT,CX_MORI_KERNEL_TYPE,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
@@ -176,15 +179,6 @@ cx_bool_enabled() {
     1|true|yes) return 0 ;;
     *) return 1 ;;
   esac
-}
-
-cx_require_record_safe() {
-  local value
-  for value in "$@"; do
-    case "$value" in
-      *'|'*|*$'\n'*|*$'\r'*) cx_die "manual case field contains a record delimiter" ;;
-    esac
-  done
 }
 
 cx_nccl_hca_device_name() {
@@ -1154,7 +1148,7 @@ BASH
 cx_preflight_allocation() {
   local job_id="$1" nodes="$2" mount_src="$3" squash="$4" shard="${5:-}"
   local log rc=0 runtime shard_path="" probe_root probe_token index
-  runtime="$mount_src/experimental/CollectiveX/runtime/run_in_container.sh"
+  runtime="$mount_src/experimental/CollectiveX/runtime/prepare_backend.sh"
   [ -z "$shard" ] || shard_path="$mount_src/experimental/CollectiveX/$shard"
   log="$(cx_private_log_path allocation-preflight)"
   probe_root="$mount_src/.collectivex-preflight"
@@ -1326,25 +1320,23 @@ cx_cleanup_stage() {
   cx_log "removed generated per-execution stage directory"
 }
 
-# Run one validated shard with one Slurm task per GPU. Launchers provide only
-# allocation/container policy through globals and CX_DISTRIBUTED_CONTAINER_ARGS.
+# Run one validated shard with one Slurm task per GPU on one or more nodes.
+# Launchers provide only allocation/container policy through globals and
+# CX_DISTRIBUTED_CONTAINER_ARGS; per-case benchmark inputs travel as run_ep.py
+# argv decoded from the shard control (config.py case-args), never as env.
 # shellcheck disable=SC2153
-cx_run_distributed_shard() {
-  local build_log build_rc cases_file expected_cases ci=0 failed_cases=0
-  local ph mode routing hidden topk experts ladder suite workload
-  local canonical case_id ep timing case_iters case_trials case_warmup case_stem
-  local scope scale_up_transport scale_out_transport transport topology_class nodes gpn domain
-  local attempt_tag out
-  local runtime_log run_rc summary_log
-  local -a container_args ep_args
-  [ "${NODES:-0}" -gt 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
-    || cx_die "invalid distributed launcher placement"
+cx_run_shard() {
+  local build_log build_rc expected_cases ci=0 failed_cases=0
+  local runtime_log run_rc summary_log argv_file case_label index shard wrap
+  local -a container_args ep_args manual_phases
+  [ "${NODES:-0}" -ge 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
+    || cx_die "invalid shard launcher placement"
   [ -n "${JOB_ID:-}" ] && [ -n "${SQUASH_FILE:-}" ] \
-    && [ -n "${CONTAINER_MOUNTS:-}" ] || cx_die "distributed launcher is incomplete"
-  [ -n "${SOURCE_BACKEND_ENV:-}" ] && [ -n "${BACKEND_PROBE:-}" ] \
-    && [ -n "${WRAP:-}" ] || cx_die "distributed rank wrapper is incomplete"
+    && [ -n "${CONTAINER_MOUNTS:-}" ] || cx_die "shard launcher is incomplete"
+  wrap="$(cx_source_backend_env)"$'\n'"$(cx_slurm_rank_wrapper)"
 
   cx_resolve_slurm_rendezvous "$JOB_ID"
+  cx_apply_network_profile "$NODES" "${CX_TRANSPORT:-}"
   mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
   container_args=(--container-mounts="$CONTAINER_MOUNTS" --no-container-mount-home
     --container-workdir=/ix/experimental/CollectiveX --no-container-entrypoint)
@@ -1353,21 +1345,21 @@ cx_run_distributed_shard() {
   fi
   local container_name="cxep_${JOB_ID}"
 
-  cx_log "distributed backend preparation: bench=$CX_BENCH nodes=$NODES"
+  cx_log "shard backend preparation: bench=$CX_BENCH nodes=$NODES"
   cx_set_failure_stage backend-setup
   build_log="$(cx_private_log_path backend-prepare)"
   set +e
   srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
     --container-name="$container_name" --container-image="$SQUASH_FILE" \
-    "${container_args[@]}" --export="$(cx_container_exports),CX_BUILD_ONLY=1" \
-    bash /ix/experimental/CollectiveX/runtime/run_in_container.sh \
+    "${container_args[@]}" --export="$(cx_container_exports)" \
+    bash /ix/experimental/CollectiveX/runtime/prepare_backend.sh \
     </dev/null >"$build_log" 2>&1
   build_rc=$?
   if [ "$build_rc" = 0 ]; then
     srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
-      --export="$(cx_container_exports)" bash -c "$BACKEND_PROBE" \
+      --export="$(cx_container_exports)" bash -c "$(cx_backend_probe)" \
       </dev/null >>"$build_log" 2>&1
     build_rc=$?
   fi
@@ -1378,106 +1370,63 @@ cx_run_distributed_shard() {
   fi
   cx_set_failure_stage execution
 
-  cases_file="$(mktemp)" || return 1
-  local shard="${CX_SHARD_FILE:-}"
+  shard="${CX_SHARD_FILE:-}"
   [ -z "$shard" ] || [ -f "$shard" ] || shard="$CX_DIR/$shard"
-  # Iterable benchmark version is a shard-level scalar; export it once so the
-  # harness copies it verbatim into every emitted result for this shard.
-  if [ -n "$shard" ] && [ -f "$shard" ]; then
-    CX_VERSION="$(python3 "$CX_RUNTIME_DIR/config.py" shard-version "$shard")"
-    export CX_VERSION
-  fi
   if [ -n "$shard" ]; then
-    if [ ! -f "$shard" ] || ! python3 "$CX_RUNTIME_DIR/config.py" \
-        shard-cases "$shard" > "$cases_file"; then
-      rm -f "$cases_file"
-      cx_die "could not enumerate validated shard cases"
-    fi
+    [ -f "$shard" ] || cx_die "shard control is unavailable"
+    expected_cases="$(python3 "$CX_RUNTIME_DIR/config.py" case-count "$shard")" \
+      && [[ "$expected_cases" =~ ^[1-9][0-9]*$ ]] \
+      || cx_die "could not enumerate validated shard cases"
   else
-    local phases="${CX_PHASE:-decode}" phase
-    [ "$phases" = both ] && phases="decode prefill"
-    cx_require_record_safe "$phases" "${CX_MODE:-normal}" "${CX_ROUTING:-uniform}" \
-      "${CX_HIDDEN:-7168}" "${CX_TOPK:-8}" "${CX_EXPERTS:-256}" \
-      "${CX_TOKENS_LADDER:-}" "${CX_SUITE:-}" "${CX_WORKLOAD_NAME:-}" \
-      "${CX_CANONICAL:-}" "${CX_CASE_ID:-}" \
-      "${CX_ITERS:-8}" "${CX_TRIALS:-64}" "${CX_WARMUP:-32}" \
-      "${CX_SCOPE:-scale-up}" \
-      "${CX_SCALE_UP_TRANSPORT:-unknown}" "${CX_SCALE_OUT_TRANSPORT:-}" \
-      "${CX_TRANSPORT:-unknown}" "${CX_TOPO:-manual}"
-    for phase in $phases; do
-      (IFS='|'; printf '%s\n' "$phase|${CX_MODE:-normal}|${CX_ROUTING:-uniform}|${CX_HIDDEN:-7168}|${CX_TOPK:-8}|${CX_EXPERTS:-256}|${CX_TOKENS_LADDER:-}|${CX_SUITE:-}|${CX_WORKLOAD_NAME:-}|${CX_CANONICAL:-}|${CX_CASE_ID:-}|$NGPUS|${CX_ITERS:-8}:${CX_TRIALS:-64}:${CX_WARMUP:-32}|$NODES|$GPN|$SCALE_UP_DOMAIN|${CX_SCOPE:-scale-up}|${CX_SCALE_UP_TRANSPORT:-unknown}|${CX_SCALE_OUT_TRANSPORT:-}|${CX_TRANSPORT:-unknown}|${CX_TOPO:-manual}")
-    done > "$cases_file"
+    # Ad-hoc runs without a shard control take one case per requested phase
+    # from the operator's CX_* environment (config.py manual-args).
+    local phase_list="${CX_PHASE:-decode}"
+    [ "$phase_list" != both ] || phase_list="decode prefill"
+    read -r -a manual_phases <<< "$phase_list"
+    expected_cases="${#manual_phases[@]}"
   fi
-  expected_cases="$(wc -l < "$cases_file" | tr -d ' ')"
-  [ "$expected_cases" -gt 0 ] \
-    || { rm -f "$cases_file"; cx_die "distributed case list is empty"; }
 
-  while IFS='|' read -r ph mode routing hidden topk experts ladder suite workload \
-      canonical case_id ep timing nodes gpn domain scope scale_up_transport \
-      scale_out_transport transport topology_class; do
-    [ -n "$ph" ] || continue
-    ci=$((ci + 1))
-    case_stem="${RUNNER}_${CX_BENCH}_${ph}_${TS}-c$(printf '%03d' "$ci")"
-    IFS=: read -r case_iters case_trials case_warmup <<< "${timing:-8:64:32}"
-    case_iters="${case_iters:-8}"
-    case_trials="${case_trials:-64}"
-    case_warmup="${case_warmup:-32}"
-    ep="${ep:-$NGPUS}"
-    export CX_MODE="$mode" CX_PHASE="$ph" CX_CASE_ID="$case_id" CX_SUITE="$suite"
-    export CX_WORKLOAD_NAME="$workload"
-    export CX_CANONICAL="$canonical" CX_EP="$ep"
-    export CX_ROUTING="$routing" CX_TOKENS_LADDER="$ladder"
-    export CX_HIDDEN="$hidden" CX_TOPK="$topk" CX_EXPERTS="$experts"
-    export CX_NODES="$nodes" CX_GPUS_PER_NODE="$gpn" CX_SCALE_UP_DOMAIN="$domain"
-    export CX_SCOPE="$scope" CX_SCALE_UP_TRANSPORT="$scale_up_transport"
-    export CX_SCALE_OUT_TRANSPORT="$scale_out_transport"
-    export CX_TRANSPORT="$transport" CX_TOPO="$topology_class"
-    export CX_ITERS="$case_iters" CX_TRIALS="$case_trials" CX_WARMUP="$case_warmup"
-    export CX_SAMPLES_PER_POINT="$((case_iters * case_trials))"
-    export CX_WARMUP_SEMANTICS="full-roundtrip-before-each-component-trial-point-v1"
-    cx_apply_network_profile "$NODES" "$transport"
-    cx_log "EP${NGPUS}[$ci] id=${case_id:-manual} $mode/$ph $CX_BENCH"
-    if [ "$ep" != "$NGPUS" ] || [ "$nodes" != "$NODES" ] || [ "$gpn" != "$GPN" ] \
-        || [ "$domain" != "$SCALE_UP_DOMAIN" ]; then
-      cx_log "ERROR: EP${NGPUS}[$ci] topology mismatch (ep=$ep nodes=$nodes gpn=$gpn domain=$domain); skipping case"
-      failed_cases=$((failed_cases + 1))
-      continue
+  argv_file="$(mktemp)" || return 1
+  while [ "$ci" -lt "$expected_cases" ]; do
+    if [ -n "$shard" ]; then
+      python3 "$CX_RUNTIME_DIR/config.py" case-args "$shard" "$ci" \
+        "$RUNNER" "$TS" "${CX_SEED:-67}" \
+        "$NGPUS" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" > "$argv_file" \
+        || { rm -f "$argv_file"; cx_die "shard case $ci does not decode against this allocation"; }
+    else
+      python3 "$CX_RUNTIME_DIR/config.py" manual-args "${manual_phases[ci]}" "$ci" \
+        "$RUNNER" "$TS" "${CX_SEED:-67}" > "$argv_file" \
+        || { rm -f "$argv_file"; cx_die "manual case $ci does not decode"; }
     fi
-
-    ep_args=(--backend "$CX_BENCH" --mode "$mode" --phase "$ph" --routing "$routing"
-      --gpus-per-node "$gpn" --scale-up-domain "$domain" --scope "$scope"
-      --scale-up-transport "$scale_up_transport" --scale-out-transport "$scale_out_transport"
-      --tokens-ladder "$ladder" --hidden "$hidden" --topk "$topk" --experts "$experts"
-      --warmup "$case_warmup" --iters "$case_iters" --trials "$case_trials"
-      --seed "${CX_SEED:-67}" --runner "$RUNNER" --topology-class "$topology_class"
-      --transport "$transport" --case-id "$case_id" --suite "$suite"
-      --workload-name "$workload" --version "${CX_VERSION:-1}")
-    export CX_ATTEMPT_ID=1
-    attempt_tag=a01
-    out="results/${case_stem}_${attempt_tag}.json"
-    runtime_log="$(cx_private_log_path "runtime-c$(printf '%03d' "$ci")-$attempt_tag")"
+    mapfile -d '' -t ep_args < "$argv_file"
+    [ "${#ep_args[@]}" -gt 0 ] \
+      || { rm -f "$argv_file"; cx_die "case $ci produced no benchmark arguments"; }
+    case_label=""
+    for ((index = 0; index + 1 < ${#ep_args[@]}; index++)); do
+      [ "${ep_args[index]}" != --case-id ] || case_label="${ep_args[index + 1]}"
+    done
+    cx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] id=${case_label:-manual} $CX_BENCH"
+    runtime_log="$(cx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     set +e
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export="$(cx_container_exports)" \
-      bash -c "$WRAP" _ "${ep_args[@]}" --out "$out" \
+      bash -c "$wrap" _ "${ep_args[@]}" \
       </dev/null >"$runtime_log" 2>&1
     run_rc=$?
     set -e
-    # Terminal-outcome emission and result-document gating were removed with
-    # contracts.py; a case now counts as run purely on the distributed command's
-    # return code. The rank-zero result the harness wrote (if any) is left in place
-    # for the summary renderer, which validates nothing.
+    # A case counts as run purely on the distributed command's return code. The
+    # rank-zero result the harness wrote (if any) is left in place for the
+    # summary renderer, which validates nothing.
     if [ "$run_rc" != 0 ]; then
       cx_fail_stage execution "$runtime_log" || true
       failed_cases=$((failed_cases + 1))
     fi
-  done < "$cases_file"
-  rm -f "$cases_file"
-  [ "$ci" -eq "$expected_cases" ] \
-    || cx_die "enumerated $expected_cases cases but executed $ci"
+    ci=$((ci + 1))
+  done
+  rm -f "$argv_file"
   if [ "$failed_cases" -ne 0 ]; then
     summary_log="$(cx_private_log_path shard-summary)"
     printf 'SHARD done: %s/%s case(s) failed\n' "$failed_cases" "$expected_cases" \
@@ -1489,17 +1438,16 @@ cx_run_distributed_shard() {
 }
 
 # Remove this allocation's persistent pyxis container before the allocation is
-# released. The cluster runs pyxis with container_scope=global, so a named
-# --container-writable container (the distributed path's cxep_<jobid>) survives
-# job teardown and its unpacked rootfs — tens of GB per node — would otherwise
+# released. Clusters may run pyxis with container_scope=global, where the named
+# --container-writable container every shard uses (cxep_<jobid>) survives job
+# teardown and its unpacked rootfs — tens of GB per node — would otherwise
 # accumulate on every allocated node's local image store until it fills and the
 # next writable extraction fails with ENOSPC. Best-effort and bounded: teardown
-# must never hang or fail on this. Single-node legs use an unnamed, ephemeral
-# container that pyxis reclaims on its own, so only NODES>1 needs removal.
+# must never hang or fail on this.
 cx_remove_distributed_container() {
   local job_id="$1" nodes="${2:-1}"
   [ -n "$job_id" ] || return 0
-  [ "$nodes" -gt 1 ] 2>/dev/null || return 0
+  [ "$nodes" -ge 1 ] 2>/dev/null || return 0
   timeout 120 srun --jobid="$job_id" --nodes="$nodes" --ntasks-per-node=1 \
     --chdir=/tmp enroot remove -f "pyxis_cxep_${job_id}" \
     </dev/null >/dev/null 2>&1 || true

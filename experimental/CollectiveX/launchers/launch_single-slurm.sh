@@ -55,6 +55,7 @@ case "$CX_BENCH" in
   deepep-v2|deepep-hybrid) ;;
   *) cx_die "unsupported $RUNNER EP backend: $CX_BENCH" ;;
 esac
+cx_apply_timing_profile
 
 export CX_RUNNER="$RUNNER" CX_NGPUS="$NGPUS" CX_NODES="$NODES"
 export CX_GPUS_PER_NODE="$GPN" CX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
@@ -97,9 +98,8 @@ fi
 
 cx_set_failure_stage scheduler-allocation
 command -v salloc >/dev/null || cx_die "salloc not found on this runner"
-allocation=(--partition="$CX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN" --exclusive
-  --time="$TIME_MIN" "${ALLOC_EXTRA[@]}")
-[ "$NODES" = 1 ] || allocation+=(--ntasks-per-node="$GPN")
+allocation=(--partition="$CX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
+  --ntasks-per-node="$GPN" --exclusive --time="$TIME_MIN" "${ALLOC_EXTRA[@]}")
 [ -z "${CX_ACCOUNT:-}" ] || allocation+=(--account="$CX_ACCOUNT")
 [ -z "${CX_QOS:-}" ] || allocation+=(--qos="$CX_QOS")
 [ -z "${CX_NODELIST:-}" ] || allocation+=(--nodelist="$CX_NODELIST")
@@ -152,29 +152,11 @@ fi
 cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${CX_SHARD_FILE:-}"
 
-if [ "$NODES" = 1 ]; then
-  run_rc=0
-  cx_set_failure_stage container-launch
-  runtime_log="$(cx_private_log_path runtime)"
-  srun --jobid="$JOB_ID" --container-image="$SQUASH_FILE" \
-    --container-mounts="$CONTAINER_MOUNTS" --no-container-mount-home \
-    --container-workdir=/ix/experimental/CollectiveX --no-container-entrypoint \
-    "${SRUN_EXTRA[@]}" --export="$(cx_container_exports)" \
-    bash /ix/experimental/CollectiveX/runtime/run_in_container.sh \
-    >"$runtime_log" 2>&1 || run_rc=$?
-else
-  SOURCE_BACKEND_ENV="$(cx_source_backend_env)"
-  BACKEND_PROBE="$(cx_backend_probe)"
-  WRAP="${SOURCE_BACKEND_ENV}"$'\n'"$(cx_slurm_rank_wrapper)"
-  CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")
-  run_rc=0
-  cx_set_failure_stage container-launch
-  cx_run_distributed_shard || run_rc=$?
-fi
+CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")
+run_rc=0
+cx_set_failure_stage container-launch
+cx_run_shard || run_rc=$?
 
-if [ "$NODES" = 1 ] && [ "$run_rc" != 0 ]; then
-  cx_fail_stage "$CX_FAILSAFE_MODE" "$runtime_log" || true
-fi
 collect_rc=0
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT" || collect_rc=$?
 [ "$run_rc" != 0 ] || [ "$collect_rc" = 0 ] || cx_set_failure_stage artifact-collection

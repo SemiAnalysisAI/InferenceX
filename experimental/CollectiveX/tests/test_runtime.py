@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import contextlib
 import io
 import json
@@ -16,11 +17,14 @@ import unittest
 
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
+BENCH = Path(__file__).resolve().parents[1] / "bench"
 sys.path.insert(0, str(RUNTIME))
+sys.path.insert(0, str(BENCH))
 
 import probe  # noqa: E402
 import config  # noqa: E402
 import stage  # noqa: E402
+import ep_harness  # noqa: E402  (stdlib-only at module top)
 
 
 class ProbeTests(unittest.TestCase):
@@ -260,6 +264,90 @@ class StageContract(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 parser.parse_args(["validate-stage-path", "x", "x", "x", "--allow-parent-owner"])
+
+
+# config.py case-args is the single case→invocation codec: cx_run_shard decodes one
+# null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
+# emitted argv with the same parser shape run_ep builds so the two sides cannot
+# drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
+# here instead of on a GPU allocation.
+class CaseArgvContract(unittest.TestCase):
+    CASE = {
+        "backend": "deepep-v2", "mode": "normal", "phase": "decode",
+        "routing": "uniform", "ep": 16, "nodes": 2, "gpus_per_node": 8,
+        "scale_up_domain": 8, "scope": "scale-out",
+        "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
+        "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
+        "hidden": 7168, "topk": 8, "experts": 256,
+        "ladder": "1 2 4", "timing": "8:64:32", "canonical": True,
+        "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
+        "suite": "ep-core", "workload": "deepseek-v3",
+    }
+
+    @staticmethod
+    def _run_ep_parser() -> argparse.ArgumentParser:
+        # Mirror of the parser bench/run_ep.py builds in main().
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            "--backend", required=True, choices=["deepep-v2", "deepep-hybrid", "mori"]
+        )
+        ep_harness.add_common_args(parser)
+        return parser
+
+    def _decode(self, stdout: bytes) -> list:
+        parts = stdout.split(b"\0")
+        self.assertEqual(parts[-1], b"")
+        return [part.decode() for part in parts[:-1]]
+
+    def _case_argv(self, placement: list) -> list:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "shard.json"
+            path.write_text(json.dumps({"version": 1, "cases": [self.CASE]}))
+            result = subprocess.run(
+                [sys.executable, str(RUNTIME / "config.py"), "case-args",
+                 str(path), "0", "h200-dgxc", "TS", "67", *placement],
+                capture_output=True, check=True,
+            )
+        return self._decode(result.stdout)
+
+    def test_case_args_round_trips_through_the_run_ep_parser(self) -> None:
+        argv = self._case_argv(["16", "2", "8", "8"])
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual(
+            (args.backend, args.mode, args.phase, args.routing, args.scope),
+            ("deepep-v2", "normal", "decode", "uniform", "scale-out"),
+        )
+        self.assertEqual((args.hidden, args.topk, args.experts), (7168, 8, 256))
+        self.assertEqual((args.gpus_per_node, args.scale_up_domain), (8, 8))
+        self.assertEqual(args.tokens_ladder, "1 2 4")
+        self.assertEqual(args.scale_out_transport, "rdma")
+        self.assertEqual(args.case_id, self.CASE["case_id"])
+        self.assertEqual(args.version, 1)
+        self.assertEqual(args.seed, ep_harness.ROUTING_SEED)
+        self.assertIsNone(
+            ep_harness.sampling_error(args.iters, args.trials, args.warmup)
+        )
+        self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_decode_TS-c000.json")
+
+    def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
+        with self.assertRaises(subprocess.CalledProcessError):
+            self._case_argv(["8", "1", "8", "8"])
+
+    def test_manual_args_reads_the_operator_environment(self) -> None:
+        env = dict(
+            os.environ, CX_BENCH="mori", CX_TOPO="mi355x-xgmi", CX_TRANSPORT="xgmi",
+            CX_GPUS_PER_NODE="8", CX_SCALE_UP_DOMAIN="8",
+        )
+        result = subprocess.run(
+            [sys.executable, str(RUNTIME / "config.py"), "manual-args",
+             "prefill", "1", "mi355x", "TS", "67"],
+            capture_output=True, check=True, env=env,
+        )
+        args = self._run_ep_parser().parse_args(self._decode(result.stdout))
+        self.assertEqual((args.backend, args.phase), ("mori", "prefill"))
+        self.assertEqual(args.topology_class, "mi355x-xgmi")
+        self.assertEqual(args.transport, "xgmi")
+        self.assertEqual(args.out, "results/mi355x_mori_prefill_TS-c001.json")
 
 
 if __name__ == "__main__":
