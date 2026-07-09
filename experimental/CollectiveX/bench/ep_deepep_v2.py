@@ -26,13 +26,11 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-DEEPEP_V2_PR = 605
-DEEPEP_V2_FIX_PR = 630
-DEEPEP_V2_NCCL_CHECK_FIX_PR = 640
-DEEPEP_V2_NCCL_CHECK_COMMIT = "93d0564188f7a0a6288c6e316484861b0efa042e"
-DEEPEP_V2_COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
-DEEPEP_V2_TREE = "29809e75c5874e6609dac4804e7b651d5226959f"
-DEEPEP_V2_FMT_COMMIT = "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
+# Source pins (PR #605 head + #630/#640 fixes) live in runtime/common.sh, which
+# fetches and builds them. This adapter verifies the realized artifacts instead:
+# installed package versions, the loaded libnccl's runtime version, and the
+# wheel's local-version tag ("+fa8a9b1"), which setup.py bakes from the pinned
+# checkout at build time and is the artifact-side commit check.
 DEEPEP_V2_VERSION = "2.0.0"
 DEEPEP_V2_DISTRIBUTIONS = frozenset({"2.0.0+fa8a9b1", "2.0.0+local"})
 TORCH_VERSION = "2.10.0+cu130"
@@ -194,20 +192,6 @@ def _lsa_topology_is_valid(
 
 
 def _require_runtime() -> tuple[str, str]:
-    expected = {
-        "DEEPEP_V2_PR": str(DEEPEP_V2_PR),
-        "DEEPEP_V2_FIX_PR": str(DEEPEP_V2_FIX_PR),
-        "DEEPEP_V2_NCCL_CHECK_FIX_PR": str(DEEPEP_V2_NCCL_CHECK_FIX_PR),
-        "DEEPEP_V2_COMMIT": DEEPEP_V2_COMMIT,
-        "DEEPEP_V2_TREE": DEEPEP_V2_TREE,
-        "DEEPEP_V2_FMT_COMMIT": DEEPEP_V2_FMT_COMMIT,
-        "DEEPEP_V2_NCCL_CHECK_COMMIT": DEEPEP_V2_NCCL_CHECK_COMMIT,
-    }
-    mismatches = [
-        f"{name}={os.environ.get(name)!r}, expected {value!r}"
-        for name, value in expected.items()
-        if os.environ.get(name) != value
-    ]
     torch_version = str(torch.__version__)
     nccl_package_version = importlib.metadata.version("nvidia-nccl-cu13")
     nvshmem_package_version = importlib.metadata.version("nvidia-nvshmem-cu12")
@@ -224,11 +208,11 @@ def _require_runtime() -> tuple[str, str]:
         "nvidia-nccl-cu13": NCCL_VERSION,
         "nvidia-nvshmem-cu12": NVSHMEM_VERSION,
     }
-    mismatches.extend(
+    mismatches = [
         f"{name}={actual[name]!r}, expected {value!r}"
         for name, value in required.items()
         if actual[name] != value
-    )
+    ]
     if actual["deep_ep distribution"] not in DEEPEP_V2_DISTRIBUTIONS:
         mismatches.append(
             "deep_ep distribution="

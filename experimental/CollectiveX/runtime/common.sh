@@ -147,15 +147,6 @@ cx_cleanup_private_logs() {
   [ "$1" != 0 ] || rm -rf -- "${CX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}/logs"
 }
 
-# Explicit Slurm export boundary. Operator config, runner credentials, HOME,
-# workspace paths, and unrelated service secrets never enter the container.
-# Per-case benchmark configuration travels as run_ep.py argv, not env, so the
-# boundary carries only shard-level identity, placement, backend-build inputs,
-# and validated network selectors.
-cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SHARD_SKU,CX_NGPUS,CX_TRANSPORT,CX_MORI_KERNEL_TYPE,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
-}
-
 # Host-side utility steps need only the basic login paths. They never receive
 # the complete Actions or runner environment.
 cx_host_exports() {
@@ -1351,7 +1342,7 @@ cx_run_shard() {
   set +e
   srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
     --container-name="$container_name" --container-image="$SQUASH_FILE" \
-    "${container_args[@]}" --export="$(cx_container_exports)" \
+    "${container_args[@]}" --export=ALL \
     bash /ix/experimental/CollectiveX/runtime/prepare_backend.sh \
     </dev/null >"$build_log" 2>&1
   build_rc=$?
@@ -1359,7 +1350,7 @@ cx_run_shard() {
     srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
-      --export="$(cx_container_exports)" bash -c "$(cx_backend_probe)" \
+      --export=ALL bash -c "$(cx_backend_probe)" \
       </dev/null >>"$build_log" 2>&1
     build_rc=$?
   fi
@@ -1412,7 +1403,7 @@ cx_run_shard() {
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
-      --export="$(cx_container_exports)" \
+      --export=ALL \
       bash -c "$wrap" _ "${ep_args[@]}" \
       </dev/null >"$runtime_log" 2>&1
     run_rc=$?

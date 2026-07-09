@@ -1,7 +1,0 @@
-# CollectiveX EP canonical workload and phase metadata.
-model_derived:
-  deepseek-v3:
-    hidden: 7168
-    topk: 8
-    routed_experts: 256
-    verified_against: "deepseek-ai/DeepSeek-V3@e815299b0bcbac849fa540c768ef21845365c9eb/config.json"

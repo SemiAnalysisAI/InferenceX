@@ -38,10 +38,10 @@ jobs:
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       n: ${{ steps.gen.outputs.n }}
-      max_parallel: ${{ steps.gen.outputs.max_parallel }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
+      # PyYAML is needed only here to resolve suites.yaml/workloads.yaml; shard extraction on GPU runners stays stdlib-only.
       - name: Install matrix dependencies
         run: python3 -m pip install --quiet PyYAML==6.0.2
       - id: gen
@@ -74,14 +74,9 @@ jobs:
               {key: value for key, value in cell.items() if key != "case_ids"}
               for cell in cells
           ]}
-          max_parallel = (
-              max(1, min(10, 4096 // max(cell["execution_weight"] for cell in cells)))
-              if cells else 1
-          )
           with open(sys.argv[1], "a", encoding="utf-8") as output:
               output.write(f"matrix={json.dumps(slim, separators=(',', ':'))}\n")
               output.write(f"n={len(cells)}\n")
-              output.write(f"max_parallel={max_parallel}\n")
           print(f"execution-cells: {len(cells)}")
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -98,7 +93,10 @@ jobs:
     if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
-      max-parallel: ${{ fromJSON(needs.setup.outputs.max_parallel) }}
+      # Fixed global cap; real throttling is each SKU pool's runner count and its
+      # cluster's Slurm partition. setup interleaves shards across SKUs, so the
+      # first jobs under this cap spread over pools instead of queuing on one.
+      max-parallel: 10
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.sku }}
     timeout-minutes: 350
@@ -122,6 +120,7 @@ jobs:
       CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
       HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
+      # Create the private mode-0700 /tmp job root and git-fetch the exact COLLECTIVEX_SOURCE_SHA into it; shards never execute from the runner's shared checkout.
       - name: Prepare isolated source
         id: source
         env:
@@ -168,6 +167,7 @@ jobs:
         with:
           name: cxsweep-matrix-${{ github.run_id }}
           path: ${{ env.CX_JOB_ROOT }}/control
+      # Materialize this shard's .shards/<id>.json case control from the run-scoped matrix artifact downloaded above.
       - name: Extract execution control
         run: |
           set -euo pipefail
@@ -177,6 +177,7 @@ jobs:
             --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
             --shard-id '${{ matrix.id }}' \
             --out '${{ env.CX_SHARD_FILE }}' >/dev/null
+      # Merge the base + per-SKU operator-config secrets into one validated mode-0600 file, then run the SKU launcher (allocate -> stage -> build -> run cases).
       - name: Execute sweep cell ${{ matrix.id }}
         id: sweep_shard
         env:
@@ -256,6 +257,7 @@ jobs:
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
+      # always(): cancel any Slurm allocation a killed launcher left recorded, append the summary table, and stage result JSONs so a red or partial leg still uploads.
       - name: Summarize and stage shard results
         id: stage_artifact
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
@@ -277,6 +279,7 @@ jobs:
           fi
           cp -- "${results[@]}" "$CX_JOB_ROOT/artifact/"
           echo "staged=true" >> "$GITHUB_OUTPUT"
+      # The neutral per-case JSONs are the workflow's only output; a consumer downloads them and decides what to display.
       - name: Upload shard results
         id: upload_artifact
         if: always() && steps.stage_artifact.outputs.staged == 'true'
@@ -287,6 +290,7 @@ jobs:
             ${{ env.CX_JOB_ROOT }}/artifact/*.json
           if-no-files-found: error
           retention-days: 14
+      # Delete the private /tmp job root only after re-validating its path shape and confirming allocation teardown; refuses anything unrecognized.
       - name: Cleanup isolated workspace
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |

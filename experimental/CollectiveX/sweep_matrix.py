@@ -69,26 +69,13 @@ def _load(name: str) -> dict[str, Any]:
     return document
 
 
-def _workload_registry(workloads: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {
-        name: cfg
-        for section in ("synthetic", "model_derived")
-        for name, cfg in (workloads.get(section) or {}).items()
-    }
-
-
 def _dims(workloads: dict[str, Any], name: str) -> tuple[int, int, int]:
-    config = _workload_registry(workloads)[name]
-    values = (
-        config.get("hidden"),
-        config.get("topk"),
-        config.get("experts", config.get("routed_experts")),
-    )
-    return values  # type: ignore[return-value]
+    config = workloads[name]
+    return config["hidden"], config["topk"], config["routed_experts"]
 
 
 def _ladder(suite: dict[str, Any], phase: str) -> str:
-    points = suite.get(f"token_points_{phase}", suite.get("token_points"))
+    points = suite.get(f"token_points_{phase}")
     if points is None:
         points = ep_harness.DECODE_LADDER if phase == "decode" else ep_harness.PREFILL_LADDER
     if (not isinstance(points, list) or not points
@@ -188,8 +175,8 @@ def resolve_matrix(
     if only_sku and only_sku in excluded:
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
-    workloads = _load("workloads.yaml")
     suites_document = _load("suites.yaml")
+    workloads = suites_document["workloads"]
     registry = suites_document["suites"]
     select_all = suites == "all"
     names = (

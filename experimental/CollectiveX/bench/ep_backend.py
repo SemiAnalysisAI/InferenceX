@@ -78,7 +78,6 @@ class WorkloadSpec:
     ok: bool = True
     rc: int = 0
     message: str = ""
-    phase: str = ""
     routing: str = "uniform"
     seed: int = 0
     hidden: int = 0
@@ -185,7 +184,7 @@ class EPBackend(abc.ABC):
         cap = self.buffer_cap(args)
         if cap is not None and cap < conditioning_ladder[-1]:
             return WorkloadSpec(
-                ok=False, rc=2, phase=args.phase,
+                ok=False, rc=2,
                 message=(
                     f"{self.name} buffer cap {cap} cannot run the v1 conditioning ladder"
                 ),
@@ -193,11 +192,10 @@ class EPBackend(abc.ABC):
         ladder, dropped = token_ladder(args.tokens_ladder, args.phase, cap)
         if not ladder:
             return WorkloadSpec(
-                ok=False, rc=2, phase=args.phase,
+                ok=False, rc=2,
                 message=f"empty token ladder (phase={args.phase}, cap={cap})",
             )
         spec = WorkloadSpec(
-            phase=args.phase,
             routing=args.routing,
             seed=args.seed,
             hidden=args.hidden,
@@ -265,7 +263,6 @@ class EPBackend(abc.ABC):
     def _topk_idx_dtype(self):
         """Integer dtype the backend's kernels expect for top-k routing indices."""
         import torch
-
         return torch.int64
 
     # ---- Timing template methods -----------------------------------------------------

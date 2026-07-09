@@ -180,13 +180,6 @@ cx_activate_deepep_v2() {
   # The identical absolute path still lets ranks on one node share their cold build.
   export EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id"
   export EP_REUSE_NCCL_COMM=1
-  export DEEPEP_V2_PR=605 DEEPEP_V2_FIX_PR=630 DEEPEP_V2_NCCL_CHECK_FIX_PR=640
-  DEEPEP_V2_COMMIT="$CX_DEEPEP_V2_COMMIT"
-  DEEPEP_V2_TREE="$CX_DEEPEP_V2_TREE"
-  DEEPEP_V2_FMT_COMMIT="$CX_DEEPEP_V2_FMT_COMMIT"
-  DEEPEP_V2_NCCL_CHECK_COMMIT="$CX_DEEPEP_V2_NCCL_CHECK_COMMIT"
-  export DEEPEP_V2_COMMIT DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT
-  export DEEPEP_V2_NCCL_CHECK_COMMIT
   [ ! -L "$EP_JIT_CACHE_DIR" ] \
     || { cx_log "ERROR: DeepEP V2 JIT cache path is unsafe"; return 1; }
   if ! mkdir -p "$EP_JIT_CACHE_DIR" || ! chmod 700 "$EP_JIT_CACHE_DIR"; then
@@ -231,7 +224,7 @@ PY
 
 cx_build_deepep_v2() {
   local root venv source ready lock_path arch cache_ready
-  local revision="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
+  local revision="$CX_DEEPEP_V2_COMMIT"
   arch="$(cx_cuda_arch)" || return 1
   root="$(cx_deepep_v2_root)" || return 1
   venv="$root/venv"; source="$root/source"; ready="$root/.ready"
@@ -295,7 +288,7 @@ cx_build_deepep_v2() {
   EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"
   export EP_NVSHMEM_ROOT_DIR
   cx_probe_deepep_v2 || { cx_log "ERROR: DeepEP V2 shared runtime probe failed"; return 1; }
-  cx_log "DeepEP V2 ready ($DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
+  cx_log "DeepEP V2 ready ($CX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
 # Build the pinned DeepEP `hybrid-ep` implementation. MNNVL remains one scale-up
@@ -390,8 +383,6 @@ cx_persist_backend_env() {
   local -a names=(PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
     NVSHMEM_DIR DEEPEP_COMMIT DEEPEP_TREE
     EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM
-    DEEPEP_V2_PR DEEPEP_V2_FIX_PR DEEPEP_V2_NCCL_CHECK_FIX_PR DEEPEP_V2_COMMIT
-    DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT DEEPEP_V2_NCCL_CHECK_COMMIT
     HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE)
   [[ "$node_id" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$root" || return 1

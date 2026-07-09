@@ -55,49 +55,12 @@ def _validate_hybrid_build() -> None:
             raise RuntimeError(f"{module_name} has no loaded extension path")
 
 
-HYBRID_CONFIG_FIELDS = (
-    "hidden_dim", "max_num_of_tokens_per_rank", "num_of_experts_per_rank",
-    "num_of_ranks_per_node", "num_of_nodes", "pad_multiple",
-    "num_of_tokens_per_chunk_preprocessing_api",
-    "num_of_threads_per_block_preprocessing_api", "num_of_blocks_preprocessing_api",
-    "num_of_blocks_permute", "num_of_blocks_unpermute", "token_data_type",
-    "num_of_stages_dispatch_api", "num_of_stages_permute_block_dispatch_api",
-    "num_of_in_flight_s2g_dispatch_api",
-    "num_of_in_flight_s2g_permute_block_dispatch_api",
-    "num_of_additional_in_flight_s2g_dispatch_api",
-    "num_of_tokens_per_chunk_dispatch_api", "num_of_blocks_dispatch_api",
-    "forward_dispatch_api", "device_side_sync_dispatch_api",
-    "num_of_stages_g2s_combine_api", "num_of_stages_s2g_combine_api",
-    "num_of_tokens_per_chunk_combine_api", "num_of_tokens_per_group_combine_api",
-    "num_of_blocks_combine_api", "num_of_additional_in_flight_s2g_combine_api",
-    "backward_combine_api", "device_side_sync_combine_api",
-)
-
-
-def _hybrid_realized_config(config) -> dict[str, str | int | bool]:
-    """Project the Python-visible, post-autotune HybridEP config to JSON scalars."""
-    realized = {}
-    for field in HYBRID_CONFIG_FIELDS:
-        try:
-            value = getattr(config, field)
-        except AttributeError as exc:
-            raise RuntimeError(f"HybridEP realized config omits {field}") from exc
-        if field == "token_data_type":
-            token_type = getattr(value, "name", None)
-            if token_type not in {"UINT8", "UINT16"}:
-                token_type = {"uint8_t": "UINT8", "uint16_t": "UINT16"}.get(str(value))
-            if token_type is None:
-                raise RuntimeError("HybridEP realized token_data_type is invalid")
-            realized[field] = token_type
-            continue
-        if type(value) is bool:
-            realized[field] = value
-            continue
-        try:
-            realized[field] = int(value)
-        except (TypeError, ValueError) as exc:
-            raise RuntimeError(f"HybridEP realized config {field} is not integral") from exc
-    return realized
+def _hybrid_token_type(value) -> str | None:
+    """Normalize HybridEP's token wire type (enum or ctype string) to UINT8/UINT16."""
+    token_type = getattr(value, "name", None)
+    if token_type not in {"UINT8", "UINT16"}:
+        token_type = {"uint8_t": "UINT8", "uint16_t": "UINT16"}.get(str(value))
+    return token_type
 
 
 def _hybrid_topology(args, world_size: int) -> dict[str, int | str]:
@@ -227,14 +190,13 @@ class DeepEPHybridBackend(EPBackend):
 
         def tracked_update_template_config(*call_args, **call_kwargs):
             config = update_template_config(*call_args, **call_kwargs)
-            realized = _hybrid_realized_config(config)
             if (
-                realized["num_of_ranks_per_node"] != self.domain_ranks
-                or realized["num_of_nodes"] != self.communication_domains
+                int(config.num_of_ranks_per_node) != self.domain_ranks
+                or int(config.num_of_nodes) != self.communication_domains
             ):
                 raise RuntimeError("DeepEP Hybrid realized topology changed within one case")
             # BF16 dispatch realizes the 2-byte UINT16 token wire type.
-            if realized["token_data_type"] != "UINT16":
+            if _hybrid_token_type(config.token_data_type) != "UINT16":
                 raise RuntimeError(
                     "DeepEP Hybrid realized token dtype is not the BF16 UINT16 wire type"
                 )

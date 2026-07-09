@@ -7,7 +7,6 @@ import re
 from typing import Any
 
 
-DEEPEP_V2_COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 DEEPEP_V2_SKU_CAPABILITIES = {
     "h100-dgxc": {
         "schedulable": False,
@@ -141,15 +140,11 @@ PLATFORMS = {
     ),
 }
 
+# Source pins and runtime versions live in runtime/common.sh and the adapters;
+# this registry holds only what scheduling reads: vendor and per-SKU capability.
 BACKENDS = {
     "deepep-v2": {
         "vendors": {"nvidia"},
-        "implementation": "deep_ep.ElasticBuffer",
-        "source": "deepseek-ai/DeepEP#605+#630+#640",
-        "commit": DEEPEP_V2_COMMIT,
-        "communication_backend": "nccl-device-lsa",
-        "torch": "2.10.0+cu130",
-        "nccl": "2.30.4",
         "sku_capabilities": DEEPEP_V2_SKU_CAPABILITIES,
     },
     "deepep-hybrid": {"vendors": {"nvidia"}},
