@@ -130,7 +130,12 @@ fi
 
 case "$OFFLOAD_MODE" in
     none)
-        OFFLOAD_ARGS=(--no-enable-prefix-caching)
+        # GPU-only KV, no DRAM offload. Leave prefix caching at vLLM's
+        # default (ON) so this is an honest no-offload baseline that still
+        # reuses shared prefixes on-GPU — apples-to-apples vs the lmcache
+        # cell, which extends that same reuse into DRAM. (Matches the
+        # kimik2.5 / dsv4 agentic recipes.)
+        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         ;;
     lmcache)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
