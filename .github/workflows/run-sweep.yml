@@ -555,8 +555,6 @@ jobs:
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
             duration: ${{ matrix.config.duration }}
-            kv-offloading: ${{ matrix.config['kv-offloading'] }}
-            kv-offload-backend: ${{ matrix.config['kv-offload-backend'] }}
             run-eval: false
             scenario-type: agentic-coding
 
