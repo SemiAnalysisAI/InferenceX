@@ -2711,10 +2711,14 @@ minimaxm3-fp4-mi355x-atom-disagg:
 
 # MiniMax-M3 MXFP8 MI300X day-zero recipe. Reuse the dedicated ROCm image and
 # MI355X serving shape, but retain the default BF16 KV cache because this
-# checkpoint lacks calibrated ROCm FP8 attention scales. Use the TP8-only H100
-# search space: TP8 for latency and TP8+EP8 (TEP) at high concurrency.
+# checkpoint lacks calibrated ROCm FP8 attention scales. TP8-only, plain
+# (non-expert-parallel) search space across the full conc range: EP8
+# (--enable-expert-parallel) produces garbage/incoherent output on this
+# MXFP8+gfx942 combination (confirmed locally: TP8/EP8 returns garbled tokens
+# even on trivial prompts, TP8/EP1 answers correctly), and was already the
+# lower-throughput topology where measured.
 minimaxm3-fp8-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi300x
@@ -2726,13 +2730,11 @@ minimaxm3-fp8-mi300x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 256 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi300x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
