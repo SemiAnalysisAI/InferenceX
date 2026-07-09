@@ -21,8 +21,7 @@ unset COLLECTIVEX_OPERATOR_CONFIG_LOADED COLLECTIVEX_EPHEMERAL_CONFIG_PATH
 cx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 cx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
-# Public failure telemetry is a closed vocabulary. Raw scheduler, container,
-# host, and filesystem diagnostics stay in the mode-0600 private logs.
+# Keep a stable stage label while leaving diagnosis to the captured tool output.
 cx_set_failure_stage() {
   local stage="$1"
   case "$stage" in
@@ -34,117 +33,13 @@ cx_set_failure_stage() {
 }
 
 cx_fail_stage() {
-  local stage="$1" log_path="${2:-}" diagnostic="unknown"
+  local stage="$1" log_path="${2:-}" tail_lines="${CX_LOG_TAIL_LINES:-100}"
   cx_set_failure_stage "$stage"
-  if [ -n "$log_path" ] && [ -f "$log_path" ]; then
-    if grep -aEqi 'no space left|disk quota|quota exceeded' "$log_path"; then
-      diagnostic="storage-capacity"
-    elif grep -aEqi 'permission denied|operation not permitted|read-only file system|source mount (creation|ownership validation|permission inspection|permission normalization|permission validation) failed' "$log_path"; then
-      diagnostic="storage-permission"
-    elif grep -aEqi 'outside one realized LSA domain|lsa(Size| team| domain).*(mismatch|invalid|expected)|ranks.*not in (one|the same) nvlink.domain' "$log_path" \
-        || { [ "${CX_BENCH:-}" = deepep-v2 ] \
-          && grep -aEqi 'nccl[.]cu:(111|112)([^0-9]|$)' "$log_path"; }; then
-      diagnostic="accelerator-topology"
-    elif grep -aEqi 'cuda driver version is insufficient|call requires newer driver|cudaErrorCallRequiresNewerDriver|CUDA_ERROR_SYSTEM_DRIVER_MISMATCH|unsupported toolchain' "$log_path"; then
-      diagnostic="accelerator-driver"
-    elif grep -aEqi 'cudaErrorDevicesUnavailable|CUDA_ERROR_DEVICE_UNAVAILABLE|CUDA-capable device\(s\) is/are busy or unavailable|primary context retain failed' "$log_path"; then
-      diagnostic="accelerator-unavailable"
-    elif grep -aEqi 'ncclDevCommCreate|ncclCommWindowRegister|ncclGetLsa(Device)?Pointer|Communicator does not support symmetric memory|Symmetric memory is not supported' "$log_path" \
-        || { [ "${CX_BENCH:-}" = deepep-v2 ] \
-          && grep -aEqi 'nccl[.]cu:(106|127|128|129|135)([^0-9]|$)' "$log_path"; }; then
-      diagnostic="nccl-device-api"
-    elif grep -aEqi 'NVCC (PTX )?compilation failed|cuobjdump failed|invalid device (kernel )?image|no kernel image is available' "$log_path"; then
-      diagnostic="jit-toolchain"
-    elif grep -aEqi 'cuda out of memory|CUDA_ERROR_OUT_OF_MEMORY|out of memory.*cuda' "$log_path"; then
-      diagnostic="accelerator-memory"
-    elif grep -aEqi 'does not match its pinned image contract|requires the exact pinned|version mismatch' "$log_path"; then
-      diagnostic="backend-version"
-    elif grep -aEqi 'nvshmem is unavailable|build-tool installation failed' "$log_path"; then
-      diagnostic="backend-dependency"
-    elif grep -aEqi 'revision fetch failed|submodule fetch failed|package installation failed|staged source is invalid|source (pin resolution|seed validation|seed copy|checkout creation|publication validation|existing source validation) failed' "$log_path"; then
-      diagnostic="backend-source"
-    elif grep -aEqi 'backend preparation failed|backend import failed|build (failed|is incomplete)|cache (mount identity )?validation failed|import failed' "$log_path"; then
-      diagnostic="backend-build"
-    elif grep -aEqi 'failed to mount|squashfs|enroot|pyxis|mount.*invalid argument|invalid argument.*mount' "$log_path"; then
-      diagnostic="container-runtime"
-    elif grep -aEqi 'command not found|not found on this runner|git lookup failed' "$log_path"; then
-      diagnostic="missing-runtime"
-    elif grep -aEqi 'too many requests|rate.?limit' "$log_path"; then
-      diagnostic="registry-rate-limit"
-    elif grep -aEqi 'ncclRemoteError|remote process exited|connection closed by peer' "$log_path"; then
-      diagnostic="collective-remote"
-    elif grep -aEqi 'ncclSystemError|unhandled system error' "$log_path"; then
-      diagnostic="collective-system"
-    elif grep -aEqi 'ncclInternalError|internal check failed' "$log_path"; then
-      diagnostic="collective-internal"
-    elif grep -aEqi 'ncclInvalidUsage|invalid usage' "$log_path"; then
-      if grep -aEqi 'dist[.]init_process_group|init_process_group[(]' "$log_path"; then
-        diagnostic="collective-init-invalid-usage"
-      elif grep -aEqi 'dist[.]all_gather_object|all_gather_object[(]' "$log_path"; then
-        diagnostic="collective-consensus-invalid-usage"
-      elif grep -aEqi 'dist[.]all_to_all_single|all_to_all_single[(]' "$log_path"; then
-        diagnostic="collective-alltoall-invalid-usage"
-      else
-        diagnostic="collective-invalid-usage"
-      fi
-    elif grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal|connection reset|could not resolve|TLS|certificate' "$log_path"; then
-      diagnostic="network-or-timeout"
-    elif grep -aEqi 'salloc:|srun:.*(unable to create step|step creation|invalid partition|invalid account)|unable to create step|job allocation' "$log_path"; then
-      diagnostic="scheduler"
-    elif grep -aEqi 'ModuleNotFoundError|ImportError:' "$log_path"; then
-      diagnostic="python-import"
-    elif grep -aEqi 'AttributeError:|TypeError:.*(unexpected|argument|operand)|has no attribute' "$log_path"; then
-      diagnostic="backend-api"
-    elif grep -aEqi 'AssertionError:' "$log_path"; then
-      diagnostic="python-assertion"
-    elif grep -aEqi 'RuntimeError:' "$log_path"; then
-      diagnostic="python-runtime"
-    elif grep -aEqi 'ValueError:' "$log_path" \
-        && grep -aEqi 'ep_harness[.]py' "$log_path"; then
-      diagnostic="harness-value"
-    elif grep -aEqi 'ValueError:' "$log_path" \
-        && grep -aEqi 'workload[.]py|make_workloads[.]py' "$log_path"; then
-      diagnostic="workload-value"
-    elif grep -aEqi 'ValueError:' "$log_path" \
-        && grep -aEqi 'run_ep[.]py' "$log_path"; then
-      diagnostic="runner-value"
-    elif grep -aEqi 'ValueError:' "$log_path" \
-        && grep -aEqi 'ep_deepep[.]py' "$log_path"; then
-      diagnostic="deepep-adapter-value"
-    elif grep -aEqi 'ValueError:' "$log_path" \
-        && grep -aEqi '/(torch|numpy)/|site-packages/(torch|numpy)' "$log_path"; then
-      diagnostic="dependency-value"
-    elif grep -aEqi 'ValueError:' "$log_path"; then
-      diagnostic="python-value"
-    elif grep -aEqi 'KeyError:' "$log_path"; then
-      diagnostic="python-key"
-    elif grep -aEqi '(FileNotFoundError|PermissionError|IsADirectoryError|NotADirectoryError|OSError):' "$log_path"; then
-      diagnostic="python-os"
-    elif grep -aEqi '(NotImplemented|System)Error:' "$log_path"; then
-      diagnostic="python-system"
-    elif grep -aEqi 'DistBackendError:' "$log_path"; then
-      diagnostic="collective-backend"
-    elif grep -aEqi 'CalledProcessError:' "$log_path"; then
-      diagnostic="python-subprocess"
-    elif grep -aEqi 'Traceback \(most recent call last\)' "$log_path"; then
-      diagnostic="python-exception"
-    elif grep -aEqi 'SHARD done: [0-9]+/[0-9]+ case\(s\) failed|WARN: .* run failed rc=|completed with invalid semantic evidence' "$log_path"; then
-      diagnostic="benchmark-case-failure"
-    elif [ -s "$log_path" ]; then
-      diagnostic="unclassified"
-    else
-      diagnostic="empty-log"
-    fi
-  fi
-  cx_log "ERROR: failure-class=$stage diagnostic=$diagnostic"
-  # Surface the failing stage's captured output verbatim on stdout for debugging.
-  # Bounded by line count only (anti-flood, not redaction): this is public CI
-  # output, so the tail carries whatever the underlying tool emitted, unmasked.
-  if [ -n "$log_path" ] && [ -f "$log_path" ] && [ -s "$log_path" ]; then
-    local tail_lines="${CX_LOG_TAIL_LINES:-100}"
-    [[ "$tail_lines" =~ ^[0-9]+$ ]] || tail_lines=100
-    cx_log "--- $stage log tail (last $tail_lines lines, verbatim) ---"
-    tail -n "$tail_lines" "$log_path" >&2 || true
+  cx_log "ERROR: failure-stage=$stage"
+  [[ "$tail_lines" =~ ^[1-9][0-9]{0,2}$ ]] || tail_lines=100
+  if [ -n "$log_path" ] && [ -s "$log_path" ]; then
+    cx_log "--- $stage log tail (last $tail_lines lines) ---"
+    tail -n "$tail_lines" -- "$log_path" >&2 || true
     cx_log "--- end $stage log tail ---"
   fi
   return 1
@@ -589,92 +484,10 @@ if os.path.isdir(path) and not os.path.islink(path):
 PY
 }
 
-cx_report_private_scheduler_failure() {
-  local root="${CX_JOB_ROOT:-}" tag="${COLLECTIVEX_EXECUTION_ID:-}" diagnostic
-  [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] \
-    && [ -n "$root" ] && [ -n "$tag" ] \
-    && [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
-    || return 0
-  diagnostic="$(python3 - "$root" "$tag" <<'PY' 2>/dev/null || true
-import os
-import re
-import stat
-import sys
-
-root, tag = sys.argv[1:]
-directory = os.path.join(root, "control", "private-logs", tag)
-try:
-    metadata = os.stat(directory, follow_symlinks=False)
-except OSError:
-    print("missing")
-    raise SystemExit
-if (
-    not stat.S_ISDIR(metadata.st_mode)
-    or metadata.st_uid != os.getuid()
-    or stat.S_IMODE(metadata.st_mode) != 0o700
-):
-    print("unsafe")
-    raise SystemExit
-payload = b""
-for name in sorted(os.listdir(directory)):
-    if not re.fullmatch(r"scheduler-allocation(?:-a[23])?[.]log", name):
-        continue
-    path = os.path.join(directory, name)
-    item = os.stat(path, follow_symlinks=False)
-    if (
-        not stat.S_ISREG(item.st_mode)
-        or item.st_uid != os.getuid()
-        or stat.S_IMODE(item.st_mode) != 0o600
-        or item.st_size > 65536
-    ):
-        print("unsafe")
-        raise SystemExit
-    with open(path, "rb") as stream:
-        payload += stream.read(65537)
-text = payload.decode("utf-8", "replace")
-if not text:
-    result = "empty"
-elif re.search(r"invalid (?:account|partition|qos|reservation)|association.*not permitted|access denied", text, re.I):
-    result = "policy"
-elif re.search(r"pending job allocation|job .* pending|waiting for resource", text, re.I):
-    result = "pending"
-elif re.search(r"requested node configuration is not available|nodes required.*not available|resources? unavailable", text, re.I):
-    result = "capacity"
-elif re.search(r"unable to contact slurm controller|communication connection failure|socket timed out|slurmctld.*(?:down|unreachable)", text, re.I):
-    result = "controller"
-elif re.search(r"invalid generic resource|invalid gres|invalid node count|invalid cpu count|memory specification can not be satisfied|requested.*configuration.*invalid|requested time limit is invalid|time limit.*(?:invalid|exceed)", text, re.I):
-    result = "resource-request"
-elif re.search(r"job violates accounting[/ ]qos policy|maximum.*jobs|association.*limit|qos.*limit", text, re.I):
-    result = "account-limit"
-elif re.search(r"invalid credential|authentication failure|authentication error", text, re.I):
-    result = "authentication"
-elif re.search(r"job submit plugin|job_submit", text, re.I):
-    result = "submit-plugin"
-elif re.search(r"unrecognized option|unknown option|invalid option", text, re.I):
-    result = "option"
-elif re.search(r"allocation (?:revoked|cancelled)|job .* cancelled", text, re.I):
-    result = "revoked"
-elif re.search(r"timed out|timeout", text, re.I):
-    result = "timeout"
-elif re.search(r"no space left|disk quota|quota exceeded", text, re.I):
-    result = "storage-capacity"
-else:
-    result = "unclassified"
-print(result)
-PY
-)"
-  case "$diagnostic" in
-    missing|unsafe|empty|policy|pending|capacity|controller|resource-request|account-limit) ;;
-    authentication|submit-plugin|option|revoked|timeout|storage-capacity|unclassified) ;;
-    *) diagnostic=unclassified ;;
-  esac
-  cx_log "ERROR: scheduler-diagnostic=$diagnostic"
-}
-
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
 cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_CACHE_SENTINEL,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
+  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
@@ -1231,7 +1044,7 @@ cx_salloc_jobid() {
     *) return 1 ;;
   esac
   if ! log="$(cx_private_log_path "$log_label")"; then
-    cx_log "ERROR: failure-class=scheduler-allocation diagnostic=private-log"
+    cx_log "ERROR: failure-stage=scheduler-allocation (private log unavailable)"
     return 1
   fi
   for argument in "$@"; do
@@ -1243,7 +1056,7 @@ cx_salloc_jobid() {
     esac
   done
   if ! job_name="$(cx_scheduler_job_name)"; then
-    cx_log "ERROR: failure-class=scheduler-allocation diagnostic=job-name"
+    cx_log "ERROR: failure-stage=scheduler-allocation (invalid job name)"
     return 1
   fi
   CX_ALLOCATION_UNCERTAIN=1
@@ -1257,7 +1070,7 @@ cx_salloc_jobid() {
       -e 's/^([0-9]+)(;[^[:space:]]+)?$/\1/p; t found' \
       -e 's/.*Granted job allocation ([0-9]+).*/\1/p; t found' \
       -e 'b' -e ':found' -e 'q' "$log")"; then
-    cx_log "ERROR: failure-class=scheduler-allocation diagnostic=grant-parse"
+    cx_log "ERROR: failure-stage=scheduler-allocation (cannot parse grant)"
     cx_reconcile_salloc_jobid "$job_name" || true
     [ -z "$JOB_ID" ] || cx_record_allocation_jobid "$JOB_ID" || true
     return 1
@@ -1410,182 +1223,109 @@ cx_select_image() {
 # Create a per-UID cache under validated cluster-local storage. Only the fixed
 # /cx-cache mount enters the container; the operator host path does not.
 cx_prepare_backend_cache() {
-  local stage_parent="$1" cache info sentinel
-  unset CX_PREPARED_BACKEND_CACHE CX_BACKEND_CACHE_SENTINEL
-  info="$(python3 - "$stage_parent" <<'PY'
+  local cache
+  unset CX_PREPARED_BACKEND_CACHE
+  cache="$(python3 - "$1" <<'PY'
 import os
-import secrets
 import stat
 import sys
 
-configured_parent = sys.argv[1]
+parent = os.path.realpath(sys.argv[1])
+marker_name = ".collectivex-cache-v1"
+marker_value = b"collectivex-cache-v1\n"
+flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 try:
-    if (
-        not os.path.isabs(configured_parent)
-        or "\n" in configured_parent
-        or "\r" in configured_parent
-    ):
-        raise OSError
-    parent = os.path.realpath(configured_parent)
-    if not os.path.isdir(parent):
-        raise OSError
-    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
     parent_fd = os.open(parent, flags)
     try:
-        probe_name = f".collectivex-owner-probe-{os.getpid()}-{secrets.token_hex(8)}"
-        os.mkdir(probe_name, 0o700, dir_fd=parent_fd)
+        probe = f".collectivex-owner-probe-{os.getpid()}"
+        os.mkdir(probe, 0o700, dir_fd=parent_fd)
         try:
-            probe_fd = os.open(probe_name, flags, dir_fd=parent_fd)
-            try:
-                probe = os.fstat(probe_fd)
-                if stat.S_IMODE(probe.st_mode) & 0o777 != 0o700:
-                    raise OSError
-                realized_owner = probe.st_uid
-            finally:
-                os.close(probe_fd)
+            probe_fd = os.open(probe, flags, dir_fd=parent_fd)
+            owner = os.fstat(probe_fd).st_uid
+            os.close(probe_fd)
         finally:
-            os.rmdir(probe_name, dir_fd=parent_fd)
-        for generation in (3, 4):
-            name = f".collectivex-backend-cache-v{generation}-{os.getuid()}"
+            os.rmdir(probe, dir_fd=parent_fd)
+        name = f".collectivex-backend-cache-v4-{os.getuid()}"
+        try:
+            os.mkdir(name, 0o700, dir_fd=parent_fd)
+        except FileExistsError:
+            pass
+        cache_fd = os.open(name, flags, dir_fd=parent_fd)
+        try:
+            cache = os.fstat(cache_fd)
+            if cache.st_uid != owner or stat.S_IMODE(cache.st_mode) != 0o700:
+                raise OSError
+            create = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
             try:
-                os.mkdir(name, 0o700, dir_fd=parent_fd)
+                marker_fd = os.open(marker_name, create, 0o600, dir_fd=cache_fd)
+                os.write(marker_fd, marker_value)
+                os.close(marker_fd)
             except FileExistsError:
                 pass
+            marker_fd = os.open(
+                marker_name,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=cache_fd,
+            )
             try:
-                cache_fd = os.open(name, flags, dir_fd=parent_fd)
-                try:
-                    metadata = os.fstat(cache_fd)
-                    if (
-                        metadata.st_uid != realized_owner
-                        or stat.S_IMODE(metadata.st_mode) & 0o777 != 0o700
-                    ):
-                        raise OSError
-                    sentinel_name = ".collectivex-mount-sentinel-v1"
-                    temporary_name = (
-                        f"{sentinel_name}.tmp.{os.getpid()}.{secrets.token_hex(8)}"
-                    )
-                    create_flags = (
-                        os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                        | getattr(os, "O_NOFOLLOW", 0)
-                    )
-                    payload = secrets.token_bytes(32)
-                    temporary_fd = os.open(
-                        temporary_name, create_flags, 0o600, dir_fd=cache_fd
-                    )
-                    try:
-                        try:
-                            view = memoryview(payload)
-                            try:
-                                while view:
-                                    written = os.write(temporary_fd, view)
-                                    if written <= 0:
-                                        raise OSError
-                                    view = view[written:]
-                                os.fsync(temporary_fd)
-                            finally:
-                                view.release()
-                        finally:
-                            os.close(temporary_fd)
-                        try:
-                            os.link(
-                                temporary_name,
-                                sentinel_name,
-                                src_dir_fd=cache_fd,
-                                dst_dir_fd=cache_fd,
-                                follow_symlinks=False,
-                            )
-                        except FileExistsError:
-                            pass
-                    finally:
-                        try:
-                            os.unlink(temporary_name, dir_fd=cache_fd)
-                        except FileNotFoundError:
-                            pass
-                    sentinel_fd = os.open(
-                        sentinel_name,
-                        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-                        dir_fd=cache_fd,
-                    )
-                    try:
-                        sentinel = os.fstat(sentinel_fd)
-                        payload = os.read(sentinel_fd, 33)
-                        if (
-                            not stat.S_ISREG(sentinel.st_mode)
-                            or sentinel.st_uid != realized_owner
-                            or stat.S_IMODE(sentinel.st_mode) & 0o777 != 0o600
-                            or sentinel.st_size != 32
-                            or len(payload) != 32
-                        ):
-                            raise OSError
-                        sentinel_value = payload.hex()
-                    finally:
-                        os.close(sentinel_fd)
-                finally:
-                    os.close(cache_fd)
-            except OSError:
-                if generation == 3:
-                    continue
-                raise
-            break
+                marker = os.fstat(marker_fd)
+                payload = os.read(marker_fd, len(marker_value) + 1)
+                if (
+                    not stat.S_ISREG(marker.st_mode)
+                    or marker.st_uid != owner
+                    or stat.S_IMODE(marker.st_mode) != 0o600
+                    or payload != marker_value
+                ):
+                    raise OSError
+            finally:
+                os.close(marker_fd)
+        finally:
+            os.close(cache_fd)
     finally:
         os.close(parent_fd)
 except OSError:
     raise SystemExit(1)
-print(sentinel_value, os.path.join(parent, name), end="")
+print(os.path.join(parent, name), end="")
 PY
-)" || return 1
-  sentinel="${info%% *}"
-  cache="${info#* }"
-  [ "$cache" != "$info" ] && [[ "$sentinel" =~ ^[0-9a-f]{64}$ ]] \
-    && [[ "$cache" = /* ]] || return 1
+  )" || return 1
+  [[ "$cache" = /* ]] || return 1
   export CX_PREPARED_BACKEND_CACHE="$cache"
-  export CX_BACKEND_CACHE_SENTINEL="$sentinel"
 }
 
 cx_verify_backend_cache_mount() {
-  python3 - "${CX_BACKEND_CACHE_ROOT:-}" \
-    "${CX_BACKEND_CACHE_SENTINEL:-}" <<'PY'
+  python3 - "${CX_BACKEND_CACHE_ROOT:-}" <<'PY'
 import os
-import re
 import stat
 import sys
 
-root, expected = sys.argv[1:]
+root = sys.argv[1]
+marker_value = b"collectivex-cache-v1\n"
 try:
-    if (
-        not os.path.isabs(root)
-        or os.path.realpath(root) != root
-        or re.fullmatch(r"[0-9a-f]{64}", expected) is None
-    ):
+    if root != "/cx-cache" or os.path.realpath(root) != root:
         raise OSError
     flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
     root_fd = os.open(root, flags)
     try:
-        root_item = os.fstat(root_fd)
-        if (
-            not stat.S_ISDIR(root_item.st_mode)
-            or stat.S_IMODE(root_item.st_mode) & 0o777 != 0o700
-        ):
+        cache = os.fstat(root_fd)
+        if stat.S_IMODE(cache.st_mode) != 0o700:
             raise OSError
-        sentinel_fd = os.open(
-            ".collectivex-mount-sentinel-v1",
+        marker_fd = os.open(
+            ".collectivex-cache-v1",
             os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
             dir_fd=root_fd,
         )
         try:
-            sentinel = os.fstat(sentinel_fd)
-            payload = os.read(sentinel_fd, 33)
+            marker = os.fstat(marker_fd)
+            payload = os.read(marker_fd, len(marker_value) + 1)
             if (
-                not stat.S_ISREG(sentinel.st_mode)
-                or sentinel.st_uid != root_item.st_uid
-                or stat.S_IMODE(sentinel.st_mode) & 0o777 != 0o600
-                or sentinel.st_size != 32
-                or len(payload) != 32
-                or payload.hex() != expected
+                not stat.S_ISREG(marker.st_mode)
+                or marker.st_uid != cache.st_uid
+                or stat.S_IMODE(marker.st_mode) != 0o600
+                or payload != marker_value
             ):
                 raise OSError
         finally:
-            os.close(sentinel_fd)
+            os.close(marker_fd)
     finally:
         os.close(root_fd)
 except OSError:
@@ -1937,7 +1677,7 @@ cx_lock_canonical_gha_env() {
   unset MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
   unset MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
   unset NCCL_CUMEM_ENABLE NCCL_MNNVL_ENABLE MC_FORCE_MNNVL
-  unset CX_BACKEND_CACHE_ROOT CX_BACKEND_CACHE_SENTINEL
+  unset CX_BACKEND_CACHE_ROOT
   unset CX_PREPARED_BACKEND_CACHE CX_BACKEND_SOURCE_ROOT
 
   [ -n "${CX_SQUASH_DIR:-}" ] \
@@ -2846,7 +2586,7 @@ cx_launcher_cleanup() {
   [ "$allocation_stopped" = 1 ] || source_root="${REPO_ROOT:-$source_root}"
   if [ "$rc" != 0 ] \
       && [ -n "${REPO_ROOT:-}" ] && [ -n "${CX_BENCH:-}" ]; then
-    cx_log "ERROR: terminal-failure-class=${CX_FAILSAFE_MODE:-setup}"
+    cx_log "ERROR: terminal-failure-stage=${CX_FAILSAFE_MODE:-setup}"
     [ -d "$source_root/experimental/CollectiveX" ] || source_root="$REPO_ROOT"
     [ "$source_root" = "$REPO_ROOT" ] \
       || cx_collect_results "$source_root" "$REPO_ROOT" || true
