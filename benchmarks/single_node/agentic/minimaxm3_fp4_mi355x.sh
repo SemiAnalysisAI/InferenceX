@@ -83,11 +83,6 @@ elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
-# AgentX concurrency counts live session trees, not individual requests.
-# Subagent fan-out can push instantaneous request concurrency above CONC, so
-# leave 2x headroom rather than clipping those bursts at the scheduler.
-MAX_NUM_SEQS=$((2 * CONC))
-
 set -x
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -122,8 +117,7 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --reasoning-parser minimax_m3
     --enable-prefix-caching
-    --no-disable-hybrid-kv-cache-manager
-    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-num-seqs "$CONC"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
