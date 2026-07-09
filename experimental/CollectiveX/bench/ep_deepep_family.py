@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Shared DeepEP-API dispatch/combine surface for the DeepEP and UCCL adapters.
+"""Shared DeepEP-API dispatch/combine surface for the DeepEP adapter.
 
-UCCL's ``uccl_deepep.Buffer`` is a drop-in clone of DeepEP's ``deep_ep.Buffer`` low-latency and
-normal API, so both adapters run byte-identical mode handling, dispatch/combine, and expert-packed
-inspection. That shared operation lives here; each concrete backend keeps only what is genuinely
+DeepEP's ``deep_ep.Buffer`` low-latency and normal API drives mode handling, dispatch/combine,
+and expert-packed inspection here; the concrete backend keeps only what is genuinely
 vendor-specific: its native buffer import, ``create_buffer`` provenance, and process teardown.
 
-This base is deliberately free of any ``deep_ep``/``uccl`` import. The UCCL benchmark image installs
-uccl WITHOUT deep_ep, so importing ``ep_uccl`` must never transitively require ``deep_ep`` — an
-inherited method resolves module globals from where it is *defined*, so keeping this file
-vendor-agnostic is what makes the shared base safe for both images.
+This base is deliberately free of any ``deep_ep`` import. An inherited method resolves module
+globals from where it is *defined*, so keeping this file import-free is what makes the shared
+base safe regardless of which native buffer the concrete backend loads.
 
 Communication is fixed BF16: dispatch and combine move BF16 activations, so the native
 ``use_fp8``/``use_logfmt`` controls are always driven off and the received buffer is the

@@ -6,7 +6,7 @@
 # this script selects one EP backend from CX_BENCH and writes result JSON under results/.
 #
 # Required env (exported by the adapter): CX_RUNNER CX_NGPUS CX_TS CX_TOPO
-# Selector: CX_BENCH = deepep | deepep-v2 | mori | uccl | nccl-ep | deepep-hybrid
+# Selector: CX_BENCH = deepep | deepep-v2 | mori | deepep-hybrid
 # EP knobs passed to bench/run_ep.py:
 #   CX_PHASE = decode | prefill | both (default decode)   <- picks the token sweep
 #   CX_TOKENS_LADDER (space/comma sep; blank = phase default)
@@ -35,8 +35,8 @@ cx_ep_ladder() {
   printf '%s' "${CX_TOKENS_LADDER:-}"
 }
 
-# Canonical workload staging. Every SKU/backend generates identical canonical array bytes and
-# content IDs in-container; the NPZ container bytes themselves are not an identity boundary. When CX_CANONICAL=1
+# Canonical workload staging. Every SKU/backend generates the same deterministic arrays
+# in-container. When CX_CANONICAL=1
 # (and CX_WORKLOAD_DIR not already provided) we generate routing traces for the run's ladder
 # into a NON-results dir (.cx_workloads/ — so the *.manifest.json never pollute the results glob) and
 # point run_ep at it. Raw attempts remain diagnostic until the publisher validates full coverage.
@@ -218,36 +218,25 @@ cx_prepare_deepep_toolchain() {
 }
 
 cx_probe_deepep() {
-  local expected_record_sha256 expected_version expected_wheel_sha256
-  if [ "${COLLECTIVEX_IMAGE:-}" != "$CX_IMAGE_MULTIARCH" ] \
-      || [ "${COLLECTIVEX_IMAGE_DIGEST:-}" != "$CX_IMAGE_MULTIARCH_DIGEST" ] \
-      || [ "${COLLECTIVEX_IMAGE_DIGEST_VERIFIED:-0}" != 1 ]; then
-    cx_log "ERROR: DeepEP V1 requires the exact pinned multi-architecture image"
+  local expected_version
+  if [ "${COLLECTIVEX_IMAGE:-}" != "$CX_IMAGE_MULTIARCH" ]; then
+    cx_log "ERROR: DeepEP V1 requires the configured multi-architecture image"
     return 1
   fi
   cx_cuda_arch >/dev/null || return 1
   case "$CX_RUNNER" in
     gb200|gb300)
       expected_version="1.1.0+814e508"
-      expected_wheel_sha256="784dabec0877b6cf72619b7e93eda7e2f365648487bd37fc3ff6960e53669313"
-      expected_record_sha256="2671cff7baf8c2c214ff4bac721af875d513130670bec57601998bd1aae82882"
       DEEPEP_COMMIT="814e508537c6ffc775d59f6f1b9ba43f3a65968c"
       ;;
     *)
       expected_version="1.2.1"
-      expected_wheel_sha256="7c02c29306ea0fe2dd474618e72e0f310f260187a9c0700a656d2f6964e8c307"
-      expected_record_sha256="6548e9c504a12b2471af4b7f4d9546321210a57a456b5dc55bd4a8dad0f932ac"
       DEEPEP_COMMIT="9af0e0d0e74f3577af1979c9b9e1ac2cad0104ee"
       ;;
   esac
   export DEEPEP_COMMIT
-  python3 - "$expected_version" "$expected_wheel_sha256" "$expected_record_sha256" <<'PY' || {
-import base64
-import csv
-import hashlib
+  python3 - "$expected_version" <<'PY' || {
 import importlib.metadata as metadata
-import io
-import json
 from pathlib import Path
 import sys
 
@@ -263,23 +252,6 @@ recorded_files = {
 buffer_module = sys.modules.get(Buffer.__module__)
 assert Path(deep_ep.__file__).resolve() in recorded_files
 assert buffer_module is not None and Path(buffer_module.__file__).resolve() in recorded_files
-direct_url = json.loads(distribution.read_text("direct_url.json"))
-assert direct_url["archive_info"]["hashes"]["sha256"] == sys.argv[2]
-record_entry = next(
-    entry for entry in distribution.files or ()
-    if str(entry).endswith(".dist-info/RECORD")
-)
-record = distribution.locate_file(record_entry).read_bytes()
-assert hashlib.sha256(record).hexdigest() == sys.argv[3]
-for path, encoded_digest, size in csv.reader(io.StringIO(record.decode())):
-    if not encoded_digest:
-        continue
-    algorithm, expected = encoded_digest.split("=", 1)
-    assert algorithm == "sha256"
-    payload = distribution.locate_file(path).read_bytes()
-    observed = base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).decode().rstrip("=")
-    assert observed == expected
-    assert not size or len(payload) == int(size)
 PY
     cx_log "ERROR: container DeepEP build does not match its pinned image contract"
     return 1
@@ -291,21 +263,20 @@ PY
 # initialization fix and PR #640's exact libnccl mapping check. Canonical launchers stage the
 # pinned source and mount a private cluster-local build cache at /cx-cache.
 cx_deepep_v2_root() {
-  local arch cpu base identity key image_digest
+  local arch cpu base image
   arch="$(cx_cuda_arch)" || return 1
   cpu="$(uname -m)"
   [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   base="${CX_BACKEND_CACHE_ROOT:-}"
   [[ "$base" = /* ]] || return 1
-  image_digest="${COLLECTIVEX_IMAGE_DIGEST:-manual-unverified}"
-  [[ "$image_digest" = manual-unverified || "$image_digest" =~ ^sha256:[0-9a-f]{64}$ ]] \
+  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')" \
     || return 1
-  # Bump the recipe generation whenever the build procedure changes. Benchmark-only
-  # source revisions must reuse the same immutable environment instead of leaking GBs.
-  identity="deepep-v2-cache-v3|$cpu|sm${arch/./}|image=$image_digest|recipe=aot-persistent-nvshmem-active-cuda-maxjobs16-v3|$CX_DEEPEP_V2_COMMIT|$CX_DEEPEP_V2_TREE|$CX_DEEPEP_V2_FMT_COMMIT|$CX_DEEPEP_V2_NCCL_CHECK_COMMIT|pip=26.1.2|setuptools=82.0.1|wheel=0.47.0|ninja=1.13.0|numpy=2.2.6|torch=2.10.0+cu130|nccl=2.30.4|nvshmem=3.3.9|max-jobs=16"
-  key="$(printf '%s' "$identity" | sha256sum | awk '{print $1}')"
-  [[ "$key" =~ ^[0-9a-f]{64}$ ]] || return 1
-  printf '%s/deepep-v2-%s' "$base" "$key"
+  image="${image#-}"; image="${image%-}"
+  [ -n "$image" ] || return 1
+  printf '%s/deepep-v2-v3-%s-sm%s-%s-torch2.10.0-cu130-nccl2.30.4-nvshmem3.3.9-%s-%s-%s-%s' \
+    "$base" "$cpu" "${arch/./}" "$image" \
+    "${CX_DEEPEP_V2_COMMIT:0:12}" "${CX_DEEPEP_V2_TREE:0:12}" \
+    "${CX_DEEPEP_V2_FMT_COMMIT:0:12}" "${CX_DEEPEP_V2_NCCL_CHECK_COMMIT:0:12}"
 }
 
 cx_activate_deepep_v2() {
@@ -399,80 +370,10 @@ assert runtime_version.value == 23004, runtime_version.value
 PY
 }
 
-cx_deepep_v2_content_sha256() {
-  python3 - <<'PY'
-import hashlib
-from importlib import metadata
-import os
-from pathlib import Path, PurePosixPath
-import stat
-
-distribution = metadata.distribution("deep_ep")
-entries = sorted(distribution.files or (), key=lambda entry: entry.as_posix())
-if not entries:
-    raise SystemExit(1)
-venv_path = Path(os.environ["VIRTUAL_ENV"]).absolute()
-if venv_path.is_symlink() or not venv_path.is_dir():
-    raise SystemExit(1)
-venv = venv_path.resolve(strict=True)
-digest = hashlib.sha256()
-extension = False
-for entry in entries:
-    relative = PurePosixPath(entry.as_posix())
-    if (
-        relative.is_absolute()
-        or ".." in relative.parts
-        or not relative.parts
-        or not (
-            relative.parts[0] == "deep_ep"
-            or relative.parts[0].startswith("deep_ep-")
-            and relative.parts[0].endswith(".dist-info")
-        )
-    ):
-        raise SystemExit(1)
-    path = Path(distribution.locate_file(entry)).absolute()
-    resolved = path.resolve(strict=True)
-    try:
-        path.relative_to(venv_path)
-        resolved.relative_to(venv)
-    except ValueError:
-        raise SystemExit(1)
-    parent = path.parent
-    while parent != venv_path:
-        if parent.is_symlink():
-            raise SystemExit(1)
-        parent = parent.parent
-    item = os.lstat(path)
-    if not stat.S_ISREG(item.st_mode):
-        raise SystemExit(1)
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (item.st_dev, item.st_ino):
-            raise SystemExit(1)
-        file_digest = hashlib.sha256()
-        while chunk := os.read(descriptor, 1024 * 1024):
-            file_digest.update(chunk)
-    finally:
-        os.close(descriptor)
-    name = relative.as_posix()
-    extension |= name.startswith("deep_ep/") and name.endswith(".so")
-    digest.update(name.encode())
-    digest.update(b"\0")
-    digest.update(str(item.st_size).encode())
-    digest.update(b"\0")
-    digest.update(file_digest.digest())
-if not extension:
-    raise SystemExit(1)
-print(digest.hexdigest(), end="")
-PY
-}
-
-cx_deepep_v2_marker_content_sha256() {
+cx_deepep_v2_marker_is_valid() {
   local root="$1" marker="$2" revision="$3" tree="$4" fmt_revision="$5" cache_key="$6"
   python3 - "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key" <<'PY'
 import os
-import re
 import stat
 import sys
 
@@ -505,34 +406,27 @@ try:
     finally:
         os.close(descriptor)
     lines = payload.decode("ascii").splitlines()
-    if lines[:4] != [revision, tree, fmt_revision, cache_key] or len(lines) != 5:
-        raise ValueError
-    if not re.fullmatch(r"[0-9a-f]{64}", lines[4]):
+    if lines != [revision, tree, fmt_revision, cache_key]:
         raise ValueError
 except (OSError, UnicodeError, ValueError):
     raise SystemExit(1)
-print(lines[4], end="")
 PY
 }
 
 cx_deepep_v2_cache_is_valid() {
   local root="$1" marker="$2" revision="$3" tree="$4" fmt_revision="$5" cache_key="$6"
-  local expected_content actual_content
-  expected_content="$(
-    cx_deepep_v2_marker_content_sha256 \
-      "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key"
-  )" || return 1
+  cx_deepep_v2_marker_is_valid \
+    "$root" "$marker" "$revision" "$tree" "$fmt_revision" "$cache_key" || return 1
   [ -d "$root/source" ] && [ ! -L "$root/source" ] \
     && [ "$(cx_git_in_tree "$root/source" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$tree" ] \
     && [ "$(cx_git_in_tree "$root/source/third-party/fmt" rev-parse HEAD 2>/dev/null)" = "$fmt_revision" ] \
     || return 1
   cx_activate_deepep_v2 || return 1
-  actual_content="$(cx_deepep_v2_content_sha256)" || return 1
-  [ "$actual_content" = "$expected_content" ]
+  cx_probe_deepep_v2
 }
 
 cx_build_deepep_v2() {
-  local root venv source marker marker_tmp lock_path arch cache_key cache_ready content_sha256
+  local root venv source marker marker_tmp lock_path arch cache_key cache_ready
   local revision="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
   local tree="29809e75c5874e6609dac4804e7b651d5226959f"
   local fmt_revision="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
@@ -541,7 +435,7 @@ cx_build_deepep_v2() {
   arch="$(cx_cuda_arch)" || return 1
   root="$(cx_deepep_v2_root)" || return 1
   cache_key="${root##*/deepep-v2-}"
-  [[ "$cache_key" =~ ^[0-9a-f]{64}$ ]] || return 1
+  [[ "$cache_key" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   venv="$root/venv"; source="$root/source"; marker="$root/.collectivex-complete"
   lock_path="${root}.lock"
   command -v flock >/dev/null || { cx_log "ERROR: flock is required for DeepEP V2"; return 1; }
@@ -603,14 +497,12 @@ cx_build_deepep_v2() {
         || { cx_log "ERROR: DeepEP V2 build failed"; exit 1; }
       cx_probe_deepep_v2 \
         || { cx_log "ERROR: DeepEP V2 ElasticBuffer/runtime probe failed"; exit 1; }
-      content_sha256="$(cx_deepep_v2_content_sha256)" \
-        || { cx_log "ERROR: DeepEP V2 installed-content hashing failed"; exit 1; }
       marker_tmp="$(mktemp "$root/.collectivex-complete.tmp.XXXXXX")" \
         || { cx_log "ERROR: DeepEP V2 cache-marker-create failed"; exit 1; }
       chmod 600 "$marker_tmp" \
         || { cx_log "ERROR: DeepEP V2 cache-marker-permission failed"; exit 1; }
-      printf '%s\n%s\n%s\n%s\n%s\n' \
-        "$revision" "$tree" "$fmt_revision" "$cache_key" "$content_sha256" > "$marker_tmp" \
+      printf '%s\n%s\n%s\n%s\n' \
+        "$revision" "$tree" "$fmt_revision" "$cache_key" > "$marker_tmp" \
         || { cx_log "ERROR: DeepEP V2 cache-marker-write failed"; exit 1; }
       mv -f -- "$marker_tmp" "$marker" \
         || { cx_log "ERROR: DeepEP V2 cache-marker-publish failed"; exit 1; }
@@ -672,10 +564,9 @@ PY
   export DEEPEP_HYBRID_BUILD_MODE=multinode-doca
 }
 
-cx_deepep_hybrid_marker_content_sha256() {
+cx_deepep_hybrid_marker_is_valid() {
   python3 - "$1" "$2" "$3" "$4" "${5:-}" <<'PY'
 import os
-import re
 import stat
 import sys
 
@@ -702,21 +593,18 @@ try:
         os.close(descriptor)
     lines = payload.decode("ascii").splitlines()
     expected = [revision, tree, build_mode] if build_mode else [revision, tree]
-    if len(lines) != len(expected) + 1 or lines[:-1] != expected:
-        raise ValueError
-    if not re.fullmatch(r"[0-9a-f]{64}", lines[-1]):
+    if lines != expected:
         raise ValueError
 except (OSError, UnicodeError, ValueError):
     raise SystemExit(1)
-print(lines[-1], end="")
 PY
 }
 
 cx_deepep_hybrid_cache_is_valid() {
   local root="$1" marker="$2" revision="$3" tree="$4" build_mode="${5:-}"
-  local expected actual status extra
-  expected="$(cx_deepep_hybrid_marker_content_sha256 \
-    "$root" "$marker" "$revision" "$tree" "$build_mode")" || return 1
+  local status extra path
+  cx_deepep_hybrid_marker_is_valid \
+    "$root" "$marker" "$revision" "$tree" "$build_mode" || return 1
   [ "$(cx_git_in_tree "$root" rev-parse HEAD 2>/dev/null)" = "$revision" ] \
     && [ "$(cx_git_in_tree "$root" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$tree" ] \
     || return 1
@@ -729,14 +617,14 @@ cx_deepep_hybrid_cache_is_valid() {
   extra="$(cx_git_in_tree "$root" ls-files --others --ignored --exclude-standard -- \
     'deep_ep/*.py' 'deep_ep/*.so' 2>/dev/null)" || return 1
   [ -z "$extra" ] || return 1
-  actual="$(cx_extension_pair_sha256 "$root" 'deep_ep_cpp*.so' 'hybrid_ep_cpp*.so')" \
-    || return 1
-  [ "$actual" = "$expected" ]
+  for path in "$root"/deep_ep_cpp*.so "$root"/hybrid_ep_cpp*.so; do
+    [ -f "$path" ] && [ ! -L "$path" ] && [ -s "$path" ] || return 1
+  done
 }
 
 cx_build_deepep_hybrid() {
   local arch revision="$CX_DEEPEP_HYBRID_COMMIT" tree="$CX_DEEPEP_HYBRID_TREE"
-  local build_root marker marker_tmp lock_path content_sha256 cache_ready build_mode
+  local build_root marker marker_tmp lock_path cache_ready build_mode
   export DEEPEP_COMMIT="$revision" DEEPEP_TREE="$tree"
   arch="$(cx_cuda_arch)" || return 1
   cx_configure_deepep_hybrid_build || return 1
@@ -774,12 +662,10 @@ cx_build_deepep_hybrid() {
         TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
         python3 setup.py build_ext --inplace) >&2 2>&1 \
         || { cx_log "ERROR: hybrid-ep build failed"; exit 1; }
-      content_sha256="$(cx_extension_pair_sha256 \
-        "$build_root" 'deep_ep_cpp*.so' 'hybrid_ep_cpp*.so')" || exit 1
       marker_tmp="$(mktemp "$build_root/.collectivex-complete.tmp.XXXXXX")" || exit 1
       chmod 600 "$marker_tmp" || exit 1
-      printf '%s\n%s\n%s\n%s\n' \
-        "$revision" "$tree" "$build_mode" "$content_sha256" > "$marker_tmp" \
+      printf '%s\n%s\n%s\n' \
+        "$revision" "$tree" "$build_mode" > "$marker_tmp" \
         || exit 1
       mv -f -- "$marker_tmp" "$marker" || exit 1
     fi
@@ -795,71 +681,6 @@ cx_build_deepep_hybrid() {
   cx_log "DeepEP hybrid-ep ready ($DEEPEP_COMMIT, mode=$build_mode)"
 }
 
-# UCCL EP (uccl.ep.Buffer is a DeepEP-API clone). The prebuilt wheel is cu12; on a cu13
-# image its kernels need a cu12 CUDA runtime on LD_LIBRARY_PATH (probe-confirmed). PEP-668
-# images need PIP_BREAK_SYSTEM_PACKAGES. Best-effort; failure to import fails loudly.
-cx_build_uccl() {
-  if [ -f /tmp/.cx_built_uccl ]; then
-    cx_log "UCCL EP already prepared this allocation — skip rebuild"
-    python3 -c "import torch; from uccl_deepep import Buffer" 2>/dev/null || return 1
-    return 0
-  fi
-  local version="0.1.1" tag="v0.1.1" node_id wrapper_root
-  local wheel_sha256="390c1320918972206546e44d79b132988f2818ec07e23afcd0595f7183916cec"
-  cx_log "UCCL EP: installing uccl==$version + cu12 runtime shim"
-  export PIP_BREAK_SYSTEM_PACKAGES=1
-  pip install -q --no-deps "sortedcontainers==2.4.0" "intervaltree==3.1.0" >&2 2>&1 \
-    || { cx_log "ERROR: UCCL support dependency installation failed"; return 1; }
-  printf 'uccl==%s --hash=sha256:%s\n' "$version" "$wheel_sha256" \
-    | pip install -q --no-deps --only-binary=:all: --require-hashes -r /dev/stdin >&2 2>&1 \
-    || { cx_log "ERROR: pip install uccl==$version failed"; return 1; }
-  pip install -q --no-deps "nvidia-cuda-runtime-cu12==12.9.79" >&2 2>&1 \
-    || { cx_log "ERROR: CUDA 12 runtime shim install failed"; return 1; }
-  local cu12lib
-  cu12lib="$(python3 -c "import nvidia.cuda_runtime as m, os; print(os.path.join(os.path.dirname(m.__file__),'lib'))" 2>/dev/null)"
-  [ -n "$cu12lib" ] && export LD_LIBRARY_PATH="$cu12lib:${LD_LIBRARY_PATH:-}"
-  local installed
-  installed="$(python3 -c 'import importlib.metadata as m; print(m.version("uccl"))')" \
-    || { cx_log "ERROR: cannot read installed UCCL version"; return 1; }
-  [ "$installed" = "$version" ] \
-    || { cx_log "ERROR: expected UCCL $version, installed $installed"; return 1; }
-  UCCL_COMMIT="pkg-$installed"
-  export UCCL_COMMIT
-  # import torch FIRST: uccl.ep's C extension links libc10.so (torch), which is only on the loader
-  # path once torch is imported (rpath). The adapter (ep_uccl.py) imports torch before uccl.ep too.
-  python3 -c "import torch; from uccl.ep import Buffer; print('uccl.ep ready')" >&2 \
-    || { cx_log "ERROR: uccl.ep import failed (cu12 runtime on LD_LIBRARY_PATH?)"; return 1; }
-  # Vendor UCCL's DeepEP-API wrapper (ep/deep_ep_wrapper/deep_ep) under a NON-conflicting name
-  # (uccl_deepep) so it doesn't shadow the container's real deep_ep. Its Buffer(group, num_nvl_bytes,
-  # ...) takes a torch ProcessGroup (matching DeepEP + ep_uccl.py's calls) and runs the full
-  # proxy/IPC-handle/runtime.sync bootstrap that the low-level uccl.ep.Buffer(rank,num_ranks) lacks.
-  case "${SLURM_NODEID:-0}" in ""|*[!0-9]*) return 1 ;; esac
-  node_id="${SLURM_NODEID:-0}"
-  wrapper_root="$PWD/.cx_backend/uccl-wrapper-node-$node_id"
-  case "$wrapper_root" in /ix/experimental/CollectiveX/.cx_backend/uccl-wrapper-node-*) ;; *) return 1 ;; esac
-  rm -rf /tmp/uccl_src "$wrapper_root"
-  # Pin the wrapper to the SAME tag as the installed wheel (pkg-0.1.1 -> v0.1.1): the wrapper's
-  # dispatch calls into uccl.ep (get_rdma_buffer etc.), so a main-branch wrapper vs a 0.1.1 wheel
-  # mismatches signatures. Match them.
-  if git clone --depth 1 --branch "$tag" https://github.com/uccl-project/uccl /tmp/uccl_src >&2 2>&1 \
-     && [ "$(git -C /tmp/uccl_src rev-parse HEAD)" = "73ee4f12ba71717d6de34ba06806e1baaabe3f42" ] \
-     && [ -d /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep ]; then
-    mkdir -p "$wrapper_root/uccl_deepep"
-    chmod 700 "$PWD/.cx_backend" "$wrapper_root" "$wrapper_root/uccl_deepep"
-    cp /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep/*.py "$wrapper_root/uccl_deepep/" 2>/dev/null
-    export PYTHONPATH="$wrapper_root:${PYTHONPATH:-}"
-    python3 -c "import torch; from uccl_deepep import Buffer; print('uccl_deepep wrapper ready')" >&2 \
-      || { cx_log "ERROR: uccl_deepep wrapper import failed"; return 1; }
-    export CX_UCCL_WRAPPER=1
-    export UCCL_WRAPPER_COMMIT="73ee4f12ba71717d6de34ba06806e1baaabe3f42"
-  else
-    cx_log "ERROR: uccl deep_ep_wrapper not available"
-    return 1
-  fi
-  : > /tmp/.cx_built_uccl
-  cx_log "UCCL EP ready ($UCCL_COMMIT, wrapper=${CX_UCCL_WRAPPER:-0})"
-}
-
 # Rack build and rank steps may enter different container instances. Persist each node's
 # loader/import path and build identity on the shared staged mount, then require it from every rank.
 cx_persist_backend_env() {
@@ -871,8 +692,7 @@ cx_persist_backend_env() {
     DEEPEP_V2_PR DEEPEP_V2_FIX_PR DEEPEP_V2_NCCL_CHECK_FIX_PR DEEPEP_V2_COMMIT
     DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT DEEPEP_V2_NCCL_CHECK_COMMIT
     DEEPEP_V2_JIT_RANDOM_SEED
-    HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE
-    UCCL_COMMIT UCCL_WRAPPER_COMMIT CX_UCCL_WRAPPER)
+    HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE)
   [[ "$node_id" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$root" || return 1
   chmod 700 "$root" || return 1
@@ -926,14 +746,9 @@ cx_prepare_backend() {
     deepep-hybrid)
       cx_build_deepep_hybrid || return 1
       ;;
-    uccl)
-      cx_build_uccl || return 1
-      ;;
     mori)
       python3 -c "import mori" \
         || { cx_log "ERROR: MoRI backend import failed"; return 1; }
-      ;;
-    nccl-ep)
       ;;
     *)
       cx_log "ERROR: unknown backend preparation request"
@@ -956,14 +771,11 @@ prepare_backend_or_record() {
 # of these per allocation (SHARD mode below), reusing this single container + its built backend.
 dispatch_bench() {
   case "$CX_BENCH" in
-    nccl-ep)
-      run_ep_suite "$CX_BENCH"
-      ;;
-    deepep|deepep-v2|deepep-hybrid|mori|uccl)
+    deepep|deepep-v2|deepep-hybrid|mori)
       prepare_backend_or_record "$CX_BENCH" && run_ep_suite "$CX_BENCH"
       ;;
     *)
-      cx_die "unknown CX_BENCH=$CX_BENCH (want deepep|deepep-v2|mori|uccl|nccl-ep|deepep-hybrid)"
+      cx_die "unknown CX_BENCH=$CX_BENCH (want deepep|deepep-v2|mori|deepep-hybrid)"
       ;;
   esac
 }
@@ -1010,7 +822,6 @@ env = {
   "CX_MODE": g("mode", "normal"),
   "CX_ROUTING": g("routing", "uniform"), "CX_PHASE": g("phase", "decode"),
   "CX_EP": g("ep", "1"),
-  "CX_EPLB": "1" if c.get("eplb") else "",
   "CX_CASE_ID": g("case_id"), "CX_SUITE": g("suite"), "CX_WORKLOAD_NAME": g("workload"),
   "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
   "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
@@ -1042,10 +853,10 @@ PY
     cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT"
     # Each case has its OWN routing/dims -> its own canonical workload manifest. cx_stage_canonical
     # short-circuits when CX_WORKLOAD_DIR is already set, so without this unset the first case's
-    # staged dir is reused for the rest and run_ep.py can't find the later cases' manifests
-    # (FileNotFoundError .cx_workloads/<wid>.manifest.json). Unset so every case re-stages its own.
+    # staged dir is reused for the rest and run_ep.py can't find the later cases' manifests.
+    # Unset so every case re-stages its own.
     unset CX_WORKLOAD_DIR 2>/dev/null || true
-    cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_MODE/$CX_PHASE routing=$CX_ROUTING eplb=${CX_EPLB:-0}"
+    cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_MODE/$CX_PHASE routing=$CX_ROUTING"
     _cx_case_ts="$CX_TS"
     CX_TS="${_cx_case_ts}-a01"
     export CX_ATTEMPT_ID=1 CX_TS

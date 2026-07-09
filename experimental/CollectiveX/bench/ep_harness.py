@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import hashlib
 import json
 import math
 import os
@@ -67,11 +66,11 @@ ROUTING_GENERATOR = workload_contract.GENERATOR_VERSION
 ACTIVATION_PROFILE = "canonical-counter-source-v4"
 ACTIVATION_GENERATOR = workload_contract.ACTIVATION_GENERATOR
 PLACEMENT = "packed"
-COMPONENT_ORDER_CONTRACT = "qualification-hash-rotated-components-v1"
+COMPONENT_ORDER_CONTRACT = "qualification-rotated-components-v2"
 LOW_LATENCY_MODE = "low-latency"
 LOW_LATENCY_MAX_TOKENS_PER_RANK = 128
 LOW_LATENCY_MEASUREMENT_CONTRACT = "expert-packed-weighted-combine-v1"
-LOW_LATENCY_COMPONENT_ORDER_CONTRACT = "qualification-hash-rotated-components-v1"
+LOW_LATENCY_COMPONENT_ORDER_CONTRACT = "qualification-rotated-components-v2"
 LOW_LATENCY_ORACLE_CONTRACT = "expert-assignment-transform-v1"
 LOW_LATENCY_CORRECTNESS_SCOPE = "expert-assignment-and-weighted-combine"
 
@@ -94,9 +93,6 @@ ORACLE_CONTRACT = identity.V1_CASE_PROFILE["oracle_contract"]
 ORACLE_RTOL = 5e-2
 ORACLE_ATOL = 2e-2
 
-EPLB_REDUNDANT_EXPERTS = 32
-EPLB_REFERENCE_TOKENS_PER_RANK = 2048
-EPLB_PLANNER = "greedy-rank-major-v1"
 V1_PROFILE = {
     "dispatch_dtype": "bf16",
     "combine_dtype": "bf16",
@@ -109,10 +105,7 @@ V1_PROFILE = {
     "routing_generator": ROUTING_GENERATOR,
     "component_order_contract": COMPONENT_ORDER_CONTRACT,
     "conditioning_contract": CONDITIONING_CONTRACT,
-    "eplb_reference_tokens_per_rank": EPLB_REFERENCE_TOKENS_PER_RANK,
-    "eplb_redundant_experts": EPLB_REDUNDANT_EXPERTS,
-    "eplb_planner": EPLB_PLANNER,
-    # DeepEP/UCCL use this only as the fallback when their tuned default is not exported.
+    # DeepEP uses this only as the fallback when its tuned default is not exported.
     "num_sms": 24,
 }
 
@@ -156,9 +149,8 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
     ap.add_argument("--routing", default="uniform", choices=["uniform"])
-    # Canonical workloads consume pre-generated trace bytes instead of the
-    # seeded runtime generator, so a result is provably the SAME workload as another machine's
-    # (checksum match). Points at a dir of <workload_id>.npz/.manifest.json (make_workloads.py).
+    # Canonical workloads consume validated pre-generated arrays instead of the
+    # seeded runtime generator. Files use readable coordinate-derived names.
     ap.add_argument("--workload-dir", default="",
                     help="dir of canonical workload traces; empty = seeded runtime generation (dev)")
     ap.add_argument("--case-id", default="")
@@ -248,11 +240,7 @@ def qualification_order(
         raise ValueError("qualification identity_key must be a string")
     base_values = list(values)
     if identity_key:
-        base_values.sort(
-            key=lambda value: hashlib.sha256(
-                f"{identity_key}\0{qualification_index}\0{value}".encode("utf-8")
-            ).digest()
-        )
+        base_values.sort(key=lambda value: str(value))
     position = trial_index + qualification_index - 1
     cycle, offset = divmod(position, len(values))
     base = base_values if cycle % 2 == 0 else list(reversed(base_values))
@@ -310,14 +298,7 @@ def percentile(xs: list[float], q: float) -> float:
     return s[i]
 
 
-def _sha256_json(value) -> str:
-    payload = json.dumps(
-        value, allow_nan=False, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode()
-    return hashlib.sha256(payload).hexdigest()
-
-
-def _write_bytes_atomic(path: str, payload: bytes) -> tuple[str, int]:
+def _write_bytes_atomic(path: str, payload: bytes) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     temporary = f"{path}.tmp-{os.getpid()}"
     try:
@@ -331,10 +312,9 @@ def _write_bytes_atomic(path: str, payload: bytes) -> tuple[str, int]:
             os.unlink(temporary)
         except FileNotFoundError:
             pass
-    return hashlib.sha256(payload).hexdigest(), len(payload)
 
 
-def _write_json_atomic(path: str, value) -> tuple[str, int]:
+def _write_json_atomic(path: str, value) -> None:
     payload = (
         json.dumps(value, allow_nan=False, ensure_ascii=False, indent=2) + "\n"
     ).encode()
@@ -406,20 +386,16 @@ def _reduce_int(torch, dist, device, v: int, op) -> int:
     return int(t.item())
 
 
-def _same_hash_across_ranks(torch, dist, device, digest: str) -> bool:
-    parts = [int(digest[offset:offset + 8], 16) for offset in range(0, 64, 8)]
-    low = torch.tensor(parts, device=device, dtype=torch.int64)
-    high = low.clone()
-    dist.all_reduce(low, op=dist.ReduceOp.MIN)
-    dist.all_reduce(high, op=dist.ReduceOp.MAX)
-    return bool(torch.equal(low, high))
-
-
-def _tensor_sha256(*tensors) -> str:
-    digest = hashlib.sha256()
+def _same_tensors_across_ranks(torch, dist, device, *tensors) -> bool:
+    matches = True
     for tensor in tensors:
-        digest.update(tensor.detach().contiguous().cpu().numpy().tobytes())
-    return digest.hexdigest()
+        observed = tensor.to(device=device, non_blocking=False)
+        reference = observed.clone() if dist.get_rank() == 0 else torch.empty_like(observed)
+        dist.broadcast(reference, src=0)
+        matches = matches and bool(torch.equal(observed, reference))
+    result = torch.tensor([int(matches)], device=device, dtype=torch.int64)
+    dist.all_reduce(result, op=dist.ReduceOp.MIN)
+    return bool(result.item())
 
 
 def _normalized_expert_metadata(torch, expert_ids, weights):
@@ -653,8 +629,6 @@ def _run_expert_packed_oracle(
             "contract": contract,
             "passed": False,
             "ordering_contract": "adapter-inspection-failed",
-            "order_sha256": None,
-            "dispatch_sha256": None,
             "combine_weight_semantics": getattr(
                 backend, "combine_weight_semantics", "undeclared"
             ),
@@ -765,10 +739,6 @@ def _run_expert_packed_oracle(
         max_weight_error = None
     weights_ok = max_weight_error == 0.0
     ordering_contract = f"canonical-source-expert-v1/{view.ordering_contract}"
-    order_sha256 = _tensor_sha256(canonical_sources, canonical_experts)
-    dispatch_sha256 = _tensor_sha256(
-        canonical_sources, canonical_experts, canonical_expected_weights
-    )
 
     handle.oracle_local_expert_slots = view.local_expert_slots
     handle.oracle_packed_positions = view.packed_positions
@@ -821,8 +791,6 @@ def _run_expert_packed_oracle(
         "atol": oracle_atol,
         "combine_weight_semantics": backend.combine_weight_semantics,
         "ordering_contract": ordering_contract,
-        "order_sha256": order_sha256,
-        "dispatch_sha256": dispatch_sha256,
         "receive_count": receive_count,
         "max_absolute_error": max_absolute_error,
         "max_elementwise_relative_error": max_elementwise_relative_error,
@@ -875,8 +843,6 @@ def _run_expert_oracle(
             "contract": ORACLE_CONTRACT,
             "passed": False,
             "ordering_contract": "adapter-inspection-failed",
-            "order_sha256": None,
-            "dispatch_sha256": None,
             "combine_weight_semantics": getattr(
                 backend, "combine_weight_semantics", "undeclared"
             ),
@@ -959,10 +925,6 @@ def _run_expert_oracle(
     canonical_ids = actual_ids.to(torch.int64).index_select(0, canonical_order)
     canonical_weights = actual_weights.index_select(0, canonical_order)
     ordering_contract = f"canonical-source-id-v1/{view.ordering_contract}"
-    order_sha256 = _tensor_sha256(canonical_sources)
-    dispatch_sha256 = _tensor_sha256(
-        canonical_sources, canonical_ids, canonical_weights
-    )
 
     problem.recv_tokens = receive_count
     combine_weight_semantics = backend.combine_weight_semantics
@@ -1016,8 +978,6 @@ def _run_expert_oracle(
         "atol": oracle_atol,
         "combine_weight_semantics": combine_weight_semantics,
         "ordering_contract": ordering_contract,
-        "order_sha256": order_sha256,
-        "dispatch_sha256": dispatch_sha256,
         "receive_count": receive_count,
         "max_absolute_error": max_absolute_error,
         "max_elementwise_relative_error": max_elementwise_relative_error,
@@ -1058,7 +1018,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: {sampling_error}")
         return 2
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
-    import eplb     # stdlib planner + torch remap (the EPLB transform)
 
     ep_size = world_size
     num_logical = getattr(args, "num_logical_experts", args.experts)
@@ -1102,16 +1061,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     if rank == 0 and dropped:
         print(f"NOTE: dropped tokens/rank {dropped} — exceed {backend.name} buffer cap {cap} "
               f"(hidden={args.hidden}); not silently truncated.")
-    loaded_workload_ids = spec.loaded_workload_ids
-    loaded_checksums = spec.loaded_checksums
+    loaded_workloads = spec.loaded_workloads
     canonical = bool(getattr(args, "workload_dir", ""))
     MAX, MIN, SUM = dist.ReduceOp.MAX, dist.ReduceOp.MIN, dist.ReduceOp.SUM
-
-    # EPLB is off in v1 (uniform placement): the plan/calibration stay None so the
-    # disabled eplb_record and the identity trace-remap paths downstream take their
-    # inert branch. `eplb` remains imported for those None-guarded call sites.
-    eplb_plan = None
-    eplb_calibration = None
 
     # Size the communicator from the resolved numeric shape. Buffer sizing needs the
     # ladder numbers (not the input tensors), so it runs after make_inputs rather than
@@ -1149,7 +1101,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         return 4
     # ---- Pass 1: build each deterministic problem and run the expert oracle. ----
     problems, gate, gts, global_traces, input_snapshots = {}, {}, {}, {}, {}
-    routing_hashes = set()
+    routing_consistent = True
     for T in ladder:
         counts = [T] * ep_size
         gt = T * ep_size
@@ -1161,7 +1113,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
                                                       gpn, args.scale_up_domain or None)
         rstats["source_token_stats"] = _stats_vec(counts)
-        routing_hashes.add(rstats["routing_hash"])
+        point_routing_consistent = _same_tensors_across_ranks(
+            torch, dist, device, idx_g, w_g
+        )
+        routing_consistent = routing_consistent and point_routing_consistent
         my_cnt = T
         problem = backend.make_problem(
             my_cnt, point.topk_idx.to(device), point.topk_weights.to(device), point.activations
@@ -1200,14 +1155,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_trials = {T: [] for T in ladder}
     comb_trials = {T: [] for T in ladder}
     rt_trials = {T: [] for T in ladder}
-    order_identity = args.case_id or _sha256_json({
-        "backend": backend.name,
-        "ep_size": ep_size,
-        "mode": mode,
-        "phase": args.phase,
-        "runner": args.runner,
-        "suite": args.suite,
-    })
+    order_identity = args.case_id or "|".join(
+        (args.runner, backend.name, args.suite, mode, args.phase, str(ep_size))
+    )
     for trial_index in range(args.trials):
         order = qualification_order(
             list(ladder), args.qualification_index, trial_index,
@@ -1266,11 +1216,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             args.seed,
         )
         pre = gate[T]["oracle_pre"]
-        order_stable = (
-            pre["ordering_contract"] == post["ordering_contract"]
-            and pre["order_sha256"] == post["order_sha256"]
-            and pre["dispatch_sha256"] == post["dispatch_sha256"]
-        )
+        order_stable = pre["ordering_contract"] == post["ordering_contract"]
         gate[T].update({
             "input_unchanged": input_unchanged,
             "local_ok": int(pre["passed"] and post["passed"] and input_unchanged and order_stable),
@@ -1418,7 +1364,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "fanout_max": rstats["fanout_max"],
                 "fanout_mean": rstats["fanout_mean"],
                 "fanout_min": rstats["fanout_min"],
-                "hash": rstats["routing_hash"],
                 "hotspot_ratio": rstats["hotspot_ratio"],
                 "locality": rstats.get("locality"),
                 "payload_copies_per_rank": rstats["payload_copies_per_rank"],
@@ -1444,12 +1389,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                   f"recv[min/mean/max]={recv_min}/{recv_total // world_size}/{recv_max} "
                   f"correct={point_ok}")
 
-    # Cross-rank workload-identity proof: every rank must have built the SAME global routing
-    # (one hash per T here); confirm all ranks agree by hashing the per-T hash set and
-    # MIN/MAX-reducing it — a mismatch means NVIDIA and AMD did NOT run identical routing.
-    trace_sig = hashlib.sha256("|".join(sorted(routing_hashes)).encode()).hexdigest()
-    routing_consistent = _same_hash_across_ranks(torch, dist, device, trace_sig)
-
     # Capture again after correctness and timing so no lazily generated kernel can escape
     # the implementation identity recorded in the artifact.
     backend.capture_deferred_provenance()
@@ -1463,30 +1402,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         prov,
         backend.name,
         getattr(args, "git_run", None),
-        image_digest=getattr(args, "image_digest", None),
-        image_verified=getattr(args, "image_digest_verified", False),
+        image_reference=getattr(args, "image", None),
         squash_sha256=getattr(args, "squash_sha256", None),
     )
     resource_profile = ep_provenance.project_resource_profile(prov)
     resource_conformance = resource_profile["conformance_class"]
-    # record the canonical workload identity consumed (one trace per T -> set of ids/checksums).
-    if canonical and loaded_workload_ids:
-        args.workload_id = identity.workload_id(
-            {
-                "members": [
-                    {"checksums": loaded_checksums[member], "workload_id": member}
-                    for member in sorted(loaded_workload_ids)
-                ]
-            }
-        )
-        args.workload_members = sorted(loaded_workload_ids)
-        args.workload_checksums = loaded_checksums
-    canonical_workload = bool(getattr(args, "workload_id", None))
-    activation_identity = workload_contract.compute_activation_identity(args.seed, args.hidden)
-    # EPLB identity covers replica placement, not only counts.
-    eplb_mapping_hash = None
-    if eplb_plan is not None:
-        eplb_mapping_hash = eplb.mapping_hash(eplb_plan)
+    if canonical and loaded_workloads:
+        args.workload_members = sorted(loaded_workloads)
+    canonical_workload = bool(getattr(args, "workload_members", None))
     anomaly_free = len(all_anomalies) == 0
     validity = {
         "execution_status": "complete" if rows else "failed",
@@ -1506,7 +1429,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank,
-        "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
+        "routing": args.routing, "num_logical_experts": num_logical,
         # V2 is reserved for the PR #605 ElasticBuffer adapter; package versions never imply it.
         "kernel_gen": kernel_generation(backend),
         "activation_profile": ACTIVATION_PROFILE,
@@ -1521,7 +1444,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     scheduled_case = {
             "backend": backend.name,
             "canonical": canonical,
-            "eplb": bool(eplb_plan),
             "ep": ep_size,
             "experts": num_logical,
             "gpus_per_node": args.gpus_per_node or ep_size,
@@ -1590,21 +1512,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             },
             "tokens_per_rank": token_count,
         }
-        sample_sha256 = _sha256_json(sample_point)
         point_identifier = identity.point_id(
             case=case_identifier, tokens_per_rank=token_count
         )
-        sample_point.update(
-            {
-                "point_id": point_identifier,
-                "sample_sha256": sample_sha256,
-            }
-        )
+        sample_point["point_id"] = point_identifier
         sample_points.append(sample_point)
-        row.update({
-            "point_id": point_identifier,
-            "sample_sha256": sample_sha256,
-        })
+        row["point_id"] = point_identifier
 
     samples_path = args.out[:-5] + ".samples.json" if args.out.endswith(".json") else args.out + ".samples.json"
     samples_document = {
@@ -1620,52 +1533,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "schema_version": 1,
     }
     samples_payload = ep_provenance.canonical_json_bytes(samples_document)
-    samples_sha256 = hashlib.sha256(samples_payload).hexdigest()
     samples_bytes = len(samples_payload)
     sample_artifact = {
         "bytes": samples_bytes,
         "format": "collectivex.samples.v1",
         "path": os.path.basename(samples_path),
-        "sha256": samples_sha256,
     }
     headline = next((r for r in rows if r["tokens_per_rank"] == 64), rows[len(rows) // 2])
-    eplb_record = (
-        {
-            "calibration_token_offset": eplb_calibration["token_offset"],
-            "calibration_trace_sha256": eplb_calibration["trace_sha256"],
-            "calibration_window": eplb_calibration["window"],
-            "calibration_workload_id": eplb_calibration["workload_id"],
-            "enabled": True,
-            "imbalance_after": eplb_plan["imbalance_after"],
-            "imbalance_before": eplb_plan["imbalance_before"],
-            "mapping_hash": eplb_mapping_hash,
-            "max_replicas": eplb_plan["max_replicas"],
-            "num_logical_experts": num_logical,
-            "num_physical_experts": args.experts,
-            "num_redundant": args.experts - num_logical,
-            "planner": EPLB_PLANNER,
-            "reference_tokens_per_rank": EPLB_REFERENCE_TOKENS_PER_RANK,
-            "replicated_experts": eplb_plan["replicated_experts"],
-        }
-        if eplb_plan
-        else {
-            "calibration_token_offset": None,
-            "calibration_trace_sha256": None,
-            "calibration_window": None,
-            "calibration_workload_id": None,
-            "enabled": False,
-            "imbalance_after": None,
-            "imbalance_before": None,
-            "mapping_hash": None,
-            "max_replicas": None,
-            "num_logical_experts": num_logical,
-            "num_physical_experts": args.experts,
-            "num_redundant": 0,
-            "planner": None,
-            "reference_tokens_per_rank": None,
-            "replicated_experts": 0,
-        }
-    )
     doc = {
         "format": "collectivex.ep.v1",
         "schema_version": SCHEMA_VERSION,
@@ -1682,7 +1556,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "case": {
             "attempt_ordinal": attempt_ordinal,
             "backend": backend.name,
-            "eplb": eplb_record,
             "ep_size": ep_size,
             "mode": mode,
             "phase": args.phase,
@@ -1694,16 +1567,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "workload": {
             "activation_generator": ACTIVATION_GENERATOR,
-            "activation_identity": activation_identity,
             "activation_profile": ACTIVATION_PROFILE,
             "cross_rank_consistent": routing_consistent,
-            "manifest_checksums": getattr(args, "workload_checksums", None),
             "members": getattr(args, "workload_members", None),
             "routing_generator": ROUTING_GENERATOR,
             "source": validity["workload_source"],
-            "trace_hashes": sorted(routing_hashes),
-            "trace_signature": trace_sig,
-            "workload_id": getattr(args, "workload_id", None),
         },
         "measurement": {
             "component_order_contract": case_profile["component_order_contract"],
@@ -1754,8 +1622,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "git_run": getattr(args, "git_run", None),
             "image": {
                 "arch": getattr(args, "image_arch", None),
-                "digest": getattr(args, "image_digest", "") or None,
-                "digest_verified": getattr(args, "image_digest_verified", False),
                 "reference": getattr(args, "image", "") or None,
                 "squash_sha256": getattr(args, "squash_sha256", None),
             },

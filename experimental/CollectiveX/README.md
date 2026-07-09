@@ -16,10 +16,9 @@ backend/topology; there is no tuning sweep. Dispatch and combine are fixed BF16 
 precision is not a swept dimension. The explicit mode selects one of two contracts:
 
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
-  combine. Uniform core coverage and one Zipf sensitivity remain; EPLB is measured only as the Zipf
-  remedy.
+  combine. Coverage is uniform routing only.
 - Low-latency mode uses `expert-packed-weighted-combine-v1`, token-expert payloads, and gate-weighted
-  combine through genuine DeepEP V1 or UCCL low-latency APIs. It is decode-only. Other backends are
+  combine through genuine DeepEP V1 low-latency APIs. It is decode-only. Other backends are
   recorded as unsupported for this suite.
 
 Both modes use `fixed-512-v1`: 64 trials x 8 timed iterations with 32 synchronized full roundtrip
@@ -52,8 +51,6 @@ referenced by any current suite or shard.
 | DeepEP V1 | Image-pinned `deep_ep.Buffer`: normal and native low-latency APIs; upstream v1.2.1 on x86 and the image's GB fork on arm64 |
 | DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out; source/SASS-bound reproducible JIT |
 | DeepEP Hybrid | Pinned `HybridEPBuffer`: x86 EP16 multi-domain RDMA/DOCA; GB EP8/EP16 in one MNNVL communication domain |
-| UCCL | Pinned 0.1.1 wheel and wrapper with normal and native low-latency APIs on Hopper; Blackwell is explicitly unsupported |
-| NCCL/RCCL A2A | Portable rank-deduplicated payload plus expert/routing-metadata reference |
 | MoRI | MI355X EP8 uses IntraNode; EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
@@ -133,17 +130,16 @@ runner-owned mode-0700 base in the validated operating-system account home, inde
 workflow's temporary `HOME`. H100 may also omit `stage_dir`; its private base is created beside, never
 beneath, the configured shared container directory so it is compute-visible. Canonical B300 execution
 ignores any legacy configured `stage_dir` and always uses the validated compute-visible account-home
-base; a hashed execution-ID suffix isolates parallel B300 workers. Canonical GB300 execution likewise
-ignores its legacy group-writable `stage_dir` and derives an execution-hashed private base beneath the
+base; an execution-ID suffix isolates parallel B300 workers. Canonical GB300 execution likewise
+ignores its legacy group-writable `stage_dir` and derives an execution-specific private base beneath the
 validated compute-visible account home. The workflow proves every derived base is visible from all
 allocated nodes before launch.
 
-Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
-pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch
-and a versioned, registry-digest-bound cache key. Every mounted squash is freshly hashed. Image-provided
-DeepEP is checked against exact wheel and installed-file fingerprints; source-built backends use pinned
-commits and runtime-verified GPU targets. DeepEP V2's mode-0700 cluster-local build cache is keyed by a
-versioned build recipe, verified image, architecture, upstream trees, and dependency pins; only its
+Enroot imports the configured image tag with a fixed filesystem epoch and a versioned cache name.
+Every mounted squash is freshly hashed. Image-provided
+DeepEP is checked by package/API versions; source-built backends use pinned commits, trees, and
+runtime-verified GPU targets. DeepEP V2's mode-0700 cluster-local build cache is named from its
+build recipe, architecture, upstream trees, and dependency pins; only its
 fixed `/cx-cache` mount reaches the container, and it never enters result artifacts. Pinned V2 and
 Hybrid sources are fetched once per workflow, validated whole, and extracted to their exact backend
 root before staging.

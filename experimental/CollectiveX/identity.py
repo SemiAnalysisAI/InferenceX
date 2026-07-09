@@ -2,44 +2,32 @@
 """Canonical cross-runtime identities for CollectiveX.
 
 A case identity is a readable, factor-derived join between a scheduled case and
-its emitted result: a human-readable body (SKU, backend, workload, mode, phase,
-EP size, routing) plus a short digest of the exact case factors. The suffix keeps
-the identity collision-proof and tamper-evident without hiding what the case is.
+its emitted result: SKU, backend, workload, mode, phase, EP size, and routing.
 Attempt and point identities are readable derivations of the case identity.
 
-Content SHA-256 survives only where it identifies separately-stored bytes: the
-workload manifest whose exact routing/gate data a result consumes. Detached
-sample files, source commits, container images, and generated kernels carry their
-own SHA-256 fields in the artifacts; this module does not mint identifiers for
-catalogs, series, evidence, allocations, or any other publisher-side grouping.
+This module uses readable factor-derived identifiers only. It does not mint
+content hashes for workloads, catalogs, evidence, allocations, or publisher-side
+grouping.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from typing import Any
 
 MAX_SAFE_INTEGER = (1 << 53) - 1
-WORKLOAD_PREFIX = "cxwork-v1-"
-_CASE_SUFFIX_LEN = 12
 _NON_SLUG = re.compile(r"[^a-z0-9]+")
-_CASE_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]*-[0-9a-f]{%d}$" % _CASE_SUFFIX_LEN)
-_WORKLOAD_ID = re.compile(r"^cxwork-v1-[0-9a-f]{64}$")
+_CASE_ID = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
 
 V1_NORMAL_CASE_PROFILE = {
     "activation_generator": "collectivex-activation-counter-v4",
     "activation_profile": "canonical-counter-source-v4",
     "combine_dtype": "bf16",
     "combine_semantics": "activation-only",
-    "component_order_contract": "qualification-hash-rotated-components-v1",
+    "component_order_contract": "qualification-rotated-components-v2",
     "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
     "contract": "layout-and-dispatch-v1",
     "correctness_scope": "dispatch-metadata-and-transformed-combine",
     "dtype": "bf16",
-    "eplb_planner": "greedy-rank-major-v1",
-    "eplb_redundant_experts": 32,
-    "eplb_reference_tokens_per_rank": 2048,
     "mode": "normal",
     "oracle_contract": "expert-specific-transform-v1",
     "payload_unit": "token-rank",
@@ -122,22 +110,6 @@ def _validate(value: Any, path: str = "$") -> None:
     raise IdentityError(f"{path}: unsupported identity value {type(value).__name__}")
 
 
-def canonical_bytes(value: Any) -> bytes:
-    """Return compact UTF-8 JSON after enforcing the portable value subset."""
-    _validate(value)
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def _content_sha256(value: Any) -> str:
-    return hashlib.sha256(canonical_bytes(value)).hexdigest()
-
-
 def _slug(value: Any) -> str:
     text = _NON_SLUG.sub("-", str(value).strip().lower()).strip("-")
     if not text:
@@ -155,15 +127,13 @@ def _case_body(sku: str, case: dict[str, Any]) -> str:
         "ep%d" % int(case["ep"]),
         _slug(case["routing"]),
     ]
-    if case.get("eplb"):
-        parts.append("eplb")
     return "-".join(parts)
 
 
 def case_id(*, sku: str, profile: dict[str, Any], case: dict[str, Any]) -> str:
-    """Readable case identity: factor body plus a digest of the exact factors."""
-    factors = {"case": case, "profile": profile, "sku": sku}
-    return f"{_case_body(sku, case)}-{_content_sha256(factors)[:_CASE_SUFFIX_LEN]}"
+    """Readable case identity derived from the scheduled comparison coordinates."""
+    del profile
+    return _case_body(sku, case)
 
 
 def case_id_from_factors(factors: dict[str, Any]) -> str:
@@ -185,14 +155,3 @@ def point_id(*, case: str, tokens_per_rank: int) -> str:
 
 def is_case_id(value: Any) -> bool:
     return bool(isinstance(value, str) and _CASE_ID.fullmatch(value))
-
-
-def workload_id(value: dict[str, Any]) -> str:
-    """Content identity of a workload manifest's canonical routing/gate data."""
-    return WORKLOAD_PREFIX + _content_sha256(
-        {"kind": "workload", "value": value, "version": 1}
-    )
-
-
-def is_workload_id(value: Any) -> bool:
-    return bool(isinstance(value, str) and _WORKLOAD_ID.fullmatch(value))

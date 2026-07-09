@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import argparse
 import ctypes
-import hashlib
-import hmac
 import json
 import os
 import platform
@@ -23,16 +21,6 @@ sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
 import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 import identity  # noqa: E402
-
-
-ALLOCATION_STRATUM_CONTRACT = "collectivex-allocation-stratum-v1"
-PRIVATE_FABRIC_ENV = {
-    "ib_gid_index": "CX_IB_GID_INDEX",
-    "rdma_devices": "CX_RDMA_DEVICES",
-    "rdma_service_level": "CX_RDMA_SERVICE_LEVEL",
-    "rdma_traffic_class": "CX_RDMA_TRAFFIC_CLASS",
-    "socket_ifname": "CX_SOCKET_IFNAME",
-}
 
 
 def _numeric_version(command: list[str]) -> str | None:
@@ -205,71 +193,6 @@ def _all_gather_json(
     return records
 
 
-def _allocation_stratum_sha256(
-    physical_hosts: list[str],
-    *,
-    audit_salt: str | None,
-    fabric_selectors: dict[str, str | None],
-    required: bool,
-) -> str | None:
-    """Commit private allocation/fabric identity without exposing its inputs."""
-    if audit_salt in (None, ""):
-        if required:
-            raise ValueError("canonical execution requires a private allocation audit salt")
-        return None
-    if not isinstance(audit_salt, str) or not re.fullmatch(r"[0-9a-f]{64}", audit_salt):
-        raise ValueError("allocation audit salt is invalid")
-    if set(fabric_selectors) != set(PRIVATE_FABRIC_ENV):
-        raise ValueError("private fabric selector set differs from the stratum contract")
-    for value in fabric_selectors.values():
-        if value is not None and (
-            not isinstance(value, str)
-            or not value
-            or len(value) > 512
-            or any(ord(char) < 32 or ord(char) == 127 for char in value)
-        ):
-            raise ValueError("private fabric selector is invalid")
-    if not physical_hosts or any(
-        not isinstance(host, str)
-        or not host
-        or len(host) > 255
-        or any(ord(char) < 32 or ord(char) == 127 for char in host)
-        for host in physical_hosts
-    ):
-        raise ValueError("physical allocation host evidence is invalid")
-    payload = json.dumps(
-        {
-            "contract": ALLOCATION_STRATUM_CONTRACT,
-            "fabric_selectors": fabric_selectors,
-            "physical_hosts": sorted(set(physical_hosts)),
-        },
-        allow_nan=False,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return hmac.new(bytes.fromhex(audit_salt), payload, hashlib.sha256).hexdigest()
-
-
-def _common_allocation_stratum(
-    records: list[str | None], *, required: bool
-) -> str | None:
-    """Require every distributed rank to derive the same private stratum."""
-    if not records or any(
-        value is not None
-        and (not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value))
-        for value in records
-    ):
-        raise ValueError("allocation stratum evidence is invalid")
-    distinct = set(records)
-    if len(distinct) != 1:
-        raise ValueError("allocation stratum differs across distributed ranks")
-    value = records[0]
-    if required and value is None:
-        raise ValueError("canonical execution requires an allocation stratum")
-    return value
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
     ap.add_argument(
@@ -280,17 +203,15 @@ def main() -> int:
             "deepep-v2",
             "deepep-hybrid",
             "mori",
-            "uccl",
-            "nccl-ep",
         ],
     )
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
     if args.mode == ep_harness.LOW_LATENCY_MODE:
-        if args.backend not in {"deepep", "uccl"}:
+        if args.backend != "deepep":
             print(
-                "ERROR: low-latency mode is supported only by deepep and uccl",
+                "ERROR: low-latency mode is supported only by deepep",
                 file=sys.stderr,
             )
             return 2
@@ -406,7 +327,6 @@ def main() -> int:
         ep=world_size,
         nodes=observed_nodes,
         routing=args.routing,
-        eplb=False,
         mode=args.mode,
     )
     if not schedulable:
@@ -426,10 +346,6 @@ def main() -> int:
         prefix = f"RANK={rank} WORLD_SIZE={world_size} LOCAL_RANK={local_rank} python3"
     args.reproduction_command = f"{prefix} bench/run_ep.py {shlex.join(sys.argv[1:])}"
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
-    args.image_digest = os.environ.get("COLLECTIVEX_IMAGE_DIGEST", "")
-    args.image_digest_verified = (
-        os.environ.get("COLLECTIVEX_IMAGE_DIGEST_VERIFIED") == "1"
-    )
     # Container architecture and local squash hash for Enroot/Pyxis.
     args.image_arch = machine
     args.squash_sha256 = os.environ.get("COLLECTIVEX_SQUASH_SHA256")
@@ -454,10 +370,6 @@ def main() -> int:
     # explicit case dimension; adapters do not infer it from the token ladder.
     if args.backend == "mori":
         from ep_mori import MoRIBackend as Backend
-    elif args.backend == "nccl-ep":
-        from ep_nccl import NCCLBackend as Backend
-    elif args.backend == "uccl":
-        from ep_uccl import UCCLBackend as Backend
     elif args.backend == "deepep-hybrid":
         from ep_deepep_hybrid import DeepEPHybridBackend as Backend
     elif args.backend == "deepep-v2":
@@ -509,27 +421,6 @@ def main() -> int:
     args.runtime_fingerprint = _common_runtime_fingerprint(
         [record[2] for record in realized_records]
     )
-    canonical = bool(args.workload_dir)
-    local_stratum = _allocation_stratum_sha256(
-        [record[0] for record in realized_records],
-        audit_salt=os.environ.get("CX_AUDIT_SALT"),
-        fabric_selectors={
-            field: os.environ.get(environment) or None
-            for field, environment in PRIVATE_FABRIC_ENV.items()
-        },
-        required=canonical,
-    )
-    stratum_records = _all_gather_json(
-        local_stratum,
-        torch_module=torch,
-        dist_module=dist,
-        device=device,
-        world_size=world_size,
-    )
-    args.allocation_stratum_sha256 = _common_allocation_stratum(
-        stratum_records, required=canonical
-    )
-
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
     # uncaught exception is otherwise invisible in CI. Print on every rank (prefixed) then re-raise.

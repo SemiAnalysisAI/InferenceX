@@ -41,7 +41,6 @@ from dataclasses import dataclass, field
 
 from ep_harness import (
     CONDITIONING_LADDERS,
-    CONDITIONING_ROUNDS_PER_SHAPE,
     time_us,
     token_ladder,
 )
@@ -66,8 +65,7 @@ class RankInputs:
     global_tokens: int = 0
     global_idx: "torch.Tensor | None" = None
     global_weights: "torch.Tensor | None" = None
-    workload_id: "str | None" = None
-    checksums: "dict | None" = None
+    workload_name: "str | None" = None
 
 
 @dataclass
@@ -98,8 +96,7 @@ class WorkloadSpec:
     conditioning_ladder: list = field(default_factory=list)
     points: dict = field(default_factory=dict)
     conditioning_points: dict = field(default_factory=dict)
-    loaded_workload_ids: list = field(default_factory=list)
-    loaded_checksums: dict = field(default_factory=dict)
+    loaded_workloads: list = field(default_factory=list)
 
 
 class EPBackend(abc.ABC):
@@ -230,17 +227,15 @@ class EPBackend(abc.ABC):
                 args, tokens_per_rank, canonical=canonical, retain_global=True
             )
             spec.points[tokens_per_rank] = point
-            if point.workload_id is not None and point.workload_id not in spec.loaded_workload_ids:
-                spec.loaded_workload_ids.append(point.workload_id)
-                spec.loaded_checksums[point.workload_id] = point.checksums
+            if point.workload_name is not None and point.workload_name not in spec.loaded_workloads:
+                spec.loaded_workloads.append(point.workload_name)
         return spec
 
     def _build_rank_inputs(self, args, tokens_per_rank, *, canonical, retain_global) -> RankInputs:
         """Build one rank's inputs for a given tokens-per-rank shape.
 
-        canonical: load pre-serialized trace bytes (checksum-verified) so this run
-        is provably the SAME workload as any other consuming the same files;
-        otherwise seeded generation. (EPLB is off, so no logical->physical remap.)
+        canonical: load and validate pre-serialized trace arrays;
+        otherwise seeded generation.
         """
         import torch
         import routing
@@ -248,21 +243,19 @@ class EPBackend(abc.ABC):
         ep_size = self.world_size
         num_logical = getattr(args, "num_logical_experts", args.experts)
         global_tokens = tokens_per_rank * ep_size
-        workload_id = None
-        checksums = None
+        workload_name = None
         if canonical:
             import workload as _wl
 
-            workload_id = _wl.compute_workload_id(
+            workload_name = _wl.workload_name(
                 args.routing, args.hidden, args.topk, num_logical, ep_size,
                 global_tokens, args.seed,
             )
-            idx_np, w_np, manifest = _wl.load_workload(
-                os.path.join(args.workload_dir, f"{workload_id}.npz"), verify=True
+            idx_np, w_np, _manifest = _wl.load_workload(
+                os.path.join(args.workload_dir, f"{workload_name}.npz"), verify=True
             )
             idx_g = torch.from_numpy(idx_np).to(torch.int64)
             w_g = torch.from_numpy(w_np).to(torch.float32)
-            checksums = manifest.get("checksums")
         else:
             idx_g, w_g = routing.build_global_routing(
                 global_tokens, num_logical, args.topk, args.routing, args.seed
@@ -279,8 +272,7 @@ class EPBackend(abc.ABC):
             global_tokens=global_tokens,
             global_idx=idx_g if retain_global else None,
             global_weights=w_g if retain_global else None,
-            workload_id=workload_id,
-            checksums=checksums,
+            workload_name=workload_name,
         )
 
     def make_problem(self, T, idx, weights, x):

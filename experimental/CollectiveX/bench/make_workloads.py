@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Generate canonical serialized workloads. Runs the stdlib counter generator for
-each (routing, global_tokens) in a ladder and writes <workload_id>.npz + .manifest.json into a
-dir that runs then consume via `run_ep.py --workload-dir`. One trace is emitted per global-token
-count because global token count is part of workload identity.
+each (routing, global_tokens) in a ladder and writes coordinate-named `.npz` and manifest files
+into a directory consumed through `run_ep.py --workload-dir`.
 
   python3 bench/make_workloads.py --out-dir /path/to/cx_workloads \\
       --routing uniform --ep 8 --hidden 7168 --topk 8 --experts 256 --seed 67 \\
@@ -12,12 +11,11 @@ Or by the named workload in configs/workloads.yaml. Explicit dimension flags sti
 
   python3 bench/make_workloads.py --out-dir /path/to/cx_workloads --workload deepseek-v3 --routing uniform --ep 8
 
---id-only prints the content-bound workload_id per ladder point without torch/numpy:
+--id-only prints the readable workload name per ladder point without torch/numpy:
 
   python3 bench/make_workloads.py --workload deepseek-v3 --ep 8 --id-only
 
-Generate every routing the suites need by running once per --routing. Idempotent (same id => same
-file). The dir is the cross-hardware artifact: copy it to each cluster so all consume identical bytes.
+Generation is idempotent for the same coordinates.
 """
 from __future__ import annotations
 
@@ -66,7 +64,7 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=67)
     ap.add_argument("--tokens-ladder", default="1 2 4 8 16 32 64 128 256 512")
     ap.add_argument("--id-only", action="store_true",
-                    help="print content-bound workload_id per point without torch/numpy")
+                    help="print the readable workload name per point without torch/numpy")
     a = ap.parse_args()
 
     # Resolve dims: a named --workload supplies defaults; explicit --hidden/--topk/--experts override
@@ -91,14 +89,13 @@ def main() -> int:
     label = f"workload={a.workload} " if a.workload else ""
 
     if a.id_only:
-        # The stdlib counter generator derives the same content-bound ID on every runtime.
         made = []
         for T in ladder:
             gt = T * a.ep
-            wid = wl.compute_workload_id(a.routing, hidden, topk, experts, a.ep, gt, a.seed)
-            made.append((T, gt, wid))
-            print(f"  T={T:<5} gt={gt:<6} routing={a.routing} -> {wid}")
-        print(f"{label}id-only: {len(made)} workload_id(s) "
+            name = wl.workload_name(a.routing, hidden, topk, experts, a.ep, gt, a.seed)
+            made.append((T, gt, name))
+            print(f"  T={T:<5} gt={gt:<6} routing={a.routing} -> {name}")
+        print(f"{label}id-only: {len(made)} workload name(s) "
               f"(hidden={hidden} topk={topk} experts={experts} ep={a.ep} routing={a.routing} seed={a.seed})")
         return 0
 
@@ -107,10 +104,9 @@ def main() -> int:
     for T in ladder:
         gt = T * a.ep
         idx, w, man = wl.build_workload(hidden, topk, experts, a.routing, gt, a.seed, epr)
-        wid = wl.save_workload(a.out_dir, idx, w, man)
-        made.append((T, gt, wid))
-        print(f"  T={T:<5} gt={gt:<6} routing={a.routing} -> {wid}  "
-              f"(trace sha {man['checksums']['trace'][:12]})")
+        name = wl.save_workload(a.out_dir, idx, w, man)
+        made.append((T, gt, name))
+        print(f"  T={T:<5} gt={gt:<6} routing={a.routing} -> {name}")
     print(f"{label}wrote {len(made)} canonical workloads to {a.out_dir} (routing={a.routing}, ep={a.ep})")
     return 0
 

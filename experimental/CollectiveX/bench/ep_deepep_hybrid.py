@@ -25,7 +25,6 @@ one MNNVL domain or x86 scale-out between two eight-GPU NVLink domains.
 """
 from __future__ import annotations
 
-import hashlib
 import importlib
 import json
 import os
@@ -55,22 +54,12 @@ def _deepep_hybrid_version() -> str:
     return os.environ.get("DEEPEP_COMMIT", getattr(deep_ep, "__version__", "hybrid-ep"))
 
 
-def _hybrid_build_evidence() -> list[dict[str, str]]:
-    records = []
-    for module_name, role in (
-        ("deep_ep_cpp", "deepep-extension"),
-        ("hybrid_ep_cpp", "deepep-hybrid-extension"),
-    ):
+def _validate_hybrid_build() -> None:
+    for module_name in ("deep_ep_cpp", "hybrid_ep_cpp"):
         module = importlib.import_module(module_name)
         path = getattr(module, "__file__", None)
-        if not path:
+        if not path or not Path(path).is_file():
             raise RuntimeError(f"{module_name} has no loaded extension path")
-        records.append(ep_provenance.content_manifest_evidence(
-            role=role,
-            name=module_name,
-            files=[(os.path.basename(path), path)],
-        ))
-    return sorted(records, key=lambda item: (item["role"], item["name"]))
 
 
 HYBRID_CONFIG_FIELDS = (
@@ -118,21 +107,10 @@ def _hybrid_realized_config(config) -> dict[str, str | int | bool]:
     return realized
 
 
-def _sha256_with_size(path: Path) -> tuple[str, int]:
-    digest = hashlib.sha256()
-    size = 0
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-            size += len(chunk)
-    return digest.hexdigest(), size
-
-
-def _hybrid_jit_evidence(root: Path) -> list[dict[str, str | int]]:
-    """Hash final JIT libraries without exposing rank-specific cache paths."""
+def _hybrid_jit_kernel_keys(root: Path) -> list[str]:
     if not root.is_dir():
         raise RuntimeError("DeepEP Hybrid produced no JIT cache directory")
-    artifacts = []
+    kernel_keys = []
     for path in sorted(root.iterdir(), key=lambda item: item.name):
         if path.suffix != ".so":
             continue
@@ -141,19 +119,14 @@ def _hybrid_jit_evidence(root: Path) -> list[dict[str, str | int]]:
         kernel_key = path.stem
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,511}", kernel_key):
             raise RuntimeError("DeepEP Hybrid JIT kernel key is invalid")
-        digest, size = _sha256_with_size(path)
-        if size <= 0:
+        if path.stat().st_size <= 0:
             raise RuntimeError("DeepEP Hybrid JIT artifact is empty")
-        artifacts.append({
-            "bytes": size,
-            "kernel_key": kernel_key,
-            "sha256": digest,
-        })
-    if len(artifacts) != 3:
+        kernel_keys.append(kernel_key)
+    if len(kernel_keys) != 3:
         raise RuntimeError(
-            f"DeepEP Hybrid expected 3 final JIT libraries, found {len(artifacts)}"
+            f"DeepEP Hybrid expected 3 final JIT libraries, found {len(kernel_keys)}"
         )
-    return artifacts
+    return kernel_keys
 
 
 def _require_cross_rank_equal(value, label: str) -> None:
@@ -248,8 +221,7 @@ class DeepEPHybridBackend(EPBackend):
         assert spec.max_tokens_per_rank <= self.max_tokens
         dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
         ver = _deepep_hybrid_version()
-        loaded_libraries = _hybrid_build_evidence()
-        _require_cross_rank_equal(loaded_libraries, "loaded extension identities")
+        _validate_hybrid_build()
 
         # HybridEP's compiler uses a process-specific child of HYBRID_EP_CACHE_DIR. Give every
         # rank a fresh private base so stale kernels cannot enter this attempt's evidence.
@@ -266,7 +238,6 @@ class DeepEPHybridBackend(EPBackend):
         )
         self._realized_config = None
         self._deferred_semantic_snapshot = None
-        self._deferred_jit_diagnostics = None
 
         try:
             self.buffer = HybridEPBuffer(
@@ -344,7 +315,6 @@ class DeepEPHybridBackend(EPBackend):
             "deepep_commit": ver, "branch": "hybrid-ep",
             "deepep_tree": os.environ.get("DEEPEP_TREE"),
             "backend_lineage": "deepep-hybrid",
-            "loaded_libraries": loaded_libraries,
             "impl": "deep_ep.HybridEPBuffer (NVIDIA TMA + warp-pipeline)",
             "mode": "normal", "transport": topology["transport"],
             "dispatch_dtype": "bf16",
@@ -352,7 +322,7 @@ class DeepEPHybridBackend(EPBackend):
             "resource_mode": "fixed-profile",
             "num_sms": None, "device_sms": dev_sms,
             "tuned_source": "deepep-hybrid-configurer-autotune-v1",
-            "realized_config": None, "jit_kernel_keys": [], "jit_shared_objects": [],
+            "realized_config": None, "jit_kernel_keys": [],
             "max_num_tokens": self.max_tokens, "top_k": self.top_k,
             "num_experts": self.num_experts, "local_experts": self.local_experts,
             "routing_factor": "ranks",
@@ -403,38 +373,16 @@ class DeepEPHybridBackend(EPBackend):
         dist.barrier()
         if self._realized_config is None:
             raise RuntimeError("DeepEP Hybrid autotune config was not materialized")
-        local_artifacts = _hybrid_jit_evidence(self._jit_root)
+        kernel_keys = _hybrid_jit_kernel_keys(self._jit_root)
         semantic = {
-            "jit_kernel_keys": [item["kernel_key"] for item in local_artifacts],
+            "jit_kernel_keys": kernel_keys,
             "realized_config": dict(self._realized_config),
         }
-        # NVCC may embed each rank's timestamped source basename in its ELF, so raw .so hashes are
-        # diagnostics rather than a cross-rank identity. Stable kernel keys encode every codegen
-        # input, including HybridEpConfigInstance fields that the Python binding does not expose.
         _require_cross_rank_equal(semantic, "realized config/JIT kernel keys")
-        gathered_artifacts = [None] * dist.get_world_size()
-        dist.all_gather_object(gathered_artifacts, local_artifacts)
-        diagnostics = []
-        for artifact_index, kernel_key in enumerate(semantic["jit_kernel_keys"]):
-            diagnostics.append({
-                "kernel_key": kernel_key,
-                "rank_artifacts": [
-                    {
-                        "bytes": rank_artifacts[artifact_index]["bytes"],
-                        "rank": artifact_rank,
-                        "sha256": rank_artifacts[artifact_index]["sha256"],
-                    }
-                    for artifact_rank, rank_artifacts in enumerate(gathered_artifacts)
-                ],
-            })
         if self._deferred_semantic_snapshot is not None and semantic != self._deferred_semantic_snapshot:
             raise RuntimeError("DeepEP Hybrid config/JIT kernel set changed after measurement")
-        if self._deferred_jit_diagnostics is not None and diagnostics != self._deferred_jit_diagnostics:
-            raise RuntimeError("DeepEP Hybrid rank-local JIT artifacts changed after measurement")
         self._deferred_semantic_snapshot = semantic
-        self._deferred_jit_diagnostics = diagnostics
         self.backend_provenance.update(semantic)
-        self.backend_provenance["jit_shared_objects"] = diagnostics
 
     def inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)

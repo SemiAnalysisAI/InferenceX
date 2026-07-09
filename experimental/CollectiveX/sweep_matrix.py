@@ -39,8 +39,8 @@ V1_SUITE_CONTRACTS = {
     "ep-core": {
         "mode": "normal",
         "coordinates": {
-            ("normal", "decode", "uniform", False),
-            ("normal", "prefill", "uniform", False),
+            ("normal", "decode", "uniform"),
+            ("normal", "prefill", "uniform"),
         },
         "ladders": {
             "decode": tuple(ep_harness.DECODE_LADDER),
@@ -49,14 +49,14 @@ V1_SUITE_CONTRACTS = {
     },
     "ep-low-latency": {
         "mode": "low-latency",
-        "backends": {"deepep", "uccl"},
-        "coordinates": {("low-latency", "decode", "uniform", False)},
+        "backends": {"deepep"},
+        "coordinates": {("low-latency", "decode", "uniform")},
         "ladders": {"decode": tuple(ep_harness.DECODE_LADDER)},
     },
 }
 IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9.-]*")
 SUITE_FIELDS = {
-    "backends", "ep_degrees", "eplb", "mode", "phases", "platforms",
+    "backends", "ep_degrees", "mode", "phases", "platforms",
     "routings", "token_points", "token_points_decode", "token_points_prefill",
     "workloads",
 }
@@ -212,9 +212,6 @@ def validate_config_documents(
         )
         phases = _list(suite["phases"], f"suite {name}.phases", str, {"decode", "prefill"})
         routings = _list(suite["routings"], f"suite {name}.routings", str, {"uniform"})
-        eplb = _list(suite.get("eplb", [False]), f"suite {name}.eplb", bool)
-        if True in eplb:
-            raise SystemExit(f"suite {name}: EPLB is unavailable for v1 uniform routing")
         degrees = _list(suite["ep_degrees"], f"suite {name}.ep_degrees", int)
         if degrees != [8, 16]:
             raise SystemExit(f"suite {name}.ep_degrees must be exactly [8, 16]")
@@ -231,8 +228,8 @@ def validate_config_documents(
         for phase in phases:
             _ladder(suite, phase)
         coordinates = {
-            (mode, phase, routing, enabled)
-            for phase, routing, enabled in itertools.product(phases, routings, eplb)
+            (mode, phase, routing)
+            for phase, routing in itertools.product(phases, routings)
         }
         if coordinates != contract["coordinates"] or any(
             tuple(map(int, _ladder(suite, phase).split())) != contract["ladders"][phase]
@@ -270,7 +267,7 @@ def _v1_requested_ladder(case: dict[str, Any]) -> str:
     """Bind extracted controls to the frozen v1 suite and workload catalog."""
     suite = V1_SUITE_CONTRACTS.get(case.get("suite"))
     coordinate = (
-        case.get("mode"), case.get("phase"), case.get("routing"), case.get("eplb")
+        case.get("mode"), case.get("phase"), case.get("routing")
     )
     if (
         suite is None
@@ -289,7 +286,7 @@ def _expected_disposition(
     requested_ladder = _v1_requested_ladder(case)
     disposition, detail = cap.resolve_disposition(
         sku, case["backend"], ep=case["ep"], nodes=case["nodes"],
-        routing=case["routing"], eplb=case["eplb"], mode=case["mode"],
+        routing=case["routing"], mode=case["mode"],
     )
     if disposition == "supported":
         if case["ladder"] != requested_ladder:
@@ -403,7 +400,6 @@ def resolve_matrix(
         mode = suite["mode"]
         phases = suite["phases"]
         routings = suite["routings"]
-        eplb_values = suite.get("eplb", [False])
         suite_backends = set(suite.get("backends", cap.SWEEP_BACKENDS))
         suite_targets = [target for target in targets if target in suite_backends]
         if not suite_targets:
@@ -414,8 +410,8 @@ def resolve_matrix(
             if platform_name in excluded:
                 continue
             ep_degrees = suite["ep_degrees"]
-            for workload, ep, phase, routing, eplb, target in itertools.product(
-                suite["workloads"], ep_degrees, phases, routings, eplb_values,
+            for workload, ep, phase, routing, target in itertools.product(
+                suite["workloads"], ep_degrees, phases, routings,
                 suite_targets,
             ):
                 if selected_eps and ep not in selected_eps:
@@ -432,7 +428,6 @@ def resolve_matrix(
                     ep=ep,
                     nodes=nodes,
                     routing=routing,
-                    eplb=bool(eplb),
                     mode=mode,
                 )
                 hidden, topk, experts = _dims(workloads, workload)
@@ -450,7 +445,6 @@ def resolve_matrix(
                         "routing": routing,
                         "phase": phase,
                         "ep": ep,
-                        "eplb": eplb,
                         "hidden": hidden,
                         "topk": topk,
                         "experts": experts,
@@ -622,7 +616,7 @@ def validate_shard_control(
     seen: set[str] = set()
     required = {
         "case_id", "suite", "workload", "backend", "routing", "mode", "phase", "ep",
-        "eplb", "hidden", "topk", "experts", "samples_per_point", "warmup_semantics",
+        "hidden", "topk", "experts", "samples_per_point", "warmup_semantics",
         "ladder", "timing", "canonical",
     } | set(TOPOLOGY_FIELDS)
     for index, case in enumerate(cases):
@@ -679,8 +673,6 @@ def validate_shard_control(
             raise MatrixError(f"case {index} has invalid phase")
         if case["routing"] != "uniform":
             raise MatrixError(f"case {index} has invalid routing")
-        if not isinstance(case["eplb"], bool) or case["eplb"]:
-            raise MatrixError(f"case {index} has invalid EPLB setting")
         if not isinstance(case["canonical"], bool) or not case["canonical"]:
             raise MatrixError(f"case {index} must use a canonical workload")
         for field in ("ep", "nodes", "gpus_per_node", "hidden", "topk", "experts",

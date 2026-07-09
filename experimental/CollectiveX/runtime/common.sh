@@ -13,7 +13,6 @@ CX_DEEPEP_V2_FMT_COMMIT="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa" # pragma: all
 # Consumed by run_in_container.sh after this helper is sourced.
 # shellcheck disable=SC2034
 CX_DEEPEP_V2_NCCL_CHECK_COMMIT="93d0564188f7a0a6288c6e316484861b0efa042e" # pragma: allowlist secret
-CX_DEEPEP_V2_INIT_SHA256="f090bbacc38c7d5dba29f07fd38a918eb820b6adac6f76903fe56273060e4870"
 CX_DEEPEP_HYBRID_COMMIT="e0a5b1d9848ab3e7b4a67842bf06f067bfac67f8" # pragma: allowlist secret
 CX_DEEPEP_HYBRID_TREE="d77aeab7f1bb52b615666fe178d26ced41fae08e" # pragma: allowlist secret
 CX_DEEPEP_HYBRID_NCCL_COMMIT="1e0c869c39bb33f1034cb9920bd2a8a8406f04a3" # pragma: allowlist secret
@@ -27,7 +26,7 @@ cx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 cx_set_failure_stage() {
   local stage="$1"
   case "$stage" in
-    setup|repository-stage|registry-verification|scheduler-allocation|container-import) ;;
+    setup|repository-stage|scheduler-allocation|container-import) ;;
     container-hash|container-launch|backend-setup|execution|artifact-collection) ;;
     *) cx_die "invalid launcher failure stage" ;;
   esac
@@ -172,16 +171,12 @@ cx_job_root_is_safe() {
 cx_load_operator_config() {
   [ -n "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" ] \
     && [ "$COLLECTIVEX_OPERATOR_CONFIG_LOADED" = "$$" ] && return 0
-  local config_path generated=0 parsed_path config_log key value
-  local audit_salt_override validation_code
-  audit_salt_override="${COLLECTIVEX_OPERATOR_AUDIT_SALT:-}"
-  unset COLLECTIVEX_OPERATOR_AUDIT_SALT
+  local config_path generated=0 parsed_path config_log key value validation_code
   unset CX_PARTITION CX_ACCOUNT CX_QOS CX_SQUASH_DIR CX_STAGE_DIR CX_ENROOT_CACHE_PATH
   unset ENROOT_CACHE_PATH
   unset CX_EXCLUDE_NODES CX_NODELIST CX_LOCK_DIR CX_MASTER_PORT
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
   unset CX_RDMA_TRAFFIC_CLASS
-  unset CX_AUDIT_SALT
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ -n "${COLLECTIVEX_OPERATOR_CONFIG_CONTENT:-}" ]; then
@@ -220,7 +215,6 @@ cx_load_operator_config() {
   }
   config_log="$(cx_private_log_path operator-config)"
   if ! python3 - "$config_path" "${CX_RUNNER:-${CX_SHARD_SKU:-${CX_PUBLIC_RUNNER:-}}}" \
-      "${COLLECTIVEX_CANONICAL_GHA:-0}" "$audit_salt_override" \
       > "$parsed_path" 2> "$config_log" <<'PY'
 import json
 import os
@@ -282,7 +276,6 @@ PATH = re.compile(r"^/[A-Za-z0-9._/+\-]+$")
 IPV4 = re.compile(r"(?<!\d)(?:\d{1,3}\.){3}\d{1,3}(?!\d)")
 INTERFACES = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}(?:,[A-Za-z][A-Za-z0-9_.-]{0,31})*$")
 RDMA_DEVICES = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?(?:,[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?)*$")
-AUDIT_SALT = re.compile(r"^[0-9a-f]{64}$")
 
 def pairs(items):
     result = {}
@@ -310,8 +303,8 @@ def bounded_integer(value, maximum):
     return result
 
 try:
-    path, runner, audit_required, audit_override = sys.argv[1:]
-    if runner not in RUNNERS or audit_required not in {"0", "1"}:
+    path, runner = sys.argv[1:]
+    if runner not in RUNNERS:
         raise ValueError
     metadata = os.lstat(path)
     if (
@@ -339,25 +332,10 @@ try:
     finally:
         os.close(descriptor)
     if (
-        set(document) not in (
-            {"schema_version", "runners"},
-            {"schema_version", "audit_salt", "runners"},
-        )
+        set(document) != {"schema_version", "runners"}
         or type(document["schema_version"]) is not int
         or document["schema_version"] != 1
     ):
-        raise ValueError
-    audit_salt = document.get("audit_salt")
-    if (
-        (audit_salt is not None and (
-            not isinstance(audit_salt, str) or not AUDIT_SALT.fullmatch(audit_salt)
-        ))
-        or (audit_override and not AUDIT_SALT.fullmatch(audit_override))
-        or (audit_salt is not None and audit_override and audit_salt != audit_override)
-    ):
-        raise ValueError
-    audit_salt = audit_salt or audit_override or None
-    if audit_required == "1" and audit_salt is None:
         raise ValueError
     runners = document["runners"]
     if (
@@ -435,8 +413,6 @@ try:
                         pass
         else:
             raise ValueError
-    if audit_salt is not None:
-        sys.stdout.buffer.write(b"CX_AUDIT_SALT\0" + audit_salt.encode() + b"\0")
     for field, value in selected.items():
         key = FIELDS[field]
         sys.stdout.buffer.write(
@@ -698,7 +674,7 @@ PY
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
 cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_CONTROL_SHA256,COLLECTIVEX_IMAGE,COLLECTIVEX_IMAGE_DIGEST,COLLECTIVEX_IMAGE_DIGEST_VERIFIED,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_EPLB,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_CACHE_SENTINEL_SHA256,CX_BACKEND_SOURCE_ROOT,CX_AUDIT_SALT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,UCCL_SOCKET_IFNAME,UCCL_IB_GID_INDEX,UCCL_IB_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
+  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_IMAGE,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_CACHE_SENTINEL,CX_BACKEND_SOURCE_ROOT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_REMOTE_TRANSPORT,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
@@ -776,14 +752,13 @@ cx_nccl_hca_device_name() {
 
 cx_export_gid_index_for_link_layer() {
   local link_layer="$1" scaleout="$2"
-  unset NVSHMEM_IB_GID_INDEX NCCL_IB_GID_INDEX UCCL_IB_GID_INDEX
+  unset NVSHMEM_IB_GID_INDEX NCCL_IB_GID_INDEX
   [ -n "${CX_IB_GID_INDEX:-}" ] || return 0
   case "$link_layer" in
     roce)
       export NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
       if [ "$scaleout" = 1 ]; then
         export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
-        export UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
       fi
       ;;
     infiniband) ;;
@@ -807,7 +782,7 @@ cx_apply_network_profile() {
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset NVSHMEM_HCA_PE_MAPPING NVSHMEM_REMOTE_TRANSPORT
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
-  unset UCCL_SOCKET_IFNAME UCCL_IB_GID_INDEX UCCL_IB_SL MORI_RDMA_DEVICES
+  unset MORI_RDMA_DEVICES
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
@@ -830,7 +805,6 @@ cx_apply_network_profile() {
     [[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]] \
       || cx_die "invalid private socket interface selector"
     export NCCL_SOCKET_IFNAME="$CX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$CX_SOCKET_IFNAME"
-    export UCCL_SOCKET_IFNAME="$CX_SOCKET_IFNAME"
   fi
   if [ -n "${CX_RDMA_DEVICES:-}" ]; then
     [[ "$CX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
@@ -863,7 +837,7 @@ cx_apply_network_profile() {
       || cx_die "invalid private RDMA service level"
     export NVSHMEM_IB_SL="$CX_RDMA_SERVICE_LEVEL"
     if [ "$scaleout" = 1 ]; then
-      export NCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL" UCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL"
+      export NCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL"
       export EP_OVERRIDE_RDMA_SL="$CX_RDMA_SERVICE_LEVEL"
       export MORI_RDMA_SL="$CX_RDMA_SERVICE_LEVEL" MORI_IO_SL="$CX_RDMA_SERVICE_LEVEL"
     fi
@@ -1129,7 +1103,7 @@ BASH
 # staging/allocation and again in-container so a missing or stale control file
 # cannot silently fall back to a manual single-case run.
 cx_validate_shard_control() {
-  local cx_root="$1" shard="${CX_SHARD_FILE:-}" path expected_sku control_sha256
+  local cx_root="$1" shard="${CX_SHARD_FILE:-}" path expected_sku
   [ -n "$shard" ] || return 0
   expected_sku="${CX_SHARD_SKU:-}"
   [ -n "$expected_sku" ] || cx_die "CX_SHARD_SKU is required with CX_SHARD_FILE"
@@ -1144,10 +1118,6 @@ cx_validate_shard_control() {
     --validate-control "$path" --expect-sku "$expected_sku" \
     --expect-backend "$CX_BENCH" --expect-nodes "$CX_NODES" >/dev/null 2>&1 \
     || cx_die "invalid shard control"
-  control_sha256="$(sha256sum "$path" | awk '{print $1}')"
-  [[ "$control_sha256" =~ ^[0-9a-f]{64}$ ]] \
-    || cx_die "cannot hash shard control"
-  export COLLECTIVEX_CONTROL_SHA256="$control_sha256"
 }
 
 # Load only the case mode needed to choose the allocation/network profile. A
@@ -1188,14 +1158,15 @@ cx_apply_timing_profile() {
   export CX_ITERS="$iters" CX_TRIALS="$trials" CX_WARMUP="$warmup"
 }
 
-# Use an opaque, execution-bound name so a missing grant message can be
-# reconciled without exposing runner or shard details in public logs.
 cx_scheduler_job_name() {
-  local execution_id="${COLLECTIVEX_EXECUTION_ID:-manual-$$}" digest
-  digest="$(printf '%s' "$execution_id" | sha256sum | awk '{print $1}')" \
-    || return 1
-  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
-  printf 'cx-%s' "${digest:0:24}"
+  local execution_id="${COLLECTIVEX_EXECUTION_ID:-manual-$$}" safe
+  safe="$(printf '%s' "$execution_id" | tr -cs 'A-Za-z0-9_.-' '-')" || return 1
+  safe="${safe#-}"; safe="${safe%-}"
+  [ -n "$safe" ] || return 1
+  if [ "${#safe}" -gt 120 ]; then
+    safe="${safe:0:48}-${safe: -71}"
+  fi
+  printf 'cx-%s' "$safe"
 }
 
 # Return 0 after recovering one allocation ID, 2 after three successful empty
@@ -1206,7 +1177,7 @@ cx_reconcile_salloc_jobid() {
   local -a ids=()
   scheduler_user="$(id -un 2>/dev/null)" || return 1
   [[ "$scheduler_user" =~ ^[A-Za-z0-9_.-]+$ \
-    && "$job_name" =~ ^cx-[0-9a-f]{24}$ ]] || return 1
+    && "$job_name" =~ ^cx-[A-Za-z0-9_.-]{1,120}$ ]] || return 1
   for attempt in 1 2 3; do
     ids=()
     if ! queue_output="$(
@@ -1409,10 +1380,8 @@ cx_reconcile_recorded_allocation() {
 # Single multi-arch container for ALL NVIDIA SKUs: tag `v0.5.11-cu130` is an OCI
 # image index covering linux/amd64 (B200) + linux/arm64 (GB200); enroot import
 # pulls the matching arch. (cu130 = CUDA 13, system nccl.h in /usr/include, torch 2.9.x.)
-# Import remains tag-based because Enroot cannot reliably import a digest-qualified
-# Docker Hub reference non-interactively. The registry digest is resolved and checked
-# immediately before import, then recorded as verified provenance.
-CX_IMAGE_MULTIARCH_DIGEST="sha256:061fb71f838e82000a1768c159654d526c2f17ebe751c21e7fc48ca53c8ef975"
+# Import uses the configured tag because Enroot cannot reliably import a
+# digest-qualified Docker Hub reference non-interactively.
 # (v0.5.12-cu130 was rejected: its 62 layers overflow enroot's overlay-based
 # squash creation on these nodes — "failed to mount overlay ... Invalid argument".
 # v0.5.11-cu130 imports cleanly.)
@@ -1422,7 +1391,6 @@ CX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 # AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for all three CDNA
 # SKUs (gfx942 mi300x/mi325x + gfx950 mi355x).
 CX_IMAGE_AMD_MORI_MI325="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
-CX_IMAGE_AMD_MORI_MI325_DIGEST="sha256:ea42375343c2ef8f73b3bdb9e1b7b435556e3ca92aba5e3f74ada29ba217fabc"
 CX_MORI_COMMIT_MI325="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
 cx_default_image() {
   case "$1" in
@@ -1432,68 +1400,19 @@ cx_default_image() {
   esac
 }
 
-cx_resolve_registry_digest() {
-  local image="$1" repository reference token digest registry
-  if [[ "$image" == *@* ]]; then
-    cx_die "digest-qualified image overrides are unsupported; configure a tag and pinned digest"
-  fi
-  registry="${image%%/*}"
-  if [[ "$image" == */* && ( "$registry" == *.* || "$registry" == *:* || "$registry" = localhost ) ]]; then
-    case "$registry" in
-      docker.io|registry-1.docker.io) image="${image#*/}" ;;
-      *) cx_die "only Docker Hub images are supported by the registry verifier" ;;
-    esac
-  fi
-  repository="${image%:*}"
-  reference="${image##*:}"
-  [ "$repository" != "$image" ] || { repository="$image"; reference=latest; }
-  [ -n "$repository" ] && [ -n "$reference" ] \
+cx_select_image() {
+  local image="$1"
+  [[ "$image" =~ ^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] \
     || cx_die "configured image reference is malformed"
-  [[ "$repository" == */* ]] || repository="library/$repository"
-  token="$(curl -fsSLG --connect-timeout 10 --max-time 30 --retry 2 \
-    --retry-delay 1 --retry-all-errors 'https://auth.docker.io/token' \
-    --data-urlencode 'service=registry.docker.io' \
-    --data-urlencode "scope=repository:${repository}:pull" \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')" \
-    || cx_die "cannot authenticate to the image registry"
-  digest="$(curl -fsSI --connect-timeout 10 --max-time 30 --retry 2 \
-    --retry-delay 1 --retry-all-errors \
-    -H "Authorization: Bearer $token" \
-    -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
-    "https://registry-1.docker.io/v2/${repository}/manifests/${reference}" \
-    | tr -d '\r' | awk 'tolower($1)=="docker-content-digest:" {print $2; exit}')" \
-    || cx_die "cannot resolve the configured image digest"
-  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] \
-    || cx_die "registry returned an invalid image digest"
-  printf '%s' "$digest"
-}
-
-cx_verify_registry_image() {
-  local image="$1" expected actual
-  expected="${CX_IMAGE_DIGEST:-$(cx_default_image_digest "$image")}"
-  [[ "$expected" =~ ^sha256:[0-9a-f]{64}$ ]] \
-    || cx_die "a pinned digest is required for the configured image"
-  actual="$(cx_resolve_registry_digest "$image")"
-  [ "$actual" = "$expected" ] \
-    || cx_die "configured image tag no longer matches its pinned digest"
-  export COLLECTIVEX_IMAGE="$image" COLLECTIVEX_IMAGE_DIGEST="$actual"
-  export COLLECTIVEX_IMAGE_DIGEST_VERIFIED=1
-}
-
-cx_default_image_digest() {
-  case "$1" in
-    "$CX_IMAGE_MULTIARCH") printf '%s' "$CX_IMAGE_MULTIARCH_DIGEST" ;;
-    "$CX_IMAGE_AMD_MORI_MI325") printf '%s' "$CX_IMAGE_AMD_MORI_MI325_DIGEST" ;;
-  esac
+  export COLLECTIVEX_IMAGE="$image"
 }
 
 # Create a per-UID cache under validated cluster-local storage. Only the fixed
 # /cx-cache mount enters the container; the operator host path does not.
 cx_prepare_backend_cache() {
-  local stage_parent="$1" cache info sentinel_sha256
-  unset CX_PREPARED_BACKEND_CACHE CX_BACKEND_CACHE_SENTINEL_SHA256
+  local stage_parent="$1" cache info sentinel
+  unset CX_PREPARED_BACKEND_CACHE CX_BACKEND_CACHE_SENTINEL
   info="$(python3 - "$stage_parent" <<'PY'
-import hashlib
 import os
 import secrets
 import stat
@@ -1598,7 +1517,7 @@ try:
                             or len(payload) != 32
                         ):
                             raise OSError
-                        sentinel_sha256 = hashlib.sha256(payload).hexdigest()
+                        sentinel_value = payload.hex()
                     finally:
                         os.close(sentinel_fd)
                 finally:
@@ -1612,21 +1531,20 @@ try:
         os.close(parent_fd)
 except OSError:
     raise SystemExit(1)
-print(sentinel_sha256, os.path.join(parent, name), end="")
+print(sentinel_value, os.path.join(parent, name), end="")
 PY
 )" || return 1
-  sentinel_sha256="${info%% *}"
+  sentinel="${info%% *}"
   cache="${info#* }"
-  [ "$cache" != "$info" ] && [[ "$sentinel_sha256" =~ ^[0-9a-f]{64}$ ]] \
+  [ "$cache" != "$info" ] && [[ "$sentinel" =~ ^[0-9a-f]{64}$ ]] \
     && [[ "$cache" = /* ]] || return 1
   export CX_PREPARED_BACKEND_CACHE="$cache"
-  export CX_BACKEND_CACHE_SENTINEL_SHA256="$sentinel_sha256"
+  export CX_BACKEND_CACHE_SENTINEL="$sentinel"
 }
 
 cx_verify_backend_cache_mount() {
   python3 - "${CX_BACKEND_CACHE_ROOT:-}" \
-    "${CX_BACKEND_CACHE_SENTINEL_SHA256:-}" <<'PY'
-import hashlib
+    "${CX_BACKEND_CACHE_SENTINEL:-}" <<'PY'
 import os
 import re
 import stat
@@ -1663,7 +1581,7 @@ try:
                 or stat.S_IMODE(sentinel.st_mode) & 0o777 != 0o600
                 or sentinel.st_size != 32
                 or len(payload) != 32
-                or hashlib.sha256(payload).hexdigest() != expected
+                or payload.hex() != expected
             ):
                 raise OSError
         finally:
@@ -1742,8 +1660,7 @@ cx_backend_source_is_valid() {
     2>/dev/null)" || return 1
   if [ "$backend" = deepep-v2 ]; then
     [ "$status" = " M deep_ep/__init__.py" ] \
-      && [ "$(sha256sum "$source/deep_ep/__init__.py" | awk '{print $1}')" = \
-        "$CX_DEEPEP_V2_INIT_SHA256" ] \
+      && [ "$(grep -Fc "if 'libnccl' in line" "$source/deep_ep/__init__.py")" = 1 ] \
       || return 1
   else
     [ -z "$status" ] || return 1
@@ -1760,59 +1677,17 @@ cx_backend_source_is_valid() {
 
 cx_apply_deepep_v2_nccl_check_fix() {
   local source="$1"
-  python3 - "$source/deep_ep/__init__.py" "$CX_DEEPEP_V2_INIT_SHA256" <<'PY'
-import hashlib
+  python3 - "$source/deep_ep/__init__.py" <<'PY'
 from pathlib import Path
 import sys
 
 path = Path(sys.argv[1])
-expected = sys.argv[2]
 old = "for so in [line.strip().split(' ')[-1] for line in f if 'nccl' in line]:"
 new = "for so in [line.strip().split(' ')[-1] for line in f if 'libnccl' in line]:"
 payload = path.read_text(encoding="utf-8")
 if payload.count(old) != 1 or new in payload:
     raise SystemExit(1)
 path.write_text(payload.replace(old, new), encoding="utf-8")
-if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
-    raise SystemExit(1)
-PY
-}
-
-cx_extension_pair_sha256() {
-  python3 - "$1" "$2" "$3" <<'PY'
-import hashlib
-import os
-from pathlib import Path
-import stat
-import sys
-
-root = Path(sys.argv[1])
-digest = hashlib.sha256()
-try:
-    if root.is_symlink() or not root.is_dir():
-        raise OSError
-    for pattern in sys.argv[2:]:
-        matches = list(root.glob(pattern))
-        if len(matches) != 1 or matches[0].is_symlink():
-            raise OSError
-        path = matches[0]
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        try:
-            metadata = os.fstat(descriptor)
-            if not stat.S_ISREG(metadata.st_mode):
-                raise OSError
-            file_digest = hashlib.sha256()
-            with os.fdopen(descriptor, "rb", closefd=False) as stream:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    file_digest.update(chunk)
-            digest.update(path.name.encode("utf-8") + b"\0")
-            digest.update(str(metadata.st_size).encode("ascii") + b"\0")
-            digest.update(file_digest.digest())
-        finally:
-            os.close(descriptor)
-except (OSError, UnicodeError):
-    raise SystemExit(1)
-print(digest.hexdigest(), end="")
 PY
 }
 
@@ -1935,7 +1810,6 @@ cx_materialize_backend_source() {
 
 cx_prepare_implicit_stage_base() {
   python3 - "${1:-}" "${2:-}" <<'PY'
-import hashlib
 import os
 from pathlib import Path
 import pwd
@@ -1970,7 +1844,13 @@ try:
     isolation_key = sys.argv[2]
     suffix = ""
     if isolation_key:
-        suffix = "-" + hashlib.sha256(isolation_key.encode("utf-8")).hexdigest()[:16]
+        safe = "".join(character if character.isalnum() or character in "_.-" else "-"
+                       for character in isolation_key).strip("-")
+        if not safe:
+            reject("isolation-key")
+        if len(safe) > 48:
+            safe = safe[:24] + "-" + safe[-23:]
+        suffix = "-" + safe
     current = home / f".inferencex-collectivex-stage{suffix}"
     created = False
     try:
@@ -2014,7 +1894,6 @@ cx_lock_canonical_gha_env() {
   local trusted_socket_ifname="" trusted_rdma_devices=""
   local trusted_ib_gid_index="" trusted_rdma_service_level=""
   local trusted_rdma_traffic_class=""
-  local trusted_audit_salt=""
   [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] || return 0
   [ "${GITHUB_ACTIONS:-}" = true ] \
     || cx_die "canonical CollectiveX execution requires GitHub Actions"
@@ -2036,7 +1915,6 @@ cx_lock_canonical_gha_env() {
     trusted_ib_gid_index="${CX_IB_GID_INDEX:-}"
     trusted_rdma_service_level="${CX_RDMA_SERVICE_LEVEL:-}"
     trusted_rdma_traffic_class="${CX_RDMA_TRAFFIC_CLASS:-}"
-    trusted_audit_salt="${CX_AUDIT_SALT:-}"
   fi
   # The legacy B300 operator row contains a root-owned stage path. B300's
   # compute-visible account home is the canonical source for its private base.
@@ -2046,7 +1924,6 @@ cx_lock_canonical_gha_env() {
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
   unset CX_RDMA_TRAFFIC_CLASS
-  unset CX_AUDIT_SALT
   unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
   unset NCCL_IB_GID_INDEX NCCL_IB_SL
   unset NVSHMEM_DISABLE_IB NVSHMEM_ENABLE_NIC_PE_MAPPING
@@ -2054,13 +1931,13 @@ cx_lock_canonical_gha_env() {
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset NVSHMEM_HCA_PE_MAPPING NVSHMEM_REMOTE_TRANSPORT
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
-  unset UCCL_SOCKET_IFNAME UCCL_IB_GID_INDEX UCCL_IB_SL MORI_RDMA_DEVICES
+  unset MORI_RDMA_DEVICES
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   unset HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE
   unset MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
   unset MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
   unset NCCL_CUMEM_ENABLE NCCL_MNNVL_ENABLE MC_FORCE_MNNVL
-  unset CX_BACKEND_CACHE_ROOT CX_BACKEND_CACHE_SENTINEL_SHA256
+  unset CX_BACKEND_CACHE_ROOT CX_BACKEND_CACHE_SENTINEL
   unset CX_PREPARED_BACKEND_CACHE CX_BACKEND_SOURCE_ROOT
 
   [ -n "${CX_SQUASH_DIR:-}" ] \
@@ -2103,8 +1980,6 @@ cx_lock_canonical_gha_env() {
       "$trusted_stage_dir")" \
       || cx_die "canonical MI300X execution cannot resolve the shared stage directory"
   fi
-  [[ "$trusted_audit_salt" =~ ^[0-9a-f]{64}$ ]] \
-    || cx_die "canonical CollectiveX execution requires a private audit salt"
   if [ "$runner" = b300 ]; then
     CX_STAGE_PARENT_OWNER_OK=1
   fi
@@ -2115,7 +1990,6 @@ cx_lock_canonical_gha_env() {
       [ "$expected_nodes" = 1 ] || [ "$expected_nodes" = 2 ] \
         || cx_die "canonical NVIDIA execution requires one or two nodes"
       CX_IMAGE="$CX_IMAGE_MULTIARCH"
-      CX_IMAGE_DIGEST="$CX_IMAGE_MULTIARCH_DIGEST"
       CX_NCCL_HOME=/usr
       ;;
     gb200|gb300)
@@ -2123,7 +1997,6 @@ cx_lock_canonical_gha_env() {
       [ "$expected_nodes" = 2 ] || [ "$expected_nodes" = 4 ] \
         || cx_die "canonical GB execution requires two or four trays"
       CX_IMAGE="$CX_IMAGE_MULTIARCH"
-      CX_IMAGE_DIGEST="$CX_IMAGE_MULTIARCH_DIGEST"
       CX_NCCL_HOME=/usr
       CX_MASTER_PORT=29551
       ;;
@@ -2135,7 +2008,6 @@ cx_lock_canonical_gha_env() {
       # gfx942 + gfx950); mi355x was migrated off the older 0227 image (sglang
       # 0.5.9), whose MoRI build hung during EpDispatchCombineOp construction.
       CX_IMAGE="$CX_IMAGE_AMD_MORI_MI325"
-      CX_IMAGE_DIGEST="$CX_IMAGE_AMD_MORI_MI325_DIGEST"
       if [ "$expected_nodes" = 2 ]; then
         CX_MORI_KERNEL_TYPE=internode-v1
       else
@@ -2165,8 +2037,7 @@ cx_lock_canonical_gha_env() {
     || export CX_RDMA_SERVICE_LEVEL="$trusted_rdma_service_level"
   [ -z "$trusted_rdma_traffic_class" ] \
     || export CX_RDMA_TRAFFIC_CLASS="$trusted_rdma_traffic_class"
-  CX_AUDIT_SALT="$trusted_audit_salt"
-  export CX_STAGE_DIR CX_AUDIT_SALT
+  export CX_STAGE_DIR
   [ "${CX_NODES:-}" = "$expected_nodes" ] \
     && [ "${CX_GPUS_PER_NODE:-}" = "$expected_gpn" ] \
     || cx_die "canonical CollectiveX placement differs from the shard"
@@ -2175,9 +2046,8 @@ cx_lock_canonical_gha_env() {
   CX_SEED=67
   case "$runner" in mi300x|mi325x|mi355x) CX_RUN_TIMEOUT=1800 ;; *) CX_RUN_TIMEOUT=900 ;; esac
   unset CX_PUBLIC_RUNNER CX_GB_PRODUCT CX_DRYRUN CX_TIMING CX_ALLOW_MNNVL
-  unset CX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE COLLECTIVEX_IMAGE_DIGEST
-  unset COLLECTIVEX_IMAGE_DIGEST_VERIFIED COLLECTIVEX_SQUASH_SHA256
-  export CX_IMAGE CX_IMAGE_DIGEST CX_NGPUS CX_SEED CX_RUN_TIMEOUT
+  unset CX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE COLLECTIVEX_SQUASH_SHA256
+  export CX_IMAGE CX_NGPUS CX_SEED CX_RUN_TIMEOUT
   case "$runner" in
     h100-dgxc|h200-dgxc|b200-dgxc|b300) export CX_NCCL_HOME ;;
     gb200|gb300) export CX_NCCL_HOME CX_MASTER_PORT ;;
@@ -2186,17 +2056,6 @@ cx_lock_canonical_gha_env() {
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;
   esac
-}
-
-cx_reverify_registry_image() {
-  local image="$1" actual
-  [[ "${COLLECTIVEX_IMAGE_DIGEST:-}" =~ ^sha256:[0-9a-f]{64}$ ]] \
-    && [ "${COLLECTIVEX_IMAGE_DIGEST_VERIFIED:-0}" = 1 ] || return 1
-  actual="$(cx_resolve_registry_digest "$image")" || return 1
-  [ "$actual" = "$COLLECTIVEX_IMAGE_DIGEST" ] || {
-    cx_log "ERROR: configured image tag changed during container import"
-    return 1
-  }
 }
 
 cx_export_squash_identity() {
@@ -2209,15 +2068,17 @@ cx_export_squash_identity() {
 }
 
 cx_squash_path() {
-  local squash_dir="$1" image="$2" key platform
-  [[ "${COLLECTIVEX_IMAGE_DIGEST:-}" =~ ^sha256:[0-9a-f]{64}$ ]] \
-    || return 1
+  local squash_dir="$1" image="$2" key platform run_scope
   case "${CX_IMAGE_PLATFORM:-}" in
     linux/amd64) platform="" ;;
     linux/arm64) platform="_linux_arm64" ;;
     *) return 1 ;;
   esac
-  key="${CX_SQUASH_FORMAT_VERSION}${platform}_${COLLECTIVEX_IMAGE_DIGEST#sha256:}_$(
+  run_scope="${GITHUB_RUN_ID:-${COLLECTIVEX_EXECUTION_ID:-manual}}-${GITHUB_RUN_ATTEMPT:-1}"
+  run_scope="$(printf '%s' "$run_scope" | tr -cs 'A-Za-z0-9_.-' '-')" || return 1
+  run_scope="${run_scope#-}"; run_scope="${run_scope%-}"
+  [ -n "$run_scope" ] || return 1
+  key="${CX_SQUASH_FORMAT_VERSION}${platform}_${run_scope}_$(
     printf '%s' "$image" | sed 's#[/:@#]#_#g'
   )"
   printf '%s' "$squash_dir/${key}.sqsh"
@@ -2278,12 +2139,6 @@ cx_ensure_squash() {
     fi
     unsquashfs -l "$sq" >> "$log" 2>&1 \
       || { cx_fail_stage container-import "$log"; return 1; }
-  fi
-  if ! cx_reverify_registry_image "$image" >> "$log" 2>&1; then
-    flock -u "$lock_fd" >/dev/null 2>&1 || true
-    exec {lock_fd}>&-
-    cx_fail_stage container-import "$log"
-    return 1
   fi
   flock -u "$lock_fd"
   exec {lock_fd}>&-
@@ -2352,10 +2207,6 @@ else
 fi
 BASH
   then
-    cx_fail_stage container-import "$log"
-    return 1
-  fi
-  if ! cx_reverify_registry_image "$image" >> "$log" 2>&1; then
     cx_fail_stage container-import "$log"
     return 1
   fi
@@ -2746,7 +2597,7 @@ PY
 # shellcheck disable=SC2153
 cx_run_distributed_shard() {
   local build_log build_rc cases_file expected_cases ci=0 failed_cases=0
-  local ph mode routing eplb hidden topk experts ladder suite workload
+  local ph mode routing hidden topk experts ladder suite workload
   local canonical case_id ep timing case_iters case_trials case_warmup case_stem
   local scope scale_up_transport scale_out_transport transport topology_class nodes gpn domain
   local workload_dir workload_ladder workload_log stage_rc attempt_tag out
@@ -2813,7 +2664,7 @@ for case in cases:
     get = lambda key, default="": str(case.get(key) or default)
     fields = (
         get("phase", "decode"), get("mode", "normal"), get("routing", "uniform"),
-        "1" if case.get("eplb") else "", get("hidden", "7168"),
+        get("hidden", "7168"),
         get("topk", "8"), get("experts", "256"), get("ladder"),
         get("suite"), get("workload"),
         "1" if case.get("canonical") else "", get("case_id"), get("ep"),
@@ -2831,7 +2682,7 @@ PY
     local phases="${CX_PHASE:-decode}" phase
     [ "$phases" = both ] && phases="decode prefill"
     cx_require_record_safe "$phases" "${CX_MODE:-normal}" "${CX_ROUTING:-uniform}" \
-      "${CX_EPLB:-}" "${CX_HIDDEN:-7168}" "${CX_TOPK:-8}" "${CX_EXPERTS:-256}" \
+      "${CX_HIDDEN:-7168}" "${CX_TOPK:-8}" "${CX_EXPERTS:-256}" \
       "${CX_TOKENS_LADDER:-}" "${CX_SUITE:-}" "${CX_WORKLOAD_NAME:-}" \
       "${CX_CANONICAL:-}" "${CX_CASE_ID:-}" \
       "${CX_ITERS:-8}" "${CX_TRIALS:-64}" "${CX_WARMUP:-32}" \
@@ -2839,14 +2690,14 @@ PY
       "${CX_SCALE_UP_TRANSPORT:-unknown}" "${CX_SCALE_OUT_TRANSPORT:-}" \
       "${CX_TRANSPORT:-unknown}" "${CX_TOPO:-manual}"
     for phase in $phases; do
-      (IFS='|'; printf '%s\n' "$phase|${CX_MODE:-normal}|${CX_ROUTING:-uniform}|${CX_EPLB:-}|${CX_HIDDEN:-7168}|${CX_TOPK:-8}|${CX_EXPERTS:-256}|${CX_TOKENS_LADDER:-}|${CX_SUITE:-}|${CX_WORKLOAD_NAME:-}|${CX_CANONICAL:-}|${CX_CASE_ID:-}|$NGPUS|${CX_ITERS:-8}:${CX_TRIALS:-64}:${CX_WARMUP:-32}|$NODES|$GPN|$SCALE_UP_DOMAIN|${CX_SCOPE:-scale-up}|${CX_SCALE_UP_TRANSPORT:-unknown}|${CX_SCALE_OUT_TRANSPORT:-}|${CX_TRANSPORT:-unknown}|${CX_TOPO:-manual}")
+      (IFS='|'; printf '%s\n' "$phase|${CX_MODE:-normal}|${CX_ROUTING:-uniform}|${CX_HIDDEN:-7168}|${CX_TOPK:-8}|${CX_EXPERTS:-256}|${CX_TOKENS_LADDER:-}|${CX_SUITE:-}|${CX_WORKLOAD_NAME:-}|${CX_CANONICAL:-}|${CX_CASE_ID:-}|$NGPUS|${CX_ITERS:-8}:${CX_TRIALS:-64}:${CX_WARMUP:-32}|$NODES|$GPN|$SCALE_UP_DOMAIN|${CX_SCOPE:-scale-up}|${CX_SCALE_UP_TRANSPORT:-unknown}|${CX_SCALE_OUT_TRANSPORT:-}|${CX_TRANSPORT:-unknown}|${CX_TOPO:-manual}")
     done > "$cases_file"
   fi
   expected_cases="$(wc -l < "$cases_file" | tr -d ' ')"
   [ "$expected_cases" -gt 0 ] \
     || { rm -f "$cases_file"; cx_die "distributed case list is empty"; }
 
-  while IFS='|' read -r ph mode routing eplb hidden topk experts ladder suite workload \
+  while IFS='|' read -r ph mode routing hidden topk experts ladder suite workload \
       canonical case_id ep timing nodes gpn domain scope scale_up_transport \
       scale_out_transport transport topology_class; do
     [ -n "$ph" ] || continue
@@ -2860,7 +2711,7 @@ PY
     export CX_MODE="$mode" CX_PHASE="$ph" CX_CASE_ID="$case_id" CX_SUITE="$suite"
     export CX_WORKLOAD_NAME="$workload"
     export CX_CANONICAL="$canonical" CX_EP="$ep"
-    export CX_ROUTING="$routing" CX_EPLB="$eplb" CX_TOKENS_LADDER="$ladder"
+    export CX_ROUTING="$routing" CX_TOKENS_LADDER="$ladder"
     export CX_HIDDEN="$hidden" CX_TOPK="$topk" CX_EXPERTS="$experts"
     export CX_NODES="$nodes" CX_GPUS_PER_NODE="$gpn" CX_SCALE_UP_DOMAIN="$domain"
     export CX_SCOPE="$scope" CX_SCALE_UP_TRANSPORT="$scale_up_transport"
@@ -2912,7 +2763,6 @@ PY
       --transport "$transport" --case-id "$case_id" --suite "$suite"
       --workload-name "$workload"
       --qualification-index "${CX_QUALIFICATION_INDEX:-1}" --version "${CX_VERSION:-1}")
-    cx_bool_enabled "$eplb" && ep_args+=(--eplb)
     [ -z "$workload_dir" ] || ep_args+=(--workload-dir "$workload_dir")
     export CX_ATTEMPT_ID=1
     attempt_tag=a01

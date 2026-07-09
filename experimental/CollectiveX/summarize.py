@@ -28,13 +28,12 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
     return documents
 
 
-def _identity(document: dict) -> tuple[str, str, str, str, bool, int]:
+def _identity(document: dict) -> tuple[str, str, str, str, int]:
     case = document["case"]
     routing = case["shape"]["routing"]
-    eplb = case["eplb"]["enabled"]
     sku = document["identity"]["case_factors"]["sku"]
     return (
-        sku, case["suite"], routing, case["phase"], eplb,
+        sku, case["suite"], routing, case["phase"],
         case.get("ep_size", case.get("ep", 0)),
     )
 
@@ -55,12 +54,12 @@ def render(documents: list[dict], markdown: bool) -> str:
             "|--:|---|---|---|---|---|--:|---|--:|--:|--:|",
         ]
         for document in documents:
-            sku, suite, routing, phase, eplb, ep = _identity(document)
+            sku, suite, routing, phase, ep = _identity(document)
             backend = document["case"]["backend"]
             token, p50, p99 = _headline(document)
             lines.append(
                 f"| {document['version']} | {sku} | `{backend}` | {suite} | {phase} | "
-                f"{routing}{'+eplb' if eplb else ''} | {ep} | "
+                f"{routing} | {ep} | "
                 f"{document['outcome']['status']} | {token} | {p50} | {p99} |"
             )
         if not documents:
@@ -68,12 +67,12 @@ def render(documents: list[dict], markdown: bool) -> str:
         return "\n".join(lines)
     lines = ["CollectiveX EP results", "======================"]
     for document in documents:
-        sku, suite, routing, phase, eplb, ep = _identity(document)
+        sku, suite, routing, phase, ep = _identity(document)
         backend = document["case"]["backend"]
         token, _, p99 = _headline(document)
         lines.append(
             f"  v{document['version']} {sku:<10} {backend:<16} {suite:<13} {phase:<7} "
-            f"{routing}{'+eplb' if eplb else ''} ep{ep} "
+            f"{routing} ep{ep} "
             f"{document['outcome']['status']} T={token} roundtrip_p99_us={p99}"
         )
     return "\n".join(lines)

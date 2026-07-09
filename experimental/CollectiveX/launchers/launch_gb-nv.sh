@@ -44,7 +44,7 @@ export CX_NODES="$NODES" CX_GPUS_PER_NODE="$GPN" CX_SCALE_UP_DOMAIN="$SCALE_UP_D
 export CX_NGPUS="$NGPUS"
 unset CX_SCALE_OUT_TRANSPORT
 case "$CX_BENCH" in
-  deepep|deepep-v2|deepep-hybrid|nccl-ep) ;;
+  deepep|deepep-v2|deepep-hybrid) ;;
   *) cx_die "unsupported $PRODUCT EP backend: $CX_BENCH" ;;
 esac
 cx_validate_shard_control "$CX_DIR"
@@ -58,8 +58,8 @@ cx_apply_network_profile "$NODES" "$CX_TRANSPORT"
 
 cx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$CX_BENCH"
 [ "${CX_DRYRUN:-0}" = 1 ] && { cx_log "DRYRUN"; exit 0; }
-cx_set_failure_stage registry-verification
-cx_verify_registry_image "$IMAGE"
+cx_set_failure_stage setup
+cx_select_image "$IMAGE"
 cx_set_failure_stage repository-stage
 MOUNT_SRC="$(cx_stage_path "$REPO_ROOT" "$CX_STAGE_DIR")"
 cx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
@@ -94,7 +94,7 @@ cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
 # Keep the loader policy here because it is platform/container specific and
 # security tests evaluate this literal independently.
 SOURCE_BACKEND_ENV='case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac; env_file="/ix/experimental/CollectiveX/.cx_backend/env/node-${SLURM_NODEID}.sh"; env_root="${env_file%/*}"; [ -d "$env_root" ] && [ ! -L "$env_root" ] || exit 66; case "$(stat -c "%a" "$env_root")" in 700|[1-7]700) ;; *) exit 66;; esac; [ -f "$env_file" ] && [ -r "$env_file" ] && [ ! -L "$env_file" ] && [ "$(stat -c "%u:%a" "$env_file")" = "$(stat -c "%u" "$env_root"):600" ] || exit 66; . "$env_file" || exit 66'
-BACKEND_PROBE="$SOURCE_BACKEND_ENV"'; case "$CX_BENCH" in deepep) python3 -c "from deep_ep import Buffer";; deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''ElasticBuffer'\'')";; deepep-hybrid) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''HybridEPBuffer'\'')";; nccl-ep) python3 -c "import torch";; esac'
+BACKEND_PROBE="$SOURCE_BACKEND_ENV"'; case "$CX_BENCH" in deepep) python3 -c "from deep_ep import Buffer";; deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''ElasticBuffer'\'')";; deepep-hybrid) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''HybridEPBuffer'\'')";; esac'
 WRAP="${SOURCE_BACKEND_ENV}"$'\n'"$(cx_slurm_rank_wrapper)"
 CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
 [ "$CX_BENCH" != deepep ] || export CX_ALLOW_MNNVL=1

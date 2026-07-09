@@ -19,15 +19,12 @@ Always publish the realized fan-out so the workload is never misread again
 """
 from __future__ import annotations
 
-import hashlib
-
 import torch
 
 ACTIVATION_GENERATOR = "collectivex-activation-counter-v4"
 SOURCE_ID_BITS = 32
-SOURCE_CHECKSUM_BITS = 16
-SOURCE_ID_COLUMNS = SOURCE_ID_BITS + SOURCE_CHECKSUM_BITS
-SOURCE_ID_CONTRACT = "bounded-sign-bit-source-v1"
+SOURCE_ID_COLUMNS = SOURCE_ID_BITS
+SOURCE_ID_CONTRACT = "bounded-sign-bit-source-v2"
 
 
 def build_global_routing(
@@ -80,15 +77,9 @@ def activations_for_source_ids(source, hidden: int, seed: int, dtype=torch.bfloa
         raise ValueError("source token ID is outside the bounded identity contract")
     source_columns = torch.arange(SOURCE_ID_BITS, device=source.device, dtype=torch.int64)
     source_bits = ((source[:, None] >> source_columns[None, :]) & 1) * 2 - 1
-    checksum = (source * 0x9E37 + int(seed) * 0xA24B) & ((1 << SOURCE_CHECKSUM_BITS) - 1)
-    checksum_columns = torch.arange(
-        SOURCE_CHECKSUM_BITS, device=source.device, dtype=torch.int64
-    )
-    checksum_bits = ((checksum[:, None] >> checksum_columns[None, :]) & 1) * 2 - 1
     # Magnitude one sits inside the ordinary [-2, 2] activation range, so the identity cannot set
     # an FP8 block scale. Decode depends only on sign and remains stable after dequantization.
     output[:, :SOURCE_ID_BITS] = source_bits.to(dtype)
-    output[:, SOURCE_ID_BITS:SOURCE_ID_COLUMNS] = checksum_bits.to(dtype)
     return output
 
 
@@ -102,17 +93,6 @@ def decode_source_ids(payload, seed: int):
     bits = prefix >= 0
     powers = 1 << torch.arange(SOURCE_ID_BITS, device=payload.device, dtype=torch.int64)
     source = (bits[:, :SOURCE_ID_BITS].to(torch.int64) * powers).sum(dim=1)
-    checksum_powers = 1 << torch.arange(
-        SOURCE_CHECKSUM_BITS, device=payload.device, dtype=torch.int64
-    )
-    observed_checksum = (
-        bits[:, SOURCE_ID_BITS:SOURCE_ID_COLUMNS].to(torch.int64) * checksum_powers
-    ).sum(dim=1)
-    checksum = (source * 0x9E37 + int(seed) * 0xA24B) & (
-        (1 << SOURCE_CHECKSUM_BITS) - 1
-    )
-    if not torch.equal(checksum, observed_checksum):
-        raise ValueError("received source-token checksum differs")
     return source
 
 
@@ -147,7 +127,7 @@ def routing_locality(idx, experts_per_rank: int, ep_size: int, tokens_per_rank: 
 def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dict:
     """Realized routing properties for the GLOBAL trace — published per point so the
     fan-out / load can never be silently misread. idx is the global [gt, topk] tensor;
-    weights the matching [gt, topk] gate weights (hashed too for workload identity).
+    weights the matching [gt, topk] gate weights.
     """
     ep = max(1, experts // max(1, experts_per_rank))
     ranks = (idx // experts_per_rank)                       # [gt, topk] destination rank per assignment
@@ -176,16 +156,6 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
     # Empty experts capture compute skew; empty destination ranks capture network skew.
     empty_expert_count = int((load == 0).sum())
     empty_rank_count = int((payload_load == 0).sum())
-    # SHA-256 workload identity over both topk_idx and gate weights: a chart
-    # point's routing is provably identical across SKUs only if both hashes match.
-    idx_bytes = idx.to(torch.int32).cpu().numpy().tobytes()
-    idx_hash = hashlib.sha256(idx_bytes).hexdigest()
-    if weights is not None:
-        w_bytes = weights.to(torch.float32).cpu().numpy().tobytes()
-        w_hash = hashlib.sha256(w_bytes).hexdigest()
-        routing_hash = hashlib.sha256(idx_bytes + w_bytes).hexdigest()
-    else:
-        w_hash, routing_hash = None, idx_hash
     return {
         "fanout_mean": float(fanout.float().mean()),
         "fanout_min": int(fanout.min()), "fanout_max": int(fanout.max()),
@@ -198,7 +168,6 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
         "expert_assignment_rank_cv": assignment_rank_cv,
         "payload_rank_cv": payload_rank_cv, "hotspot_ratio": hotspot_ratio,
         "empty_expert_count": empty_expert_count, "empty_rank_count": empty_rank_count,
-        "routing_hash": routing_hash, "idx_hash": idx_hash, "weights_hash": w_hash,
     }
 
 

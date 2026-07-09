@@ -52,7 +52,7 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 [ "$NGPUS" = "$EXPECTED_WORLD" ] \
   || cx_die "$RUNNER world size must equal nodes x GPUs per node"
 case "$CX_BENCH" in
-  deepep|deepep-v2|deepep-hybrid|uccl|nccl-ep) ;;
+  deepep|deepep-v2|deepep-hybrid) ;;
   *) cx_die "unsupported $RUNNER EP backend: $CX_BENCH" ;;
 esac
 
@@ -76,8 +76,8 @@ cx_require_vars CX_PARTITION CX_SQUASH_DIR
 
 cx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$CX_BENCH"
 [ "${CX_DRYRUN:-0}" != 1 ] || { cx_log "CX_DRYRUN=1 - not allocating"; exit 0; }
-cx_set_failure_stage registry-verification
-cx_verify_registry_image "$IMAGE"
+cx_set_failure_stage setup
+cx_select_image "$IMAGE"
 SQUASH_FILE=""
 cx_set_failure_stage repository-stage
 MOUNT_SRC="$(cx_stage_path "$REPO_ROOT" "${CX_STAGE_DIR:-}")"
@@ -181,7 +181,7 @@ if [ "$NODES" = 1 ]; then
     >"$runtime_log" 2>&1 || run_rc=$?
 else
   SOURCE_BACKEND_ENV='case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac; env_file="/ix/experimental/CollectiveX/.cx_backend/env/node-${SLURM_NODEID}.sh"; env_root="${env_file%/*}"; [ -d "$env_root" ] && [ ! -L "$env_root" ] || exit 66; case "$(stat -c "%a" "$env_root")" in 700|[1-7]700) ;; *) exit 66;; esac; [ -f "$env_file" ] && [ -r "$env_file" ] && [ ! -L "$env_file" ] && [ "$(stat -c "%u:%a" "$env_file")" = "$(stat -c "%u" "$env_root"):600" ] || exit 66; . "$env_file" || exit 66'
-  BACKEND_PROBE="$SOURCE_BACKEND_ENV"'; case "$CX_BENCH" in deepep) python3 -c "from deep_ep import Buffer";; deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''ElasticBuffer'\'')";; deepep-hybrid) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''HybridEPBuffer'\'')";; uccl) python3 -c "import torch; from uccl_deepep import Buffer";; nccl-ep) python3 -c "import torch";; esac'
+  BACKEND_PROBE="$SOURCE_BACKEND_ENV"'; case "$CX_BENCH" in deepep) python3 -c "from deep_ep import Buffer";; deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''ElasticBuffer'\'')";; deepep-hybrid) python3 -c "import deep_ep; assert hasattr(deep_ep, '\''HybridEPBuffer'\'')";; esac'
   WRAP="${SOURCE_BACKEND_ENV}"$'\n'"$(cx_slurm_rank_wrapper)"
   CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")
   run_rc=0

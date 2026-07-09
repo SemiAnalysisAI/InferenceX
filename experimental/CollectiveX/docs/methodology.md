@@ -25,7 +25,7 @@ fixed BF16 on every backend; precision is not a swept dimension. Each case expli
 `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
 
 - `ep-core`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
-- `ep-low-latency`: DeepEP V1 / UCCL native low-latency APIs; uniform decode T=1..128 powers of
+- `ep-low-latency`: DeepEP V1 native low-latency APIs; uniform decode T=1..128 powers of
   two; other backends are recorded as unsupported rather than fabricating a low-latency path.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
@@ -59,9 +59,8 @@ by the emitted artifact.
 
 One canonical workload is generated over the global token batch and sliced by source rank. Expert
 indices and gate weights are serialized. Activations use a versioned integer counter formula whose
-BF16 values are exact across runtimes; its full identity is bound into the manifest. The manifest
-also binds shape/EP coordinates and oracle version. SHA-256 covers canonical bytes and parameters;
-library RNG regeneration is not proof of identity.
+BF16 values are exact across runtimes. The manifest records shape, EP, generator, and oracle
+coordinates, and loading regenerates the expected routing arrays for direct equality validation.
 
 Routing traffic distinguishes:
 
@@ -74,7 +73,7 @@ Adapters may not generate routing or reinterpret one quantity as the other.
 
 Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
 combine returns activation payload through an unweighted rank-sum path. Low-latency mode uses
-`expert-packed-weighted-combine-v1`: native DeepEP V1 / UCCL APIs dispatch token-expert assignments
+`expert-packed-weighted-combine-v1`: native DeepEP V1 APIs dispatch token-expert assignments
 and perform gate-weighted combine. Expert-output staging is outside isolated combine timing and
 inside the measured paired roundtrip. Each component declares availability, origin, start/end states,
 stage scope, and sample count. A paired-only API reports null isolated components. `isolated_sum` is
@@ -93,15 +92,7 @@ Measured roundtrip p99 is the headline latency. Retries remain separate attempts
 does not erase earlier failures. Decode and prefill identify the serving regime represented by one
 MoE-layer collective; they do not change the timed primitive at an otherwise identical shape.
 
-The NCCL/RCCL reference is an end-to-end Python adapter, not a bare fabric primitive. Its dispatch
-boundary includes layout, count exchange, a device-to-host split synchronization, fresh receive
-allocation, and four payload/metadata all-to-all calls; activation-only combine adds one all-to-all
-plus scatter/reduction. Its p99 therefore measures the complete reference-adapter boundary and can be
-host/scheduler-sensitive. It is useful for portable system controls but must not be labeled fabric,
-link, bus, or single-collective latency.
-
-The versioned conditioning and EPLB planner contracts (reference trace, redundant count, and
-placement/remap version) are part of scheduled and evidence identity.
+The versioned conditioning contract is part of scheduled and evidence identity.
 
 Logical payload bandwidth is:
 
@@ -134,8 +125,9 @@ expert-packed source/expert assignment, native gate weights, and gate-weighted c
 contracts compare against the reference activation. The combine gate is `rtol=0.05, atol=0.02` for
 the BF16 communication path. This threshold is a correctness gate, not an estimate of transport
 error. Any failed rank or point makes the case ineligible in the result it writes.
-Pre/post dispatch evidence is hashed in canonical source-token order. Native receive slots may be
-assigned nondeterministically, so physical receive order is not treated as a correctness property.
+Pre/post dispatch behavior is checked against canonical source-token metadata and expected output.
+Native receive slots may be assigned nondeterministically, so physical receive order is not treated
+as a correctness property.
 
 ## Result Artifact
 
@@ -153,29 +145,26 @@ unknown fields, and contains:
 - `outcome`: `success`, `failed`, `invalid`, `unsupported`, with `diagnostic` and reasons.
 
 Exact per-point samples are emitted as detached `collectivex.samples.v1` documents referenced by path
-and SHA-256, so the raw document stays compact. Each dispatched case writes its raw result document;
+and byte count, so the raw document stays compact. Each dispatched case writes its raw result document;
 unsupported or never-run cells produce no synthetic record. Private
 environment details (hosts, addresses, device selectors, credentials, workspace paths) remain in
 local mode-0600 logs and ignored operator notes and never enter an emitted artifact.
 
 ## Identity
 
-Identifiers are readable factor strings with a short digest suffix, not opaque hashes:
+Identifiers are readable factor strings:
 
-- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}[-eplb]` followed by a
-  12-hex digest of the full case factors (SKU, profile, and case), so the body is human-readable
-  while the suffix makes the ID collision-proof and a tamper-evident join key;
+- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}` with the remaining
+  case factors appended in stable key order;
 - `attempt_id`: `case_id` plus `-a{ordinal:02d}`; and
 - `point_id`: `case_id` plus `-t{tokens_per_rank}`.
 
-Content SHA-256 is retained only where it identifies separately-stored bytes or executable code: the
-workload manifest (`workload_id` = `cxwork-v1-{sha256}`), detached sample files (`sample_sha256`),
-source commits, container images and squash layers, and deferred/JIT-generated source. DeepEP V2
-uses a fixed NVCC random seed and binds final cache keys plus generated-source and executable-SASS
-hashes; raw CUBIN bytes remain private diagnostics and are stripped before they enter an artifact.
-Hybrid binds its realized auto-tuned config and complete kernel-key set while retaining rank-local
-shared-object hashes as private diagnostics. Locally built extension hashes are diagnostic; their
-pinned source trees, build recipe, runtime, and dependencies remain bound to the case factors.
+Canonical workload files use readable routing and shape coordinates and are validated against the
+deterministic generator. Detached sample documents are referenced by path and byte count. Content
+SHA-256 is retained only for the mounted squash; source and library revisions use Git commits and
+trees. DeepEP V2 uses a fixed NVCC random seed and validates the complete generated-kernel set.
+Hybrid binds its realized auto-tuned config and complete kernel-key set. Pinned source trees, build
+recipes, runtime versions, and dependencies remain bound to the case factors.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
 not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or
@@ -203,20 +192,19 @@ child of image storage. The launcher still proves cross-node visibility before a
 Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
 from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
 its owner matches the private parent owner; explicit stages and all other runners retain the strict
-effective-UID ownership rule. A hashed execution-ID suffix isolates parallel B300 workers without
-exposing private runner identity. The current NFS export may realize a newly created hashed base as
+effective-UID ownership rule. An execution-ID suffix isolates parallel B300 workers. The current
+NFS export may realize a newly created base as
 UID 0; only that creation path is accepted, while a pre-existing root-owned base is rejected.
 Canonical GB300 execution likewise ignores its legacy group-writable `stage_dir` and derives an
-execution-hashed private base beneath the validated compute-visible account home.
+execution-specific private base beneath the validated compute-visible account home.
 
 ## Image Pinning And Build Isolation
 
-Container tags are checked against pinned registry digests. Enroot imports use a fixed
-`SOURCE_DATE_EPOCH` and versioned cache generation; every mounted squash is freshly hashed into series
-identity. Image-provided DeepEP is also checked against exact per-architecture wheel and installed-file
-fingerprints, so a stale cache cannot inherit the pinned source identity. Source-built DeepEP V2 uses
+Enroot imports configured container tags with a fixed `SOURCE_DATE_EPOCH` and versioned cache
+generation; every mounted squash is freshly hashed. Image-provided DeepEP is also checked against
+exact package versions and its expected API. Source-built DeepEP V2 uses
 a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its content key binds a
-versioned build recipe, verified image digest, CPU/GPU architecture, upstream source trees, and pinned
+versioned build recipe, CPU/GPU architecture, upstream source trees, and pinned
 build dependencies. The cache is never an artifact; per-execution source/results stages remain
 isolated and disposable, and marker plus runtime probes fail closed before reuse. The runner UID is
 inside the trusted cluster boundary: this cache guards against stale or accidental mutation, not

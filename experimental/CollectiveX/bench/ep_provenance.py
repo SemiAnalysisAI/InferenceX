@@ -10,14 +10,11 @@ bench modules that build and self-check them.
 """
 from __future__ import annotations
 
-import hashlib
 import inspect
 import json
 import math
-import os
 import re
-from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any
 
 class ContractError(ValueError):
     """A provenance payload differs from the CollectiveX emitter contract."""
@@ -78,11 +75,6 @@ DEEPEP_V2_V1_PROVENANCE = {
 DEEPEP_V2_DISTRIBUTION_VERSIONS = frozenset({
     "2.0.0+fa8a9b1", "2.0.0+local",
 })
-UCCL_DEPENDENCY_VERSIONS = {
-    "intervaltree": "3.1.0",
-    "nvidia-cuda-runtime-cu12": "12.9.79",
-    "sortedcontainers": "2.4.0",
-}
 REQUIRED_BACKEND_PROVENANCE = {
     "deepep": (
         "deepep_version", "deepep_commit", "backend_lineage", "allow_mnnvl",
@@ -90,22 +82,16 @@ REQUIRED_BACKEND_PROVENANCE = {
         "nvshmem_ibgda_nic_handler",
     ),
     "deepep-v2": (
-        *DEEPEP_V2_V1_PROVENANCE, "api_signature_sha256", "loaded_libraries",
-        "jit_cubins", "jit_random_seed", "deterministic", "num_experts",
+        *DEEPEP_V2_V1_PROVENANCE, "jit_kernels", "jit_random_seed",
+        "deterministic", "num_experts",
         "tuning_num_experts", "allow_hybrid_mode", "gin_enabled",
         "communication_backend",
     ),
     "deepep-hybrid": (
         "deepep_commit", "deepep_tree", "branch", "backend_lineage",
-        "loaded_libraries", "realized_config", "jit_kernel_keys", "jit_shared_objects",
-    ),
-    "uccl": (
-        "uccl_version", "uccl_commit", "uccl_wrapper_commit", "backend_lineage",
-        "loaded_libraries", "uccl_dependency_versions", "mode", "num_nvl_bytes",
-        "num_rdma_bytes",
+        "realized_config", "jit_kernel_keys",
     ),
     "mori": ("mori_commit",),
-    "nccl-ep": ("nccl_version", "collective_library", "backend_lineage"),
 }
 
 
@@ -135,13 +121,6 @@ def resolve_deepep_mnnvl(
     raise ContractError(
         f"requested DeepEP MNNVL is unsupported by commit {deepep_commit or 'unknown'}"
     )
-
-
-def collective_kernel_generation(collective_library: Any) -> str:
-    """Return the public NCCL/RCCL implementation lineage."""
-    if collective_library not in {"nccl", "rccl"}:
-        raise ContractError("reference collective library must be nccl or rccl")
-    return collective_library
 
 
 def project_resource_profile(provenance: dict[str, Any]) -> dict[str, Any]:
@@ -199,68 +178,15 @@ def _resolved_provenance_value(field: str, value: Any) -> bool:
     if "capture-failed" in text:
         return False
     if field.endswith("_commit") and (
-        text in {"main", "hybrid-ep", "uccl", "pkg-uccl"}
+        text in {"main", "hybrid-ep"}
         or text.endswith(("-unknown", "-none", "-main", "-hybrid-ep"))
     ):
         return False
     return True
 
 
-def _content_evidence_is_valid(value: Any, required_roles: set[str]) -> bool:
-    if not isinstance(value, list) or not value:
-        return False
-    records: set[tuple[str, str]] = set()
-    roles: set[str] = set()
-    for item in value:
-        if not isinstance(item, dict) or set(item) != {"name", "role", "sha256"}:
-            return False
-        name, role, digest = item["name"], item["role"], item["sha256"]
-        if (
-            not isinstance(name, str)
-            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,159}", name)
-            or not isinstance(role, str)
-            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,127}", role)
-            or not isinstance(digest, str)
-            or not re.fullmatch(r"[0-9a-f]{64}", digest)
-            or (role, name) in records
-        ):
-            return False
-        records.add((role, name))
-        roles.add(role)
-    return required_roles <= roles
-
-
-def _deepep_v2_jit_cubins_are_valid(value: Any) -> bool:
-    if not isinstance(value, list) or len(value) != len(DEEPEP_V2_JIT_KERNELS):
-        return False
-    cache_keys = []
-    kernel_names = set()
-    for item in value:
-        if not isinstance(item, dict) or set(item) != {
-            "cache_key", "cubin_sha256", "sass_sha256", "source_sha256",
-        }:
-            return False
-        cache_key = item["cache_key"]
-        match = (
-            re.fullmatch(r"kernel\.([A-Za-z0-9_+-]+)\.[0-9a-f]{32}", cache_key)
-            if isinstance(cache_key, str)
-            else None
-        )
-        if (
-            match is None
-            or any(
-                not isinstance(item[field], str)
-                or not re.fullmatch(r"[0-9a-f]{64}", item[field])
-                for field in ("cubin_sha256", "sass_sha256", "source_sha256")
-            )
-        ):
-            return False
-        cache_keys.append(cache_key)
-        kernel_names.add(match.group(1))
-    return (
-        cache_keys == sorted(set(cache_keys))
-        and kernel_names == DEEPEP_V2_JIT_KERNELS
-    )
+def _deepep_v2_jit_kernels_are_valid(value: Any) -> bool:
+    return isinstance(value, list) and set(value) == DEEPEP_V2_JIT_KERNELS
 
 
 HYBRID_REALIZED_CONFIG_FIELDS = {
@@ -318,39 +244,6 @@ def _hybrid_kernel_keys_are_valid(value: Any) -> bool:
     )
 
 
-def _hybrid_jit_evidence_is_valid(value: Any, kernel_keys: Any) -> bool:
-    if not _hybrid_kernel_keys_are_valid(kernel_keys) or not isinstance(value, list):
-        return False
-    if len(value) != len(kernel_keys):
-        return False
-    rank_sets = []
-    for expected_key, item in zip(kernel_keys, value):
-        if not isinstance(item, dict) or set(item) != {"kernel_key", "rank_artifacts"}:
-            return False
-        rank_artifacts = item["rank_artifacts"]
-        if item["kernel_key"] != expected_key or not isinstance(rank_artifacts, list):
-            return False
-        ranks = []
-        for artifact in rank_artifacts:
-            if not isinstance(artifact, dict) or set(artifact) != {"bytes", "rank", "sha256"}:
-                return False
-            rank, digest, size = artifact["rank"], artifact["sha256"], artifact["bytes"]
-            if (
-                type(rank) is not int
-                or rank < 0
-                or not isinstance(digest, str)
-                or not re.fullmatch(r"[0-9a-f]{64}", digest)
-                or type(size) is not int
-                or size <= 0
-            ):
-                return False
-            ranks.append(rank)
-        if not ranks or ranks != list(range(len(ranks))):
-            return False
-        rank_sets.append(ranks)
-    return all(ranks == rank_sets[0] for ranks in rank_sets)
-
-
 def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[str]:
     unknown = [
         field for field, value in provenance.items()
@@ -375,7 +268,7 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
             "cpu", "gpu", "not-active",
         }:
             unresolved.append("nvshmem_ibgda_nic_handler")
-    if backend in {"deepep", "uccl"}:
+    if backend == "deepep":
         mode = provenance.get("mode")
         num_nvl_bytes = provenance.get("num_nvl_bytes")
         num_rdma_bytes = provenance.get("num_rdma_bytes")
@@ -397,7 +290,7 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
                 or provenance["num_max_tokens_per_rank"] <= 0
             ):
                 unresolved.append("num_max_tokens_per_rank")
-            if backend == "deepep" and (
+            if (
                 type(provenance.get("num_qps_per_rank")) is not int
                 or provenance["num_qps_per_rank"] <= 0
             ):
@@ -406,8 +299,8 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
         for field in ("num_experts", "tuning_num_experts"):
             if type(provenance.get(field)) is not int or provenance[field] <= 0:
                 unresolved.append(field)
-        if not _deepep_v2_jit_cubins_are_valid(provenance.get("jit_cubins")):
-            unresolved.append("jit_cubins")
+        if not _deepep_v2_jit_kernels_are_valid(provenance.get("jit_kernels")):
+            unresolved.append("jit_kernels")
         if provenance.get("jit_random_seed") != "collectivex-deepep-v2-fa8a9b1":
             unresolved.append("jit_random_seed")
         unresolved.extend(
@@ -431,18 +324,6 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
             unresolved.extend(
                 ("allow_hybrid_mode", "gin_enabled", "communication_backend")
             )
-    content_roles = {
-        "deepep-v2": {"deepep-extension", "nccl", "nvshmem"},
-        "deepep-hybrid": {"deepep-extension", "deepep-hybrid-extension"},
-        "uccl": {
-            "uccl-distribution", "uccl-wrapper", "intervaltree-distribution",
-            "sortedcontainers-distribution", "cuda-runtime",
-        },
-    }.get(backend)
-    if content_roles is not None and not _content_evidence_is_valid(
-        provenance.get("loaded_libraries"), content_roles
-    ):
-        unresolved.append("loaded_libraries")
     if backend in {"deepep-v2", "deepep-hybrid"} and not re.fullmatch(
         r"[0-9a-f]{40}", str(provenance.get("deepep_tree", ""))
     ):
@@ -454,22 +335,6 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
             unresolved.append("realized_config")
         if not _hybrid_kernel_keys_are_valid(provenance.get("jit_kernel_keys")):
             unresolved.append("jit_kernel_keys")
-        if not _hybrid_jit_evidence_is_valid(
-            provenance.get("jit_shared_objects"), provenance.get("jit_kernel_keys")
-        ):
-            unresolved.append("jit_shared_objects")
-    if backend == "uccl" and provenance.get("backend_lineage") != "uccl":
-        unresolved.append("backend_lineage")
-    if backend == "uccl" and provenance.get("uccl_dependency_versions") != (
-        UCCL_DEPENDENCY_VERSIONS
-    ):
-        unresolved.append("uccl_dependency_versions")
-    if backend == "nccl-ep":
-        collective = provenance.get("collective_library")
-        if collective not in {"nccl", "rccl"}:
-            unresolved.append("collective_library")
-        if provenance.get("backend_lineage") != collective:
-            unresolved.append("backend_lineage")
     if backend == "mori" and provenance.get("kernel_type") == "InterNodeV1":
         expected = {
             "block_num": 96,
@@ -506,160 +371,15 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
 
 def provenance_complete(
     provenance: dict[str, Any], backend: str, git_run: dict[str, Any] | None,
-    *, image_digest: Any, image_verified: Any, squash_sha256: Any,
+    *, image_reference: Any, squash_sha256: Any,
 ) -> bool:
     """Return whether backend provenance and run identity are fully resolved."""
-    image = str(image_digest or "")
+    image = str(image_reference or "")
     squash = str(squash_sha256 or "")
     return (
         not backend_provenance_issues(backend, provenance)
-        and image_verified is True
-        and bool(re.fullmatch(r"sha256:[0-9a-f]{64}", image))
+        and bool(re.fullmatch(r"[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+", image))
         and bool(re.fullmatch(r"[0-9a-f]{64}", squash))
         and isinstance(git_run, dict)
         and all(git_run.get(field) for field in GIT_RUN_FIELDS)
     )
-
-
-def content_manifest_evidence(
-    *, role: str, name: str, files: Iterable[tuple[str, str | os.PathLike[str]]]
-) -> dict[str, str]:
-    """Hash a labeled file set without exposing any host path in provenance."""
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,127}", role):
-        raise ContractError("content evidence role is invalid")
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,159}", name):
-        raise ContractError("content evidence name is invalid")
-    manifest: list[dict[str, Any]] = []
-    labels: set[str] = set()
-    for label, raw_path in files:
-        logical = PurePosixPath(label)
-        if (
-            not label
-            or logical.is_absolute()
-            or ".." in logical.parts
-            or label in labels
-            or any(ord(character) < 0x20 or ord(character) > 0x7E for character in label)
-        ):
-            raise ContractError("content evidence label is invalid or duplicated")
-        path = Path(raw_path)
-        if not path.is_file():
-            raise ContractError("content evidence source is not a file")
-        digest = hashlib.sha256()
-        size = 0
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-                size += len(chunk)
-        labels.add(label)
-        manifest.append({"bytes": size, "label": label, "sha256": digest.hexdigest()})
-    if not manifest:
-        raise ContractError("content evidence cannot be empty")
-    digest = hashlib.sha256(
-        canonical_json_bytes(sorted(manifest, key=lambda item: item["label"]))
-    ).hexdigest()
-    return {"name": name, "role": role, "sha256": digest}
-
-
-# Source-built backend libraries whose raw build tree is projected to a stable
-# public source identity (private cache keys / host paths are dropped).
-SOURCE_BUILT_LIBRARY_ROLES = frozenset({
-    "deepep-extension", "deepep-hybrid-extension",
-})
-
-
-def series_provenance(provenance: dict[str, Any]) -> dict[str, Any]:
-    """Project stable semantic build identity while dropping private binaries and host paths."""
-    projected = {
-        key: value for key, value in provenance.items()
-        if key not in {"jit_cache_key", "jit_shared_objects", "path", "sm_fraction"}
-    }
-    libraries = provenance.get("loaded_libraries")
-    if isinstance(libraries, list):
-        projected["loaded_libraries"] = [
-            {
-                "name": item.get("name"),
-                "role": item.get("role"),
-                "source_tree": provenance.get("deepep_tree"),
-            }
-            if isinstance(item, dict) and item.get("role") in SOURCE_BUILT_LIBRARY_ROLES
-            else item
-            for item in libraries
-        ]
-    jit_cubins = provenance.get("jit_cubins")
-    if isinstance(jit_cubins, list):
-        projected["jit_cubins"] = [
-            {
-                "cache_key": item.get("cache_key"),
-                "sass_sha256": item.get("sass_sha256"),
-                "source_sha256": item.get("source_sha256"),
-            }
-            if isinstance(item, dict)
-            else item
-            for item in jit_cubins
-        ]
-    return projected
-
-
-def _sha256_json(value: Any) -> str:
-    """Canonical sha256 of a finite JSON value."""
-    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
-
-
-def backend_version(provenance: dict[str, Any]) -> str | None:
-    """Return the canonical public backend version from implementation provenance."""
-    for field in (
-        "deepep_version", "uccl_version", "nccl_version",
-        "mori_commit", "deepep_commit",
-    ):
-        value = provenance.get(field)
-        if value is not None and str(value).strip():
-            return str(value)[:160]
-    return None
-
-
-def public_series_config(
-    *, kernel_generation: Any, provenance: dict[str, Any],
-    resource_profile: dict[str, Any], resource_mode: Any, device_product: Any,
-) -> dict[str, Any]:
-    """Project raw implementation facts into the exact public configuration fields."""
-    generation = None if kernel_generation == "n-a" else kernel_generation
-    profile = "profile-" + _sha256_json(resource_profile)[:16]
-    return {
-        "backend": {
-            "generation": generation,
-            "version": backend_version(provenance),
-        },
-        "resource": {
-            "mode": resource_mode,
-            "profile": profile,
-            "comm_units_kind": resource_profile.get("comm_units_kind"),
-            "configured_units": resource_profile.get("configured_units"),
-        },
-        "system": {"label": str(device_product)[:160]},
-    }
-
-
-def public_series_config_sha256(config: dict[str, Any]) -> str:
-    """Commit the canonical public configuration projection into series identity."""
-    return _sha256_json(config)
-
-
-def routing_implementation_control_sha256(implementation: dict[str, Any]) -> str:
-    """Bind routing cohorts to the same static build/generator and non-treatment configuration."""
-    provenance = implementation.get("provenance")
-    if not isinstance(provenance, dict):
-        raise ContractError("implementation provenance is unavailable")
-    semantic = series_provenance(provenance)
-    treatment_fields = {
-        "jit_cache_key", "jit_cubins", "jit_kernel_keys", "jit_shared_objects",
-        "local_experts", "num_experts", "path", "realized_config", "sm_fraction",
-    }
-    return _sha256_json({
-        "kernel_generation": implementation.get("kernel_generation"),
-        "name": implementation.get("name"),
-        "provenance": {
-            key: value for key, value in semantic.items()
-            if key not in treatment_fields
-        },
-        "resource_profile": implementation.get("resource_profile"),
-    })

@@ -60,8 +60,7 @@ class FakeBackend(EPBackend):
     def _build_rank_inputs(self, options, tokens, *, canonical, retain_global):
         return RankInputs(
             tokens_per_rank=tokens, topk_idx=None, topk_weights=None,
-            activations=None, workload_id=f"workload-{tokens}" if canonical else None,
-            checksums={"tokens": tokens},
+            activations=None, workload_name=f"workload-{tokens}" if canonical else None,
         )
 
 

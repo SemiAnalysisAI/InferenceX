@@ -85,7 +85,6 @@ class MoRIBackend(EPBackend):
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
         device_properties = torch.cuda.get_device_properties(device)
-        device_cus = device_properties.multi_processor_count
         realized_arch = str(getattr(device_properties, "gcnArchName", "")).split(":", 1)[0]
         if realized_arch != expected_arch:
             raise RuntimeError(

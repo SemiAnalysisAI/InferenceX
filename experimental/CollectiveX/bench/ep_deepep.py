@@ -68,8 +68,8 @@ def _normal_buffer_sizes(hidden: int, world_size: int) -> tuple[int, int]:
 
 
 class DeepEPBackend(DeepEPFamilyBackend):
-    # Mode handling and dispatch/combine are shared with UCCL in DeepEPFamilyBackend;
-    # only the native deep_ep buffer construction and teardown live here.
+    # Mode handling and dispatch/combine live in DeepEPFamilyBackend; only the native
+    # deep_ep buffer construction and teardown live here.
     name = "deepep"
 
     def create_buffer(self, spec):

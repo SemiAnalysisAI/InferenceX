@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import ctypes
-import hashlib
 import importlib.metadata
 import inspect
 import json
@@ -44,25 +43,6 @@ NVSHMEM_VERSION = "3.3.9"
 DEEPEP_V2_JIT_KERNELS = ep_provenance.DEEPEP_V2_JIT_KERNELS
 
 
-def _sha256(path: str) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _api_sha256() -> str:
-    signatures = {
-        "ElasticBuffer.__init__": str(inspect.signature(ElasticBuffer.__init__)),
-        "ElasticBuffer.dispatch": str(inspect.signature(ElasticBuffer.dispatch)),
-        "ElasticBuffer.combine": str(inspect.signature(ElasticBuffer.combine)),
-    }
-    return hashlib.sha256(
-        json.dumps(signatures, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
-
-
 def _loaded_library_paths() -> set[str]:
     extension = getattr(getattr(deep_ep, "_C", None), "__file__", None)
     if not extension or not os.path.isfile(extension):
@@ -93,8 +73,7 @@ def _loaded_nccl_version() -> str:
     return ep_harness.format_collective_version(version.value)
 
 
-def _loaded_library_evidence() -> list[dict[str, str]]:
-    """Return content identities, never private library paths."""
+def _validate_loaded_libraries() -> None:
     paths = _loaded_library_paths()
     required = {
         "nccl": [path for path in paths if "libnccl.so" in os.path.basename(path)],
@@ -104,28 +83,10 @@ def _loaded_library_evidence() -> list[dict[str, str]]:
     if mismatches:
         raise RuntimeError("expected one loaded library for each dependency: " + ", ".join(mismatches))
 
-    def role(path: str) -> str:
-        name = os.path.basename(path)
-        if "libnccl.so" in name:
-            return "nccl"
-        if "libnvshmem_host.so" in name:
-            return "nvshmem"
-        return "deepep-extension"
-
-    def label(path: str) -> str:
-        return "deep_ep._C" if role(path) == "deepep-extension" else os.path.basename(path)
-
-    return sorted(
-        ({"role": role(path), "name": label(path), "sha256": _sha256(path)} for path in paths),
-        key=lambda item: (item["role"], item["name"], item["sha256"]),
-    )
-
-
-def _jit_artifact_evidence() -> list[dict[str, str]]:
+def _jit_kernel_names() -> list[str]:
     root = Path(os.environ["EP_JIT_CACHE_DIR"]) / "cache"
     if root.is_symlink() or not root.is_dir():
         raise RuntimeError("DeepEP V2 produced no JIT cache evidence")
-    artifacts = []
     kernel_names = set()
     for directory in sorted(root.iterdir(), key=lambda item: item.name):
         match = re.fullmatch(r"kernel\.([A-Za-z0-9_+-]+)\.([0-9a-f]{32})", directory.name)
@@ -143,54 +104,24 @@ def _jit_artifact_evidence() -> list[dict[str, str]]:
         if any(path.stat().st_size <= 0 for path in (source, cubin, sass)):
             raise RuntimeError("DeepEP V2 JIT evidence is empty")
         kernel_names.add(match.group(1))
-        artifacts.append({
-            "cache_key": directory.name,
-            "source_sha256": _sha256(str(source)),
-            "sass_sha256": _sha256(str(sass)),
-            "cubin_sha256": _sha256(str(cubin)),
-        })
-    if (
-        len(artifacts) != len(DEEPEP_V2_JIT_KERNELS)
-        or kernel_names != DEEPEP_V2_JIT_KERNELS
-    ):
+    if kernel_names != DEEPEP_V2_JIT_KERNELS:
         raise RuntimeError("DeepEP V2 JIT kernel set differs from the v1 contract")
-    return sorted(artifacts, key=lambda item: item["cache_key"])
+    return sorted(kernel_names)
 
 
-def _jit_cache_key(
+def _jit_cache_directory(
     args,
     world_size: int,
     max_tokens: int,
     allow_hybrid_mode: bool,
     realized: dict[str, int | bool],
 ) -> str:
-    """Key generated kernels by codegen inputs, not routing data or case identity."""
-    payload = {
-        "contract": "deepep-v2-jit-config-v3",
-        "runner": args.runner,
-        "world_size": world_size,
-        "hidden": args.hidden,
-        "topk": args.topk,
-        "physical_experts": args.experts,
-        "tuning_experts": getattr(args, "num_logical_experts", args.experts),
-        "max_tokens": max_tokens,
-        "dispatch_dtype": "bf16",
-        "combine_dtype": "bf16",
-        "input_layout": "bf16",
-        "expert_alignment": 1,
-        "do_cpu_sync": True,
-        "cached_mode": False,
-        "do_expand": False,
-        "use_expanded_layout": False,
-        "allow_hybrid_mode": allow_hybrid_mode,
-        "allow_multiple_reduction": True,
-        "prefer_overlap_with_compute": True,
-        "deterministic": False,
-        **realized,
-    }
-    return "jitcfg-v3-" + hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    values = (
+        args.runner, world_size, args.hidden, args.topk, args.experts,
+        getattr(args, "num_logical_experts", args.experts), max_tokens,
+        int(allow_hybrid_mode), realized["allocated_qps"], realized["num_sms"],
+    )
+    return "jit-" + "-".join(str(value) for value in values)
 
 
 def _require_cross_rank_equal(value, label: str) -> None:
@@ -337,7 +268,7 @@ class DeepEPV2Backend(EPBackend):
     def create_buffer(self, spec):
         # Local aliases keep the moved buffer-construction body byte-verbatim. The cap
         # equals the value the deleted __init__ ladder-peek computed
-        # (token_ladder(.., None) + conditioning), so the jit_cache_key stays stable.
+        # (token_ladder(.., None) + conditioning), so the JIT directory stays stable.
         args, world_size, device = self.args, self.world_size, self.device
         self.max_tokens = spec.max_tokens_per_rank
         torch_version, nccl_runtime_version = _require_runtime()
@@ -395,16 +326,15 @@ class DeepEPV2Backend(EPBackend):
             gin_enabled, world_size, scale_up_domain, jit_config
         ):
             raise RuntimeError("DeepEP V2 realized communication domains differ from topology")
-        self.jit_cache_key = _jit_cache_key(
+        jit_cache_directory = _jit_cache_directory(
             args,
             world_size,
             self.max_tokens,
             allow_hybrid_mode,
             jit_config,
         )
-        os.environ["EP_JIT_CACHE_DIR"] = str(jit_root / self.jit_cache_key)
+        os.environ["EP_JIT_CACHE_DIR"] = str(jit_root / jit_cache_directory)
         realized_config = {
-            "jit_cache_key": self.jit_cache_key,
             "num_max_tokens_per_rank": self.max_tokens,
             **jit_config,
         }
@@ -414,8 +344,7 @@ class DeepEPV2Backend(EPBackend):
             "deepep-managed" if getattr(comm, "managed", True) else "pytorch-reused"
         )
 
-        loaded_libraries = _loaded_library_evidence()
-        _require_cross_rank_equal(loaded_libraries, "loaded libraries")
+        _validate_loaded_libraries()
         self.backend_provenance = {
             "deepep_version": DEEPEP_V2_VERSION,
             "deepep_distribution_version": importlib.metadata.version("deep_ep"),
@@ -427,7 +356,6 @@ class DeepEPV2Backend(EPBackend):
             "deepep_nccl_check_commit": DEEPEP_V2_NCCL_CHECK_COMMIT,
             "fmt_commit": DEEPEP_V2_FMT_COMMIT,
             "api": "deep_ep.ElasticBuffer",
-            "api_signature_sha256": _api_sha256(),
             "communication_backend": communication_backend,
             "gin_enabled": gin_enabled,
             "nccl_communicator": communicator,
@@ -437,9 +365,7 @@ class DeepEPV2Backend(EPBackend):
             "nccl_package_version": importlib.metadata.version("nvidia-nccl-cu13"),
             "nccl_version": nccl_runtime_version,
             "nvshmem_package_version": importlib.metadata.version("nvidia-nvshmem-cu12"),
-            "loaded_libraries": loaded_libraries,
-            "jit_cache_key": self.jit_cache_key,
-            "jit_cubins": [],
+            "jit_kernels": [],
             "jit_random_seed": DEEPEP_V2_JIT_RANDOM_SEED,
             "num_experts": int(args.experts),
             "mode": "normal",
@@ -508,19 +434,19 @@ class DeepEPV2Backend(EPBackend):
         return combined_x
 
     def capture_deferred_provenance(self):
-        # destroy() uses this same barrier. Materialize its JIT kernel before hashing the
+        # destroy() uses this same barrier. Materialize its JIT kernel before recording the
         # implementation so the first and later routing cases see identical evidence.
         self.buffer.barrier(use_comm_stream=True, with_cpu_sync=True)
         torch.cuda.synchronize()
-        jit_cubins = _jit_artifact_evidence()
-        _require_cross_rank_equal(jit_cubins, "JIT CUBINs")
+        jit_kernels = _jit_kernel_names()
+        _require_cross_rank_equal(jit_kernels, "JIT kernels")
         if (
             self._deferred_jit_snapshot is not None
-            and jit_cubins != self._deferred_jit_snapshot
+            and jit_kernels != self._deferred_jit_snapshot
         ):
-            raise RuntimeError("DeepEP V2 JIT CUBIN set changed after measurement")
-        self._deferred_jit_snapshot = jit_cubins
-        self.backend_provenance["jit_cubins"] = jit_cubins
+            raise RuntimeError("DeepEP V2 JIT kernel set changed after measurement")
+        self._deferred_jit_snapshot = jit_kernels
+        self.backend_provenance["jit_kernels"] = jit_kernels
 
     def inspect_dispatch(self, p, h):
         count = self.recv_tokens(h)

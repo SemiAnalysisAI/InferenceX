@@ -153,14 +153,8 @@ BACKENDS = {
         "nccl": "2.30.4",
         "sku_capabilities": DEEPEP_V2_SKU_CAPABILITIES,
     },
-    "uccl": {
-        "vendors": {"nvidia"},
-        "machines": {"amd64"},
-        "excluded_skus": {"b200-dgxc", "b300"},
-    },
     "deepep-hybrid": {"vendors": {"nvidia"}},
     "mori": {"vendors": {"amd"}},
-    "nccl-ep": {"vendors": {"nvidia", "amd"}},
 }
 SWEEP_BACKENDS = tuple(BACKENDS)
 
@@ -236,7 +230,6 @@ def _resolve_base(
     ep: int | None = None,
     nodes: int | None = None,
     routing: str = "uniform",
-    eplb: bool = False,
     mode: str = "normal",
 ) -> tuple[bool, str]:
     """Resolve the base BF16 capability for one SKU/backend/EP cell."""
@@ -247,7 +240,7 @@ def _resolve_base(
         return False, f"unknown backend {backend!r}"
     if mode not in {"normal", "low-latency"}:
         return False, f"unknown benchmark mode {mode!r}"
-    if mode == "low-latency" and backend not in {"deepep", "uccl"}:
+    if mode == "low-latency" and backend != "deepep":
         return False, f"{backend} has no distinct low-latency API"
     if ep is None:
         if nodes is None:
@@ -263,8 +256,8 @@ def _resolve_base(
     topology = topology_for(sku, ep)
     if topology is None or (nodes is not None and nodes != topology["nodes"]):
         return False, f"{sku} does not register EP{ep} on {nodes} nodes"
-    if routing != "uniform" or eplb:
-        return False, "core routing is uniform; EPLB is unavailable"
+    if routing != "uniform":
+        return False, "core routing is uniform"
     if platform["vendor"] not in implementation["vendors"]:
         return False, f"{backend} does not support {platform['vendor']}"
     sku_capability = implementation.get("sku_capabilities", {}).get(sku)
@@ -292,7 +285,6 @@ def resolve_disposition(
     ep: int | None = None,
     nodes: int | None = None,
     routing: str = "uniform",
-    eplb: bool = False,
     mode: str = "normal",
 ) -> tuple[str, str]:
     """Resolve a BF16 cell to its capability disposition."""
@@ -302,7 +294,6 @@ def resolve_disposition(
         ep=ep,
         nodes=nodes,
         routing=routing,
-        eplb=eplb,
         mode=mode,
     )
     return ("supported", "ok") if base_ok else ("unsupported", base_detail)
@@ -315,7 +306,6 @@ def resolve(
     ep: int | None = None,
     nodes: int | None = None,
     routing: str = "uniform",
-    eplb: bool = False,
     mode: str = "normal",
 ) -> tuple[bool, str]:
     """Return whether one fixed-profile case can run on a public GHA runner label."""
@@ -325,7 +315,6 @@ def resolve(
         ep=ep,
         nodes=nodes,
         routing=routing,
-        eplb=eplb,
         mode=mode,
     )
     return disposition == "supported", detail

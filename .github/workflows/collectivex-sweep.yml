@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep, deepep-v2, uccl, deepep-hybrid, mori, nccl-ep]
+        options: [all, deepep, deepep-v2, deepep-hybrid, mori]
       suites:
         description: "'all' or comma-list of suite names"
         type: string
@@ -191,7 +191,6 @@ jobs:
           COLLECTIVEX_B200_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B200_CONFIG_V1 }}
           COLLECTIVEX_MI300_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI300_CONFIG_V1 }}
           COLLECTIVEX_MI355_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI355_CONFIG_V1 }}
-          COLLECTIVEX_OPERATOR_AUDIT_SALT: ${{ secrets.COLLECTIVEX_AUDIT_SALT_V1 }}
           COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
         run: |
           set -euo pipefail
