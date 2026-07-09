@@ -49,10 +49,13 @@ infra:
 frontend:
   type: dynamo
   enable_multiple_frontends: true
+  env:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
 backend:
   type: vllm
   connector: null
   prefill_environment:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -70,6 +73,7 @@ backend:
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
