@@ -4650,6 +4650,17 @@
     - "Update SGLang image from lmsysorg/sglang:v0.5.13-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
     - "Enable SGLANG_ENABLE_UNIFIED_RADIX_TREE=1 unconditionally (previously hicache-only) and SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 to free out-of-window SWA KV slots during chunked prefill, relieving SWA pool pressure and restoring prefix-cache hit rate on multi-turn agentic workloads"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2112
+  
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB200 llmd-vllm disaggregated multinode benchmarks (full curve)"
+    - "Low-latency 1P1D pure-TP8 decode (conc 1)"
+    - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
+    - "Low-middle 1P4D pure-TP8 decode (conc 256/512)"
+    - "High-tpt 2P+1D DEP8 (conc 4096)"
+    - "Max-tpt 3P+1D DEP8 (conc 4096); same engine config as high-tpt, one more prefill instance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050
 
 - config-keys:
     - glm5-fp8-gb300-dynamo-sglang-mtp

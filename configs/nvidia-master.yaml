@@ -8684,6 +8684,130 @@ dsv4-fp4-gb200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
+# TODO: change image to official llmd image.
+# Build source: benchmarks/llm-d/Dockerfile.
+dsv4-fp4-gb200-llmd-vllm:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: llmd-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # Low latency: 1 prefill DEP8 + 1 decode TP8.
+      - spec-decoding: "none"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=dsv4-fp4-gb200-low-latency.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
+      # Low-middle: 1 prefill DEP8 + 4 decode TP8.
+      - spec-decoding: "none"
+        conc-list: [256, 512]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=dsv4-fp4-gb200-low-latency.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=8"
+          - "DECODE_WORKERS=4"
+          - "GPUS_PER_NODE=4"
+
+      # Mid curve: 1 prefill DEP8 + 1 decode DEP8.
+      - spec-decoding: "none"
+        conc-list: [256, 512, 1024]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
+      # High throughput: 2 prefill DEP8 + 1 decode DEP8.
+      - spec-decoding: "none"
+        conc-list: [4096]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=4"
+          - "PREFILL_WORKERS=2"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
+      # Max throughput: 3 prefill DEP8 + 1 decode DEP8.
+      - spec-decoding: "none"
+        conc-list: [4096]
+        prefill:
+          num-worker: 3
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=6"
+          - "PREFILL_WORKERS=3"
+          - "GPUS_PER_NODE=4"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
