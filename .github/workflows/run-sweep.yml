@@ -556,7 +556,7 @@ jobs:
             precision: ${{ matrix.config.precision }}
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            conc-list: '[${{ matrix.config.conc }}]'
+            conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
