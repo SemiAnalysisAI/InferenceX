@@ -7,7 +7,6 @@ import argparse
 import ctypes
 import os
 from pathlib import Path
-import socket
 
 
 def default_route_interface(route_path: Path = Path("/proc/net/route")) -> str:
@@ -36,16 +35,80 @@ def validate_cuda_context(expected: int) -> None:
         raise SystemExit(1)
 
 
-def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str) -> None:
-    for name in filter(None, socket_names.split(",")):
-        socket.if_nametoindex(name)
-    for selector in filter(None, rdma_devices.split(",")):
-        name, _, port = selector.partition(":")
-        port = port or "1"
-        state = Path(f"/sys/class/infiniband/{name}/ports/{port}/state")
-        if not state.read_text().strip().startswith("4:"): raise SystemExit(1)
-        if gid_index and not Path(f"/sys/class/infiniband/{name}/ports/{port}/gids/{gid_index}").exists():
-            raise SystemExit(1)
+def _emit(marker: str) -> None:
+    # cx_validate_network_profile_on_job (runtime/common.sh) greps these exact strings
+    # out of the per-node probe log to derive CX_SOCKET_IFNAME / CX_RDMA_LINK_LAYER and to
+    # diagnose failures. The marker vocabulary is a string contract with that function —
+    # keep the two halves in lockstep (see tests/test_runtime.py::NetworkProfileContract).
+    print(f"[collectivex-private] {marker}")
+
+
+def _check_port(port_path: Path, ordinal: int, gid_index: str, profile: str):
+    # Return the port's link layer ("roce"/"infiniband") when it is active, carries a
+    # non-empty GID at the pinned index, and agrees with any already-seen link layer;
+    # otherwise emit the matching rdma-port-<ordinal>=<reason> marker and return None.
+    if not port_path.is_dir():
+        _emit(f"rdma-port-{ordinal}=missing"); return None
+    state = port_path / "state"
+    if not state.is_file() or state.read_text().split()[:1] != ["4:"]:
+        _emit(f"rdma-port-{ordinal}=inactive"); return None
+    if gid_index:
+        gid = port_path / "gids" / gid_index
+        if not gid.is_file():
+            _emit(f"rdma-port-{ordinal}=gid-missing"); return None
+        if not "".join(c for c in gid.read_text() if c not in ":0" and not c.isspace()):
+            _emit(f"rdma-port-{ordinal}=gid-empty"); return None
+    link = port_path / "link_layer"
+    if not link.is_file():
+        _emit(f"rdma-port-{ordinal}=link-layer-missing"); return None
+    layer = {"Ethernet": "roce", "InfiniBand": "infiniband"}.get(link.read_text().strip())
+    if layer is None:
+        _emit(f"rdma-port-{ordinal}=link-layer-invalid"); return None
+    if profile and profile != layer:
+        _emit(f"rdma-port-{ordinal}=link-layer-mixed"); return None
+    return layer
+
+
+def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: str,
+                             sys_root: Path = Path("/sys"),
+                             route_path: Path = Path("/proc/net/route")) -> None:
+    # Prove the operator-pinned scale-out fabric on this node: resolve the cross-node socket
+    # interface (operator selector, else this node's default route), confirm each socket
+    # interface is live, and confirm every pinned RDMA port is active with a consistent link
+    # layer. On success emit the socket-interface-selected and rdma-link-layer markers the
+    # launcher consumes; on any failure emit the diagnostic marker and exit non-zero.
+    names = socket_names or default_route_interface(route_path)
+    if not names:
+        _emit("socket-interface-1=default-route-missing")
+        raise SystemExit(1)
+    _emit(f"socket-interface-selected={names}")
+    for ordinal, interface in enumerate((n for n in names.split(",") if n), start=1):
+        net = sys_root / "class" / "net" / interface
+        if not net.is_dir():
+            _emit(f"socket-interface-{ordinal}=missing"); raise SystemExit(1)
+        operstate = net / "operstate"
+        state = operstate.read_text().strip() if operstate.is_file() else ""
+        if state not in ("up", "unknown"):
+            _emit(f"socket-interface-{ordinal}=down"); raise SystemExit(1)
+    profile = ""
+    for ordinal, selector in enumerate((s for s in rdma_devices.split(",") if s), start=1):
+        device, _, configured_port = selector.partition(":")
+        ports = sys_root / "class" / "infiniband" / device / "ports"
+        if not ports.is_dir():
+            _emit(f"rdma-device-{ordinal}=missing"); raise SystemExit(1)
+        if configured_port:
+            layer = _check_port(ports / configured_port, ordinal, gid_index, profile)
+            if layer is None: raise SystemExit(1)
+            profile = layer
+        else:
+            active = False
+            for port_path in sorted(p for p in ports.iterdir() if p.is_dir()):
+                layer = _check_port(port_path, ordinal, gid_index, profile)
+                if layer is not None:
+                    profile, active = layer, True
+            if not active: raise SystemExit(1)
+    if not profile: raise SystemExit(1)
+    _emit(f"rdma-link-layer={profile}")
 
 
 def main() -> None:
