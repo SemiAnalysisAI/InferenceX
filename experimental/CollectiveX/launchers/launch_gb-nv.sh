@@ -44,7 +44,7 @@ export CX_NODES="$NODES" CX_GPUS_PER_NODE="$GPN" CX_SCALE_UP_DOMAIN="$SCALE_UP_D
 export CX_NGPUS="$NGPUS"
 unset CX_SCALE_OUT_TRANSPORT
 case "$CX_BENCH" in
-  deepep|deepep-v2|deepep-hybrid) ;;
+  deepep-v2|deepep-hybrid) ;;
   *) cx_die "unsupported $PRODUCT EP backend: $CX_BENCH" ;;
 esac
 cx_load_network_control_mode "$CX_DIR" || cx_die "cannot resolve network control mode"

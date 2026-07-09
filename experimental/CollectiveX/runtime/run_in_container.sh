@@ -6,7 +6,7 @@
 # this script selects one EP backend from CX_BENCH and writes result JSON under results/.
 #
 # Required env (exported by the adapter): CX_RUNNER CX_NGPUS CX_TS CX_TOPO
-# Selector: CX_BENCH = deepep | deepep-v2 | mori | deepep-hybrid
+# Selector: CX_BENCH = deepep-v2 | deepep-hybrid | mori
 # EP knobs passed to bench/run_ep.py:
 #   CX_PHASE = decode | prefill | both (default decode)   <- picks the token sweep
 #   CX_TOKENS_LADDER (space/comma sep; blank = phase default)

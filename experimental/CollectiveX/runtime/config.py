@@ -117,7 +117,6 @@ def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str
     values = {"CX_NGPUS": nodes * expected, "CX_SEED": 67,
               "CX_RUN_TIMEOUT": 1800 if family == "amd" else 900,
               "CX_IMAGE": amd if family == "amd" else multiarch}
-    if family != "amd": values["CX_NCCL_HOME"] = "/usr"
     if family == "gb": values["CX_MASTER_PORT"] = 29551
     if family == "amd":
         values.update(CX_MORI_KERNEL_TYPE="internode-v1" if nodes == 2 else "asyncll",
