@@ -145,10 +145,12 @@ pf = bash_escape(m.get('prefill_flags', '--tensor-parallel-size 8'))
 df = bash_escape(m.get('decode_flags', '--tensor-parallel-size 8'))
 ev = bash_escape(m.get('env', ''))
 dev = bash_escape(m.get('decode_env', ''))
+pev = bash_escape(m.get('prefill_env', ''))
 print(f'PREFILL_SERVER_CONFIG=\"{pf}\"')
 print(f'DECODE_SERVER_CONFIG=\"{df}\"')
 print(f'MODEL_ENVS=\"{ev}\"')
 print(f'DECODE_MODEL_ENVS=\"{dev}\"')
+print(f'PREFILL_MODEL_ENVS=\"{pev}\"')
 ")"
 
 echo "Loaded model configuration for: $MODEL_NAME"
@@ -250,6 +252,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
 
     setup_vllm_env
+
+    for env_pair in ${PREFILL_MODEL_ENVS}; do
+        export "$env_pair"
+        echo "[PREFILL_ENV] $env_pair"
+    done
 
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
@@ -419,6 +426,11 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
+
+    for env_pair in ${PREFILL_MODEL_ENVS}; do
+        export "$env_pair"
+        echo "[PREFILL_ENV] $env_pair"
+    done
 
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
