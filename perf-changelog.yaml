@@ -4654,5 +4654,7 @@
 - config-keys:
     - kimik2.5-fp4-mi355x-atom
   description:
-    - "TODO & update image"
+    - "Update ATOM image from rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511 to rocm/atom-dev:nightly_202607091539"
+    - "Enable ATOM_DISABLE_MMAP=true, AITER_QUICK_REDUCE_QUANTIZATION=INT4, AITER_MXFP4_INTERMEDIATE=1; add --scheduler-delay-factor 1 to server launch"
+    - "Narrow TP8 search-space to conc 4 only for both 1k1k and 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2132
