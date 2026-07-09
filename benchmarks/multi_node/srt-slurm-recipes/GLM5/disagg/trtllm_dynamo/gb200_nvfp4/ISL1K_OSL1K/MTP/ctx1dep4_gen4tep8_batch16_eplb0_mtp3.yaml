@@ -1,0 +1,116 @@
+name: glm5_nvfp4_ISL1K_OSL1K_ctx1dep4_gen4tep8_batch16_eplb0_mtp3
+model:
+  path: nvidia/GLM-5-NVFP4
+  container: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
+  precision: fp4
+resources:
+  gpu_type: gb200
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 4
+  decode_workers: 4
+  decode_nodes: 8
+  gpus_per_decode: 8
+  gpus_per_node: 4
+backend:
+  type: trtllm
+  prefill_environment:
+    ENROOT_ALLOW_DEV: 'yes'
+    MIMALLOC_PURGE_DELAY: '0'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_ENABLE_PDL: '1'
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    UCX_TLS: 'cuda_ipc,cuda_copy,sm,self,tcp'
+  decode_environment:
+    ENROOT_ALLOW_DEV: 'yes'
+    MIMALLOC_PURGE_DELAY: '0'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_ENABLE_PDL: '1'
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    UCX_TLS: 'cuda_ipc,cuda_copy,sm,self,tcp'
+  trtllm_config:
+    prefill:
+      tensor_parallel_size: 4
+      moe_expert_parallel_size: 4
+      pipeline_parallel_size: 1
+      enable_attention_dp: true
+      disable_overlap_scheduler: true
+      trust_remote_code: true
+      max_batch_size: 16
+      max_num_tokens: 16384
+      max_seq_len: 1064
+      print_iter_log: true
+      cuda_graph_config: null
+      moe_config:
+        backend: CUTEDSL
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.6
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 3
+    decode:
+      tensor_parallel_size: 8
+      moe_expert_parallel_size: 8
+      pipeline_parallel_size: 1
+      enable_attention_dp: false
+      enable_lm_head_tp_in_adp: false
+      trust_remote_code: true
+      max_batch_size: 16
+      max_num_tokens: 64
+      max_seq_len: 2088
+      print_iter_log: true
+      stream_interval: 100
+      num_postprocess_workers: 4
+      cuda_graph_config:
+        enable_padding: true
+        batch_sizes:
+          - 1
+          - 2
+          - 4
+          - 8
+          - 16
+      moe_config:
+        backend: TRTLLM
+        use_low_precision_moe_combine: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: false
+        free_gpu_memory_fraction: 0.9
+      cache_transceiver_config:
+        backend: UCX
+        max_tokens_in_buffer: 16384
+      nvfp4_gemm_config:
+        allowed_backends:
+          - cutlass
+          - cublaslt
+          - cutedsl
+          - cuda_core
+      speculative_config:
+        decoding_type: MTP
+        num_nextn_predict_layers: 3
+      allreduce_strategy: MNNVL
+benchmark:
+  type: sa-bench
+  isl: 1024
+  osl: 1024
+  concurrencies: '92'
+  req_rate: 'inf'
+  num_prompts_mult: 16
+  use_chat_template: true
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+dynamo:
+  install: false
