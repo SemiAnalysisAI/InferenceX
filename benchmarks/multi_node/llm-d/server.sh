@@ -562,12 +562,6 @@ PY
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
     _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
     _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
-    # Hard per-conc wall-clock bound for the bench client (read by
-    # run_benchmark_serving). A benchmark that fails or hangs (e.g. asyncio
-    # shutdown wedged on thousands of failed in-flight requests at very high
-    # concurrency) is killed after this instead of pinning the whole allocation
-    # to TIME_LIMIT. Overridable via recipe env / additional-settings.
-    export BENCH_TIMEOUT_S="${BENCH_TIMEOUT_S:-2400}"
     for max_concurrency in "${CONCURRENCIES[@]}"; do
         num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
         [[ "$num_prompts" -lt 16 ]] && num_prompts=16
