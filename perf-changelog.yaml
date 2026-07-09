@@ -4657,3 +4657,4 @@
     - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
     - "Image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2129
+  
