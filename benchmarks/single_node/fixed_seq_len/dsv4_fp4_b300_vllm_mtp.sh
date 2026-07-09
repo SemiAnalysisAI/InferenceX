@@ -66,6 +66,7 @@ fi
 
 # use 2 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=2
+export SPEEDBENCH_NUM_SPEC_TOKENS="$NUM_SPEC_TOKENS"
 
 start_gpu_monitor
 

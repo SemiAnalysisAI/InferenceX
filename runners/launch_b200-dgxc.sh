@@ -366,6 +366,9 @@ EOF
     # Collect eval results if eval was requested
     if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
         EVAL_DIR="$LOGS_DIR/eval_results"
+        if [[ "${FRAMEWORK:-}" == dynamo* && "${SPEC_DECODING:-none}" == "mtp" ]]; then
+            bash "$GITHUB_WORKSPACE/utils/evals/write_dynamo_speedbench_al_from_logs.sh" "$LOGS_DIR" "$GITHUB_WORKSPACE"
+        fi
         if [ -d "$EVAL_DIR" ]; then
             echo "Extracting eval results from $EVAL_DIR"
             shopt -s nullglob

@@ -105,10 +105,20 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
 
 
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return the latest legacy lm-eval JSON and deprecated second slot."""
+def detect_speedbench_jsons(d: Path) -> List[Path]:
+    """Return compact SpeedBench AL result JSONs from one artifact directory."""
+    paths = []
+    for path in d.glob('results*.json'):
+        data = load_json(path)
+        if isinstance(data, dict) and 'speedbench_al_eval_version' in data:
+            paths.append(path)
+    return sorted(paths)
+
+
+def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], List[Path]]:
+    """Return the latest legacy lm-eval JSON and all SpeedBench AL JSONs."""
     lm_paths = detect_lm_eval_jsons(d)
-    return (lm_paths[0] if lm_paths else None), None
+    return (lm_paths[0] if lm_paths else None), detect_speedbench_jsons(d)
 
 
 def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
@@ -195,6 +205,38 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     return extracted
 
 
+def extract_speedbench_al_metrics(json_path: Path) -> List[Dict[str, Any]]:
+    """Extract a compact SpeedBench AL result as an eval metric row."""
+    data = load_json(json_path) or {}
+    if 'speedbench_al_eval_version' not in data:
+        return []
+
+    mode = data.get('thinking_mode', 'unknown')
+    mtp = data.get('num_speculative_tokens', 'unknown')
+    return [{
+        'metric_type': 'speedbench_al',
+        'task': 'speedbench_al',
+        'task_label': f"speedbench_al/{mode}/mtp{mtp}",
+        'acceptance_length': data.get('acceptance_length'),
+        'reference_acceptance_length': data.get('reference_acceptance_length'),
+        'min_acceptance_length': data.get('min_acceptance_length'),
+        'max_acceptance_length': data.get('max_acceptance_length'),
+        'threshold_ratio': data.get('threshold_ratio'),
+        'max_threshold_ratio': data.get('max_threshold_ratio'),
+        'thinking_mode': mode,
+        'num_speculative_tokens': mtp,
+        'speedbench_framework': data.get('framework'),
+        'speedbench_metric_source': data.get('metric_source'),
+        'speedbench_accepted_tokens': data.get('accepted_tokens'),
+        'speedbench_verify_steps': data.get('verify_steps', data.get('draft_tokens')),
+        'speedbench_proposed_draft_tokens': data.get('proposed_draft_tokens'),
+        'passed': data.get('passed'),
+        'error': data.get('error'),
+        'model': data.get('model'),
+        'source': str(json_path),
+    }]
+
+
 def pct(x: Any) -> str:
     """Format value as percentage."""
     try:
@@ -274,7 +316,7 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'dp_attention': str(dp_attention).lower(),
         'prefill_dp_attention': str(prefill_dp_attention).lower(),
         'decode_dp_attention': str(decode_dp_attention).lower(),
-        'task': m.get('task', 'unknown'),
+        'task': m.get('task_label') or m.get('task', 'unknown'),
         'em_strict': m.get('strict'),
         'em_strict_se': m.get('strict_se'),
         'em_flexible': m.get('flex'),
@@ -284,7 +326,25 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     # Add universal score field (primary metric for unified comparison)
-    if m.get('strict') is not None:
+    if m.get('metric_type') == 'speedbench_al':
+        row['score'] = m.get('acceptance_length')
+        row['score_name'] = 'acceptance_length'
+        row['score_se'] = None
+        row['speedbench_reference_acceptance_length'] = m.get('reference_acceptance_length')
+        row['speedbench_min_acceptance_length'] = m.get('min_acceptance_length')
+        row['speedbench_max_acceptance_length'] = m.get('max_acceptance_length')
+        row['speedbench_threshold_ratio'] = m.get('threshold_ratio')
+        row['speedbench_max_threshold_ratio'] = m.get('max_threshold_ratio')
+        row['speedbench_thinking_mode'] = m.get('thinking_mode')
+        row['speedbench_num_speculative_tokens'] = m.get('num_speculative_tokens')
+        row['speedbench_framework'] = m.get('speedbench_framework')
+        row['speedbench_metric_source'] = m.get('speedbench_metric_source')
+        row['speedbench_accepted_tokens'] = m.get('speedbench_accepted_tokens')
+        row['speedbench_verify_steps'] = m.get('speedbench_verify_steps')
+        row['speedbench_proposed_draft_tokens'] = m.get('speedbench_proposed_draft_tokens')
+        row['speedbench_passed'] = m.get('passed')
+        row['speedbench_error'] = m.get('error')
+    elif m.get('strict') is not None:
         row['score'] = m.get('strict')
         row['score_name'] = 'em_strict'
         row['score_se'] = m.get('strict_se')
@@ -298,6 +358,28 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         row['score_se'] = None
 
     return row
+
+
+def score_cell(row: Dict[str, Any]) -> str:
+    """Format the primary score for lm-eval and non-percentage eval rows."""
+    if row.get('score_name') == 'acceptance_length':
+        score = row.get('score')
+        minimum = row.get('speedbench_min_acceptance_length')
+        maximum = row.get('speedbench_max_acceptance_length')
+        passed = row.get('speedbench_passed')
+        if score is None:
+            return 'FAIL'
+        try:
+            status = 'PASS' if passed else 'FAIL'
+            if minimum is None or maximum is None:
+                return f"{float(score):.2f} ({status})"
+            return (
+                f"{float(score):.2f} in "
+                f"[{float(minimum):.2f}, {float(maximum):.2f}] ({status})"
+            )
+        except Exception:
+            return str(score)
+    return f"{pct(row['score'])}{se(row['score_se'])}"
 
 
 def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
@@ -326,6 +408,10 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
             metrics_list = extract_lm_metrics(lm_path)
             for metrics in metrics_list:
                 rows.append(build_row(row_meta, metrics))
+
+        for speedbench_path in detect_speedbench_jsons(d):
+            for metrics in extract_speedbench_al_metrics(speedbench_path):
+                rows.append(build_row(meta, metrics))
     return rows
 
 
@@ -400,7 +486,7 @@ def main():
                     r['conc'],
                     r['dp_attention'],
                     r['task'],
-                    f"{pct(r['score'])}{se(r['score_se'])}",
+                    score_cell(r),
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
                     r['n_eff'] or '',
@@ -438,7 +524,7 @@ def main():
                     r['decode_num_workers'],
                     r['conc'],
                     r['task'],
-                    f"{pct(r['score'])}{se(r['score_se'])}",
+                    score_cell(r),
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
                     r['n_eff'] or '',
