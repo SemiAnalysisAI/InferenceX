@@ -116,7 +116,6 @@ VLLM_CMD=(
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
     --reasoning-parser minimax_m3
-    --enable-prefix-caching
     --max-num-seqs "$CONC"
     "${OFFLOAD_ARGS[@]}"
 )
