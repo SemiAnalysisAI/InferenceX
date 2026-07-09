@@ -809,7 +809,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 24, 32, 40] }
 
 kimik2.5-fp4-mi355x-atom:
-  image: benenzhu/benenzhu-amd:dev6
+  image: rocm/atom-dev:nightly_202607091539 # wait for a release image, cause Kimi is a old model.
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
@@ -818,10 +818,16 @@ kimik2.5-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 4 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
+      - { tp: 8, conc-start: 4, conc-end: 4 }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
