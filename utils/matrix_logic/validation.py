@@ -6,7 +6,7 @@ import pprint
 import yaml
 
 CLUSTER_LABEL_PREFIX = "cluster:"
-DEFAULT_AGENTIC_DURATION_SECONDS = 360 # to be changed back
+DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 """
     The below class defines the field names expected to be present in the JSON entries
