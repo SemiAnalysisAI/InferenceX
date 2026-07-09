@@ -13,10 +13,9 @@ set -x
 #       experts EP-sharded across DP ranks (per the vLLM blog recipe).
 #       Highest aggregate throughput at large CONC.
 #
-# Image is configured in nvidia-master.yaml. block_size=256,
-# kv-cache-dtype=fp8, FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph
-# capture with custom_ops=all (per the vLLM blog recipe at
-# https://vllm.ai/blog/deepseek-v4).
+# Image is configured in nvidia-master.yaml. The serving flags follow the
+# DeepSeek-V4 low-latency vLLM recipe with sparse MLA attention, Mega-MoE,
+# FP8 KV cache, and full decode-only CUDA graphs.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -197,20 +196,27 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$VLLM_BACKEND_PORT"
     --trust-remote-code
-    --kv-cache-dtype fp8
-    --block-size 256
     "${PARALLEL_ARGS[@]}"
     "${VLLM_CP_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-    --attention_config.use_fp4_indexer_cache=True
+    --prefill-schedule-interval 8
+    --numa-bind
+    --enable-cumem-allocator
+    --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+    --moe-backend deep_gemm_mega_moe
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+    --block-size 256
+    --max-num-seqs "$MAX_NUM_SEQS"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
-    --enable-prefix-caching
+    --kv-cache-dtype fp8
+    --load-format fastsafetensors
+    --no-enable-flashinfer-autotune
     --no-disable-hybrid-kv-cache-manager
-    --max-num-seqs "$MAX_NUM_SEQS"
+    --disable-uvicorn-access-log
+    --enable-prefix-caching
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"

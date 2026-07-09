@@ -1,4 +1,12 @@
 - config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+    - dsv4-fp4-b300-vllm-agentic
+  description:
+    - "Apply the DeepSeek-V4 vLLM sparse-attention, Mega-MoE, full decode-only CUDA graph, cuMem/NUMA, fastsafetensors, and scheduler tuning flags."
+    - "Expand B200 and B300 AgentX concurrency points to cover the corresponding SGLang search spaces."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/REPLACE_ME
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
