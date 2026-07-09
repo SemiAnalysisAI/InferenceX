@@ -210,7 +210,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 "${EP_ARGS[@]}" \
 --prefill-schedule-interval 8 \
 --numa-bind \
---compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}' \
+--compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}' \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
