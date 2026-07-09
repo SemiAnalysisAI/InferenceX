@@ -1303,7 +1303,42 @@ _install_swebench_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages swebench || true
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then
         python3 -m pip install -q --no-cache-dir --break-system-packages modal || true
+        _patch_swebench_scoring_cpu || \
+            echo "WARN: scoring-cpu patch failed; eval sandboxes will reserve 4 CPUs each" >&2
     fi
+}
+
+# swebench's Modal scorer hardcodes cpu=4 per eval sandbox
+# (run_evaluation_modal.py); Modal bills RESERVED cores, and the test runs are
+# overwhelmingly single-threaded pytest, so 300 instances reserve ~4x what
+# they use -- measured ~$80/full-300 run, ~independent of image caching.
+# Patch to SWEBENCH_EVAL_SANDBOX_CPU (default 2 -> ~half cost; tests run
+# slightly slower per instance, absorbed by scoring parallelism).
+_patch_swebench_scoring_cpu() {
+    python3 - <<'PYPATCH'
+import os, sys
+
+cpu = os.environ.get("SWEBENCH_EVAL_SANDBOX_CPU", "2")
+try:
+    float(cpu)
+except ValueError:
+    print(f"WARN: SWEBENCH_EVAL_SANDBOX_CPU={cpu!r} is not numeric; leaving cpu=4", file=sys.stderr)
+    sys.exit(1)
+
+import swebench.harness.modal_eval.run_evaluation_modal as rem
+path = rem.__file__
+src = open(path).read()
+new = f"cpu={cpu},  # inferencex scoring-cpu patch"
+if "inferencex scoring-cpu patch" in src:
+    print(f"[swebench] {path}: scoring-cpu patch already applied")
+    sys.exit(0)
+if src.count("cpu=4,") != 1:
+    print(f"WARN: [swebench] {path}: cpu=4 anchor not found exactly once "
+          f"(count={src.count('cpu=4,')}); skipping", file=sys.stderr)
+    sys.exit(1)
+open(path, "w").write(src.replace("cpu=4,", new))
+print(f"[swebench] {path}: eval sandbox cpu=4 -> cpu={cpu}")
+PYPATCH
 }
 
 # swebench's validate_modal_credentials() only checks that ~/.modal.toml
