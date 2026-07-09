@@ -4651,7 +4651,7 @@
     - "Enable SGLANG_ENABLE_UNIFIED_RADIX_TREE=1 unconditionally (previously hicache-only) and SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 to free out-of-window SWA KV slots during chunked prefill, relieving SWA pool pressure and restoring prefix-cache hit rate on multi-turn agentic workloads"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2112
 
-  - config-keys:
+- config-keys:
     - kimik2.5-fp4-mi355x-atom
   description:
     - "TODO & update image"
