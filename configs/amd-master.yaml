@@ -1177,7 +1177,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  image: vllm/vllm-openai-rocm:v0.24.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1200,7 +1200,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1221,7 +1220,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8

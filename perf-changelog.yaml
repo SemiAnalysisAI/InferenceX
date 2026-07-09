@@ -4622,6 +4622,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:v0.24.0 (MoRI-IO fixes upstreamed in vllm#40344)"
+    - "Rename a2a backend mori to mori_low_latency; set read_mode via kv_connector_extra_config instead of VLLM_MORIIO_CONNECTOR_READ_MODE env var"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1585
+
+- config-keys:
     - dsr1-fp4-b200-dynamo-sglang-mtp
   description:
     - "Prune the 8k/1k MTP disagg low-latency points: 1p5d-tp8 to conc 4-32, 1p3d-tp8 to conc 32-64, and 1p1d-tp8 to conc 32."
