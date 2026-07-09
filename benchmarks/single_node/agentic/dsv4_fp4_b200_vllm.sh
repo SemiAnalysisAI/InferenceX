@@ -246,5 +246,10 @@ fi
 
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
+# Large Mooncake-backed trajectories can take more than AIPerf's default 300s
+# to return after cache-pressure warmup stops admitting new requests.
+if [ "$KV_OFFLOADING" = "dram" ]; then
+    REPLAY_CMD+=" --warmup-grace-period 900"
+fi
 
 run_agentic_replay_and_write_outputs "$RESULT_DIR"
