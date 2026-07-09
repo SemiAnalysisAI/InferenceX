@@ -560,8 +560,8 @@ kimik2.7-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [32] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32] }
+      - { tp: 4, kv-offloading: none, conc-list: [32, 64] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 64] }
 
 
 kimik2.5-fp4-mi355x-atom:
