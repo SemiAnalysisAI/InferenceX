@@ -150,13 +150,22 @@ cx_deepep_v2_root() {
 }
 
 cx_activate_deepep_v2() {
-  local root venv execution_id
+  local root venv venv_site execution_id
   root="$(cx_deepep_v2_root)" || return 1
   venv="$root/venv"
   [ -x "$venv/bin/python" ] \
     || { cx_log "ERROR: DeepEP V2 venv interpreter is unavailable"; return 1; }
   export VIRTUAL_ENV="$venv"
   export PATH="$venv/bin:${PATH#"$venv/bin:"}"
+  # The per-case probe and rank steps re-source this env in a fresh container task where
+  # PATH alone has proven insufficient to select the venv interpreter over the image's
+  # bundled deep_ep (the amd64 sglang image ships a 1.2.1 wheel with no ElasticBuffer).
+  # Pinning the venv site-packages on PYTHONPATH makes the from-source 2.0.0 build win
+  # under either interpreter, mirroring the deepep-hybrid path that already runs green here.
+  for venv_site in "$venv"/lib/python*/site-packages; do break; done
+  [ -d "$venv_site" ] \
+    || { cx_log "ERROR: DeepEP V2 venv site-packages is unavailable"; return 1; }
+  export PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}"
   EP_NCCL_ROOT_DIR="$(cx_nvidia_package_root nvidia-nccl-cu13 nccl)" \
     || { cx_log "ERROR: DeepEP V2 NCCL package root is unavailable"; return 1; }
   EP_NVSHMEM_ROOT_DIR="$(cx_nvidia_package_root nvidia-nvshmem-cu12 nvshmem)" \
