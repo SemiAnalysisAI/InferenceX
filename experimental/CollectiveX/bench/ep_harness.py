@@ -878,6 +878,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         if realized_placement is not None
         else int(os.environ.get("SLURM_NNODES", "1"))
     )
+    # A scheduled sweep case always carries a matrix-issued --case-id; ad-hoc manual runs do
+    # not. The old canonical-workload machinery (serialized traces) is gone — every workload is
+    # now seeded-runtime — so "canonical" means "matrix-scheduled case", matching sweep_matrix's
+    # canonical:True on scheduled cases and CX_CANONICAL in the container env.
+    canonical = bool(args.case_id)
     scheduled_case = {
             "backend": backend.name,
             "canonical": canonical,
