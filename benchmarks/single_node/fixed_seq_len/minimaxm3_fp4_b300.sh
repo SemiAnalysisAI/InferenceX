@@ -5,9 +5,9 @@
 # checkpoint. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm PR #46380) is
 # baked into the perf container image.
 #
-# At runtime the recipe swaps the image's FlashInfer for the pinned nightly
-# release and applies the CuTeDSL split-K gemm patch on top, mirroring vLLM
-# commits 82a00090a (nightly install) and 0a16bea6b (patch).
+# At runtime the recipe swaps the image's FlashInfer for the pinned stable
+# 0.6.14 release with CUDA 13 dependencies and applies the CuTeDSL split-K gemm
+# patch on top, mirroring vLLM commit 0a16bea6b.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -23,30 +23,16 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# --- FlashInfer nightly + CuTeDSL split-K gemm patch -------------------------
-# Pinned to nightly release nightly-v0.6.14-20260708. The wheels are not yet on
-# the flashinfer.ai/whl/nightly flat index, so install by direct release URL.
-FLASHINFER_VERSION=0.6.14.dev20260708
-FLASHINFER_NIGHTLY_TAG=nightly-v0.6.14-20260708
-FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
-
-# The flashinfer-jit-cache wheel is CUDA-version-specific; derive cuXYZ from
-# the torch build inside the container (e.g. 13.0 -> cu130).
-CUDA_MAJOR_MINOR="cu$(python3 -c 'import torch; print(torch.version.cuda.replace(".", ""))')" \
-    || { echo "Failed to determine CUDA version from torch" >&2; exit 1; }
+# --- FlashInfer 0.6.14 + CuTeDSL split-K gemm patch --------------------------
+FLASHINFER_VERSION=0.6.14
 
 python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
 
-python3 -m pip install --pre \
-    "${FLASHINFER_RELEASE_URL}/flashinfer_python-${FLASHINFER_VERSION}-py3-none-any.whl" \
-    "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
-    "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+${CUDA_MAJOR_MINOR}-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
-    || { echo "FlashInfer nightly install failed" >&2; exit 1; }
-
-python -m pip install "nvidia-cutlass-dsl[cu13]>=4.5.2"
+python -m pip install "flashinfer-python[cu13]==${FLASHINFER_VERSION}" \
+    || { echo "FlashInfer ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
 
 # Apply CuTeDSL split-K gemm patch (jiahanc/flashinfer branch cutedsl-splitK,
-# flashinfer/gemm changes only) on top of the pinned nightly. The reinstall
+# flashinfer/gemm changes only) on top of the pinned release. The reinstall
 # above guarantees pristine files, so the patch always applies cleanly.
 FLASHINFER_PATCH="$(dirname "$0")/patches/flashinfer-cutedsl-splitk-gemm.patch"
 if ! command -v patch >/dev/null 2>&1; then
