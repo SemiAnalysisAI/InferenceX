@@ -583,3 +583,38 @@ def test_agentic_no_preds_still_fails(tmp_path):
     shim, gen_dir = _agentic_shim(tmp_path, "exit 7\n")
     res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
     assert "GEN_RC=7" in res.stdout, res.stdout + res.stderr
+
+
+def test_agentic_eval_limit_defaults_to_50_slice(tmp_path):
+    """Empty EVAL_LIMIT: agentic generation runs the 50-instance CI slice."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+    )
+    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
+    (shim / "mini-extra").write_text(body)
+    # expected=50 but only 1 pred: crash-free exit + salvage keeps rc 0
+    res = _run_agentic(shim, gen_dir)
+    argv = (shim / "argv.log").read_text()
+    assert "--slice 0:50" in argv, argv
+    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+
+
+def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
+    """EVAL_LIMIT=full: no --slice arg (whole split)."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+    )
+    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
+    (shim / "mini-extra").write_text(body)
+    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "full"})
+    argv = (shim / "argv.log").read_text()
+    assert "--slice" not in argv, argv
+    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr

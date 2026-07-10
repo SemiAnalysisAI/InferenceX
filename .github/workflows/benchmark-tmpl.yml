@@ -152,6 +152,11 @@ env:
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+  # Known-bad b300 nodes, excluded until infra repairs them (salloc honors
+  # this env natively). b300-005: NCCL/CUDA init death (jobs 30508/30548).
+  # b300-006: wedged nvidia driver, container-cli rpc timeout (run
+  # 28958779201). Remove entries as nodes are fixed.
+  SALLOC_EXCLUDE: 'b300-005,b300-006'
 
 permissions:
   contents: read

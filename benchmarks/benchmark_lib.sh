@@ -1436,7 +1436,9 @@ maybe_run_eval() {
 #                              all preds are written, then kill (hang-on-exit)
 #   SWEBENCH_EXPECTED_INSTANCES (default 300)  full-split size for the watchdog
 #   SWEBENCH_WATCHDOG_POLL     (default 30)    watchdog poll interval, seconds
-#   EVAL_LIMIT                 first-N instances only (--slice 0:N)
+#   EVAL_LIMIT                 first-N instances (--slice 0:N); empty -> the
+#                              SWEBENCH_DEFAULT_EVAL_LIMIT (50) CI slice;
+#                              "full"/0 -> whole split
 _run_swebench_agentic_generation() {
     local gen_dir="$1"; shift
     local port="${PORT:-8888}"
@@ -1512,6 +1514,13 @@ d["model"] = {
 yaml.safe_dump(d, open(out_path, "w"), default_flow_style=False, sort_keys=False)
 PYGEN
 
+    # CI default is the 50-instance slice (~45min GPU + ~$9 Modal, scores
+    # 62-68%); EVAL_LIMIT=full (or 0) runs the whole split (~1.75h + ~$44,
+    # 54% +/- 1 instance) for release-grade checks. Decision 2026-07-09.
+    case "${EVAL_LIMIT:-}" in
+        "")           EVAL_LIMIT="${SWEBENCH_DEFAULT_EVAL_LIMIT:-50}" ;;
+        full|FULL|0)  EVAL_LIMIT="" ;;
+    esac
     local slice_args=()
     if [ -n "${EVAL_LIMIT:-}" ]; then
         slice_args=(--slice "0:${EVAL_LIMIT}")
@@ -1521,14 +1530,14 @@ PYGEN
     # Expected instance count: the EVAL_LIMIT slice, else the full Lite test
     # split (override via SWEBENCH_EXPECTED_INSTANCES for other datasets).
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-8} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-30} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-64} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-30} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
         --subset lite --split test \
         --environment-class swerex_modal \
         "${slice_args[@]}" \
-        -w "${SWEBENCH_AGENT_WORKERS:-8}" \
+        -w "${SWEBENCH_AGENT_WORKERS:-64}" \
         -o "$gen_dir/agent_out" &
     local mini_pid=$!
     # Completion watchdog: mini-extra can hang on exit AFTER all instances
