@@ -176,13 +176,6 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
         "internode run plus the MI325X internode RDMA selectors in the network "
         "config; scheduled EP8 only for now"
     ),
-    ("mi355x", "mori", 16): (
-        "MoRI InterNodeV1 EP16 cross-node ROCm-SHMEM path VALIDATED on 2-node "
-        "MI355X (2026-07-10: 16/16 ranks established cross-node QPs over the RoCE "
-        "fabric) — the earlier 'does not complete' basis was wrong. Scheduling is "
-        "now gated only on the operator provisioning the MI355X internode RDMA "
-        "selectors in the network-config secret; remove this override once they land"
-    ),
 }
 
 
