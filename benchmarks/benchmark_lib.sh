@@ -1483,6 +1483,8 @@ maybe_run_eval() {
 #   SWEBENCH_AGENT_STEP_LIMIT  (default 75)    per-instance agent step cap
 #   SWEBENCH_AGENT_TIMEOUT     (default 14400) whole-generation guard, seconds
 #   SWEBENCH_AGENT_RUNTIME_TIMEOUT (default 3600) max sandbox lifetime backstop
+#   SWEBENCH_AGENT_SANDBOX_CPU (unset = Modal default) cores reserved per
+#                              agent execution sandbox
 #   SWEBENCH_AGENT_EXIT_GRACE  (default 300)   wait for mini-extra exit after
 #                              all preds are written, then kill (hang-on-exit)
 #   SWEBENCH_EXPECTED_INSTANCES (default 300)  full-split size for the watchdog
@@ -1550,6 +1552,12 @@ env.update({
     # billing for any that slip through both.
     "runtime_timeout": float(os.environ.get("SWEBENCH_AGENT_RUNTIME_TIMEOUT", "3600")),
 })
+# Modal's default sandbox reservation is fractional-core; agents run real test
+# suites in these sandboxes (verify-before-submit), where a starved CPU can eat
+# the 300s command timeout. Optional knob; unset preserves the Modal default.
+agent_cpu = os.environ.get("SWEBENCH_AGENT_SANDBOX_CPU", "")
+if agent_cpu:
+    env["modal_sandbox_kwargs"] = {"cpu": float(agent_cpu)}
 d["environment"] = env
 model_name = os.environ.get("MODEL_NAME") or os.environ.get("MODEL", "")
 d["model"] = {

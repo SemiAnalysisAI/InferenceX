@@ -666,3 +666,25 @@ def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
 
 def test_explicit_single_shot_escape_hatch(tmp_path):
     assert "GEN=single-shot" in _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")
+
+
+def test_agent_sandbox_cpu_knob(tmp_path):
+    """SWEBENCH_AGENT_SANDBOX_CPU flows into modal_sandbox_kwargs; unset leaves
+    the Modal default (no modal_sandbox_kwargs key at all)."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+    )
+    res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_SANDBOX_CPU": "1"})
+    assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+    cfg = (gen_dir / "mini_swebench_overrides.yaml").read_text()
+    assert "modal_sandbox_kwargs" in cfg and "cpu: 1" in cfg, cfg
+
+    gen_dir2 = tmp_path / "gen2"
+    gen_dir2.mkdir()
+    res2 = _run_agentic(shim, gen_dir2, {"EVAL_LIMIT": "1"})
+    assert "GEN_RC=0" in res2.stdout, res2.stdout + res2.stderr
+    cfg2 = (gen_dir2 / "mini_swebench_overrides.yaml").read_text()
+    assert "modal_sandbox_kwargs" not in cfg2, cfg2
