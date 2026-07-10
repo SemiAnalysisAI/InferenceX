@@ -82,14 +82,24 @@ import yaml, sys, os
 config_path = '${MODELS_YAML}'
 model_name = '${MODEL_NAME}'
 
+# Select the models.yaml recipe variant by run type: agentic runs (IS_AGENTIC)
+# use the '<model>-AgentX' entry, non-agentic disaggregated runs use '<model>-DI'.
+# Fall back to the bare model name if the variant-specific key is absent.
+is_agentic = '${IS_AGENTIC:-0}'.strip().lower() in ('1', 'true')
+model_key = f'{model_name}-AgentX' if is_agentic else f'{model_name}-DI'
+
 with open(config_path) as f:
     models = yaml.safe_load(f)
 
-if model_name not in models:
-    print(f'echo \"ERROR: Model {model_name} not in models.yaml\"; exit 1')
-    sys.exit(0)
+if model_key not in models:
+    if model_name in models:
+        model_key = model_name
+    else:
+        print(f'echo \"ERROR: Model {model_key} not in models.yaml\"; exit 1')
+        sys.exit(0)
 
-m = models[model_name]
+m = models[model_key]
+print(f'echo \"Selected models.yaml entry: {model_key} (IS_AGENTIC={is_agentic})\"')
 
 def eval_formula(val):
     \"\"\"Evaluate chunked_prefill_size: if string, resolve variable names from env and compute.\"\"\"
@@ -233,6 +243,7 @@ if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GR
 else
     PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
 fi
+
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
@@ -472,7 +483,7 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     }
 
     # HiCache capacity via --hicache-ratio (scales with GPU KV pool).
-    HICACHE_RATIO="${HICACHE_RATIO:-16}"
+    HICACHE_RATIO="${HICACHE_RATIO:-5}"
 
     build_hicache_flags() {
         echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-ratio ${HICACHE_RATIO} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
@@ -507,15 +518,28 @@ fi
 # Container Synchronization
 # =============================================================================
 
+# sync.py barrier/health-barrier exits 1 on timeout (and prints which
+# node/port never became ready), but without an explicit check here the
+# script would silently continue past a timed-out barrier -- printing a
+# misleading "success" message and launching the next stage against
+# servers/routers that never actually came up, instead of failing fast.
+run_barrier_or_die() {
+    local desc="$1" cmd="$2"
+    if ! eval "$cmd"; then
+        echo "FATAL: ${desc} failed — see the sync.py timeout output above for which node/port never became ready." >&2
+        exit 1
+    fi
+}
+
 echo "Waiting at the container creation barrier on $host_name"
-python3 $SGLANG_WS_PATH/sync.py barrier \
+run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
     --enable-port \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300
+    --timeout 300"
 
 
 # =============================================================================
@@ -668,7 +692,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout 2400"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -711,7 +735,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
-        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/proxy_${host_name}.log"
+        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/router_${host_name}.log"
         # sgl-router (Rust/tracing) emits ANSI color codes. NO_COLOR asks it to
         # skip them at the source; the sed strip guarantees a clean file even if
         # it doesn't honor NO_COLOR. Both branches use process substitution so
@@ -741,7 +765,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ports 30000 \
             --wait-for-all-health \
             --health-endpoint /readiness \
-            --timeout 1800"
+            --timeout 3000"
 
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
@@ -827,9 +851,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # its own defaults for anything not exported here.
         {
             for _v in ENGINE MODEL_NAME MODEL_PREFIX PRECISION FRAMEWORK SPEC_DECODING \
-                      DURATION MAX_MODEL_LEN RESULT_FILENAME RUNNER_NAME \
+                      DURATION MAX_MODEL_LEN RESULT_FILENAME RUNNER_NAME RUNNER_TYPE IMAGE \
                       AIPERF_SERVER_METRICS_URLS SERVER_FLUSH_URLS_CSV \
                       ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
+                      DISAGG IS_MULTINODE \
+                      TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
+                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
+                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
                       KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB \
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
                       AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
@@ -838,7 +866,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 if [[ -n "${!_v+x}" ]]; then printf '%s=%s\n' "$_v" "${!_v}"; fi
             done
             echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
-            echo "AGENTIC_OUTPUT_DIR=/run_logs/slurm_job-${SLURM_JOB_ID}"
+            # Do NOT pin AGENTIC_OUTPUT_DIR: it must default to /workspace (the
+            # host repo mount == GITHUB_WORKSPACE) so the aggregated
+            # ${RESULT_FILENAME}_conc<N>.json lands where the workflow guard globs
+            # it. /workspace is bind-mounted writable, same as the co-located path.
             echo "HF_HOME=/run_logs/hf_cache"
             echo "MODEL_DIR=/models"
             # A pre-baked client image ships aiperf at CLIENT_AIPERF_VENV; when
