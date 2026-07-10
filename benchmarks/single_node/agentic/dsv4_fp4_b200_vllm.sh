@@ -64,13 +64,7 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
-# Mooncake-backed requests can stop returning during AIPerf's accelerated
-# one-token cache-pressure stage even though the vLLM engine remains healthy.
-# Keep that optional stage for local KV runs; offload runs still use AIPerf's
-# ordinary trajectory warmup before the measured profile.
-if [ "$KV_OFFLOADING" != "dram" ]; then
-    export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
-fi
+export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
 
 # vLLM v0.22.1 can ship CUTLASS DSL 4.5.2 with stale native MLIR bindings,
 # which fails DSV4 indexer compilation with mlir_global_dtors(..., data).
