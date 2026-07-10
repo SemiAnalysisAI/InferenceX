@@ -150,6 +150,13 @@ if [ "$DP_ATTENTION" = "true" ]; then
         CHUNKED_PREFILL_SIZE=65536
         CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 544)
     else
+        # DEP4 (TP4/EP4) shards the model across only 4 GPUs, so per-GPU weights
+        # are ~2x DEP8 (233 GB loaded, ~32 GB free). At the DEP8-tuned 0.835 the
+        # KV pool cannot allocate (profiler floor ~0.879). Set 0.93: ~12 GB KV
+        # for the no-offload conc points, while keeping ~18 GB of activation/
+        # CUDA-graph headroom for the MegaMoE workspace (DEP4's footprint is
+        # lighter than DEP8's: decode graph 128 vs 544, same 8192 eff chunk).
+        MEM_FRACTION_STATIC=0.93
         CHUNKED_PREFILL_SIZE=32768
         CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 128)
     fi
