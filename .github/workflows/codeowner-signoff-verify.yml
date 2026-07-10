@@ -30,6 +30,9 @@ name: CODEOWNER Sign-off Verify
 #   9. No patches to the inference engine / serving stack (the pinned image
 #      runs as shipped) — the only exception is a patch covered by a
 #      filled-out docs/waiver/<PR_NUMBER>.md waiver.
+#  10. Agentic spec-decode configs simulate acceptance at the committed golden
+#      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
+#      vLLM synthetic rejection sampling in --speculative-config).
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
