@@ -21,7 +21,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=mooncake.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=mooncake or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -101,15 +101,20 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
+LMCACHE_SERVER_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
+LMCACHE_SERVER_PID=""
 
 OFFLOAD_ARGS=()
 
-if require_agentic_kv_offload_backend mooncake; then
+if agentic_kv_offload_enabled; then
+    case "$KV_OFFLOAD_BACKEND" in
+    mooncake)
+        require_agentic_kv_offload_backend mooncake
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / GPU_COUNT))
@@ -169,6 +174,83 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
+        ;;
+    lmcache)
+        require_agentic_kv_offload_backend lmcache
+        # The LMCache MP server owns the host-DRAM KV pool as one shared
+        # tier; vLLM ranks attach via LMCacheMPConnector, so the aggregate
+        # host budget is passed through undivided (unlike Mooncake's
+        # per-rank segments). Follows the LMCache DeepSeek-V4 recipe
+        # (docs.lmcache.ai/recipes/deepseek_v4_flash.html); LMCache handles
+        # DSV4's Sparse-MLA hybrid KV geometries automatically.
+        LMCACHE_VERSION=0.5.1
+        agentic_pip_install --quiet --no-cache-dir "lmcache==$LMCACHE_VERSION"
+        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+
+        LMCACHE_HOST=127.0.0.1
+        LMCACHE_PORT=$((PORT + 12000))
+        LMCACHE_HTTP_PORT=$((PORT + 13000))
+        # LMCacheMPConnector concatenates lmcache.mp.host and port into the
+        # ZMQ endpoint. Bind the server to a raw host, but pass the connector
+        # a ZMQ-style host string.
+        LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
+        # The pool grows lazily from the initial allocation, so the full
+        # --l1-size-gb budget is not pinned at startup.
+        LMCACHE_L1_INIT_SIZE_GB=20
+        LMCACHE_MQ_TIMEOUT=300
+        # Identical prefixes must hash to identical cache keys across DP ranks.
+        export PYTHONHASHSEED=0
+
+        echo "Starting LMCache MP server on port $LMCACHE_PORT..."
+        # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
+        # under heavy async-load pressure; CPU-side workers stay at 8.
+        lmcache server \
+            --host "$LMCACHE_HOST" \
+            --port "$LMCACHE_PORT" \
+            --http-host "$LMCACHE_HOST" \
+            --http-port "$LMCACHE_HTTP_PORT" \
+            --l1-size-gb "$TOTAL_CPU_DRAM_GB" \
+            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB" \
+            --max-gpu-workers 1 \
+            --max-cpu-workers 8 \
+            --chunk-size 1024 \
+            --l1-align-bytes 16384 \
+            --eviction-trigger-watermark 0.85 \
+            --eviction-ratio 0.10 \
+            --eviction-policy LRU \
+            > "$LMCACHE_SERVER_LOG" 2>&1 &
+        LMCACHE_SERVER_PID=$!
+        LMCACHE_READY=0
+        for _ in $(seq 1 60); do
+            if ! kill -0 "$LMCACHE_SERVER_PID" 2>/dev/null; then
+                echo "LMCache server died during startup." >&2
+                cat "$LMCACHE_SERVER_LOG" >&2
+                exit 1
+            fi
+            if curl --output /dev/null --silent --fail \
+                "http://127.0.0.1:$LMCACHE_HTTP_PORT/healthcheck"; then
+                LMCACHE_READY=1
+                break
+            fi
+            sleep 2
+        done
+        if [ "$LMCACHE_READY" -ne 1 ]; then
+            echo "LMCache server did not become healthy in time." >&2
+            cat "$LMCACHE_SERVER_LOG" >&2
+            exit 1
+        fi
+
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+        )
+        ;;
+    *)
+        echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected one of: mooncake, lmcache)" >&2
+        exit 1
+        ;;
+    esac
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)

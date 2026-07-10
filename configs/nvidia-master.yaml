@@ -1782,6 +1782,25 @@ dsv4-fp4-b200-vllm-agentic:
       # Retain the external-cache transition and peak-throughput region.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 38, 44, 56, 64, 66, 68] }
 
+# LMCache CPU-offload arm of dsv4-fp4-b200-vllm-agentic, split into its own
+# config so it can be triggered/tested independently of the Mooncake curve.
+# Points mirror the Mooncake offload points; the GPU-cache (kv-offloading:
+# none) baselines live in the parent config only.
+dsv4-fp4-b200-vllm-agentic-lmcache:
+  image: vllm/vllm-openai:v0.23.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 38, 44, 56, 64, 66, 68] }
+
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3228,6 +3247,26 @@ dsv4-fp4-b300-vllm-agentic:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32] }
       # TP8 DEP retains representative low, peak, and transition points.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144] }
+
+# LMCache CPU-offload arm of dsv4-fp4-b300-vllm-agentic, split into its own
+# config so it can be triggered/tested independently of the Mooncake curve.
+# Points mirror the Mooncake offload points; the GPU-cache (kv-offloading:
+# none) baselines live in the parent config only.
+dsv4-fp4-b300-vllm-agentic-lmcache:
+  image: vllm/vllm-openai:v0.23.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 18, 20, 24] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [52] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
