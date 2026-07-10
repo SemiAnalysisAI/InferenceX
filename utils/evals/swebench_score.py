@@ -8,15 +8,16 @@ Pipeline:
   2. Extract a unified diff from each model generation.
   3. Write a ``predictions.jsonl`` in the format the official ``swebench`` harness
      expects: ``{instance_id, model_name_or_path, model_patch}``.
-  4. Run ``python -m swebench.harness.run_evaluation`` (Docker) to get the
-     resolved-rate -- unless ``--no-run``/``--report`` is given (offline/testing).
+  4. Run ``python -m swebench.harness.run_evaluation`` to get the resolved-rate
+     -- unless ``--no-run``/``--report`` is given (offline/testing).
   5. Emit a results JSON shaped like an lm-eval result so the existing
      ``collect_eval_results.py`` / ``validate_scores.py`` ingest it unchanged.
      The metric is published as ``exact_match,resolved`` = resolved-rate.
 
-The harness needs Docker + lots of disk and is NOT runnable on this dev Mac, so
-the Docker step is isolated behind ``--no-run`` for local testing. TODO(alec):
-exercise the real ``--run`` path on a runner.
+The harness supports two scoring backends: local Docker (default; needs Docker +
+lots of disk) and Modal remote sandboxes (``--modal``, used when the node has no
+Docker -- the CI path). The Docker step is isolated behind ``--no-run`` so the
+prediction-building path can be exercised offline without either backend.
 """
 
 import argparse
@@ -149,7 +150,7 @@ def iter_samples(samples_dir: Path) -> Iterator[dict]:
             "with --log_samples?"
         )
     for path in files:
-        with path.open() as fh:
+        with path.open(encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 line = line.strip()
                 if line:
@@ -181,7 +182,7 @@ def build_predictions(samples_dir: Path, model_name: str) -> list[dict]:
 
 
 def write_predictions(predictions: list[dict], out_path: Path) -> None:
-    with out_path.open("w") as fh:
+    with out_path.open("w", encoding="utf-8") as fh:
         for row in predictions:
             fh.write(json.dumps(row) + "\n")
 
@@ -249,7 +250,7 @@ def parse_resolved(report: dict) -> tuple[int, int]:
     Denominator is the SUBMITTED instance count, not the full dataset size:
     with EVAL_LIMIT the harness reports total_instances = len(dataset) (e.g.
     300) even when only N predictions were submitted, which deflated a 32/50
-    run to 0.107 and nearly tripped the 0.10 threshold gate. Submitted counts
+    (0.64) run to 0.107, which fails the 0.50 threshold gate. Submitted counts
     empty/errored attempts against the score; instances never attempted don't.
     (For full-split runs submitted == total, matching leaderboard convention.)
     """
@@ -368,7 +369,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         # either JSONL (one object per line) or mini-swe-agent/SWE-agent's
         # preds.json (a single dict keyed by instance_id).
         src = Path(args.predictions_file)
-        text = src.read_text()
+        text = src.read_text(encoding="utf-8", errors="replace")
         try:
             blob = json.loads(text)
             predictions = list(blob.values()) if isinstance(blob, dict) else blob
@@ -396,7 +397,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # 4. score (Docker) or load an existing report
     if args.report:
-        report = json.loads(Path(args.report).read_text())
+        report = json.loads(Path(args.report).read_text(encoding="utf-8", errors="replace"))
     elif args.no_run:
         print("ERROR: --no-run requires --report", file=sys.stderr)
         return 1
@@ -406,12 +407,12 @@ def main(argv: Optional[list[str]] = None) -> int:
             out_dir, args.max_workers, args.namespace, modal=args.modal,
         )
         report_path = find_report(out_dir, args.model_name, run_id)
-        report = json.loads(report_path.read_text())
+        report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
         # Stage under a stable name the workflow's upload globs match; the
         # native name embeds the model string and is easy to miss.
         staged = out_dir / f"swebench_report_{args.task_name}.json"
         if report_path.resolve() != staged.resolve():
-            staged.write_text(json.dumps(report, indent=2))
+            staged.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     resolved, total = parse_resolved(report)
 
@@ -421,7 +422,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         args.lm_eval_version, report,
     )
     results_path = out_dir / f"results_{args.task_name}.json"
-    results_path.write_text(json.dumps(results, indent=2))
+    results_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     print(
         f"[swebench] {args.task_name}: resolved {resolved}/{total} "
         f"= {resolved / total:.4f} -> {results_path}"

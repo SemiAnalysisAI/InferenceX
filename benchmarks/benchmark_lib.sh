@@ -1091,7 +1091,7 @@ append_lm_eval_summary() {
     local fw="${FRAMEWORK:-}"
     local prec="${PRECISION:-}"
     if [[ -z "$fw" || -z "$prec" ]]; then
-        if [[ -n "${RESULT_FILENAME}" ]]; then
+        if [[ -n "${RESULT_FILENAME:-}" ]]; then
             # Extract the two fields immediately before "_tp"
             # Handles arbitrary underscores in exp_name by matching from the end
             local parsed
@@ -1111,7 +1111,7 @@ append_lm_eval_summary() {
   "is_multinode": ${is_multinode_json},
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
-  "spec_decoding": "${SPEC_DECODING}",
+  "spec_decoding": "${SPEC_DECODING:-}",
   "tp": ${TP:-1},
   "dcp_size": ${DCP_SIZE:-1},
   "pcp_size": ${PCP_SIZE:-1},
@@ -1164,10 +1164,10 @@ META
 # SWE-bench eval helpers
 # ------------------------------
 
-# Run the SWE-bench Lite eval: generate patches with lm-eval, then score them
-# with the official swebench Docker harness. lm-eval cannot score SWE-bench
-# itself (no repo-level test executor), so we reuse it only for generation and
-# emit an lm-eval-shaped results JSON from swebench_score.py so the rest of the
+# Run the SWE-bench Lite eval: generate patches (agentic by default, via
+# mini-swe-agent + Modal execution sandboxes; lm-eval single-shot is an explicit
+# escape hatch), then score them with the official swebench harness. Either way
+# swebench_score.py emits an lm-eval-shaped results JSON so the rest of the
 # pipeline (append_lm_eval_summary / collect / validate) is unchanged.
 #
 # Env knobs:
@@ -1428,8 +1428,8 @@ maybe_run_eval() {
 # docker daemon needed on this node. Writes <gen_dir>/agent_out/preds.json
 # (dict keyed by instance_id; consumed via swebench_score.py --predictions-file).
 # Env knobs:
-#   SWEBENCH_AGENT_WORKERS     (default 8)     parallel instances / sandboxes
-#   SWEBENCH_AGENT_STEP_LIMIT  (default 30)    per-instance agent step cap
+#   SWEBENCH_AGENT_WORKERS     (default 64)    parallel instances / sandboxes
+#   SWEBENCH_AGENT_STEP_LIMIT  (default 75)    per-instance agent step cap
 #   SWEBENCH_AGENT_TIMEOUT     (default 14400) whole-generation guard, seconds
 #   SWEBENCH_AGENT_RUNTIME_TIMEOUT (default 3600) max sandbox lifetime backstop
 #   SWEBENCH_AGENT_EXIT_GRACE  (default 300)   wait for mini-extra exit after
@@ -1495,7 +1495,7 @@ env.update({
     "startup_timeout": float(os.environ.get("SWEBENCH_AGENT_STARTUP_TIMEOUT", "900")),
     "timeout": int(os.environ.get("SWEBENCH_AGENT_CMD_TIMEOUT", "300")),
     # Backstop only: sandboxes are terminated on instance completion (see
-    # _patch_swebench_agent_cleanup) and swept after generation; this caps
+    # _patch_swebench_agent) and swept after generation; this caps
     # billing for any that slip through both.
     "runtime_timeout": float(os.environ.get("SWEBENCH_AGENT_RUNTIME_TIMEOUT", "3600")),
 })
@@ -1521,6 +1521,13 @@ PYGEN
         "")           EVAL_LIMIT="${SWEBENCH_DEFAULT_EVAL_LIMIT:-50}" ;;
         full|FULL|0)  EVAL_LIMIT="" ;;
     esac
+    # A non-empty EVAL_LIMIT must be a positive integer: it drives both the
+    # --slice bound and the watchdog's `done_count -ge expected` test, where a
+    # negative/non-numeric value silently short-circuits generation.
+    if [ -n "${EVAL_LIMIT:-}" ] && [[ ! "$EVAL_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: EVAL_LIMIT='${EVAL_LIMIT}' must be a positive integer, 'full', or 0" >&2
+        return 1
+    fi
     local slice_args=()
     if [ -n "${EVAL_LIMIT:-}" ]; then
         slice_args=(--slice "0:${EVAL_LIMIT}")
@@ -1581,10 +1588,20 @@ PYGEN
         agen_rc=$wait_rc
     fi
     # Reap sandboxes still running after generation (crashed workers, outer
-    # timeout kills, anything the in-process cleanup missed). Nothing else is
-    # using Modal at this point -- scoring creates its own containers later --
-    # so a workspace-wide sweep is safe. Every leaked sandbox otherwise bills
-    # until runtime_timeout (1h). SWEBENCH_SANDBOX_SWEEP=0 disables (tests).
+    # timeout kills, anything the in-process cleanup missed). Every leaked
+    # sandbox otherwise bills until runtime_timeout (1h). SWEBENCH_SANDBOX_SWEEP=0
+    # disables (tests).
+    #
+    # SCOPE: Sandbox.list() enumerates the CURRENT Modal environment, and the
+    # agent creates its sandboxes in that same environment, so the sweep is
+    # confined to this environment -- NOT the whole workspace. This is only safe
+    # against sibling jobs if each concurrent agentic-eval leg runs in its OWN
+    # Modal environment: the e2e matrix (test-sweep-agentic-evals) fans out
+    # multiple legs sharing one MODAL_TOKEN, so without per-leg isolation this
+    # sweep would terminate a sibling leg's live sandboxes mid-run. The workflow
+    # must set a distinct MODAL_ENVIRONMENT per leg (workflow scope) -- the modal
+    # client honors it transparently for both create and list, so no change is
+    # needed here beyond exporting it upstream.
     [ "${SWEBENCH_SANDBOX_SWEEP:-1}" = "1" ] && python3 - <<'PYSWEEP' || true
 try:
     import modal
@@ -1653,6 +1670,20 @@ run_swebench_eval() {
     local gen_mode="${SWEBENCH_GEN_MODE:-agentic}"
     local score_input=()
     if [ "$gen_mode" = "agentic" ]; then
+        # Agentic generation is hardcoded to `mini-extra swebench --subset lite`
+        # (see _run_swebench_agentic_generation), so the generated instance IDs
+        # are always SWE-bench_Lite. Scoring derives its dataset from the YAML;
+        # if that has been pointed at a non-Lite dataset the two diverge and
+        # every instance is unscoreable. Fail fast rather than silently deflate.
+        case "$dataset" in
+            *SWE-bench_Lite|*SWE-bench_Lite/*) ;;
+            *)
+                echo "ERROR: agentic generation only produces SWE-bench_Lite instances, but ${yaml_path} dataset_path='${dataset}' is not Lite." >&2
+                echo "       Use gen_mode=single-shot for other datasets, or point the YAML at SWE-bench_Lite." >&2
+                rm -rf "$gen_dir" 2>/dev/null || true
+                return 1
+                ;;
+        esac
         _run_swebench_agentic_generation "$gen_dir" "$@" || {
             local agen_rc=$?
             rm -rf "$gen_dir" 2>/dev/null || true
@@ -1725,6 +1756,12 @@ run_swebench_eval() {
     local score_rc=0
     local ns_args=()
     if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
+    # Match the exact-string gate used by _install_swebench_deps /
+    # _ensure_modal_credentials: --modal only when explicitly "true", so
+    # SWEBENCH_USE_MODAL=false (or 0) scores on local Docker as documented,
+    # rather than passing --modal without the modal package or credentials.
+    local modal_args=()
+    if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then modal_args=(--modal); fi
     # Guard against a stalled scoring backend (e.g. Modal image-build queue):
     # kill scoring after SWEBENCH_SCORE_TIMEOUT seconds (default 2h) rather
     # than holding the GPU allocation until the slurm wall clock.
@@ -1737,7 +1774,7 @@ run_swebench_eval() {
         --dataset-name "$dataset" \
         --max-workers "${SWEBENCH_MAX_WORKERS:-4}" \
         --lm-eval-version "$lm_eval_version" \
-        ${SWEBENCH_USE_MODAL:+--modal} \
+        "${modal_args[@]}" \
         "${ns_args[@]}" \
         || score_rc=$?
     rm -rf "$gen_dir" 2>/dev/null || true

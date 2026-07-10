@@ -227,7 +227,7 @@ def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
         "precision": "fp8", "isl": 8192, "osl": 1024,
     }))
     res = sbs.build_results_json(
-        "swebench_lite", 150, 300, "dsr1", "0.4.12", None
+        "swebench_lite", 180, 300, "dsr1", "0.4.12", None
     )
     (art / "results_swebench_lite.json").write_text(json.dumps(res))
 
@@ -235,15 +235,15 @@ def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
     rows = cer.collect_eval_rows(tmp_path)
     assert len(rows) == 1
     assert rows[0]["task"] == "swebench_lite"
-    assert rows[0]["score"] == pytest.approx(0.5)
+    assert rows[0]["score"] == pytest.approx(0.6)
 
-    # validate_scores gates exact_match,resolved against thresholds.json (0.10).
+    # validate_scores gates exact_match,resolved against thresholds.json (0.50).
     monkeypatch.chdir(art)
     monkeypatch.setattr(sys, "argv", [
         "validate_scores.py",
         "--results-glob", "results_swebench_lite.json",
     ])
-    assert vs.main() == 0  # 0.5 >= 0.10 default threshold
+    assert vs.main() == 0  # 0.6 >= 0.50 threshold
 
 
 def test_predictions_file_mode_skips_samples_and_scores(tmp_path):

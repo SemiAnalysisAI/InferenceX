@@ -106,7 +106,7 @@ on:
         type: string
         default: ""
       swebench-gen-mode:
-        description: "SWE-bench generation mode (single-shot | agentic). Empty = single-shot."
+        description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
         required: false
         type: string
         default: ""
