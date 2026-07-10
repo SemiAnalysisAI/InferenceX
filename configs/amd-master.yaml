@@ -2231,7 +2231,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 16,32,48,64 ]
+        conc-list: [ 2,4,8,16,32 ]
         kv-offloading: dram
         kv-offload-backend: hicache
         prefill:
