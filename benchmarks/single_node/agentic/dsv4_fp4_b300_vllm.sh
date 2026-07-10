@@ -87,7 +87,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     USE_VLLM_ROUTER=true
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_VERSION=0.1.14
-    VLLM_ROUTER_POLICY=round_robin
+    VLLM_ROUTER_POLICY=consistent_hash
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
@@ -181,7 +181,10 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    EP_ARGS=(
+        --enable-expert-parallel
+        --moe-backend deep_gemm_mega_moe
+    )
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -206,15 +209,20 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 "${PARALLEL_ARGS[@]}" \
 "${VLLM_CP_ARGS[@]}" \
 "${EP_ARGS[@]}" \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+--prefill-schedule-interval 8 \
+--numa-bind \
+--compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention_config.use_fp4_indexer_cache=True \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
 --reasoning-parser deepseek_v4 \
-    --enable-prefix-caching \
+--no-enable-flashinfer-autotune \
+--enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
 --max-num-seqs "$MAX_NUM_SEQS" \
+--max-num-batched-tokens 32768 \
+--disable-uvicorn-access-log \
 "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
