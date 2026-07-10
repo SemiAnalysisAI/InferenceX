@@ -217,6 +217,7 @@ VLLM_CMD=(
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
+    --no-async-scheduling
     --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
 )
