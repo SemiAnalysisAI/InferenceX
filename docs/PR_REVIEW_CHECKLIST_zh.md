@@ -27,6 +27,7 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] If an company claims that they support vLLM/SGLang as first class upstream in-tree LLM inference engines on their hardware, I have have verified that the respective vLLM/SGLang submission has been made before additional frameworks (TRT-LLM, ATOM, etc.). The only exceptions are for new hardware, such as MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8, etc., and for new model architectures where there is an actual reason why vLLM/SGLang does not fundamentally support them yet.
 - [ ] Verified that the single-node recipes are similar to the official [vLLM recipes](https://recipes.vllm.ai/) and/or the[SGLang cookbook](https://docs.sglang.io/cookbook/intro):
   - If they are not, I have verified that a PR has been opened in [vLLM recipe repo](https://github.com/vllm-project/recipes) or [SGLang repo](https://github.com/sgl-project/sglang/tree/main/docs_new) and linked it below in the additional detail section:
+- [ ] Verified that this PR does not patch the inference engine or serving stack — the pinned image must run as shipped. This covers .patch files / git apply / patch, inline patches embedded in benchmark scripts (e.g. a python3/sed heredoc that rewrites installed engine sources before serving), in-place edits of site-packages, monkey-patching, overwriting container files, and installing forked/rebuilt engine wheels on top of the pinned image. The only exception is a patch covered by a filled-out waiver at [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md` — named after the PR that introduces the patch and filed in that same PR, stating what is patched, why the unmodified upstream image cannot run this benchmark, the upstream PR/issue link, and the removal plan — which I have linked below in the additional detail section.
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
 
 ### Additional detail section:
@@ -45,7 +46,8 @@ Signed: `FILL_IN_GITHUB_USERNAME`
 7. 如果公司声称在其硬件上将 vLLM/SGLang 作为一等 LLM 推理引擎支持，已确认相应 vLLM 提交使用上游 [vLLM docker 仓库](https://hub.docker.com/u/vllm)、SGLang 提交使用上游 [lmsysorg docker 仓库](https://hub.docker.com/u/lmsysorg)。唯一例外：新硬件（如 MI455X UALoE72、Vera Rubin NVL72、Rubin NVL8 等），以及经 vLLM/SGLang 社区维护者确认上游尚未从根本上支持的新模型架构。
 8. 如果公司声称在其硬件上将 vLLM/SGLang 作为一等上游 in-tree LLM 推理引擎支持，已确认相应 vLLM/SGLang 提交先于其他框架（TRT-LLM、ATOM 等）完成。例外情形同上。
 9. 已确认单节点 recipe 与官方 [vLLM recipes](https://recipes.vllm.ai/) 和/或 [SGLang cookbook](https://docs.sglang.io/cookbook/intro) 相似；如果不相似，已确认在 [vLLM recipe 仓库](https://github.com/vllm-project/recipes)或 [SGLang 仓库](https://github.com/sgl-project/sglang/tree/main/docs_new)开了 PR，并在下方 Additional detail section 中给出链接。
-10. 如果上述任何条目无法合理满足，已在下方提供额外说明。
+10. 已确认该 PR 未对推理引擎或 serving 技术栈打补丁 —— 锁定的镜像必须原样运行。涵盖：.patch 文件 / `git apply` / `patch`、内嵌在基准测试脚本中的行内补丁（例如在启动服务前用 python3/sed heredoc 改写已安装的引擎源码）、就地编辑 site-packages、monkey-patch、覆盖容器文件、以及在锁定镜像之上安装 fork 或重新构建的引擎 wheel。唯一例外：该补丁已由 [docs/waiver/](https://github.com/SemiAnalysisAI/InferenceX/tree/main/docs/waiver)`<PR_NUMBER>.md`（以引入补丁的 PR 编号命名，并在同一 PR 中提交）中填写完整的豁免覆盖 —— 写明补丁内容、为何未修改的上游镜像无法运行该基准测试、上游 PR/issue 链接及移除计划 —— 并已在下方 Additional detail section 中给出链接。
+11. 如果上述任何条目无法合理满足，已在下方提供额外说明。
 
 ## 示例
 

@@ -27,6 +27,9 @@ name: CODEOWNER Sign-off Verify
 #      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
 #   7. No benchmark hacks that change the model architecture / cut FLOPs.
 #   8. Speculative-decoding configs benchmark through chat templates.
+#   9. No patches to the inference engine / serving stack (the pinned image
+#      runs as shipped) — the only exception is a patch covered by a
+#      filled-out docs/waiver/<PR_NUMBER>.md waiver.
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
@@ -243,7 +246,7 @@ jobs:
             A CODEOWNER (`${{ needs.gate.outputs.signoff-author }}`) just posted the reviewer
             sign-off checklist (as a ${{ needs.gate.outputs.signoff-kind }}) that marks
             PR #${{ needs.gate.outputs.pr-number }} as ready to merge. Your job is to
-            INDEPENDENTLY verify the checks below (0-8). Do not trust the reviewer's checkmarks
+            INDEPENDENTLY verify the checks below (0-9). Do not trust the reviewer's checkmarks
             — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
             configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
             the merge standard in `docs/PR_REVIEW_CHECKLIST.md` (read it in the checked-out
@@ -486,8 +489,37 @@ jobs:
               name the config and script line.
             - N/A if the PR has no speculative-decoding changes.
 
+            ## Check 9 — No engine patches without a waiver
+            The pinned upstream image must run AS SHIPPED — the community must be able to
+            reproduce the number from the released image. From the PR diff (scripts under
+            `benchmarks/**`, master configs, workflow changes), scan for anything that modifies
+            the inference engine or serving stack at build or run time:
+            - `.patch` files, `git apply` / `patch` invocations;
+            - INLINE patches embedded in benchmark scripts — the common shape is a heredoc
+              (`python3 - <<EOF`, `sed -i`, `cat > <file> <<EOF`) that rewrites installed engine
+              sources (e.g. paths resolved via `importlib.util.find_spec`, anything under
+              `site-packages`, `/sgl-workspace`, vLLM/SGLang model files) before `vllm serve` /
+              SGLang launch;
+            - Python monkey-patching injected via env hooks, sitecustomize, or copied-in files;
+            - overwriting/shadowing files inside the container image;
+            - `pip install` of forked or rebuilt ENGINE wheels on top of the pinned image.
+            Installing the benchmark harness and client-side deps (aiperf, eval tooling) is fine
+            — the rule covers the SERVING stack that produces the numbers.
+            - PASS in one line if the PR introduces no such patching.
+            - If patching is present, it FAILs unless BOTH: (a) a filled-out waiver exists at
+              `docs/waiver/<PR_NUMBER>.md`, named after the PR that introduced the patch and
+              filed in that same PR — for patching THIS PR introduces, that means this PR adds
+              `docs/waiver/${{ needs.gate.outputs.pr-number }}.md`; for pre-existing patching,
+              the waiver named after the original PR must already be on the default branch —
+              and it covers exactly this patch, stating what is patched, why the unmodified
+              upstream image cannot run this benchmark, the upstream PR/issue link, and a
+              removal plan; AND (b) the sign-off's additional detail section links that waiver.
+              When you FAIL, name the offending script/line and what is missing (no waiver /
+              waiver not linked / waiver does not cover this patch).
+            - N/A if the PR touches no benchmark scripts, images, or configs.
+
             ## Verdict and output
-            Decide PASS only if Checks 0-8 ALL pass (a check reported as `N/A` counts as a pass —
+            Decide PASS only if Checks 0-9 ALL pass (a check reported as `N/A` counts as a pass —
             keep the `N/A — <reason>` row so the reviewer sees it was considered). Post EXACTLY ONE summary comment on
             PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
             the hidden marker so reruns are identifiable:
@@ -513,7 +545,7 @@ jobs:
               restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
               run/recipe instead of describing it.
 
-            - If everything is to standard: post the verdict header + the nine one-line rows
+            - If everything is to standard: post the verdict header + the ten one-line rows
               (with the green run URL). Do NOT @-mention anyone on a pass.
             - If anything is NOT to standard: the verdict header must be immediately followed by a
               line that @-mentions the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`

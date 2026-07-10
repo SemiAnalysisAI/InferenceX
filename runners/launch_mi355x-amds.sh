@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+if [[ "${SCENARIO_SUBDIR:-}" == "agentic/" ]]; then
+    exec bash "$(dirname "$0")/launch_mi355x-amds-agentic.sh"
+fi
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}

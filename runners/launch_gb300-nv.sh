@@ -179,6 +179,14 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
         mkdir -p recipes/sglang/glm5/gb300-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb300-fp4" recipes/sglang/glm5/gb300-fp4
     fi
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+    # GLM-5.1 FP8 (gb300) recipes are version-controlled in-repo; overlay them
+    # onto the pinned submission branch.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/glm5.1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.1" recipes/sglang/glm5.1
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
     # GLM-5.1 MTP recipe (recipes/gb300-fp4/glm5-mtp.yaml) lives on
     # NVIDIA/srt-slurm:main — check it out; no in-repo overlay needed.
