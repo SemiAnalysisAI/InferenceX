@@ -4716,3 +4716,10 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache
+  description:
+    - "Bump the SGLang ROCm image from 20260706 to 20260709 and retire the DeepSeek-V4 compress-state, DSA paged-MQA, AITER instruction-shape, and HiCache host-pool shims that are already included upstream."
+    - "Remove the SWA re-prefill and unified-KV HiCache overlays after their upstream PRs merged; retain only patch code without a merged upstream equivalent."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2127
