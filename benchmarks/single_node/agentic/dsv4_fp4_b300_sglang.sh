@@ -138,7 +138,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --ep-size "$EP_SIZE"
         --moe-a2a-backend megamoe
     )
-    MEM_FRACTION_STATIC=0.835
+    MEM_FRACTION_STATIC=0.85
     SWA_FULL_TOKENS_RATIO=0.075
     # MegaMoE requires the default (non-compressed) attention path and fused shared experts.
     MODEL_ARGS=()
