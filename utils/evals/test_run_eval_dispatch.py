@@ -622,8 +622,9 @@ def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
 
 # --- scenario-implied swebench gen-mode -------------------------------------
 #
-# Label-triggered evals pass no SWEBENCH_GEN_MODE; the scenario must imply the
-# agent loop or a healthy config scores ~10% single-shot and trips the gate.
+# swebench generation is agentic-only: unset SWEBENCH_GEN_MODE means the agent
+# loop everywhere (single-shot scores ~10% and would trip the 0.50 gate);
+# single-shot exists only as an explicit debugging escape hatch.
 
 _GENMODE_SCRIPT = r'''
 source "$BENCHMARK_LIB" 2>/dev/null
@@ -653,13 +654,15 @@ def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
     return res.stdout
 
 
-def test_agentic_scenario_implies_agentic_gen_mode(tmp_path):
+def test_gen_mode_defaults_to_agentic(tmp_path):
     assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="1")
 
 
-def test_fixed_seqlen_scenario_implies_single_shot(tmp_path):
-    assert "GEN=single-shot" in _gen_mode(tmp_path, is_agentic="0")
+def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
+    # swebench is agentic-only (decision 2026-07-09); a forced swebench run on
+    # any scenario still gets the agent loop unless explicitly overridden.
+    assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="0")
 
 
-def test_explicit_gen_mode_overrides_scenario(tmp_path):
+def test_explicit_single_shot_escape_hatch(tmp_path):
     assert "GEN=single-shot" in _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")

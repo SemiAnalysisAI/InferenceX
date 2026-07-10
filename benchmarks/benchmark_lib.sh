@@ -1645,19 +1645,12 @@ run_swebench_eval() {
         return 1
     fi
 
-    # 1. Generation: agentic (mini-swe-agent + Modal execution sandboxes) or
-    #    single-shot (lm-eval prompt-per-instance). SWEBENCH_GEN_MODE overrides;
-    #    otherwise the scenario decides -- agentic configs get the agent loop.
-    #    (Label-triggered evals pass no gen-mode; defaulting them to single-shot
-    #    would score ~10% and trip the 0.50 gate on healthy serving.)
-    local gen_mode="${SWEBENCH_GEN_MODE:-}"
-    if [ -z "$gen_mode" ]; then
-        if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
-            gen_mode=agentic
-        else
-            gen_mode=single-shot
-        fi
-    fi
+    # 1. Generation is AGENTIC (mini-swe-agent + Modal execution sandboxes) --
+    #    that is the point of SWE-bench, and the 0.50 gate is calibrated to it.
+    #    SWEBENCH_GEN_MODE=single-shot remains only as an explicit debugging
+    #    escape hatch (lm-eval prompt-per-instance; scores ~10%, never a CI
+    #    mode). Decision 2026-07-09: swebench is agentic-only.
+    local gen_mode="${SWEBENCH_GEN_MODE:-agentic}"
     local score_input=()
     if [ "$gen_mode" = "agentic" ]; then
         _run_swebench_agentic_generation "$gen_dir" "$@" || {
