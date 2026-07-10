@@ -57,17 +57,17 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   hicache)
         # ---- Hicache config ----------------------------------------------------------
         # DSv4 allocates several physical host sub-pools for each logical host
-        # token. MI355X nodes have ~3 TB of host DRAM (similar to B200's 3.8
-        # TiB), so ratio=8 at TP≥8 provides a large useful CPU tier within the
-        # node budget. Lower TP configs use higher ratios to maintain adequate
-        # host token capacity without exceeding DRAM limits.
+        # token. ROCm's cudaHostRegister has a per-process pinnable-memory
+        # ceiling well below the node's ~2.4 TiB total DRAM. At TP8 with
+        # mem-fraction-static=0.90 each GPU's KV pool is ~62 GB, so ratio=8
+        # would try to pin ~495 GB (TP8 pure) or ~495 GB per engine (DPA),
+        # both of which blow the limit. Ratio=2 keeps pinned memory safely
+        # under the ceiling while still providing a meaningful CPU KV tier.
 
-        DEFAULT_HICACHE_RATIO=8
+        # RuntimeError: cudaHostRegister failed (rc=1, invalid argument) for ptr=0x6f6388400000 size=531470745600; host buffer is not pinned and device transfers may silently return stale data 
+        DEFAULT_HICACHE_RATIO=4
+
         HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-        if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
-            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
-            exit 1
-        fi
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
