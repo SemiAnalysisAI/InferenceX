@@ -7,7 +7,8 @@
 #
 # At runtime the recipe swaps the image's FlashInfer for the first pinned
 # nightly containing the upstream SM100 low-M MXFP8 split-K kernel
-# (flashinfer-ai/flashinfer#3847).
+# (flashinfer-ai/flashinfer#3847), then backports the AutoTuner non-Tensor guard
+# fix from flashinfer-ai/flashinfer#3918.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -23,7 +24,7 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# --- FlashInfer nightly ------------------------------------------------------
+# --- FlashInfer nightly + AutoTuner non-Tensor guard patch ------------------
 FLASHINFER_VERSION=0.6.15.dev20260710
 FLASHINFER_NIGHTLY_TAG=nightly-v0.6.15-20260710
 FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
@@ -35,6 +36,20 @@ python3 -m pip install \
     "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
     "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+cu130-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
     || { echo "FlashInfer nightly install failed" >&2; exit 1; }
+
+# The pinned nightly predates flashinfer-ai/flashinfer#3918. Apply only its
+# runtime fix; the upstream test change is intentionally not backported.
+FLASHINFER_PATCH="$(dirname "$0")/patches/flashinfer-autotuner-non-tensor-guard.patch"
+if ! command -v patch >/dev/null 2>&1; then
+    apt-get update -y && apt-get install -y --no-install-recommends patch \
+        || { echo "Failed to install patch(1)" >&2; exit 1; }
+fi
+SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
+    || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
+patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${FLASHINFER_PATCH}" >/dev/null \
+    || { echo "FlashInfer AutoTuner non-Tensor guard patch does not apply" >&2; exit 1; }
+patch -p1 -d "${SITE_PACKAGES}" < "${FLASHINFER_PATCH}" \
+    || { echo "FlashInfer AutoTuner non-Tensor guard patch failed" >&2; exit 1; }
 
 # -----------------------------------------------------------------------------
 
