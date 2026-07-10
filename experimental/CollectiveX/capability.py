@@ -166,8 +166,11 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
         "Pinned MoRI distributed initialization does not complete on MI300X EP16"
     ),
     ("mi355x", "mori", 16): (
-        "MoRI InterNodeV1 EP16 scale-out needs device-initiated cross-node RDMA "
-        "(ROCm SHMEM), which does not complete on MI355X hosts"
+        "MoRI InterNodeV1 EP16 cross-node ROCm-SHMEM path VALIDATED on 2-node "
+        "MI355X (2026-07-10: 16/16 ranks established cross-node QPs over the RoCE "
+        "fabric) — the earlier 'does not complete' basis was wrong. Scheduling is "
+        "now gated only on the operator provisioning the MI355X internode RDMA "
+        "selectors in the network-config secret; remove this override once they land"
     ),
 }
 
