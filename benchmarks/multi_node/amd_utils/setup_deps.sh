@@ -122,14 +122,15 @@ print("[SETUP] Patched: disaggregation/prefill.py resolve_waiting_queue_bootstra
 }
 
 # ---------------------------------------------------------------------------
-# SGLang: Install latest transformers for GLM-5 model type support.
+# SGLang: Install latest transformers for GLM model type support.
 #
 # GLM-5 (zai-org/GLM-5-FP8) requires a transformers build that includes
-# the glm_moe_dsa model type. The mori images do not ship it.
-# Only install if GLM-5 is the active model (avoid overhead otherwise).
+# the glm_moe_dsa model type. The mori images do not ship it. Gated on any
+# GLM model name (not just GLM-5-FP8) so other GLM variants pick up the same
+# fix; only installs when a GLM model is active (avoid overhead otherwise).
 # ---------------------------------------------------------------------------
 install_transformers_glm5() {
-    if [[ "$MODEL_NAME" != "GLM-5-FP8" ]]; then
+    if [[ "$MODEL_NAME" != *GLM* ]]; then
         return 0
     fi
 
@@ -161,7 +162,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 else
-    patch_disagg_prefill_bootstrap_desync
+    # patch_disagg_prefill_bootstrap_desync
 
     install_transformers_glm5
 fi
