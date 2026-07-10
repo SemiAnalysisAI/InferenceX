@@ -3218,7 +3218,6 @@ dsv4-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
-      - { tp: 8, kv-offloading: none,  conc-list: [72] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [40] }
 
 dsv4-fp4-b300-trt:
