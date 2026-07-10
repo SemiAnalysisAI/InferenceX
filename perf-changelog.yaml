@@ -4707,3 +4707,12 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
+    - "Sync per-worker vLLM serve flags with the single-node minimaxm3-fp8-mi355x-vllm recipe (PR #2003): add --moe-backend aiter, --linear-backend emulation, --max-num-batched-tokens 32768; export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6"
+    - "Retune the P/D search space to TP4 across all workers (drop the TP8 and TP4/EP layouts, which regress tok/s/GPU on gfx950) and tune the prefill:decode worker ratio instead. 1k1k: balanced 1P-TP4/1D-TP4 (conc 1-1024) + decode-heavy 1P-TP4/2D-TP4 (conc 256-2048). 8k1k: balanced 1P-TP4/1D-TP4 (conc 1-512) + prefill-heavy 2P-TP4/1D-TP4 (conc 128-512). All layouts keep prefill+decode workers <= 3 for the 3-node mi355x-disagg pool"
+    - "On-box MI355X per-GPU throughput vs the original 6/24 disagg config: 8k1k peak ~2085 -> ~6003 tok/s/gpu (~2.9x), 1k1k peak ~1736 -> ~2586 tok/s/gpu (~1.5x)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
