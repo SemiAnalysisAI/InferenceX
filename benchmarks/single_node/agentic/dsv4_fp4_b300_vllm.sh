@@ -181,10 +181,7 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(
-        --enable-expert-parallel
-        --moe-backend deep_gemm_mega_moe
-    )
+    EP_ARGS=(--enable-expert-parallel)
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -209,19 +206,15 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 "${PARALLEL_ARGS[@]}" \
 "${VLLM_CP_ARGS[@]}" \
 "${EP_ARGS[@]}" \
---prefill-schedule-interval 8 \
---numa-bind \
---compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
 --attention_config.use_fp4_indexer_cache=True \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
 --reasoning-parser deepseek_v4 \
---no-enable-flashinfer-autotune \
---enable-prefix-caching \
+    --enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
 --max-num-seqs "$MAX_NUM_SEQS" \
---disable-uvicorn-access-log \
 "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
