@@ -801,10 +801,71 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Benchmark runner: bench.sh (fixed-seq-len)"
     fi
 
+    IS_AGENTIC_RUN=0
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        IS_AGENTIC_RUN=1
+    fi
+
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
+    elif [[ -n "${CLIENT_IMAGE:-}" && "$IS_AGENTIC_RUN" == "1" ]]; then
+        # Separate client image (node-0 sibling container): run the aiperf trace
+        # replay in its own sibling container built from CLIENT_IMAGE (which ships
+        # a pre-baked aiperf + deps) instead of rebuilding the aiperf venv inside
+        # this server container. The server/router stay up in this container while
+        # the client container drives the benchmark against the router on
+        # localhost (--network host). job.slurm mounts the host docker socket + CLI
+        # into this container and forwards HOST_REPO_DIR / HOST_MODEL_DIR /
+        # HOST_BENCH_LOGS / CLIENT_CONT_NAME so the sibling can be launched here.
+        CLIENT_ENV_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/client.env"
+        mkdir -p "/run_logs/slurm_job-${SLURM_JOB_ID}"
+        # Forward the benchmark-relevant env (incl. runtime-computed metrics/flush
+        # URLs) to the client container; override the few paths/flags that differ
+        # inside the pre-baked image. Unset vars are skipped, so the client keeps
+        # its own defaults for anything not exported here.
+        {
+            for _v in ENGINE MODEL_NAME MODEL_PREFIX PRECISION FRAMEWORK SPEC_DECODING \
+                      DURATION MAX_MODEL_LEN RESULT_FILENAME RUNNER_NAME \
+                      AIPERF_SERVER_METRICS_URLS SERVER_FLUSH_URLS_CSV \
+                      ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
+                      KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB \
+                      WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
+                      AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
+                      AIPERF_TRAJECTORY_START_MIN_RATIO AIPERF_TRAJECTORY_START_MAX_RATIO \
+                      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES ROUTER_PORT TQDM_MININTERVAL; do
+                if [[ -n "${!_v+x}" ]]; then printf '%s=%s\n' "$_v" "${!_v}"; fi
+            done
+            echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
+            echo "AGENTIC_OUTPUT_DIR=/run_logs/slurm_job-${SLURM_JOB_ID}"
+            echo "HF_HOME=/run_logs/hf_cache"
+            echo "MODEL_DIR=/models"
+            # A pre-baked client image ships aiperf at CLIENT_AIPERF_VENV; when
+            # unset (e.g. reusing the server image, which carries no pre-baked
+            # venv), trace_replay builds aiperf on the fly from
+            # /workspace/utils/aiperf — same as the co-located path.
+            if [[ -n "${CLIENT_AIPERF_VENV:-}" ]]; then
+                echo "AIPERF_USE_PREBUILT=1"
+                echo "AIPERF_VENV=${CLIENT_AIPERF_VENV}"
+            fi
+        } > "$CLIENT_ENV_FILE"
+
+        echo "Launching agentic benchmark in separate client container: ${CLIENT_IMAGE}"
+        docker rm -f "${CLIENT_CONT_NAME}" 2>/dev/null || true
+        set -x
+        docker run --rm --network host \
+            --name "${CLIENT_CONT_NAME}" \
+            --shm-size 32G \
+            -v "${HOST_REPO_DIR}:/workspace" \
+            -v "${HOST_MODEL_DIR}:/models" \
+            -v /tmp:/run_logs \
+            -v "${HOST_BENCH_LOGS}:/benchmark_logs" \
+            --env-file "${CLIENT_ENV_FILE}" \
+            --entrypoint "" \
+            "${CLIENT_IMAGE}" \
+            bash -lc "cd /workspace/benchmarks/multi_node/amd_utils && bash trace_replay.sh /models ${MODEL_NAME} \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        set +x
     else
         set -x
         eval "$BENCH_CMD"

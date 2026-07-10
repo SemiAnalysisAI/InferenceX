@@ -326,6 +326,8 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # dated tags are garbage-collected (manifest unknown)
 VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260629-e667ebb}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
+# Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
+CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
@@ -502,6 +504,27 @@ echo "[config] wrote HiCache/Mooncake settings -> $HICACHE_MC_CONFIG"
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
 
+# =============================================================================
+# Optional: separate benchmark-client image (agentic runs) — node-0 sibling
+# =============================================================================
+# When CLIENT_IMAGE is set, node 0 runs the aiperf trace replay in its own
+# sibling container built from CLIENT_IMAGE (which ships a pre-baked aiperf +
+# deps), instead of rebuilding the aiperf venv inside the server container every
+# run. Give the server container access to the host docker socket + CLI and the
+# host paths the sibling needs for its bind mounts. These fragments are expanded
+# at submit time and injected into the server `docker run` below; empty (no-op)
+# when CLIENT_IMAGE is unset, so the in-container aiperf path is unchanged.
+CLIENT_DOCKER_MOUNTS=""
+CLIENT_DOCKER_ENV=""
+if [[ -n "${CLIENT_IMAGE:-}" ]]; then
+    HOST_DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
+    CLIENT_DOCKER_MOUNTS="-v /var/run/docker.sock:/var/run/docker.sock -v ${HOST_DOCKER_BIN}:/usr/bin/docker"
+    CLIENT_DOCKER_ENV="-e CLIENT_IMAGE=${CLIENT_IMAGE} -e HOST_REPO_DIR=${DI_REPO_DIR} -e HOST_MODEL_DIR=${MODEL_DIR} -e HOST_BENCH_LOGS=${BENCHMARK_LOGS_DIR} -e CLIENT_CONT_NAME=${CLIENT_CONT_NAME}"
+    echo "[client] node-0 sibling benchmark-client image enabled: ${CLIENT_IMAGE}"
+    # Best-effort pre-pull on all nodes so node 0's sibling launch doesn't stall.
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
+fi
+
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
@@ -662,9 +685,11 @@ fi
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
     ${EXTRA_DOCKER_MOUNTS:-} \
+    ${CLIENT_DOCKER_MOUNTS} \
     \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
+    ${CLIENT_DOCKER_ENV} \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
@@ -681,7 +706,7 @@ exit \$DOCKER_EXIT_CODE
 "
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
-    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
 
     # Clean up vLLM external router container on node 0
     if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then

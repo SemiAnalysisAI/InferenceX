@@ -2241,6 +2241,13 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
+          # Node-0 sibling client: run the aiperf trace-replay in its own sibling
+          # container on node 0 (via the host docker socket) instead of inside the
+          # server container. Reuse the (publicly pullable) server image so
+          # upstream CI can fetch it; aiperf is built on the fly from
+          # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
+          # selects the sibling-container mode.
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
         decode:
           num-worker: 1
           tp: 8
