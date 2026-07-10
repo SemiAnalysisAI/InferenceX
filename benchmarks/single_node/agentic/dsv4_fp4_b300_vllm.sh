@@ -13,9 +13,9 @@ set -x
 #       experts EP-sharded across DP ranks (per the vLLM blog recipe).
 #       Highest aggregate throughput at large CONC.
 #
-# Image is vllm/vllm-openai:v0.20.0-cu130. block_size=256, kv-cache-dtype=fp8,
-# FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph capture with
-# custom_ops=all (per the vLLM blog recipe at https://vllm.ai/blog/deepseek-v4).
+# Image is configured in nvidia-master.yaml. The serving flags follow the
+# DeepSeek-V4 low-latency vLLM recipe with sparse MLA attention, Mega-MoE,
+# FP8 KV cache, and full decode-only CUDA graphs.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -122,6 +122,7 @@ if require_agentic_kv_offload_backend mooncake; then
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -180,7 +181,10 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    EP_ARGS=(
+        --enable-expert-parallel
+        --moe-backend deep_gemm_mega_moe
+    )
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -205,15 +209,20 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 "${PARALLEL_ARGS[@]}" \
 "${VLLM_CP_ARGS[@]}" \
 "${EP_ARGS[@]}" \
---compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+--prefill-schedule-interval 8 \
+--numa-bind \
+--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}' \
+--attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}' \
 --attention_config.use_fp4_indexer_cache=True \
 --tokenizer-mode deepseek_v4 \
 --tool-call-parser deepseek_v4 \
 --enable-auto-tool-choice \
 --reasoning-parser deepseek_v4 \
+--no-enable-flashinfer-autotune \
 --enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
 --max-num-seqs "$MAX_NUM_SEQS" \
+--disable-uvicorn-access-log \
 "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"

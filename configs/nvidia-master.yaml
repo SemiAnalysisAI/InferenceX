@@ -1762,7 +1762,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.23.0
+  image: vllm/vllm-openai:nightly-95ed0feaa5cd7fb16d72c53ce04950aaf07c4698
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
@@ -1775,12 +1775,11 @@ dsv4-fp4-b200-vllm-agentic:
       search-space:
       # Pure TP is only competitive at very low concurrency.
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
-      # Sample the useful MooncakeStore range without repeating its collapsed
-      # high-concurrency tail.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 32, 38, 44, 50] }
+      # Cover the external-cache transition region.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [8, 10, 16, 32, 40, 44] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [24, 32, 38, 44, 48, 50, 52] }
       # Retain the external-cache transition and peak-throughput region.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 38, 44, 56, 64, 66, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32, 38, 44, 50, 56, 64, 66, 68] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -3207,7 +3206,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-vllm-agentic:
-  image: vllm/vllm-openai:v0.23.0
+  image: vllm/vllm-openai:nightly-95ed0feaa5cd7fb16d72c53ce04950aaf07c4698
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv
@@ -3219,15 +3218,15 @@ dsv4-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
-      - { tp: 4, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16] }
+      - { tp: 4, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 20, 24, 32] }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 18, 20, 24] }
-      # TP8 remains cache-resident through conc 52.
-      - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 32, 40, 48, 52] }
+      # Cover the TP8 cache-transition region.
+      - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [52] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [8, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32] }
-      # TP8 DEP retains representative low, peak, and transition points.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [8, 16, 24, 32, 40, 64] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
+      # Cover the TP8 DEP throughput region.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144, 196, 512] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066

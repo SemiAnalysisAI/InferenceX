@@ -4707,3 +4707,12 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+    - dsv4-fp4-b300-vllm-agentic
+  description:
+    - "Tune DeepSeek-V4 AgentX on B200 and B300 with the vLLM nightly at 95ed0fe."
+    - "Enable sparse MLA, EP-gated Mega-MoE, full decode-only CUDA graphs, NUMA binding, FP8 KV cache, and the vLLM PR #45406 scheduler fix."
+    - "Expand native-cache and MooncakeStore concurrency coverage."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2138
