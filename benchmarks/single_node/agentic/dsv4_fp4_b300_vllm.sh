@@ -147,9 +147,6 @@ EOF
         # per-transfer bookkeeping and give the shared RNIC more workers.
         export MC_SLICE_SIZE=1048576
         export MC_WORKERS_PER_CTX=4
-        # Avoid head-of-line blocking all async KV loads on a rank when one
-        # large Mooncake GET stalls. Backported from vLLM #45971.
-        export VLLM_MOONCAKE_LOAD_RECV_THREADS=4
 
         # The store is shared, but each rank contributes a separate segment.
         # Start eviction before an imbalanced rank exhausts its segment, and
