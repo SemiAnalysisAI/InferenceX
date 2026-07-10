@@ -29,7 +29,7 @@ name: CODEOWNER Sign-off Verify
 #   8. Speculative-decoding configs benchmark through chat templates.
 #   9. No patches to the inference engine / serving stack (the pinned image
 #      runs as shipped) — the only exception is a patch covered by a
-#      filled-out waiver in docs/waiver/.
+#      filled-out docs/waiver/<PR_NUMBER>.md waiver.
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
@@ -507,11 +507,15 @@ jobs:
             — the rule covers the SERVING stack that produces the numbers.
             - PASS in one line if the PR introduces no such patching.
             - If patching is present, it FAILs unless BOTH: (a) a filled-out waiver exists at
-              `docs/waiver/<slug>/WAIVER.md` (per the template and rules in
-              `docs/waiver/README.md`) — added in this PR or already on the default branch —
-              that covers exactly this patch, AND (b) the sign-off's additional detail section
-              links that waiver. When you FAIL, name the offending script/line and what is
-              missing (no waiver / waiver not linked / waiver does not cover this patch).
+              `docs/waiver/<PR_NUMBER>.md`, named after the PR that introduced the patch and
+              filed in that same PR — for patching THIS PR introduces, that means this PR adds
+              `docs/waiver/${{ needs.gate.outputs.pr-number }}.md`; for pre-existing patching,
+              the waiver named after the original PR must already be on the default branch —
+              and it covers exactly this patch, stating what is patched, why the unmodified
+              upstream image cannot run this benchmark, the upstream PR/issue link, and a
+              removal plan; AND (b) the sign-off's additional detail section links that waiver.
+              When you FAIL, name the offending script/line and what is missing (no waiver /
+              waiver not linked / waiver does not cover this patch).
             - N/A if the PR touches no benchmark scripts, images, or configs.
 
             ## Verdict and output
