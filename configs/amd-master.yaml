@@ -1733,6 +1733,61 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
+
+dsv4-fp4-mi355x-sglang-disagg:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # non-MTP configurations
+      # 1P1D pure TP8  (mori KV transfer)
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+      # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
+      - spec-decoding: "none"
+        conc-list: [ 128, 256 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2596,8 +2651,8 @@ minimaxm3-fp8-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
 minimaxm3-fp8-mi355x-atom-disagg:
-  image: rocm/atom-dev:MiniMax-M3-20260622
-  model: amd/MiniMax-M3-MXFP8
+  image: rocm/atom-dev:nightly_202607011530
+  model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x-disagg
   precision: fp8
@@ -2610,7 +2665,7 @@ minimaxm3-fp8-mi355x-atom-disagg:
       osl: 1024
       search-space:
       # 1P1D TP4
-      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
+      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -2625,12 +2680,30 @@ minimaxm3-fp8-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+      # 2P1D, DPA TP4
+      - conc-list: [ 256, 512, 768, 1024 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
       # 1P1D TP4
     - isl: 1024
       osl: 1024
       search-space:
       # 1P1D TP4
-      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
+      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -2645,9 +2718,10 @@ minimaxm3-fp8-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
 
 minimaxm3-fp4-mi355x-atom-disagg:
-  image: rocm/atom-dev:MiniMax-M3-20260622
+  image: rocm/atom-dev:nightly_202607011530
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x-disagg
@@ -2661,7 +2735,7 @@ minimaxm3-fp4-mi355x-atom-disagg:
       osl: 1024
       search-space:
       # 1P1D TP4
-      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
+      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -2676,12 +2750,30 @@ minimaxm3-fp4-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+      # 2P1D, DPA TP4
+      - conc-list: [ 256, 512, 768, 1024 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
       # 1P1D TP4
     - isl: 1024
       osl: 1024
       search-space:
       # 1P1D TP4
-      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
+      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -2696,6 +2788,7 @@ minimaxm3-fp4-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
 
 # MiniMax-M3 MXFP8 MI300X day-zero recipe. Reuse the dedicated ROCm image and
 # MI355X serving shape, but retain the default BF16 KV cache because this
@@ -3029,3 +3122,36 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
+
+dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2,4,8,16,32 ]
+        kv-offloading: dram
+        kv-offload-backend: hicache
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"

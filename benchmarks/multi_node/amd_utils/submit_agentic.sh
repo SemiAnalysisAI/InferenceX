@@ -130,11 +130,11 @@ export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
 
 # DRY_RUN=1 makes server_sglang.sh echo the composed prefill/decode/router launch
 # commands instead of executing them (useful for previewing a recipe against a real
-# allocation). Threaded here → job.slurm → Docker (-e DRY_RUN) → server_sglang.sh.
+# allocation). Threaded here → job_agentic.slurm → Docker (-e DRY_RUN) → server_sglang.sh.
 # sbatch defaults to --export=ALL, so exporting it is what carries it into the job.
 export DRY_RUN="${DRY_RUN:-0}"
 
-# Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
+# Eval-related env vars (threaded from workflow → runner → here → job_agentic.slurm → Docker)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
@@ -174,7 +174,7 @@ fi
 # =============================================================================
 # Reuse existing allocation (skip sbatch)
 # =============================================================================
-# When SLURM_REUSE_JOBID is set, run job.slurm directly in the current shell,
+# When SLURM_REUSE_JOBID is set, run job_agentic.slurm directly in the current shell,
 # attaching to the existing allocation. Inner `srun` calls pick up the
 # allocation via SLURM_JOB_ID; SLURM_OVERLAP=1 lets them share task slots with
 # the interactive shell already holding the allocation.
@@ -211,10 +211,10 @@ if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
     STDERR_LOG="${BENCHMARK_LOGS_DIR}/slurm_job-${REUSE_JID}.err"
     rm -f "$STDOUT_LOG" "$STDERR_LOG"
 
-    nohup bash "$(dirname "$0")/job.slurm" >"$STDOUT_LOG" 2>"$STDERR_LOG" &
+    nohup bash "$(dirname "$0")/job_agentic.slurm" >"$STDOUT_LOG" 2>"$STDERR_LOG" &
     INLINE_PID=$!
     echo "$INLINE_PID" > "${BENCHMARK_LOGS_DIR}/slurm_job-${REUSE_JID}.pid"
-    echo "Started job.slurm (pid=${INLINE_PID}); logs: ${STDOUT_LOG}" >&2
+    echo "Started job_agentic.slurm (pid=${INLINE_PID}); logs: ${STDOUT_LOG}" >&2
 
     echo "$REUSE_JID"
     exit 0
@@ -235,7 +235,7 @@ sbatch_cmd=(
     --job-name "$RUNNER_NAME"
     --output "${BENCHMARK_LOGS_DIR}/slurm_job-%j.out"
     --error "${BENCHMARK_LOGS_DIR}/slurm_job-%j.err"
-    "$(dirname "$0")/job.slurm"
+    "$(dirname "$0")/job_agentic.slurm"
 )
 
 JOB_ID=$("${sbatch_cmd[@]}")
