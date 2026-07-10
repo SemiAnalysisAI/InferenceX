@@ -70,8 +70,12 @@ export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
 # vLLM v0.22.1 can ship CUTLASS DSL 4.5.2 with stale native MLIR bindings,
 # which fails DSV4 indexer compilation with mlir_global_dtors(..., data).
 # Reinstall the matching native wheel until NVIDIA/cutlass#3259 is resolved.
-agentic_pip_install --quiet --force-reinstall --no-deps \
-    'nvidia-cutlass-dsl-libs-cu13==4.5.2'
+# The v0.24 images ship fixed bindings; reinstalling there would downgrade.
+VLLM_INSTALLED_VERSION=$(python3 -c "from importlib.metadata import version; print(version('vllm'))")
+if [ "$(printf '%s\n' "$VLLM_INSTALLED_VERSION" 0.24.0 | sort -V | head -n1)" != "0.24.0" ]; then
+    agentic_pip_install --quiet --force-reinstall --no-deps \
+        'nvidia-cutlass-dsl-libs-cu13==4.5.2'
+fi
 
 # vllm-project/router expands the one HTTP backend into one logical worker per
 # DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
@@ -194,8 +198,15 @@ EOF
         # ZMQ endpoint. Bind the server to a raw host, but pass the connector
         # a ZMQ-style host string.
         LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
+        # Pool target derated to 75% of the aggregate budget: pinned host
+        # memory is unswappable and also consumes GPU-side mapping
+        # resources, so leave headroom for vLLM host buffers and the OS.
+        # Full-budget targets OOM-killed the node (host OOM-killer or
+        # cudaErrorMemoryAllocation) as the cache filled past ~2 TB during
+        # PR #2153 bring-up.
+        LMCACHE_L1_SIZE_GB=$((TOTAL_CPU_DRAM_GB * 3 / 4))
         # The pool grows lazily from the initial allocation, so the full
-        # --l1-size-gb budget is not pinned at startup.
+        # --l1-size-gb target is not pinned at startup.
         LMCACHE_L1_INIT_SIZE_GB=20
         LMCACHE_MQ_TIMEOUT=300
         # Identical prefixes must hash to identical cache keys across DP ranks.
@@ -209,7 +220,7 @@ EOF
             --port "$LMCACHE_PORT" \
             --http-host "$LMCACHE_HOST" \
             --http-port "$LMCACHE_HTTP_PORT" \
-            --l1-size-gb "$TOTAL_CPU_DRAM_GB" \
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB" \
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB" \
             --max-gpu-workers 1 \
             --max-cpu-workers 8 \

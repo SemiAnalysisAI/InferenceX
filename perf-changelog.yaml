@@ -4726,9 +4726,11 @@
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic-lmcache
-    - dsv4-fp4-b300-vllm-agentic-lmcache
+  scenario-type:
+    - agentic-coding
   description:
-    - "Add LMCache 0.5.1 DRAM KV-offload configs (kv-offload-backend: lmcache) as standalone sections alongside the Mooncake parents"
-    - "LMCache MP server + LMCacheMPConnector with one shared host-DRAM pool sized to the aggregate TOTAL_CPU_DRAM_GB budget"
-    - "LMCache points mirror the Mooncake offload points: B300 TP4 conc 16-24, TP8 conc 52, TP4-DEP4 conc 32; B200 TP8 conc 8-16, TP8-DEP8 conc 16-68"
+    - "Add LMCache 0.5.1 DRAM KV-offload config (kv-offload-backend: lmcache) as a standalone section alongside the Mooncake parent (B300 section deferred)"
+    - "Image vllm/vllm-openai:v0.24.0 for the LMCache section (parent stays on v0.23.0); CUTLASS DSL cu13 reinstall gated to vLLM < 0.24"
+    - "LMCache MP server + LMCacheMPConnector; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB after full-budget pinned pools OOM-killed nodes in bring-up"
+    - "LMCache points mirror the Mooncake offload points: B200 TP8 conc 8-16, TP8-DEP8 conc 16-68"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2153
