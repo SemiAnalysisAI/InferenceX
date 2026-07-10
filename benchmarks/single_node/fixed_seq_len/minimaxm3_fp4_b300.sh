@@ -3,7 +3,9 @@
 # MiniMax-M3 NVFP4 B300 single-node vLLM recipe.
 # Same shape as minimaxm3_fp8_b300.sh but uses the nvidia/MiniMax-M3-NVFP4
 # checkpoint. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm PR #46380) is
-# baked into the perf container image, so no runtime patch is needed.
+# baked into the perf container image. The FlashInfer runtime is pinned to the
+# first nightly containing the upstream SM100 low-M MXFP8 split-K kernel
+# (flashinfer-ai/flashinfer#3847).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -18,6 +20,23 @@ check_env_vars \
     MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
+
+FLASHINFER_VERSION=0.6.15.dev20260710
+FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/nightly-v0.6.15-20260710"
+
+python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
+
+python3 -m pip install --no-deps \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_python-${FLASHINFER_VERSION}-py3-none-any.whl" \
+    || { echo "FlashInfer ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
+
+python3 -m pip install --no-deps \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
+    || { echo "FlashInfer cubin ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
+
+python3 -m pip install --no-deps \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+cu130-cp39-abi3-manylinux_2_28_x86_64.whl" \
+    || { echo "FlashInfer JIT cache ${FLASHINFER_VERSION}+cu130 install failed" >&2; exit 1; }
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
@@ -39,6 +58,7 @@ SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
@@ -57,6 +77,7 @@ start_gpu_monitor
 set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $PORT \
 $PARALLEL_ARGS \
+--attention_config.indexer_kv_dtype fp8 \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
