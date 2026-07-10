@@ -63,13 +63,19 @@ def main() -> None:
 
     scheduler = store_root / "scheduler.py"
     worker = store_root / "worker.py"
+    core_scheduler = package_root / "v1" / "core" / "sched" / "scheduler.py"
 
     resumed_requests_patched = (
         "if req_id in cached_reqs.resumed_req_ids:" in scheduler.read_text()
         and 'logger.exception("Error in %s (req=%s)"' in worker.read_text()
     )
     empty_load_patched = "Mooncake load has no local keys" in worker.read_text()
-    if resumed_requests_patched and empty_load_patched:
+    diagnostics_patched = (
+        "MOONCAKE_DIAG load-enqueue" in worker.read_text()
+        and "MOONCAKE_DIAG scheduler-waiting" in core_scheduler.read_text()
+        and "MOONCAKE_DIAG scheduler-finished" in core_scheduler.read_text()
+    )
+    if resumed_requests_patched and empty_load_patched and diagnostics_patched:
         print(
             "vLLM MooncakeStore correctness backports already present in "
             f"{package_root}"
@@ -152,8 +158,104 @@ def main() -> None:
 """,
         )
 
+    if not diagnostics_patched:
+        replace_once(
+            worker,
+            """            load_spec.token_len = load_spec.kvpool_cached_tokens
+
+            assert self.kv_recv_thread is not None
+            self.kv_recv_thread.add_request(request)
+""",
+            """            load_spec.token_len = load_spec.kvpool_cached_tokens
+
+            logger.warning(
+                "MOONCAKE_DIAG load-enqueue req=%s tp_rank=%d token_len=%d",
+                request.req_id,
+                self.tp_rank,
+                load_spec.token_len,
+            )
+            assert self.kv_recv_thread is not None
+            self.kv_recv_thread.add_request(request)
+""",
+        )
+        replace_once(
+            worker,
+            """        token_len = req_meta.load_spec.token_len  # type: ignore[union-attr]
+        req_id = req_meta.req_id
+""",
+            """        token_len = req_meta.load_spec.token_len  # type: ignore[union-attr]
+        req_id = req_meta.req_id
+        logger.warning(
+            "MOONCAKE_DIAG load-start req=%s tp_rank=%d token_len=%d",
+            req_id,
+            self.tp_rank,
+            token_len,
+        )
+""",
+        )
+        replace_once(
+            worker,
+            """        self.set_finished_request(req_id)
+        self.request_queue.task_done()
+
+
+# ============================================================
+""",
+            """        logger.warning(
+            "MOONCAKE_DIAG load-complete req=%s tp_rank=%d",
+            req_id,
+            self.tp_rank,
+        )
+        self.set_finished_request(req_id)
+        self.request_queue.task_done()
+
+
+# ============================================================
+""",
+        )
+        replace_once(
+            worker,
+            """        logger.debug(
+            "Completed send: %d, recv: %d, tp_rank: %d",
+""",
+            """        if done_recving:
+            logger.warning(
+                "MOONCAKE_DIAG load-report tp_rank=%d reqs=%s",
+                self.tp_rank,
+                sorted(done_recving),
+            )
+        logger.debug(
+            "Completed send: %d, recv: %d, tp_rank: %d",
+""",
+        )
+        replace_once(
+            core_scheduler,
+            """                    request.status = RequestStatus.WAITING_FOR_REMOTE_KVS
+                    step_skipped_waiting.prepend_request(request)
+""",
+            """                    request.status = RequestStatus.WAITING_FOR_REMOTE_KVS
+                    logger.warning(
+                        "MOONCAKE_DIAG scheduler-waiting req=%s external_tokens=%d",
+                        request_id,
+                        num_external_computed_tokens,
+                    )
+                    step_skipped_waiting.prepend_request(request)
+""",
+        )
+        replace_once(
+            core_scheduler,
+            """        for req_id in kv_connector_output.finished_recving or ():
+            logger.debug("Finished recving KV transfer for request %s", req_id)
+""",
+            """        for req_id in kv_connector_output.finished_recving or ():
+            logger.warning("MOONCAKE_DIAG scheduler-finished req=%s", req_id)
+            logger.debug("Finished recving KV transfer for request %s", req_id)
+""",
+        )
+
     compile(scheduler.read_text(), str(scheduler), "exec")
     compile(worker.read_text(), str(worker), "exec")
+    compile(core_scheduler.read_text(), str(core_scheduler), "exec")
     print(f"Applied vLLM MooncakeStore correctness backports to {package_root}")
 
 
