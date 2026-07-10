@@ -233,7 +233,7 @@ collx_apply_network_profile() {
     export NVSHMEM_HCA_LIST="$COLLX_RDMA_DEVICES"
     export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
     if [ "$scaleout" = 1 ]; then
-      if [ "${COLLX_SHARD_SKU:-}" = mi300x ] \
+      if [ "${COLLX_SHARD_SKU:-}" = mi300x ] || [ "${COLLX_SHARD_SKU:-}" = mi325x ] \
           || [ "${COLLX_SHARD_SKU:-}" = mi355x ]; then
         unset NCCL_NET
       else
@@ -679,13 +679,13 @@ collx_reconcile_recorded_allocation() {
 # Runtime setup verifies the image-bundled DeepEP build for the detected GPU target.
 COLLX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 
-# AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for both CDNA
-# SKUs (gfx942 mi300x + gfx950 mi355x).
+# AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for all three CDNA
+# SKUs (gfx942 mi300x/mi325x + gfx950 mi355x).
 COLLX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
 COLLX_MORI_COMMIT_AMD="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
 collx_default_image() {
   case "$1" in
-    mi300x*|mi355x*) echo "$COLLX_IMAGE_AMD_MORI" ;;
+    mi300x*|mi325x*|mi355x*) echo "$COLLX_IMAGE_AMD_MORI" ;;
     b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$COLLX_IMAGE_MULTIARCH" ;;
     *) collx_die "no default image for runner prefix: $1" ;;
   esac
@@ -934,7 +934,7 @@ collx_lock_canonical_gha_env() {
         trusted_stage_dir="$(collx_prepare_implicit_stage_base)" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
-      mi300x|mi355x)
+      mi300x|mi325x|mi355x)
         # AMD self-hosted runners and compute nodes share the runner filesystem,
         # while the image cache may be root-owned. Derive a runner-owned base
         # outside _work instead of weakening stage ownership validation.
@@ -967,7 +967,7 @@ collx_lock_canonical_gha_env() {
   done < "$policy_file"
   rm -f -- "$policy_file"
   case "$runner:$trusted_lock_dir" in
-    mi300x:?*|mi355x:?*) export COLLX_LOCK_DIR="$trusted_lock_dir" ;;
+    mi300x:?*|mi325x:?*|mi355x:?*) export COLLX_LOCK_DIR="$trusted_lock_dir" ;;
   esac
   COLLX_STAGE_DIR="$trusted_stage_dir"
   [ -z "$trusted_qos" ] || export COLLX_QOS="$trusted_qos"
@@ -987,7 +987,7 @@ collx_lock_canonical_gha_env() {
   export COLLX_IMAGE COLLX_NGPUS COLLX_SEED COLLX_RUN_TIMEOUT
   case "$runner" in
     gb200|gb300) export COLLX_MASTER_PORT ;;
-    mi300x|mi355x)
+    mi300x|mi325x|mi355x)
       export COLLX_MORI_KERNEL_TYPE MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;

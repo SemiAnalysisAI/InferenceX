@@ -11,7 +11,7 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}"
 case "$RUNNER" in
-  mi300x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  mi300x|mi325x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi355x) CPUS_PER_TASK=128; DEVICE_MOUNTS="" ;;
   *) collx_die "set COLLX_SHARD_SKU or COLLX_PUBLIC_RUNNER to a registered AMD SKU" ;;
 esac
@@ -44,7 +44,7 @@ case "$COLLX_BENCH" in
 esac
 collx_apply_timing_profile
 
-if [ "$RUNNER" = mi300x ]; then
+if [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
   export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
   export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
   export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
@@ -56,7 +56,7 @@ fi
 if [ "$COLLX_BENCH" = mori ]; then
   if [ "$NODES" -gt 1 ]; then
     export COLLX_MORI_KERNEL_TYPE=internode-v1
-  elif [ "$RUNNER" = mi300x ]; then
+  elif [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
     export COLLX_MORI_KERNEL_TYPE="${COLLX_MORI_KERNEL_TYPE:-asyncll}"
   else
     export COLLX_MORI_KERNEL_TYPE="${COLLX_MORI_KERNEL_TYPE:-intranode}"

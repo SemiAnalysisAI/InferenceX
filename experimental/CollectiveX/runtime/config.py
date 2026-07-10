@@ -26,6 +26,7 @@ REQUIRED = {
     "gb200": {"partition", "account", "storage_roots"},
     "gb300": {"partition", "account", "squash_dir", "enroot_cache_path"},
     "mi300x": {"partition", "squash_dir"},
+    "mi325x": {"partition", "squash_dir"},
     "mi355x": {"partition", "squash_dir"},
 }
 
@@ -169,7 +170,7 @@ def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str
         expected, allowed, family = 8, {1, 2}, "nvidia"
     elif runner in {"gb200", "gb300"}:
         expected, allowed, family = 4, {2, 4}, "gb"
-    elif runner in {"mi300x", "mi355x"}:
+    elif runner in {"mi300x", "mi325x", "mi355x"}:
         expected, allowed, family = 8, {1, 2}, "amd"
     else:
         raise SystemExit(1)

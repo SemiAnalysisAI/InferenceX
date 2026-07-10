@@ -18,7 +18,7 @@ suites:
   ep-core:
     mode: normal
     workloads: [deepseek-v3]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi325x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode, prefill]

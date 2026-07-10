@@ -18,6 +18,7 @@ DEEPEP_V2_SKU_CAPABILITIES = {
     "b300": {"schedulable": True, "basis": "pinned-pr605-pr630-sm103-maps-sm100f"},
     "gb300": {"schedulable": True, "basis": "pinned-pr605-pr630-sm103-maps-sm100f"},
     "mi300x": {"schedulable": False, "basis": "nvidia-only"},
+    "mi325x": {"schedulable": False, "basis": "nvidia-only"},
     "mi355x": {"schedulable": False, "basis": "nvidia-only"},
 }
 
@@ -127,6 +128,11 @@ PLATFORMS = {
         gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
         launcher="mi-amds",
     ),
+    "mi325x": _platform(
+        vendor="amd", arch="gfx942", machine="amd64", product="mi325x",
+        gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
+        launcher="mi-amds",
+    ),
     "mi355x": _platform(
         vendor="amd", arch="gfx950", machine="amd64", product="mi355x",
         gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
@@ -164,6 +170,11 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ),
     ("mi300x", "mori", 16): (
         "Pinned MoRI distributed initialization does not complete on MI300X EP16"
+    ),
+    ("mi325x", "mori", 16): (
+        "MoRI InterNodeV1 EP16 unvalidated on MI325X (gfx942) — pending a 2-node "
+        "internode run plus the MI325X internode RDMA selectors in the network "
+        "config; scheduled EP8 only for now"
     ),
     ("mi355x", "mori", 16): (
         "MoRI InterNodeV1 EP16 cross-node ROCm-SHMEM path VALIDATED on 2-node "
