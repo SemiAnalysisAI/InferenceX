@@ -458,6 +458,6 @@ jobs:
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
-                        "database-target": "production"
+                        "database-target": "agentx-v1"
                       }
                     }'

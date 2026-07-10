@@ -56,6 +56,9 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
+
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     # DeepSeek V4 HiCache currently rejects --hicache-size and supports
@@ -77,7 +80,6 @@ if require_agentic_kv_offload_backend hicache; then
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-    export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
     CACHE_ARGS=(
         --enable-hierarchical-cache
         --hicache-ratio "$HICACHE_RATIO"
