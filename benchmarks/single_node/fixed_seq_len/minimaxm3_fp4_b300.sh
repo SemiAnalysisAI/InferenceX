@@ -5,9 +5,9 @@
 # checkpoint. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm PR #46380) is
 # baked into the perf container image.
 #
-# At runtime the recipe swaps the image's FlashInfer for the pinned stable
-# 0.6.14 release with CUDA 13 dependencies and applies the CuTeDSL split-K gemm
-# patch on top, mirroring vLLM commit 0a16bea6b.
+# At runtime the recipe swaps the image's FlashInfer for the first pinned
+# nightly containing the upstream SM100 low-M MXFP8 split-K kernel
+# (flashinfer-ai/flashinfer#3847).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -23,34 +23,19 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# # --- FlashInfer 0.6.14 + CuTeDSL split-K gemm patch --------------------------
-# FLASHINFER_VERSION=0.6.14
+# --- FlashInfer nightly ------------------------------------------------------
+FLASHINFER_VERSION=0.6.15.dev20260710
+FLASHINFER_NIGHTLY_TAG=nightly-v0.6.15-20260710
+FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
 
-# python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
+python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
 
-# python3 -m pip install --no-deps "flashinfer-python[cu13]==${FLASHINFER_VERSION}" \
-#     || { echo "FlashInfer ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
+python3 -m pip install \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_python-${FLASHINFER_VERSION}-py3-none-any.whl" \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+cu130-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
+    || { echo "FlashInfer nightly install failed" >&2; exit 1; }
 
-# python3 -m pip install --no-deps "flashinfer-cubin==${FLASHINFER_VERSION}" \
-#     --index-url https://flashinfer.ai/whl \
-#     || { echo "FlashInfer cubin ${FLASHINFER_VERSION} install failed" >&2; exit 1; }
-
-# python3 -m pip install --no-deps "flashinfer-jit-cache==${FLASHINFER_VERSION}+cu130" \
-#     --index-url https://flashinfer.ai/whl/cu130 \
-#     || { echo "FlashInfer JIT cache ${FLASHINFER_VERSION}+cu130 install failed" >&2; exit 1; }
-
-# Apply CuTeDSL split-K gemm patch (jiahanc/flashinfer branch cutedsl-splitK,
-# flashinfer/gemm changes only) on top of the pinned release. The reinstall
-# above guarantees pristine files, so the patch always applies cleanly.
-FLASHINFER_PATCH="$(dirname "$0")/patches/flashinfer-cutedsl-splitk-gemm.patch"
-if ! command -v patch >/dev/null 2>&1; then
-    apt-get update -y && apt-get install -y --no-install-recommends patch \
-        || { echo "Failed to install patch(1)" >&2; exit 1; }
-fi
-SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
-    || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "$FLASHINFER_PATCH" \
-    || { echo "FlashInfer CuTeDSL split-K gemm patch failed" >&2; exit 1; }
 # -----------------------------------------------------------------------------
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
@@ -72,7 +57,6 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 
 if [ "${DP_ATTENTION}" = "true" ]; then
