@@ -317,7 +317,7 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260617-e667ebb}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260629-e667ebb}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
@@ -532,6 +532,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
+        --ulimit nofile=1048576:1048576 \
         -v /tmp:/run_logs \
         \"$VLLM_ROUTER_IMAGE\" \
         bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
@@ -572,6 +573,7 @@ fi
     --device=/dev/infiniband/uverbs7 \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
+    --ulimit nofile=1048576:1048576 \
     --network host \
     --ipc host \
     --group-add video \
