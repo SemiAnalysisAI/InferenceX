@@ -62,7 +62,7 @@ class MoRIBackend(EPBackend):
         runner = str(getattr(args, "runner", ""))
         if runner.startswith("mi355x"):
             expected_arch = "gfx950"
-        elif runner.startswith("mi300x"):
+        elif runner.startswith(("mi300x", "mi325x")):
             expected_arch = "gfx942"
         else:
             raise RuntimeError(
@@ -118,8 +118,8 @@ class MoRIBackend(EPBackend):
         self.dispatch_warps = 16
         self.combine_warps = 8
 
-        # MI355X uses the direct intranode kernel. MI300X uses MoRI's split
-        # AsyncLL send/receive kernel as its normal-mode XGMI transport.
+        # MI355X uses the direct intranode kernel. MI300X/MI325X use MoRI's split
+        # AsyncLL send/receive kernel as their normal-mode XGMI transport.
         kernel_request = os.environ.get("COLLX_MORI_KERNEL_TYPE", "intranode").strip().lower()
         self._kernel_type = None
         self._kernel_type_label = "IntraNode"
