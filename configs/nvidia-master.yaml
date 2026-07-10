@@ -3218,15 +3218,8 @@ dsv4-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
-      - { tp: 4, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 20, 24, 32] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 18, 20, 24] }
-      # Match the SGLang TP8 cache-transition coverage.
-      - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [52] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [8, 16, 24, 32, 40, 64] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
-      # Match the SGLang TP8 DEP coverage.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144, 196, 512] }
+      - { tp: 8, kv-offloading: none,  conc-list: [72] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [40] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -14561,4 +14554,3 @@ glm5-fp4-gb300-dynamo-trt-mtp:
           tp: 16
           ep: 16
           dp-attn: true
-
