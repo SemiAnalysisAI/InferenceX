@@ -22,7 +22,7 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 SERVER_LOG=/workspace/server.log
 
 
-export ATOM_DISABLE_MMAP=true
+export ATOM_DISABLE_MMAP=true # Model load faster.
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_MXFP4_INTERMEDIATE=1
 export OMP_NUM_THREADS=1
