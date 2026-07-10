@@ -8,9 +8,6 @@ block our benchmark + accuracy configs — so we can keep reusing the
 
 - `mori_conn.py` — single-file overlay (bind-mounted) for the **sglang**
   MoRI backend.
-- `decode_tp_queue_agree.patch` — reference-only unified diff for the local
-  TP-rank decode queue agreement fix. Its runtime invocation is currently
-  disabled in `../setup_deps.sh`.
 
 > Note: the vLLM MoRIIO `minimax-m3` overlay (`moriio/`) was retired once the
 > upstream fixes (vLLM #46039 / #46290 / #46332) shipped in the ROCm nightly
