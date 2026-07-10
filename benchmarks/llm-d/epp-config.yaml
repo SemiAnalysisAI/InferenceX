@@ -1,0 +1,61 @@
+# Default EPP scheduling config (fallback when CONFIG_FILE is unset).
+#
+# Mirrors the upstream llm-d well-lit-path P/D guide:
+#   guides/pd-disaggregation/router/pd-disaggregation.values.yaml
+# in github.com/llm-d/llm-d. Plugins, scheduling profiles, and scorer
+# weights are unchanged from upstream.
+#
+# Single delta vs upstream: file-discovery. The upstream guide assumes
+# a Kubernetes control plane drives endpoint discovery; in our SLURM
+# setup the coordinator node writes /tmp/endpoints.yaml at job start
+# (see benchmarks/multi_node/llm-d/README.md) and EPP loads it via the
+# file-discovery plugin instead.
+
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  # Endpoint discovery (replaces upstream's K8s discovery).
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  # P/D routing - identical to upstream pd-disaggregation guide.
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc

@@ -2099,6 +2099,45 @@ class TestGenerateTestConfigSweep:
         assert result[1]["conc"] == [256]
         assert result[1]["exp-name"] == "dsv4_p2x8_d1x8_conc256"
 
+    def test_multinode_agentic_preserves_kv_offload_fields(self):
+        config = {
+            "dsv4-agentic-hicache": {
+                "image": "sglang-rocm",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "sglang-disagg",
+                "runner": "cluster:mi355x-amds",
+                "multinode": True,
+                "disagg": True,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "search-space": [{
+                            "conc-list": [16],
+                            "kv-offloading": "dram",
+                            "kv-offload-backend": "hicache",
+                            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                        }],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-agentic-hicache"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config)
+
+        assert len(result) == 1
+        assert result[0]["kv-offloading"] == "dram"
+        assert result[0]["kv-offload-backend"] == "hicache"
+        assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
+
 
 # =============================================================================
 # Test apply_node_type_defaults
