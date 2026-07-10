@@ -1530,7 +1530,7 @@ PYGEN
     # Expected instance count: the EVAL_LIMIT slice, else the full Lite test
     # split (override via SWEBENCH_EXPECTED_INSTANCES for other datasets).
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-64} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-30} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-64} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-75} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
