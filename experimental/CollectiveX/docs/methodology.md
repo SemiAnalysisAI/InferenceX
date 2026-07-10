@@ -24,7 +24,9 @@ placement, and one pinned fixed resource profile per backend/topology. Dispatch 
 fixed BF16 on every backend; precision is not a swept dimension. Every case uses the normal
 `layout-and-dispatch-v1` semantics.
 
-- `ep-core`: uniform routing; decode T=1..512 powers of two; prefill T=256..2048 powers of two.
+- `ep-core`: uniform routing over the workload's token ladders — for `deepseek-v3`, decode
+  T=1..512 powers of two and prefill T=256..2048 powers of two. Ladders are model-specific and
+  live with the workload in `configs/suites.yaml`.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`, and
@@ -54,7 +56,8 @@ decided only by the emitted artifact.
 
 ## Workload Identity
 
-One deterministic workload is generated over the global token batch from a fixed seed and sliced by
+One deterministic workload is generated over the global token batch from the workload's seed in
+`configs/suites.yaml` (part of the workload identity, baked into every scheduled case) and sliced by
 source rank; a stdlib integer counter produces byte-identical expert indices, gate weights, and
 activations on every runtime, and the harness proves the realized routing trace identical across
 ranks before a case can succeed.
@@ -75,7 +78,8 @@ availability, origin, and sample count. A paired-only API reports null isolated 
 `isolated_sum` is derived. The artifact records the mode so a reader can keep distinct measurement
 contracts separate.
 
-Every measured component uses one fixed timing profile:
+Every measured component uses one fixed timing profile, defined once in `configs/suites.yaml`
+and baked into every scheduled case:
 
 - 128 trials x 8 timed iterations = 1024 observations;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at

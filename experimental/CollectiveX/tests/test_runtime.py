@@ -346,8 +346,9 @@ class CaseArgvContract(unittest.TestCase):
         "scale_up_domain": 8, "scope": "scale-out",
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
-        "hidden": 7168, "topk": 8, "experts": 256,
-        "ladder": "1 2 4", "timing": "8:128:32", "canonical": True,
+        "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
+        "ladder": "1 2 4", "conditioning_ladder": "1 2 4 8",
+        "timing": "8:128:32", "canonical": True,
         "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
         "suite": "ep-core", "workload": "deepseek-v3",
     }
@@ -372,8 +373,10 @@ class CaseArgvContract(unittest.TestCase):
             path = Path(directory) / "shard.json"
             path.write_text(json.dumps({"version": 1, "cases": [self.CASE]}))
             result = subprocess.run(
+                # Blank invocation seed: a scheduled case must take its seed from
+                # the case document (configs/suites.yaml), never the invocation.
                 [sys.executable, str(RUNTIME / "config.py"), "case-args",
-                 str(path), "0", "h200-dgxc", "TS", "67", *placement],
+                 str(path), "0", "h200-dgxc", "TS", "", *placement],
                 capture_output=True, check=True,
             )
         return self._decode(result.stdout)
@@ -388,13 +391,12 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.hidden, args.topk, args.experts), (7168, 8, 256))
         self.assertEqual((args.gpus_per_node, args.scale_up_domain), (8, 8))
         self.assertEqual(args.tokens_ladder, "1 2 4")
+        self.assertEqual(args.conditioning_ladder, "1 2 4 8")
         self.assertEqual(args.scale_out_transport, "rdma")
         self.assertEqual(args.case_id, self.CASE["case_id"])
         self.assertEqual(args.version, 1)
-        self.assertEqual(args.seed, ep_harness.ROUTING_SEED)
-        self.assertIsNone(
-            ep_harness.sampling_error(args.iters, args.trials, args.warmup)
-        )
+        self.assertEqual(args.seed, self.CASE["seed"])
+        self.assertEqual((args.iters, args.trials, args.warmup), (8, 128, 32))
         self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_decode_TS-c000.json")
 
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
@@ -402,9 +404,14 @@ class CaseArgvContract(unittest.TestCase):
             self._case_argv(["8", "1", "8", "8"])
 
     def test_manual_args_reads_the_operator_environment(self) -> None:
+        # Manual runs have no workload/timing fallbacks: the operator states the
+        # full shape and profile or run_ep.py rejects the argv.
         env = dict(
             os.environ, COLLX_BENCH="mori", COLLX_TOPO="mi355x-xgmi", COLLX_TRANSPORT="xgmi",
             COLLX_GPUS_PER_NODE="8", COLLX_SCALE_UP_DOMAIN="8",
+            COLLX_HIDDEN="7168", COLLX_TOPK="8", COLLX_EXPERTS="256",
+            COLLX_TOKENS_LADDER="256 512", COLLX_CONDITIONING_LADDER="1 2 4",
+            COLLX_ITERS="8", COLLX_TRIALS="128", COLLX_WARMUP="32",
         )
         result = subprocess.run(
             [sys.executable, str(RUNTIME / "config.py"), "manual-args",
@@ -415,7 +422,20 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.backend, args.phase), ("mori", "prefill"))
         self.assertEqual(args.topology_class, "mi355x-xgmi")
         self.assertEqual(args.transport, "xgmi")
+        self.assertEqual(args.seed, 67)
+        self.assertEqual(args.conditioning_ladder, "1 2 4")
         self.assertEqual(args.out, "results/mi355x_mori_prefill_TS-c001.json")
+
+    def test_manual_args_without_workload_env_fails_the_run_ep_parser(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(RUNTIME / "config.py"), "manual-args",
+             "prefill", "0", "mi355x", "TS", "67"],
+            capture_output=True, check=True,
+            env={k: v for k, v in os.environ.items() if not k.startswith("COLLX_")},
+        )
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                self._run_ep_parser().parse_args(self._decode(result.stdout))
 
 
 if __name__ == "__main__":

@@ -38,7 +38,6 @@ import types
 from dataclasses import dataclass, field
 
 from ep_harness import (
-    CONDITIONING_LADDERS,
     time_us,
     token_ladder,
 )
@@ -169,16 +168,21 @@ class EPBackend(abc.ABC):
         """
         ep_size = self.world_size
         experts_per_rank = args.experts // ep_size
-        conditioning_ladder = list(CONDITIONING_LADDERS[args.phase])
+        conditioning_ladder, _ = token_ladder(args.conditioning_ladder, None)
+        if not conditioning_ladder:
+            return WorkloadSpec(
+                ok=False, rc=2,
+                message=f"empty conditioning ladder (phase={args.phase})",
+            )
         cap = self.buffer_cap(args)
         if cap is not None and cap < conditioning_ladder[-1]:
             return WorkloadSpec(
                 ok=False, rc=2,
                 message=(
-                    f"{self.name} buffer cap {cap} cannot run the v1 conditioning ladder"
+                    f"{self.name} buffer cap {cap} cannot run the conditioning ladder"
                 ),
             )
-        ladder, dropped = token_ladder(args.tokens_ladder, args.phase, cap)
+        ladder, dropped = token_ladder(args.tokens_ladder, cap)
         if not ladder:
             return WorkloadSpec(
                 ok=False, rc=2,

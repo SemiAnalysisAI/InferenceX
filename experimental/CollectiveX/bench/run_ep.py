@@ -149,18 +149,9 @@ def main() -> int:
     if args.case_id and not ep_harness.is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
-    if args.case_id and args.seed != ep_harness.ROUTING_SEED:
-        print(
-            f"ERROR: scheduled v1 cases require seed={ep_harness.ROUTING_SEED}; got {args.seed}",
-            file=sys.stderr,
-        )
-        return 2
-    sampling_error = ep_harness.sampling_error(
-        args.iters, args.trials, args.warmup
-    )
-    if sampling_error:
-        print(f"ERROR: {sampling_error}", file=sys.stderr)
-        return 2
+    # Seed and timing arrive baked into the case argv from the single
+    # configs/suites.yaml source; there is no separate canonical constant to
+    # cross-check against.
 
     try:
         import torch

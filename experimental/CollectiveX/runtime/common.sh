@@ -930,7 +930,7 @@ collx_lock_canonical_gha_env() {
   rm -f -- "$policy_file"
   unset COLLX_PUBLIC_RUNNER COLLX_GB_PRODUCT COLLX_DRYRUN COLLX_TIMING
   unset COLLX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE
-  export COLLX_IMAGE COLLX_NGPUS COLLX_SEED COLLX_RUN_TIMEOUT
+  export COLLX_IMAGE COLLX_NGPUS COLLX_RUN_TIMEOUT
   case "$runner" in
     gb200|gb300) export COLLX_MASTER_PORT ;;
     mi300x|mi325x|mi355x)
@@ -1327,12 +1327,12 @@ collx_run_shard() {
   while [ "$ci" -lt "$expected_cases" ]; do
     if [ -n "$shard" ]; then
       python3 "$COLLX_RUNTIME_DIR/config.py" case-args "$shard" "$ci" \
-        "$RUNNER" "$TS" "${COLLX_SEED:-67}" \
+        "$RUNNER" "$TS" "${COLLX_SEED:-}" \
         "$NGPUS" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" > "$argv_file" \
         || { rm -f "$argv_file"; collx_die "shard case $ci does not decode against this allocation"; }
     else
       python3 "$COLLX_RUNTIME_DIR/config.py" manual-args "${manual_phases[ci]}" "$ci" \
-        "$RUNNER" "$TS" "${COLLX_SEED:-67}" > "$argv_file" \
+        "$RUNNER" "$TS" "${COLLX_SEED:-}" > "$argv_file" \
         || { rm -f "$argv_file"; collx_die "manual case $ci does not decode"; }
     fi
     mapfile -d '' -t ep_args < "$argv_file"

@@ -176,10 +176,13 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, ind
         "--scale-up-transport", get("scale_up_transport", "unknown"),
         "--scale-out-transport", get("scale_out_transport"),
         "--tokens-ladder", get("ladder"),
-        "--hidden", get("hidden", "7168"),
-        "--topk", get("topk", "8"),
-        "--experts", get("experts", "256"),
-        "--seed", seed,
+        "--conditioning-ladder", get("conditioning_ladder"),
+        "--hidden", get("hidden"),
+        "--topk", get("topk"),
+        "--experts", get("experts"),
+        # Scheduled cases carry the workload seed from configs/suites.yaml; the
+        # positional seed only reaches ad-hoc manual runs.
+        "--seed", get("seed", seed),
         "--runner", runner,
         "--topology-class", get("topology_class", "manual"),
         "--transport", get("transport", "unknown"),
@@ -188,7 +191,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, ind
         "--workload-name", get("workload"),
         "--version", str(version),
     ]
-    iters, trials, warmup = (get("timing", "8:128:32").split(":") + ["", "", ""])[:3]
+    iters, trials, warmup = (get("timing").split(":") + ["", "", ""])[:3]
     for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
         if value:
             argv += [flag, value]
@@ -228,13 +231,17 @@ def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None
         "scale_up_transport": env("COLLX_SCALE_UP_TRANSPORT", "unknown"),
         "scale_out_transport": env("COLLX_SCALE_OUT_TRANSPORT", ""),
         "ladder": env("COLLX_TOKENS_LADDER", ""),
-        "hidden": env("COLLX_HIDDEN", "7168"), "topk": env("COLLX_TOPK", "8"),
-        "experts": env("COLLX_EXPERTS", "256"),
+        "conditioning_ladder": env("COLLX_CONDITIONING_LADDER", ""),
+        # No workload or timing fallbacks: a manual run states its full shape and
+        # profile or run_ep.py rejects the argv. The scheduled values live in
+        # configs/suites.yaml.
+        "hidden": env("COLLX_HIDDEN", ""), "topk": env("COLLX_TOPK", ""),
+        "experts": env("COLLX_EXPERTS", ""),
         "topology_class": env("COLLX_TOPO", "manual"),
         "transport": env("COLLX_TRANSPORT", "unknown"),
         "case_id": env("COLLX_CASE_ID", ""), "suite": env("COLLX_SUITE", ""),
         "workload": env("COLLX_WORKLOAD_NAME", ""),
-        "timing": f"{env('COLLX_ITERS', '8')}:{env('COLLX_TRIALS', '128')}:{env('COLLX_WARMUP', '32')}",
+        "timing": f"{env('COLLX_ITERS', '')}:{env('COLLX_TRIALS', '')}:{env('COLLX_WARMUP', '')}",
     }
     _emit_argv(case, env("COLLX_VERSION", "1"), runner, ts, seed, index)
 
@@ -250,7 +257,7 @@ def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str
         raise SystemExit(1)
     if nodes not in allowed or gpus_per_node != expected:
         raise SystemExit(1)
-    values = {"COLLX_NGPUS": nodes * expected, "COLLX_SEED": 67,
+    values = {"COLLX_NGPUS": nodes * expected,
               "COLLX_RUN_TIMEOUT": 1800 if family == "amd" else 900,
               "COLLX_IMAGE": amd if family == "amd" else multiarch}
     if family == "gb": values["COLLX_MASTER_PORT"] = 29551

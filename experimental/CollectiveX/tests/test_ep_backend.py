@@ -17,7 +17,8 @@ from ep_backend import EPBackend, RankInputs  # noqa: E402
 
 def args(**updates):
     values = dict(
-        experts=8, phase="decode", tokens_ladder="", routing="uniform", seed=0,
+        experts=8, phase="decode", tokens_ladder="",
+        conditioning_ladder="1 2 4 8 16 32 64 128", routing="uniform", seed=0,
         hidden=16, topk=2, mode="normal",
     )
     values.update(updates)

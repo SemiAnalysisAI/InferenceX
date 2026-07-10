@@ -142,6 +142,9 @@ def _require_runtime() -> None:
 
 class DeepEPV2Backend(EPBackend):
     name = "deepep-v2"
+    # Invariant by identity contract: this backend IS the PR #605 ElasticBuffer
+    # implementation; LSA vs hybrid GIN are transport paths, not kernel families.
+    kernel_generation = "v2-elastic-buffer"
     stage_device_work = False
     combine_needs_redispatch = False
     combine_weight_semantics = "unweighted-rank-sum"

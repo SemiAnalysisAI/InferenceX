@@ -42,7 +42,6 @@ import json
 import math
 import os
 import re
-import types
 
 
 _CASE_ID = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
@@ -69,30 +68,12 @@ def case_id(sku: str, case: dict) -> str:
     return "-".join(values)
 
 
-# Every comparison-grade EP point uses the same literal timing profile on every SKU/backend.
-# Eight timed iterations keep each MoRI burst well below its sustained-iteration wedge, 128 trials
-# provide 1024 observations per operation (tighter p99 tail — the estimate that drives the chart),
-# and 32 warmups meet Blackwell's measured clock-ramp floor. Trials is the sample axis; note each
-# trial re-warms 32×, so trial count also dominates wall-clock (see the warm-once methodology TODO).
-TIMED_SAMPLES_PER_POINT = 1024
-TIMED_ITERS_PER_TRIAL = 8
-TRIALS_PER_POINT = 128
-WARMUP_ITERS_PER_TRIAL = 32
+# The timing profile, routing seed, and all token ladders (measured and
+# conditioning) live in configs/suites.yaml; the matrix bakes them into every
+# scheduled case and they arrive here only through the CLI — this module keeps
+# no defaults for them. "decode"/"prefill" are token-size regimes, NOT distinct
+# kernels. Conditioning rounds per warm shape stay fixed here.
 WARMUP_SEMANTICS = "full-roundtrip-before-each-component-trial-point-v1"
-ROUTING_SEED = 67
-
-# Phase-default sweeps — token-size regimes, NOT distinct kernels (both run normal
-# mode; "decode"/"prefill" name the small/large-token regime). Powers of two for a
-# clean log x-axis; clamped to the backend buffer ceiling (MoRI's registerable heap).
-DECODE_LADDER = [1, 2, 4, 8, 16, 32, 64, 128]
-PREFILL_LADDER = [128, 256, 512, 1024, 2048, 4096]
-# Conditioning replays a fixed phase ramp before each measured shape to settle
-# clocks and routing state; these rounds are never timed or emitted. The ladders
-# and round count are fixed for every benchmark case.
-CONDITIONING_LADDERS = {
-    "decode": [1, 2, 4, 8, 16, 32, 64, 128],
-    "prefill": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-}
 CONDITIONING_ROUNDS_PER_SHAPE = 8
 # Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
 ORACLE_RTOL = 5e-2
@@ -126,37 +107,39 @@ def format_collective_version(raw) -> str:
 
 def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
-    # DeepEP uses this only when its installed Buffer does not expose a tuned default.
-    ap.set_defaults(num_sms=24)
     ap.add_argument("--mode", default="normal", choices=["normal"])
     ap.add_argument("--phase", default="decode", choices=["decode", "prefill"],
-                    help="token-size regime: decode (small T) / prefill (large T) — picks the default ladder")
-    ap.add_argument("--tokens-ladder", default="",
-                    help="space/comma-separated source-tokens-per-rank sweep; blank = phase default")
-    ap.add_argument("--hidden", type=int, default=7168)
-    ap.add_argument("--topk", type=int, default=8)
-    ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
+                    help="token-size regime: decode (small T) / prefill (large T) — picks the conditioning ramp")
+    ap.add_argument("--tokens-ladder", required=True,
+                    help="space/comma-separated source-tokens-per-rank sweep; the matrix "
+                         "supplies the workload's phase ladder from configs/suites.yaml")
+    ap.add_argument("--conditioning-ladder", required=True,
+                    help="space/comma-separated untimed warm ramp replayed before each measured "
+                         "shape; the matrix supplies the workload's phase ramp from configs/suites.yaml")
+    ap.add_argument("--hidden", type=int, required=True)
+    ap.add_argument("--topk", type=int, required=True)
+    ap.add_argument("--experts", type=int, required=True,
+                    help="TOTAL experts (fixed across EP degrees)")
     ap.add_argument("--routing", default="uniform", choices=["uniform"])
     ap.add_argument("--case-id", default="")
     ap.add_argument("--suite", default="")
     ap.add_argument("--workload-name", default="")
-    ap.add_argument("--seed", type=int, default=ROUTING_SEED)
+    ap.add_argument("--seed", type=int, required=True,
+                    help="routing-trace seed; part of the workload identity in configs/suites.yaml")
     ap.add_argument(
         "--version",
         type=int,
         default=os.environ.get("COLLX_VERSION", "1"),
         help="iterable benchmark version copied verbatim into the emitted result",
     )
-    # 32: B300/Blackwell needs ~30 untimed iters to reach steady-state GPU clocks +
-    # establish NVLink/NVSHMEM connections — at warmup=8 its dispatch read ~1787us
-    # (cold), at warmup>=30 it settles to ~85us (faster than H100, reproducible within
-    # ~2.5%). H100/MI355X reach steady state much sooner; the extra iters are harmless.
-    ap.add_argument("--warmup", type=int, default=WARMUP_ITERS_PER_TRIAL,
-                    help=f"untimed full roundtrips before each trial/point; fixed to {WARMUP_ITERS_PER_TRIAL}")
-    ap.add_argument("--iters", type=int, default=TIMED_ITERS_PER_TRIAL,
-                    help=f"timed iterations per trial; fixed to {TIMED_ITERS_PER_TRIAL}")
-    ap.add_argument("--trials", type=int, default=TRIALS_PER_POINT,
-                    help=f"timed trials; fixed to {TRIALS_PER_POINT}")
+    # The single cross-SKU profile (and its rationale) lives in configs/suites.yaml
+    # `timing:`; the matrix bakes it into every scheduled case.
+    ap.add_argument("--warmup", type=int, required=True,
+                    help="untimed full roundtrips before each trial/point")
+    ap.add_argument("--iters", type=int, required=True,
+                    help="timed iterations per trial")
+    ap.add_argument("--trials", type=int, required=True,
+                    help="timed trials")
     # provenance / output
     ap.add_argument("--runner", required=True)
     ap.add_argument("--topology-class", required=True)
@@ -171,29 +154,14 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--out", required=True)
 
 
-def token_ladder(spec: str, phase: str, cap: int | None) -> tuple[list[int], list[int]]:
-    """Return (ladder, dropped): explicit spec else the phase default; positive ints;
-    clamped to `cap` with dropped points reported (never silently truncated)."""
-    if spec and spec.strip():
-        want = [int(t) for t in spec.replace(",", " ").split() if t]
-    else:
-        want = DECODE_LADDER if phase == "decode" else PREFILL_LADDER
-    want = sorted({t for t in want if t > 0})
+def token_ladder(spec: str, cap: int | None) -> tuple[list[int], list[int]]:
+    """Return (ladder, dropped) from an explicit spec (there is no default — the
+    model-specific ladders live in configs/suites.yaml); positive ints; clamped to
+    `cap` with dropped points reported (never silently truncated)."""
+    want = sorted({t for t in (int(t) for t in spec.replace(",", " ").split() if t) if t > 0})
     if cap is not None:
         return [t for t in want if t <= cap], [t for t in want if t > cap]
     return want, []
-
-
-def sampling_error(iters: int, trials: int, warmup: int) -> str | None:
-    """Return a user-facing error unless the exact cross-SKU timing profile is used."""
-    expected = (TIMED_ITERS_PER_TRIAL, TRIALS_PER_POINT, WARMUP_ITERS_PER_TRIAL)
-    observed = (iters, trials, warmup)
-    if observed != expected:
-        return ("CollectiveX requires exactly iters:trials:warmup="
-                f"{expected[0]}:{expected[1]}:{expected[2]} on every SKU/backend; got "
-                f"{observed[0]}:{observed[1]}:{observed[2]} "
-                f"({iters * trials if iters > 0 and trials > 0 else 'invalid'} timed samples)")
-    return None
 
 
 def trial_order(values: list, trial_index: int) -> list:
@@ -280,13 +248,8 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[flo
 
 
 def kernel_generation(backend) -> str:
-    """Return the adapter's explicit kernel family when one exists."""
-    declared = getattr(backend, "kernel_generation", None)
-    if declared:
-        return declared
-    return {
-        "deepep-v2": "v2-elastic-buffer",
-    }.get(backend.name, "n-a")
+    """Return the adapter's declared kernel family."""
+    return getattr(backend, "kernel_generation", None) or "n-a"
 
 
 def _reduce_vec(torch, dist, device, vals, op):
@@ -327,6 +290,20 @@ def _normalized_expert_metadata(torch, expert_ids, weights):
     )
 
 
+def _expert_coefficients(torch, expert):
+    """Per-expert affine coefficients — the transform and its independently derived
+    expectation must use these exact formulas, so they exist only here."""
+    scale = ((expert * 17 + 5) % 31 + 1).to(torch.float32) / 32
+    offset_a = (((expert * 29 + 7) % 37) - 18).to(torch.float32) / 64
+    offset_b = (((expert * 43 + 11) % 41) - 20).to(torch.float32) / 128
+    return scale, offset_a, offset_b
+
+
+def _column_pattern(torch, ncols, device):
+    columns = torch.arange(ncols, device=device, dtype=torch.int64)
+    return (((columns * 13) % 17) - 8).to(torch.float32) / 8
+
+
 def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semantics):
     """Build one local expert aggregate for the v1 unweighted combine contract."""
     if combine_weight_semantics != "unweighted-rank-sum":
@@ -334,14 +311,11 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     valid = expert_ids >= 0
     expert = expert_ids.clamp(min=0).to(torch.int64)
     gate = weights.to(torch.float32).masked_fill(~valid, 0)
-    scale = ((expert * 17 + 5) % 31 + 1).to(torch.float32) / 32
-    offset_a = (((expert * 29 + 7) % 37) - 18).to(torch.float32) / 64
-    offset_b = (((expert * 43 + 11) % 41) - 20).to(torch.float32) / 128
+    scale, offset_a, offset_b = _expert_coefficients(torch, expert)
     scale_sum = (gate * scale).sum(dim=1, keepdim=True)
     offset_a_sum = (gate * offset_a).sum(dim=1, keepdim=True)
     offset_b_sum = (gate * offset_b).sum(dim=1, keepdim=True)
-    columns = torch.arange(payload.shape[1], device=payload.device, dtype=torch.int64)
-    pattern = (((columns * 13) % 17) - 8).to(torch.float32) / 8
+    pattern = _column_pattern(torch, payload.shape[1], payload.device)
     transformed = (
         payload.float() * scale_sum + offset_a_sum + offset_b_sum * pattern.unsqueeze(0)
     )
@@ -354,17 +328,43 @@ def _expected_transformed_combine(torch, problem):
     expected = torch.zeros_like(semantic_x, dtype=torch.float32)
     expert_ids = problem.topk_idx.to(torch.int64)
     weights = problem.topk_weights.to(torch.float32)
-    columns = torch.arange(semantic_x.shape[1], device=semantic_x.device, dtype=torch.int64)
-    pattern = (((columns * 13) % 17) - 8).to(torch.float32) / 8
+    pattern = _column_pattern(torch, semantic_x.shape[1], semantic_x.device)
     for slot in range(expert_ids.shape[1]):
-        expert = expert_ids[:, slot]
         gate = weights[:, slot].unsqueeze(1)
-        scale = (((expert * 17 + 5) % 31 + 1).to(torch.float32) / 32).unsqueeze(1)
-        offset_a = ((((expert * 29 + 7) % 37) - 18).to(torch.float32) / 64).unsqueeze(1)
-        offset_b = ((((expert * 43 + 11) % 41) - 20).to(torch.float32) / 128).unsqueeze(1)
+        scale, offset_a, offset_b = (
+            c.unsqueeze(1) for c in _expert_coefficients(torch, expert_ids[:, slot])
+        )
         expert_output = semantic_x.float() * scale + offset_a + offset_b * pattern.unsqueeze(0)
         expected.add_(gate * expert_output)
     return expected
+
+
+_ORACLE_CHECKS = (
+    "combine_values", "counts", "metadata", "multiplicity", "payload",
+    "source_set", "weights",
+)
+
+
+def _oracle_report(**fields):
+    """One report shape for both the fail-soft and full oracle paths, so every
+    emitted correctness dict carries identical keys."""
+    report = {
+        "passed": False,
+        "atol": ORACLE_ATOL,
+        "rtol": ORACLE_RTOL,
+        "combine_weight_semantics": "undeclared",
+        "ordering": None,
+        "receive_count": 0,
+        "max_absolute_error": None,
+        "max_elementwise_relative_error": None,
+        "max_relative_error": None,
+        "max_weight_error": None,
+        "checks": dict.fromkeys(_ORACLE_CHECKS, False),
+    }
+    assert set(fields) <= set(report), sorted(set(fields) - set(report))
+    report.update(fields)
+    assert set(report["checks"]) == set(_ORACLE_CHECKS)
+    return report
 
 
 def _run_expert_oracle(
@@ -379,13 +379,14 @@ def _run_expert_oracle(
     seed: int,
 ):
     """Verify one real dispatch/transform/combine without entering a timed region."""
-    oracle_atol, oracle_rtol = ORACLE_ATOL, ORACLE_RTOL
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
         view = backend.inspect_dispatch(problem, handle)
         source_ids = routing.decode_source_ids(view.payload, seed)
     except Exception as inspection_error:
+        # Drain the in-flight dispatch before reporting: an abandoned handle
+        # would deadlock the other ranks.
         try:
             problem.recv_tokens = backend.recv_tokens(handle)
             backend.stage(problem, handle)
@@ -393,29 +394,12 @@ def _run_expert_oracle(
             torch.cuda.synchronize()
         except Exception as cleanup_error:
             raise inspection_error from cleanup_error
-        return {
-            "passed": False,
-            "ordering": "adapter-inspection-failed",
-            "combine_weight_semantics": getattr(
+        return _oracle_report(
+            ordering="adapter-inspection-failed",
+            combine_weight_semantics=getattr(
                 backend, "combine_weight_semantics", "undeclared"
             ),
-            "receive_count": 0,
-            "atol": oracle_atol,
-            "max_absolute_error": None,
-            "max_elementwise_relative_error": None,
-            "max_relative_error": None,
-            "max_weight_error": None,
-            "rtol": oracle_rtol,
-            "checks": {
-                "combine_values": False,
-                "counts": False,
-                "metadata": False,
-                "multiplicity": False,
-                "payload": False,
-                "source_set": False,
-                "weights": False,
-            },
-        }
+        )
 
     receive_count = int(view.payload.shape[0])
     shape_ok = (
@@ -471,12 +455,9 @@ def _run_expert_oracle(
     multiplicity_ok = torch.equal(
         (actual_ids >= 0).sum(dim=1), (expected_ids >= 0).sum(dim=1)
     )
-    # Receive-slot assignment may use atomics and is not a semantic EP guarantee. Compare
-    # pre/post dispatch evidence in canonical source-token order without changing the native path.
-    canonical_order = torch.argsort(source_ids.to(torch.int64), stable=True)
-    canonical_sources = source_ids.to(torch.int64).index_select(0, canonical_order)
-    canonical_ids = actual_ids.to(torch.int64).index_select(0, canonical_order)
-    canonical_weights = actual_weights.index_select(0, canonical_order)
+    # Receive-slot assignment may use atomics and is not a semantic EP guarantee, so
+    # physical receive order is never compared; the adapter's declared contract is
+    # what Pass 3 checks for stability.
     ordering = view.ordering_contract
 
     problem.recv_tokens = receive_count
@@ -488,29 +469,25 @@ def _run_expert_oracle(
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(torch, problem)
-    if combined.shape == expected_combined.shape and combined.numel():
-        absolute_error = (combined.float() - expected_combined).abs()
-        max_absolute_error = float(absolute_error.max().item())
-        max_relative_error = max_absolute_error / (
-            float(expected_combined.abs().max().item()) + 1e-6
-        )
-        max_elementwise_relative_error = float(
-            (absolute_error / expected_combined.abs().clamp_min(oracle_atol)).max().item()
-        )
-        combine_values_ok = bool(torch.allclose(
-            combined.float(), expected_combined, rtol=oracle_rtol, atol=oracle_atol
-        ))
-    elif combined.shape == expected_combined.shape:
-        max_absolute_error = 0.0
-        max_elementwise_relative_error = 0.0
-        max_relative_error = 0.0
+    if combined.shape == expected_combined.shape:
+        # Zero errors stand when the rank legitimately combined nothing.
+        max_absolute_error = max_elementwise_relative_error = max_relative_error = 0.0
         combine_values_ok = True
+        if combined.numel():
+            absolute_error = (combined.float() - expected_combined).abs()
+            max_absolute_error = float(absolute_error.max().item())
+            max_relative_error = max_absolute_error / (
+                float(expected_combined.abs().max().item()) + 1e-6
+            )
+            max_elementwise_relative_error = float(
+                (absolute_error / expected_combined.abs().clamp_min(ORACLE_ATOL)).max().item()
+            )
+            combine_values_ok = bool(torch.allclose(
+                combined.float(), expected_combined, rtol=ORACLE_RTOL, atol=ORACLE_ATOL
+            ))
     else:
-        max_absolute_error = None
-        max_elementwise_relative_error = None
-        max_relative_error = None
+        max_absolute_error = max_elementwise_relative_error = max_relative_error = None
         combine_values_ok = False
-    tolerance = oracle_rtol
     checks = {
         "combine_values": combine_values_ok,
         "counts": counts_ok,
@@ -520,24 +497,22 @@ def _run_expert_oracle(
         "source_set": source_set_ok,
         "weights": weights_ok,
     }
-    return {
-        "passed": bool(
+    return _oracle_report(
+        passed=bool(
             all(checks.values())
             and ordering
             and max_relative_error is not None
-            and max_relative_error < tolerance
+            and max_relative_error < ORACLE_RTOL
         ),
-        "atol": oracle_atol,
-        "combine_weight_semantics": combine_weight_semantics,
-        "ordering": ordering,
-        "receive_count": receive_count,
-        "max_absolute_error": max_absolute_error,
-        "max_elementwise_relative_error": max_elementwise_relative_error,
-        "max_relative_error": max_relative_error,
-        "max_weight_error": max_weight_error,
-        "rtol": oracle_rtol,
-        "checks": checks,
-    }
+        combine_weight_semantics=combine_weight_semantics,
+        ordering=ordering,
+        receive_count=receive_count,
+        max_absolute_error=max_absolute_error,
+        max_elementwise_relative_error=max_elementwise_relative_error,
+        max_relative_error=max_relative_error,
+        max_weight_error=max_weight_error,
+        checks=checks,
+    )
 
 
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
@@ -547,10 +522,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         if rank == 0:
             print(f"ERROR: unknown CollectiveX case mode {mode!r}")
         return 2
-    timing_error = sampling_error(args.iters, args.trials, args.warmup)
-    if timing_error:
+    if min(args.iters, args.trials, args.warmup) <= 0:
         if rank == 0:
-            print(f"ERROR: {timing_error}")
+            print(f"ERROR: iters/trials/warmup must be positive; got "
+                  f"{args.iters}:{args.trials}:{args.warmup}")
         return 2
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
 
@@ -561,6 +536,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: experts ({args.experts}) must divide ep_size ({ep_size})")
         return 2
     experts_per_rank = args.experts // ep_size
+    # gpus-per-node=0 / scale-up-domain=0 mean "the whole EP group" (manual runs).
+    gpn = args.gpus_per_node or ep_size
+    scale_up_domain = args.scale_up_domain or gpn
+    suite = args.suite or "manual"
+    workload_name = args.workload_name or "manual"
     if getattr(backend, "mode", None) != mode:
         if rank == 0:
             print(f"ERROR: backend mode {getattr(backend, 'mode', None)!r} != {mode!r}")
@@ -615,7 +595,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         point = spec.points[T]
         idx_g, w_g = point.global_idx, point.global_weights
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
-        gpn = args.gpus_per_node or ep_size
         rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
                                                       gpn, args.scale_up_domain or None)
         point_routing_consistent = _same_tensors_across_ranks(
@@ -656,10 +635,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
     comb_pool = {T: [] for T in ladder}     # ... combine
     rt_pool = {T: [] for T in ladder}       # independently measured round trip
-    disp_trials = {T: [] for T in ladder}
-    stage_trials = {T: [] for T in ladder}
-    comb_trials = {T: [] for T in ladder}
-    rt_trials = {T: [] for T in ladder}
     for trial_index in range(args.trials):
         order = trial_order(list(ladder), trial_index)
         for T in order:
@@ -675,25 +650,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 measured[component_name] = backend.benchmark_component(
                     component_name, problem, args.warmup, args.iters
                 )
-            disp_iters = measured["dispatch"]
-            stage_iters = measured["stage"]
-            comb_iters = measured["combine"]
-            rt_iters = measured["roundtrip"]
             # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
-            if disp_iters:
-                reduced_dispatch = _reduce_vec(torch, dist, device, disp_iters, MAX)
-                reduced_combine = _reduce_vec(torch, dist, device, comb_iters, MAX)
-                disp_trials[T].append(reduced_dispatch)
-                comb_trials[T].append(reduced_combine)
-                disp_pool[T] += reduced_dispatch
-                comb_pool[T] += reduced_combine
-            if stage_iters:
-                reduced_stage = _reduce_vec(torch, dist, device, stage_iters, MAX)
-                stage_trials[T].append(reduced_stage)
-                stage_pool[T] += reduced_stage
-            reduced_roundtrip = _reduce_vec(torch, dist, device, rt_iters, MAX)
-            rt_trials[T].append(reduced_roundtrip)
-            rt_pool[T] += reduced_roundtrip
+            if measured["dispatch"]:
+                disp_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MAX)
+                comb_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MAX)
+            if measured["stage"]:
+                stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
+            rt_pool[T] += _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
 
     # ---- Pass 3: prove timed inputs were immutable and repeat the full oracle. ----
     for T in ladder:
@@ -763,21 +726,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             percentile_name: gt / (latency_us * 1e-6)
             for percentile_name, latency_us in rtp.items()
         }
-        dispatch_bytes = logical_byte_provenance(logical_copies, H)
-        combine_bytes = logical_byte_provenance(logical_copies, H)
-        stage_bytes = {
-            "activation_data_bytes": 0,
-            "scale_bytes": 0,
-            "total_logical_bytes": 0,
-        }
-        roundtrip_bytes = {
-            **{
-                field: dispatch_bytes[field] + combine_bytes[field]
-                for field in (
-                    "activation_data_bytes", "scale_bytes", "total_logical_bytes"
-                )
-            },
-        }
+        # Dispatch and combine move the same logical payload; the roundtrip is
+        # their sum and stage moves nothing.
+        one_way_bytes = logical_byte_provenance(logical_copies, H)
+        roundtrip_bytes = {field: 2 * value for field, value in one_way_bytes.items()}
+        stage_bytes = dict.fromkeys(one_way_bytes, 0)
         rows.append({
             "components": {
                 "combine": component(cp, len(c)),
@@ -792,8 +745,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             },
             "global_tokens": gt,
             "byte_provenance": {
-                "combine": combine_bytes,
-                "dispatch": dispatch_bytes,
+                "combine": one_way_bytes,
+                "dispatch": one_way_bytes,
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
             },
@@ -844,7 +797,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         ),
         "workload_identity": "consistent-across-ranks" if routing_consistent else "inconsistent",
         "measurement_conformance": "conformant",   # run_ep gate rejects nonconformant pre-run
-        "sampling_conformance": "conformant",      # sampling_error rejects any other timing profile
+        "sampling_conformance": "conformant",      # the matrix bakes the single suites.yaml profile into every scheduled case
     }
 
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
@@ -871,25 +824,27 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "canonical": canonical,
             "ep": ep_size,
             "experts": num_logical,
-            "gpus_per_node": args.gpus_per_node or ep_size,
+            "gpus_per_node": gpn,
             "hidden": args.hidden,
             "ladder": " ".join(map(str, ladder)),
+            "conditioning_ladder": " ".join(map(str, conditioning_ladder)),
+            "seed": args.seed,
             "mode": mode,
             "nodes": nodes,
             "phase": args.phase,
             "routing": args.routing,
-            "samples_per_point": TIMED_SAMPLES_PER_POINT,
-            "scale_up_domain": args.scale_up_domain or (args.gpus_per_node or ep_size),
+            "samples_per_point": args.iters * args.trials,
+            "scale_up_domain": scale_up_domain,
             "scale_up_transport": args.scale_up_transport,
             "scale_out_transport": args.scale_out_transport or None,
             "scope": args.scope,
-            "suite": args.suite or "manual",
+            "suite": suite,
             "timing": f"{args.iters}:{args.trials}:{args.warmup}",
             "topk": args.topk,
             "topology_class": args.topology_class,
             "transport": args.transport,
             "warmup_semantics": WARMUP_SEMANTICS,
-            "workload": args.workload_name or "manual",
+            "workload": workload_name,
     }
     case_factors = {"case": scheduled_case, "sku": args.runner}
     computed_case_id = case_id(args.runner, scheduled_case)
@@ -930,8 +885,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "resource_mode": "fixed-profile",
             "runner": args.runner,
             "shape": shape,
-            "suite": args.suite or "manual",
-            "workload_name": args.workload_name or "manual",
+            "suite": suite,
+            "workload_name": workload_name,
         },
         "workload": {
             "cross_rank_consistent": routing_consistent,
@@ -944,7 +899,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "rows": rows,
             "sampling": {
                 "iterations_per_trial": args.iters,
-                "samples_per_component": TIMED_SAMPLES_PER_POINT,
+                "samples_per_component": args.iters * args.trials,
                 "trials": args.trials,
                 "warmup_iterations": args.warmup,
             },
@@ -956,11 +911,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "topology": {
             "device_count": getattr(args, "runtime_device_count", None),
             "device_product": getattr(args, "runtime_device_product", None),
-            "gpus_per_node": args.gpus_per_node or ep_size,
+            "gpus_per_node": gpn,
             "nodes": nodes,
             "placement": "packed",
             "realized_placement": realized_placement,
-            "scale_up_domain": args.scale_up_domain or (args.gpus_per_node or ep_size),
+            "scale_up_domain": scale_up_domain,
             "scale_up_transport": args.scale_up_transport,
             "scale_out_transport": args.scale_out_transport or None,
             "scope": args.scope,

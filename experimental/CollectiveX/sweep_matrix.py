@@ -27,10 +27,6 @@ import capability as cap  # noqa: E402
 import ep_harness  # noqa: E402
 
 
-EP_TIMING_PROFILE = (
-    f"{ep_harness.TIMED_ITERS_PER_TRIAL}:{ep_harness.TRIALS_PER_POINT}:"
-    f"{ep_harness.WARMUP_ITERS_PER_TRIAL}"
-)
 TOPOLOGY_FIELDS = (
     "nodes", "gpus_per_node", "scale_up_domain", "scope", "scale_up_transport",
     "scale_out_transport", "transport", "topology_class",
@@ -68,20 +64,37 @@ def _load(name: str) -> dict[str, Any]:
     return document
 
 
-def _dims(workloads: dict[str, Any], name: str) -> tuple[int, int, int]:
+def _positive_int(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and value > 0
+
+
+def _dims(workloads: dict[str, Any], name: str) -> tuple[int, int, int, int]:
     config = workloads[name]
-    return config["hidden"], config["topk"], config["routed_experts"]
+    seed = config["seed"]
+    # Positive (not just non-negative): the case-argv codec treats falsy fields
+    # as absent, so a seed of 0 would silently defer to the invocation seed.
+    if not _positive_int(seed):
+        raise SystemExit(f"workload {name!r} has no valid routing seed: {seed!r}")
+    return config["hidden"], config["topk"], config["routed_experts"], seed
 
 
-def _ladder(suite: dict[str, Any], phase: str) -> str:
-    points = suite.get(f"token_points_{phase}")
-    if points is None:
-        points = ep_harness.DECODE_LADDER if phase == "decode" else ep_harness.PREFILL_LADDER
+def _timing(document: dict[str, Any]) -> tuple[int, int, int]:
+    keys = ("iters_per_trial", "trials_per_point", "warmup_iters_per_trial")
+    timing = document.get("timing")
+    if (not isinstance(timing, dict) or set(timing) != set(keys)
+            or not all(_positive_int(timing[key]) for key in keys)):
+        raise SystemExit(f"suites.yaml timing must define positive ints {keys}: {timing!r}")
+    return timing[keys[0]], timing[keys[1]], timing[keys[2]]
+
+
+def _ladder(workloads: dict[str, Any], workload: str, group: str, phase: str) -> str:
+    points = workloads[workload].get(group, {}).get(phase)
     if (not isinstance(points, list) or not points
-            or any(isinstance(point, bool) or not isinstance(point, int) or point <= 0
-                   for point in points)
+            or not all(_positive_int(point) for point in points)
             or points != sorted(set(points))):
-        raise SystemExit(f"invalid {phase} token ladder: {points!r}")
+        raise SystemExit(
+            f"workload {workload!r} has no valid {phase} ladder in {group}: {points!r}"
+        )
     return " ".join(map(str, points))
 
 
@@ -156,6 +169,9 @@ def resolve_matrix(
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     suites_document = _load("suites.yaml")
+    iters, trials, warmup = _timing(suites_document)
+    timing_profile = f"{iters}:{trials}:{warmup}"
+    samples_per_point = iters * trials
     workloads = suites_document["workloads"]
     registry = suites_document["suites"]
     select_all = suites == "all"
@@ -209,7 +225,7 @@ def resolve_matrix(
                     routing=routing,
                     mode=mode,
                 )
-                hidden, topk, experts = _dims(workloads, workload)
+                hidden, topk, experts, seed = _dims(workloads, workload)
 
                 def add_case(
                     case_ladder: str,
@@ -227,11 +243,15 @@ def resolve_matrix(
                         "hidden": hidden,
                         "topk": topk,
                         "experts": experts,
-                        "samples_per_point": ep_harness.TIMED_SAMPLES_PER_POINT,
+                        "seed": seed,
+                        "samples_per_point": samples_per_point,
                         "warmup_semantics": ep_harness.WARMUP_SEMANTICS,
                         "ladder": case_ladder,
+                        "conditioning_ladder": _ladder(
+                            workloads, workload, "conditioning_ladders", phase
+                        ),
                         "mode": mode,
-                        "timing": EP_TIMING_PROFILE,
+                        "timing": timing_profile,
                         "canonical": True,
                         **{field: topology[field] for field in TOPOLOGY_FIELDS},
                     }
@@ -256,7 +276,7 @@ def resolve_matrix(
                     if disposition == "runnable":
                         shards.setdefault((platform_name, target, nodes), []).append(case)
 
-                requested_ladder = _ladder(suite, phase)
+                requested_ladder = _ladder(workloads, workload, "token_ladders", phase)
                 if capability_disposition == "unsupported":
                     add_case(
                         requested_ladder,

@@ -18,7 +18,7 @@ precision is not a swept dimension. Every case runs the single normal-mode contr
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Coverage is uniform routing only.
 
-Cases use a fixed timing profile: 128 trials x 8 timed iterations (1024 samples per component)
+Cases use a fixed timing profile from `configs/suites.yaml`: 128 trials x 8 timed iterations (1024 samples per component)
 with 32 synchronized full roundtrip warmups before each measured component at every trial/point. Component measurement order rotates each
 trial so every timed component occupies every position in the sequence; each iteration takes the
 cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the headline latency. A
