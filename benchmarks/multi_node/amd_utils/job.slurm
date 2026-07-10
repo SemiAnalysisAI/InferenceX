@@ -573,6 +573,7 @@ fi
     --device=/dev/infiniband/uverbs7 \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
+    --ulimit nofile=1048576:1048576 \
     --network host \
     --ipc host \
     --group-add video \

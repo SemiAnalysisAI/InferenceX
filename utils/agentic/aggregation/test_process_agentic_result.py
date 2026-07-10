@@ -57,6 +57,7 @@ AGG_TOP_LEVEL_KEYS = {
     "request_accounting",
     "request_metrics",
     "server_metrics",
+    "kv_cache_pool_tokens",
 }
 REQUEST_ACCOUNTING_KEYS = {
     "records_total",
@@ -604,6 +605,7 @@ def test_processor_handles_missing_server_metrics(tmp_path: Path):
     server_metrics = agg["server_metrics"]
     assert server_metrics["cache"]["gpu_cache_hit_rate"] is None
     assert server_metrics["kv_cache"]["gpu_total_tokens"] is None
+    assert agg["kv_cache_pool_tokens"] is None
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] is None
     # Non-server-derived totals fall back to per-record sums.
     assert server_metrics["tokens"]["prompt_total"] == 100 + 180 + 120 + 200 + 240
@@ -628,6 +630,30 @@ def test_processor_reads_gpu_kv_cache_capacity_from_server_log(tmp_path: Path):
     agg = _run_processor(result_dir, tmp_path / "out")
 
     assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 11_500_000
+    assert agg["kv_cache_pool_tokens"] == 11_500_000
+    _assert_stable_server_metrics_schema(agg)
+
+
+def test_processor_emits_sglang_kv_pool_from_server_log(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    (result_dir / "server.log").write_text(
+        "\n".join(
+            [
+                "[2026-07-08 16:43:35] server_args=ServerArgs(tp_size=4, dp_size=4)",
+                "[2026-07-08 16:49:59 DP0 TP0 EP0] "
+                "max_total_num_tokens=4602880, chunked_prefill_size=4096",
+            ]
+        )
+    )
+
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={"FRAMEWORK": "sglang"},
+    )
+
+    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 18_411_520
+    assert agg["kv_cache_pool_tokens"] == 18_411_520
     _assert_stable_server_metrics_schema(agg)
 
 
