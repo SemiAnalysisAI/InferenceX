@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backport vLLM MooncakeStore correctness fixes to v0.24.0.
+"""Backport vLLM MooncakeStore and scheduler correctness fixes to v0.24.0.
 
 v0.24.0 keeps a connector-local set of preempted request IDs to decide
 whether cached-request block IDs replace or extend the tracked block table.
@@ -16,6 +16,12 @@ Mooncake key.  With hybrid KV layouts, a worker can legitimately have no local
 chunks for a request.  Rotating an empty key list raises before the request is
 marked complete, so the all-worker completion aggregator waits forever.  Treat
 that case as a successful no-op load.
+
+The scheduler can also strand completed async loads behind an unschedulable
+queue head.  If nothing is running, stopping at that head means no future work
+can free blocks and the engine remains permanently idle.  Backport the focused
+recovery from vLLM PR #45406: in that terminal state only, skip the head and
+continue traversal so a completed parked load can be promoted and make progress.
 """
 
 from __future__ import annotations
@@ -70,12 +76,20 @@ def main() -> None:
         and 'logger.exception("Error in %s (req=%s)"' in worker.read_text()
     )
     empty_load_patched = "Mooncake load has no local keys" in worker.read_text()
+    parked_load_recovery_patched = (
+        "Nothing is running, so no future event frees blocks" in core_scheduler.read_text()
+    )
     diagnostics_patched = (
         "MOONCAKE_DIAG load-enqueue" in worker.read_text()
         and "MOONCAKE_DIAG scheduler-waiting" in core_scheduler.read_text()
         and "MOONCAKE_DIAG scheduler-finished" in core_scheduler.read_text()
     )
-    if resumed_requests_patched and empty_load_patched and diagnostics_patched:
+    if (
+        resumed_requests_patched
+        and empty_load_patched
+        and parked_load_recovery_patched
+        and diagnostics_patched
+    ):
         print(
             "vLLM MooncakeStore correctness backports already present in "
             f"{package_root}"
@@ -155,6 +169,34 @@ def main() -> None:
 
         # Rotate aligned lists by tp_rank for load balancing.
         rotation = self.tp_rank % len(key_list)
+""",
+        )
+
+    if not parked_load_recovery_patched:
+        replace_once(
+            core_scheduler,
+            """                    if request.has_encoder_inputs:
+                        self.encoder_cache_manager.free(request)
+                    break
+
+                # KVTransfer: the connector uses this info to determine
+""",
+            """                    if request.has_encoder_inputs:
+                        self.encoder_cache_manager.free(request)
+                    if self.running:
+                        # Running requests will eventually free blocks; stop
+                        # here to preserve queue-order admission.
+                        break
+                    # Nothing is running, so no future event frees blocks and
+                    # stopping at this request would freeze this state. A
+                    # completed async load behind it may hold blocks and is
+                    # only promoted when traversal reaches it. Skip the head
+                    # so that parked load can run and release capacity.
+                    request_queue.pop_request()
+                    step_skipped_waiting.prepend_request(request)
+                    continue
+
+                # KVTransfer: the connector uses this info to determine
 """,
         )
 
