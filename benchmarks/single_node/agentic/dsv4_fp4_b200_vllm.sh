@@ -70,12 +70,8 @@ export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
 # vLLM v0.22.1 can ship CUTLASS DSL 4.5.2 with stale native MLIR bindings,
 # which fails DSV4 indexer compilation with mlir_global_dtors(..., data).
 # Reinstall the matching native wheel until NVIDIA/cutlass#3259 is resolved.
-# The v0.24 images ship fixed bindings; reinstalling there would downgrade.
-VLLM_INSTALLED_VERSION=$(python3 -c "from importlib.metadata import version; print(version('vllm'))")
-if [ "$(printf '%s\n' "$VLLM_INSTALLED_VERSION" 0.24.0 | sort -V | head -n1)" != "0.24.0" ]; then
-    agentic_pip_install --quiet --force-reinstall --no-deps \
-        'nvidia-cutlass-dsl-libs-cu13==4.5.2'
-fi
+agentic_pip_install --quiet --force-reinstall --no-deps \
+    'nvidia-cutlass-dsl-libs-cu13==4.5.2'
 
 # vllm-project/router expands the one HTTP backend into one logical worker per
 # DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
@@ -127,6 +123,7 @@ if agentic_kv_offload_enabled; then
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -190,6 +187,11 @@ EOF
         LMCACHE_VERSION=0.5.1
         agentic_pip_install --quiet --no-cache-dir "lmcache==$LMCACHE_VERSION"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+        # Async KV loads park requests in WAITING_FOR_REMOTE_KVS holding
+        # blocks; without the PR #45406 scheduler fix the waiting-queue scan
+        # can freeze permanently once nothing is running (hung warmup
+        # stragglers in PR #2153 bring-up).
+        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         LMCACHE_HOST=127.0.0.1
         LMCACHE_PORT=$((PORT + 12000))
@@ -229,6 +231,7 @@ EOF
             --eviction-trigger-watermark 0.85 \
             --eviction-ratio 0.10 \
             --eviction-policy LRU \
+            --supported-transfer-mode lmcache_driven \
             > "$LMCACHE_SERVER_LOG" 2>&1 &
         LMCACHE_SERVER_PID=$!
         LMCACHE_READY=0
@@ -271,7 +274,10 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    EP_ARGS=(
+        --enable-expert-parallel
+        --moe-backend deep_gemm_mega_moe
+    )
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -295,15 +301,20 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${VLLM_CP_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --prefill-schedule-interval 8
+    --numa-bind
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+    --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
     --attention_config.use_fp4_indexer_cache=True
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
+    --no-enable-flashinfer-autotune
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
+    --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
