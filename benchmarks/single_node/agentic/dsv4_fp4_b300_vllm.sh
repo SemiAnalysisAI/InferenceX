@@ -195,6 +195,11 @@ if [ "$MAX_NUM_SEQS" -eq 128 ]; then
     MAX_NUM_SEQS=136
 fi
 
+MAX_NUM_BATCHED_TOKENS=32768
+if [ "$EP_SIZE" -gt 1 ]; then
+    MAX_NUM_BATCHED_TOKENS=10240
+fi
+
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
@@ -221,7 +226,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
 --max-num-seqs "$MAX_NUM_SEQS" \
---max-num-batched-tokens 10240 \
+--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
 --no-async-scheduling \
 --disable-uvicorn-access-log \
 "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
