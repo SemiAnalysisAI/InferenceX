@@ -85,7 +85,7 @@ def main() -> int:
     documents = load_results(args.results_dir, args.runner, args.ts)
     print(render(documents))
     # Pure renderer — never gates CI. The per-case leg gate lives in ep_harness.run_sweep: a
-    # non-success outcome returns nonzero and fails the shard (see cx_run_shard). A dead
+    # non-success outcome returns nonzero and fails the shard (see collx_run_shard). A dead
     # "exit 1 when no success doc" gate here lost its only caller in 41caeaa0.
     return 0
 

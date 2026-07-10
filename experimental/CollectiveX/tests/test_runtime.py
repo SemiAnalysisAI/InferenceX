@@ -71,8 +71,8 @@ class ConfigTests(unittest.TestCase):
                 sys.stdout = stdout
             payload = os.read(read_fd, 4096)
             os.close(read_fd)
-            self.assertIn(b"CX_PARTITION\0gpu\0", payload)
-            self.assertIn(b"CX_SQUASH_DIR\0" + directory.encode() + b"\0", payload)
+            self.assertIn(b"COLLX_PARTITION\0gpu\0", payload)
+            self.assertIn(b"COLLX_SQUASH_DIR\0" + directory.encode() + b"\0", payload)
 
     def test_canonical_policy_rejects_wrong_gpu_count(self) -> None:
         with self.assertRaises(SystemExit):
@@ -115,17 +115,17 @@ class StageTests(unittest.TestCase):
             command = (
                 "set -euo pipefail; "
                 f"source {common!s}; "
-                "CX_SHARD_FILE=shard.json; "
-                f"cx_load_network_control_mode {directory!s}; "
-                'test "$CX_MODE" = normal'
+                "COLLX_SHARD_FILE=shard.json; "
+                f"collx_load_network_control_mode {directory!s}; "
+                'test "$COLLX_MODE" = normal'
             )
             subprocess.run(["bash", "-c", command], check=True)
 
 
 # The per-node probe (runtime/probe.py) and the launcher gate
-# (runtime/common.sh: cx_validate_network_profile_on_job) share an implicit string contract:
-# the probe prints these markers, the launcher greps them back out to derive CX_SOCKET_IFNAME
-# and CX_RDMA_LINK_LAYER. The patterns are duplicated here on purpose — the test fails if
+# (runtime/common.sh: collx_validate_network_profile_on_job) share an implicit string contract:
+# the probe prints these markers, the launcher greps them back out to derive COLLX_SOCKET_IFNAME
+# and COLLX_RDMA_LINK_LAYER. The patterns are duplicated here on purpose — the test fails if
 # either side drifts, which is exactly the failure that slipped through when 5506c623 moved the
 # probe into Python but left the emit statements behind, silently zeroing the marker count for
 # every non-MNNVL multi-node leg.
@@ -266,7 +266,7 @@ class StageContract(unittest.TestCase):
                 parser.parse_args(["validate-stage-path", "x", "x", "x", "--allow-parent-owner"])
 
 
-# config.py case-args is the single case→invocation codec: cx_run_shard decodes one
+# config.py case-args is the single case→invocation codec: collx_run_shard decodes one
 # null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
 # emitted argv with the same parser shape run_ep builds so the two sides cannot
 # drift — a flag the codec emits but run_ep does not declare (or vice versa) fails
@@ -335,8 +335,8 @@ class CaseArgvContract(unittest.TestCase):
 
     def test_manual_args_reads_the_operator_environment(self) -> None:
         env = dict(
-            os.environ, CX_BENCH="mori", CX_TOPO="mi355x-xgmi", CX_TRANSPORT="xgmi",
-            CX_GPUS_PER_NODE="8", CX_SCALE_UP_DOMAIN="8",
+            os.environ, COLLX_BENCH="mori", COLLX_TOPO="mi355x-xgmi", COLLX_TRANSPORT="xgmi",
+            COLLX_GPUS_PER_NODE="8", COLLX_SCALE_UP_DOMAIN="8",
         )
         result = subprocess.run(
             [sys.executable, str(RUNTIME / "config.py"), "manual-args",

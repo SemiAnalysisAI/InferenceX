@@ -10,13 +10,13 @@ import sys
 
 
 FIELDS = {
-    "partition": "CX_PARTITION", "account": "CX_ACCOUNT", "qos": "CX_QOS",
-    "squash_dir": "CX_SQUASH_DIR", "stage_dir": "CX_STAGE_DIR",
-    "enroot_cache_path": "CX_ENROOT_CACHE_PATH", "exclude_nodes": "CX_EXCLUDE_NODES",
-    "nodelist": "CX_NODELIST", "lock_dir": "CX_LOCK_DIR",
-    "socket_ifname": "CX_SOCKET_IFNAME", "rdma_devices": "CX_RDMA_DEVICES",
-    "ib_gid_index": "CX_IB_GID_INDEX", "rdma_service_level": "CX_RDMA_SERVICE_LEVEL",
-    "rdma_traffic_class": "CX_RDMA_TRAFFIC_CLASS",
+    "partition": "COLLX_PARTITION", "account": "COLLX_ACCOUNT", "qos": "COLLX_QOS",
+    "squash_dir": "COLLX_SQUASH_DIR", "stage_dir": "COLLX_STAGE_DIR",
+    "enroot_cache_path": "COLLX_ENROOT_CACHE_PATH", "exclude_nodes": "COLLX_EXCLUDE_NODES",
+    "nodelist": "COLLX_NODELIST", "lock_dir": "COLLX_LOCK_DIR",
+    "socket_ifname": "COLLX_SOCKET_IFNAME", "rdma_devices": "COLLX_RDMA_DEVICES",
+    "ib_gid_index": "COLLX_IB_GID_INDEX", "rdma_service_level": "COLLX_RDMA_SERVICE_LEVEL",
+    "rdma_traffic_class": "COLLX_RDMA_TRAFFIC_CLASS",
 }
 REQUIRED = {
     "h100-dgxc": {"partition", "account", "squash_dir"},
@@ -142,26 +142,26 @@ def case_args(
 
 
 def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None:
-    """Ad-hoc (shard-less) runs take one case per phase from the operator's CX_* env."""
+    """Ad-hoc (shard-less) runs take one case per phase from the operator's COLLX_* env."""
     env = os.environ.get
     case = {
-        "backend": env("CX_BENCH", ""), "mode": env("CX_MODE", "normal"),
-        "phase": phase, "routing": env("CX_ROUTING", "uniform"),
-        "gpus_per_node": env("CX_GPUS_PER_NODE", "0"),
-        "scale_up_domain": env("CX_SCALE_UP_DOMAIN", "0"),
-        "scope": env("CX_SCOPE", "scale-up"),
-        "scale_up_transport": env("CX_SCALE_UP_TRANSPORT", "unknown"),
-        "scale_out_transport": env("CX_SCALE_OUT_TRANSPORT", ""),
-        "ladder": env("CX_TOKENS_LADDER", ""),
-        "hidden": env("CX_HIDDEN", "7168"), "topk": env("CX_TOPK", "8"),
-        "experts": env("CX_EXPERTS", "256"),
-        "topology_class": env("CX_TOPO", "manual"),
-        "transport": env("CX_TRANSPORT", "unknown"),
-        "case_id": env("CX_CASE_ID", ""), "suite": env("CX_SUITE", ""),
-        "workload": env("CX_WORKLOAD_NAME", ""),
-        "timing": f"{env('CX_ITERS', '8')}:{env('CX_TRIALS', '64')}:{env('CX_WARMUP', '32')}",
+        "backend": env("COLLX_BENCH", ""), "mode": env("COLLX_MODE", "normal"),
+        "phase": phase, "routing": env("COLLX_ROUTING", "uniform"),
+        "gpus_per_node": env("COLLX_GPUS_PER_NODE", "0"),
+        "scale_up_domain": env("COLLX_SCALE_UP_DOMAIN", "0"),
+        "scope": env("COLLX_SCOPE", "scale-up"),
+        "scale_up_transport": env("COLLX_SCALE_UP_TRANSPORT", "unknown"),
+        "scale_out_transport": env("COLLX_SCALE_OUT_TRANSPORT", ""),
+        "ladder": env("COLLX_TOKENS_LADDER", ""),
+        "hidden": env("COLLX_HIDDEN", "7168"), "topk": env("COLLX_TOPK", "8"),
+        "experts": env("COLLX_EXPERTS", "256"),
+        "topology_class": env("COLLX_TOPO", "manual"),
+        "transport": env("COLLX_TRANSPORT", "unknown"),
+        "case_id": env("COLLX_CASE_ID", ""), "suite": env("COLLX_SUITE", ""),
+        "workload": env("COLLX_WORKLOAD_NAME", ""),
+        "timing": f"{env('COLLX_ITERS', '8')}:{env('COLLX_TRIALS', '64')}:{env('COLLX_WARMUP', '32')}",
     }
-    _emit_argv(case, env("CX_VERSION", "1"), runner, ts, seed, index)
+    _emit_argv(case, env("COLLX_VERSION", "1"), runner, ts, seed, index)
 
 
 def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str, amd: str, mori: str) -> None:
@@ -175,12 +175,12 @@ def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str
         raise SystemExit(1)
     if nodes not in allowed or gpus_per_node != expected:
         raise SystemExit(1)
-    values = {"CX_NGPUS": nodes * expected, "CX_SEED": 67,
-              "CX_RUN_TIMEOUT": 1800 if family == "amd" else 900,
-              "CX_IMAGE": amd if family == "amd" else multiarch}
-    if family == "gb": values["CX_MASTER_PORT"] = 29551
+    values = {"COLLX_NGPUS": nodes * expected, "COLLX_SEED": 67,
+              "COLLX_RUN_TIMEOUT": 1800 if family == "amd" else 900,
+              "COLLX_IMAGE": amd if family == "amd" else multiarch}
+    if family == "gb": values["COLLX_MASTER_PORT"] = 29551
     if family == "amd":
-        values.update(CX_MORI_KERNEL_TYPE="internode-v1" if nodes == 2 else "asyncll",
+        values.update(COLLX_MORI_KERNEL_TYPE="internode-v1" if nodes == 2 else "asyncll",
                       MORI_COMMIT=mori, MORI_DISABLE_AUTO_XGMI=0, MORI_ENABLE_SDMA=1,
                       MORI_APP_LOG_LEVEL="info", MORI_SHMEM_LOG_LEVEL="info", MORI_IO_LOG_LEVEL="info")
     emit(values)

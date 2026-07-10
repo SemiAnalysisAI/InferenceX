@@ -7,7 +7,7 @@ warp-pipeline implementation of expert-parallel all-to-all, exposing `deep_ep.Hy
 rack-scale (Megatron `moe_flex_dispatcher_backend="hybridep"`). This adapter binds the API's
 "ranks per node" field to active ranks per NVLink/MNNVL communication domain, not physical host
 GPUs: x86 EP16 is two 8-rank domains, while GB EP8/EP16 is one 8/16-rank MNNVL domain across hosts.
-The container build is done by runtime/prepare_backend.sh `cx_build_deepep_hybrid` (CUDA-13 CCCL
+The container build is done by runtime/prepare_backend.sh `collx_build_deepep_hybrid` (CUDA-13 CCCL
 include path, without the V2 NVSHMEM overlay).
 
 API (pinned on B300, branch e0a5b1d):
@@ -42,7 +42,7 @@ try:
     HybridEPBuffer = deep_ep.HybridEPBuffer
 except Exception as exc:  # pragma: no cover - needs the hybrid-ep build
     print("ERROR: deep_ep.HybridEPBuffer import failed — the hybrid-ep branch must be built at job "
-          "setup (cx_build_deepep_hybrid). "
+          "setup (collx_build_deepep_hybrid). "
           f"{exc!r}", file=sys.stderr)
     raise
 

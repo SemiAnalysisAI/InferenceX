@@ -36,8 +36,8 @@ def validate_cuda_context(expected: int) -> None:
 
 
 def _emit(marker: str) -> None:
-    # cx_validate_network_profile_on_job (runtime/common.sh) greps these exact strings
-    # out of the per-node probe log to derive CX_SOCKET_IFNAME / CX_RDMA_LINK_LAYER and to
+    # collx_validate_network_profile_on_job (runtime/common.sh) greps these exact strings
+    # out of the per-node probe log to derive COLLX_SOCKET_IFNAME / COLLX_RDMA_LINK_LAYER and to
     # diagnose failures. The marker vocabulary is a string contract with that function —
     # keep the two halves in lockstep (see tests/test_runtime.py::NetworkProfileContract).
     print(f"[collectivex-private] {marker}")

@@ -3,8 +3,8 @@ __pycache__/
 results/
 unsupported/
 .shards/
-.cx_workloads/
-.cx_backend/
+.collx_workloads/
+.collx_backend/
 /matrix_full.json
 gpucore.*
 

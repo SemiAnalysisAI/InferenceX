@@ -120,7 +120,7 @@ class MoRIBackend(EPBackend):
 
         # MI355X uses the direct intranode kernel. MI300X uses MoRI's split
         # AsyncLL send/receive kernel as its normal-mode XGMI transport.
-        kernel_request = os.environ.get("CX_MORI_KERNEL_TYPE", "intranode").strip().lower()
+        kernel_request = os.environ.get("COLLX_MORI_KERNEL_TYPE", "intranode").strip().lower()
         self._kernel_type = None
         self._kernel_type_label = "IntraNode"
         self._async_ll = False
@@ -131,7 +131,7 @@ class MoRIBackend(EPBackend):
             kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
             if kernel_enum is None or not hasattr(kernel_enum, "AsyncLL"):
                 raise RuntimeError(
-                    "CX_MORI_KERNEL_TYPE=asyncll requires "
+                    "COLLX_MORI_KERNEL_TYPE=asyncll requires "
                     "EpDispatchCombineKernelType.AsyncLL"
                 )
             self._kernel_type = kernel_enum.AsyncLL
@@ -146,7 +146,7 @@ class MoRIBackend(EPBackend):
             kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
             if kernel_enum is None or not hasattr(kernel_enum, "InterNodeV1"):
                 raise RuntimeError(
-                    "CX_MORI_KERNEL_TYPE=internode-v1 requires "
+                    "COLLX_MORI_KERNEL_TYPE=internode-v1 requires "
                     "EpDispatchCombineKernelType.InterNodeV1"
                 )
             self._kernel_type = kernel_enum.InterNodeV1
@@ -158,11 +158,11 @@ class MoRIBackend(EPBackend):
             self._tuned_source = "upstream-internode-v1-96-64x8-qps1"
         elif kernel_request not in ("intranode", "intra_node", "intra-node", ""):
             raise RuntimeError(
-                f"unknown CX_MORI_KERNEL_TYPE={kernel_request!r} "
+                f"unknown COLLX_MORI_KERNEL_TYPE={kernel_request!r} "
                 "(expected intranode|asyncll|internode-v1)"
             )
         elif scale_out:
-            raise RuntimeError("MoRI scale-out EP16 requires CX_MORI_KERNEL_TYPE=internode-v1")
+            raise RuntimeError("MoRI scale-out EP16 requires COLLX_MORI_KERNEL_TYPE=internode-v1")
         self.kernel_generation = (
             "inter-node-v1" if self._inter_node
             else "async-ll" if self._async_ll

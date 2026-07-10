@@ -143,7 +143,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--version",
         type=int,
-        default=os.environ.get("CX_VERSION", "1"),
+        default=os.environ.get("COLLX_VERSION", "1"),
         help="iterable benchmark version copied verbatim into the emitted result",
     )
     # 32: B300/Blackwell needs ~30 untimed iters to reach steady-state GPU clocks +
@@ -881,7 +881,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # A scheduled sweep case always carries a matrix-issued --case-id; ad-hoc manual runs do
     # not. The old canonical-workload machinery (serialized traces) is gone — every workload is
     # now seeded-runtime — so "canonical" means "matrix-scheduled case", matching sweep_matrix's
-    # canonical:True on scheduled cases and CX_CANONICAL in the container env.
+    # canonical:True on scheduled cases and COLLX_CANONICAL in the container env.
     canonical = bool(args.case_id)
     scheduled_case = {
             "backend": backend.name,
@@ -922,11 +922,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "source_sha": git_run.get("source_sha"),
     }
     try:
-        attempt_ordinal = int(os.environ.get("CX_ATTEMPT_ID", "1"))
+        attempt_ordinal = int(os.environ.get("COLLX_ATTEMPT_ID", "1"))
     except ValueError:
         attempt_ordinal = 0
     if attempt_ordinal <= 0:
-        raise ValueError("CX_ATTEMPT_ID must be a positive integer")
+        raise ValueError("COLLX_ATTEMPT_ID must be a positive integer")
     headline = next((r for r in rows if r["tokens_per_rank"] == 64), rows[len(rows) // 2])
     doc = {
         "version": args.version,
@@ -1007,7 +1007,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
               f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
               f"headline T={headline['tokens_per_rank']} {component_summary}"
               f"-> {args.out}")
-    # CI honesty: run_sweep's return code is the only success signal cx_run_shard (and thus CI)
+    # CI honesty: run_sweep's return code is the only success signal collx_run_shard (and thus CI)
     # reads — the doc is uploaded regardless, via the launcher's always() stage step. A captured
     # `invalid` outcome (semantic correctness or cross-rank routing identity failed) must therefore
     # fail the leg, not ride as a green success; otherwise a persistent oracle failure is invisible

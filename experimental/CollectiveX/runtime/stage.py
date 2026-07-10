@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 
 
-EXCLUDES = {"__pycache__", "results", ".cx_workloads", ".cx_backend", ".cx_sources",
+EXCLUDES = {"__pycache__", "results", ".collx_workloads", ".collx_backend", ".collx_sources",
             "platforms.yaml", "private-infra.md", "goal.md", "notes.md"}
 
 
