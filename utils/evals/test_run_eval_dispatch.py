@@ -618,3 +618,48 @@ def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
     argv = (shim / "argv.log").read_text()
     assert "--slice" not in argv, argv
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
+
+
+# --- scenario-implied swebench gen-mode -------------------------------------
+#
+# Label-triggered evals pass no SWEBENCH_GEN_MODE; the scenario must imply the
+# agent loop or a healthy config scores ~10% single-shot and trips the gate.
+
+_GENMODE_SCRIPT = r'''
+source "$BENCHMARK_LIB" 2>/dev/null
+_install_swebench_agent_deps() { :; }
+_ensure_modal_credentials() { :; }
+_run_swebench_agentic_generation() { echo "GEN=agentic"; return 42; }
+run_lm_eval() { echo "GEN=single-shot"; return 42; }
+run_swebench_eval --port 8888
+echo "RC=$?"
+'''
+
+
+def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
+    env = {**os.environ,
+           "BENCHMARK_LIB": str(BENCHMARK_LIB),
+           "KV_OFFLOADING": "none",
+           "IS_AGENTIC": is_agentic,
+           "EVAL_RESULT_DIR": str(tmp_path / "out")}
+    env.pop("SWEBENCH_GEN_MODE", None)
+    env.pop("SCENARIO_TYPE", None)
+    if gen_mode is not None:
+        env["SWEBENCH_GEN_MODE"] = gen_mode
+    res = subprocess.run(["bash", "-c", _GENMODE_SCRIPT], env=env,
+                         text=True, capture_output=True,
+                         cwd=BENCHMARK_LIB.parents[1])
+    assert "RC=42" in res.stdout, res.stdout + res.stderr  # stub rc propagated
+    return res.stdout
+
+
+def test_agentic_scenario_implies_agentic_gen_mode(tmp_path):
+    assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="1")
+
+
+def test_fixed_seqlen_scenario_implies_single_shot(tmp_path):
+    assert "GEN=single-shot" in _gen_mode(tmp_path, is_agentic="0")
+
+
+def test_explicit_gen_mode_overrides_scenario(tmp_path):
+    assert "GEN=single-shot" in _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")
