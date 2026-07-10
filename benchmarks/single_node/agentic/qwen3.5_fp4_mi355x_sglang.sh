@@ -71,11 +71,13 @@ if require_agentic_kv_offload_backend hicache; then
     HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
     HICACHE_MAX_SIZE_GB_PER_RANK_POOL="${HICACHE_MAX_SIZE_GB_PER_RANK_POOL:-${HICACHE_MAX_SIZE_GB_PER_RANK:-180}}"
     HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-    # Keep page_size=1 and the safer direct/layer_first copy path on ROCm; the
-    # kernel/page_first HiCache transfer path faults on first prefill on MI355X.
+    # Keep page_size=1 and the direct IO backend on ROCm (the kernel/page_first
+    # HiCache path relies on a CUDA-only JIT kernel). Qwen3.5's hybrid Mamba
+    # host pool (MambaPoolHost) only supports the page_first_direct layout, and
+    # io_backend=direct requires page_first_direct anyway, so pair them.
     HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-1}"
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
     # SGLang --hicache-size is per rank per host pool, while the workflow input
     # is a node-total DRAM budget. Divide by TP and the number of host pools
     # unless HICACHE_SIZE_GB is set directly for one-off tuning.
