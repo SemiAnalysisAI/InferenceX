@@ -114,7 +114,6 @@ case "$KV_OFFLOAD_BACKEND" in
         # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
         # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
         # worker RSS / page cache / slurm cgroup).
-        TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
         TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-${TOTAL_CPU_DRAM_GB}}"
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
@@ -146,7 +145,6 @@ case "$KV_OFFLOAD_BACKEND" in
         # Let the external MP server own the full CPU KV pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
         # LMCache backend.
-        TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
         TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-${TOTAL_CPU_DRAM_GB}}"
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
