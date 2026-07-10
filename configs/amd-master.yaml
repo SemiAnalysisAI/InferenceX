@@ -2351,7 +2351,8 @@ dsv4-fp4-mi355x-sglang-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.80
+      search-space:
       - { tp: 8, kv-offloading: none, conc-list: [48] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [48] }
       - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [48] }
