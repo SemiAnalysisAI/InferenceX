@@ -4710,3 +4710,4 @@
     - "Add SGLANG_CMD array pattern with command logging and env-var dump"
     - "Add capture_cache_metrics for pre/post-benchmark cache stats"
     - "Sweep conc=48 across TP8 +/- DPA +/- HiCache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2146
