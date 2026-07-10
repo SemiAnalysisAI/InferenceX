@@ -116,6 +116,20 @@ fi
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then EP_ARGS=(--ep-size "$EP_SIZE"); fi
 
+# Qwen3.5 is a hybrid Mamba model. With radix cache on, SGLang's
+# mamba-radix-cache-strategy defaults to "auto", which selects "extra_buffer"
+# whenever overlap schedule (the default) is on. extra_buffer needs the
+# CUDA-only FLA backend and aborts on ROCm at arg-validation:
+#   AssertionError: extra_buffer needs CUDA/MUSA/NPU (FLA).
+# Force the ROCm-compatible "no_buffer" strategy, which requires page_size=1
+# and overlap schedule off. Applies to both KV modes (both keep radix on).
+MAMBA_ARGS=(--mamba-radix-cache-strategy no_buffer --disable-overlap-schedule)
+# no_buffer requires page_size=1. The hicache path already sets --page-size in
+# CACHE_ARGS; add it here only for the GPU-only (none) path to avoid a dup flag.
+if [ "${#CACHE_ARGS[@]}" -eq 0 ]; then
+    MAMBA_ARGS+=(--page-size 1)
+fi
+
 echo "Starting sglang server..."
 export PYTHONNOUSERSITE=1
 
@@ -138,6 +152,7 @@ SGLANG_CMD=(
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
     --watchdog-timeout 1200
     --enable-metrics
+    "${MAMBA_ARGS[@]}"
     "${CACHE_ARGS[@]}"
     "${WARMUP_ARGS[@]}"
 )
