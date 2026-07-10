@@ -87,7 +87,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     USE_VLLM_ROUTER=true
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_VERSION=0.1.14
-    VLLM_ROUTER_POLICY=power_of_two
+    VLLM_ROUTER_POLICY=round_robin
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
@@ -223,13 +223,10 @@ wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --s
 
 if [ "$USE_VLLM_ROUTER" = "true" ]; then
     echo "Starting native vLLM router on port $PORT for $TP DP ranks..."
-    VLLM_ROUTER_WORKERS=()
-    for ((rank = 0; rank < TP; rank++)); do
-        VLLM_ROUTER_WORKERS+=("http://localhost:$VLLM_BACKEND_PORT@$rank")
-    done
     vllm-router \
-        --worker-urls "${VLLM_ROUTER_WORKERS[@]}" \
+        --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
         --policy "$VLLM_ROUTER_POLICY" \
+        --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \
         --prometheus-host 127.0.0.1 \
