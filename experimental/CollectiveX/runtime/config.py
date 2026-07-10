@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Load private runner settings and shard controls."""
+"""Load private runner settings, the public backend registry, and shard controls."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import sys
 
 
@@ -90,6 +91,62 @@ def operator_config(path: str, runner: str) -> None:
         emit(selected)
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-config", file=sys.stderr)
+        raise SystemExit(1)
+
+
+# Same acceptance as common.sh collx_select_image; keep the two in sync.
+_IMAGE_REF = re.compile(r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$")
+_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
+
+
+def backend_registry(path: str | None = None) -> None:
+    """Validate the public backend registry (configs/backends.json) and emit the
+    COLLX_* source-pin and image names consumed by common.sh at source time.
+    Unlike the network overlay this file is required: a missing or malformed
+    registry fails closed rather than falling back."""
+    if path is None:
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "configs", "backends.json",
+        )
+    try:
+        with open(path, encoding="utf-8") as stream:
+            document = json.load(stream)
+        if document["schema_version"] != 1:
+            raise ValueError
+
+        def sha(value: object) -> str:
+            if not isinstance(value, str) or not _GIT_SHA.fullmatch(value):
+                raise ValueError
+            return value
+
+        def image(name: str) -> str:
+            ref = document["images"][name]["ref"]
+            if not isinstance(ref, str) or not _IMAGE_REF.fullmatch(ref):
+                raise ValueError
+            return ref
+
+        def repo(backend: dict) -> str:
+            url = backend["repo"]
+            if not isinstance(url, str) or not url.startswith("https://"):
+                raise ValueError
+            return url
+
+        v2 = document["backends"]["deepep-v2"]
+        emit({
+            "COLLX_IMAGE_MULTIARCH": image("multiarch"),
+            "COLLX_IMAGE_AMD_MORI": image("amd-mori"),
+            "COLLX_MORI_COMMIT_AMD": sha(document["backends"]["mori"]["commit"]),
+            "COLLX_DEEPEP_V2_REPO": repo(v2),
+            "COLLX_DEEPEP_V2_COMMIT": sha(v2["commit"]),
+            "COLLX_DEEPEP_V2_TREE": sha(v2["tree"]),
+            "COLLX_DEEPEP_V2_FMT_COMMIT": sha(v2["submodules"]["third-party/fmt"]),
+            "COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT": sha(
+                v2["patches"][0]["upstream_commit"]
+            ),
+        })
+    except (IndexError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        print("validation-invalid-backend-registry", file=sys.stderr)
         raise SystemExit(1)
 
 
@@ -213,7 +270,7 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     for name, names in {
         "operator-config": ("path", "runner"), "network-mode": ("path",),
-        "case-count": ("path",),
+        "backend-registry": (), "case-count": ("path",),
         "case-args": ("path", "index", "runner", "ts", "seed",
                       "ngpus", "nodes", "gpus_per_node", "scale_up_domain"),
         "manual-args": ("phase", "index", "runner", "ts", "seed"),
@@ -224,6 +281,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "operator-config": operator_config(args.path, args.runner)
     elif args.command == "network-mode": network_mode(args.path)
+    elif args.command == "backend-registry": backend_registry()
     elif args.command == "case-count": case_count(args.path)
     elif args.command == "case-args":
         case_args(args.path, int(args.index), args.runner, args.ts, args.seed,

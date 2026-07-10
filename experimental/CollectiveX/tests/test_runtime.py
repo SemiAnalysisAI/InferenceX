@@ -85,6 +85,75 @@ class ConfigTests(unittest.TestCase):
             config.network_mode(str(path))
 
 
+# configs/backends.json is the single definition of backend source pins and
+# container images; config.py backend-registry validates it and emits the
+# COLLX_* names common.sh consumes at source time. These tests pin both sides
+# of that seam so a rename or malformed registry fails here, not on a runner.
+class BackendRegistryTests(unittest.TestCase):
+    EMITTED = {
+        "COLLX_IMAGE_MULTIARCH", "COLLX_IMAGE_AMD_MORI", "COLLX_MORI_COMMIT_AMD",
+        "COLLX_DEEPEP_V2_REPO", "COLLX_DEEPEP_V2_COMMIT", "COLLX_DEEPEP_V2_TREE",
+        "COLLX_DEEPEP_V2_FMT_COMMIT", "COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT",
+    }
+
+    @staticmethod
+    def _emitted_pairs() -> dict[str, str]:
+        result = subprocess.run(
+            [sys.executable, str(RUNTIME / "config.py"), "backend-registry"],
+            capture_output=True, check=True,
+        )
+        parts = result.stdout.split(b"\0")
+        assert parts[-1] == b""
+        values = [part.decode() for part in parts[:-1]]
+        return dict(zip(values[::2], values[1::2], strict=True))
+
+    def test_registry_emits_exactly_the_declared_names(self) -> None:
+        pairs = self._emitted_pairs()
+        self.assertEqual(set(pairs), self.EMITTED)
+        for name, value in pairs.items():
+            if "_COMMIT" in name or name.endswith("_TREE"):
+                self.assertRegex(value, r"^[0-9a-f]{40}$", name)
+            elif name.endswith("_REPO"):
+                self.assertTrue(value.startswith("https://"), name)
+            else:
+                self.assertRegex(value, r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$", name)
+
+    def test_common_sh_requires_every_emitted_name(self) -> None:
+        # The loader's fail-closed loop and the registry emit must not drift.
+        common = (RUNTIME / "common.sh").read_text()
+        for name in self.EMITTED:
+            self.assertIn(name, common)
+
+    def test_registry_values_come_from_the_tracked_file(self) -> None:
+        document = json.loads(
+            (RUNTIME.parent / "configs" / "backends.json").read_text()
+        )
+        pairs = self._emitted_pairs()
+        self.assertEqual(
+            pairs["COLLX_DEEPEP_V2_COMMIT"],
+            document["backends"]["deepep-v2"]["commit"],
+        )
+        self.assertEqual(
+            pairs["COLLX_DEEPEP_V2_FMT_COMMIT"],
+            document["backends"]["deepep-v2"]["submodules"]["third-party/fmt"],
+        )
+        self.assertEqual(pairs["COLLX_IMAGE_MULTIARCH"], document["images"]["multiarch"]["ref"])
+
+    def test_registry_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "absent.json"
+            with self.assertRaises(SystemExit):
+                config.backend_registry(str(missing))
+            malformed = Path(directory) / "backends.json"
+            document = json.loads(
+                (RUNTIME.parent / "configs" / "backends.json").read_text()
+            )
+            document["backends"]["deepep-v2"]["commit"] = "not-a-sha"
+            malformed.write_text(json.dumps(document))
+            with self.assertRaises(SystemExit):
+                config.backend_registry(str(malformed))
+
+
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -289,7 +358,7 @@ class CaseArgvContract(unittest.TestCase):
         # Mirror of the parser bench/run_ep.py builds in main().
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--backend", required=True, choices=["deepep-v2", "deepep-hybrid", "mori"]
+            "--backend", required=True, choices=["deepep-v2", "mori", "nccl-ep"]
         )
         ep_harness.add_common_args(parser)
         return parser

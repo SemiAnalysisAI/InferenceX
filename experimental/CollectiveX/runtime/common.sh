@@ -5,20 +5,35 @@
 # model-serving. Logging goes to stderr so functions can `echo` a single
 # result on stdout.
 
-COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6" # pragma: allowlist secret
-COLLX_DEEPEP_V2_TREE="29809e75c5874e6609dac4804e7b651d5226959f" # pragma: allowlist secret
-COLLX_DEEPEP_V2_FMT_COMMIT="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa" # pragma: allowlist secret
-# Consumed by prepare_backend.sh after this helper is sourced.
-# shellcheck disable=SC2034
-COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT="93d0564188f7a0a6288c6e316484861b0efa042e" # pragma: allowlist secret
-COLLX_DEEPEP_HYBRID_COMMIT="e0a5b1d9848ab3e7b4a67842bf06f067bfac67f8" # pragma: allowlist secret
-COLLX_DEEPEP_HYBRID_TREE="d77aeab7f1bb52b615666fe178d26ced41fae08e" # pragma: allowlist secret
-COLLX_DEEPEP_HYBRID_NCCL_COMMIT="1e0c869c39bb33f1034cb9920bd2a8a8406f04a3" # pragma: allowlist secret
 unset COLLECTIVEX_OPERATOR_CONFIG_LOADED COLLECTIVEX_EPHEMERAL_CONFIG_PATH
 COLLX_RUNTIME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
+
+# Public benchmark identity (backend source pins + container images) is data,
+# not launcher state: configs/backends.json. config.py validates the registry
+# and emits the COLLX_* names consumed here, by prepare_backend.sh (which
+# re-sources this file in-container), and by the launchers.
+collx_load_backend_registry() {
+  local registry key value name
+  registry="$(mktemp /tmp/inferencex-collectivex-registry.XXXXXX)" \
+    || collx_die "cannot stage the backend registry"
+  if ! python3 "$COLLX_RUNTIME_DIR/config.py" backend-registry > "$registry"; then
+    rm -f -- "$registry"
+    collx_die "invalid backend registry (configs/backends.json)"
+  fi
+  while IFS= read -r -d '' key && IFS= read -r -d '' value; do
+    printf -v "$key" '%s' "$value"
+  done < "$registry"
+  rm -f -- "$registry"
+  for name in COLLX_IMAGE_MULTIARCH COLLX_IMAGE_AMD_MORI COLLX_MORI_COMMIT_AMD \
+      COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT COLLX_DEEPEP_V2_TREE \
+      COLLX_DEEPEP_V2_FMT_COMMIT COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT; do
+    [ -n "${!name:-}" ] || collx_die "backend registry omits $name"
+  done
+}
+collx_load_backend_registry
 
 # Keep a stable stage label while leaving diagnosis to the captured tool output.
 collx_set_failure_stage() {
@@ -65,7 +80,7 @@ collx_job_root_is_safe() {
 collx_load_operator_config() {
   [ -n "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" ] \
     && [ "$COLLECTIVEX_OPERATOR_CONFIG_LOADED" = "$$" ] && return 0
-  local config_path generated=0 parsed_path config_log key value validation_code
+  local config_path generated=0 parsed_path key value
   unset COLLX_PARTITION COLLX_ACCOUNT COLLX_QOS COLLX_SQUASH_DIR COLLX_STAGE_DIR COLLX_ENROOT_CACHE_PATH
   unset ENROOT_CACHE_PATH
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
@@ -107,19 +122,15 @@ collx_load_operator_config() {
     [ "$generated" = 0 ] || rm -f -- "$config_path"
     collx_die "cannot parse runner configuration"
   }
-  config_log="$(collx_private_log_path operator-config)"
   if ! python3 "$COLLX_RUNTIME_DIR/config.py" operator-config "$config_path" \
       "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}}" \
-      > "$parsed_path" 2> "$config_log"
+      > "$parsed_path"
   then
-    validation_code="$(head -n 1 "$config_log" 2>/dev/null || true)"
     rm -f -- "$parsed_path"
     [ "$generated" = 0 ] || rm -f -- "$config_path"
     unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
     unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
-    [[ "$validation_code" =~ ^validation-(line-[0-9]+|missing-required-[a-z0-9_-]+)$ ]] \
-      || validation_code="validation-unknown"
-    collx_die "runner-local configuration failed ($validation_code)"
+    collx_die "runner-local configuration failed"
   fi
   while IFS= read -r -d '' key && IFS= read -r -d '' value; do
     printf -v "$key" '%s' "$value"
@@ -134,17 +145,14 @@ collx_load_operator_config() {
   COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
 }
 
+# Per-step log files: several callers parse these for markers (salloc grant,
+# stage copy-error, per-node network selectors), so they are a data channel,
+# not just failure display. Logs persist after the run for postmortem.
 collx_private_log_path() {
-  local label="$1" root="${COLLX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}" path
-  [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || collx_die "invalid private log label"
-  path="$root/logs/$label.log"
-  mkdir -m 700 -p "${path%/*}" || collx_die "cannot create private log directory"
-  (umask 077; : > "$path") || collx_die "cannot create private runtime log"
+  local path="${COLLX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}/logs/$1.log"
+  mkdir -p "${path%/*}" || collx_die "cannot create log directory"
+  : > "$path" || collx_die "cannot create runtime log"
   printf '%s' "$path"
-}
-
-collx_cleanup_private_logs() {
-  [ "$1" != 0 ] || rm -rf -- "${COLLX_JOB_ROOT:-/tmp/inferencex-collectivex-$(id -u)}/logs"
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
@@ -161,15 +169,6 @@ collx_require_vars() {
   done
   [ "${#missing[@]}" -eq 0 ] || collx_die \
     "missing runner-local configuration: ${missing[*]} (set them in COLLECTIVEX_OPERATOR_CONFIG)"
-}
-
-collx_bool_enabled() {
-  local normalized
-  normalized="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
-  case "$normalized" in
-    1|true|yes) return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 collx_nccl_hca_device_name() {
@@ -402,13 +401,7 @@ BASH
 collx_source_backend_env() {
   cat <<'BASH'
 case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac
-env_file="/ix/experimental/CollectiveX/.collx_backend/env/node-${SLURM_NODEID}.sh"
-env_root="${env_file%/*}"
-[ -d "$env_root" ] && [ ! -L "$env_root" ] || exit 66
-case "$(stat -c "%a" "$env_root")" in 700|[1-7]700) ;; *) exit 66;; esac
-[ -f "$env_file" ] && [ -r "$env_file" ] && [ ! -L "$env_file" ] \
-  && [ "$(stat -c "%u:%a" "$env_file")" = "$(stat -c "%u" "$env_root"):600" ] || exit 66
-. "$env_file" || exit 66
+. "/ix/experimental/CollectiveX/.collx_backend/env/node-${SLURM_NODEID}.sh" || exit 66
 BASH
 }
 
@@ -419,8 +412,8 @@ collx_backend_probe() {
   cat <<'BASH'
 case "$COLLX_BENCH" in
   deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, 'ElasticBuffer')" ;;
-  deepep-hybrid) python3 -c "import deep_ep; assert hasattr(deep_ep, 'HybridEPBuffer')" ;;
   mori) python3 -c "import mori" ;;
+  nccl-ep) python3 -c "import torch; assert torch.distributed.is_available()" ;;
   *) exit 69 ;;
 esac
 BASH
@@ -668,21 +661,9 @@ collx_reconcile_recorded_allocation() {
   collx_cancel_job "$job_id" && collx_clear_allocation_jobid
 }
 
-# Single multi-arch container for ALL NVIDIA SKUs: tag `v0.5.11-cu130` is an OCI
-# image index covering linux/amd64 (B200) + linux/arm64 (GB200); enroot import
-# pulls the matching arch. (cu130 = CUDA 13, system nccl.h in /usr/include, torch 2.9.x.)
+# Image references come from configs/backends.json (collx_load_backend_registry).
 # Import uses the configured tag because Enroot cannot reliably import a
 # digest-qualified Docker Hub reference non-interactively.
-# (v0.5.12-cu130 was rejected: its 62 layers overflow enroot's overlay-based
-# squash creation on these nodes — "failed to mount overlay ... Invalid argument".
-# v0.5.11-cu130 imports cleanly.)
-# Runtime setup verifies the image-bundled DeepEP build for the detected GPU target.
-COLLX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
-
-# AMD (ROCm/CDNA): single mi35x-tagged image bundles MoRI for all three CDNA
-# SKUs (gfx942 mi300x/mi325x + gfx950 mi355x).
-COLLX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
-COLLX_MORI_COMMIT_AMD="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
 collx_default_image() {
   case "$1" in
     mi300x*|mi325x*|mi355x*) echo "$COLLX_IMAGE_AMD_MORI" ;;
@@ -741,18 +722,19 @@ collx_fetch_revision() {
   return 1
 }
 
+# repo|commit|tree|fmt-submodule|nccl-submodule (registry-loaded; empty = not pinned)
 collx_backend_source_pin() {
   case "$1" in
-    deepep-v2) printf '%s||%s' "$COLLX_DEEPEP_V2_COMMIT" "$COLLX_DEEPEP_V2_FMT_COMMIT" ;;
-    deepep-hybrid) printf '%s|||%s' "$COLLX_DEEPEP_HYBRID_COMMIT" "$COLLX_DEEPEP_HYBRID_NCCL_COMMIT" ;;
+    deepep-v2) printf '%s|%s|%s|%s|' "$COLLX_DEEPEP_V2_REPO" \
+      "$COLLX_DEEPEP_V2_COMMIT" "$COLLX_DEEPEP_V2_TREE" "$COLLX_DEEPEP_V2_FMT_COMMIT" ;;
     *) return 1 ;;
   esac
 }
 
 collx_backend_source_path() {
-  local root="$1" backend="$2" revision tree fmt nccl pin
+  local root="$1" backend="$2" repository revision tree fmt nccl pin
   pin="$(collx_backend_source_pin "$backend")" || return 1
-  IFS='|' read -r revision tree fmt nccl <<< "$pin"
+  IFS='|' read -r repository revision tree fmt nccl <<< "$pin"
   printf '%s/%s-%s' "$root" "$backend" "$revision"
 }
 
@@ -762,7 +744,7 @@ collx_apply_deepep_v2_nccl_check_fix() {
 
 # Acquire source before compute allocation, preferring the verified same-run GHA seed.
 _collx_prepare_backend_source() {
-  local mount_src="$1" backend="$2" root source temporary revision tree fmt nccl pin
+  local mount_src="$1" backend="$2" root source temporary repository revision tree fmt nccl pin
   root="$mount_src/experimental/CollectiveX/.collx_sources"
   COLLX_BACKEND_SOURCE_STEP="source mount creation"
   if [ ! -e "$root" ] && [ ! -L "$root" ]; then
@@ -781,10 +763,9 @@ _collx_prepare_backend_source() {
     rm -rf -- "$temporary"
     return 1
   }
-  IFS='|' read -r revision tree fmt nccl <<< "$pin"
+  IFS='|' read -r repository revision tree fmt nccl <<< "$pin"
   COLLX_BACKEND_SOURCE_STEP="revision fetch"
-  if ! collx_fetch_revision \
-      https://github.com/deepseek-ai/DeepEP "$revision" "$temporary"; then
+  if ! collx_fetch_revision "$repository" "$revision" "$temporary"; then
     rm -rf -- "$temporary"
     return 1
   fi
@@ -862,12 +843,7 @@ collx_prepare_runner_shared_stage_base() {
 }
 
 collx_lock_canonical_gha_env() {
-  local runner="$1" trusted_lock_dir=""
-  local trusted_stage_dir=""
-  local trusted_qos=""
-  local trusted_socket_ifname="" trusted_rdma_devices=""
-  local trusted_ib_gid_index="" trusted_rdma_service_level=""
-  local trusted_rdma_traffic_class=""
+  local runner="$1"
   [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] || return 0
   [ "${GITHUB_ACTIONS:-}" = true ] \
     || collx_die "canonical CollectiveX execution requires GitHub Actions"
@@ -878,25 +854,12 @@ collx_lock_canonical_gha_env() {
     && "${COLLECTIVEX_SOURCE_SHA:-}" =~ ^[0-9a-f]{40,64}$ ]] \
     || collx_die "canonical CollectiveX workflow identity is incomplete"
 
-  # collx_load_operator_config clears inherited values before setting this process marker.
-  # Preserve only values parsed from that private strict document.
-  if [ "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" = "$$" ]; then
-    trusted_lock_dir="${COLLX_LOCK_DIR:-}"
-    trusted_stage_dir="${COLLX_STAGE_DIR:-}"
-    trusted_qos="${COLLX_QOS:-}"
-    trusted_socket_ifname="${COLLX_SOCKET_IFNAME:-}"
-    trusted_rdma_devices="${COLLX_RDMA_DEVICES:-}"
-    trusted_ib_gid_index="${COLLX_IB_GID_INDEX:-}"
-    trusted_rdma_service_level="${COLLX_RDMA_SERVICE_LEVEL:-}"
-    trusted_rdma_traffic_class="${COLLX_RDMA_TRAFFIC_CLASS:-}"
-  fi
-  # The legacy B300 operator row contains a root-owned stage path. B300's
-  # compute-visible account home is the canonical source for its private base.
-  case "$runner" in b300|gb300) trusted_stage_dir="" ;; esac
-  unset COLLX_MASTER_PORT COLLX_MORI_KERNEL_TYPE COLLX_LOCK_DIR COLLX_STAGE_DIR COLLX_QOS
+  # Measurement hygiene: clear inherited communication-library and rendezvous
+  # knobs so every fabric selector is re-derived by collx_apply_network_profile
+  # and the canonical policy below. Operator-config COLLX_* values are trusted
+  # as exported by collx_load_operator_config.
+  unset COLLX_MASTER_PORT COLLX_MORI_KERNEL_TYPE
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
-  unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
-  unset COLLX_RDMA_TRAFFIC_CLASS
   unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
   unset NCCL_IB_GID_INDEX NCCL_IB_SL
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
@@ -905,52 +868,53 @@ collx_lock_canonical_gha_env() {
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
   unset MORI_RDMA_DEVICES
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
-  unset HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE
   unset MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
   unset MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
   unset NCCL_CUMEM_ENABLE NCCL_MNNVL_ENABLE MC_FORCE_MNNVL
   unset COLLX_BACKEND_CACHE_ROOT
   unset COLLX_PREPARED_BACKEND_CACHE COLLX_BACKEND_SOURCE_ROOT
+  case "$runner" in
+    mi300x|mi325x|mi355x) ;;
+    *) unset COLLX_LOCK_DIR ;;
+  esac
 
   [ -n "${COLLX_SQUASH_DIR:-}" ] \
     || collx_die "canonical CollectiveX execution requires shared container storage"
-  if [ -z "$trusted_stage_dir" ]; then
+  # The legacy B300 operator row contains a root-owned stage path; B300/GB300
+  # always derive their stage base from the compute-visible account home.
+  case "$runner" in b300|gb300) COLLX_STAGE_DIR="" ;; esac
+  if [ -z "${COLLX_STAGE_DIR:-}" ]; then
     case "$runner" in
       h100-dgxc)
-        trusted_stage_dir="$(collx_prepare_implicit_stage_base "${COLLX_SQUASH_DIR%/*}")" \
+        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "${COLLX_SQUASH_DIR%/*}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated shared stage directory"
         ;;
-      b300)
-        trusted_stage_dir="$(collx_prepare_implicit_stage_base "" \
-          "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
-          || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
-        ;;
-      gb300)
-        trusted_stage_dir="$(collx_prepare_implicit_stage_base "" \
+      b300|gb300)
+        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "" \
           "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       h200-dgxc|b200-dgxc)
-        trusted_stage_dir="$(collx_prepare_implicit_stage_base)" \
+        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base)" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       mi300x|mi325x|mi355x)
         # AMD self-hosted runners and compute nodes share the runner filesystem,
         # while the image cache may be root-owned. Derive a runner-owned base
         # outside _work instead of weakening stage ownership validation.
-        trusted_stage_dir="$(collx_prepare_runner_shared_stage_base)" \
+        COLLX_STAGE_DIR="$(collx_prepare_runner_shared_stage_base)" \
           || collx_die "canonical AMD execution cannot create an isolated shared stage directory"
         ;;
       *) collx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
     esac
   elif [ "$runner" = mi300x ]; then
-    # The MI300X runner home is a shared-filesystem symlink. Resolve the
-    # operator-selected base once; collx_stage_path still validates the canonical
-    # directory's ownership, permissions, overlap, and per-run child path.
-    trusted_stage_dir="$(python3 "$COLLX_RUNTIME_DIR/stage.py" resolve-directory \
-      "$trusted_stage_dir")" \
+    # The MI300X runner home is a shared-filesystem symlink; resolve the
+    # operator-selected base once.
+    COLLX_STAGE_DIR="$(python3 "$COLLX_RUNTIME_DIR/stage.py" resolve-directory \
+      "$COLLX_STAGE_DIR")" \
       || collx_die "canonical MI300X execution cannot resolve the shared stage directory"
   fi
+  export COLLX_STAGE_DIR
 
   local policy_file policy_key policy_value
   policy_file="$(mktemp /tmp/inferencex-collectivex-policy.XXXXXX)" \
@@ -966,22 +930,6 @@ collx_lock_canonical_gha_env() {
     printf -v "$policy_key" '%s' "$policy_value"
   done < "$policy_file"
   rm -f -- "$policy_file"
-  case "$runner:$trusted_lock_dir" in
-    mi300x:?*|mi325x:?*|mi355x:?*) export COLLX_LOCK_DIR="$trusted_lock_dir" ;;
-  esac
-  COLLX_STAGE_DIR="$trusted_stage_dir"
-  [ -z "$trusted_qos" ] || export COLLX_QOS="$trusted_qos"
-  [ -z "$trusted_socket_ifname" ] \
-    || export COLLX_SOCKET_IFNAME="$trusted_socket_ifname"
-  [ -z "$trusted_rdma_devices" ] \
-    || export COLLX_RDMA_DEVICES="$trusted_rdma_devices"
-  [ -z "$trusted_ib_gid_index" ] \
-    || export COLLX_IB_GID_INDEX="$trusted_ib_gid_index"
-  [ -z "$trusted_rdma_service_level" ] \
-    || export COLLX_RDMA_SERVICE_LEVEL="$trusted_rdma_service_level"
-  [ -z "$trusted_rdma_traffic_class" ] \
-    || export COLLX_RDMA_TRAFFIC_CLASS="$trusted_rdma_traffic_class"
-  export COLLX_STAGE_DIR
   unset COLLX_PUBLIC_RUNNER COLLX_GB_PRODUCT COLLX_DRYRUN COLLX_TIMING
   unset COLLX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE
   export COLLX_IMAGE COLLX_NGPUS COLLX_SEED COLLX_RUN_TIMEOUT
@@ -1479,7 +1427,6 @@ collx_launcher_cleanup() {
       [ "$rc" != 0 ] || rc=1
     fi
   fi
-  [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] || collx_cleanup_private_logs "$rc"
   exit "$rc"
 }
 

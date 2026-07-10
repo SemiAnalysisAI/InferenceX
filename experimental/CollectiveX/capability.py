@@ -147,8 +147,10 @@ BACKENDS = {
         "vendors": {"nvidia"},
         "sku_capabilities": DEEPEP_V2_SKU_CAPABILITIES,
     },
-    "deepep-hybrid": {"vendors": {"nvidia"}},
     "mori": {"vendors": {"amd"}},
+    # Vendor-neutral collective-library baseline (RCCL on AMD, NCCL on NVIDIA):
+    # a routing-aware variable-split all-to-all, no source pin or build.
+    "nccl-ep": {"vendors": {"nvidia", "amd"}},
 }
 SWEEP_BACKENDS = tuple(BACKENDS)
 
@@ -161,9 +163,6 @@ TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {}
 # Keep these narrower than platform overrides so working reference paths remain
 # measurable on the same fabric.
 BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
-    ("b200-dgxc", "deepep-hybrid", 16): (
-        "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200"
-    ),
     ("b300", "deepep-v2", 16): (
         "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
         "unprovisioned on B300 hosts"

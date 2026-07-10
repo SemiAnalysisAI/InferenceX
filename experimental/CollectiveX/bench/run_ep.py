@@ -140,8 +140,8 @@ def main() -> int:
         required=True,
         choices=[
             "deepep-v2",
-            "deepep-hybrid",
             "mori",
+            "nccl-ep",
         ],
     )
     ep_harness.add_common_args(ap)
@@ -275,7 +275,7 @@ def main() -> int:
     elif args.backend == "deepep-v2":
         from ep_deepep_v2 import DeepEPV2Backend as Backend
     else:
-        from ep_deepep_hybrid import DeepEPHybridBackend as Backend
+        from ep_nccl_ep import NcclEPBackend as Backend
 
     # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
     # group device-only so scale-out does not also depend on a host Gloo fabric.

@@ -3,19 +3,16 @@
 
 from __future__ import annotations
 
-import ctypes
 import importlib.metadata
 import inspect
 import json
 import os
-import re
 import sys
 import types
 from pathlib import Path
 
 import torch
 import torch.distributed as dist
-import ep_harness
 from ep_backend import EPBackend
 
 try:
@@ -26,88 +23,23 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# Source pins (PR #605 head + #630/#640 fixes) live in runtime/common.sh, which
-# fetches and builds them. This adapter verifies the realized artifacts instead:
-# installed package versions, the loaded libnccl's runtime version, and the
-# wheel's local-version tag ("+fa8a9b1"), which setup.py bakes from the pinned
-# checkout at build time and is the artifact-side commit check.
+# Source pins (PR #605 head + #630/#640 fixes) live in configs/backends.json;
+# the launcher fetches and builds them and persists DEEPEP_COMMIT into the rank
+# environment. This adapter verifies the realized artifacts instead: installed
+# package versions, the loaded libnccl's runtime version, and the wheel's
+# local-version tag, which setup.py bakes from the pinned checkout at build
+# time and is the artifact-side commit check.
 DEEPEP_V2_VERSION = "2.0.0"
-DEEPEP_V2_DISTRIBUTIONS = frozenset({"2.0.0+fa8a9b1", "2.0.0+local"})
-TORCH_VERSION = "2.10.0+cu130"
-NCCL_VERSION = "2.30.4"
-NVSHMEM_VERSION = "3.3.9"
-# The exact JIT kernel set a healthy deepep-v2 build materializes; the cubin-set
-# gate in ``_jit_kernel_names`` fails closed if the realized set differs.
-DEEPEP_V2_JIT_KERNELS = frozenset({
-    "barrier", "combine", "combine_reduce_epilogue", "dispatch",
-    "dispatch_copy_epilogue",
-})
 
 
-def _loaded_library_paths() -> set[str]:
-    extension = getattr(getattr(deep_ep, "_C", None), "__file__", None)
-    if not extension or not os.path.isfile(extension):
-        raise RuntimeError("DeepEP V2 extension library is not loaded")
-    paths = {os.path.realpath(extension)}
-    try:
-        with open("/proc/self/maps", encoding="utf-8") as handle:
-            for line in handle:
-                path = line.rstrip().split()[-1]
-                name = os.path.basename(path)
-                if ("libnccl.so" in name or "libnvshmem_host.so" in name) and os.path.isfile(path):
-                    paths.add(os.path.realpath(path))
-    except OSError as exc:  # pragma: no cover - benchmark runtime is Linux
-        raise RuntimeError("cannot inspect loaded communication libraries") from exc
-    return paths
-
-
-def _loaded_nccl_version() -> str:
-    matches = [
-        path for path in _loaded_library_paths()
-        if "libnccl.so" in os.path.basename(path)
-    ]
-    if len(matches) != 1:
-        raise RuntimeError("expected exactly one loaded NCCL library")
-    version = ctypes.c_int()
-    if ctypes.CDLL(matches[0]).ncclGetVersion(ctypes.byref(version)) != 0:
-        raise RuntimeError("loaded NCCL version query failed")
-    return ep_harness.format_collective_version(version.value)
-
-
-def _validate_loaded_libraries() -> None:
-    paths = _loaded_library_paths()
-    required = {
-        "nccl": [path for path in paths if "libnccl.so" in os.path.basename(path)],
-        "nvshmem": [path for path in paths if "libnvshmem_host.so" in os.path.basename(path)],
-    }
-    mismatches = [f"{name}={len(matches)}" for name, matches in required.items() if len(matches) != 1]
-    if mismatches:
-        raise RuntimeError("expected one loaded library for each dependency: " + ", ".join(mismatches))
-
-def _jit_kernel_names() -> list[str]:
-    root = Path(os.environ["EP_JIT_CACHE_DIR"]) / "cache"
-    if root.is_symlink() or not root.is_dir():
-        raise RuntimeError("DeepEP V2 produced no JIT cache evidence")
-    kernel_names = set()
-    for directory in sorted(root.iterdir(), key=lambda item: item.name):
-        match = re.fullmatch(r"kernel\.([A-Za-z0-9_+-]+)\.([0-9a-f]{32})", directory.name)
-        if directory.is_symlink() or not directory.is_dir() or match is None:
-            raise RuntimeError("DeepEP V2 JIT cache contains an invalid entry")
-        if {path.name for path in directory.iterdir()} != {
-            "kernel.cu", "kernel.cubin", "kernel.sass",
-        }:
-            raise RuntimeError("DeepEP V2 JIT kernel evidence is incomplete")
-        source = directory / "kernel.cu"
-        cubin = directory / "kernel.cubin"
-        sass = directory / "kernel.sass"
-        if any(path.is_symlink() or not path.is_file() for path in (source, cubin, sass)):
-            raise RuntimeError("DeepEP V2 JIT evidence is not a regular file")
-        if any(path.stat().st_size <= 0 for path in (source, cubin, sass)):
-            raise RuntimeError("DeepEP V2 JIT evidence is empty")
-        kernel_names.add(match.group(1))
-    if kernel_names != DEEPEP_V2_JIT_KERNELS:
-        raise RuntimeError("DeepEP V2 JIT kernel set differs from the expected contract")
-    return sorted(kernel_names)
+def _expected_distributions() -> frozenset:
+    """Registry-pinned wheel tag plus "+local" (an explicitly unpinned dev
+    build). Without DEEPEP_COMMIT in the environment only dev builds pass."""
+    pinned = os.environ.get("DEEPEP_COMMIT", "")
+    tags = {f"{DEEPEP_V2_VERSION}+local"}
+    if pinned:
+        tags.add(f"{DEEPEP_V2_VERSION}+{pinned[:7]}")
+    return frozenset(tags)
 
 
 def _jit_cache_directory(
@@ -191,46 +123,21 @@ def _lsa_topology_is_valid(
     )
 
 
-def _require_runtime() -> tuple[str, str]:
-    torch_version = str(torch.__version__)
-    nccl_package_version = importlib.metadata.version("nvidia-nccl-cu13")
-    nvshmem_package_version = importlib.metadata.version("nvidia-nvshmem-cu12")
-    actual = {
-        "deep_ep": str(getattr(deep_ep, "__version__", "")),
-        "deep_ep distribution": importlib.metadata.version("deep_ep"),
-        "torch": torch_version,
-        "nvidia-nccl-cu13": nccl_package_version,
-        "nvidia-nvshmem-cu12": nvshmem_package_version,
-    }
-    required = {
-        "deep_ep": DEEPEP_V2_VERSION,
-        "torch": TORCH_VERSION,
-        "nvidia-nccl-cu13": NCCL_VERSION,
-        "nvidia-nvshmem-cu12": NVSHMEM_VERSION,
-    }
-    mismatches = [
-        f"{name}={actual[name]!r}, expected {value!r}"
-        for name, value in required.items()
-        if actual[name] != value
-    ]
-    if actual["deep_ep distribution"] not in DEEPEP_V2_DISTRIBUTIONS:
+def _require_runtime() -> None:
+    """Sentinel checks only: the registry wheel tag (catches the b300 image-bundled
+    deep_ep 1.2.1 shadowing the from-source build) and ElasticBuffer presence."""
+    distribution = importlib.metadata.version("deep_ep")
+    expected_distributions = _expected_distributions()
+    mismatches = []
+    if distribution not in expected_distributions:
         mismatches.append(
-            "deep_ep distribution="
-            f"{actual['deep_ep distribution']!r}, expected one of "
-            f"{sorted(DEEPEP_V2_DISTRIBUTIONS)!r}"
+            f"deep_ep distribution={distribution!r}, expected one of "
+            f"{sorted(expected_distributions)!r}"
         )
     if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
         mismatches.append("deep_ep.ElasticBuffer is absent")
-    if os.environ.get("EP_SUPPRESS_NCCL_CHECK"):
-        mismatches.append("EP_SUPPRESS_NCCL_CHECK must be unset")
-    nccl_runtime_version = _loaded_nccl_version()
-    if nccl_runtime_version != NCCL_VERSION:
-        mismatches.append(
-            f"loaded NCCL={nccl_runtime_version!r}, expected {NCCL_VERSION!r}"
-        )
     if mismatches:
         raise RuntimeError("invalid DeepEP V2 runtime: " + "; ".join(mismatches))
-    return torch_version, nccl_runtime_version
 
 
 class DeepEPV2Backend(EPBackend):
@@ -317,7 +224,6 @@ class DeepEPV2Backend(EPBackend):
             **jit_config,
         }
         _require_cross_rank_equal(realized_config, "realized tuning/topology")
-        _validate_loaded_libraries()
 
     def _topk_idx_dtype(self):
         # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.

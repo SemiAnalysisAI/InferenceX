@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "notes": [
+    "Public CollectiveX benchmark identity: container images and backend source pins.",
+    "runtime/config.py backend-registry validates this file and emits the COLLX_* names",
+    "consumed by runtime/common.sh, runtime/prepare_backend.sh, and the launchers.",
+    "Commits and trees are enforced at source fetch (rev-parse HEAD / HEAD^{tree});",
+    "submodule pins are enforced after submodule update. Changing a pin here changes",
+    "what the published benchmark measured, so it belongs in review, not in a launcher."
+  ],
+  "images": {
+    "multiarch": {
+      "ref": "lmsysorg/sglang:v0.5.11-cu130",
+      "platforms": ["linux/amd64", "linux/arm64"],
+      "notes": [
+        "Single multi-arch container for ALL NVIDIA SKUs: the tag is an OCI image",
+        "index covering linux/amd64 (B200) + linux/arm64 (GB200); enroot import",
+        "pulls the matching arch. cu130 = CUDA 13, system nccl.h in /usr/include.",
+        "v0.5.12-cu130 rejected: its 62 layers overflow enroot's overlay-based squash",
+        "creation on these nodes (failed to mount overlay: Invalid argument);",
+        "v0.5.11-cu130 imports cleanly. Runtime setup verifies the image-bundled",
+        "DeepEP build for the detected GPU target."
+      ]
+    },
+    "amd-mori": {
+      "ref": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "platforms": ["linux/amd64"],
+      "notes": [
+        "Single mi35x-tagged image bundles MoRI for all three CDNA SKUs",
+        "(gfx942 mi300x/mi325x + gfx950 mi355x)."
+      ]
+    }
+  },
+  "backends": {
+    "deepep-v2": {
+      "repo": "https://github.com/deepseek-ai/DeepEP",
+      "commit": "fa8a9b16898204afd347c663b89e65ef87dc6ce6",
+      "tree": "29809e75c5874e6609dac4804e7b651d5226959f",
+      "submodules": {
+        "third-party/fmt": "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
+      },
+      "patches": [
+        {
+          "name": "deepep-v2-nccl-check",
+          "upstream_commit": "93d0564188f7a0a6288c6e316484861b0efa042e",
+          "applied_by": "runtime/stage.py rewrite-deepep-v2"
+        }
+      ]
+    },
+    "mori": {
+      "commit": "bf99bdf18fc69887a346913ca01c315c2aa9bd4c"
+    }
+  }
+}

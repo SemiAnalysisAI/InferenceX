@@ -20,7 +20,7 @@ def matrix(**options):
 
 class MatrixTests(unittest.TestCase):
     def test_shard_extraction_is_deterministic_and_preserves_cases(self):
-        document = matrix(backend="deepep-hybrid", only_sku="h100-dgxc")
+        document = matrix(backend="nccl-ep", only_sku="h100-dgxc")
         cell = document["include"][0]
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -299,7 +299,7 @@ def kernel_generation(backend) -> str:
         return declared
     return {
         "deepep-v2": "v2-elastic-buffer",
-        "deepep-hybrid": "hybrid",
+        "nccl-ep": "collective-all-to-all",
     }.get(backend.name, "n-a")
 
 
