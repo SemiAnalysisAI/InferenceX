@@ -146,7 +146,6 @@ SGLANG_CMD=(
     --swa-full-tokens-ratio 0.15
     --page-size 256
     --kv-cache-dtype fp8_e4m3
-    --context-length "$MAX_MODEL_LEN"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --disable-shared-experts-fusion
     --tool-call-parser deepseekv4
