@@ -20,9 +20,8 @@ built in ``__init__`` before any input existed.
 
 The base class carries the contract flags the driver reads (``stage_device_work``,
 ``combine_needs_redispatch``, ``dispatch_needs_combine_cleanup``,
-``combine_weight_semantics``, ``oracle_layout``/``payload_unit``, ``roundtrip_only``)
-with defaults matching the common (non-fp8, normal-mode) case; subclasses override
-them. The two Pass-2 timing branch rules — untimed stage+combine cleanup after a
+``combine_weight_semantics``, ``roundtrip_only``) with defaults matching the
+common case; subclasses override them. The two Pass-2 timing branch rules — untimed stage+combine cleanup after a
 timed dispatch (MoRI), and per-iter re-dispatch for stateful combine (MoRI) — are
 encoded once in ``benchmark_dispatch``/``benchmark_combine`` so subclasses supply
 only the raw op.
@@ -61,7 +60,6 @@ class RankInputs:
     topk_idx: "torch.Tensor"
     topk_weights: "torch.Tensor"
     activations: "torch.Tensor"
-    global_tokens: int = 0
     global_idx: "torch.Tensor | None" = None
     global_weights: "torch.Tensor | None" = None
 
@@ -78,12 +76,6 @@ class WorkloadSpec:
     ok: bool = True
     rc: int = 0
     message: str = ""
-    routing: str = "uniform"
-    seed: int = 0
-    hidden: int = 0
-    topk: int = 0
-    experts: int = 0
-    num_logical: int = 0
     ep_size: int = 0
     experts_per_rank: int = 0
     cap: "int | None" = None
@@ -113,8 +105,6 @@ class EPBackend(abc.ABC):
     # Adapters that reduce activations and top-k weights independently must carry
     # the complete local weighted expert sum in the activation tensor.
     combine_weight_semantics = "unweighted-rank-sum"
-    oracle_layout = "token-rank"
-    payload_unit = "token-rank"
     roundtrip_only = False
 
     def __init_subclass__(cls, **kwargs):
@@ -146,7 +136,7 @@ class EPBackend(abc.ABC):
 
     @abc.abstractmethod
     def stage(self, problem, handle):
-        """Prepare the combine input on ``handle`` (dequantize / copy into place)."""
+        """Prepare the combine input on ``handle`` (copy into place)."""
 
     @abc.abstractmethod
     def combine(self, problem, handle):
@@ -178,7 +168,6 @@ class EPBackend(abc.ABC):
         when the ladder is empty or the cap cannot serve the conditioning ladder.
         """
         ep_size = self.world_size
-        num_logical = getattr(args, "num_logical_experts", args.experts)
         experts_per_rank = args.experts // ep_size
         conditioning_ladder = list(CONDITIONING_LADDERS[args.phase])
         cap = self.buffer_cap(args)
@@ -196,12 +185,6 @@ class EPBackend(abc.ABC):
                 message=f"empty token ladder (phase={args.phase}, cap={cap})",
             )
         spec = WorkloadSpec(
-            routing=args.routing,
-            seed=args.seed,
-            hidden=args.hidden,
-            topk=args.topk,
-            experts=args.experts,
-            num_logical=num_logical,
             ep_size=ep_size,
             experts_per_rank=experts_per_rank,
             cap=cap,
@@ -243,7 +226,6 @@ class EPBackend(abc.ABC):
             topk_idx=idx_s.contiguous(),
             topk_weights=w_s.contiguous(),
             activations=activations,
-            global_tokens=global_tokens,
             global_idx=idx_g if retain_global else None,
             global_weights=w_g if retain_global else None,
         )

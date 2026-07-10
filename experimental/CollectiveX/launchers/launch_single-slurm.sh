@@ -52,7 +52,7 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 [ "$NGPUS" = "$EXPECTED_WORLD" ] \
   || collx_die "$RUNNER world size must equal nodes x GPUs per node"
 case "$COLLX_BENCH" in
-  deepep-v2|nccl-ep) ;;
+  deepep-v2) ;;
   *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
 esac
 collx_apply_timing_profile

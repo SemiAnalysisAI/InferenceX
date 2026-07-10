@@ -11,7 +11,6 @@ import argparse
 import itertools
 import json
 from pathlib import Path
-import re
 import sys
 from typing import Any
 
@@ -84,25 +83,6 @@ def _ladder(suite: dict[str, Any], phase: str) -> str:
             or points != sorted(set(points))):
         raise SystemExit(f"invalid {phase} token ladder: {points!r}")
     return " ".join(map(str, points))
-
-
-def _case_id(sku: str, case: dict[str, Any]) -> str:
-    parts = (
-        sku,
-        case["backend"],
-        case.get("workload") or "manual",
-        case["mode"],
-        case["phase"],
-        f"ep{int(case['ep'])}",
-        case["routing"],
-    )
-    values = [
-        re.sub(r"[^a-z0-9]+", "-", str(part).strip().lower()).strip("-")
-        for part in parts
-    ]
-    if not all(values):
-        raise SystemExit("case identity contains an empty factor")
-    return "-".join(values)
 
 
 def _semantic_points(sku: str, case: dict[str, Any]) -> list[str]:
@@ -261,7 +241,9 @@ def resolve_matrix(
                                 f"suite {suite_name}: duplicate semantic point for {platform_name}"
                             )
                         scheduled.add(signature)
-                    case["case_id"] = _case_id(platform_name, case)
+                    # Same function the harness recomputes at run time — a scheduled
+                    # case ID can never drift from its realized factors.
+                    case["case_id"] = ep_harness.case_id(platform_name, case)
                     requested_cases.append(
                         {
                             "sku": platform_name,
@@ -283,11 +265,6 @@ def resolve_matrix(
                         capability_detail,
                     )
                     continue
-                if capability_disposition != "supported":
-                    raise SystemExit(
-                        f"suite {suite_name}: invalid capability disposition "
-                        f"{capability_disposition!r}"
-                    )
                 add_case(requested_ladder, "runnable", None, None)
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}

@@ -39,7 +39,7 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 [ "$NGPUS" = "$EXPECTED_WORLD" ] \
   || collx_die "$RUNNER world size must equal nodes x GPUs per node"
 case "$COLLX_BENCH" in
-  mori|nccl-ep) ;;
+  mori) ;;
   *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
 esac
 collx_apply_timing_profile

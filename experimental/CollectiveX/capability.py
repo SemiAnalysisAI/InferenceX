@@ -75,15 +75,11 @@ def _platform(
         scale_up_domain=scale_up_domain,
         scale_up_transport=scale_up_transport,
     )
-    ep8 = topologies[8]
     return {
         "vendor": vendor,
         "arch": arch,
         "machine": machine,
         "product": product,
-        # EP8 defaults remain while downstream readers migrate to per-EP records.
-        "transport": ep8["transport"],
-        "topology_class": ep8["topology_class"],
         "gpus_per_node": gpus_per_node,
         "scale_up_domain": scale_up_domain,
         "ep_degrees": tuple(topologies),
@@ -140,24 +136,16 @@ PLATFORMS = {
     ),
 }
 
-# Source pins and runtime versions live in runtime/common.sh and the adapters;
-# this registry holds only what scheduling reads: vendor and per-SKU capability.
+# Source pins and images live in configs/backends.json; this registry holds
+# only what scheduling reads: vendor and per-SKU capability.
 BACKENDS = {
     "deepep-v2": {
         "vendors": {"nvidia"},
         "sku_capabilities": DEEPEP_V2_SKU_CAPABILITIES,
     },
     "mori": {"vendors": {"amd"}},
-    # Vendor-neutral collective-library baseline (RCCL on AMD, NCCL on NVIDIA):
-    # a routing-aware variable-split all-to-all, no source pin or build.
-    "nccl-ep": {"vendors": {"nvidia", "amd"}},
 }
 SWEEP_BACKENDS = tuple(BACKENDS)
-
-# Publication-quality topology exceptions apply after ordinary backend support
-# checks. They describe the currently usable benchmark fabric, not a library
-# implementation limit, and can be removed when the named topology is repaired.
-TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {}
 
 # Backend-specific topology limits require repeated native execution evidence.
 # Keep these narrower than platform overrides so working reference paths remain
@@ -210,7 +198,7 @@ def topology_for(sku: str, ep: int) -> dict[str, Any] | None:
     return platform["topologies"].get(ep)
 
 
-def _resolve_base(
+def resolve(
     sku: str,
     backend: str,
     *,
@@ -219,7 +207,7 @@ def _resolve_base(
     routing: str = "uniform",
     mode: str = "normal",
 ) -> tuple[bool, str]:
-    """Resolve the base BF16 capability for one SKU/backend/EP cell."""
+    """Return whether one fixed-profile case can run on a public GHA runner label."""
     platform, implementation = PLATFORMS.get(sku), BACKENDS.get(backend)
     if platform is None:
         return False, f"unknown GHA runner label {sku!r}"
@@ -248,18 +236,11 @@ def _resolve_base(
     sku_capability = implementation.get("sku_capabilities", {}).get(sku)
     if sku_capability is not None and not sku_capability["schedulable"]:
         return False, f"{backend} is unsupported on {sku}: {sku_capability['basis']}"
-    if platform["machine"] not in implementation.get("machines", {platform["machine"]}):
-        return False, f"{backend} does not support {platform['machine']}"
-    if sku in implementation.get("excluded_skus", set()):
-        return False, f"{backend} is unavailable on {sku}"
     backend_topology_override = BACKEND_TOPOLOGY_CELL_OVERRIDES.get(
         (sku, backend, ep)
     )
     if backend_topology_override is not None:
         return False, backend_topology_override
-    topology_override = TOPOLOGY_CELL_OVERRIDES.get((sku, ep))
-    if topology_override is not None:
-        return False, topology_override
     return True, "ok"
 
 
@@ -273,33 +254,5 @@ def resolve_disposition(
     mode: str = "normal",
 ) -> tuple[str, str]:
     """Resolve a BF16 cell to its capability disposition."""
-    base_ok, base_detail = _resolve_base(
-        sku,
-        backend,
-        ep=ep,
-        nodes=nodes,
-        routing=routing,
-        mode=mode,
-    )
-    return ("supported", "ok") if base_ok else ("unsupported", base_detail)
-
-
-def resolve(
-    sku: str,
-    backend: str,
-    *,
-    ep: int | None = None,
-    nodes: int | None = None,
-    routing: str = "uniform",
-    mode: str = "normal",
-) -> tuple[bool, str]:
-    """Return whether one fixed-profile case can run on a public GHA runner label."""
-    disposition, detail = resolve_disposition(
-        sku,
-        backend,
-        ep=ep,
-        nodes=nodes,
-        routing=routing,
-        mode=mode,
-    )
-    return disposition == "supported", detail
+    ok, detail = resolve(sku, backend, ep=ep, nodes=nodes, routing=routing, mode=mode)
+    return ("supported", "ok") if ok else ("unsupported", detail)

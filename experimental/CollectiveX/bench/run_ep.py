@@ -141,7 +141,6 @@ def main() -> int:
         choices=[
             "deepep-v2",
             "mori",
-            "nccl-ep",
         ],
     )
     ep_harness.add_common_args(ap)
@@ -272,10 +271,8 @@ def main() -> int:
     # explicit case dimension; adapters do not infer it from the token ladder.
     if args.backend == "mori":
         from ep_mori import MoRIBackend as Backend
-    elif args.backend == "deepep-v2":
-        from ep_deepep_v2 import DeepEPV2Backend as Backend
     else:
-        from ep_nccl_ep import NcclEPBackend as Backend
+        from ep_deepep_v2 import DeepEPV2Backend as Backend
 
     # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
     # group device-only so scale-out does not also depend on a host Gloo fabric.
@@ -287,12 +284,10 @@ def main() -> int:
                 world_size=world_size,
                 device_id=device,
             )
-        elif args.backend == "deepep-v2":
+        else:
             # PR #605 reuses PyTorch's NCCL communicator through ``_comm_ptr``. Supplying
             # device_id eagerly forms it before ElasticBuffer construction.
             dist.init_process_group("nccl", device_id=device)
-        else:
-            dist.init_process_group("nccl")
 
     args.runtime = _runtime_info(torch, vendor=vendor)
 

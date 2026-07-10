@@ -9,7 +9,7 @@
 # configuration enters the container as environment.
 #
 # Required env (exported by the adapter): COLLX_RUNNER
-# Selector: COLLX_BENCH = deepep-v2 | mori | nccl-ep
+# Selector: COLLX_BENCH = deepep-v2 | mori
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
@@ -334,12 +334,6 @@ collx_prepare_backend() {
     mori)
       python3 -c "import mori" \
         || { collx_log "ERROR: MoRI backend import failed"; return 1; }
-      ;;
-    nccl-ep)
-      # Vendor-neutral collective baseline: no source build; the RCCL/NCCL
-      # all-to-all ships with torch in the image. Verify it is importable.
-      python3 -c "import torch; assert torch.distributed.is_available()" \
-        || { collx_log "ERROR: nccl-ep requires torch.distributed"; return 1; }
       ;;
     *)
       collx_log "ERROR: unknown backend preparation request"

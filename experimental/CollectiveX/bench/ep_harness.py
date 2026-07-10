@@ -80,7 +80,6 @@ TRIALS_PER_POINT = 128
 WARMUP_ITERS_PER_TRIAL = 32
 WARMUP_SEMANTICS = "full-roundtrip-before-each-component-trial-point-v1"
 ROUTING_SEED = 67
-PLACEMENT = "packed"
 
 # Phase-default sweeps — token-size regimes, NOT distinct kernels (both run normal
 # mode; "decode"/"prefill" name the small/large-token regime). Powers of two for a
@@ -208,18 +207,6 @@ def trial_order(values: list, trial_index: int) -> list:
     return base[offset:] + base[:offset]
 
 
-def _stats_vec(xs: list[int]) -> dict:
-    """min/mean/max/CV (+ empty count) of a per-rank count vector — self-describing source-token
-    or load summary without dumping the full vector."""
-    n = len(xs) or 1
-    mean = sum(xs) / n
-    var = sum((x - mean) ** 2 for x in xs) / n
-    cv = (var ** 0.5 / mean) if mean > 0 else 0.0
-    return {"min": min(xs) if xs else 0, "mean": round(mean, 3),
-            "max": max(xs) if xs else 0, "cv": round(cv, 4),
-            "empty_ranks": sum(1 for x in xs if x == 0), "total": sum(xs), "ranks": n}
-
-
 def percentile(xs: list[float], q: float) -> float:
     if not xs:
         return float("nan")
@@ -299,7 +286,6 @@ def kernel_generation(backend) -> str:
         return declared
     return {
         "deepep-v2": "v2-elastic-buffer",
-        "nccl-ep": "collective-all-to-all",
     }.get(backend.name, "n-a")
 
 
@@ -624,7 +610,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     problems, gate, gts, global_traces, input_snapshots = {}, {}, {}, {}, {}
     routing_consistent = True
     for T in ladder:
-        counts = [T] * ep_size
         gt = T * ep_size
         gts[T] = gt
         point = spec.points[T]
@@ -633,7 +618,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gpn = args.gpus_per_node or ep_size
         rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
                                                       gpn, args.scale_up_domain or None)
-        rstats["source_token_stats"] = _stats_vec(counts)
         point_routing_consistent = _same_tensors_across_ranks(
             torch, dist, device, idx_g, w_g
         )
@@ -771,11 +755,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
-        # Canonical LOGICAL payload byte contracts (from the routing trace, NOT backend recv
-        # tensors): token-rank = one copy per unique (token,dest-rank); token-expert = one copy
-        # per routed (token,expert). routed_copies = token-rank copies; gt*topk = token-expert.
-        token_rank_copies = rstats["routed_copies"]
-        logical_copies = token_rank_copies
+        # Canonical LOGICAL payload bytes come from the routing trace (NOT backend recv
+        # tensors): one copy per unique (token, dest-rank) pair.
+        logical_copies = rstats["routed_copies"]
         H = args.hidden
         throughput = {
             percentile_name: gt / (latency_us * 1e-6)
@@ -839,7 +821,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "payload_copies_per_rank": rstats["payload_copies_per_rank"],
                 "payload_rank_cv": rstats["payload_rank_cv"],
                 "routed_copies": rstats["routed_copies"],
-                "source_token_stats": rstats.get("source_token_stats"),
             },
             "token_rate_at_latency_percentile": throughput,
             "tokens_per_rank": T,
@@ -863,7 +844,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         ),
         "workload_identity": "consistent-across-ranks" if routing_consistent else "inconsistent",
         "measurement_conformance": "conformant",   # run_ep gate rejects nonconformant pre-run
-        "sampling_conformance": "conformant",      # fixed-512-v1 gate rejects any other profile
+        "sampling_conformance": "conformant",      # sampling_error rejects any other timing profile
     }
 
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)

@@ -44,7 +44,7 @@ export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$S
 export COLLX_NGPUS="$NGPUS"
 unset COLLX_SCALE_OUT_TRANSPORT
 case "$COLLX_BENCH" in
-  deepep-v2|nccl-ep) ;;
+  deepep-v2) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
 esac
 collx_load_network_control_mode "$COLLX_DIR" || collx_die "cannot resolve network control mode"

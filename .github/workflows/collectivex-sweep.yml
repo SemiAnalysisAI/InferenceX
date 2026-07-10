@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori, nccl-ep]
+        options: [all, deepep-v2, mori]
       suites:
         description: "'all' or comma-list of suite names"
         type: string

@@ -18,8 +18,8 @@ precision is not a swept dimension. Every case runs the single normal-mode contr
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Coverage is uniform routing only.
 
-Cases use `fixed-512-v1`: 64 trials x 8 timed iterations with 32 synchronized full roundtrip
-warmups before each measured component at every trial/point. Component measurement order rotates each
+Cases use a fixed timing profile: 128 trials x 8 timed iterations (1024 samples per component)
+with 32 synchronized full roundtrip warmups before each measured component at every trial/point. Component measurement order rotates each
 trial so every timed component occupies every position in the sequence; each iteration takes the
 cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the headline latency. A
 stdlib integer counter produces byte-identical routing and gate weights.
@@ -28,7 +28,7 @@ Correctness is checked against the reference activation. The combine gate is `rt
 for the BF16 communication path. Any failed rank or point makes the case ineligible in the result
 it writes.
 
-The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, and MI355X. `sweep_matrix.py` materializes
+The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
 and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`, and
 `--ep-sizes` select a subset; the matrix is generated per dispatch, with no frozen digest or locked
@@ -37,7 +37,7 @@ case count.
 | Systems | EP8 | EP16 |
 |---|---|---|
 | H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
-| MI300X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
+| MI300X/MI325X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not determine scope: both GB topologies stay inside one 72-GPU MNNVL
@@ -45,9 +45,8 @@ scale-up domain.
 
 | Backend | Current scope |
 |---|---|
-| DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out; source/SASS-bound reproducible JIT |
-| DeepEP Hybrid | Pinned `HybridEPBuffer`: x86 EP16 multi-domain RDMA/DOCA; GB EP8/EP16 in one MNNVL communication domain |
-| MoRI | AMD EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X asyncLL); EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
+| DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out |
+| MoRI | AMD EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X/MI325X asyncLL); EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.
@@ -58,10 +57,9 @@ initialization when GIN is unavailable; the second prevents NCCL shared-memory m
 misclassified as duplicate NCCL libraries. Scale-up cases request NCCL Device API LSA and fail closed
 unless the realized LSA team covers the full EP world. x86 EP16 scale-out cases instead require the
 hybrid path with GIN, two logical scale-out domains represented by two physical RDMA ranks, and eight
-scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. The isolated build
-records the API, source, loaded libraries, generated JIT source, and executable SASS; raw CUBIN bytes
-stay private diagnostics. Whether a given SKU/backend/EP cell is attempted is a capability fact;
-whether it succeeded is decided by the benchmark's return code.
+scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. Whether a given
+SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is decided by the
+benchmark's return code.
 
 ## Workflow And Artifacts
 
@@ -77,18 +75,18 @@ unsupported cells produce no synthetic record. No step promotes a run,
 builds a dataset, or advances a channel; the neutral artifacts are the output. A consumer downloads
 them and decides what to display.
 
-Private host, address, device, NIC, credential, workspace, and path data stays in encrypted config,
-ignored operator notes, or bounded mode-0600 runner logs; it is never uploaded.
+Credentials stay in encrypted config and are never uploaded. Per-step runner logs are kept on the
+runner for postmortem; result artifacts carry only the fields listed in the methodology.
 
 ## Runner Configuration
 
 Runner-local Slurm and storage values use a strict per-SKU JSON document at
-`$XDG_CONFIG_HOME/inferencex/collectivex.json` or `COLLECTIVEX_OPERATOR_CONFIG`. The mode-0600,
-same-owner, non-symlink file is outside the checkout and never uploaded. Unknown runners, fields,
-duplicate keys, endpoint literals, unsafe paths, and non-JSON input fail closed; configuration is
-never evaluated as shell. GHA passes encrypted `COLLECTIVEX_OPERATOR_CONFIG_V1` content only to the
-launcher, which validates it, exports the selected SKU's allowlisted values, and deletes the temporary
-copy before allocation. Required JSON fields are:
+`$XDG_CONFIG_HOME/inferencex/collectivex.json` or `COLLECTIVEX_OPERATOR_CONFIG`. Unknown runners,
+fields, duplicate keys, and non-JSON input fail closed; configuration is never evaluated as shell.
+GHA passes encrypted `COLLECTIVEX_OPERATOR_CONFIG_V1` content to the launcher, which validates it,
+exports the selected SKU's values, and deletes the temporary copy before allocation. Per-SKU
+scale-out RDMA selectors live in the tracked `configs/network-config.json` overlay. Required JSON
+fields are:
 
 | SKU | Variables |
 |---|---|
@@ -98,7 +96,7 @@ copy before allocation. Required JSON fields are:
 | `b300` | `partition`, `account`, `squash_dir` |
 | `gb200` | `partition`, `account`, ordered `storage_roots` |
 | `gb300` | `partition`, `account`, `squash_dir`, `enroot_cache_path` |
-| `mi300x`, `mi355x` | `partition`, `squash_dir`, `stage_dir` |
+| `mi300x`, `mi325x`, `mi355x` | `partition`, `squash_dir` |
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
 its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class`
@@ -132,13 +130,11 @@ validated compute-visible account home. The workflow proves every derived base i
 allocated nodes before launch.
 
 Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
-platform, so one run never reuses another run's imported filesystem. Image-provided
-DeepEP is checked by package/API versions; source-built backends use pinned commits, trees, and
-runtime-verified GPU targets. DeepEP V2's mode-0700 cluster-local build cache is named from its
-build recipe, architecture, upstream trees, and dependency pins; only its
-fixed `/cx-cache` mount reaches the container, and it never enters result artifacts. Pinned V2 and
-Hybrid sources are fetched once per workflow, validated whole, and extracted to their exact backend
-root before staging.
+platform, so one run never reuses another run's imported filesystem. Backend source pins and image
+references live in `configs/backends.json`; the DeepEP V2 build is fetched at the pinned commit,
+verified by the wheel's commit-derived local-version tag and `ElasticBuffer` presence, and cached in
+a cluster-local build cache keyed by recipe, architecture, image, and commit. Only the fixed
+`/cx-cache` mount reaches the container.
 
 ## Local Checks
 

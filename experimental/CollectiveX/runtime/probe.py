@@ -24,10 +24,6 @@ def prepare_cache(parent_path: str) -> str:
     return str(path)
 
 
-def verify_cache_mount(root: str) -> None:
-    if root != "/cx-cache" or not Path(root).is_dir(): raise SystemExit(1)
-
-
 def validate_cuda_context(expected: int) -> None:
     cuda = ctypes.CDLL("libcuda.so.1")
     count = ctypes.c_int()
@@ -115,13 +111,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(); commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("default-route-interface")
     command = commands.add_parser("prepare-cache"); command.add_argument("parent")
-    command = commands.add_parser("verify-cache-mount"); command.add_argument("root")
     command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
     command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index")
     args = parser.parse_args()
     if args.command == "default-route-interface": print(default_route_interface(), end="")
     elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
-    elif args.command == "verify-cache-mount": verify_cache_mount(args.root)
     elif args.command == "cuda-context": validate_cuda_context(args.expected)
     else: validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
 

@@ -24,7 +24,7 @@ placement, and one pinned fixed resource profile per backend/topology. Dispatch 
 fixed BF16 on every backend; precision is not a swept dimension. Every case uses the normal
 `layout-and-dispatch-v1` semantics.
 
-- `ep-core`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
+- `ep-core`: uniform routing; decode T=1..512 powers of two; prefill T=256..2048 powers of two.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`, and
@@ -34,7 +34,7 @@ matrix is generated per dispatch; there is no frozen matrix digest or locked cas
 | Systems | EP8 | EP16 |
 |---|---|---|
 | H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
-| MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
+| MI300X/MI325X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
@@ -46,17 +46,18 @@ the exact upstream PR #640 library matcher that excludes NCCL shared-memory mapp
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
-scale-up and uses LSA. MoRI EP8 uses MI355X IntraNode in normal mode; EP16 uses pinned InterNodeV1
-over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external input.
+scale-up and uses LSA. MoRI EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X/MI325X
+AsyncLL); EP16 uses pinned InterNodeV1 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps,
+one QP per PE, and external input.
 Whether a given SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is
 decided only by the emitted artifact.
 
 ## Workload Identity
 
-One canonical workload is generated over the global token batch and sliced by source rank. Expert
-indices and gate weights are serialized. Activations use an integer counter formula whose
-BF16 values are exact across runtimes. The manifest records shape, EP, and routing coordinates,
-and loading regenerates the expected routing arrays for direct equality validation.
+One deterministic workload is generated over the global token batch from a fixed seed and sliced by
+source rank; a stdlib integer counter produces byte-identical expert indices, gate weights, and
+activations on every runtime, and the harness proves the realized routing trace identical across
+ranks before a case can succeed.
 
 Routing traffic distinguishes:
 
@@ -70,13 +71,13 @@ Adapters may not generate routing or reinterpret one quantity as the other.
 Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
 combine returns activation payload through an unweighted rank-sum path. Expert-output staging is
 outside isolated combine timing and inside the measured paired roundtrip. Each component declares
-availability, origin, start/end states, stage scope, and sample count. A paired-only API reports null
-isolated components. `isolated_sum` is derived. The artifact records the mode so a reader can keep
-distinct measurement contracts separate.
+availability, origin, and sample count. A paired-only API reports null isolated components.
+`isolated_sum` is derived. The artifact records the mode so a reader can keep distinct measurement
+contracts separate.
 
-Every measured component uses `fixed-512-v1`:
+Every measured component uses one fixed timing profile:
 
-- 64 trials x 8 timed iterations = 512 observations;
+- 128 trials x 8 timed iterations = 1024 observations;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at
   every trial/point;
 - component measurement order rotates each trial (`trial_order`) so every timed component occupies
@@ -85,16 +86,14 @@ Every measured component uses `fixed-512-v1`:
 
 Measured roundtrip p99 is the headline latency. Decode and prefill identify the serving regime
 represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
-identical shape.
-
-The versioned conditioning contract is part of scheduled and evidence identity.
+identical shape. A fixed untimed conditioning ramp precedes every measured shape.
 
 Logical payload bandwidth is:
 
 `logical_payload_bytes / measured_latency_seconds`
 
-Normal-mode payload bytes use rank-deduplicated token-rank activations. They add required scale bytes
-at the named boundary and exclude expert metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire
+Normal-mode payload bytes use rank-deduplicated token-rank BF16 activations (2 bytes per value, no
+scale payload) and exclude expert metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire
 utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
 rates are named `rate_at_latency_percentile`: bytes or tokens divided by the matching latency
@@ -137,12 +136,10 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
 - `outcome`: `status` (`success` or `invalid`), `reasons`, and a structured `validity` (execution,
   semantic-correctness, workload-identity, and conformance states).
 
-Each `rows` entry carries point latency, byte accounting, token rate, correctness, load, fanout, and
-anomaly evidence; per-point statistics are summarized in place, not emitted as separate documents.
-Each dispatched case writes exactly this one raw result document; unsupported or never-run cells
-produce no synthetic record. Private environment details (hosts, addresses, device selectors,
-credentials, workspace paths) remain in local mode-0600 logs and ignored operator notes and never
-enter an emitted artifact.
+Each `rows` entry carries point latency, byte accounting, token rate, correctness, load, and fanout;
+per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
+case writes exactly this one raw result document; unsupported or never-run cells produce no
+synthetic record.
 
 ## Identity
 
@@ -152,10 +149,8 @@ Identifiers are readable factor strings:
   slug-normalized; and
 - `attempt_ordinal`: a positive integer distinguishing repeat executions of one `case_id`.
 
-Canonical workload files use readable routing and shape coordinates and are validated against the
-deterministic generator. Source and library revisions use Git commits and trees; DeepEP V2 uses a
-fixed NVCC random seed for reproducible JIT builds. Pinned source trees, build recipes, runtime
-versions, and dependencies remain bound to the case factors.
+Backend source pins live in `configs/backends.json` and are enforced at fetch by commit; the DeepEP
+V2 build is verified at run time by its commit-derived wheel tag.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
 not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or

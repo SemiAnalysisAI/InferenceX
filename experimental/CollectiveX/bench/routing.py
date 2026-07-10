@@ -25,25 +25,14 @@ _MASK64 = (1 << 64) - 1
 
 SOURCE_ID_BITS = 32
 SOURCE_ID_COLUMNS = SOURCE_ID_BITS
-SOURCE_ID_CONTRACT = "bounded-sign-bit-source-v2"
 
 
-def build_global_routing(
-    global_tokens: int,
-    experts: int,
-    topk: int,
-    routing: str,
-    seed: int,
-    *,
-    token_offset: int = 0,
-):
+def build_global_routing(global_tokens: int, experts: int, topk: int, routing: str, seed: int):
     """Return one byte-stable counter-generated routing window on CPU."""
     if routing != "uniform":
         raise ValueError(f"unknown routing {routing!r} (uniform)")
     if global_tokens <= 0 or experts <= 0 or topk <= 0 or topk > experts:
         raise ValueError("global_tokens/experts/topk must be positive and topk <= experts")
-    if token_offset < 0:
-        raise ValueError("token_offset must be non-negative")
 
     def counter(token: int, slot: int, attempt: int, stream: int) -> int:
         value = (
@@ -59,8 +48,7 @@ def build_global_routing(
         return value ^ (value >> 31)
 
     indices, weights = [], []
-    for local_token in range(int(global_tokens)):
-        token = int(token_offset) + local_token
+    for token in range(int(global_tokens)):
         selected, used = [], set()
         for slot in range(int(topk)):
             attempt = 0
@@ -127,15 +115,14 @@ def decode_source_ids(payload, seed: int):
 def routing_locality(idx, experts_per_rank: int, ep_size: int, tokens_per_rank: int,
                      gpus_per_node: int, scale_up_domain: int = None) -> dict:
     """Locality of rank-deduplicated payload copies under packed placement."""
-    import torch as _t
     gt = idx.shape[0]
     assignments = (idx // experts_per_rank).clamp(max=ep_size - 1)
-    destinations = _t.zeros((gt, ep_size), dtype=_t.bool)
+    destinations = torch.zeros((gt, ep_size), dtype=torch.bool)
     destinations.scatter_(1, assignments, True)
     token, dest = destinations.nonzero(as_tuple=True)
     src = (token // max(1, tokens_per_rank)).clamp(max=ep_size - 1)
     sud = scale_up_domain or (gpus_per_node * ep_size)                  # default: all one domain
-    phys = _t.arange(ep_size, dtype=_t.int64)
+    phys = torch.arange(ep_size, dtype=torch.int64)
     pd, ps = phys[dest], phys[src]
     local = (dest == src)
     same_node = (pd // gpus_per_node) == (ps // gpus_per_node)

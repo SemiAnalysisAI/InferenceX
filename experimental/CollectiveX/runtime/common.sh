@@ -412,7 +412,6 @@ collx_backend_probe() {
 case "$COLLX_BENCH" in
   deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, 'ElasticBuffer')" ;;
   mori) python3 -c "import mori" ;;
-  nccl-ep) python3 -c "import torch; assert torch.distributed.is_available()" ;;
   *) exit 69 ;;
 esac
 BASH

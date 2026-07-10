@@ -357,7 +357,7 @@ class CaseArgvContract(unittest.TestCase):
         # Mirror of the parser bench/run_ep.py builds in main().
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--backend", required=True, choices=["deepep-v2", "mori", "nccl-ep"]
+            "--backend", required=True, choices=["deepep-v2", "mori"]
         )
         ep_harness.add_common_args(parser)
         return parser

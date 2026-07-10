@@ -49,13 +49,10 @@ def _mori_source_commit() -> str:
 
 class MoRIBackend(EPBackend):
     name = "mori"
-    stage_device_work = False
     combine_needs_redispatch = True
     dispatch_needs_combine_cleanup = True
-    combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
-        # mori is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
         super().__init__(args, rank, world_size, local_rank, device)
         # The runner pins the AMD GPU architecture MoRI is built against. This is a
         # hardware-lineage contract, independent of the (fixed BF16) communication path.
@@ -110,11 +107,9 @@ class MoRIBackend(EPBackend):
             raise RuntimeError(
                 "MoRI InterNodeV1 is pinned to EP16 over two 8-GPU XGMI/RDMA nodes"
             )
-        self.block_num = self._block_target = 80
+        self.block_num = 80
         self.rdma_block_num = 0
         self.num_qps = 1
-        self._block_floored = False
-        self._tuned_source = "default-80"
         self.dispatch_warps = 16
         self.combine_warps = 8
 
@@ -122,7 +117,6 @@ class MoRIBackend(EPBackend):
         # AsyncLL send/receive kernel as their normal-mode XGMI transport.
         kernel_request = os.environ.get("COLLX_MORI_KERNEL_TYPE", "intranode").strip().lower()
         self._kernel_type = None
-        self._kernel_type_label = "IntraNode"
         self._async_ll = False
         self._inter_node = False
         if kernel_request in ("asyncll", "async_ll", "async-ll"):
@@ -135,11 +129,9 @@ class MoRIBackend(EPBackend):
                     "EpDispatchCombineKernelType.AsyncLL"
                 )
             self._kernel_type = kernel_enum.AsyncLL
-            self._kernel_type_label = "AsyncLL"
             self._async_ll = True
-            self.block_num = self._block_target = 64
+            self.block_num = 64
             self.dispatch_warps = self.combine_warps = 8
-            self._tuned_source = "upstream-asyncll-64x8-external-input"
         elif kernel_request in ("internode-v1", "internode_v1", "internodev1"):
             if not scale_out:
                 raise RuntimeError("MoRI InterNodeV1 is valid only for scale-out EP16")
@@ -150,12 +142,10 @@ class MoRIBackend(EPBackend):
                     "EpDispatchCombineKernelType.InterNodeV1"
                 )
             self._kernel_type = kernel_enum.InterNodeV1
-            self._kernel_type_label = "InterNodeV1"
             self._inter_node = True
-            self.block_num = self._block_target = 96
+            self.block_num = 96
             self.rdma_block_num = 64
             self.dispatch_warps = self.combine_warps = 8
-            self._tuned_source = "upstream-internode-v1-96-64x8-qps1"
         elif kernel_request not in ("intranode", "intra_node", "intra-node", ""):
             raise RuntimeError(
                 f"unknown COLLX_MORI_KERNEL_TYPE={kernel_request!r} "
