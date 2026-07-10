@@ -4596,6 +4596,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
 
 - config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic
+  description:
+    - "Update vLLM ROCm image from v0.22.0 to nightly-09663abde0f50944a8d5ea30120666024b503faa"
+    - "Pin LMCache to commit 1720917e to fix scheduler ValueError with hybrid KV cache manager"
+    - "Add LMCache KV offload backend with tuned config (blocking timeout, transfer mode)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2109
+
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
     - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override; without it the drafter falls back to a slow default backend."
@@ -4620,6 +4628,13 @@
     - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
     - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:v0.24.0 (MoRI-IO fixes upstreamed in vllm#40344)"
+    - "Rename a2a backend mori to mori_low_latency; set read_mode via kv_connector_extra_config instead of VLLM_MORIIO_CONNECTOR_READ_MODE env var"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1585
 
 - config-keys:
     - dsr1-fp4-b200-dynamo-sglang-mtp
@@ -4651,3 +4666,44 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026 (gb300_nvfp4 MTP recipes)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1799
 
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2108
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache
+    - dsv4-fp4-b300-sglang-agentic-hicache
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.13-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
+    - "Enable SGLANG_ENABLE_UNIFIED_RADIX_TREE=1 unconditionally (previously hicache-only) and SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 to free out-of-window SWA KV slots during chunked prefill, relieving SWA pool pressure and restoring prefix-cache hit rate on multi-turn agentic workloads"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2112
+  
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB200 llmd-vllm disaggregated multinode benchmarks (full curve)"
+    - "Low-latency 1P1D pure-TP8 decode (conc 1)"
+    - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
+    - "Low-middle 1P4D pure-TP8 decode (conc 256/512)"
+    - "High-tpt 2P+1D DEP8 (conc 4096)"
+    - "Max-tpt 3P+1D DEP8 (conc 4096); same engine config as high-tpt, one more prefill instance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050
+
+- config-keys:
+    - glm5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Add GLM-5.1-FP8 GB300 multinode dynamo-sglang benchmark with EAGLE MTP speculative decoding"
+    - "Image: lmsysorg/sglang:v0.5.11-cu130"
+    - "11 topologies across 1k/1k and 8k/1k (prefill TP4 + decode wide-EP: 8k/1k DEP16/24/32/40, 1k/1k DEP48/56; per-node TP4 low-latency); MTP flags: speculative-algorithm EAGLE, num-steps 2, eagle-topk 1, num-draft-tokens 3"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1907
+  
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093

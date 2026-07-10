@@ -371,6 +371,7 @@ run_benchmark_serving() {
     local trust_remote_code=false
     local server_pid=""
     local tokenizer=""
+    local tokenizer_mode=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -441,6 +442,10 @@ run_benchmark_serving() {
                 ;;
             --tokenizer)
                 tokenizer="$2"
+                shift 2
+                ;;
+            --tokenizer-mode)
+                tokenizer_mode="$2"
                 shift 2
                 ;;
             *)
@@ -552,6 +557,10 @@ run_benchmark_serving() {
 
     if [[ -n "$tokenizer" ]]; then
         benchmark_cmd+=(--tokenizer "$tokenizer")
+    fi
+
+    if [[ -n "$tokenizer_mode" ]]; then
+        benchmark_cmd+=(--tokenizer-mode "$tokenizer_mode")
     fi
 
     # Run benchmark with optional server monitoring
@@ -867,6 +876,24 @@ run_lm_eval() {
             *)                echo "Unknown parameter: $1"; return 1 ;;
         esac
     done
+
+    # Anchor a relative task-yaml to the repo root. On the llmd-vllm path
+    # the eval runs inside the serving container, whose WORKDIR is
+    # /vllm-workspace, not the repo bind-mount (/workspace) - so a relative
+    # path like "utils/evals/gsm8k.yaml" resolves to a nonexistent file and
+    # lm_eval fails with "Tasks not found". benchmark_lib.sh always lives at
+    # <repo>/benchmarks/, so derive the repo root from BASH_SOURCE and
+    # relocate the path there. Only rewrites a relative *.yaml that is
+    # missing from cwd but present under the repo root; builtin lm_eval task
+    # names (no .yaml), absolute paths, and paths that already resolve from
+    # cwd (the dynamo/srt-slurm path) are left untouched.
+    local _repo_root
+    _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
+          && ! -f "$tasks_dir" && -f "$_repo_root/$tasks_dir" ]]; then
+        echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"
+        tasks_dir="$_repo_root/$tasks_dir"
+    fi
 
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps

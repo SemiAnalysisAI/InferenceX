@@ -105,8 +105,19 @@ def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
 
 def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build an agentic identity from one point result."""
+    if "kv_offloading" in row:
+        kv_offloading = row.get("kv_offloading") or "none"
+        offload_key: Any = (
+            kv_offloading,
+            (row.get("kv_offload_backend") or "")
+            if kv_offloading != "none"
+            else "",
+        )
+    else:
+        offload_key = row.get("offloading", "none")
+
     if as_bool(row.get("is_multinode", False)):
-        return (
+        key = (
             "multi",
             row.get("hw"),
             row.get("infmax_model_prefix"),
@@ -124,6 +135,9 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
             as_int(row.get("decode_num_workers", 0)),
             as_int(row.get("conc")),
         )
+        if "kv_offloading" in row or "offloading" in row:
+            return (*key, offload_key)
+        return key
     return (
         "single",
         row.get("hw"),
@@ -136,7 +150,7 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
-        row.get("offloading", "none"),
+        offload_key,
     )
 
 
