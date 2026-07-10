@@ -801,9 +801,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
             echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
             echo "AGENTIC_OUTPUT_DIR=/run_logs/slurm_job-${SLURM_JOB_ID}"
             echo "HF_HOME=/run_logs/hf_cache"
-            echo "AIPERF_USE_PREBUILT=1"
-            echo "AIPERF_VENV=/opt/venv"
             echo "MODEL_DIR=/models"
+            # A pre-baked client image ships aiperf at CLIENT_AIPERF_VENV; when
+            # unset (e.g. reusing the server image, which carries no pre-baked
+            # venv), trace_replay builds aiperf on the fly from
+            # /workspace/utils/aiperf — same as the co-located path.
+            if [[ -n "${CLIENT_AIPERF_VENV:-}" ]]; then
+                echo "AIPERF_USE_PREBUILT=1"
+                echo "AIPERF_VENV=${CLIENT_AIPERF_VENV}"
+            fi
         } > "$CLIENT_ENV_FILE"
 
         echo "Launching agentic benchmark in separate client container: ${CLIENT_IMAGE}"
