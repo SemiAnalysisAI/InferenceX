@@ -4699,3 +4699,11 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang-agentic
+  description:
+    - "Add Qwen3.5-397B-A17B-MXFP4 agentic-coding config on MI355X (runner: cluster:mi355x-amds) via SGLang, TP4/EP1"
+    - "Sweep KV-offloading none vs dram/HiCache (SGLang hierarchical CPU-DRAM KV tier) at conc 16, dram-utilization 0.80"
+    - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710; recipe benchmarks/single_node/agentic/qwen3.5_fp4_mi355x_sglang.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2126

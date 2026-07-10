@@ -304,6 +304,21 @@ qwen3.5-fp8-mi355x-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
+qwen3.5-fp4-mi355x-sglang-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model-prefix: qwen3.5
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [16] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16] }
+
 qwen3.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: Qwen/Qwen3.5-397B-A17B-FP8
