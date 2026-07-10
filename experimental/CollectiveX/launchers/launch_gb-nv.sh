@@ -44,7 +44,7 @@ export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$S
 export COLLX_NGPUS="$NGPUS"
 unset COLLX_SCALE_OUT_TRANSPORT
 case "$COLLX_BENCH" in
-  deepep-v2|deepep-hybrid) ;;
+  deepep-v2|nccl-ep) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
 esac
 collx_load_network_control_mode "$COLLX_DIR" || collx_die "cannot resolve network control mode"
@@ -63,7 +63,7 @@ collx_set_failure_stage repository-stage
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-if [ "$COLLX_BENCH" = deepep-v2 ] || [ "$COLLX_BENCH" = deepep-hybrid ]; then
+if [ "$COLLX_BENCH" = deepep-v2 ]; then
   collx_set_failure_stage backend-setup
   collx_prepare_backend_source "$MOUNT_SRC" "$COLLX_BENCH" \
     || collx_die "cannot stage the pinned backend source"

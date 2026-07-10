@@ -52,7 +52,7 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 [ "$NGPUS" = "$EXPECTED_WORLD" ] \
   || collx_die "$RUNNER world size must equal nodes x GPUs per node"
 case "$COLLX_BENCH" in
-  deepep-v2|deepep-hybrid) ;;
+  deepep-v2|nccl-ep) ;;
   *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
 esac
 collx_apply_timing_profile
@@ -83,7 +83,7 @@ collx_set_failure_stage repository-stage
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "${COLLX_STAGE_DIR:-}")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-if [ "$COLLX_BENCH" = deepep-v2 ] || [ "$COLLX_BENCH" = deepep-hybrid ]; then
+if [ "$COLLX_BENCH" = deepep-v2 ]; then
   collx_set_failure_stage backend-setup
   collx_prepare_backend_source "$MOUNT_SRC" "$COLLX_BENCH" \
     || collx_die "cannot stage the pinned backend source"
