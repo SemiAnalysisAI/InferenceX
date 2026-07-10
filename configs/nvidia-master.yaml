@@ -14088,8 +14088,8 @@ dsv4-fp4-b200-sglang-agentic-hicache:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [8, 16, 24] }
       # DEP without HiCache is already degraded at conc 52 (2,098 tok/s/GPU),
       # so resolve its pre-52 cliff instead of repeating the collapsed tail.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,    conc-list: [16, 32, 38, 44, 48, 52, 56, 58, 60] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 38, 40, 44, 48, 50, 54, 56, 60, 64, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,    conc-list: [16, 32, 38, 44, 48, 52, 54, 56, 58] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 38, 40, 44, 48, 52, 54, 56, 60, 64, 68] }
 
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP

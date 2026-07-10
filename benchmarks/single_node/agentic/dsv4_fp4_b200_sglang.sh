@@ -152,7 +152,7 @@ MODEL_ARGS=()
 # spill, so it can take a larger static fraction for more KV headroom.
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$DEP_HIGH_CONC" = "true" ]; then
-        MEM_FRACTION_STATIC=0.835
+        MEM_FRACTION_STATIC=0.85
     else
         MEM_FRACTION_STATIC=0.88
     fi
