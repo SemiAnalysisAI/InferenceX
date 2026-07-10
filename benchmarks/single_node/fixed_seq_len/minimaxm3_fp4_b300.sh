@@ -19,6 +19,20 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
+# Test the BF16 MiniMax-M3 routing gate against the main branch runtime.
+VLLM_GATE_PATCH="$(dirname "$0")/patches/vllm-minimaxm3-gate-bf16.patch"
+if ! command -v patch >/dev/null 2>&1; then
+    apt-get update -y && apt-get install -y --no-install-recommends patch \
+        || { echo "Failed to install patch(1)" >&2; exit 1; }
+fi
+VLLM_PACKAGE_DIR=$(python3 -c "import importlib.util; print(importlib.util.find_spec('vllm').submodule_search_locations[0])") \
+    || { echo "Could not locate the installed vllm package" >&2; exit 1; }
+VLLM_SITE_PACKAGES=$(dirname "$VLLM_PACKAGE_DIR")
+patch --dry-run -p1 -d "$VLLM_SITE_PACKAGES" < "$VLLM_GATE_PATCH" >/dev/null \
+    || { echo "vLLM MiniMax-M3 GateLinear BF16 patch does not apply" >&2; exit 1; }
+patch -p1 -d "$VLLM_SITE_PACKAGES" < "$VLLM_GATE_PATCH" \
+    || { echo "vLLM MiniMax-M3 GateLinear BF16 patch failed" >&2; exit 1; }
+
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"

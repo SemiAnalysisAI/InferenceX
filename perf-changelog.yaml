@@ -4716,3 +4716,10 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Test the BF16 MiniMax-M3 routing gate against the main branch image and bundled FlashInfer runtime"
+    - "Keep the existing non-DP serving configuration and omit DP-attention sweep points"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2149

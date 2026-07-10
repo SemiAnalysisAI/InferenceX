@@ -1,0 +1,11 @@
+--- a/vllm/models/minimax_m3/nvidia/model.py
++++ b/vllm/models/minimax_m3/nvidia/model.py
+@@ -228,7 +228,7 @@
+             config.hidden_size,
+             config.num_local_experts,
+             bias=False,
+-            params_dtype=torch.float32,
++            params_dtype=torch.bfloat16,
+             out_dtype=torch.float32,
+             prefix=f"{prefix}.gate",
+         )
