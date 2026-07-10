@@ -71,7 +71,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-        export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
         CACHE_ARGS=(
             --enable-hierarchical-cache
             --hicache-ratio "$HICACHE_RATIO"
@@ -100,7 +99,10 @@ fi
 
 # ---- LLM server config ----------------------------------------------------------
 
-CUDA_GRAPH_MAX_BS="$CONC"
+# AgentX concurrency counts live session trees, not individual requests.
+# Allow subagent fan-out to exceed CONC without clipping request bursts.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
+CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 export SGLANG_DEFAULT_THINKING=1
@@ -110,6 +112,8 @@ export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+METRICS_ARGS=(--enable-metrics)
+MEM_FRACTION_STATIC=0.90
 CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_SHARED_EXPERT_TP1=1
@@ -138,12 +142,11 @@ SGLANG_CMD=(
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    --disable-radix-cache
-    --attention-backend dsv4
+    --attention-backend compressed
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
-    --max-running-requests "$CONC"
-    --mem-fraction-static 0.90
-    --swa-full-tokens-ratio 0.15
+    --max-running-requests "$MAX_RUNNING_REQUESTS"
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
+    --swa-full-tokens-ratio 0.10
     --page-size 256
     --kv-cache-dtype fp8_e4m3
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
@@ -152,7 +155,7 @@ SGLANG_CMD=(
     --reasoning-parser deepseek-v4
     --chat-template "$(dirname "$0")/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
-    --enable-metrics
+    "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
 
@@ -202,8 +205,10 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-capture_cache_metrics
-trap capture_cache_metrics EXIT
+if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
+    capture_cache_metrics
+    trap capture_cache_metrics EXIT
+fi
 
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
