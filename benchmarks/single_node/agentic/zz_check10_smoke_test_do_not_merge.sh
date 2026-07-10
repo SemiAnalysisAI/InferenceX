@@ -6,7 +6,7 @@
 # name this file. The PR adding it will be closed without merging.
 set -euo pipefail
 
-vllm serve deepseek-ai/DeepSeek-V4-Pro-NVFP4 \\
-    --port 8000 \\
-    --tensor-parallel-size 8 \\
+vllm serve deepseek-ai/DeepSeek-V4-Pro-NVFP4 \
+    --port 8000 \
+    --tensor-parallel-size 8 \
     --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
