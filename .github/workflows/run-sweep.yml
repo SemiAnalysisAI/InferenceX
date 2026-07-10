@@ -331,6 +331,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -434,6 +436,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -487,6 +491,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -582,6 +588,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -686,7 +694,7 @@ jobs:
             always() &&
             needs.setup.result == 'success' &&
             needs.setup.outputs.reuse-enabled == 'true'
-        runs-on: ubuntu-latest
+        runs-on: blacksmith-4vcpu-ubuntu-2404
         steps:
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -833,6 +841,7 @@ jobs:
                 collect-results,
                 collect-evals,
                 calc-success-rate,
+                setup,
                 upload-changelog-metadata,
                 reuse-ingest-artifacts,
             ]
@@ -840,6 +849,17 @@ jobs:
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
+            needs.setup.result == 'success' &&
+            (
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == '[]'
+              ) &&
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
+              )
+            ) &&
             (
               needs.collect-results.result != 'skipped' ||
               needs.collect-evals.result != 'skipped' ||
@@ -914,7 +934,7 @@ jobs:
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
                     -d '{
-                      "ref": "feat/agentx",
+                      "ref": "master",
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",

@@ -185,6 +185,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -267,6 +269,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -297,6 +301,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -385,7 +391,7 @@ jobs:
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
                     -d '{
-                      "ref": "feat/agentx",
+                      "ref": "master",
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",

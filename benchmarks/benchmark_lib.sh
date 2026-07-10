@@ -371,6 +371,7 @@ run_benchmark_serving() {
     local trust_remote_code=false
     local server_pid=""
     local tokenizer=""
+    local tokenizer_mode=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -441,6 +442,10 @@ run_benchmark_serving() {
                 ;;
             --tokenizer)
                 tokenizer="$2"
+                shift 2
+                ;;
+            --tokenizer-mode)
+                tokenizer_mode="$2"
                 shift 2
                 ;;
             *)
@@ -552,6 +557,10 @@ run_benchmark_serving() {
 
     if [[ -n "$tokenizer" ]]; then
         benchmark_cmd+=(--tokenizer "$tokenizer")
+    fi
+
+    if [[ -n "$tokenizer_mode" ]]; then
+        benchmark_cmd+=(--tokenizer-mode "$tokenizer_mode")
     fi
 
     # Run benchmark with optional server monitoring
@@ -868,6 +877,24 @@ run_lm_eval() {
         esac
     done
 
+    # Anchor a relative task-yaml to the repo root. On the llmd-vllm path
+    # the eval runs inside the serving container, whose WORKDIR is
+    # /vllm-workspace, not the repo bind-mount (/workspace) - so a relative
+    # path like "utils/evals/gsm8k.yaml" resolves to a nonexistent file and
+    # lm_eval fails with "Tasks not found". benchmark_lib.sh always lives at
+    # <repo>/benchmarks/, so derive the repo root from BASH_SOURCE and
+    # relocate the path there. Only rewrites a relative *.yaml that is
+    # missing from cwd but present under the repo root; builtin lm_eval task
+    # names (no .yaml), absolute paths, and paths that already resolve from
+    # cwd (the dynamo/srt-slurm path) are left untouched.
+    local _repo_root
+    _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
+          && ! -f "$tasks_dir" && -f "$_repo_root/$tasks_dir" ]]; then
+        echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"
+        tasks_dir="$_repo_root/$tasks_dir"
+    fi
+
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
         _patch_lm_eval
@@ -1074,6 +1101,8 @@ append_lm_eval_summary() {
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING}",
   "tp": ${TP:-1},
+  "dcp_size": ${DCP_SIZE:-1},
+  "pcp_size": ${PCP_SIZE:-1},
   "conc": ${metadata_conc},
 ${batch_metadata}  "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
@@ -1311,17 +1340,20 @@ resolve_trace_source() {
     # unfiltered corpus and switches to the 256k-capped variant), or
     # by recipes that want to pin an older corpus generation.
     #
-    # Default (no override): the 062126 v7 corpus, selected by model family.
-    # DSv4 (full context) rides the unfiltered base corpus; every non-DSv4
-    # recipe defaults to the 256k-capped variant because those servers run at
-    # max_model_len ~256k and would reject >256k requests. Any recipe can still
-    # pin a specific corpus via WEKA_LOADER_OVERRIDE.
+    # Default (no override): the 062126 v7 corpus, selected by the model
+    # family's native context length. Models with a 1M-token default context
+    # use the unfiltered corpus; shorter-context families use the 256k-capped
+    # variant. Any recipe can still pin a specific corpus via
+    # WEKA_LOADER_OVERRIDE.
     local default_loader
-    if [[ "${MODEL_PREFIX:-}" == dsv4* ]]; then
-        default_loader="semianalysis_cc_traces_weka_062126"
-    else
-        default_loader="semianalysis_cc_traces_weka_062126_256k"
-    fi
+    case "${MODEL_PREFIX:-}" in
+        dsv4*|minimaxm3*)
+            default_loader="semianalysis_cc_traces_weka_062126"
+            ;;
+        *)
+            default_loader="semianalysis_cc_traces_weka_062126_256k"
+            ;;
+    esac
     local loader="${WEKA_LOADER_OVERRIDE:-$default_loader}"
     local dataset
     case "$loader" in

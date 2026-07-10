@@ -38,6 +38,8 @@ class Fields(Enum):
 
     # Search-space/benchmark fields
     TP = 'tp'
+    DCP_SIZE = 'dcp-size'
+    PCP_SIZE = 'pcp-size'
     CONC_START = 'conc-start'
     CONC_END = 'conc-end'
     CONC_LIST = 'conc-list'
@@ -86,6 +88,16 @@ class Fields(Enum):
 """
 
 
+def _validate_single_node_topology(self):
+    """Validate context-parallel settings shared by single-node schemas."""
+    if self.tp % self.dcp_size != 0:
+        raise ValueError(
+            f"'{Fields.TP.value}' ({self.tp}) must be divisible by "
+            f"'{Fields.DCP_SIZE.value}' ({self.dcp_size})"
+        )
+    return self
+
+
 class SingleNodeMatrixEntry(BaseModel):
     """Pydantic model for validating single node matrix entry structure.
     This validates the input that should be expected to .github/workflows/benchmark-tmpl.yml"""
@@ -103,6 +115,8 @@ class SingleNodeMatrixEntry(BaseModel):
     isl: int
     osl: int
     tp: int
+    dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     conc: Union[int, List[int]]
@@ -111,6 +125,10 @@ class SingleNodeMatrixEntry(BaseModel):
     disagg: Literal[False]
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+
+    @model_validator(mode='after')
+    def validate_single_node_topology(self):
+        return _validate_single_node_topology(self)
 
 
 class WorkerConfig(BaseModel):
@@ -181,6 +199,8 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     framework: str
     runner: str
     tp: int
+    dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     conc: int
@@ -199,6 +219,10 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     def validate_kv_offload_fields(self):
         return _validate_kv_offload_fields(self)
 
+    @model_validator(mode='after')
+    def validate_single_node_topology(self):
+        return _validate_single_node_topology(self)
+
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
     """Pydantic model for validating multinode agentic coding matrix entries."""
@@ -216,7 +240,10 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
-    kv_offloading: Literal["none"] = Field(alias=Fields.KV_OFFLOADING.value)
+    kv_offloading: Literal["none", "dram"] = Field(alias=Fields.KV_OFFLOADING.value)
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
+    )
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -225,6 +252,10 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
         return _validate_worker_hardware_pair(self)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
@@ -351,6 +382,10 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     tp: int
+    dcp_size: int = Field(
+        default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    pcp_size: int = Field(
+        default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: Optional[int] = None
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
@@ -366,6 +401,10 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     @model_validator(mode='after')
     def validate_conc_fields(self):
         return _validate_conc_fields(self)
+
+    @model_validator(mode='after')
+    def validate_single_node_topology(self):
+        return _validate_single_node_topology(self)
 
 
 class MultiNodeSearchSpaceEntry(BaseModel):
@@ -417,6 +456,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     tp: Optional[int] = None
+    dcp_size: int = Field(
+        default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    pcp_size: int = Field(
+        default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: Optional[int] = None
     dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
     spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
@@ -452,12 +495,22 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
             valid = has_complete_multinode
         if not valid:
             raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
-        if has_single_node and self.kv_offloading is None:
-            raise ValueError(
-                f"Single-node agentic search-space entries must specify "
-                f"{Fields.KV_OFFLOADING.value}"
-            )
+        if has_single_node:
+            if self.kv_offloading is None:
+                raise ValueError(
+                    f"Single-node agentic search-space entries must specify "
+                    f"{Fields.KV_OFFLOADING.value}"
+                )
+            _validate_single_node_topology(self)
         if has_complete_multinode:
+            if (
+                "dcp_size" in self.model_fields_set
+                or "pcp_size" in self.model_fields_set
+            ):
+                raise ValueError(
+                    "Multinode agentic search-space entries cannot specify "
+                    f"'{Fields.DCP_SIZE.value}' or '{Fields.PCP_SIZE.value}'"
+                )
             _validate_worker_hardware_pair(self)
         return self
 
