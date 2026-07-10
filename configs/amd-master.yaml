@@ -3167,6 +3167,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           tp: 8
           ep: 1
           dp-attn: false
-           additional-settings:
-           - "DECODE_NODES=1"
-           - "DECODE_MTP_SIZE=0"
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
