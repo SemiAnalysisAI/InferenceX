@@ -221,7 +221,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
 --max-num-seqs "$MAX_NUM_SEQS" \
---max-num-batched-tokens 10240 \
+--no-async-scheduling \
 --disable-uvicorn-access-log \
 "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
