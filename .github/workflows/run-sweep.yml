@@ -536,7 +536,7 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
+            conc-list: '[${{ matrix.config.conc }}]'
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
@@ -551,6 +551,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
+            conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
             duration: ${{ matrix.config.duration }}
@@ -933,11 +934,11 @@ jobs:
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
                     -d '{
-                      "ref": "feat/agentx",
+                      "ref": "master",
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
-                        "database-target": "agentx-v1"
+                        "database-target": "production"
                       }
                     }'
 

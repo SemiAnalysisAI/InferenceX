@@ -391,10 +391,10 @@ jobs:
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
                     -d '{
-                      "ref": "feat/agentx",
+                      "ref": "master",
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
-                        "database-target": "agentx-v1"
+                        "database-target": "production"
                       }
                     }'

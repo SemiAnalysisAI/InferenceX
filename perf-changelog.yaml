@@ -4718,19 +4718,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache
-  description:
-    - "Bump the SGLang ROCm image from 20260706 to 20260709 and retire the DeepSeek-V4 compress-state, DSA paged-MQA, AITER instruction-shape, and HiCache host-pool shims that are already included upstream."
-    - "Remove the SWA re-prefill and unified-KV HiCache overlays after their upstream PRs merged; retain only patch code without a merged upstream equivalent."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2127
-
-- config-keys:
     - dsv4-fp4-b200-vllm-agentic-lmcache
   scenario-type:
     - agentic-coding
   description:
     - "Add LMCache 0.5.1 DRAM KV-offload config (kv-offload-backend: lmcache) as a standalone section alongside the Mooncake parent (B300 section deferred)"
-    - "Image vllm/vllm-openai:v0.24.0 for the LMCache section (parent stays on v0.23.0); CUTLASS DSL cu13 reinstall gated to vLLM < 0.24"
-    - "LMCache MP server + LMCacheMPConnector; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB after full-budget pinned pools OOM-killed nodes in bring-up"
+    - "Image vllm/vllm-openai:v0.24.0 for the LMCache section (parent stays on v0.23.0)"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB after full-budget pinned pools OOM-killed nodes in bring-up"
+    - "Adopt the vLLM perf flags from #2138 (Mega-MoE, FULL_DECODE_ONLY cudagraphs, sparse MLA attention, NUMA binding) and the vLLM PR #45406 scheduler-freeze backport for async KV loads (waiver: docs/waiver/2153.md)"
     - "LMCache points mirror the Mooncake offload points: B200 TP8 conc 8-16, TP8-DEP8 conc 16-68"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2153

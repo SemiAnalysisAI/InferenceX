@@ -158,17 +158,17 @@ jobs:
         needs: package-reused-artifacts
         runs-on: ubuntu-latest
         steps:
-            - name: Trigger AgentX database ingest
+            - name: Trigger agentic database ingest
               run: |
                   curl -sSf -X POST \
                     -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
                     -d '{
-                      "ref": "feat/agentx",
+                      "ref": "master",
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
-                        "database-target": "agentx-v1"
+                        "database-target": "production"
                       }
                     }'
