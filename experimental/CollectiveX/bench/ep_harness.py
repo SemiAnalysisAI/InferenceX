@@ -70,11 +70,13 @@ def case_id(sku: str, case: dict) -> str:
 
 
 # Every comparison-grade EP point uses the same literal timing profile on every SKU/backend.
-# Eight timed iterations keep each MoRI burst well below its sustained-iteration wedge, 64 trials
-# provide 512 observations per operation, and 32 warmups meet Blackwell's measured clock-ramp floor.
-TIMED_SAMPLES_PER_POINT = 512
+# Eight timed iterations keep each MoRI burst well below its sustained-iteration wedge, 128 trials
+# provide 1024 observations per operation (tighter p99 tail — the estimate that drives the chart),
+# and 32 warmups meet Blackwell's measured clock-ramp floor. Trials is the sample axis; note each
+# trial re-warms 32×, so trial count also dominates wall-clock (see the warm-once methodology TODO).
+TIMED_SAMPLES_PER_POINT = 1024
 TIMED_ITERS_PER_TRIAL = 8
-TRIALS_PER_POINT = 64
+TRIALS_PER_POINT = 128
 WARMUP_ITERS_PER_TRIAL = 32
 WARMUP_SEMANTICS = "full-roundtrip-before-each-component-trial-point-v1"
 ROUTING_SEED = 67

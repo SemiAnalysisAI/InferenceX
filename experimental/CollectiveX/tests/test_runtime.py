@@ -279,7 +279,7 @@ class CaseArgvContract(unittest.TestCase):
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256,
-        "ladder": "1 2 4", "timing": "8:64:32", "canonical": True,
+        "ladder": "1 2 4", "timing": "8:128:32", "canonical": True,
         "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
         "suite": "ep-core", "workload": "deepseek-v3",
     }

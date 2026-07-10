@@ -113,7 +113,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, ind
         "--workload-name", get("workload"),
         "--version", str(version),
     ]
-    iters, trials, warmup = (get("timing", "8:64:32").split(":") + ["", "", ""])[:3]
+    iters, trials, warmup = (get("timing", "8:128:32").split(":") + ["", "", ""])[:3]
     for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
         if value:
             argv += [flag, value]
@@ -159,7 +159,7 @@ def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None
         "transport": env("COLLX_TRANSPORT", "unknown"),
         "case_id": env("COLLX_CASE_ID", ""), "suite": env("COLLX_SUITE", ""),
         "workload": env("COLLX_WORKLOAD_NAME", ""),
-        "timing": f"{env('COLLX_ITERS', '8')}:{env('COLLX_TRIALS', '64')}:{env('COLLX_WARMUP', '32')}",
+        "timing": f"{env('COLLX_ITERS', '8')}:{env('COLLX_TRIALS', '128')}:{env('COLLX_WARMUP', '32')}",
     }
     _emit_argv(case, env("COLLX_VERSION", "1"), runner, ts, seed, index)
 
