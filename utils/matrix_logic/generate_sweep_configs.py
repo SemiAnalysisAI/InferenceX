@@ -24,7 +24,8 @@ seq_len_stoi = {
 
 MIN_EVAL_CONC = 16
 # Bound how many multinode agentic conc points share one server allocation.
-MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
+# 1 = one task/SLURM allocation per concurrency (matches single-node agentic).
+MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
 # 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
