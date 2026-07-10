@@ -4059,6 +4059,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1869
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+  description:
+    - "Initial submission: DeepSeek-V4-Pro FP4 multi-node SGLang PD-disaggregated (prefill/decode) on MI355X (8k1k, STP / no-MTP)."
+    - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701"
+    - "Launcher: server_sglang.sh + sync.py node coordination, mori KV transfer + MoE a2a, sglang_router (--pd-disaggregation) on :30000."
+    - "Topologies: 1P1D pure-TP8/EP1 over 2 nodes (conc 1-128); 1P1D DEP8 (TP8/EP8 + dp-attention) over 3 nodes (conc 128,256)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1818
+
+- config-keys:
     - glm5.1-fp4-mi355x-sglang
   description:
     - "Bump SGLang ROCm image from v0.5.12.post1-rocm720-mi35x-20260529 to v0.5.13.post1-rocm720-mi35x-20260622"
@@ -4303,6 +4312,14 @@
     - "Reuse the pinned vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e image, text-only target path, TRITON_ATTN, automatic tool choice, MiniMax-M3 parsers, VLLM_USE_BREAKABLE_CUDAGRAPH=0, default KV-cache dtype, and automatic MoE backend selection."
     - "Pass --use-chat-template for MTP acceptance and mirror the existing MiniMax-M3 MXFP8 MI355X MTP TP/EP/DP-attention search space at 1k1k and 8k1k."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1939
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-disagg
+    - minimaxm3-fp8-mi355x-atom-disagg
+  description:
+    - "Refactor ATOM disagg server_atom.sh and models_atom.yaml: split MODEL_TP_DP_FLAGS and MODEL_EP_DP_FLAGS into per-role prefill/decode variants, move BLOCK_SIZE (128), MEM_FRAC_STATIC (0.8), MAX_MODEL_LEN (32768), MAX_NUM_SEQS (256), MAX_NUM_BATCHED_TOKENS (32768) from launch scripts into models_atom.yaml with env-var override support."
+    - "Add online_quant_config (with DPA-specific variant) to models_atom.yaml. FP8 uses different online_quant_config exclude patterns when DPA is enabled (*.gate.*, *.block_sparse_moe.experts*) vs disabled (*block_sparse_moe)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2000
 
 - config-keys:
     - minimaxm3-fp8-mi355x-vllm-mtp
@@ -4706,3 +4723,10 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache
+  description:
+    - "Bump the SGLang ROCm image from 20260706 to 20260709 and retire the DeepSeek-V4 compress-state, DSA paged-MQA, AITER instruction-shape, and HiCache host-pool shims that are already included upstream."
+    - "Remove the SWA re-prefill and unified-KV HiCache overlays after their upstream PRs merged; retain only patch code without a merged upstream equivalent."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2127

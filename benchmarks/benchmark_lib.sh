@@ -1340,17 +1340,20 @@ resolve_trace_source() {
     # unfiltered corpus and switches to the 256k-capped variant), or
     # by recipes that want to pin an older corpus generation.
     #
-    # Default (no override): the 062126 v7 corpus, selected by model family.
-    # DSv4 (full context) rides the unfiltered base corpus; every non-DSv4
-    # recipe defaults to the 256k-capped variant because those servers run at
-    # max_model_len ~256k and would reject >256k requests. Any recipe can still
-    # pin a specific corpus via WEKA_LOADER_OVERRIDE.
+    # Default (no override): the 062126 v7 corpus, selected by the model
+    # family's native context length. Models with a 1M-token default context
+    # use the unfiltered corpus; shorter-context families use the 256k-capped
+    # variant. Any recipe can still pin a specific corpus via
+    # WEKA_LOADER_OVERRIDE.
     local default_loader
-    if [[ "${MODEL_PREFIX:-}" == dsv4* ]]; then
-        default_loader="semianalysis_cc_traces_weka_062126"
-    else
-        default_loader="semianalysis_cc_traces_weka_062126_256k"
-    fi
+    case "${MODEL_PREFIX:-}" in
+        dsv4*|minimaxm3*)
+            default_loader="semianalysis_cc_traces_weka_062126"
+            ;;
+        *)
+            default_loader="semianalysis_cc_traces_weka_062126_256k"
+            ;;
+    esac
     local loader="${WEKA_LOADER_OVERRIDE:-$default_loader}"
     local dataset
     case "$loader" in

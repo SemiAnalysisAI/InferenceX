@@ -7,6 +7,7 @@ check_env_vars \
     ISL \
     OSL \
     IMAGE \
+    SPEC_DECODING \
     MODEL_PATH \
     PREFILL_NUM_WORKERS \
     PREFILL_TP \
@@ -60,6 +61,10 @@ else
 export DECODE_ENABLE_DP=false
 fi
 
+# Launch jobs based on ISL/OSL
+# Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
+# by a list of numbers delimited by 'x'. This is because of how the underlying launch script
+# expects the concurrencies.
 JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \
