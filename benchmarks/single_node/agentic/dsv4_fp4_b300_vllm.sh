@@ -223,10 +223,13 @@ wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --s
 
 if [ "$USE_VLLM_ROUTER" = "true" ]; then
     echo "Starting native vLLM router on port $PORT for $TP DP ranks..."
+    VLLM_ROUTER_WORKERS=()
+    for ((rank = 0; rank < TP; rank++)); do
+        VLLM_ROUTER_WORKERS+=("http://localhost:$VLLM_BACKEND_PORT@$rank")
+    done
     vllm-router \
-        --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
+        --worker-urls "${VLLM_ROUTER_WORKERS[@]}" \
         --policy "$VLLM_ROUTER_POLICY" \
-        --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \
         --prometheus-host 127.0.0.1 \
