@@ -87,7 +87,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     USE_VLLM_ROUTER=true
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_VERSION=0.1.14
-    VLLM_ROUTER_POLICY=consistent_hash
+    VLLM_ROUTER_POLICY=cache_aware
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
