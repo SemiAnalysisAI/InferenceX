@@ -5,44 +5,31 @@ set -x
 # Agentic trace replay benchmark for Minimax-M3 FP4 on MI355X using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
-#
-# OFFLOADING values:
-#   none    - vLLM GPU KV only.
-#   cpu     - vLLM native CPU offload.
-#   lmcache - LMCache MP server + vLLM LMCacheMPConnector.
+#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
+#   TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE, DP_ATTENTION
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL MODEL_PATH TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
 
 PORT=8888
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+if [[ -n "${SLURM_JOB_ID+x}" ]]; then
+    echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 # ROCR/HIP visibility for vLLM 0.14+
-if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
+if [[ -n "${ROCR_VISIBLE_DEVICES+x}" ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 rocm-smi || true
 amd-smi || true
 
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
-if [[ -n "${MODEL_PATH:-}" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$MODEL" --local-dir "$MODEL_PATH"
-    fi
-else
-    hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+    hf download "$MODEL" --local-dir "$MODEL_PATH"
 fi
 
 resolve_trace_source
@@ -69,7 +56,7 @@ trap cleanup_lmcache_server EXIT
 
 wait_for_lmcache_ready() {
     { set +x; } 2>/dev/null
-    local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
+    local attempts=120
     local tail_pid=""
 
     while [ ! -f "$LMCACHE_LOG" ]; do
@@ -109,10 +96,6 @@ wait_for_lmcache_ready() {
 case "$KV_OFFLOAD_BACKEND" in
     native)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
-        # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
-        # worker RSS / page cache / slurm cgroup).
-        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-${TOTAL_CPU_DRAM_GB}}"
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
         # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
@@ -126,7 +109,7 @@ case "$KV_OFFLOAD_BACKEND" in
         # This gives extra cache hit than disabling hybrid kv cache manager
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
+            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
         )
         ;;
     lmcache)
@@ -143,28 +126,25 @@ case "$KV_OFFLOAD_BACKEND" in
         # Let the external MP server own the full CPU KV pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
         # LMCache backend.
-        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-${TOTAL_CPU_DRAM_GB}}"
-        LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
-        LMCACHE_PORT="${LMCACHE_PORT:-5555}"
-        LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+        LMCACHE_HOST=127.0.0.1
+        LMCACHE_PORT=5555
+        LMCACHE_HTTP_PORT=8080
         # LMCacheMPConnector concatenates lmcache.mp.host and port into the
         # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
         # ZMQ-style host string.
-        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_PARTITION_GB))}"
-        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+        LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
+        LMCACHE_L1_SIZE_GB="$TOTAL_CPU_DRAM_GB"
+        LMCACHE_L1_INIT_SIZE_GB=20
         # LMCache read locks are leases on chunks that lookup has promised
         # vLLM can retrieve. The default 300s TTL is too short for this
         # long-context agentic queue: TP8/conc32 can spend >300s between
         # lookup and retrieve while GPU KV is saturated, which leaves the
         # object present in L1 but no longer readable. Keep the 2.5 TB pool
         # size unchanged and only extend the lookup-to-retrieve lease.
-        LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-        # (srok) check 256 vs 32
-        #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$((TP * 2))}"
-        export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+        LMCACHE_L1_READ_TTL_SECONDS=7200
+        LMCACHE_CHUNK_SIZE=256
+        LMCACHE_MAX_WORKERS=$((TP * 2))
+        export PYTHONHASHSEED=0
         export LMCACHE_BLOCKING_TIMEOUT_SECS=60
 
         echo "Starting LMCache MP server..."
