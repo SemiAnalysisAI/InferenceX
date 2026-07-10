@@ -143,19 +143,18 @@ collx_deepep_v2_root() {
     || return 1
   image="${image#-}"; image="${image%-}"
   [ -n "$image" ] || return 1
-  printf '%s/deepep-v2-v3-%s-sm%s-%s-torch2.10.0-cu130-nccl2.30.4-nvshmem3.3.9-%s-%s-%s-%s' \
-    "$base" "$cpu" "${arch/./}" "$image" \
-    "${COLLX_DEEPEP_V2_COMMIT:0:12}" "${COLLX_DEEPEP_V2_TREE:0:12}" \
-    "${COLLX_DEEPEP_V2_FMT_COMMIT:0:12}" "${COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT:0:12}"
+  # The source commit determines the tree and submodule gitlinks, so it is the
+  # only source fragment the cache key needs.
+  printf '%s/deepep-v2-v3-%s-sm%s-%s-torch2.10.0-cu130-nccl2.30.4-nvshmem3.3.9-%s' \
+    "$base" "$cpu" "${arch/./}" "$image" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
 }
 
 collx_activate_deepep_v2() {
   local root venv venv_site execution_id
   root="$(collx_deepep_v2_root)" || return 1
-  # Artifact-side source identity for the probe, the persisted rank env, and the
-  # adapter's wheel-tag check — registry values (configs/backends.json), carried
-  # into the rank env by collx_persist_backend_env.
-  export DEEPEP_COMMIT="$COLLX_DEEPEP_V2_COMMIT" DEEPEP_TREE="$COLLX_DEEPEP_V2_TREE"
+  # Registry pin (configs/backends.json) for the probe's and the adapter's
+  # wheel-tag check; carried into the rank env by collx_persist_backend_env.
+  export DEEPEP_COMMIT="$COLLX_DEEPEP_V2_COMMIT"
   venv="$root/venv"
   [ -x "$venv/bin/python" ] \
     || { collx_log "ERROR: DeepEP V2 venv interpreter is unavailable"; return 1; }
@@ -284,7 +283,7 @@ collx_build_deepep_v2() {
 collx_persist_backend_env() {
   local root="$PWD/.collx_backend/env" node_id="${SLURM_NODEID:-0}" path temporary name
   local -a names=(PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
-    NVSHMEM_DIR DEEPEP_COMMIT DEEPEP_TREE
+    NVSHMEM_DIR DEEPEP_COMMIT
     EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM)
   [[ "$node_id" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$root" || return 1

@@ -92,8 +92,7 @@ class ConfigTests(unittest.TestCase):
 class BackendRegistryTests(unittest.TestCase):
     EMITTED = {
         "COLLX_IMAGE_MULTIARCH", "COLLX_IMAGE_AMD_MORI", "COLLX_MORI_COMMIT_AMD",
-        "COLLX_DEEPEP_V2_REPO", "COLLX_DEEPEP_V2_COMMIT", "COLLX_DEEPEP_V2_TREE",
-        "COLLX_DEEPEP_V2_FMT_COMMIT", "COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT",
+        "COLLX_DEEPEP_V2_REPO", "COLLX_DEEPEP_V2_COMMIT", "COLLX_DEEPEP_V2_FMT_COMMIT",
     }
 
     @staticmethod
@@ -111,7 +110,7 @@ class BackendRegistryTests(unittest.TestCase):
         pairs = self._emitted_pairs()
         self.assertEqual(set(pairs), self.EMITTED)
         for name, value in pairs.items():
-            if "_COMMIT" in name or name.endswith("_TREE"):
+            if "_COMMIT" in name:
                 self.assertRegex(value, r"^[0-9a-f]{40}$", name)
             elif name.endswith("_REPO"):
                 self.assertTrue(value.startswith("https://"), name)

@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "notes": [
-    "Public CollectiveX benchmark identity: container images and backend source pins.",
+    "CollectiveX backend registry: container images and backend source pins.",
     "runtime/config.py backend-registry validates this file and emits the COLLX_* names",
     "consumed by runtime/common.sh, runtime/prepare_backend.sh, and the launchers.",
-    "Commits and trees are enforced at source fetch (rev-parse HEAD / HEAD^{tree});",
-    "submodule pins are enforced after submodule update. Changing a pin here changes",
-    "what the published benchmark measured, so it belongs in review, not in a launcher."
+    "The commit is enforced at source fetch (rev-parse HEAD) and drives the build",
+    "cache key and the deep_ep wheel-tag probe. Changing a pin here changes what",
+    "the benchmark measures, so it belongs in review, not in a launcher."
   ],
   "images": {
     "multiarch": {
@@ -35,7 +35,6 @@
     "deepep-v2": {
       "repo": "https://github.com/deepseek-ai/DeepEP",
       "commit": "fa8a9b16898204afd347c663b89e65ef87dc6ce6",
-      "tree": "29809e75c5874e6609dac4804e7b651d5226959f",
       "submodules": {
         "third-party/fmt": "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
       },

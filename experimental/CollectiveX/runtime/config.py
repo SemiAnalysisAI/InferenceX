@@ -139,11 +139,7 @@ def backend_registry(path: str | None = None) -> None:
             "COLLX_MORI_COMMIT_AMD": sha(document["backends"]["mori"]["commit"]),
             "COLLX_DEEPEP_V2_REPO": repo(v2),
             "COLLX_DEEPEP_V2_COMMIT": sha(v2["commit"]),
-            "COLLX_DEEPEP_V2_TREE": sha(v2["tree"]),
             "COLLX_DEEPEP_V2_FMT_COMMIT": sha(v2["submodules"]["third-party/fmt"]),
-            "COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT": sha(
-                v2["patches"][0]["upstream_commit"]
-            ),
         })
     except (IndexError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-backend-registry", file=sys.stderr)

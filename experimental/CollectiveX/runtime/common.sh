@@ -28,8 +28,7 @@ collx_load_backend_registry() {
   done < "$registry"
   rm -f -- "$registry"
   for name in COLLX_IMAGE_MULTIARCH COLLX_IMAGE_AMD_MORI COLLX_MORI_COMMIT_AMD \
-      COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT COLLX_DEEPEP_V2_TREE \
-      COLLX_DEEPEP_V2_FMT_COMMIT COLLX_DEEPEP_V2_NCCL_CHECK_COMMIT; do
+      COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT COLLX_DEEPEP_V2_FMT_COMMIT; do
     [ -n "${!name:-}" ] || collx_die "backend registry omits $name"
   done
 }
@@ -722,19 +721,19 @@ collx_fetch_revision() {
   return 1
 }
 
-# repo|commit|tree|fmt-submodule|nccl-submodule (registry-loaded; empty = not pinned)
+# repo|commit|fmt-submodule|nccl-submodule (registry-loaded; empty = not fetched)
 collx_backend_source_pin() {
   case "$1" in
-    deepep-v2) printf '%s|%s|%s|%s|' "$COLLX_DEEPEP_V2_REPO" \
-      "$COLLX_DEEPEP_V2_COMMIT" "$COLLX_DEEPEP_V2_TREE" "$COLLX_DEEPEP_V2_FMT_COMMIT" ;;
+    deepep-v2) printf '%s|%s|%s|' "$COLLX_DEEPEP_V2_REPO" \
+      "$COLLX_DEEPEP_V2_COMMIT" "$COLLX_DEEPEP_V2_FMT_COMMIT" ;;
     *) return 1 ;;
   esac
 }
 
 collx_backend_source_path() {
-  local root="$1" backend="$2" repository revision tree fmt nccl pin
+  local root="$1" backend="$2" repository revision fmt nccl pin
   pin="$(collx_backend_source_pin "$backend")" || return 1
-  IFS='|' read -r repository revision tree fmt nccl <<< "$pin"
+  IFS='|' read -r repository revision fmt nccl <<< "$pin"
   printf '%s/%s-%s' "$root" "$backend" "$revision"
 }
 
@@ -744,7 +743,7 @@ collx_apply_deepep_v2_nccl_check_fix() {
 
 # Acquire source before compute allocation, preferring the verified same-run GHA seed.
 _collx_prepare_backend_source() {
-  local mount_src="$1" backend="$2" root source temporary repository revision tree fmt nccl pin
+  local mount_src="$1" backend="$2" root source temporary repository revision fmt nccl pin
   root="$mount_src/experimental/CollectiveX/.collx_sources"
   COLLX_BACKEND_SOURCE_STEP="source mount creation"
   if [ ! -e "$root" ] && [ ! -L "$root" ]; then
@@ -763,7 +762,7 @@ _collx_prepare_backend_source() {
     rm -rf -- "$temporary"
     return 1
   }
-  IFS='|' read -r repository revision tree fmt nccl <<< "$pin"
+  IFS='|' read -r repository revision fmt nccl <<< "$pin"
   COLLX_BACKEND_SOURCE_STEP="revision fetch"
   if ! collx_fetch_revision "$repository" "$revision" "$temporary"; then
     rm -rf -- "$temporary"
