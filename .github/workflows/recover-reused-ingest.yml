@@ -125,22 +125,55 @@ jobs:
                   python3 utils/validate_reusable_sweep_artifacts.py \
                     --artifacts-dir "${{ github.workspace }}/source-artifacts"
 
-            - name: Download original merge changelog
+            - name: Recover merge changelog metadata
               env:
                   GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
                   MERGE_RUN_ID: ${{ inputs.merge-run-id }}
+                  SOURCE_PR_NUMBER: ${{ inputs.source-pr-number }}
                   CHANGELOG_PATH: ${{ github.workspace }}/merge-changelog
               run: |
                   url=$(gh api "repos/${{ github.repository }}/actions/runs/${MERGE_RUN_ID}/artifacts?per_page=100" --paginate --slurp \
                     | jq -r '[.[].artifacts[] | select(.name == "changelog-metadata")] | sort_by(.created_at) | last | .archive_download_url // empty')
-                  if [ -z "$url" ]; then
-                      echo "::error::No changelog-metadata artifact found on run $MERGE_RUN_ID"
+                  mkdir -p "$CHANGELOG_PATH"
+                  if [ -n "$url" ]; then
+                      gh api "$url" > "$RUNNER_TEMP/changelog.zip"
+                      unzip -oq "$RUNNER_TEMP/changelog.zip" -d "$CHANGELOG_PATH"
+                      rm -f "$RUNNER_TEMP/changelog.zip"
+                      exit 0
+                  fi
+
+                  echo "No merge-run changelog artifact; reconstructing it from the merge commit"
+                  merge_run=$(gh api "repos/${{ github.repository }}/actions/runs/${MERGE_RUN_ID}")
+                  merge_sha=$(jq -r '.head_sha // empty' <<<"$merge_run")
+                  if [ "$(jq -r '.event' <<<"$merge_run")" != "push" ] || \
+                     [ "$(jq -r '.head_branch' <<<"$merge_run")" != "main" ] || \
+                     [ "$(jq -r '.path' <<<"$merge_run")" != ".github/workflows/run-sweep.yml" ] || \
+                     [ -z "$merge_sha" ]; then
+                      echo "::error::Run $MERGE_RUN_ID is not a run-sweep.yml push-to-main run"
                       exit 1
                   fi
-                  mkdir -p "$CHANGELOG_PATH"
-                  gh api "$url" > "$RUNNER_TEMP/changelog.zip"
-                  unzip -oq "$RUNNER_TEMP/changelog.zip" -d "$CHANGELOG_PATH"
-                  rm -f "$RUNNER_TEMP/changelog.zip"
+
+                  mapped_prs=$(gh api "repos/${{ github.repository }}/commits/${merge_sha}/pulls")
+                  if [ "$(jq --arg pr "$SOURCE_PR_NUMBER" --arg merge "$merge_sha" '[.[] | select((.number | tostring) == $pr and .merged_at != null and .merge_commit_sha == $merge)] | length' <<<"$mapped_prs")" -ne 1 ]; then
+                      echo "::error::Merge commit $merge_sha does not map uniquely to merged PR #$SOURCE_PR_NUMBER"
+                      exit 1
+                  fi
+
+                  git fetch --no-tags --depth=2 origin "$merge_sha"
+                  base_sha=$(git rev-parse "${merge_sha}^")
+                  git checkout --detach "$merge_sha"
+                  python3 -m pip install pydantic
+                  python3 utils/process_changelog.py \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "$base_sha" \
+                    --head-ref "$merge_sha" \
+                    | jq --arg pr "https://github.com/${{ github.repository }}/pull/${SOURCE_PR_NUMBER}" \
+                        'if (.changelog_metadata.entries | length) > 0 and
+                            all(.changelog_metadata.entries[]; .["pr-link"] == $pr)
+                         then .changelog_metadata
+                         else error("reconstructed metadata contains entries outside the source PR")
+                         end' \
+                        > "$CHANGELOG_PATH/changelog_metadata.json"
 
             - name: Upload reusable ingest artifacts
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
