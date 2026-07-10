@@ -1,0 +1,10 @@
+{
+  "_comment": "Per-SKU RDMA fabric selectors for scale-out (EP16 multi-node) legs, overlaid onto the base operator config by config.py operator-config. Applied only when collx_apply_network_profile runs for scale-out (EP8/MNNVL return early). Each runners.<sku> block may contain only the network FIELDS: socket_ifname, rdma_devices, ib_gid_index, rdma_service_level, rdma_traffic_class. SKUs absent here fall back to the network overlay secret.",
+  "runners": {
+    "mi355x": {
+      "socket_ifname": "eno0",
+      "rdma_devices": "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7",
+      "ib_gid_index": 1
+    }
+  }
+}

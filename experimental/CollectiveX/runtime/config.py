@@ -37,12 +37,33 @@ def emit(values: dict[str, object]) -> None:
         sys.stdout.buffer.write(name.encode() + b"\0" + str(value).encode() + b"\0")
 
 
+def _network_overlay(runner: str) -> dict[str, object]:
+    """Repo-tracked per-SKU scale-out RDMA selectors (configs/network-config.json),
+    overlaid onto the base operator config. Only network FIELDS are taken, so top-level
+    notes and unknown keys are ignored; a missing/invalid file is a no-op fallback to the
+    base/secret network fields."""
+    net_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "configs", "network-config.json",
+    )
+    try:
+        with open(net_path, encoding="utf-8") as stream:
+            document = json.load(stream)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    block = document.get("runners", {}).get(runner, {})
+    return {key: value for key, value in block.items() if key in FIELDS}
+
+
 def operator_config(path: str, runner: str) -> None:
     try:
         with open(path, encoding="utf-8") as stream:
             document = json.load(stream)
         runners = document["runners"]
         selected = dict(runners[runner])
+        # Overlay repo-tracked scale-out RDMA selectors onto the base runner config;
+        # SKUs absent from network-config.json keep their base/secret network fields.
+        selected.update(_network_overlay(runner))
         missing = REQUIRED[runner] - set(selected)
         if missing:
             print("validation-missing-required-" + "-".join(sorted(missing)), file=sys.stderr)

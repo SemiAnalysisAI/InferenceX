@@ -12,5 +12,4 @@ gpucore.*
 goal.md
 notes.md
 configs/platforms.yaml
-configs/network-config.v1.json
 private-infra.md
