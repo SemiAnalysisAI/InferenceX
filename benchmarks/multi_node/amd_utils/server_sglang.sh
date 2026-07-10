@@ -508,15 +508,28 @@ fi
 # Container Synchronization
 # =============================================================================
 
+# sync.py barrier/health-barrier exits 1 on timeout (and prints which
+# node/port never became ready), but without an explicit check here the
+# script would silently continue past a timed-out barrier -- printing a
+# misleading "success" message and launching the next stage against
+# servers/routers that never actually came up, instead of failing fast.
+run_barrier_or_die() {
+    local desc="$1" cmd="$2"
+    if ! eval "$cmd"; then
+        echo "FATAL: ${desc} failed — see the sync.py timeout output above for which node/port never became ready." >&2
+        exit 1
+    fi
+}
+
 echo "Waiting at the container creation barrier on $host_name"
-python3 $SGLANG_WS_PATH/sync.py barrier \
+run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
     --enable-port \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300
+    --timeout 300"
 
 
 # =============================================================================
@@ -643,12 +656,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout 2400"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        run_barrier_or_die "prefill/decode server ports barrier" "$BARRIER_CMD"
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
@@ -707,7 +720,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
         else
-            eval "$HEALTH_BARRIER_CMD"
+            run_barrier_or_die "router readiness barrier" "$HEALTH_BARRIER_CMD"
         fi
 
         echo "Router is ready for benchmarking"
@@ -997,7 +1010,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        run_barrier_or_die "proxy server barrier (prefill node)" "$BARRIER_CMD"
     fi
 
     echo "Waiting until proxy server closes..."
@@ -1074,7 +1087,7 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        run_barrier_or_die "proxy server barrier (decode node)" "$BARRIER_CMD"
     fi
 
 
