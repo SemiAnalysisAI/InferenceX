@@ -228,7 +228,6 @@ EOF
         # (register_kv_caches fails with cudaErrorInvalidValue).
         VLLM_COMPILATION_CONFIG='{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
         VLLM_TUNING_ARGS=(
-            --gpu-memory-utilization 0.85
             --numa-bind
             --prefill-schedule-interval 8
             --max-cudagraph-capture-size "$MAX_NUM_SEQS"
