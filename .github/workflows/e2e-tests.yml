@@ -185,6 +185,7 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
             pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
@@ -269,6 +270,7 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
             pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
@@ -301,6 +303,7 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
             pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}

@@ -45,6 +45,7 @@ AGG_TOP_LEVEL_KEYS = {
     "scenario_type",
     "is_multinode",
     "tp",
+    "pp",
     "dcp_size",
     "pcp_size",
     "ep",
@@ -324,6 +325,7 @@ def _run_processor(
             "FRAMEWORK": "vllm",
             "PRECISION": "fp4",
             "TP": "4",
+            "PP_SIZE": "1",
             "DCP_SIZE": "1",
             "PCP_SIZE": "1",
             "EP_SIZE": "1",
@@ -442,20 +444,21 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     agg = _run_processor(
         result_dir,
         output_dir,
-        env_overrides={"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"},
+        env_overrides={"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"},
     )
     throughput = agg["request_metrics"]["throughput"]
     per_gpu = throughput["per_gpu"]
+    assert agg["pp"] == 2
     assert agg["dcp_size"] == 2
     assert agg["pcp_size"] == 2
     assert per_gpu["total_tput_tps"] == pytest.approx(
-        throughput["total"]["tokens_per_second"] / 8
+        throughput["total"]["tokens_per_second"] / 16
     )
     assert per_gpu["input_tput_tps"] == pytest.approx(
-        throughput["input"]["tokens_per_second"] / 8
+        throughput["input"]["tokens_per_second"] / 16
     )
     assert per_gpu["output_tput_tps"] == pytest.approx(
-        throughput["output"]["tokens_per_second"] / 8
+        throughput["output"]["tokens_per_second"] / 16
     )
 
 

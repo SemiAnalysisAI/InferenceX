@@ -41,6 +41,7 @@ def valid_single_node_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "tp": 8,
+        "pp": 1,
         "dcp-size": 1,
         "pcp-size": 1,
         "ep": 1,
@@ -348,6 +349,7 @@ class TestAgenticMatrixEntries:
             "framework": "vllm",
             "runner": "cluster:b200-dgxc",
             "tp": 8,
+            "pp": 1,
             "dcp-size": 1,
             "pcp-size": 1,
             "ep": 1,
@@ -595,6 +597,21 @@ class TestSingleNodeSearchSpaceEntry:
             "conc-list": [4, 8, 16, 32, 64, 128],
         })
         assert entry.conc_list == [4, 8, 16, 32, 64, 128]
+
+    def test_pp_defaults_to_one(self):
+        entry = SingleNodeSearchSpaceEntry(**{
+            "tp": 4,
+            "conc-list": [4],
+        })
+        assert entry.pp == 1
+
+    def test_pp_must_be_positive_integer(self):
+        with pytest.raises(Exception, match="greater than 0"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "pp": 0,
+                "conc-list": [4],
+            })
 
     def test_dcp_size_must_divide_tp(self):
         with pytest.raises(Exception, match="must be divisible"):
