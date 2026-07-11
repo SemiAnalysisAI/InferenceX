@@ -4755,7 +4755,9 @@
     - minimaxm3-fp4-b300-vllm
   description:
     - "Update the vLLM image to nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
-    - "Install FlashInfer 0.6.14.dev20260708"
-    - "Apply the local SM100 low-M MXFP8 split-K patch"
+    - "Install FlashInfer 0.6.15.dev20260710"
+    - "Use the upstream SM100 low-M MXFP8 split-K implementation included in FlashInfer 0.6.15"
+    - "Apply the FlashInfer AutoTuner non-Tensor guard fix from PR #3918"
+    - "Revert the FlashInfer PR #3745 runtime communication workspace changes via a local patch"
     - "Use the explicit FlashInfer TRT-LLM all-reduce backend override"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
