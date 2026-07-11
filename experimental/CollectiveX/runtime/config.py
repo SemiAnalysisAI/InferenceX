@@ -60,10 +60,19 @@ def _network_overlay(runner: str) -> dict[str, object]:
 
 def operator_config(path: str, runner: str) -> None:
     try:
-        with open(path, encoding="utf-8") as stream:
-            document = json.load(stream)
-        runners = document["runners"]
-        selected = dict(runners[runner])
+        # The registry's tracked per-SKU `operator` block is the baseline
+        # (de-secreted by operator decision); an operator config document, when
+        # provided, overrides it per field. Path "-" means registry-only — and
+        # for SKUs with no tracked block it preserves the historical no-config
+        # behavior (emit nothing) so manual runs on secret-fed SKUs still work.
+        selected = dict(_platforms()[runner].get("operator", {}))
+        if path == "-":
+            if not selected:
+                return
+        else:
+            with open(path, encoding="utf-8") as stream:
+                document = json.load(stream)
+            selected.update(document["runners"].get(runner, {}))
         # Overlay repo-tracked scale-out RDMA selectors onto the base runner config;
         # SKUs without a platform_config.json network block keep their base/secret
         # network fields.

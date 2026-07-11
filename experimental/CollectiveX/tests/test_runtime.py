@@ -135,6 +135,33 @@ class ConfigTests(unittest.TestCase):
             self.assertIn(b"COLLX_PARTITION\0gpu\0", payload)
             self.assertIn(b"COLLX_SQUASH_DIR\0" + directory.encode() + b"\0", payload)
 
+    def _emit_registry_only(self, runner: str) -> bytes:
+        read_fd, write_fd = os.pipe()
+        stdout = sys.stdout
+        try:
+            sys.stdout = os.fdopen(write_fd, "w")
+            config.operator_config("-", runner)
+            sys.stdout.flush()
+        finally:
+            sys.stdout.close()
+            sys.stdout = stdout
+        payload = os.read(read_fd, 4096)
+        os.close(read_fd)
+        return payload
+
+    def test_operator_config_registry_only_emits_tracked_baseline(self) -> None:
+        # "-" = no operator document: the registry's per-SKU operator block is
+        # the tracked baseline (plus its network overlay where present).
+        payload = self._emit_registry_only("h200-dgxc")
+        self.assertIn(b"COLLX_PARTITION\0main\0", payload)
+        self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
+        self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
+
+    def test_operator_config_registry_only_skips_secret_fed_sku(self) -> None:
+        # SKUs without a tracked operator block keep the historical no-config
+        # behavior: nothing emitted, no validation failure.
+        self.assertEqual(self._emit_registry_only("gb200"), b"")
+
     def test_canonical_policy_rejects_wrong_gpu_count(self) -> None:
         with self.assertRaises(SystemExit):
             config.canonical_policy("gb200", 2, 8, "nvidia:image", "amd:image", "commit")

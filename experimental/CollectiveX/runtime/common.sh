@@ -161,8 +161,14 @@ collx_load_operator_config() {
   if [ ! -e "$config_path" ]; then
     [ "${COLLECTIVEX_CANONICAL_GHA:-0}" != 1 ] \
       || collx_die "runner configuration is unavailable"
-    COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
-    return 0
+    if [ -z "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}}" ]; then
+      COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
+      return 0
+    fi
+    # No operator document, but the SKU is known: the tracked registry's
+    # per-SKU `operator` block still supplies baseline fields, so emit
+    # registry-only values ("-" sentinel; a no-op for SKUs without a block).
+    config_path="-"
   fi
   umask 077
   parsed_path="$(mktemp /tmp/inferencex-collectivex-parsed.XXXXXX)" || {

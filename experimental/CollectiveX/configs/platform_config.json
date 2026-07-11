@@ -8,7 +8,14 @@
     "from these values; suites.yaml 'platforms: all' resolves to every SKU listed",
     "here; runtime/config.py derives its operator-config schema and canonical policy from them.",
     "The optional 'network' block carries the SKU's operator-approved scale-out RDMA",
-    "selectors, overlaid onto the base operator config by runtime/config.py."
+    "selectors, overlaid onto the base operator config by runtime/config.py.",
+    "The optional per-SKU 'operator' block is the tracked baseline for runner-local",
+    "settings (placement, dirs, exclude lists) - de-secreted by operator decision",
+    "2026-07-12 from live cluster state and a recovered manual config. An operator",
+    "config file/secret, when present, overrides these per field. audit_salt and",
+    "any value not listed here remain secret. Pending blocks (still secret-fed):",
+    "gb200 (no SSH path), mi300x/mi325x (cluster unreachable at derivation time);",
+    "b300 stage_dir and gb300 squash_dir/enroot_cache_path were not recoverable."
   ],
   "platforms": {
     "h100-dgxc": {
@@ -25,7 +32,13 @@
         "account",
         "squash_dir"
       ],
-      "run_timeout": 900
+      "run_timeout": 900,
+      "operator": {
+        "partition": "hpc-gpu-1",
+        "account": "customer",
+        "squash_dir": "/mnt/nfs/sa-shared/cx-squash",
+        "exclude_nodes": "hpc-gpu-1-7"
+      }
     },
     "h200-dgxc": {
       "vendor": "nvidia",
@@ -40,7 +53,14 @@
         "partition",
         "squash_dir"
       ],
-      "run_timeout": 900
+      "run_timeout": 900,
+      "operator": {
+        "partition": "main",
+        "squash_dir": "/home/sa-shared/containers"
+      },
+      "network": {
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
+      }
     },
     "b200-dgxc": {
       "vendor": "nvidia",
@@ -56,7 +76,17 @@
         "account",
         "squash_dir"
       ],
-      "run_timeout": 900
+      "run_timeout": 900,
+      "operator": {
+        "partition": "gpu-2",
+        "account": "benchmark",
+        "qos": "gpu-2_qos",
+        "squash_dir": "/home/sa-shared/containers"
+      },
+      "network": {
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7",
+        "ib_gid_index": "3"
+      }
     },
     "b300": {
       "vendor": "nvidia",
@@ -72,7 +102,18 @@
         "account",
         "squash_dir"
       ],
-      "run_timeout": 900
+      "run_timeout": 900,
+      "operator": {
+        "partition": "batch_1",
+        "account": "benchmark",
+        "qos": "batch_1_qos",
+        "squash_dir": "/data/home/sa-shared/sqsh"
+      },
+      "network": {
+        "socket_ifname": "bond0",
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_8,mlx5_9,mlx5_10,mlx5_11,mlx5_16,mlx5_17,mlx5_20,mlx5_21,mlx5_22,mlx5_23",
+        "ib_gid_index": "3"
+      }
     },
     "gb200": {
       "vendor": "nvidia",
@@ -107,7 +148,12 @@
         "enroot_cache_path"
       ],
       "run_timeout": 900,
-      "master_port": 29551
+      "master_port": 29551,
+      "operator": {
+        "partition": "batch_1",
+        "account": "benchmark",
+        "qos": "batch_1_qos"
+      }
     },
     "mi300x": {
       "vendor": "amd",
@@ -157,7 +203,11 @@
         "partition",
         "squash_dir"
       ],
-      "run_timeout": 1800
+      "run_timeout": 1800,
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/var/lib/squash"
+      }
     }
   }
 }
