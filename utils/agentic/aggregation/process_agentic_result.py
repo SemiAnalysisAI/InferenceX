@@ -56,12 +56,15 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     fields: dict[str, Any] = {}
 
     if not is_multinode:
+        pp = env_int("PP_SIZE", 1)
         dcp_size = env_int("DCP_SIZE", 1)
         pcp_size = env_int("PCP_SIZE", 1)
-        if dcp_size <= 0 or pcp_size <= 0:
-            raise SystemExit("DCP_SIZE and PCP_SIZE must be positive integers.")
-        fields.update({"dcp_size": dcp_size, "pcp_size": pcp_size})
-        return fields, tp * pcp_size, tp, ep, dp_attention
+        if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
+            raise SystemExit(
+                "PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers."
+            )
+        fields.update({"pp": pp, "dcp_size": dcp_size, "pcp_size": pcp_size})
+        return fields, tp * pp * pcp_size, tp, ep, dp_attention
 
     prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
     prefill_tp = env_int("PREFILL_TP")

@@ -18,8 +18,8 @@ entry-name:
       osl: int
       search-space:
       - { tp: int, conc-start: int, conc-end: int }
-      # Optionally, specify expert/data-parallel attention and context-parallel sizes
-      - { tp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
+      # Optionally, specify pipeline/expert/data-attention/context parallelism
+      - { tp: int, pp: int, ep: int, dp-attn: bool, dcp-size: int, pcp-size: int, conc-start: int, conc-end: int }
       - ...
     - ...
     agentic-coding:  # optional
@@ -86,9 +86,10 @@ The below list describes what each field is:
       - Note: the step factor between `conc-start` and `conc-end` is 2, so if `conc-start` is 4 and `conc-end` is 128, all concurrencies `4, 8, 16, 32, ..., 128` will be run.
       - (Optional) `ep`: An integer representing the expert parallelism level that the configuration will be served at. Default is 1 (no expert parallelism) when not specified.
       - (Optional) `dp-attn`: A boolean representing whether or not to activate data parallel attention for the configuration. Default is false when not specified.
+      - (Optional) `pp`: Pipeline parallelism level. Default is 1. It must be a positive integer.
       - (Optional) `dcp-size`: Decode context-parallel size. Default is 1. It must be a positive divisor of `tp`; DCP reuses the TP GPUs.
-      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A single-node job allocates `tp * pcp-size` GPUs.
-      - `dcp-size` and `pcp-size` are single-node fields. They are not accepted inside multinode `prefill` or `decode` worker blocks.
+      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A single-node job allocates `tp * pp * pcp-size` GPUs.
+      - `pp`, `dcp-size`, and `pcp-size` are single-node fields. They are not accepted inside multinode `prefill` or `decode` worker blocks.
   - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry must have:
     - `trace-source`: Identifier for the trace dataset to use.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries.
@@ -99,7 +100,7 @@ input.
 
 Notes:
 - No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
-- Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts (`ep` as `EP_SIZE`, `dp-attn` as `DP_ATTENTION`, `dcp-size` as `DCP_SIZE`, and `pcp-size` as `PCP_SIZE`). Actually using those variables is an implementation detail of the benchmark Bash script.
+- Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts (`pp` as `PP_SIZE`, `ep` as `EP_SIZE`, `dp-attn` as `DP_ATTENTION`, `dcp-size` as `DCP_SIZE`, and `pcp-size` as `PCP_SIZE`). Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ## Runners
 

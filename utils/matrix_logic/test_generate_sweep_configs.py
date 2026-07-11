@@ -672,21 +672,21 @@ class TestGenerateFullSweepSingleNode:
         assert entry["tp"] == 8
         assert "exp-name" in entry
         assert "max-model-len" in entry
-        assert (entry["dcp-size"], entry["pcp-size"]) == (1, 1)
+        assert (entry["pp"], entry["dcp-size"], entry["pcp-size"]) == (1, 1, 1)
 
         explicit_config = copy.deepcopy(sample_single_node_config)
         for seq_config in explicit_config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"]:
             for search_entry in seq_config["search-space"]:
-                search_entry.update({"dcp-size": 2, "pcp-size": 2})
+                search_entry.update({"pp": 2, "dcp-size": 2, "pcp-size": 2})
         explicit_result = generate_full_sweep(
             full_sweep_args_single_node,
             explicit_config,
             sample_runner_config,
         )
         assert {
-            (row["dcp-size"], row["pcp-size"])
+            (row["pp"], row["dcp-size"], row["pcp-size"])
             for row in explicit_result
-        } == {(2, 2)}
+        } == {(2, 2, 2)}
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Filter by model prefix should work."""
@@ -1848,7 +1848,7 @@ def full_sweep_args_both():
 class TestGenerateTestConfigSweep:
     """Tests for exact config-key sweep generation."""
 
-    def test_single_node_context_parallel_fields_are_generated(
+    def test_single_node_parallelism_fields_are_generated(
         self,
         sample_single_node_config,
         sample_runner_config,
@@ -1864,21 +1864,21 @@ class TestGenerateTestConfigSweep:
             args, sample_single_node_config, sample_runner_config
         )
         assert [
-            (row["dcp-size"], row["pcp-size"])
+            (row["pp"], row["dcp-size"], row["pcp-size"])
             for row in default_result
-        ] == [(1, 1)]
+        ] == [(1, 1, 1)]
 
         explicit_config = copy.deepcopy(sample_single_node_config)
         explicit_config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"][0]["search-space"][0].update(
-            {"dcp-size": 2, "pcp-size": 2}
+            {"pp": 2, "dcp-size": 2, "pcp-size": 2}
         )
         explicit_result = generate_test_config_sweep(
             args, explicit_config, sample_runner_config
         )
         assert [
-            (row["dcp-size"], row["pcp-size"])
+            (row["pp"], row["dcp-size"], row["pcp-size"])
             for row in explicit_result
-        ] == [(2, 2)]
+        ] == [(2, 2, 2)]
 
     def test_runner_node_filter_expands_config_runner(self, sample_multinode_config, sample_runner_config):
         """test-config should allow targeting one concrete runner node."""
@@ -1996,6 +1996,13 @@ class TestGenerateTestConfigSweep:
                                 "kv-offload-backend": "native",
                                 "conc-list": [32],
                             },
+                            {
+                                "tp": 4,
+                                "pp": 2,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
                         ],
                     }],
                 },
@@ -2012,10 +2019,15 @@ class TestGenerateTestConfigSweep:
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
         budgets = {
-            (entry["dcp-size"], entry["pcp-size"]): entry["total-cpu-dram-gb"]
+            (entry["pp"], entry["dcp-size"], entry["pcp-size"]): entry["total-cpu-dram-gb"]
             for entry in result
         }
-        assert budgets == {(1, 1): 1199, (2, 1): 1199, (1, 2): 2399}
+        assert budgets == {
+            (1, 1, 1): 1199,
+            (1, 2, 1): 1199,
+            (1, 1, 2): 2399,
+            (2, 1, 1): 2399,
+        }
         assert all(entry["duration"] == 3600 for entry in result)
 
     def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
@@ -2241,7 +2253,7 @@ class TestGenerateFullSweepMixed:
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [
-                            {"tp": 8, "kv-offloading": "none", "conc-list": [16]},
+                            {"tp": 4, "pp": 2, "kv-offloading": "none", "conc-list": [16]},
                         ],
                     }],
                 },
@@ -2283,6 +2295,7 @@ class TestGenerateFullSweepMixed:
         assert len(single_result) == 1
         assert "prefill" not in single_result[0]
         assert single_result[0]["runner"] == "cluster:b300-nv"
+        assert single_result[0]["pp"] == 2
         assert len(multi_result) == 1
         assert "prefill" in multi_result[0]
         assert multi_result[0]["runner"] == "cluster:gb200-nv"

@@ -7,6 +7,7 @@ from pathlib import Path
 from validate_reusable_sweep_artifacts import (
     agentic_key,
     benchmark_key,
+    eval_key,
     dedupe_reran_evals,
     main,
     validate_agentic_artifacts,
@@ -42,6 +43,9 @@ def single_eval_result(
         "isl": isl,
         "osl": osl,
         "tp": 2,
+        "pp": 1,
+        "dcp_size": 1,
+        "pcp_size": 1,
         "ep": 1,
         "dp_attention": False,
         "conc": conc,
@@ -131,6 +135,7 @@ def fixed_result(conc: int) -> dict:
         "isl": 1024,
         "osl": 1024,
         "tp": 2,
+        "pp": 1,
         "dcp_size": 1,
         "pcp_size": 1,
         "ep": 1,
@@ -149,6 +154,7 @@ def agentic_result(conc: int = 16) -> dict:
         "scenario_type": "agentic-coding",
         "is_multinode": False,
         "tp": 8,
+        "pp": 1,
         "dcp_size": 1,
         "pcp_size": 1,
         "ep": 8,
@@ -158,17 +164,20 @@ def agentic_result(conc: int = 16) -> dict:
     }
 
 
-def test_single_node_reusable_keys_normalize_legacy_cp_and_separate_variants() -> None:
+def test_single_node_reusable_keys_normalize_legacy_parallelism_and_separate_variants() -> None:
     cases = (
         ("fixed", benchmark_key, fixed_result(16)),
         ("agentic", agentic_key, agentic_result()),
+        ("eval", eval_key, single_eval_result(16)),
     )
 
     for name, identity, row in cases:
         legacy_row = dict(row)
+        legacy_row.pop("pp")
         legacy_row.pop("dcp_size")
         legacy_row.pop("pcp_size")
         assert identity(legacy_row) == identity(row), name
+        assert identity({**row, "pp": 2}) != identity(row), name
         assert identity({**row, "dcp_size": 2}) != identity(row), name
         assert identity({**row, "pcp_size": 2}) != identity(row), name
 

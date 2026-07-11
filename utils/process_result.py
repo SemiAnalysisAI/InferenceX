@@ -122,15 +122,17 @@ else:
     tp_size = int(single_node_env['TP'])
     ep_size = int(single_node_env['EP_SIZE'])
     dp_attention = single_node_env['DP_ATTENTION']
+    pp = int(os.environ.get('PP_SIZE', '1'))
     dcp_size = int(os.environ.get('DCP_SIZE', '1'))
     pcp_size = int(os.environ.get('PCP_SIZE', '1'))
-    if dcp_size <= 0 or pcp_size <= 0:
-        raise ValueError("DCP_SIZE and PCP_SIZE must be positive integers.")
-    num_gpus = tp_size * pcp_size
+    if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
+        raise ValueError("PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers.")
+    num_gpus = tp_size * pp * pcp_size
 
     single_node_data = {
         'is_multinode': False,
         'tp': tp_size,
+        'pp': pp,
         'dcp_size': dcp_size,
         'pcp_size': pcp_size,
         'ep': ep_size,

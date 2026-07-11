@@ -373,7 +373,7 @@ class TestCalculations:
         assert output_data["intvty_p99"] == pytest.approx(20.0)
 
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
-        """PCP expands the GPU denominator while DCP remains metadata."""
+        """PP and PCP expand the GPU denominator while DCP remains metadata."""
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 8,
@@ -382,17 +382,18 @@ class TestCalculations:
         }
 
         env = single_node_env_vars.copy()
-        env.update({"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"})
+        env.update({"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"})
 
         result = run_script(tmp_path, env, benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
+        assert output_data["pp"] == 2
         assert output_data["dcp_size"] == 2
         assert output_data["pcp_size"] == 2
-        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 8)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 8)
-        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 8)
+        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 16)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 16)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 16)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""

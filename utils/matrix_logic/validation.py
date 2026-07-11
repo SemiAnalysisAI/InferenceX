@@ -38,6 +38,7 @@ class Fields(Enum):
 
     # Search-space/benchmark fields
     TP = 'tp'
+    PP = 'pp'
     DCP_SIZE = 'dcp-size'
     PCP_SIZE = 'pcp-size'
     CONC_START = 'conc-start'
@@ -115,6 +116,7 @@ class SingleNodeMatrixEntry(BaseModel):
     isl: int
     osl: int
     tp: int
+    pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
@@ -199,6 +201,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     framework: str
     runner: str
     tp: int
+    pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
@@ -382,6 +385,7 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     tp: int
+    pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(
         default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(
@@ -456,6 +460,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     tp: Optional[int] = None
+    pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(
         default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(
@@ -503,13 +508,23 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 )
             _validate_single_node_topology(self)
         if has_complete_multinode:
-            if (
-                "dcp_size" in self.model_fields_set
-                or "pcp_size" in self.model_fields_set
-            ):
+            explicitly_single_node_fields = {
+                "pp",
+                "dcp_size",
+                "pcp_size",
+            } & self.model_fields_set
+            if explicitly_single_node_fields:
+                field_names = ", ".join(
+                    f"'{name}'"
+                    for name in (
+                        Fields.PP.value,
+                        Fields.DCP_SIZE.value,
+                        Fields.PCP_SIZE.value,
+                    )
+                )
                 raise ValueError(
                     "Multinode agentic search-space entries cannot specify "
-                    f"'{Fields.DCP_SIZE.value}' or '{Fields.PCP_SIZE.value}'"
+                    f"{field_names}"
                 )
             _validate_worker_hardware_pair(self)
         return self
