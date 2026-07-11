@@ -193,10 +193,16 @@ def test_multinode_agentic_identity_fields_match() -> None:
         "scenario_type": "agentic-coding",
         "is_multinode": True,
         "prefill_tp": 4,
+        "prefill_pp": 2,
+        "prefill_dcp_size": 2,
+        "prefill_pcp_size": 2,
         "prefill_ep": 2,
         "prefill_dp_attention": "true",
         "prefill_num_workers": 2,
         "decode_tp": 8,
+        "decode_pp": 2,
+        "decode_dcp_size": 4,
+        "decode_pcp_size": 1,
         "decode_ep": 4,
         "decode_dp_attention": "false",
         "decode_num_workers": 3,
@@ -213,14 +219,51 @@ def test_multinode_agentic_identity_fields_match() -> None:
         True,
         4,
         2,
+        2,
+        2,
+        2,
         True,
         2,
         8,
+        2,
+        4,
+        1,
         4,
         False,
         3,
         64,
     )
+
+    for identity in (benchmark_key, agentic_key, eval_key):
+        legacy_row = dict(row)
+        for field in (
+            "prefill_pp",
+            "prefill_dcp_size",
+            "prefill_pcp_size",
+            "decode_pp",
+            "decode_dcp_size",
+            "decode_pcp_size",
+        ):
+            legacy_row.pop(field)
+        default_row = {
+            **row,
+            "prefill_pp": 1,
+            "prefill_dcp_size": 1,
+            "prefill_pcp_size": 1,
+            "decode_pp": 1,
+            "decode_dcp_size": 1,
+            "decode_pcp_size": 1,
+        }
+        assert identity(legacy_row) == identity(default_row)
+        for field in (
+            "prefill_pp",
+            "prefill_dcp_size",
+            "prefill_pcp_size",
+            "decode_pp",
+            "decode_dcp_size",
+            "decode_pcp_size",
+        ):
+            assert identity({**default_row, field: 2}) != identity(default_row)
 
 
 def write_agentic_artifacts(

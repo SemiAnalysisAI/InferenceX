@@ -407,11 +407,29 @@ class TestCalculations:
         env = multinode_env_vars.copy()
         env["PREFILL_GPUS"] = "20"
         env["DECODE_GPUS"] = "8"
+        env.update({
+            "PREFILL_PP_SIZE": "2",
+            "PREFILL_DCP_SIZE": "2",
+            "PREFILL_PCP_SIZE": "2",
+            "DECODE_PP_SIZE": "2",
+            "DECODE_DCP_SIZE": "4",
+            "DECODE_PCP_SIZE": "1",
+        })
 
         result = run_script(tmp_path, env, benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
+        assert (
+            output_data["prefill_pp"],
+            output_data["prefill_dcp_size"],
+            output_data["prefill_pcp_size"],
+        ) == (2, 2, 2)
+        assert (
+            output_data["decode_pp"],
+            output_data["decode_dcp_size"],
+            output_data["decode_pcp_size"],
+        ) == (2, 4, 1)
         assert output_data["tput_per_gpu"] == pytest.approx(1000.0)  # 28000 / 28
         assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)  # 16000 / 8
         assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20

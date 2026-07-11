@@ -45,12 +45,18 @@ scenarios:
         hardware: b200
         num-worker: 1
         tp: 8
+        pp: 1
+        dcp-size: 1
+        pcp-size: 2
         ep: 8
         dp-attn: false
       decode:
         hardware: h100
         num-worker: 2
         tp: 8
+        pp: 1
+        dcp-size: 2
+        pcp-size: 1
         ep: 8
         dp-attn: false
 ```
@@ -88,8 +94,9 @@ The below list describes what each field is:
       - (Optional) `dp-attn`: A boolean representing whether or not to activate data parallel attention for the configuration. Default is false when not specified.
       - (Optional) `pp`: Pipeline parallelism level. Default is 1. It must be a positive integer.
       - (Optional) `dcp-size`: Decode context-parallel size. Default is 1. It must be a positive divisor of `tp`; DCP reuses the TP GPUs.
-      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A single-node job allocates `tp * pp * pcp-size` GPUs.
-      - `pp`, `dcp-size`, and `pcp-size` are single-node fields. They are not accepted inside multinode `prefill` or `decode` worker blocks.
+      - (Optional) `pcp-size`: Prefill context-parallel size. Default is 1. A topology consumes `tp * pp * pcp-size` GPUs per worker; DCP does not add GPUs.
+      - For single-node entries, set `pp`, `dcp-size`, and `pcp-size` directly in the search-space entry.
+      - For multinode entries, set them independently inside each `prefill` and `decode` worker block. A worker pool allocates `num-worker * tp * pp * pcp-size` GPUs.
   - `agentic-coding`: Agentic trace replay benchmarks using real conversation traces. Each entry must have:
     - `trace-source`: Identifier for the trace dataset to use.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries.
@@ -100,7 +107,7 @@ input.
 
 Notes:
 - No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
-- Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts (`pp` as `PP_SIZE`, `ep` as `EP_SIZE`, `dp-attn` as `DP_ATTENTION`, `dcp-size` as `DCP_SIZE`, and `pcp-size` as `PCP_SIZE`). Actually using those variables is an implementation detail of the benchmark Bash script.
+- Setting the fields above only guarantees that their values are passed as environment variables to benchmark scripts. Single-node jobs receive `PP_SIZE`, `DCP_SIZE`, and `PCP_SIZE`; multinode jobs receive `PREFILL_PP_SIZE`, `PREFILL_DCP_SIZE`, `PREFILL_PCP_SIZE`, `DECODE_PP_SIZE`, `DECODE_DCP_SIZE`, and `DECODE_PCP_SIZE`. Actually using those variables is an implementation detail of the benchmark Bash script.
 
 ## Runners
 
