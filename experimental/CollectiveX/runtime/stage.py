@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import pwd
 from pathlib import Path
@@ -13,10 +12,6 @@ import shutil
 
 EXCLUDES = {"__pycache__", "results", ".collx_workloads", ".collx_backend", ".collx_sources",
             "platforms.yaml", "private-infra.md", "goal.md", "notes.md"}
-
-
-def safe_name(value: str) -> bool:
-    return bool(value) and all(char.isalnum() or char in "._-" for char in value)
 
 
 def implicit_stage_base(args) -> None:
@@ -28,7 +23,9 @@ def implicit_stage_base(args) -> None:
     home = Path(base).resolve()
     suffix = ""
     if args.isolation_key:
-        suffix = "-" + hashlib.sha256(args.isolation_key.encode("utf-8")).hexdigest()[:16]
+        if not all(char.isalnum() or char in "._-" for char in args.isolation_key):
+            raise SystemExit(1)
+        suffix = "-" + args.isolation_key
     path = home / f".inferencex-collectivex-stage{suffix}"
     path.mkdir(mode=0o700, exist_ok=True)
     print(path, end="")
@@ -85,8 +82,8 @@ SPECS = {
     "implicit-stage-base": (("home", "?"), ("isolation_key", "?")),
     "resolve-directory": (("path",),),
     "validate-stage-path": (("repo",), ("base",), ("child",), ("job_root", "?"), ("workspace", "?")),
-    "create-stage": (("stage",), ("tag",)), "copy-repository": (("source",), ("target",)),
-    "validate-cleanup": (("root",), ("tag",)), "rewrite-deepep-v2": (("path",),),
+    "create-stage": (("stage",),), "copy-repository": (("source",), ("target",)),
+    "validate-cleanup": (("root",),), "rewrite-deepep-v2": (("path",),),
 }
 
 

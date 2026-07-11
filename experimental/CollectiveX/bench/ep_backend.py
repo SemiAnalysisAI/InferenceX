@@ -1,41 +1,14 @@
 #!/usr/bin/env python3
-"""Abstract base class for CollectiveX EP dispatch/combine backends.
-
-The benchmark drives every backend through one fixed lifecycle, modelled on the
-DeepEP (`tests/legacy/test_internode.py`) and ROCm/mori
-(`examples/ops/dispatch_combine/test_dispatch_combine_internode.py`) reference
-harnesses, but wrapped in a real base class so the shared plumbing lives in one
-place and each adapter supplies only the transport-specific pieces:
-
-    spec = backend.make_inputs(args)      # base: ladder + per-rank routing/activations
-    backend.create_buffer(spec)           # subclass: size the communicator from `spec`
-    problem = backend.make_problem(...)    # base: dtype coercion + dispatch encoding
-    backend.benchmark_dispatch(...)        # base template: warm + time the raw op
-    backend.benchmark_combine(...)         # base template: warm + time the raw op
-
-`make_inputs` computes the sweep's numeric shape (token ladder, max tokens/rank)
-and materialises the per-rank inputs; `create_buffer` consumes those numbers to
-size the communicator. This resolves the historical inversion where buffers were
-built in ``__init__`` before any input existed.
-
-The base class carries the contract flags the driver reads (``stage_device_work``,
-``combine_needs_redispatch``, ``dispatch_needs_combine_cleanup``,
-``combine_weight_semantics``, ``roundtrip_only``) with defaults matching the
-common case; subclasses override them. The two Pass-2 timing branch rules — untimed stage+combine cleanup after a
-timed dispatch (MoRI), and per-iter re-dispatch for stateful combine (MoRI) — are
-encoded once in ``benchmark_dispatch``/``benchmark_combine`` so subclasses supply
-only the raw op.
-
-``torch`` and ``routing`` are imported lazily inside the methods that touch a
-device, mirroring ``ep_harness`` — so this module byte-compiles and imports under
-the CPU-only test environment, while ``run_sweep`` imports it lazily on the GPU
-image to avoid an import cycle.
-"""
+"""Shared lifecycle and input generation for EP backends."""
 from __future__ import annotations
 
 import abc
 import types
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import torch
 
 from ep_harness import (
     time_us,
@@ -197,8 +170,7 @@ class EPBackend(abc.ABC):
             ladder=list(ladder),
             conditioning_ladder=conditioning_ladder,
         )
-        # Warm-only conditioning shapes never need canonical manifests or the
-        # global trace: they are never measured or emitted.
+        # Conditioning shapes are warmed but never emitted.
         for wt in conditioning_ladder:
             spec.conditioning_points[wt] = self._build_rank_inputs(
                 args, wt, retain_global=False

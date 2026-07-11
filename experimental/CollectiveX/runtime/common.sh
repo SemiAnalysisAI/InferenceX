@@ -1182,16 +1182,14 @@ collx_stage_path() {
     "$stage_path" "${COLLX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}"
 }
 
-# Stage only the public benchmark tree into a pre-resolved, private execution
-# child. A runner-owned marker makes recursive cleanup an explicit capability.
+# Stage only the public benchmark tree into the private execution child.
 collx_stage_repo() {
-  local repo_root="$1" stage_dir="$2" expected log tag copy_error
+  local repo_root="$1" stage_dir="$2" expected log copy_error
   expected="$(collx_stage_path "$repo_root" "${COLLX_STAGE_DIR:-}")" \
     || collx_die "configured stage base is unavailable or unsafe"
   [ "$stage_dir" = "$expected" ] \
     || collx_die "execution stage differs from the configured stage base"
-  tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
-  python3 "$COLLX_RUNTIME_DIR/stage.py" create-stage "$stage_dir" "$tag" \
+  python3 "$COLLX_RUNTIME_DIR/stage.py" create-stage "$stage_dir" \
     || collx_die "cannot create the configured stage directory"
   collx_log "staging CollectiveX on compute-visible storage"
   log="$(collx_private_log_path repository-stage)"
@@ -1246,8 +1244,8 @@ collx_cleanup_stage() {
     collx_log "ERROR: refusing to remove an unrecognized stage directory"
     return 1
   fi
-  if ! python3 "$COLLX_RUNTIME_DIR/stage.py" validate-cleanup "$mount_src" "$tag"; then
-    collx_log "ERROR: refusing to remove an unowned stage directory"
+  if ! python3 "$COLLX_RUNTIME_DIR/stage.py" validate-cleanup "$mount_src"; then
+    collx_log "ERROR: refusing to remove an invalid stage directory"
     return 1
   fi
   rm -rf -- "$mount_src" >/dev/null 2>&1 || {
@@ -1257,7 +1255,7 @@ collx_cleanup_stage() {
   collx_log "removed generated per-execution stage directory"
 }
 
-# Run one validated shard with one Slurm task per GPU on one or more nodes.
+# Run one shard with one Slurm task per GPU on one or more nodes.
 # Launchers provide only allocation/container policy through globals and
 # COLLX_DISTRIBUTED_CONTAINER_ARGS; per-case benchmark inputs travel as run_ep.py
 # argv decoded from the shard control (config.py case-args), never as env.
@@ -1313,7 +1311,7 @@ collx_run_shard() {
     [ -f "$shard" ] || collx_die "shard control is unavailable"
     expected_cases="$(python3 "$COLLX_RUNTIME_DIR/config.py" case-count "$shard")" \
       && [[ "$expected_cases" =~ ^[1-9][0-9]*$ ]] \
-      || collx_die "could not enumerate validated shard cases"
+      || collx_die "could not enumerate shard cases"
   else
     # Ad-hoc runs without a shard control take one case per requested phase
     # from the operator's COLLX_* environment (config.py manual-args).

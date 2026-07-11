@@ -30,7 +30,7 @@ NGPUS="${COLLX_NGPUS:-$EXPECTED_WORLD}"
 if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 [ "$NODES" = 2 ] || [ "$NODES" = 4 ] \
-  || collx_die "$PRODUCT v1 supports two or four four-GPU trays"
+  || collx_die "$PRODUCT supports two or four four-GPU trays"
 [ "$GPN" = 4 ] || collx_die "$PRODUCT requires four GPUs per tray"
 [ "$SCALE_UP_DOMAIN" = 72 ] || collx_die "$PRODUCT requires the NVL72 scale-up domain"
 [ "$NGPUS" = "$EXPECTED_WORLD" ] \

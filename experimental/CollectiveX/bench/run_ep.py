@@ -5,10 +5,8 @@ from __future__ import annotations
 
 import argparse
 import ctypes
-import json
 import os
 import platform
-import socket
 import sys
 
 # Make the sibling bench/ modules importable when run as `bench/run_ep.py` under
@@ -49,88 +47,6 @@ def _runtime_info(torch, *, vendor: str) -> dict:
         "framework": str(torch.__version__),
         "vendor": vendor,
     }
-
-
-def _summarize_realized_placement(
-    records: list[tuple[str, int]],
-    *,
-    expected_nodes: int,
-    expected_gpus_per_node: int,
-    expected_world_size: int,
-) -> dict:
-    """Validate private host/rank records and return only publication-safe aggregates."""
-    if expected_nodes < 1 or expected_gpus_per_node < 1:
-        raise ValueError("requested placement dimensions must be positive")
-    if expected_nodes * expected_gpus_per_node != expected_world_size:
-        raise ValueError("requested nodes x GPUs per node differs from world size")
-    if len(records) != expected_world_size:
-        raise ValueError("realized rank count differs from world size")
-
-    by_host: dict[str, list[int]] = {}
-    for host, local_rank in records:
-        if not isinstance(host, str) or not host or type(local_rank) is not int:
-            raise ValueError("realized placement record has invalid types")
-        by_host.setdefault(host, []).append(local_rank)
-
-    counts = sorted(len(local_ranks) for local_ranks in by_host.values())
-    complete_local_ranks = all(
-        sorted(local_ranks) == list(range(expected_gpus_per_node))
-        for local_ranks in by_host.values()
-    )
-    unique_pairs = len(set(records)) == len(records)
-    if len(by_host) != expected_nodes:
-        raise ValueError(
-            f"realized node count {len(by_host)} differs from requested {expected_nodes}"
-        )
-    if counts != [expected_gpus_per_node] * expected_nodes:
-        raise ValueError("realized ranks per node differ from requested GPUs per node")
-    if not complete_local_ranks or not unique_pairs:
-        raise ValueError("realized local ranks are incomplete or duplicated")
-    return {
-        "gpus_per_node": expected_gpus_per_node,
-        "nodes": expected_nodes,
-        "ranks_per_node": expected_gpus_per_node,
-        "unique_local_ranks": True,
-        "valid": True,
-    }
-
-
-def _all_gather_json(
-    value,
-    *,
-    torch_module,
-    dist_module,
-    device,
-    world_size: int,
-) -> list:
-    """Gather bounded JSON values using device tensors, not Python object collectives."""
-    payload = json.dumps(
-        value,
-        allow_nan=False,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    if not payload or len(payload) > 1_048_576:
-        raise ValueError("distributed consensus payload size is invalid")
-    size = torch_module.tensor([len(payload)], dtype=torch_module.int64, device=device)
-    sizes = [torch_module.zeros_like(size) for _ in range(world_size)]
-    dist_module.all_gather(sizes, size)
-    lengths = [int(item.item()) for item in sizes]
-    if any(length < 1 or length > 1_048_576 for length in lengths):
-        raise ValueError("distributed consensus size evidence is invalid")
-    width = max(lengths)
-    encoded = torch_module.zeros(width, dtype=torch_module.uint8, device=device)
-    encoded[: len(payload)] = torch_module.tensor(
-        list(payload), dtype=torch_module.uint8, device=device
-    )
-    gathered = [torch_module.empty_like(encoded) for _ in range(world_size)]
-    dist_module.all_gather(gathered, encoded)
-    records = []
-    for tensor, length in zip(gathered, lengths, strict=True):
-        raw = bytes(tensor[:length].cpu().tolist())
-        records.append(json.loads(raw.decode("utf-8")))
-    return records
 
 
 def main() -> int:
@@ -245,7 +161,6 @@ def main() -> int:
         print(f"ERROR: scheduled case is unsupported: {reason}", file=sys.stderr)
         return 5
     args.runtime_device_product = device_name
-    args.runtime_device_count = device_count
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
     _run = {
         "run_id": os.environ.get("GITHUB_RUN_ID"),
@@ -282,26 +197,6 @@ def main() -> int:
 
     args.runtime = _runtime_info(torch, vendor=vendor)
 
-    gpus_per_node = args.gpus_per_node or sku["gpus_per_node"]
-    try:
-        expected_nodes = int(
-            os.environ.get("SLURM_NNODES", str(world_size // gpus_per_node))
-        )
-    except ValueError as exc:
-        raise ValueError("SLURM_NNODES must be a positive integer") from exc
-    realized_records = _all_gather_json(
-        [socket.gethostname(), local_rank],
-        torch_module=torch,
-        dist_module=dist,
-        device=device,
-        world_size=world_size,
-    )
-    args.realized_placement = _summarize_realized_placement(
-        [(record[0], record[1]) for record in realized_records],
-        expected_nodes=expected_nodes,
-        expected_gpus_per_node=gpus_per_node,
-        expected_world_size=world_size,
-    )
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
     # uncaught exception is otherwise invisible in CI. Print on every rank (prefixed) then re-raise.

@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
@@ -46,11 +47,26 @@ class ProbeTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_merge_operator_config_applies_overlays(self) -> None:
+        base = {"runners": {"h100-dgxc": {"partition": "gpu"}}}
+        overlay = {"runners": {"h100-dgxc": {"account": "bench"}}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "operator.json"
+            with mock.patch.dict(os.environ, {
+                "COLLECTIVEX_OPERATOR_CONFIG_CONTENT": json.dumps(base),
+                "COLLECTIVEX_H100_CONFIG_CONTENT": json.dumps(overlay),
+            }, clear=True):
+                config.merge_operator_config(str(path))
+            self.assertEqual(
+                json.loads(path.read_text())["runners"]["h100-dgxc"],
+                {"partition": "gpu", "account": "bench"},
+            )
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def test_operator_config_emits_allowlisted_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "operator.json"
             path.write_text(json.dumps({
-                "schema_version": 1,
                 "runners": {
                     "h100-dgxc": {
                         "partition": "gpu",
@@ -162,7 +178,7 @@ class StageTests(unittest.TestCase):
             (source / "runtime").mkdir(parents=True)
             (source / "runtime" / "common.sh").write_text("test")
             (source / "goal.md").write_text("private")
-            args = type("Args", (), {"stage": str(target), "tag": "test-run"})
+            args = type("Args", (), {"stage": str(target)})
             stage.create_stage(args)
             copy_args = type(
                 "Args", (), {"source": str(source), "target": str(target / "experimental" / "CollectiveX")}
@@ -170,9 +186,7 @@ class StageTests(unittest.TestCase):
             stage.copy_repository(copy_args)
             self.assertTrue((target / "experimental" / "CollectiveX" / "runtime" / "common.sh").is_file())
             self.assertFalse((target / "experimental" / "CollectiveX" / "goal.md").exists())
-            cleanup_args = type(
-                "Args", (), {"root": str(target), "tag": "test-run"}
-            )
+            cleanup_args = type("Args", (), {"root": str(target)})
             stage.validate_cleanup(cleanup_args)
 
     def test_common_network_mode_resolves_shard_from_root(self) -> None:
@@ -348,7 +362,7 @@ class CaseArgvContract(unittest.TestCase):
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
         "ladder": "1 2 4", "conditioning_ladder": "1 2 4 8",
-        "timing": "8:128:32", "canonical": True,
+        "timing": "8:128:32",
         "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
         "suite": "ep-core", "workload": "deepseek-v3",
     }

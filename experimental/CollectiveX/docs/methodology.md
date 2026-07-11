@@ -128,17 +128,15 @@ as a correctness property.
 
 One raw case document carries `record_type: "case-attempt"` and the single `version`, and contains:
 
-- `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and scheduled case), and
-  `allocation_factors` (run id, run attempt, source SHA);
-- `case`: backend, EP size, mode, phase, runner, suite, workload name, and the routing/shape
-  coordinate;
+- `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and the scheduled case — backend,
+  EP size, mode, phase, suite, workload, and the topology coordinate), and `allocation_factors`
+  (run id, run attempt, source SHA);
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks;
 - `measurement`: dispatch/combine dtype and semantics, `sampling`, and the per-point `rows`;
 - `implementation`: backend name and kernel generation;
-- `topology`: requested and realized SKU, devices, placement, scale-up domain, and transport;
+- `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
-- `outcome`: `status` (`success` or `invalid`), `reasons`, and a structured `validity` (execution,
-  semantic-correctness, workload-identity, and conformance states).
+- `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
 Each `rows` entry carries point latency, byte accounting, token rate, correctness, load, and fanout;
 per-point statistics are summarized in place, not emitted as separate documents. Each dispatched

@@ -193,55 +193,8 @@ jobs:
           set -euo pipefail
           umask 077
           operator_config="$COLLX_JOB_ROOT/operator-config.json"
-          python3 - "$operator_config" <<'PY'
-          import json
-          import os
-          import sys
-
-          def pairs(items):
-              result = {}
-              for key, value in items:
-                  if key in result:
-                      raise ValueError("duplicate configuration key")
-                  result[key] = value
-              return result
-
-          def load(name):
-              return json.loads(
-                  os.environ[name], object_pairs_hook=pairs,
-                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()),
-              )
-
-          base = load("COLLECTIVEX_OPERATOR_CONFIG_CONTENT")
-          if set(base) != {"schema_version", "runners"} or base["schema_version"] != 1:
-              raise ValueError("invalid operator configuration")
-          if not isinstance(base["runners"], dict):
-              raise ValueError("invalid operator runners")
-          for overlay_name in (
-              "COLLECTIVEX_NETWORK_CONFIG_CONTENT", "COLLECTIVEX_H100_CONFIG_CONTENT",
-              "COLLECTIVEX_B300_CONFIG_CONTENT",
-              "COLLECTIVEX_B200_CONFIG_CONTENT", "COLLECTIVEX_MI300_CONFIG_CONTENT",
-              "COLLECTIVEX_MI355_CONFIG_CONTENT",
-          ):
-              overlay_raw = os.environ.get(overlay_name, "")
-              if not overlay_raw:
-                  continue
-              overlay = load(overlay_name)
-              if set(overlay) != {"schema_version", "runners"} or overlay["schema_version"] != 1:
-                  raise ValueError("invalid operator overlay")
-              if not isinstance(overlay["runners"], dict):
-                  raise ValueError("invalid overlay runners")
-              for runner, fields in overlay["runners"].items():
-                  if not isinstance(fields, dict) or not fields:
-                      raise ValueError("invalid overlay runner")
-                  base["runners"].setdefault(runner, {}).update(fields)
-          payload = json.dumps(base, sort_keys=True, separators=(",", ":")) + "\n"
-          if len(payload.encode()) > 65536:
-              raise ValueError("merged operator configuration is too large")
-          descriptor = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-          with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-              stream.write(payload)
-          PY
+          python3 experimental/CollectiveX/runtime/config.py \
+            merge-operator-config "$operator_config"
           # The merged config has been written to $operator_config; hand the
           # launcher the path only. The raw secret *_CONTENT vars must be cleared
           # here, otherwise collx_load_operator_config sees them still set and tries

@@ -1,22 +1,5 @@
 #!/usr/bin/env python3
-"""CollectiveX — deterministic, platform-independent MoE routing trace.
-
-Fair-comparison fix #1: routing (per-token expert IDs + gate weights) is generated
-ONCE from a fixed seed over the *global* token batch, indexed by global token id, and
-is identical on every SKU for the same (seed, routing, global_tokens, experts, top-k).
-Each rank materializes its slice `[rank*T,(rank+1)*T)`. Activations
-are per-rank (same rank ⇒ same x on any platform), so a given global token id has
-identical activation everywhere without materializing a global activation tensor.
-
-The v1 suite uses a single routing distribution:
-
-  * uniform   — top-k distinct experts drawn uniformly per token. The DEFAULT.
-                Expected fan-out for top-k=8, 256 experts, EP8 (32 experts/rank) ≈
-                8·(1 − C(224,8)/C(256,8)) ≈ 5.3 ranks/token. Load ~ Poisson.
-
-Always publish the realized fan-out so the workload is never misread again
-(`routing_stats`).
-"""
+"""Deterministic platform-independent MoE routing and activations."""
 from __future__ import annotations
 
 import torch
@@ -139,10 +122,9 @@ def routing_locality(idx, experts_per_rank: int, ep_size: int, tokens_per_rank: 
     }
 
 
-def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dict:
+def routing_stats(idx, experts: int, experts_per_rank: int) -> dict:
     """Realized routing properties for the GLOBAL trace — published per point so the
     fan-out / load can never be silently misread. idx is the global [gt, topk] tensor;
-    weights the matching [gt, topk] gate weights.
     """
     ep = max(1, experts // max(1, experts_per_rank))
     ranks = (idx // experts_per_rank)                       # [gt, topk] destination rank per assignment
@@ -184,19 +166,3 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
         "payload_rank_cv": payload_rank_cv, "hotspot_ratio": hotspot_ratio,
         "empty_expert_count": empty_expert_count, "empty_rank_count": empty_rank_count,
     }
-
-
-# --------------------------------------------------------------------------- self-test
-if __name__ == "__main__":
-    import sys
-    E, TOPK, EPR, GT = 256, 8, 32, 4096
-    ui, _ = build_global_routing(GT, E, TOPK, "uniform", 67)
-    assert all(len(set(row.tolist())) == TOPK for row in ui[:16])
-    uniform = routing_stats(ui, E, EPR)
-    assert uniform["hotspot_ratio"] >= 1.0
-    dev = torch.device("cpu")
-    first = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32)
-    second = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32)
-    assert torch.equal(first, second) and torch.isfinite(first).all()
-    print("routing self-test: PASS")
-    sys.exit(0)

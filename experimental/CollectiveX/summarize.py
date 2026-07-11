@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render a small native-v1 shard summary (renderer only; the leg gate is in ep_harness)."""
+"""Render a small shard summary; benchmark gating remains in the harness."""
 from __future__ import annotations
 
 import argparse
@@ -30,12 +30,10 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
 
 
 def _identity(document: dict) -> tuple[str, str, str, str, int]:
-    case = document["case"]
-    routing = case["shape"]["routing"]
-    sku = document["identity"]["case_factors"]["sku"]
+    factors = document["identity"]["case_factors"]
+    case = factors["case"]
     return (
-        sku, case["suite"], routing, case["phase"],
-        case.get("ep_size", case.get("ep", 0)),
+        factors["sku"], case["suite"], case["routing"], case["phase"], case["ep"],
     )
 
 
@@ -64,7 +62,7 @@ def render(documents: list[dict]) -> str:
     ]
     for document in documents:
         sku, suite, routing, phase, ep = _identity(document)
-        backend = document["case"]["backend"]
+        backend = document["identity"]["case_factors"]["case"]["backend"]
         token, p50, p99 = _headline(document)
         lines.append(
             f"| {document['version']} | {sku} | `{backend}` | {suite} | {phase} | "

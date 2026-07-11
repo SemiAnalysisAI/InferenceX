@@ -285,7 +285,6 @@ class DeepEPV2Backend(EPBackend):
             local_expert_counts=torch.bincount(
                 local, minlength=self.args.experts // self.world_size
             ),
-            ordering_contract="elastic-source-metadata-v1",
         )
 
     def combine_transformed(self, p, h, transformed):

@@ -98,21 +98,6 @@ def _ladder(workloads: dict[str, Any], workload: str, group: str, phase: str) ->
     return " ".join(map(str, points))
 
 
-def _semantic_points(sku: str, case: dict[str, Any]) -> list[str]:
-    execution = {
-        key: value for key, value in case.items()
-        if key not in {"canonical", "case_id", "ladder", "suite", "workload"}
-    }
-    return [
-        json.dumps(
-            {"sku": sku, "tokens_per_rank": int(point), **execution},
-            sort_keys=True,
-            separators=(",", ":"),
-        )
-        for point in case["ladder"].split()
-    ]
-
-
 def _select_backends(backend: str, backends: str) -> list[str]:
     available = list(cap.SWEEP_BACKENDS)
     if backend and backends:
@@ -171,7 +156,6 @@ def resolve_matrix(
     suites_document = _load("suites.yaml")
     iters, trials, warmup = _timing(suites_document)
     timing_profile = f"{iters}:{trials}:{warmup}"
-    samples_per_point = iters * trials
     workloads = suites_document["workloads"]
     registry = suites_document["suites"]
     select_all = suites == "all"
@@ -189,7 +173,6 @@ def resolve_matrix(
 
     shards: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
     requested_cases: list[dict[str, Any]] = []
-    scheduled: set[str] = set()
     for suite_name in names:
         suite = registry[suite_name]
         mode = suite["mode"]
@@ -244,23 +227,14 @@ def resolve_matrix(
                         "topk": topk,
                         "experts": experts,
                         "seed": seed,
-                        "samples_per_point": samples_per_point,
-                        "warmup_semantics": ep_harness.WARMUP_SEMANTICS,
                         "ladder": case_ladder,
                         "conditioning_ladder": _ladder(
                             workloads, workload, "conditioning_ladders", phase
                         ),
                         "mode": mode,
                         "timing": timing_profile,
-                        "canonical": True,
                         **{field: topology[field] for field in TOPOLOGY_FIELDS},
                     }
-                    for signature in _semantic_points(platform_name, case):
-                        if signature in scheduled:
-                            raise SystemExit(
-                                f"suite {suite_name}: duplicate semantic point for {platform_name}"
-                            )
-                        scheduled.add(signature)
                     # Same function the harness recomputes at run time — a scheduled
                     # case ID can never drift from its realized factors.
                     case["case_id"] = ep_harness.case_id(platform_name, case)
@@ -303,7 +277,6 @@ def resolve_matrix(
                 "launcher": cap.PLATFORMS[sku]["launcher"],
                 **{field: chunk[0][field] for field in TOPOLOGY_FIELDS},
                 "n": len(chunk),
-                "execution_weight": execution_weight(chunk),
                 "case_ids": [case["case_id"] for case in chunk],
                 "cases": chunk,
             })
@@ -320,11 +293,6 @@ def resolve_matrix(
     }
 
 
-def execution_weight(cases: list[dict[str, Any]]) -> int:
-    """Return GPU-point work used to bound workflow parallelism."""
-    return sum(int(case["ep"]) * len(case["ladder"].split()) for case in cases)
-
-
 def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str, Any]:
     """Select one generator-produced shard and write its execution document."""
     with open(matrix_path) as fh:
@@ -335,7 +303,7 @@ def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str
     source = matches[0]
     control = {
         key: source[key]
-        for key in ("id", "sku", "backend", "nodes", "n", "execution_weight", "cases")
+        for key in ("id", "sku", "backend", "nodes", "n", "cases")
     }
     control["version"] = document["version"]
     output = Path(output_path)

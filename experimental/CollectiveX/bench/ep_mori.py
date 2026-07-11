@@ -166,11 +166,8 @@ class MoRIBackend(EPBackend):
         self._gpus_per_node = gpus_per_node
 
     def create_buffer(self, spec):
-        # Local aliases re-expose the __init__ names so the moved shmem-init /
-        # config / op / provenance body below stays byte-verbatim.
-        args, world_size, rank, device = self.args, self.world_size, self.rank, self.device
+        args, world_size, rank = self.args, self.world_size, self.rank
         gpus_per_node = self._gpus_per_node
-        device_cus = torch.cuda.get_device_properties(device).multi_processor_count
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
@@ -340,7 +337,6 @@ class MoRIBackend(EPBackend):
             local_expert_counts=torch.bincount(
                 local_expert_ids, minlength=self.experts_per_rank
             ),
-            ordering_contract="mori-global-topk-masked-v1",
         )
 
     def combine_transformed(self, p, h, transformed):

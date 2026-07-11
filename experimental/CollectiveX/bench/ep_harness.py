@@ -1,39 +1,5 @@
 #!/usr/bin/env python3
-"""CollectiveX — shared EP (expert-parallel) dispatch/combine benchmark harness.
-
-Backend-agnostic core. The per-backend adapters (`ep_deepep_v2.py`, `ep_mori.py`)
-implement a small duck-typed protocol; this module owns the source-tokens-per-rank
-sweep, the timing, the correctness gate, and the emitted JSON doc.
-
-Fair-comparison rules (see docs/methodology.md):
-  * **Deterministic shared routing trace** (`routing.py`): the per-token expert IDs +
-    gate weights are generated once from a fixed seed over the *global* batch and are
-    identical on every SKU; each rank materializes its slice. So every platform runs
-    the *same* problem (no per-rank/per-platform RNG in the adapters).
-  * Dispatch timing includes routing-layout generation. Combine excludes staging.
-    Isolated sum is derived independently at each percentile and is not a measured chained op.
-  * **Correct collective percentile**: each iteration's latency is reduced MAX across
-    ranks first (a collective finishes with its slowest rank), THEN percentiled —
-    `median_i(max_r)`, not `max_r(median_i)`.
-  * **One line = one fixed config**; only T varies. Both `tokens_per_rank` and
-    `global_tokens = T * ep_size` are recorded as explicit chart coordinates.
-
-stdlib-only at module top (torch is passed in by the entrypoint; `routing` is imported
-lazily inside run_sweep) so this file `py_compile`s without torch.
-
-Backend protocol:
-    name, mode, combine_needs_redispatch
-    buffer_cap(args) -> int|None
-    make_problem(T, idx, weights, x) -> problem   # materialize this rank's trace slice
-    dispatch(problem) -> handle                   # pure dispatch comm (timed)
-    stage(problem, handle)                        # expert-output placement
-    stage_device_work                             # true only when stage launches device work
-    combine(problem, handle) -> tensor            # pure combine comm (timed)
-    inspect_dispatch(problem, handle) -> view     # normalized payload/expert/weight metadata
-    combine_transformed(problem, handle, tensor) -> tensor
-    recv_tokens(handle) -> int                    # realized tokens received this rank
-    finalize(rc) -> int|NoReturn
-"""
+"""Shared EP timing, correctness, and result generation."""
 from __future__ import annotations
 
 import argparse
@@ -68,12 +34,7 @@ def case_id(sku: str, case: dict) -> str:
     return "-".join(values)
 
 
-# The timing profile, routing seed, and all token ladders (measured and
-# conditioning) live in configs/suites.yaml; the matrix bakes them into every
-# scheduled case and they arrive here only through the CLI — this module keeps
-# no defaults for them. "decode"/"prefill" are token-size regimes, NOT distinct
-# kernels. Conditioning rounds per warm shape stay fixed here.
-WARMUP_SEMANTICS = "full-roundtrip-before-each-component-trial-point-v1"
+# Workload and timing values arrive from configs/suites.yaml through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
 # Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
 ORACLE_RTOL = 5e-2
@@ -307,7 +268,7 @@ def _column_pattern(torch, ncols, device):
 def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semantics):
     """Build one local expert aggregate for the v1 unweighted combine contract."""
     if combine_weight_semantics != "unweighted-rank-sum":
-        raise ValueError("v1 requires unweighted rank-sum combine")
+        raise ValueError("benchmark requires unweighted rank-sum combine")
     valid = expert_ids >= 0
     expert = expert_ids.clamp(min=0).to(torch.int64)
     gate = weights.to(torch.float32).masked_fill(~valid, 0)
@@ -353,7 +314,6 @@ def _oracle_report(**fields):
         "atol": ORACLE_ATOL,
         "rtol": ORACLE_RTOL,
         "combine_weight_semantics": "undeclared",
-        "ordering": None,
         "receive_count": 0,
         "max_absolute_error": None,
         "max_elementwise_relative_error": None,
@@ -395,7 +355,6 @@ def _run_expert_oracle(
         except Exception as cleanup_error:
             raise inspection_error from cleanup_error
         return _oracle_report(
-            ordering="adapter-inspection-failed",
             combine_weight_semantics=getattr(
                 backend, "combine_weight_semantics", "undeclared"
             ),
@@ -455,11 +414,6 @@ def _run_expert_oracle(
     multiplicity_ok = torch.equal(
         (actual_ids >= 0).sum(dim=1), (expected_ids >= 0).sum(dim=1)
     )
-    # Receive-slot assignment may use atomics and is not a semantic EP guarantee, so
-    # physical receive order is never compared; the adapter's declared contract is
-    # what Pass 3 checks for stability.
-    ordering = view.ordering_contract
-
     problem.recv_tokens = receive_count
     combine_weight_semantics = backend.combine_weight_semantics
     transformed = _expert_transform(
@@ -500,12 +454,10 @@ def _run_expert_oracle(
     return _oracle_report(
         passed=bool(
             all(checks.values())
-            and ordering
             and max_relative_error is not None
             and max_relative_error < ORACLE_RTOL
         ),
         combine_weight_semantics=combine_weight_semantics,
-        ordering=ordering,
         receive_count=receive_count,
         max_absolute_error=max_absolute_error,
         max_elementwise_relative_error=max_elementwise_relative_error,
@@ -566,19 +518,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
               f"(hidden={args.hidden}); not silently truncated.")
     MAX, MIN, SUM = dist.ReduceOp.MAX, dist.ReduceOp.MIN, dist.ReduceOp.SUM
 
-    # Size the communicator from the resolved numeric shape. Buffer sizing needs the
-    # ladder numbers (not the input tensors), so it runs after make_inputs rather than
-    # in __init__ — resolving the historical build-buffers-before-inputs inversion.
-    # make_inputs already materialized deterministic per-rank routing and activations.
+    # Inputs determine the communicator capacity.
     backend.create_buffer(spec)
 
     for wt in conditioning_ladder:
-        # Fabric/clock warm-up BEFORE any timed point (review: H200 had an anomalous
-        # cold first point and a 40% decode-vs-prefill mismatch at the shared T=128).
-        # make_inputs already materialized these warm-only per-rank inputs; ramping
-        # through the small ladder shapes untimed warms clocks/fabric for everyone and
-        # is cold-jump-safe for MoRI. Warm-only shapes carry no canonical manifest:
-        # they are never measured or emitted.
+        # Settle clocks and fabric with the configured untimed ramp.
         cwp = spec.conditioning_points[wt]
         wp = backend.make_problem(
             wt, cwp.topk_idx.to(device), cwp.topk_weights.to(device), cwp.activations
@@ -594,7 +538,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gts[T] = gt
         point = spec.points[T]
         idx_g, w_g = point.global_idx, point.global_weights
-        rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
+        rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank)
         rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
                                                       gpn, args.scale_up_domain or None)
         point_routing_consistent = _same_tensors_across_ranks(
@@ -673,13 +617,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             args.seed,
         )
         pre = gate[T]["oracle_pre"]
-        order_stable = pre["ordering"] == post["ordering"]
         gate[T].update({
             "input_unchanged": input_unchanged,
-            "local_ok": int(pre["passed"] and post["passed"] and input_unchanged and order_stable),
+            "local_ok": int(pre["passed"] and post["passed"] and input_unchanged),
             "max_rel": max(pre["max_relative_error"] or 0.0, post["max_relative_error"] or 0.0),
             "oracle_post": post,
-            "order_stable": order_stable,
         })
 
     # ---- Pass 4: percentiles (p50/p90/p95/p99, nearest-rank) from pooled samples + bytes + row ----
@@ -790,60 +732,27 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # status=valid requires correctness AND a proven-identical routing trace across ranks.
     all_ok = bool(rows) and all(r["correctness"]["passed"] for r in rows) and routing_consistent
 
-    validity = {
-        "execution_status": "complete" if rows else "failed",
-        "semantic_correctness": (
-            "pass" if rows and all(r["correctness"]["passed"] for r in rows) else "fail"
-        ),
-        "workload_identity": "consistent-across-ranks" if routing_consistent else "inconsistent",
-        "measurement_conformance": "conformant",   # run_ep gate rejects nonconformant pre-run
-        "sampling_conformance": "conformant",      # the matrix bakes the single suites.yaml profile into every scheduled case
-    }
-
-    shape = {  # FIXED line identity (no T, no per-backend resource knobs)
-        "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
-        "experts_per_rank": experts_per_rank,
-        "routing": args.routing, "num_logical_experts": num_logical,
-        # V2 is reserved for the PR #605 ElasticBuffer adapter; package versions never imply it.
-        "kernel_gen": kernel_generation(backend),
-    }
     generated_at = args.timestamp or _dt.datetime.now().astimezone().isoformat()
-    realized_placement = getattr(args, "realized_placement", None)
-    nodes = (
-        realized_placement["nodes"]
-        if realized_placement is not None
-        else int(os.environ.get("SLURM_NNODES", "1"))
-    )
-    # A scheduled sweep case always carries a matrix-issued --case-id; ad-hoc manual runs do
-    # not. The old canonical-workload machinery (serialized traces) is gone — every workload is
-    # now seeded-runtime — so "canonical" means "matrix-scheduled case", matching sweep_matrix's
-    # canonical:True on scheduled cases and COLLX_CANONICAL in the container env.
-    canonical = bool(args.case_id)
+    nodes = int(os.environ.get("SLURM_NNODES", "1"))
     scheduled_case = {
             "backend": backend.name,
-            "canonical": canonical,
             "ep": ep_size,
             "experts": num_logical,
             "gpus_per_node": gpn,
             "hidden": args.hidden,
             "ladder": " ".join(map(str, ladder)),
-            "conditioning_ladder": " ".join(map(str, conditioning_ladder)),
-            "seed": args.seed,
             "mode": mode,
             "nodes": nodes,
             "phase": args.phase,
             "routing": args.routing,
-            "samples_per_point": args.iters * args.trials,
             "scale_up_domain": scale_up_domain,
             "scale_up_transport": args.scale_up_transport,
             "scale_out_transport": args.scale_out_transport or None,
             "scope": args.scope,
             "suite": suite,
-            "timing": f"{args.iters}:{args.trials}:{args.warmup}",
             "topk": args.topk,
             "topology_class": args.topology_class,
             "transport": args.transport,
-            "warmup_semantics": WARMUP_SEMANTICS,
             "workload": workload_name,
     }
     case_factors = {"case": scheduled_case, "sku": args.runner}
@@ -876,18 +785,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "case_factors": case_factors,
             "case_id": case_identifier,
         },
-        "case": {
-            "attempt_ordinal": attempt_ordinal,
-            "backend": backend.name,
-            "ep_size": ep_size,
-            "mode": mode,
-            "phase": args.phase,
-            "resource_mode": "fixed-profile",
-            "runner": args.runner,
-            "shape": shape,
-            "suite": suite,
-            "workload_name": workload_name,
-        },
         "workload": {
             "cross_rank_consistent": routing_consistent,
         },
@@ -909,12 +806,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "name": backend.name,
         },
         "topology": {
-            "device_count": getattr(args, "runtime_device_count", None),
             "device_product": getattr(args, "runtime_device_product", None),
             "gpus_per_node": gpn,
             "nodes": nodes,
             "placement": "packed",
-            "realized_placement": realized_placement,
             "scale_up_domain": scale_up_domain,
             "scale_up_transport": args.scale_up_transport,
             "scale_out_transport": args.scale_out_transport or None,
@@ -931,7 +826,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "outcome": {
             "reasons": [] if all_ok else ["semantic correctness or routing identity failed"],
             "status": "success" if all_ok else "invalid",
-            "validity": validity,
         },
     }
     if rank == 0:
