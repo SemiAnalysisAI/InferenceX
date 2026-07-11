@@ -19,8 +19,6 @@ dynamo:
   hash: "2d5d7eb603af21926887580fe3a212c7926fbaad"
   install: true
 
-setup_script: downgrade-sgl-deep-gemm.sh
-
 slurm:
   time_limit: "8:00:00"
 

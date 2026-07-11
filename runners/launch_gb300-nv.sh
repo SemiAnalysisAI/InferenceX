@@ -144,10 +144,6 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
-    SRTCTL_SETUP_SCRIPT="downgrade-sgl-deep-gemm.sh"
-    cp \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT"
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
     # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
