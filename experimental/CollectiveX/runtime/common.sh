@@ -499,6 +499,12 @@ collx_prepare_deepep_source() {
   mkdir -p -- "$root" && chmod 700 "$root" || return 1
   temporary="$(mktemp -d "$root/.deepep-v2.XXXXXX")" || return 1
   log="$(collx_private_log_path backend-source-deepep-v2)" || return 1
+  # On b300 the NFS export can realize a newly created stage dir as UID 0 while
+  # git runs as the UID-mapped Actions user, tripping git's "dubious ownership"
+  # guard on the source tree and its fmt submodule. HOME is this job's ephemeral
+  # dir and the runner UID is inside the trusted cluster boundary, so scope the
+  # exemption globally (also reaches the submodule child git).
+  git config --global --add safe.directory '*' >> "$log" 2>&1 || true
   if GIT_TERMINAL_PROMPT=0 git init -q "$temporary" > "$log" 2>&1 \
       && git -C "$temporary" remote add origin "$COLLX_DEEPEP_V2_REPO" >> "$log" 2>&1 \
       && GIT_TERMINAL_PROMPT=0 git -C "$temporary" fetch -q --no-tags --depth 1 \

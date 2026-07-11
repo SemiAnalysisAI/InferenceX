@@ -150,11 +150,7 @@
       "operator_fields": [
         "partition",
         "squash_dir"
-      ],
-      "operator": {
-        "partition": "compute",
-        "squash_dir": "/home/bshan/collectivex/containers"
-      }
+      ]
     },
     "mi325x": {
       "vendor": "amd",
