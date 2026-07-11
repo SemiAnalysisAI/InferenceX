@@ -108,6 +108,18 @@ class ConfigTests(unittest.TestCase):
             )
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
 
+    def test_merge_operator_config_tolerates_absent_base(self) -> None:
+        # De-secreted operator config: the base secret is deleted (empty CONTENT).
+        # Merge must still write {"runners":{}} so the launcher finds a config file
+        # and falls back to the tracked platform_config.json baseline.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "operator.json"
+            with mock.patch.dict(
+                os.environ, {"COLLECTIVEX_OPERATOR_CONFIG_CONTENT": ""}, clear=True
+            ):
+                config.merge_operator_config(str(path))
+            self.assertEqual(json.loads(path.read_text()), {"runners": {}})
+
     def test_operator_config_emits_allowlisted_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "operator.json"

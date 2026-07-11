@@ -122,7 +122,12 @@ def merge_operator_config(path: str) -> None:
             parse_constant=lambda _: (_ for _ in ()).throw(ValueError()),
         )
 
-    base = load_env(OPERATOR_ENV[0])
+    # An absent/blank base secret (all operator config de-secreted into the
+    # tracked platform_config.json) yields an empty base; the per-SKU registry
+    # `operator` block then supplies every field downstream. A present base is
+    # still parsed strictly. Overlay secrets are already skipped when empty.
+    base = (load_env(OPERATOR_ENV[0])
+            if os.environ.get(OPERATOR_ENV[0], "").strip() else {"runners": {}})
     if not isinstance(base.get("runners"), dict):
         raise ValueError("invalid operator runners")
     base = {"runners": base["runners"]}
