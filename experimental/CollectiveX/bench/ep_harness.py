@@ -87,7 +87,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--version",
         type=int,
-        default=os.environ.get("COLLX_VERSION", "1"),
+        required=True,
         help="iterable benchmark version copied verbatim into the emitted result",
     )
     # The single cross-SKU profile (and its rationale) lives in configs/suites.yaml

@@ -167,19 +167,18 @@ Every non-MNNVL scale-out case uses operator-pinned socket and RDMA selectors. T
 missing or partial profiles, then probes every allocated node for the configured interface, active
 HCA port, and configured GID before backend initialization. It never substitutes a default route,
 inherited runner environment, or transport fallback. Scale-up and MNNVL cases clear the profile;
-scale-out NCCL/RCCL forces `NCCL_NET=IB` and exact HCA matching. Selector values remain in encrypted
-config and mode-0600 private logs.
+scale-out NVIDIA forces `NCCL_NET=IB`, while AMD leaves plugin selection to RCCL. Both use exact HCA
+matching. Selector values remain in encrypted config and mode-0600 private logs.
 
 Repository staging uses a pre-existing, runner-owned, group/world non-writable shared base outside
 the checkout and workflow workspace. The parent process resolves the exact execution child before
-copying, claims it with a runner-owned marker, and verifies that all allocated nodes can read and
-write the same bytes. Cleanup waits for confirmed allocation teardown and removes only that child,
-including a safely identified partial claim. V2 and Hybrid source is fetched before allocation at an
-exact pinned revision, followed by exact Git tree, submodule, and local-patch validation.
+copying; backend preparation then runs from that tree on every allocated node. Cleanup waits for
+confirmed allocation teardown and removes only that child. DeepEP V2 source is fetched before allocation at an
+exact pinned revision, initializes its pinned `fmt` submodule, and applies the required local patch.
 
 H200, B200, and B300 may derive that private base beneath the validated operating-system account home
 when it is compute-visible. H100 instead derives a sibling of its shared container directory, never a
-child of image storage. The launcher still proves cross-node visibility before any benchmark starts.
+child of image storage.
 Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
 from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
 its owner matches the private parent owner; explicit stages and all other runners retain the strict
@@ -194,10 +193,9 @@ execution-specific private base beneath the validated compute-visible account ho
 Enroot imports configured container tags into a per-run-scoped squash keyed by the image tag and
 image platform, so one run never reuses another run's imported filesystem. Image-provided DeepEP is
 also checked against exact package versions and its expected API. Source-built DeepEP V2 uses
-a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its content key binds a
-versioned build recipe, CPU/GPU architecture, upstream source trees, and pinned
-build dependencies. The cache is never an artifact; per-execution source/results stages remain
-isolated and disposable, and marker plus runtime probes fail closed before reuse. The runner UID is
+a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its path binds CPU/GPU
+architecture, image, and upstream commit. The cache is never an artifact; per-execution
+source/results stages remain isolated and disposable, and runtime probes fail closed before reuse. The runner UID is
 inside the trusted cluster boundary: this cache guards against stale or accidental mutation, not
 hostile same-UID jobs. Only an unpublished partial build may be reset automatically; a cache that
 fails integrity or runtime checks is left intact and rejected so a concurrent allocation cannot lose

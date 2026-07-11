@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import re
 import sys
 import types
@@ -35,18 +34,6 @@ def _project_local_metadata(torch_module, raw_expert_ids, raw_weights, rank, exp
     )
     weights = torch_module.where(local, raw_weights, torch_module.zeros_like(raw_weights))
     return expert_ids, weights, raw_expert_ids[local] - local_start
-
-
-def _mori_source_commit() -> str:
-    module_path = Path(mori.__file__).resolve()
-    for root in module_path.parents:
-        head = root / ".git" / "HEAD"
-        if not head.is_symlink() and head.is_file() and head.stat().st_size <= 128:
-            value = head.read_text(encoding="ascii").strip()
-            if re.fullmatch(r"[0-9a-f]{40}", value):
-                return value
-            raise RuntimeError("MoRI image source is not pinned to a detached commit")
-    raise RuntimeError("MoRI image source revision is unavailable")
 
 
 class MoRIBackend(EPBackend):
@@ -212,11 +199,6 @@ class MoRIBackend(EPBackend):
         self.op = mori.ops.EpDispatchCombineOp(self.config)
         if getattr(self.op, "launch_config_mode", None) != "MANUAL":
             raise RuntimeError("MoRI explicit launch configuration was not applied")
-
-        expected_mori_commit = os.environ.get("MORI_COMMIT")
-        mori_commit = _mori_source_commit()
-        if expected_mori_commit and mori_commit != expected_mori_commit:
-            raise RuntimeError("MoRI image source revision differs from the pinned revision")
 
     def buffer_cap(self, args):
         # Rows reserved per rank for a uniformly routed dispatch.

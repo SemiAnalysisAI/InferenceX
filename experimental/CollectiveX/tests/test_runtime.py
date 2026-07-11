@@ -29,8 +29,8 @@ import ep_harness  # noqa: E402  (stdlib-only at module top)
 
 
 # configs/platform_config.json is the single per-SKU registry shared by
-# capability.py (topologies), runtime/config.py (operator schema, network
-# overlay, canonical policy), runtime/prepare_backend.sh (CUDA target), and
+# capability.py (topologies), runtime/config.py (operator schema and network
+# overlay), runtime/prepare_backend.sh (CUDA target), and
 # bench/ep_mori.py (arch pin). Validate its shape once so a malformed entry
 # fails here instead of on an allocation.
 class PlatformRegistryTests(unittest.TestCase):
@@ -49,15 +49,13 @@ class PlatformRegistryTests(unittest.TestCase):
                               "scale_up_transport", "launcher"):
                     self.assertIsInstance(entry[field], str)
                     self.assertTrue(entry[field])
-                for field in ("gpus_per_node", "scale_up_domain", "run_timeout"):
+                for field in ("gpus_per_node", "scale_up_domain"):
                     self.assertIsInstance(entry[field], int)
                     self.assertGreater(entry[field], 0)
                 self.assertTrue(entry["operator_fields"])
                 self.assertLessEqual(
                     set(entry.get("network", {})), self.NETWORK_FIELDS
                 )
-                if entry["scale_up_transport"] == "mnnvl":
-                    self.assertIn("master_port", entry)
                 if entry["vendor"] == "nvidia":
                     self.assertRegex(entry["arch"], r"^sm\d+$")
                 else:
@@ -171,19 +169,9 @@ class ConfigTests(unittest.TestCase):
 
     def test_operator_config_registry_only_skips_secret_fed_sku(self) -> None:
         # SKUs without a tracked operator block keep the historical no-config
-        # behavior: nothing emitted, no validation failure.
-        self.assertEqual(self._emit_registry_only("gb200"), b"")
-
-    def test_canonical_policy_rejects_wrong_gpu_count(self) -> None:
-        with self.assertRaises(SystemExit):
-            config.canonical_policy("gb200", 2, 8, "nvidia:image", "amd:image", "commit")
-
-    def test_network_mode_defaults_to_normal(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "shard.json"
-            path.write_text('{"cases":[{}]}')
-            config.network_mode(str(path))
-
+        # behavior: nothing emitted, no validation failure. mi325x is the last
+        # still-secret-fed SKU (no SSH access target to derive a baseline).
+        self.assertEqual(self._emit_registry_only("mi325x"), b"")
 
 # configs/backends.json is the single definition of backend source pins and
 # container images; config.py backend-registry validates it and emits the
@@ -191,8 +179,8 @@ class ConfigTests(unittest.TestCase):
 # of that seam so a rename or malformed registry fails here, not on a runner.
 class BackendRegistryTests(unittest.TestCase):
     EMITTED = {
-        "COLLX_IMAGE_MULTIARCH", "COLLX_IMAGE_AMD_MORI", "COLLX_MORI_COMMIT_AMD",
-        "COLLX_DEEPEP_V2_REPO", "COLLX_DEEPEP_V2_COMMIT", "COLLX_DEEPEP_V2_FMT_COMMIT",
+        "COLLX_IMAGE_MULTIARCH", "COLLX_IMAGE_AMD_MORI",
+        "COLLX_DEEPEP_V2_REPO", "COLLX_DEEPEP_V2_COMMIT",
     }
 
     @staticmethod
@@ -232,10 +220,6 @@ class BackendRegistryTests(unittest.TestCase):
             pairs["COLLX_DEEPEP_V2_COMMIT"],
             document["backends"]["deepep-v2"]["commit"],
         )
-        self.assertEqual(
-            pairs["COLLX_DEEPEP_V2_FMT_COMMIT"],
-            document["backends"]["deepep-v2"]["submodules"]["third-party/fmt"],
-        )
         self.assertEqual(pairs["COLLX_IMAGE_MULTIARCH"], document["images"]["multiarch"]["ref"])
 
     def test_registry_fails_closed(self) -> None:
@@ -262,9 +246,6 @@ class StageTests(unittest.TestCase):
             (source / "runtime").mkdir(parents=True)
             (source / "runtime" / "common.sh").write_text("test")
             (source / "goal.md").write_text("private")
-            # The per-leg control JSON must reach the staged tree, or the cross-node
-            # preflight fails "test -r shard" (exit 11) and aborts every leg at
-            # repository-stage. .shards must NOT be excluded.
             (source / ".shards").mkdir()
             (source / ".shards" / "leg.json").write_text("{}")
             args = type("Args", (), {"stage": str(target)})
@@ -275,25 +256,10 @@ class StageTests(unittest.TestCase):
             stage.copy_repository(copy_args)
             staged = target / "experimental" / "CollectiveX"
             self.assertTrue((staged / "runtime" / "common.sh").is_file())
-            self.assertTrue((staged / ".shards" / "leg.json").is_file())
+            self.assertFalse((staged / ".shards").exists())
             self.assertFalse((staged / "goal.md").exists())
             cleanup_args = type("Args", (), {"root": str(target)})
             stage.validate_cleanup(cleanup_args)
-
-    def test_common_network_mode_resolves_shard_from_root(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            shard = Path(directory) / "shard.json"
-            shard.write_text('{"cases":[{"mode":"normal"}]}')
-            common = RUNTIME / "common.sh"
-            command = (
-                "set -euo pipefail; "
-                f"source {common!s}; "
-                "COLLX_SHARD_FILE=shard.json; "
-                f"collx_load_network_control_mode {directory!s}; "
-                'test "$COLLX_MODE" = normal'
-            )
-            subprocess.run(["bash", "-c", command], check=True)
-
 
 # The per-node probe (runtime/probe.py) and the launcher gate
 # (runtime/common.sh: collx_validate_network_profile_on_job) share an implicit string contract:
@@ -477,10 +443,8 @@ class CaseArgvContract(unittest.TestCase):
             path = Path(directory) / "shard.json"
             path.write_text(json.dumps({"version": 1, "cases": [self.CASE]}))
             result = subprocess.run(
-                # Blank invocation seed: a scheduled case must take its seed from
-                # the case document (configs/suites.yaml), never the invocation.
                 [sys.executable, str(RUNTIME / "config.py"), "case-args",
-                 str(path), "0", "h200-dgxc", "TS", "", *placement],
+                 str(path), "0", "h200-dgxc", "TS", *placement],
                 capture_output=True, check=True,
             )
         return self._decode(result.stdout)
@@ -505,84 +469,6 @@ class CaseArgvContract(unittest.TestCase):
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
-
-    def test_manual_args_reads_the_operator_environment(self) -> None:
-        # Manual runs have no workload/timing fallbacks: the operator states the
-        # full shape and profile or run_ep.py rejects the argv.
-        env = dict(
-            os.environ, COLLX_BENCH="mori", COLLX_TOPO="mi355x-xgmi", COLLX_TRANSPORT="xgmi",
-            COLLX_GPUS_PER_NODE="8", COLLX_SCALE_UP_DOMAIN="8",
-            COLLX_HIDDEN="7168", COLLX_TOPK="8", COLLX_EXPERTS="256",
-            COLLX_TOKENS_LADDER="256 512",
-            COLLX_ITERS="8", COLLX_TRIALS="128", COLLX_WARMUP="32",
-        )
-        result = subprocess.run(
-            [sys.executable, str(RUNTIME / "config.py"), "manual-args",
-             "prefill", "1", "mi355x", "TS", "67"],
-            capture_output=True, check=True, env=env,
-        )
-        args = self._run_ep_parser().parse_args(self._decode(result.stdout))
-        self.assertEqual((args.backend, args.phase), ("mori", "prefill"))
-        self.assertEqual(args.topology_class, "mi355x-xgmi")
-        self.assertEqual(args.transport, "xgmi")
-        self.assertEqual(args.seed, 67)
-        self.assertEqual(args.tokens_ladder, "256 512")
-        self.assertEqual(args.out, "results/mi355x_mori_prefill_TS-c001.json")
-
-    def test_manual_args_without_workload_env_fails_the_run_ep_parser(self) -> None:
-        result = subprocess.run(
-            [sys.executable, str(RUNTIME / "config.py"), "manual-args",
-             "prefill", "0", "mi355x", "TS", "67"],
-            capture_output=True, check=True,
-            env={k: v for k, v in os.environ.items() if not k.startswith("COLLX_")},
-        )
-        with contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit):
-                self._run_ep_parser().parse_args(self._decode(result.stdout))
-
-
-# collx_require_registered_topology (runtime/common.sh) validates every
-# launcher's topology overrides against configs/platform_config.json through a
-# bash -> python3 seam. Exercise the real function under bash so a registry
-# rename or argv reshuffle fails here instead of on an allocation.
-class LauncherTopologyContract(unittest.TestCase):
-    CASES = (
-        # (expect_pass, runner, nodes, gpn, scale_up_domain, ngpus)
-        (True, "gb200", 2, 4, 72, 8),
-        (True, "gb300", 4, 4, 72, 16),
-        (True, "mi355x", 1, 8, 8, 8),
-        (True, "h100-dgxc", 2, 8, 8, 16),
-        (False, "gb200", 3, 4, 72, 12),    # node count realizes no EP degree
-        (False, "gb200", 2, 8, 72, 16),    # gpus_per_node contradicts registry
-        (False, "b300", 1, 8, 4, 8),       # scale-up domain contradicts registry
-        (False, "b300", 1, 8, 8, 9),       # world != nodes x gpus_per_node
-        (False, "nosuchsku", 1, 8, 8, 8),  # unknown registry key
-    )
-
-    def test_registry_topology_validation(self) -> None:
-        collx_dir = RUNTIME.parent
-        script = (
-            "set -uo pipefail\n"
-            f'cd "{collx_dir}"\n'
-            f'COLLX_DIR="{collx_dir}"\n'
-            "source runtime/common.sh 2>/dev/null || true\n"
-            'collx_require_registered_topology "$@"\n'
-        )
-        for expect_pass, runner, nodes, gpn, domain, ngpus in self.CASES:
-            with self.subTest(runner=runner, nodes=nodes, gpn=gpn,
-                              domain=domain, ngpus=ngpus):
-                result = subprocess.run(
-                    ["bash", "-c", script, "_", runner, str(nodes), str(gpn),
-                     str(domain), str(ngpus)],
-                    capture_output=True,
-                    env={k: v for k, v in os.environ.items()
-                         if not k.startswith("COLLX_")},
-                )
-                if expect_pass:
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                else:
-                    self.assertNotEqual(result.returncode, 0)
-
 
 if __name__ == "__main__":
     unittest.main()

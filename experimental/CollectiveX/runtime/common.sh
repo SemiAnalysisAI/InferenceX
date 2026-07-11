@@ -5,7 +5,7 @@
 # model-serving. Logging goes to stderr so functions can `echo` a single
 # result on stdout.
 
-unset COLLECTIVEX_OPERATOR_CONFIG_LOADED COLLECTIVEX_EPHEMERAL_CONFIG_PATH
+unset COLLECTIVEX_OPERATOR_CONFIG_LOADED
 COLLX_RUNTIME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
@@ -27,35 +27,21 @@ collx_load_backend_registry() {
     printf -v "$key" '%s' "$value"
   done < "$registry"
   rm -f -- "$registry"
-  for name in COLLX_IMAGE_MULTIARCH COLLX_IMAGE_AMD_MORI COLLX_MORI_COMMIT_AMD \
-      COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT COLLX_DEEPEP_V2_FMT_COMMIT; do
+  for name in COLLX_IMAGE_MULTIARCH COLLX_IMAGE_AMD_MORI \
+      COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT; do
     [ -n "${!name:-}" ] || collx_die "backend registry omits $name"
   done
 }
 collx_load_backend_registry
 
-# Keep a stable stage label while leaving diagnosis to the captured tool output.
-collx_set_failure_stage() {
-  local stage="$1"
-  case "$stage" in
-    setup|repository-stage|scheduler-allocation|container-import) ;;
-    container-hash|container-launch|backend-setup|execution|artifact-collection) ;;
-    *) collx_die "invalid launcher failure stage" ;;
-  esac
-  export COLLX_FAILSAFE_MODE="$stage"
-}
-
-collx_fail_stage() {
-  local stage="$1" log_path="${2:-}" tail_lines="${COLLX_LOG_TAIL_LINES:-100}"
-  collx_set_failure_stage "$stage"
-  collx_log "ERROR: failure-stage=$stage"
-  [[ "$tail_lines" =~ ^[1-9][0-9]{0,2}$ ]] || tail_lines=100
-  if [ -n "$log_path" ] && [ -s "$log_path" ]; then
-    collx_log "--- $stage log tail (last $tail_lines lines) ---"
-    tail -n "$tail_lines" -- "$log_path" >&2 || true
-    collx_log "--- end $stage log tail ---"
+# Print bounded command output without maintaining a parallel failure taxonomy.
+collx_log_tail() {
+  local log_path="$1"
+  if [ -s "$log_path" ]; then
+    collx_log "--- command log tail ---"
+    tail -n 100 -- "$log_path" >&2 || true
+    collx_log "--- end command log tail ---"
   fi
-  return 1
 }
 
 # Shared launcher skeleton: the identity-stage boilerplate every launcher runs
@@ -63,45 +49,17 @@ collx_fail_stage() {
 collx_launcher_prologue() {
   JOB_ID=""
   collx_install_launcher_fail_safe
-  collx_set_failure_stage setup
+  [ -n "${COLLX_SHARD_FILE:-}" ] || collx_die "COLLX_SHARD_FILE is required"
   collx_load_operator_config
-  collx_lock_canonical_gha_env "$1"
-}
-
-# Validate launcher topology overrides against the platform registry — the
-# single source for gpus_per_node/scale_up_domain. Allowed node counts realize
-# EP8/EP16 on the registered gpus_per_node, exactly as runtime/config.py
-# derives them for shard decoding.
-collx_require_registered_topology() {
-  local runner="$1" nodes="$2" gpn="$3" domain="$4" ngpus="$5"
-  local registry="$COLLX_DIR/configs/platform_config.json"
-  local expected reg_gpn reg_domain low high
-  expected="$(python3 - "$runner" "$registry" <<'PY'
-import json, sys
-platform = json.load(open(sys.argv[2]))["platforms"][sys.argv[1]]
-print(platform["gpus_per_node"], platform["scale_up_domain"])
-PY
-)" || collx_die "no platform registry entry for $runner"
-  read -r reg_gpn reg_domain <<< "$expected"
-  [ "$gpn" = "$reg_gpn" ] || collx_die "$runner requires $reg_gpn GPUs per node"
-  [ "$domain" = "$reg_domain" ] \
-    || collx_die "$runner requires a $reg_domain-GPU scale-up domain"
-  low=$((8 / reg_gpn)); [ "$low" -ge 1 ] || low=1
-  high=$((16 / reg_gpn))
-  [ "$nodes" = "$low" ] || [ "$nodes" = "$high" ] \
-    || collx_die "$runner supports $low or $high nodes"
-  [ "$ngpus" = "$((nodes * gpn))" ] \
-    || collx_die "$runner world size must equal nodes x GPUs per node"
+  collx_prepare_stage_dir "$1"
 }
 
 # Shared launcher tail: run the shard, collect artifacts, and fold both return
 # codes into FINAL_RC (run failures win; collection failures surface otherwise).
 collx_execute_and_collect() {
   local mount_src="$1" repo_root="$2" run_rc=0 collect_rc=0
-  collx_set_failure_stage container-launch
   collx_run_shard || run_rc=$?
   collx_collect_results "$mount_src" "$repo_root" || collect_rc=$?
-  [ "$run_rc" != 0 ] || [ "$collect_rc" = 0 ] || collx_set_failure_stage artifact-collection
   FINAL_RC="$run_rc"
   [ "$FINAL_RC" != 0 ] || FINAL_RC="$collect_rc"
 }
@@ -145,12 +103,10 @@ collx_load_operator_config() {
       config_path="$(mktemp /tmp/inferencex-collectivex-config.XXXXXX)" \
         || collx_die "cannot create ephemeral runner configuration"
     fi
-    COLLECTIVEX_EPHEMERAL_CONFIG_PATH="$config_path"
     generated=1
     if ! printf '%s' "$COLLECTIVEX_OPERATOR_CONFIG_CONTENT" > "$config_path"; then
       unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT
       rm -f -- "$config_path"
-      unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
       collx_die "cannot materialize runner configuration"
     fi
   elif [ "${COLLECTIVEX_OPERATOR_CONFIG_REQUIRED:-0}" = 1 ]; then
@@ -161,7 +117,7 @@ collx_load_operator_config() {
   if [ ! -e "$config_path" ]; then
     [ "${COLLECTIVEX_CANONICAL_GHA:-0}" != 1 ] \
       || collx_die "runner configuration is unavailable"
-    if [ -z "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}}" ]; then
+    if [ -z "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-}}" ]; then
       COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
       return 0
     fi
@@ -176,12 +132,11 @@ collx_load_operator_config() {
     collx_die "cannot parse runner configuration"
   }
   if ! python3 "$COLLX_RUNTIME_DIR/config.py" operator-config "$config_path" \
-      "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}}" \
+      "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-}}" \
       > "$parsed_path"
   then
     rm -f -- "$parsed_path"
     [ "$generated" = 0 ] || rm -f -- "$config_path"
-    unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
     unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
     collx_die "runner-local configuration failed"
   fi
@@ -193,7 +148,6 @@ collx_load_operator_config() {
   if [ "$generated" = 1 ] || [ "${COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL:-0}" = 1 ]; then
     rm -f -- "$config_path" || collx_die "cannot remove ephemeral runner configuration"
   fi
-  unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
   unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
   COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
 }
@@ -224,21 +178,14 @@ collx_require_vars() {
     "missing runner-local configuration: ${missing[*]} (set them in COLLECTIVEX_OPERATOR_CONFIG)"
 }
 
-collx_nccl_hca_device_name() {
-  local selector="${1#=}"
-  printf '%s' "${selector%%:*}"
-}
-
 collx_export_gid_index_for_link_layer() {
-  local link_layer="$1" scaleout="$2"
+  local link_layer="$1"
   unset NVSHMEM_IB_GID_INDEX NCCL_IB_GID_INDEX
   [ -n "${COLLX_IB_GID_INDEX:-}" ] || return 0
   case "$link_layer" in
     roce)
       export NVSHMEM_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
-      if [ "$scaleout" = 1 ]; then
-        export NCCL_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
-      fi
+      export NCCL_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
       ;;
     infiniband) ;;
     *) collx_die "unsupported RDMA link layer" ;;
@@ -251,7 +198,6 @@ collx_export_gid_index_for_link_layer() {
 collx_apply_network_profile() {
   local nodes="$1" transport="$2"
   local selector rdma_name rdma_names="" ep_nic=""
-  local scaleout=0
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
   unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
@@ -262,39 +208,34 @@ collx_apply_network_profile() {
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
   unset MORI_RDMA_DEVICES
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
-  if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
-    scaleout=1
-  fi
-  [ "$scaleout" = 1 ] || return 0
+  # Single-node and MNNVL runs need only the scrub above; everything past this
+  # point is the scale-out path, so no per-branch scale-out guards remain.
+  { [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; } || return 0
   [ -n "${COLLX_RDMA_DEVICES:-}" ] \
     || collx_die "RDMA execution requires a private device selector"
-  if [ "$scaleout" = 1 ] && [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
+  if [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
     [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
     export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
   fi
-  if [ -n "${COLLX_RDMA_DEVICES:-}" ]; then
-    [[ "$COLLX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
-      || collx_die "invalid private RDMA device selector"
-    IFS=, read -r -a selectors <<< "$COLLX_RDMA_DEVICES"
-    for selector in "${selectors[@]}"; do
-      rdma_name="${selector%%:*}"
-      rdma_names="${rdma_names}${rdma_names:+,}${rdma_name}"
-      [ -n "$ep_nic" ] || ep_nic="$rdma_name"
-    done
-    export NVSHMEM_HCA_LIST="$COLLX_RDMA_DEVICES"
-    export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
-    if [ "$scaleout" = 1 ]; then
-      if [ "${COLLX_SHARD_SKU:-}" = mi300x ] || [ "${COLLX_SHARD_SKU:-}" = mi325x ] \
-          || [ "${COLLX_SHARD_SKU:-}" = mi355x ]; then
-        unset NCCL_NET
-      else
-        export NCCL_NET=IB
-      fi
-      export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
-      export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
-    fi
+  [[ "$COLLX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
+    || collx_die "invalid private RDMA device selector"
+  IFS=, read -r -a selectors <<< "$COLLX_RDMA_DEVICES"
+  for selector in "${selectors[@]}"; do
+    rdma_name="${selector%%:*}"
+    rdma_names="${rdma_names}${rdma_names:+,}${rdma_name}"
+    [ -n "$ep_nic" ] || ep_nic="$rdma_name"
+  done
+  export NVSHMEM_HCA_LIST="$COLLX_RDMA_DEVICES"
+  export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
+  # RCCL selects its own net plugin; NCCL_NET=IB breaks AMD SKUs.
+  if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
+    unset NCCL_NET
+  else
+    export NCCL_NET=IB
   fi
+  export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
+  export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
   if [ -n "${COLLX_IB_GID_INDEX:-}" ]; then
     [[ "$COLLX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$COLLX_IB_GID_INDEX" -le 255 ] \
       || collx_die "invalid private IB GID index"
@@ -303,17 +244,14 @@ collx_apply_network_profile() {
     [[ "$COLLX_RDMA_SERVICE_LEVEL" =~ ^[0-9]+$ ]] && [ "$COLLX_RDMA_SERVICE_LEVEL" -le 15 ] \
       || collx_die "invalid private RDMA service level"
     export NVSHMEM_IB_SL="$COLLX_RDMA_SERVICE_LEVEL"
-    if [ "$scaleout" = 1 ]; then
-      export NCCL_IB_SL="$COLLX_RDMA_SERVICE_LEVEL"
-      export EP_OVERRIDE_RDMA_SL="$COLLX_RDMA_SERVICE_LEVEL"
-      export MORI_RDMA_SL="$COLLX_RDMA_SERVICE_LEVEL" MORI_IO_SL="$COLLX_RDMA_SERVICE_LEVEL"
-    fi
+    export NCCL_IB_SL="$COLLX_RDMA_SERVICE_LEVEL"
+    export EP_OVERRIDE_RDMA_SL="$COLLX_RDMA_SERVICE_LEVEL"
+    export MORI_RDMA_SL="$COLLX_RDMA_SERVICE_LEVEL" MORI_IO_SL="$COLLX_RDMA_SERVICE_LEVEL"
   fi
   if [ -n "${COLLX_RDMA_TRAFFIC_CLASS:-}" ]; then
     [[ "$COLLX_RDMA_TRAFFIC_CLASS" =~ ^[0-9]+$ ]] && [ "$COLLX_RDMA_TRAFFIC_CLASS" -le 255 ] \
       || collx_die "invalid private RDMA traffic class"
-    [ "$scaleout" = 1 ] \
-      && export MORI_RDMA_TC="$COLLX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$COLLX_RDMA_TRAFFIC_CLASS"
+    export MORI_RDMA_TC="$COLLX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$COLLX_RDMA_TRAFFIC_CLASS"
   fi
   local nic_handler=gpu
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
@@ -322,7 +260,7 @@ collx_apply_network_profile() {
       roce|infiniband) ;;
       *) collx_die "invalid validated RDMA link layer" ;;
     esac
-    collx_export_gid_index_for_link_layer "$COLLX_RDMA_LINK_LAYER" "$scaleout"
+    collx_export_gid_index_for_link_layer "$COLLX_RDMA_LINK_LAYER"
   fi
 }
 
@@ -348,12 +286,9 @@ collx_default_route_interface() {
 # node before image import or backend initialization. Selector values and node
 # diagnostics stay in the runner-private log.
 collx_validate_network_profile_on_job() {
-  local job_id="$1" nodes="$2" transport="$3" report_failure="${4:-1}"
-  local log_label=network-profile log rc=0 scaleout=0 marker_count link_layer
-  if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
-    scaleout=1
-  fi
-  [ "$scaleout" = 1 ] || return 0
+  local job_id="$1" nodes="$2" transport="$3"
+  local log_label=network-profile log rc=0 marker_count link_layer
+  { [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; } || return 0
   [[ "$job_id" =~ ^[1-9][0-9]*$ && "$nodes" =~ ^[1-9][0-9]*$ ]] \
     || return 1
   [ -n "${COLLX_RDMA_DEVICES:-}" ] || return 1
@@ -363,7 +298,7 @@ collx_validate_network_profile_on_job() {
     *) return 1 ;;
   esac
   log="$(collx_private_log_path "$log_label")" || return 1
-  COLLX_NETWORK_PROFILE_LOG="$log"
+  export COLLX_NETWORK_PROFILE_LOG="$log"
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
     --chdir=/tmp --input=all --export="$(collx_host_exports)" \
     python3 /dev/stdin network-profile "${COLLX_SOCKET_IFNAME:-}" \
@@ -373,7 +308,6 @@ collx_validate_network_profile_on_job() {
     marker="$(grep -aoE '(socket-interface|rdma-(device|port))-[0-9]+=(missing|down|inactive|default-route-missing|gid-missing|gid-empty|link-layer-missing|link-layer-invalid|link-layer-mixed)' "$log" \
       | tail -n 1 || true)"
     [ -z "$marker" ] || collx_log "ERROR: network-profile-$marker"
-    [ "$report_failure" = 0 ] || collx_fail_stage setup "$log" || true
     return "$rc"
   fi
   socket_ifname="$(
@@ -398,10 +332,10 @@ collx_validate_network_profile_on_job() {
   marker_count="$(grep -Ec '^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$' "$log")"
   case "$marker_count:$link_layer" in
     "$nodes":roce|"$nodes":infiniband) ;;
-    *) [ "$report_failure" = 0 ] || collx_fail_stage setup "$log" || true; return 1 ;;
+    *) return 1 ;;
   esac
   export COLLX_RDMA_LINK_LAYER="$link_layer"
-  collx_export_gid_index_for_link_layer "$link_layer" "$scaleout"
+  collx_export_gid_index_for_link_layer "$link_layer"
 }
 
 collx_allocation_nodes_csv() {
@@ -448,26 +382,13 @@ BASH
   export MASTER_ADDR="$master_addr" MASTER_PORT="$master_port"
 }
 
-# Printed into `bash -c` ahead of the rank wrapper or backend probe. Sources the
-# per-node loader/import environment persisted by collx_persist_backend_env, refusing
+# Printed into `bash -c` ahead of the rank wrapper. Sources the per-node
+# loader/import environment persisted by collx_persist_backend_env, refusing
 # a file whose directory shape, ownership, or mode differs from what that step wrote.
 collx_source_backend_env() {
   cat <<'BASH'
 case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac
 . "/ix/experimental/CollectiveX/.collx_backend/env/node-${SLURM_NODEID}.sh" || exit 66
-BASH
-}
-
-# Per-node backend import probe, run inside the persistent container after the
-# build step. Selects on the runtime COLLX_BENCH so every launcher shares one probe.
-collx_backend_probe() {
-  collx_source_backend_env
-  cat <<'BASH'
-case "$COLLX_BENCH" in
-  deepep-v2) python3 -c "import deep_ep; assert hasattr(deep_ep, 'ElasticBuffer')" ;;
-  mori) python3 -c "import mori" ;;
-  *) exit 69 ;;
-esac
 BASH
 }
 
@@ -495,235 +416,63 @@ exec python3 bench/run_ep.py "$@"
 BASH
 }
 
-# Load the case mode needed to choose the allocation/network profile. Every
-# case runs in normal mode; the in-container dispatcher reapplies the profile
-# for each individual case.
-collx_load_network_control_mode() {
-  local collx_root="$1" shard="${COLLX_SHARD_FILE:-}" path mode
-  [ -n "$shard" ] || return 0
-  path="$shard"
-  [ -f "$path" ] || path="${collx_root%/}/$shard"
-  [ -f "$path" ] || return 1
-  mode="$(python3 "$COLLX_RUNTIME_DIR/config.py" network-mode "$path")" || return 1
-  case "$mode" in
-    normal) export COLLX_MODE="$mode" ;;
-    *) return 1 ;;
-  esac
-}
-
-collx_apply_timing_profile() {
-  [ -n "${COLLX_TIMING:-}" ] || return 0
-  local iters trials warmup extra
-  IFS=: read -r iters trials warmup extra <<< "$COLLX_TIMING"
-  [[ "$iters" =~ ^[1-9][0-9]*$ && "$trials" =~ ^[1-9][0-9]*$ \
-    && "$warmup" =~ ^[1-9][0-9]*$ && -z "$extra" ]] \
-    || collx_die "COLLX_TIMING must be positive iters:trials:warmup"
-  export COLLX_ITERS="$iters" COLLX_TRIALS="$trials" COLLX_WARMUP="$warmup"
-}
-
-collx_scheduler_job_name() {
-  local execution_id="${COLLECTIVEX_EXECUTION_ID:-manual-$$}" safe
-  safe="$(printf '%s' "$execution_id" | tr -cs 'A-Za-z0-9_.-' '-')" || return 1
-  safe="${safe#-}"; safe="${safe%-}"
-  [ -n "$safe" ] || return 1
-  if [ "${#safe}" -gt 120 ]; then
-    safe="${safe:0:48}-${safe: -71}"
-  fi
-  printf 'cx-%s' "$safe"
-}
-
-# Return 0 after recovering one allocation ID, 2 after three successful empty
-# observations, and 1 for every ambiguous or failed lookup. Callers inspect the
-# state variables rather than the status because all missing-ID paths still fail.
-collx_reconcile_salloc_jobid() {
-  local job_name="$1" scheduler_user queue_output line delay attempt
-  local -a ids=()
-  scheduler_user="$(id -un 2>/dev/null)" || return 1
-  [[ "$scheduler_user" =~ ^[A-Za-z0-9_.-]+$ \
-    && "$job_name" =~ ^cx-[A-Za-z0-9_.-]{1,120}$ ]] || return 1
-  for attempt in 1 2 3; do
-    ids=()
-    if ! queue_output="$(
-      squeue -h --user="$scheduler_user" --name="$job_name" -o %A 2>/dev/null
-    )"; then
-      return 1
-    fi
-    while IFS= read -r line; do
-      [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-      if [[ "$line" =~ ^[[:space:]]*([1-9][0-9]*)[[:space:]]*$ ]]; then
-        ids+=("${BASH_REMATCH[1]}")
-      else
-        return 1
-      fi
-    done <<< "$queue_output"
-    if [ "${#ids[@]}" -eq 1 ]; then
-      JOB_ID="${ids[0]}"
-      COLLX_ALLOCATION_UNCERTAIN=0
-      return 0
-    fi
-    [ "${#ids[@]}" -eq 0 ] || return 1
-    if [ "$attempt" -eq 3 ]; then
-      COLLX_ALLOCATION_UNCERTAIN=0
-      return 2
-    fi
-    delay=$((1 << (attempt - 1)))
-    sleep "$delay" || return 1
-  done
-  return 1
-}
-
-collx_verify_salloc_jobid() {
-  local job_id="$1" queue_output line count=0
-  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
-  queue_output="$(squeue -h -j "$job_id" -o %A 2>/dev/null)" || return 1
-  while IFS= read -r line; do
-    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
-    [[ "$line" =~ ^[[:space:]]*${job_id}[[:space:]]*$ ]] || return 1
-    count=$((count + 1))
-  done <<< "$queue_output"
-  [ "$count" -eq 1 ]
-}
-
 # Allocate via salloc's stable grant message and assign JOB_ID in this shell.
-# Raw scheduler output remains in the bounded private execution log.
+# Record it so workflow cleanup can release a launcher interrupted by Actions.
 collx_salloc_jobid() {
-  local log_label=scheduler-allocation log job_id job_name argument salloc_rc=0
+  local log_label=scheduler-allocation log job_id root="${COLLX_JOB_ROOT:-}"
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
     2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
     *) return 1 ;;
   esac
   if ! log="$(collx_private_log_path "$log_label")"; then
-    collx_log "ERROR: failure-stage=scheduler-allocation (private log unavailable)"
+    collx_log "ERROR: scheduler log is unavailable"
     return 1
   fi
-  for argument in "$@"; do
-    case "$argument" in
-      --job-name|--job-name=*|-J|-J*)
-        collx_log "ERROR: scheduler job names are managed by CollectiveX"
-        return 1
-        ;;
-    esac
-  done
-  if ! job_name="$(collx_scheduler_job_name)"; then
-    collx_log "ERROR: failure-stage=scheduler-allocation (invalid job name)"
-    return 1
-  fi
-  COLLX_ALLOCATION_UNCERTAIN=1
-  # salloc has no portable --parsable option. Parse the stable grant message
-  # used by the production launchers, while also accepting a bare ID from
-  # site wrappers. Contain shell-function wrappers that call exit so the
-  # launcher can still reconcile and cancel an allocation.
   collx_log "scheduler-request=submit"
-  (salloc "$@" --job-name="$job_name" --no-shell) > "$log" 2>&1 || salloc_rc=$?
-  if ! job_id="$(sed -nE \
-      -e 's/^([0-9]+)(;[^[:space:]]+)?$/\1/p; t found' \
-      -e 's/.*Granted job allocation ([0-9]+).*/\1/p; t found' \
-      -e 'b' -e ':found' -e 'q' "$log")"; then
-    collx_log "ERROR: failure-stage=scheduler-allocation (cannot parse grant)"
-    collx_reconcile_salloc_jobid "$job_name" || true
-    [ -z "$JOB_ID" ] || collx_record_allocation_jobid "$JOB_ID" || true
+  if ! (salloc "$@" --no-shell) > "$log" 2>&1; then
+    collx_log "ERROR: scheduler allocation failed"
+    collx_log_tail "$log"
     return 1
   fi
-  if [ -n "$job_id" ]; then
-    [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
-    JOB_ID="$job_id"
-    COLLX_ALLOCATION_UNCERTAIN=0
-  fi
-  if [ "$salloc_rc" != 0 ]; then
-    if [ -n "$JOB_ID" ] && collx_verify_salloc_jobid "$JOB_ID"; then
-      collx_log "scheduler-request=verified-grant"
-      collx_record_allocation_jobid "$JOB_ID" || return 1
-      return 0
-    fi
-    collx_log "ERROR: scheduler-request=rejected"
-    if [ "$salloc_rc" -ge 128 ] && [ -z "$JOB_ID" ]; then
-      collx_fail_stage scheduler-allocation "$log"
-      return 1
-    fi
-    [ -n "$JOB_ID" ] || collx_reconcile_salloc_jobid "$job_name" || true
-    [ -z "$JOB_ID" ] || collx_record_allocation_jobid "$JOB_ID" || true
-    collx_fail_stage scheduler-allocation "$log"
-    return 1
-  fi
-  if [ -z "$JOB_ID" ]; then
-    collx_log "ERROR: scheduler-request=missing-grant"
-    collx_reconcile_salloc_jobid "$job_name" || true
-    collx_fail_stage scheduler-allocation "$log"
-    return 1
-  fi
-  collx_record_allocation_jobid "$JOB_ID" || return 1
-}
-
-collx_record_allocation_jobid() {
-  local job_id="$1" root="${COLLX_JOB_ROOT:-}" path temporary
+  job_id="$(sed -nE \
+      's/.*Granted job allocation ([1-9][0-9]*).*/\1/p' "$log" | head -n1)"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
-  [ -n "$root" ] || return 0
-  collx_job_root_is_safe "$root" || return 1
-  path="$root/jobid"
-  temporary="$(mktemp "$root/.jobid.XXXXXX")" || return 1
-  chmod 600 "$temporary" || { rm -f -- "$temporary"; return 1; }
-  printf '%s\n' "$job_id" > "$temporary" \
-    || { rm -f -- "$temporary"; return 1; }
-  mv -f -- "$temporary" "$path" || { rm -f -- "$temporary"; return 1; }
+  JOB_ID="$job_id"
+  if [ -n "$root" ]; then
+    collx_job_root_is_safe "$root" || return 1
+    (umask 077; printf '%s\n' "$JOB_ID" > "$root/jobid") || return 1
+  fi
 }
 
-collx_clear_allocation_jobid() {
-  local root="${COLLX_JOB_ROOT:-}" path
-  [ -n "$root" ] || return 0
-  collx_job_root_is_safe "$root" || return 1
-  path="$root/jobid"
-  [ ! -e "$path" ] || {
-    [ -f "$path" ] && [ ! -L "$path" ] \
-      && [ "$(stat -c '%u:%a' "$path" 2>/dev/null)" = "$(id -u):600" ] || return 1
-    rm -f -- "$path"
-  }
-}
-
-collx_cancel_job() {
-  local job_id="$1" active delay
-  [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
-  scancel "$job_id" >/dev/null 2>&1 || true
-  for delay in 1 2 4 8 16 32 64; do
-    if ! active="$(squeue -h -j "$job_id" -o %A 2>/dev/null)"; then
-      sleep "$delay"
-      continue
+# Idempotent cleanup for launcher traps, allocation retries, and workflow recovery.
+collx_cleanup_allocation() {
+  local root="${1:-${COLLX_JOB_ROOT:-}}" path="" job_id="${JOB_ID:-}" active
+  if [ -n "$root" ]; then
+    collx_job_root_is_safe "$root" || return 1
+    path="$root/jobid"
+    if [ -z "$job_id" ] && [ -f "$path" ]; then
+      IFS= read -r job_id < "$path" || return 1
     fi
-    [ -n "$active" ] || return 0
-    sleep "$delay"
+  fi
+  [ -n "$job_id" ] || return 0
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  scancel "$job_id" >/dev/null 2>&1 || true
+  for _ in {1..30}; do
+    active="$(squeue -h -j "$job_id" -o %A 2>/dev/null)" || active=unknown
+    if [ -z "$active" ]; then
+      [ -z "$path" ] || rm -f -- "$path"
+      return
+    fi
+    sleep 1
   done
   collx_log "ERROR: scheduled allocation did not terminate during cleanup"
   return 1
 }
 
-# A workflow cancellation may kill a foreground Slurm step before Bash can run
-# the launcher trap. Reconcile the mode-0600 allocation record from an always()
-# workflow step before isolated source cleanup is allowed.
-collx_reconcile_recorded_allocation() {
-  local root="$1" path job_id
-  collx_job_root_is_safe "$root" || return 1
-  export COLLX_JOB_ROOT="$root"
-  path="$root/jobid"
-  [ -e "$path" ] || return 0
-  [ -f "$path" ] && [ ! -L "$path" ] \
-    && [ "$(stat -c '%u:%a' "$path" 2>/dev/null)" = "$(id -u):600" ] \
-    || return 1
-  IFS= read -r job_id < "$path" || return 1
-  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
-  collx_cancel_job "$job_id" && collx_clear_allocation_jobid
-}
-
 # Image references come from configs/backends.json (collx_load_backend_registry).
 # Import uses the configured tag because Enroot cannot reliably import a
 # digest-qualified Docker Hub reference non-interactively.
-collx_default_image() {
-  case "$1" in
-    mi300x*|mi325x*|mi355x*) echo "$COLLX_IMAGE_AMD_MORI" ;;
-    b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$COLLX_IMAGE_MULTIARCH" ;;
-    *) collx_die "no default image for runner prefix: $1" ;;
-  esac
-}
-
 collx_select_image() {
   local image="$1"
   [[ "$image" =~ ^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]] \
@@ -741,142 +490,41 @@ collx_prepare_backend_cache() {
   export COLLX_PREPARED_BACKEND_CACHE="$cache"
 }
 
-collx_git() {
-  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0 \
-    git -c credential.helper= "$@"
-}
-
-collx_git_in_tree() {
-  local directory="$1" canonical
-  shift
-  [[ "$directory" = /* ]] && [ -d "$directory" ] && [ ! -L "$directory" ] \
-    || return 1
-  [[ "$directory" != *'*'* && "$directory" != *$'\n'* && "$directory" != *$'\r'* ]] \
-    || return 1
-  canonical="$(cd -P -- "$directory" && pwd -P)" || return 1
-  collx_git -c "safe.directory=$canonical" -C "$canonical" "$@"
-}
-
-collx_fetch_revision() {
-  local repository="$1" revision="$2" destination="$3" attempt
-  for attempt in 1 2 3; do
-    rm -rf -- "$destination"
-    if collx_git init -q "$destination" \
-        && collx_git_in_tree "$destination" remote add origin "$repository" \
-        && collx_git_in_tree "$destination" fetch -q --no-tags --depth 1 origin "$revision" \
-        && collx_git_in_tree "$destination" -c advice.detachedHead=false \
-          checkout -q --detach FETCH_HEAD \
-        && [ "$(collx_git_in_tree "$destination" rev-parse HEAD)" = "$revision" ]; then
-      return 0
-    fi
-    [ "$attempt" = 3 ] || sleep $((attempt * 5))
-  done
+# Fetch the pinned DeepEP tree before allocating GPUs.
+collx_prepare_deepep_source() {
+  local mount_src="$1" root source temporary log
+  root="$mount_src/experimental/CollectiveX/.collx_sources"
+  source="$root/deepep-v2-$COLLX_DEEPEP_V2_COMMIT"
+  [ ! -d "$source" ] || return 0
+  mkdir -p -- "$root" && chmod 700 "$root" || return 1
+  temporary="$(mktemp -d "$root/.deepep-v2.XXXXXX")" || return 1
+  log="$(collx_private_log_path backend-source-deepep-v2)" || return 1
+  if GIT_TERMINAL_PROMPT=0 git init -q "$temporary" > "$log" 2>&1 \
+      && git -C "$temporary" remote add origin "$COLLX_DEEPEP_V2_REPO" >> "$log" 2>&1 \
+      && GIT_TERMINAL_PROMPT=0 git -C "$temporary" fetch -q --no-tags --depth 1 \
+        origin "$COLLX_DEEPEP_V2_COMMIT" >> "$log" 2>&1 \
+      && git -C "$temporary" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
+        >> "$log" 2>&1 \
+      && [ "$(git -C "$temporary" rev-parse HEAD)" = "$COLLX_DEEPEP_V2_COMMIT" ] \
+      && GIT_TERMINAL_PROMPT=0 git -C "$temporary" submodule update -q --init --depth 1 \
+        third-party/fmt >> "$log" 2>&1 \
+      && python3 "$COLLX_RUNTIME_DIR/stage.py" rewrite-deepep-v2 \
+        "$temporary/deep_ep/__init__.py" >> "$log" 2>&1 \
+      && mv -- "$temporary" "$source" >> "$log" 2>&1; then
+    return 0
+  fi
+  rm -rf -- "$temporary"
+  collx_log "ERROR: DeepEP source preparation failed"
+  collx_log_tail "$log"
   return 1
 }
 
-# repo|commit|fmt-submodule|nccl-submodule (registry-loaded; empty = not fetched)
-collx_backend_source_pin() {
-  case "$1" in
-    deepep-v2) printf '%s|%s|%s|' "$COLLX_DEEPEP_V2_REPO" \
-      "$COLLX_DEEPEP_V2_COMMIT" "$COLLX_DEEPEP_V2_FMT_COMMIT" ;;
-    *) return 1 ;;
-  esac
-}
-
-collx_backend_source_path() {
-  local root="$1" backend="$2" repository revision fmt nccl pin
-  pin="$(collx_backend_source_pin "$backend")" || return 1
-  IFS='|' read -r repository revision fmt nccl <<< "$pin"
-  printf '%s/%s-%s' "$root" "$backend" "$revision"
-}
-
-collx_apply_deepep_v2_nccl_check_fix() {
-  python3 "$COLLX_RUNTIME_DIR/stage.py" rewrite-deepep-v2 "$1/deep_ep/__init__.py"
-}
-
-# Acquire source before compute allocation, preferring the verified same-run GHA seed.
-_collx_prepare_backend_source() {
-  local mount_src="$1" backend="$2" root source temporary repository revision fmt nccl pin
-  root="$mount_src/experimental/CollectiveX/.collx_sources"
-  COLLX_BACKEND_SOURCE_STEP="source mount creation"
-  if [ ! -e "$root" ] && [ ! -L "$root" ]; then
-    mkdir -m 700 -- "$root" || return 1
-  fi
-  [ -d "$mount_src" ] && [ -d "$root" ] || return 1
-  COLLX_BACKEND_SOURCE_STEP="git lookup"
-  command -v git >/dev/null || return 1
-  COLLX_BACKEND_SOURCE_STEP="source pin resolution"
-  source="$(collx_backend_source_path "$root" "$backend")" || return 1
-  [ ! -d "$source" ] || return 0
-  COLLX_BACKEND_SOURCE_STEP="source checkout creation"
-  temporary="$(mktemp -d "$root/.${backend}.XXXXXX")" || return 1
-  COLLX_BACKEND_SOURCE_STEP="source pin resolution"
-  pin="$(collx_backend_source_pin "$backend")" || {
-    rm -rf -- "$temporary"
-    return 1
-  }
-  IFS='|' read -r repository revision fmt nccl <<< "$pin"
-  COLLX_BACKEND_SOURCE_STEP="revision fetch"
-  if ! collx_fetch_revision "$repository" "$revision" "$temporary"; then
-    rm -rf -- "$temporary"
-    return 1
-  fi
-  COLLX_BACKEND_SOURCE_STEP="submodule fetch"
-  if [ -n "$fmt" ] && ! collx_git_in_tree "$temporary" \
-      -c "safe.directory=$temporary/third-party/fmt" \
-      submodule update -q --init --depth 1 third-party/fmt; then
-    rm -rf -- "$temporary"
-    return 1
-  fi
-  if [ -n "$nccl" ] && ! collx_git_in_tree "$temporary" \
-      -c "safe.directory=$temporary/third-party/nccl" \
-      submodule update -q --init --depth 1 third-party/nccl; then
-    rm -rf -- "$temporary"
-    return 1
-  fi
-  if [ "$backend" = deepep-v2 ]; then
-    COLLX_BACKEND_SOURCE_STEP="upstream NCCL check fix"
-    collx_apply_deepep_v2_nccl_check_fix "$temporary" || {
-      rm -rf -- "$temporary"
-      return 1
-    }
-  fi
-  COLLX_BACKEND_SOURCE_STEP="source publication"
-  if ! mv -- "$temporary" "$source"; then
-    rm -rf -- "$temporary"
-    return 1
-  fi
-}
-
-collx_prepare_backend_source() {
-  local log backend="$2" COLLX_BACKEND_SOURCE_STEP="initialization"
-  log="$(collx_private_log_path "backend-source-$backend")" || return 1
-  if _collx_prepare_backend_source "$@" > "$log" 2>&1; then
-    return 0
-  fi
-  printf '%s failed\n' "$COLLX_BACKEND_SOURCE_STEP" >> "$log"
-  collx_log "ERROR: backend-source-step=${COLLX_BACKEND_SOURCE_STEP// /-}"
-  collx_fail_stage backend-setup "$log"
-}
-
-collx_materialize_backend_source() {
-  local backend="$1" destination="$2" source parent temporary
+collx_materialize_deepep_source() {
+  local destination="$1" source
   [ -n "${COLLX_BACKEND_SOURCE_ROOT:-}" ] || return 1
-  source="$(collx_backend_source_path "$COLLX_BACKEND_SOURCE_ROOT" "$backend")" || return 1
+  source="$COLLX_BACKEND_SOURCE_ROOT/deepep-v2-$COLLX_DEEPEP_V2_COMMIT"
   [ -d "$source" ] || return 1
-  parent="${destination%/*}"
-  [ "$parent" != "$destination" ] && [ -d "$parent" ] && [ ! -L "$parent" ] \
-    || return 1
-  temporary="$(mktemp -d "$parent/.collectivex-source.XXXXXX")" || return 1
-  if ! cp -R -- "$source/." "$temporary/"; then
-    rm -rf -- "$temporary"
-    return 1
-  fi
-  if ! rm -rf -- "$destination" || ! mv -- "$temporary" "$destination"; then
-    rm -rf -- "$temporary"
-    return 1
-  fi
-  [ -d "$destination" ]
+  rm -rf -- "$destination" && cp -R -- "$source" "$destination"
 }
 
 collx_prepare_implicit_stage_base() {
@@ -894,46 +542,11 @@ collx_prepare_runner_shared_stage_base() {
   collx_prepare_implicit_stage_base "$runner_root"
 }
 
-collx_lock_canonical_gha_env() {
+collx_prepare_stage_dir() {
   local runner="$1"
   [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] || return 0
-  [ "${GITHUB_ACTIONS:-}" = true ] \
-    || collx_die "canonical CollectiveX execution requires GitHub Actions"
-  [ -n "${COLLX_SHARD_FILE:-}" ] && [ "${COLLX_SHARD_SKU:-}" = "$runner" ] \
-    || collx_die "canonical CollectiveX execution requires a matched shard"
-  [[ "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ \
-    && "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ \
-    && "${COLLECTIVEX_SOURCE_SHA:-}" =~ ^[0-9a-f]{40,64}$ ]] \
-    || collx_die "canonical CollectiveX workflow identity is incomplete"
-
-  # Measurement hygiene: clear inherited communication-library and rendezvous
-  # knobs so every fabric selector is re-derived by collx_apply_network_profile
-  # and the canonical policy below. Operator-config COLLX_* values are trusted
-  # as exported by collx_load_operator_config.
-  unset COLLX_MASTER_PORT COLLX_MORI_KERNEL_TYPE
-  unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
-  unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
-  unset NCCL_IB_GID_INDEX NCCL_IB_SL
-  unset NVSHMEM_ENABLE_NIC_PE_MAPPING
-  unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
-  unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
-  unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
-  unset MORI_RDMA_DEVICES
-  unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
-  unset MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
-  unset MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
-  unset NCCL_CUMEM_ENABLE NCCL_MNNVL_ENABLE MC_FORCE_MNNVL
-  unset COLLX_BACKEND_CACHE_ROOT
-  unset COLLX_PREPARED_BACKEND_CACHE COLLX_BACKEND_SOURCE_ROOT
-  case "$runner" in
-    mi300x|mi325x|mi355x) ;;
-    *) unset COLLX_LOCK_DIR ;;
-  esac
-
   [ -n "${COLLX_SQUASH_DIR:-}" ] \
     || collx_die "canonical CollectiveX execution requires shared container storage"
-  # The legacy B300 operator row contains a root-owned stage path; B300/GB300
-  # always derive their stage base from the compute-visible account home.
   case "$runner" in b300|gb300) COLLX_STAGE_DIR="" ;; esac
   if [ -z "${COLLX_STAGE_DIR:-}" ]; then
     case "$runner" in
@@ -951,47 +564,17 @@ collx_lock_canonical_gha_env() {
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       mi300x|mi325x|mi355x)
-        # AMD self-hosted runners and compute nodes share the runner filesystem,
-        # while the image cache may be root-owned. Derive a runner-owned base
-        # outside _work instead of weakening stage ownership validation.
         COLLX_STAGE_DIR="$(collx_prepare_runner_shared_stage_base)" \
           || collx_die "canonical AMD execution cannot create an isolated shared stage directory"
         ;;
       *) collx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
     esac
   elif [ "$runner" = mi300x ]; then
-    # The MI300X runner home is a shared-filesystem symlink; resolve the
-    # operator-selected base once.
     COLLX_STAGE_DIR="$(python3 "$COLLX_RUNTIME_DIR/stage.py" resolve-directory \
       "$COLLX_STAGE_DIR")" \
       || collx_die "canonical MI300X execution cannot resolve the shared stage directory"
   fi
   export COLLX_STAGE_DIR
-
-  local policy_file policy_key policy_value
-  policy_file="$(mktemp /tmp/inferencex-collectivex-policy.XXXXXX)" \
-    || collx_die "cannot derive canonical SKU policy"
-  if ! python3 "$COLLX_RUNTIME_DIR/config.py" canonical-policy "$runner" \
-      "${COLLX_NODES:-0}" "${COLLX_GPUS_PER_NODE:-0}" \
-      "$COLLX_IMAGE_MULTIARCH" "$COLLX_IMAGE_AMD_MORI" "$COLLX_MORI_COMMIT_AMD" \
-      > "$policy_file"; then
-    rm -f -- "$policy_file"
-    collx_die "canonical CollectiveX placement differs from the SKU policy"
-  fi
-  while IFS= read -r -d '' policy_key && IFS= read -r -d '' policy_value; do
-    printf -v "$policy_key" '%s' "$policy_value"
-  done < "$policy_file"
-  rm -f -- "$policy_file"
-  unset COLLX_PUBLIC_RUNNER COLLX_DRYRUN COLLX_TIMING
-  unset COLLX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE
-  export COLLX_IMAGE COLLX_NGPUS COLLX_RUN_TIMEOUT
-  case "$runner" in
-    gb200|gb300) export COLLX_MASTER_PORT ;;
-    mi300x|mi325x|mi355x)
-      export MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
-      export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
-      ;;
-  esac
 }
 
 collx_squash_path() {
@@ -1020,31 +603,31 @@ collx_ensure_squash() {
   machine="$(uname -m)"
   case "${COLLX_IMAGE_PLATFORM:-}:$machine" in
     linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
-    *) collx_fail_stage container-import "$log"; return 1 ;;
+    *) collx_log_tail "$log"; return 1 ;;
   esac
   mkdir -p "$squash_dir" 2>> "$log" \
-    || { collx_fail_stage container-import "$log"; return 1; }
+    || { collx_log_tail "$log"; return 1; }
   sq="$(collx_squash_path "$squash_dir" "$image")" \
-    || { collx_fail_stage container-import "$log"; return 1; }
+    || { collx_log_tail "$log"; return 1; }
   key="${sq##*/}"
   key="${key%.sqsh}"
   locks="$squash_dir/.locks"
   mkdir -p "$locks" 2>> "$log" \
-    || { collx_fail_stage container-import "$log"; return 1; }
+    || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
-    || { collx_fail_stage container-import "$log"; return 1; }
+    || { collx_log_tail "$log"; return 1; }
   flock -w 900 "$lock_fd" 2>> "$log" \
-    || { collx_fail_stage container-import "$log"; return 1; }
+    || { collx_log_tail "$log"; return 1; }
   if unsquashfs -l "$sq" >/dev/null 2>&1; then
     collx_log "container squash ready"
   else
     collx_log "importing configured container image"
     rm -f "$sq" 2>> "$log" \
-      || { collx_fail_stage container-import "$log"; return 1; }
+      || { collx_log_tail "$log"; return 1; }
     # </dev/null: never block on an interactive password prompt.
     if [ "${COLLX_ENROOT_LOCAL_IMPORT:-0}" = 1 ]; then
       enroot_local="$(mktemp -d /tmp/inferencex-collectivex-enroot.XXXXXX)" \
-        || { collx_fail_stage container-import "$log"; return 1; }
+        || { collx_log_tail "$log"; return 1; }
       (
         trap 'rm -rf -- "$enroot_local"' EXIT
         export ENROOT_TEMP_PATH="$enroot_local/tmp"
@@ -1057,13 +640,13 @@ collx_ensure_squash() {
       ) >> "$log" 2>&1 || import_rc=$?
       rm -rf -- "$enroot_local" >/dev/null 2>&1 || true
       [ "$import_rc" = 0 ] \
-        || { collx_fail_stage container-import "$log"; return 1; }
+        || { collx_log_tail "$log"; return 1; }
     else
       enroot import -o "$sq" "docker://$image" </dev/null >> "$log" 2>&1 \
-        || { collx_fail_stage container-import "$log"; return 1; }
+        || { collx_log_tail "$log"; return 1; }
     fi
     unsquashfs -l "$sq" >> "$log" 2>&1 \
-      || { collx_fail_stage container-import "$log"; return 1; }
+      || { collx_log_tail "$log"; return 1; }
   fi
   flock -u "$lock_fd"
   exec {lock_fd}>&-
@@ -1087,13 +670,7 @@ collx_ensure_squash_on_job() {
   [ -n "$lock_dir" ] || lock_dir="$squash_dir/.locks"
   lock="$lock_dir/${key}.lock"
   log="$(collx_private_log_path "$log_label")"
-  # Import (or verify) the squash on EVERY allocated node, not just one. On SKUs
-  # whose squash_dir is node-local (e.g. mi355x/mi300x /var/lib/squash) a single-
-  # node import leaves the remaining nodes without the squash, so the per-node
-  # container-hash check and the benchmark itself then fail with "No such file"
-  # on whichever node was missed. The per-node script below is flock-guarded and
-  # idempotent: on shared-FS SKUs the first node imports and every other node
-  # short-circuits on the unsquashfs check, so no redundant import occurs.
+  # Run once per node because some clusters use node-local squash storage.
   if ! srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
       --ntasks-per-node=1 --chdir=/tmp \
       --export="$(collx_host_exports)" \
@@ -1116,10 +693,7 @@ export ENROOT_RUNTIME_PATH="$compute_home/enroot-run"
 mkdir -p "$(dirname "$sq")" "$(dirname "$lock")" \
   "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
 exec 9>"$lock"
-# Wait indefinitely: with a shared-FS squash_dir every node contends on the same
-# lock, and a slow cold import must not spuriously time out the waiters. The lock
-# is tied to fd 9, so a crashed importer releases it automatically. Node-local
-# squash_dirs use independent per-node locks, so there is no contention there.
+# Shared storage serializes the import; node-local storage imports in parallel.
 flock 9
 if unsquashfs -l "$sq" >/dev/null 2>&1; then
   echo 'container squash ready'
@@ -1130,71 +704,11 @@ else
 fi
 BASH
   then
-    collx_fail_stage container-import "$log"
+    collx_log "ERROR: container import failed"
+    collx_log_tail "$log"
     return 1
   fi
   printf '%s' "$sq"
-}
-
-collx_preflight_allocation() {
-  local job_id="$1" nodes="$2" mount_src="$3" squash="$4" shard="${5:-}"
-  local log rc=0 runtime shard_path="" probe_root probe_token index
-  runtime="$mount_src/experimental/CollectiveX/runtime/prepare_backend.sh"
-  [ -z "$shard" ] || shard_path="$mount_src/experimental/CollectiveX/$shard"
-  log="$(collx_private_log_path allocation-preflight)"
-  probe_root="$mount_src/.collectivex-preflight"
-  probe_token="$probe_root/source"
-  if [ -e "$probe_root" ] || [ -L "$probe_root" ] \
-      || ! mkdir -m 700 "$probe_root"; then
-    collx_fail_stage repository-stage "$log"
-    return 1
-  fi
-  if ! printf '%s\n' "${COLLECTIVEX_EXECUTION_ID:-manual-$$}" > "$probe_token" \
-      || ! chmod 600 "$probe_token"; then
-    chmod 700 "$probe_root" >/dev/null 2>&1 || true
-    rm -rf -- "$probe_root" >/dev/null 2>&1 || true
-    collx_fail_stage repository-stage "$log"
-    return 1
-  fi
-  srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
-    --chdir=/tmp --input=all \
-    --export="$(collx_host_exports)" bash -s -- "$runtime" "$shard_path" "$squash" \
-    "$COLLX_IMAGE_PLATFORM" "$probe_root" \
-    > "$log" 2>&1 <<'BASH' || rc=$?
-set -euo pipefail
-machine="$(uname -m)"
-case "$4:$machine" in
-  linux/amd64:x86_64|linux/amd64:amd64|linux/arm64:aarch64|linux/arm64:arm64) ;;
-  *) exit 13 ;;
-esac
-test -r "$1" || exit 10
-[ -z "$2" ] || test -r "$2" || exit 11
-test -r "$3" || exit 12
-unsquashfs -s "$3" >/dev/null 2>&1 || exit 12
-case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 10 ;; esac
-[ -d "$5" ] && [ ! -L "$5" ] && [ -r "$5/source" ] || exit 10
-(set -C; cat "$5/source" > "$5/node-$SLURM_NODEID") || exit 10
-cmp -s -- "$5/source" "$5/node-$SLURM_NODEID" || exit 10
-BASH
-  if [ "$rc" = 0 ]; then
-    for ((index = 0; index < nodes; index++)); do
-      if ! cmp -s -- "$probe_token" "$probe_root/node-$index"; then
-        rc=10
-        break
-      fi
-    done
-  fi
-  if [ -d "$probe_root" ] && [ ! -L "$probe_root" ]; then
-    chmod 700 "$probe_root" >/dev/null 2>&1 || rc=10
-  fi
-  rm -rf -- "$probe_root" >/dev/null 2>&1 || rc=10
-  [ "$rc" = 0 ] && return 0
-  case "$rc" in
-    10|11) collx_fail_stage repository-stage "$log" ;;
-    12) collx_fail_stage container-hash "$log" ;;
-    *) collx_fail_stage container-launch "$log" ;;
-  esac
-  return 1
 }
 
 # A clean nvidia-smi inventory does not prove that a prior cancelled workload
@@ -1208,7 +722,7 @@ collx_validate_cuda_context_on_job() {
     *) return 1 ;;
   esac
   log="$(collx_private_log_path "$log_label")"
-  COLLX_CUDA_CONTEXT_LOG="$log"
+  export COLLX_CUDA_CONTEXT_LOG="$log"
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
     --gres=gpu:"$gpus_per_node" --chdir=/tmp --input=all \
     --export="$(collx_host_exports)" python3 /dev/stdin cuda-context "$gpus_per_node" \
@@ -1219,18 +733,17 @@ collx_validate_cuda_context_on_job() {
 # EXIT trap can remove an interrupted partial stage. The configured base must
 # already exist on compute-visible storage and must not traverse symlinks.
 collx_stage_path() {
-  local repo_root="$1" stage_base="${2:-}" tag safe_tag stage_path
+  local repo_root="$1" stage_base="${2:-}" tag stage_path
   tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
   [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
     || collx_die "invalid staging execution identity"
-  safe_tag="$(printf '%s' "$tag" | tr -c 'A-Za-z0-9._-' '_')"
   if [ -z "$stage_base" ] || [ "$stage_base" = "$repo_root" ]; then
     [ -n "${COLLX_SQUASH_DIR:-}" ] \
       || collx_die "CollectiveX staging requires COLLX_STAGE_DIR or COLLX_SQUASH_DIR"
     stage_base="$COLLX_SQUASH_DIR"
-    stage_path="${stage_base%/}/.collectivex-stage-$safe_tag"
+    stage_path="${stage_base%/}/.collectivex-stage-$tag"
   else
-    stage_path="${stage_base%/}/job_$safe_tag"
+    stage_path="${stage_base%/}/job_$tag"
   fi
   python3 "$COLLX_RUNTIME_DIR/stage.py" validate-stage-path "$repo_root" "$stage_base" \
     "$stage_path" "${COLLX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}"
@@ -1238,11 +751,7 @@ collx_stage_path() {
 
 # Stage only the public benchmark tree into the private execution child.
 collx_stage_repo() {
-  local repo_root="$1" stage_dir="$2" expected log
-  expected="$(collx_stage_path "$repo_root" "${COLLX_STAGE_DIR:-}")" \
-    || collx_die "configured stage base is unavailable or unsafe"
-  [ "$stage_dir" = "$expected" ] \
-    || collx_die "execution stage differs from the configured stage base"
+  local repo_root="$1" stage_dir="$2" log
   python3 "$COLLX_RUNTIME_DIR/stage.py" create-stage "$stage_dir" \
     || collx_die "cannot create the configured stage directory"
   collx_log "staging CollectiveX on compute-visible storage"
@@ -1252,7 +761,8 @@ collx_stage_repo() {
       "$stage_dir/experimental/CollectiveX" > "$log" 2>&1; then
     rm -rf -- "$stage_dir" >/dev/null 2>&1 \
       || collx_log "ERROR: cannot remove the incomplete execution stage"
-    collx_fail_stage repository-stage "$log" || true
+    collx_log "ERROR: repository staging failed"
+    collx_log_tail "$log"
     return 1
   fi
 }
@@ -1279,22 +789,8 @@ collx_collect_results() {
 }
 
 collx_cleanup_stage() {
-  local mount_src="$1" repo_root="$2" base="${COLLX_STAGE_DIR:-}" tag safe_tag expected
-  tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
-  safe_tag="$(printf '%s' "$tag" | tr -c 'A-Za-z0-9._-' '_')"
+  local mount_src="$1" repo_root="$2"
   [ "$mount_src" != "$repo_root" ] || return 0
-  if [ -n "$base" ] && [ "$base" != "$repo_root" ]; then
-    expected="${base%/}/job_$safe_tag"
-  else
-    [ -n "${COLLX_SQUASH_DIR:-}" ] \
-      || { collx_log "ERROR: cannot identify the generated stage directory"; return 1; }
-    expected="${COLLX_SQUASH_DIR%/}/.collectivex-stage-$safe_tag"
-  fi
-  if [ "$mount_src" != "$expected" ] || [ "$mount_src" = / ] \
-      || { [ -n "$base" ] && [ "$mount_src" = "$base" ]; }; then
-    collx_log "ERROR: refusing to remove an unrecognized stage directory"
-    return 1
-  fi
   if ! python3 "$COLLX_RUNTIME_DIR/stage.py" validate-cleanup "$mount_src"; then
     collx_log "ERROR: refusing to remove an invalid stage directory"
     return 1
@@ -1313,8 +809,8 @@ collx_cleanup_stage() {
 # shellcheck disable=SC2153
 collx_run_shard() {
   local build_log build_rc expected_cases ci=0 failed_cases=0
-  local runtime_log run_rc summary_log argv_file case_label index shard wrap
-  local -a container_args ep_args manual_phases
+  local runtime_log run_rc argv_file shard wrap
+  local -a container_args ep_args
   [ "${NODES:-0}" -ge 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
     || collx_die "invalid shard launcher placement"
   [ -n "${JOB_ID:-}" ] && [ -n "${SQUASH_FILE:-}" ] \
@@ -1331,96 +827,58 @@ collx_run_shard() {
   fi
   local container_name="cxep_${JOB_ID}"
 
+  shard="${COLLX_SHARD_FILE:-}"
+  [ -f "$shard" ] || shard="$COLLX_DIR/$shard"
+  [ -f "$shard" ] || collx_die "shard control is unavailable"
+  expected_cases="$(python3 "$COLLX_RUNTIME_DIR/config.py" case-count "$shard")" \
+    && [[ "$expected_cases" =~ ^[1-9][0-9]*$ ]] \
+    || collx_die "could not enumerate shard cases"
+
   collx_log "shard backend preparation: bench=$COLLX_BENCH nodes=$NODES"
-  collx_set_failure_stage backend-setup
   build_log="$(collx_private_log_path backend-prepare)"
-  set +e
+  build_rc=0
   srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
     --container-name="$container_name" --container-image="$SQUASH_FILE" \
     "${container_args[@]}" --export=ALL \
     bash /ix/experimental/CollectiveX/runtime/prepare_backend.sh \
-    </dev/null >"$build_log" 2>&1
-  build_rc=$?
-  if [ "$build_rc" = 0 ]; then
-    srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
-      --container-name="$container_name" --container-image="$SQUASH_FILE" \
-      "${container_args[@]}" \
-      --export=ALL bash -c "$(collx_backend_probe)" \
-      </dev/null >>"$build_log" 2>&1
-    build_rc=$?
-  fi
-  set -e
+    </dev/null >"$build_log" 2>&1 || build_rc=$?
   if [ "$build_rc" != 0 ]; then
-    collx_fail_stage backend-setup "$build_log" || true
+    collx_log "ERROR: backend preparation failed"
+    collx_log_tail "$build_log"
     return "$build_rc"
-  fi
-  collx_set_failure_stage execution
-
-  shard="${COLLX_SHARD_FILE:-}"
-  [ -z "$shard" ] || [ -f "$shard" ] || shard="$COLLX_DIR/$shard"
-  if [ -n "$shard" ]; then
-    [ -f "$shard" ] || collx_die "shard control is unavailable"
-    expected_cases="$(python3 "$COLLX_RUNTIME_DIR/config.py" case-count "$shard")" \
-      && [[ "$expected_cases" =~ ^[1-9][0-9]*$ ]] \
-      || collx_die "could not enumerate shard cases"
-  else
-    # Ad-hoc runs without a shard control take one case per requested phase
-    # from the operator's COLLX_* environment (config.py manual-args).
-    local phase_list="${COLLX_PHASE:-decode}"
-    [ "$phase_list" != both ] || phase_list="decode prefill"
-    read -r -a manual_phases <<< "$phase_list"
-    expected_cases="${#manual_phases[@]}"
   fi
 
   argv_file="$(mktemp)" || return 1
   while [ "$ci" -lt "$expected_cases" ]; do
-    if [ -n "$shard" ]; then
-      python3 "$COLLX_RUNTIME_DIR/config.py" case-args "$shard" "$ci" \
-        "$RUNNER" "$TS" "${COLLX_SEED:-}" \
-        "$NGPUS" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" > "$argv_file" \
-        || { rm -f "$argv_file"; collx_die "shard case $ci does not decode against this allocation"; }
-    else
-      python3 "$COLLX_RUNTIME_DIR/config.py" manual-args "${manual_phases[ci]}" "$ci" \
-        "$RUNNER" "$TS" "${COLLX_SEED:-}" > "$argv_file" \
-        || { rm -f "$argv_file"; collx_die "manual case $ci does not decode"; }
-    fi
+    python3 "$COLLX_RUNTIME_DIR/config.py" case-args "$shard" "$ci" \
+      "$RUNNER" "$TS" \
+      "$NGPUS" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" > "$argv_file" \
+      || { rm -f "$argv_file"; collx_die "shard case $ci does not decode against this allocation"; }
     mapfile -d '' -t ep_args < "$argv_file"
     [ "${#ep_args[@]}" -gt 0 ] \
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
-    case_label=""
-    for ((index = 0; index + 1 < ${#ep_args[@]}; index++)); do
-      [ "${ep_args[index]}" != --case-id ] || case_label="${ep_args[index + 1]}"
-    done
-    collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] id=${case_label:-manual} $COLLX_BENCH"
+    collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
-    set +e
+    run_rc=0
     timeout -k 30 "${COLLX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export=ALL \
       bash -c "$wrap" _ "${ep_args[@]}" \
-      </dev/null >"$runtime_log" 2>&1
-    run_rc=$?
-    set -e
-    # A case counts as run purely on the distributed command's return code. The
-    # rank-zero result the harness wrote (if any) is left in place for the
-    # summary renderer, which validates nothing.
+      </dev/null >"$runtime_log" 2>&1 || run_rc=$?
     if [ "$run_rc" != 0 ]; then
-      collx_fail_stage execution "$runtime_log" || true
+      collx_log "ERROR: case $ci failed"
+      collx_log_tail "$runtime_log"
       failed_cases=$((failed_cases + 1))
     fi
     ci=$((ci + 1))
   done
   rm -f "$argv_file"
-  if [ "$failed_cases" -ne 0 ]; then
-    summary_log="$(collx_private_log_path shard-summary)"
-    printf 'SHARD done: %s/%s case(s) failed\n' "$failed_cases" "$expected_cases" \
-      > "$summary_log"
-    collx_fail_stage execution "$summary_log" || true
+  [ "$failed_cases" = 0 ] || {
+    collx_log "ERROR: $failed_cases/$expected_cases case(s) failed"
     return 1
-  fi
-  return 0
+  }
 }
 
 # Remove this allocation's persistent pyxis container before the allocation is
@@ -1440,33 +898,19 @@ collx_remove_distributed_container() {
 }
 
 collx_launcher_cleanup() {
-  local rc="$1" stage_root="${MOUNT_SRC:-}" source_root allocation_stopped=1
-  source_root="${stage_root:-${REPO_ROOT:-}}"
+  local rc="$1" stage_root="${MOUNT_SRC:-}" allocation_stopped=1
   trap - EXIT HUP INT TERM
-  if [ -n "${COLLECTIVEX_EPHEMERAL_CONFIG_PATH:-}" ]; then
-    rm -f -- "$COLLECTIVEX_EPHEMERAL_CONFIG_PATH" >/dev/null 2>&1 || true
-    unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
-  fi
   if [ -n "${JOB_ID:-}" ]; then
     collx_remove_distributed_container "$JOB_ID" "${NODES:-1}"
-    if ! collx_cancel_job "$JOB_ID"; then
-      allocation_stopped=0
-      [ "$rc" != 0 ] || rc=1
-    elif ! collx_clear_allocation_jobid; then
+    if ! collx_cleanup_allocation; then
       allocation_stopped=0
       [ "$rc" != 0 ] || rc=1
     fi
-  elif [ "${COLLX_ALLOCATION_UNCERTAIN:-0}" = 1 ]; then
-    allocation_stopped=0
-    [ "$rc" != 0 ] || rc=1
   fi
-  [ "$allocation_stopped" = 1 ] || source_root="${REPO_ROOT:-$source_root}"
-  if [ "$rc" != 0 ] \
-      && [ -n "${REPO_ROOT:-}" ] && [ -n "${COLLX_BENCH:-}" ]; then
-    collx_log "ERROR: terminal-failure-stage=${COLLX_FAILSAFE_MODE:-setup}"
-    [ -d "$source_root/experimental/CollectiveX" ] || source_root="$REPO_ROOT"
-    [ "$source_root" = "$REPO_ROOT" ] \
-      || collx_collect_results "$source_root" "$REPO_ROOT" || true
+  if [ "$rc" != 0 ] && [ "$allocation_stopped" = 1 ] && [ -n "${REPO_ROOT:-}" ] \
+      && [ -d "$stage_root/experimental/CollectiveX" ] \
+      && [ "$stage_root" != "$REPO_ROOT" ]; then
+    collx_collect_results "$stage_root" "$REPO_ROOT" || true
   fi
   if [ "$allocation_stopped" = 1 ] && [ -n "${REPO_ROOT:-}" ] \
       && [ -n "$stage_root" ] && [ "$stage_root" != "$REPO_ROOT" ]; then
@@ -1478,7 +922,6 @@ collx_launcher_cleanup() {
 }
 
 collx_install_launcher_fail_safe() {
-  COLLX_ALLOCATION_UNCERTAIN=0
   trap 'collx_launcher_cleanup "$?"' EXIT
   trap 'collx_launcher_cleanup 129' HUP
   trap 'collx_launcher_cleanup 130' INT

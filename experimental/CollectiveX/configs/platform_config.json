@@ -1,22 +1,4 @@
 {
-  "schema_version": 1,
-  "notes": [
-    "Per-SKU platform registry: public identity (vendor/arch/machine/product), fixed",
-    "placement (gpus_per_node, scale_up_domain, scale_up_transport), launcher, the",
-    "operator-config fields the SKU requires, and canonical runtime policy",
-    "(run_timeout, optional master_port). capability.py derives the EP topologies",
-    "from these values; suites.yaml 'platforms: all' resolves to every SKU listed",
-    "here; runtime/config.py derives its operator-config schema and canonical policy from them.",
-    "The optional 'network' block carries the SKU's operator-approved scale-out RDMA",
-    "selectors, overlaid onto the base operator config by runtime/config.py.",
-    "The optional per-SKU 'operator' block is the tracked baseline for runner-local",
-    "settings (placement, dirs, exclude lists) - de-secreted by operator decision",
-    "2026-07-12 from live cluster state and a recovered manual config. An operator",
-    "config file/secret, when present, overrides these per field. audit_salt and",
-    "any value not listed here remain secret. Pending blocks (still secret-fed):",
-    "gb200 (no SSH path), mi300x/mi325x (cluster unreachable at derivation time);",
-    "b300 stage_dir and gb300 squash_dir/enroot_cache_path were not recoverable."
-  ],
   "platforms": {
     "h100-dgxc": {
       "vendor": "nvidia",
@@ -32,7 +14,6 @@
         "account",
         "squash_dir"
       ],
-      "run_timeout": 900,
       "operator": {
         "partition": "hpc-gpu-1",
         "account": "customer",
@@ -53,7 +34,6 @@
         "partition",
         "squash_dir"
       ],
-      "run_timeout": 900,
       "operator": {
         "partition": "main",
         "squash_dir": "/home/sa-shared/containers"
@@ -76,7 +56,6 @@
         "account",
         "squash_dir"
       ],
-      "run_timeout": 900,
       "operator": {
         "partition": "gpu-2",
         "account": "benchmark",
@@ -102,7 +81,6 @@
         "account",
         "squash_dir"
       ],
-      "run_timeout": 900,
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
@@ -129,8 +107,13 @@
         "account",
         "storage_roots"
       ],
-      "run_timeout": 900,
-      "master_port": 29551
+      "operator": {
+        "partition": "batch",
+        "account": "benchmark",
+        "storage_roots": [
+          "/mnt/lustre01/users-public/sa-shared"
+        ]
+      }
     },
     "gb300": {
       "vendor": "nvidia",
@@ -147,12 +130,12 @@
         "squash_dir",
         "enroot_cache_path"
       ],
-      "run_timeout": 900,
-      "master_port": 29551,
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
-        "qos": "batch_1_qos"
+        "qos": "batch_1_qos",
+        "squash_dir": "/data/home/sa-shared/collectivex/containers",
+        "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache"
       }
     },
     "mi300x": {
@@ -168,7 +151,10 @@
         "partition",
         "squash_dir"
       ],
-      "run_timeout": 1800
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/home/bshan/collectivex/containers"
+      }
     },
     "mi325x": {
       "vendor": "amd",
@@ -182,8 +168,7 @@
       "operator_fields": [
         "partition",
         "squash_dir"
-      ],
-      "run_timeout": 1800
+      ]
     },
     "mi355x": {
       "vendor": "amd",
@@ -203,7 +188,6 @@
         "partition",
         "squash_dir"
       ],
-      "run_timeout": 1800,
       "operator": {
         "partition": "compute",
         "squash_dir": "/var/lib/squash"

@@ -2,8 +2,7 @@
 # CollectiveX shared AMD Slurm launcher (one or two nodes).
 # shellcheck disable=SC2034
 #
-# Flow (section banners below match the collx_set_failure_stage labels GHA reports;
-# container-import runs inside the allocation retry loop on these clusters):
+# Flow (container import runs inside the allocation retry loop):
 #   identity -> setup -> repository-stage -> scheduler-allocation + container-import
 #   -> container-launch -> artifact-collection
 set -euo pipefail
@@ -15,14 +14,14 @@ REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
 source "$HERE/../runtime/common.sh"
 
 # ---- identity: resolve SKU, backend, platform -------------------------------
-RUNNER="${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}"
+RUNNER="${COLLX_SHARD_SKU:-}"
 case "$RUNNER" in
   mi300x|mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi355x) CPUS_PER_NODE=128; DEVICE_MOUNTS="" ;;
-  *) collx_die "set COLLX_SHARD_SKU or COLLX_PUBLIC_RUNNER to a registered AMD SKU" ;;
+  *) collx_die "COLLX_SHARD_SKU is not a registered AMD SKU" ;;
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
-export COLLX_IMAGE_PLATFORM=linux/amd64
+export COLLX_IMAGE_PLATFORM=linux/amd64 COLLX_VENDOR=amd
 # ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 
@@ -34,23 +33,17 @@ EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-collx_require_registered_topology "$RUNNER" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" "$NGPUS"
 case "$COLLX_BENCH" in
   mori) ;;
   *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
 esac
-collx_apply_timing_profile
 
-if [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
-  export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
-  export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
-  export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
-  export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
-  export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
-  # The backend case above admits only mori, so its image override is unconditional.
-  export COLLX_IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_AMD_MORI}"
-fi
-IMAGE="${COLLX_IMAGE:-$(collx_default_image "$RUNNER")}"
+export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
+export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
+export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
+export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
+export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
+IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_AMD_MORI}"
 export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
 export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN" COLLX_TS="$TS"
 export COLLX_SCALE_UP_TRANSPORT=xgmi
@@ -62,7 +55,6 @@ else
   unset COLLX_SCALE_OUT_TRANSPORT
 fi
 export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-1800}"
-collx_load_network_control_mode "$COLLX_DIR" || collx_die "cannot resolve network control mode"
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
 PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
@@ -70,17 +62,13 @@ PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
 
 # ---- repository-stage: compute-visible copy of the checkout -----------------
-collx_set_failure_stage repository-stage
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
-[ "${COLLX_DRYRUN:-0}" != 1 ] || { collx_log "COLLX_DRYRUN=1 - not allocating"; exit 0; }
-collx_set_failure_stage setup
 collx_select_image "$IMAGE"
 
 # ---- scheduler-allocation + container-import: retry until nodes validate ----
 # Each attempt must pass the network profile AND import the squash; a rejected
 # allocation is cancelled and its nodes excluded from the next attempt.
-collx_set_failure_stage scheduler-allocation
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
@@ -102,16 +90,14 @@ for allocation_attempt in 1 2 3; do
   export COLLX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"
   collx_salloc_jobid "${attempt_allocation[@]}"
   [ -n "$JOB_ID" ] || collx_die "could not resolve allocated JOB_ID from salloc"
-  collx_set_failure_stage setup
   reject_reason=""
-  if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT" 0; then
+  if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
     # A node whose RoCE devices do not match the pinned selector (e.g. an
     # outlier still using default rocepXXXs0 names instead of the rdmaN udev
     # names the rest of the fleet exposes) must be rejected and retried
     # elsewhere, not treated as a hard failure.
     reject_reason=network
   else
-    collx_set_failure_stage container-import
     if SQUASH_FILE="$(collx_ensure_squash_on_job \
         "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${COLLX_LOCK_DIR:-}")"; then
       break
@@ -120,7 +106,7 @@ for allocation_attempt in 1 2 3; do
   fi
   if [ -n "$NODELIST" ] || [ "$allocation_attempt" = 3 ]; then
     if [ "$reject_reason" = network ]; then
-      collx_fail_stage setup "$COLLX_NETWORK_PROFILE_LOG" || true
+      collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
       collx_die "allocated nodes failed the network profile"
     fi
     collx_die "allocated nodes failed container import"
@@ -128,15 +114,12 @@ for allocation_attempt in 1 2 3; do
   rejected_nodes="$(collx_allocation_nodes_csv "$JOB_ID")" \
     || collx_die "cannot identify nodes from a rejected allocation"
   collx_log "allocated nodes failed $reject_reason validation; retrying elsewhere"
-  collx_cancel_job "$JOB_ID" || collx_die "cannot release a rejected allocation"
-  collx_clear_allocation_jobid || collx_die "cannot reset rejected allocation state"
+  collx_cleanup_allocation || collx_die "cannot release a rejected allocation"
   JOB_ID=""
   [ -z "$excluded_nodes" ] || excluded_nodes+=,
   excluded_nodes+="$rejected_nodes"
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
-collx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
-  "${COLLX_SHARD_FILE:-}"
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
 
 # ---- container-launch -> artifact-collection (shared tail) ------------------

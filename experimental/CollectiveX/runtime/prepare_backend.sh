@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
-# CollectiveX — in-container backend preparation, one task per node.
-#
-# Runs INSIDE the persistent named container once per allocated node before any
-# benchmark case: builds or validates the COLLX_BENCH backend, then persists the
-# loader environment to .collx_backend/env/node-N.sh for the per-case rank steps
-# (collx_source_backend_env). Benchmark cases are driven from the host by
-# collx_run_shard with run_ep.py argv decoded from the shard control; no per-case
-# configuration enters the container as environment.
-#
-# Required env (exported by the adapter): COLLX_RUNNER
-# Selector: COLLX_BENCH = deepep-v2 | mori
+# Prepare one backend per allocated node and persist its rank environment.
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
@@ -21,9 +11,7 @@ source runtime/common.sh
 
 collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${COLLX_NODES:-1}"
 
-# Resolve and verify the actual CUDA target before compiling source kernels.
-# Expected target derives from the SKU's `arch` in configs/platform_config.json
-# (smXYZ -> "XY.Z"); non-sm (AMD) SKUs have no CUDA target and fail here.
+# Match the CUDA target to the registered SKU before compiling.
 collx_cuda_arch() {
   local expected detected
   expected="$(python3 - "$COLLX_RUNNER" <<'PY'
@@ -135,9 +123,6 @@ collx_prepare_deepep_toolchain() {
   export LD_LIBRARY_PATH="$NVSHMEM_DIR/lib:${LD_LIBRARY_PATH:-}"
 }
 
-# DeepEP V2 is PR #605's ElasticBuffer implementation with upstream PR #630's pure scale-up
-# initialization fix and PR #640's exact libnccl mapping check. Canonical launchers stage the
-# pinned source and mount a private cluster-local build cache at /cx-cache.
 collx_deepep_v2_root() {
   local arch cpu base image
   arch="$(collx_cuda_arch)" || return 1
@@ -145,32 +130,20 @@ collx_deepep_v2_root() {
   [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   base="${COLLX_BACKEND_CACHE_ROOT:-}"
   [[ "$base" = /* ]] || return 1
-  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')" \
-    || return 1
-  image="${image#-}"; image="${image%-}"
-  [ -n "$image" ] || return 1
-  # The source commit determines the tree and submodule gitlinks, so it is the
-  # only source fragment the cache key needs.
-  printf '%s/deepep-v2-v3-%s-sm%s-%s-torch2.10.0-cu130-nccl2.30.4-nvshmem3.3.9-%s' \
-    "$base" "$cpu" "${arch/./}" "$image" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
+  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
+  printf '%s/deepep-v2-%s-sm%s-%s-%s' \
+    "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
 }
 
 collx_activate_deepep_v2() {
   local root venv venv_site execution_id
   root="$(collx_deepep_v2_root)" || return 1
-  # Registry pin (configs/backends.json) for the probe's and the adapter's
-  # wheel-tag check; carried into the rank env by collx_persist_backend_env.
-  export DEEPEP_COMMIT="$COLLX_DEEPEP_V2_COMMIT"
   venv="$root/venv"
   [ -x "$venv/bin/python" ] \
     || { collx_log "ERROR: DeepEP V2 venv interpreter is unavailable"; return 1; }
   export VIRTUAL_ENV="$venv"
   export PATH="$venv/bin:${PATH#"$venv/bin:"}"
-  # The per-case probe and rank steps re-source this env in a fresh container task where
-  # PATH alone has proven insufficient to select the venv interpreter over the image's
-  # bundled deep_ep (the amd64 sglang image ships a 1.2.1 wheel with no ElasticBuffer).
-  # Pinning the venv site-packages on PYTHONPATH makes the from-source 2.0.0 build win
-  # under either interpreter, even when the image ships a shadowing deep_ep wheel.
+  # Ensure the source build wins over any deep_ep wheel bundled in the image.
   for venv_site in "$venv"/lib/python*/site-packages; do break; done
   [ -d "$venv_site" ] \
     || { collx_log "ERROR: DeepEP V2 venv site-packages is unavailable"; return 1; }
@@ -184,11 +157,15 @@ collx_activate_deepep_v2() {
   execution_id="${COLLECTIVEX_EXECUTION_ID:-manual}"
   [[ "$execution_id" =~ ^[A-Za-z0-9._-]+$ ]] \
     || { collx_log "ERROR: DeepEP V2 execution identity is invalid"; return 1; }
-  # JIT CUBINs are per-execution evidence and must be node-local. A shared NFS cache lets
-  # ranks on different nodes race the same compiler output and can trip compiler.hpp asserts.
-  # The identical absolute path still lets ranks on one node share their cold build.
+  # Shared JIT caches race across nodes; keep this cache node-local.
   export EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id"
   export EP_REUSE_NCCL_COMM=1
+  # ElasticBuffer requires NCCL symmetric memory, which needs cuMem. Some
+  # provider image variants bake NCCL_CUMEM_ENABLE=0 (h100-dgxc's does), and
+  # pyxis lets image env override srun-passed env, so a launcher-side export
+  # never reaches the ranks. Exporting it here puts it in the persisted node
+  # environment, which ranks source inside the container after image env.
+  export NCCL_CUMEM_ENABLE=1
   [ ! -L "$EP_JIT_CACHE_DIR" ] \
     || { collx_log "ERROR: DeepEP V2 JIT cache path is unsafe"; return 1; }
   if ! mkdir -p "$EP_JIT_CACHE_DIR" || ! chmod 700 "$EP_JIT_CACHE_DIR"; then
@@ -198,19 +175,14 @@ collx_activate_deepep_v2() {
   unset EP_SUPPRESS_NCCL_CHECK
 }
 
-# Sentinel probe: the registry wheel tag (setup.py bakes DEEPEP_COMMIT's short
-# hash into the local-version tag — catches an image-bundled deep_ep shadowing
-# the from-source build, the b300 failure mode) and ElasticBuffer presence.
+# Catch an image-bundled DeepEP shadowing the from-source build: the shadow
+# (deep_ep 1.2.1) lacks ElasticBuffer, so its presence is the capability check.
 collx_probe_deepep_v2() {
   python3 - <<'PY'
-import importlib.metadata as metadata
 import inspect
-import os
 
 import deep_ep
 
-pinned = os.environ["DEEPEP_COMMIT"]
-assert metadata.version("deep_ep") in {f"2.0.0+{pinned[:7]}", "2.0.0+local"}, metadata.version("deep_ep")
 assert inspect.isclass(deep_ep.ElasticBuffer)
 PY
 }
@@ -263,7 +235,7 @@ collx_build_deepep_v2() {
         || { collx_log "ERROR: DeepEP V2 toolchain preparation failed"; exit 1; }
       EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"
       export EP_NVSHMEM_ROOT_DIR
-      collx_materialize_backend_source deepep-v2 "$source" \
+      collx_materialize_deepep_source "$source" \
         || { collx_log "ERROR: DeepEP V2 staged source is invalid"; exit 1; }
       (cd "$source" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
         python3 -m pip install -q --no-build-isolation --no-deps --force-reinstall .) >&2 2>&1 \
@@ -284,13 +256,13 @@ collx_build_deepep_v2() {
   collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
-# Rack build and rank steps may enter different container instances. Persist each node's
-# loader/import path and build identity on the shared staged mount, then require it from every rank.
+# Rank steps enter fresh container tasks, so persist each node's environment.
 collx_persist_backend_env() {
   local root="$PWD/.collx_backend/env" node_id="${SLURM_NODEID:-0}" path temporary name
   local -a names=(PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
-    NVSHMEM_DIR DEEPEP_COMMIT
-    EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM)
+    NVSHMEM_DIR
+    EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM
+    NCCL_CUMEM_ENABLE)
   [[ "$node_id" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$root" || return 1
   chmod 700 "$root" || return 1
@@ -324,7 +296,8 @@ collx_probe_scaleout_network() {
   done
   IFS=, read -r -a devices <<< "$NCCL_IB_HCA"
   for device in "${devices[@]}"; do
-    rdma_name="$(collx_nccl_hca_device_name "$device")"
+    device="${device#=}"
+    rdma_name="${device%%:*}"
     [ -d "/sys/class/infiniband/$rdma_name" ] \
       || { collx_log "ERROR: configured scale-out RDMA device is absent"; return 1; }
   done

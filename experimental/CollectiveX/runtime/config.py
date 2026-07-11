@@ -63,8 +63,8 @@ def operator_config(path: str, runner: str) -> None:
         # The registry's tracked per-SKU `operator` block is the baseline
         # (de-secreted by operator decision); an operator config document, when
         # provided, overrides it per field. Path "-" means registry-only — and
-        # for SKUs with no tracked block it preserves the historical no-config
-        # behavior (emit nothing) so manual runs on secret-fed SKUs still work.
+        # for SKUs with no tracked block it preserves the no-config behavior
+        # (emit nothing).
         selected = dict(_platforms()[runner].get("operator", {}))
         if path == "-":
             if not selected:
@@ -188,10 +188,8 @@ def backend_registry(path: str | None = None) -> None:
         emit({
             "COLLX_IMAGE_MULTIARCH": image("multiarch"),
             "COLLX_IMAGE_AMD_MORI": image("amd-mori"),
-            "COLLX_MORI_COMMIT_AMD": sha(document["backends"]["mori"]["commit"]),
             "COLLX_DEEPEP_V2_REPO": repo(v2),
             "COLLX_DEEPEP_V2_COMMIT": sha(v2["commit"]),
-            "COLLX_DEEPEP_V2_FMT_COMMIT": sha(v2["submodules"]["third-party/fmt"]),
         })
     except (IndexError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-backend-registry", file=sys.stderr)
@@ -203,18 +201,11 @@ def load(path: str) -> dict:
         return json.load(stream)
 
 
-def network_mode(path: str) -> None:
-    modes = {case.get("mode", "normal") for case in load(path)["cases"]}
-    if modes != {"normal"}:
-        raise SystemExit(1)
-    print("normal", end="")
-
-
 def case_count(path: str) -> None:
     print(len(load(path)["cases"]), end="")
 
 
-def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, index: int) -> None:
+def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) -> None:
     """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
     get = lambda key, default="": str(case.get(key) or default)
     argv = [
@@ -231,9 +222,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, ind
         "--hidden", get("hidden"),
         "--topk", get("topk"),
         "--experts", get("experts"),
-        # Scheduled cases carry the workload seed from configs/suites.yaml; the
-        # positional seed only reaches ad-hoc manual runs.
-        "--seed", get("seed", seed),
+        "--seed", get("seed"),
         "--runner", runner,
         "--topology-class", get("topology_class", "manual"),
         "--transport", get("transport", "unknown"),
@@ -252,7 +241,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, ind
 
 
 def case_args(
-    path: str, index: int, runner: str, ts: str, seed: str,
+    path: str, index: int, runner: str, ts: str,
     ngpus: str, nodes: str, gpus_per_node: str, scale_up_domain: str,
 ) -> None:
     document = load(path)
@@ -267,61 +256,7 @@ def case_args(
     if placement != (ngpus, nodes, gpus_per_node, scale_up_domain):
         print(f"case placement {placement} differs from the allocation", file=sys.stderr)
         raise SystemExit(1)
-    _emit_argv(case, document["version"], runner, ts, seed, index)
-
-
-def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None:
-    """Ad-hoc (shard-less) runs take one case per phase from the operator's COLLX_* env."""
-    env = os.environ.get
-    case = {
-        "backend": env("COLLX_BENCH", ""), "mode": env("COLLX_MODE", "normal"),
-        "phase": phase, "routing": env("COLLX_ROUTING", "uniform"),
-        "gpus_per_node": env("COLLX_GPUS_PER_NODE", "0"),
-        "scale_up_domain": env("COLLX_SCALE_UP_DOMAIN", "0"),
-        "scope": env("COLLX_SCOPE", "scale-up"),
-        "scale_up_transport": env("COLLX_SCALE_UP_TRANSPORT", "unknown"),
-        "scale_out_transport": env("COLLX_SCALE_OUT_TRANSPORT", ""),
-        "ladder": env("COLLX_TOKENS_LADDER", ""),
-        # No workload or timing fallbacks: a manual run states its full shape and
-        # profile or run_ep.py rejects the argv. The scheduled values live in
-        # configs/suites.yaml.
-        "hidden": env("COLLX_HIDDEN", ""), "topk": env("COLLX_TOPK", ""),
-        "experts": env("COLLX_EXPERTS", ""),
-        "topology_class": env("COLLX_TOPO", "manual"),
-        "transport": env("COLLX_TRANSPORT", "unknown"),
-        "case_id": env("COLLX_CASE_ID", ""), "suite": env("COLLX_SUITE", ""),
-        "workload": env("COLLX_WORKLOAD_NAME", ""),
-        "timing": f"{env('COLLX_ITERS', '')}:{env('COLLX_TRIALS', '')}:{env('COLLX_WARMUP', '')}",
-    }
-    _emit_argv(case, env("COLLX_VERSION", "1"), runner, ts, seed, index)
-
-
-def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str, amd: str, mori: str) -> None:
-    try:
-        entry = _platforms()[runner]
-        expected = int(entry["gpus_per_node"])
-        vendor = entry["vendor"]
-        run_timeout = int(entry["run_timeout"])
-        master_port = entry.get("master_port")
-    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
-        raise SystemExit(1)
-    # Node counts realizing the registered EP degrees (8 and 16, matching
-    # capability._topologies) on this SKU's fixed gpus_per_node.
-    allowed = {max(1, 8 // expected), 16 // expected}
-    if nodes not in allowed or gpus_per_node != expected:
-        raise SystemExit(1)
-    values = {"COLLX_NGPUS": nodes * expected,
-              "COLLX_RUN_TIMEOUT": run_timeout,
-              "COLLX_IMAGE": amd if vendor == "amd" else multiarch}
-    if master_port is not None:
-        values["COLLX_MASTER_PORT"] = int(master_port)
-    if vendor == "amd":
-        # The MoRI kernel is derived by the adapter from (arch, scope); no
-        # kernel-type env is emitted (COLLX_MORI_KERNEL_TYPE survives only as an
-        # optional cross-check the adapter honors if a launcher still sets it).
-        values.update(MORI_COMMIT=mori, MORI_DISABLE_AUTO_XGMI=0, MORI_ENABLE_SDMA=1,
-                      MORI_APP_LOG_LEVEL="info", MORI_SHMEM_LOG_LEVEL="info", MORI_IO_LOG_LEVEL="info")
-    emit(values)
+    _emit_argv(case, document["version"], runner, ts, index)
 
 
 def main() -> None:
@@ -329,27 +264,20 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     for name, names in {
         "operator-config": ("path", "runner"), "merge-operator-config": ("path",),
-        "network-mode": ("path",),
         "backend-registry": (), "case-count": ("path",),
-        "case-args": ("path", "index", "runner", "ts", "seed",
+        "case-args": ("path", "index", "runner", "ts",
                       "ngpus", "nodes", "gpus_per_node", "scale_up_domain"),
-        "manual-args": ("phase", "index", "runner", "ts", "seed"),
-        "canonical-policy": ("runner", "nodes", "gpus_per_node", "multiarch", "amd", "mori"),
     }.items():
         command = commands.add_parser(name)
         for arg in names: command.add_argument(arg)
     args = parser.parse_args()
     if args.command == "operator-config": operator_config(args.path, args.runner)
     elif args.command == "merge-operator-config": merge_operator_config(args.path)
-    elif args.command == "network-mode": network_mode(args.path)
     elif args.command == "backend-registry": backend_registry()
     elif args.command == "case-count": case_count(args.path)
     elif args.command == "case-args":
-        case_args(args.path, int(args.index), args.runner, args.ts, args.seed,
+        case_args(args.path, int(args.index), args.runner, args.ts,
                   args.ngpus, args.nodes, args.gpus_per_node, args.scale_up_domain)
-    elif args.command == "manual-args":
-        manual_args(args.phase, int(args.index), args.runner, args.ts, args.seed)
-    else: canonical_policy(args.runner, int(args.nodes), int(args.gpus_per_node), args.multiarch, args.amd, args.mori)
 
 
 if __name__ == "__main__":

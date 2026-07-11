@@ -2,7 +2,7 @@
 # CollectiveX shared standard NVIDIA Slurm launcher (one or two nodes).
 # shellcheck disable=SC2034
 #
-# Flow (section banners below match the collx_set_failure_stage labels GHA reports):
+# Flow:
 #   identity -> setup -> repository-stage -> backend-setup -> scheduler-allocation
 #   -> container-import -> container-launch -> artifact-collection
 set -euo pipefail
@@ -14,7 +14,7 @@ REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
 source "$HERE/../runtime/common.sh"
 
 # ---- identity: resolve SKU, backend, platform -------------------------------
-RUNNER="${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}"
+RUNNER="${COLLX_SHARD_SKU:-}"
 ALLOC_EXTRA=(); SRUN_EXTRA=(); LOCAL_IMPORT=0
 case "$RUNNER" in
   h100-dgxc) PRODUCT=h100; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1 ;;
@@ -33,11 +33,11 @@ case "$RUNNER" in
     SRUN_EXTRA=(--mpi=none --container-remap-root)
     LOCAL_IMPORT=1
     ;;
-  *) collx_die "set COLLX_SHARD_SKU or COLLX_PUBLIC_RUNNER to a registered NVIDIA SKU" ;;
+  *) collx_die "COLLX_SHARD_SKU is not a registered NVIDIA SKU" ;;
 esac
 TOPO="${PRODUCT}-nvlink-island"
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
-export COLLX_IMAGE_PLATFORM=linux/amd64
+export COLLX_IMAGE_PLATFORM=linux/amd64 COLLX_VENDOR=nvidia
 # ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 
@@ -45,14 +45,12 @@ NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
 SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
 NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
-IMAGE="${COLLX_IMAGE:-$(collx_default_image "$PRODUCT")}"
+IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_MULTIARCH}"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-collx_require_registered_topology "$RUNNER" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" "$NGPUS"
 case "$COLLX_BENCH" in
   deepep-v2) ;;
   *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
 esac
-collx_apply_timing_profile
 
 export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
 export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
@@ -65,7 +63,6 @@ else
   unset COLLX_SCALE_OUT_TRANSPORT
 fi
 export NCCL_CUMEM_ENABLE=1
-collx_load_network_control_mode "$COLLX_DIR" || collx_die "cannot resolve network control mode"
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 collx_require_vars COLLX_PARTITION COLLX_SQUASH_DIR
 [ "$REQUIRE_ACCOUNT" = 0 ] || collx_require_vars COLLX_ACCOUNT
@@ -77,18 +74,15 @@ case "$RUNNER" in
 esac
 
 collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
-[ "${COLLX_DRYRUN:-0}" != 1 ] || { collx_log "COLLX_DRYRUN=1 - not allocating"; exit 0; }
 collx_select_image "$IMAGE"
 
 # ---- repository-stage: compute-visible copy of the checkout -----------------
-collx_set_failure_stage repository-stage
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "${COLLX_STAGE_DIR:-}")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
 # ---- backend-setup: pinned DeepEP source + isolated build cache -------------
 # The backend case above admits only deepep-v2, so its staging is unconditional.
-collx_set_failure_stage backend-setup
-collx_prepare_backend_source "$MOUNT_SRC" "$COLLX_BENCH" \
+collx_prepare_deepep_source "$MOUNT_SRC" \
   || collx_die "cannot stage the pinned backend source"
 export COLLX_BACKEND_SOURCE_ROOT=/ix/experimental/CollectiveX/.collx_sources
 collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
@@ -99,7 +93,6 @@ export COLLX_BACKEND_CACHE_ROOT=/cx-cache
 # ---- scheduler-allocation: salloc, retry until nodes validate ---------------
 # Each attempt must pass the network profile (and accelerator-context on b300);
 # a rejected allocation is cancelled and its nodes excluded from the next attempt.
-collx_set_failure_stage scheduler-allocation
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 allocation=(--partition="$COLLX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
   --ntasks-per-node="$GPN" --exclusive --time="$TIME_MIN" "${ALLOC_EXTRA[@]}")
@@ -115,8 +108,7 @@ for allocation_attempt in 1 2 3; do
   export COLLX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"
   collx_salloc_jobid "${attempt_allocation[@]}"
   [ -n "$JOB_ID" ] || collx_die "could not resolve allocated JOB_ID from salloc"
-  collx_set_failure_stage setup
-  if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT" 0; then
+  if ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
     validation_failure=network
   elif [ "$RUNNER" = b300 ] \
       && ! collx_validate_cuda_context_on_job "$JOB_ID" "$NODES" "$GPN"; then
@@ -129,17 +121,16 @@ for allocation_attempt in 1 2 3; do
   [ "$RUNNER:$validation_failure" != b300:cuda-context ] || retryable=1
   if [ "$retryable" = 0 ] || [ "$allocation_attempt" = 3 ]; then
     if [ "$validation_failure" = network ]; then
-      collx_fail_stage setup "$COLLX_NETWORK_PROFILE_LOG" || true
+      collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
       collx_die "allocated nodes failed the network profile"
     fi
-    collx_fail_stage setup "$COLLX_CUDA_CONTEXT_LOG" || true
+    collx_log_tail "$COLLX_CUDA_CONTEXT_LOG"
     collx_die "allocated nodes failed accelerator context validation"
   fi
   rejected_nodes="$(collx_allocation_nodes_csv "$JOB_ID")" \
     || collx_die "cannot identify nodes from a rejected allocation"
   collx_log "allocated nodes failed $validation_failure validation; retrying elsewhere"
-  collx_cancel_job "$JOB_ID" || collx_die "cannot release a rejected allocation"
-  collx_clear_allocation_jobid || collx_die "cannot reset rejected allocation state"
+  collx_cleanup_allocation || collx_die "cannot release a rejected allocation"
   JOB_ID=""
   [ -z "$excluded_nodes" ] || excluded_nodes+=,
   excluded_nodes+="$rejected_nodes"
@@ -147,14 +138,11 @@ done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 
 # ---- container-import: squash file (login-local on b300, else on the job) ----
-collx_set_failure_stage container-import
 if [ "$LOCAL_IMPORT" = 1 ]; then
   SQUASH_FILE="$(COLLX_ENROOT_LOCAL_IMPORT=1 collx_ensure_squash "$COLLX_SQUASH_DIR" "$IMAGE")"
 else
   SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$COLLX_SQUASH_DIR" "$IMAGE")"
 fi
-collx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
-  "${COLLX_SHARD_FILE:-}"
 
 # ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable "${SRUN_EXTRA[@]}")

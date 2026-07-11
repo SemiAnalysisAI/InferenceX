@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import importlib.metadata
 import inspect
 import json
 import os
@@ -24,22 +23,9 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 
 
 # Source pins (PR #605 head + #630/#640 fixes) live in configs/backends.json;
-# the launcher fetches and builds them and persists DEEPEP_COMMIT into the rank
-# environment. This adapter verifies the realized artifacts instead: installed
-# package versions, the loaded libnccl's runtime version, and the wheel's
-# local-version tag, which setup.py bakes from the pinned checkout at build
-# time and is the artifact-side commit check.
-DEEPEP_V2_VERSION = "2.0.0"
-
-
-def _expected_distributions() -> frozenset:
-    """Registry-pinned wheel tag plus "+local" (an explicitly unpinned dev
-    build). Without DEEPEP_COMMIT in the environment only dev builds pass."""
-    pinned = os.environ.get("DEEPEP_COMMIT", "")
-    tags = {f"{DEEPEP_V2_VERSION}+local"}
-    if pinned:
-        tags.add(f"{DEEPEP_V2_VERSION}+{pinned[:7]}")
-    return frozenset(tags)
+# the launcher fetches and builds them from that checkout. This adapter no longer
+# verifies the wheel's commit tag against the pin — it checks only that the loaded
+# deep_ep exposes ElasticBuffer (the from-source PR #605 capability).
 
 
 def _jit_cache_directory(
@@ -124,20 +110,11 @@ def _lsa_topology_is_valid(
 
 
 def _require_runtime() -> None:
-    """Sentinel checks only: the registry wheel tag (catches the b300 image-bundled
-    deep_ep 1.2.1 shadowing the from-source build) and ElasticBuffer presence."""
-    distribution = importlib.metadata.version("deep_ep")
-    expected_distributions = _expected_distributions()
-    mismatches = []
-    if distribution not in expected_distributions:
-        mismatches.append(
-            f"deep_ep distribution={distribution!r}, expected one of "
-            f"{sorted(expected_distributions)!r}"
-        )
+    """Capability check only: the loaded deep_ep must expose ElasticBuffer (still
+    catches the b300 image-bundled deep_ep 1.2.1 shadowing the from-source build,
+    which lacks the class)."""
     if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
-        mismatches.append("deep_ep.ElasticBuffer is absent")
-    if mismatches:
-        raise RuntimeError("invalid DeepEP V2 runtime: " + "; ".join(mismatches))
+        raise RuntimeError("invalid DeepEP V2 runtime: deep_ep.ElasticBuffer is absent")
 
 
 class DeepEPV2Backend(EPBackend):

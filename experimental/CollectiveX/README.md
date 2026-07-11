@@ -83,15 +83,20 @@ runner for postmortem; result artifacts carry only the fields listed in the meth
 Runner-local Slurm and storage values use a strict per-SKU JSON document at
 `$XDG_CONFIG_HOME/inferencex/collectivex.json` or `COLLECTIVEX_OPERATOR_CONFIG`. Unknown runners,
 fields, duplicate keys, and non-JSON input fail closed; configuration is never evaluated as shell.
-GHA passes encrypted `COLLECTIVEX_OPERATOR_CONFIG_V1` content to the launcher, which validates it,
-exports the selected SKU's values, and deletes the temporary copy before allocation.
+GHA passes encrypted `COLLECTIVEX_OPERATOR_CONFIG_V1` content to the launcher, which validates it
+and overlays it, per field, onto the tracked baseline. The secret is optional: when it is absent a
+SKU runs entirely from its tracked baseline, and any field the baseline already supplies needs no
+secret.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
-identity (vendor/arch/machine/product), fixed placement, launcher, canonical runtime policy
-(run timeout, master port), the operator-config fields each SKU must supply
-(`operator_fields`), and the SKU's scale-out RDMA selectors (`network` block, overlaid onto the
-base operator config). `capability.py` derives EP topologies from it, and a suite's
-`platforms: all` in `configs/suites.yaml` resolves to every SKU registered there.
+identity (vendor/arch/machine/product), fixed placement, launcher, the operator-config fields each
+SKU must supply (`operator_fields`), the tracked baseline values for those fields (`operator` block,
+overridden per field by an operator document/secret when present), and the SKU's scale-out RDMA
+selectors (`network` block, overlaid the same way). A SKU whose `operator` block already covers its
+`operator_fields` needs no secret; SKUs without a complete baseline stay secret-fed and fail closed
+with a `validation-missing-required-*` marker if the secret is gone. `capability.py` derives EP
+topologies from it, and a suite's `platforms: all` in `configs/suites.yaml` resolves to every SKU
+registered there.
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
 its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class`
@@ -121,14 +126,13 @@ beneath, the configured shared container directory so it is compute-visible. Can
 ignores any legacy configured `stage_dir` and always uses the validated compute-visible account-home
 base; an execution-ID suffix isolates parallel B300 workers. Canonical GB300 execution likewise
 ignores its legacy group-writable `stage_dir` and derives an execution-specific private base beneath the
-validated compute-visible account home. The workflow proves every derived base is visible from all
-allocated nodes before launch.
+validated compute-visible account home. Backend preparation runs from that staged tree on every node.
 
 Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
 platform, so one run never reuses another run's imported filesystem. Backend source pins and image
 references live in `configs/backends.json`; the DeepEP V2 build is fetched at the pinned commit,
 verified by the wheel's commit-derived local-version tag and `ElasticBuffer` presence, and cached in
-a cluster-local build cache keyed by recipe, architecture, image, and commit. Only the fixed
+a cluster-local build cache keyed by architecture, image, and commit. Only the fixed
 `/cx-cache` mount reaches the container.
 
 ## Local Checks

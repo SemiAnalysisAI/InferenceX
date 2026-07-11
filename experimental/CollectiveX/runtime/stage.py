@@ -10,17 +10,14 @@ from pathlib import Path
 import shutil
 
 
-# NOTE: never exclude .shards — the per-leg control JSON (COLLX_SHARD_FILE) lives there
-# and must reach the staged tree, or the cross-node preflight fails "test -r shard" (exit 11).
-EXCLUDES = {"__pycache__", "results", ".collx_workloads", ".collx_backend", ".collx_sources",
-            ".venv", ".pytest_cache", "private-infra.md", "goal.md", "notes.md"}
+EXCLUDES = {"__pycache__", "results", ".shards", ".collx_workloads", ".collx_backend",
+            ".collx_sources", ".venv", ".pytest_cache", "private-infra.md", "goal.md",
+            "notes.md"}
 
 
 def implicit_stage_base(args) -> None:
     # Resolve the account home from /etc/passwd, not $HOME. The GHA launcher deliberately
-    # points $HOME at a runner-local /tmp sandbox; honoring it (Path.home()) would land the
-    # stage on node-local /tmp, invisible to the allocated compute node, and the preflight
-    # probe fails at repository-stage. The passwd home is the compute-visible account root.
+    # points $HOME at a runner-local /tmp sandbox. The passwd home is compute-visible.
     base = args.home or pwd.getpwuid(os.getuid()).pw_dir
     home = Path(base).resolve()
     suffix = ""

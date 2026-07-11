@@ -219,8 +219,8 @@ jobs:
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           source experimental/CollectiveX/runtime/common.sh
-          collx_reconcile_recorded_allocation "$COLLX_JOB_ROOT" \
-            || { echo "CollectiveX allocation cleanup could not be reconciled; results may still be changing" >&2; exit 1; }
+          collx_cleanup_allocation "$COLLX_JOB_ROOT" \
+            || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
           python3 experimental/CollectiveX/summarize.py \
             --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
           shopt -s nullglob
@@ -243,7 +243,7 @@ jobs:
             ${{ env.COLLX_JOB_ROOT }}/artifact/*.json
           if-no-files-found: error
           retention-days: 14
-      # Delete the private /tmp job root only after re-validating its path shape and confirming allocation teardown; refuses anything unrecognized.
+      # Delete the private /tmp job root after the preceding step releases any allocation.
       - name: Cleanup isolated workspace
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
@@ -258,8 +258,5 @@ jobs:
             || { echo "CollectiveX cleanup source is invalid" >&2; exit 1; }
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          source experimental/CollectiveX/runtime/common.sh
-          collx_reconcile_recorded_allocation "$COLLX_JOB_ROOT" \
-            || { echo "CollectiveX allocation cleanup could not be reconciled; retaining isolated files" >&2; exit 1; }
           rm -rf -- "$COLLX_JOB_ROOT"
           [ "$COLLX_JOB_PARENT" = /tmp ] || rm -f -- "$COLLX_JOB_PARENT"

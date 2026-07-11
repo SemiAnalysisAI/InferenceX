@@ -10,13 +10,7 @@
   "backends": {
     "deepep-v2": {
       "repo": "https://github.com/deepseek-ai/DeepEP",
-      "commit": "fa8a9b16898204afd347c663b89e65ef87dc6ce6",
-      "submodules": {
-        "third-party/fmt": "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
-      }
-    },
-    "mori": {
-      "commit": "bf99bdf18fc69887a346913ca01c315c2aa9bd4c"
+      "commit": "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
     }
   }
 }
