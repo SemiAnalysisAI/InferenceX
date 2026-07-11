@@ -1222,7 +1222,7 @@ _install_swebench_agent_deps() {
 # the normal-return path; the except-path hook stays for real exceptions.
 _patch_swebench_agent() {
     python3 - <<'PYPATCH'
-import sys
+import os, sys
 
 SENTINEL = "inferencex sandbox cleanup"
 
@@ -1297,7 +1297,12 @@ mini_ok = patch(mini_sb.__file__, [
     ),
 ])
 
+APP_NAME = os.environ.get("SWEBENCH_MODAL_APP_NAME", "infx-evals-swe")
 rex_ok = patch(rex_modal.__file__, [
+    (
+        'self._app = modal.App.lookup("swe-rex", create_if_missing=True)',
+        f'self._app = modal.App.lookup("{APP_NAME}", create_if_missing=True)  # inferencex app name',
+    ),
     (
         "        if self._sandbox is not None:\n"
         "            exit_code = await self._sandbox.poll.aio()\n"
@@ -1479,7 +1484,12 @@ maybe_run_eval() {
 # docker daemon needed on this node. Writes <gen_dir>/agent_out/preds.json
 # (dict keyed by instance_id; consumed via swebench_score.py --predictions-file).
 # Env knobs:
-#   SWEBENCH_AGENT_WORKERS     (default 64)    parallel instances / sandboxes
+#   SWEBENCH_AGENT_WORKERS     (default: the config's CONC, else 64) parallel
+#                              instances / sandboxes -- the eval drives the
+#                              server at the concurrency its config was tuned
+#                              for (pareto sweep 2026-07-10: conc-matched
+#                              workers cut full-run generation 90m -> 51m at
+#                              identical score)
 #   SWEBENCH_AGENT_STEP_LIMIT  (default 75)    per-instance agent step cap
 #   SWEBENCH_AGENT_TIMEOUT     (default 14400) whole-generation guard, seconds
 #   SWEBENCH_AGENT_RUNTIME_TIMEOUT (default 3600) max sandbox lifetime backstop
@@ -1596,14 +1606,14 @@ PYGEN
     # Expected instance count: the EVAL_LIMIT slice, else the full Lite test
     # split (override via SWEBENCH_EXPECTED_INSTANCES for other datasets).
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-64} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-75} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-75} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
         --subset lite --split test \
         --environment-class swerex_modal \
         "${slice_args[@]}" \
-        -w "${SWEBENCH_AGENT_WORKERS:-64}" \
+        -w "${SWEBENCH_AGENT_WORKERS:-${CONC:-64}}" \
         -o "$gen_dir/agent_out" &
     local mini_pid=$!
     # Completion watchdog: mini-extra can hang on exit AFTER all instances
@@ -1651,27 +1661,27 @@ PYGEN
     # sandbox otherwise bills until runtime_timeout (1h). SWEBENCH_SANDBOX_SWEEP=0
     # disables (tests).
     #
-    # SCOPE: Sandbox.list() enumerates the CURRENT Modal environment, and the
-    # agent creates its sandboxes in that same environment, so the sweep is
-    # confined to this environment -- NOT the whole workspace. This is only safe
-    # against sibling jobs if each concurrent agentic-eval leg runs in its OWN
-    # Modal environment: the e2e matrix (test-sweep-agentic-evals) fans out
-    # multiple legs sharing one MODAL_TOKEN, so without per-leg isolation this
-    # sweep would terminate a sibling leg's live sandboxes mid-run. The workflow
-    # must set a distinct MODAL_ENVIRONMENT per leg (workflow scope) -- the modal
-    # client honors it transparently for both create and list, so no change is
-    # needed here beyond exporting it upstream.
+    # SCOPE: the sweep is confined to OUR app (SWEBENCH_MODAL_APP_NAME, the
+    # same app swe-rex creates sandboxes under after _patch_swebench_agent), so
+    # it can never touch other apps' sandboxes in the workspace. Concurrent
+    # agentic-eval legs still share this app, so before the e2e matrix ever
+    # fans out parallel legs, give each leg its own app name (or a distinct
+    # MODAL_ENVIRONMENT) -- otherwise one leg's sweep reaps a sibling's live
+    # sandboxes mid-run.
     [ "${SWEBENCH_SANDBOX_SWEEP:-1}" = "1" ] && python3 - <<'PYSWEEP' || true
 try:
+    import os
     import modal
+    name = os.environ.get("SWEBENCH_MODAL_APP_NAME", "infx-evals-swe")
+    app = modal.App.lookup(name)  # raises if absent (nothing was created -> nothing to sweep)
     n = 0
-    for sb in modal.Sandbox.list():
+    for sb in modal.Sandbox.list(app_id=app.app_id):
         try:
             sb.terminate()
             n += 1
         except Exception as e:
             print(f"[swebench-agentic] sweep: could not terminate {sb.object_id}: {e}")
-    print(f"[swebench-agentic] sandbox sweep: terminated {n} lingering sandbox(es)")
+    print(f"[swebench-agentic] sandbox sweep ({name}): terminated {n} lingering sandbox(es)")
 except Exception as e:
     print(f"[swebench-agentic] sandbox sweep skipped: {e}")
 PYSWEEP
@@ -1824,8 +1834,9 @@ run_swebench_eval() {
     # Optional per-instance test timeout (harness default 1800s): real tests
     # finish in seconds-to-minutes, so persistently-erroring instances gate the
     # scoring tail at the full default.
-    local itimeout_args=()
-    if [ -n "${SWEBENCH_EVAL_TIMEOUT:-}" ]; then itimeout_args=(--instance-timeout "$SWEBENCH_EVAL_TIMEOUT"); fi
+    # Default 900s: real test runs bill ~33s; only persistently-erroring
+    # instances touch the ceiling, and they gate the scoring tail.
+    local itimeout_args=(--instance-timeout "${SWEBENCH_EVAL_TIMEOUT:-900}")
     # Guard against a stalled scoring backend (e.g. Modal image-build queue):
     # kill scoring after SWEBENCH_SCORE_TIMEOUT seconds (default 2h) rather
     # than holding the GPU allocation until the slurm wall clock.
