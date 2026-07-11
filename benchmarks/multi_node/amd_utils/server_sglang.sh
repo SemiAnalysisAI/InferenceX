@@ -812,7 +812,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 if [[ -n "${!_v+x}" ]]; then printf '%s=%s\n' "$_v" "${!_v}"; fi
             done
             echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
-            echo "AGENTIC_OUTPUT_DIR=/run_logs/slurm_job-${SLURM_JOB_ID}"
+            # Do NOT pin AGENTIC_OUTPUT_DIR: it must default to /workspace (the
+            # host repo mount == GITHUB_WORKSPACE) so the aggregated
+            # ${RESULT_FILENAME}_conc<N>.json lands where the workflow guard globs
+            # it. /workspace is bind-mounted writable, same as the co-located path.
             echo "HF_HOME=/run_logs/hf_cache"
             echo "MODEL_DIR=/models"
             # A pre-baked client image ships aiperf at CLIENT_AIPERF_VENV; when
