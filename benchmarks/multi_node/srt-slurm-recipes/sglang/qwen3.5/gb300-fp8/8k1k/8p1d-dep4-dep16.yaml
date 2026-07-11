@@ -1,6 +1,5 @@
 name: "qwen3.5-8p1d-dep4-dep16"
 
-setup_script: rebuild-deepep.sh
 
 sbatch_directives:
   mem: "0"

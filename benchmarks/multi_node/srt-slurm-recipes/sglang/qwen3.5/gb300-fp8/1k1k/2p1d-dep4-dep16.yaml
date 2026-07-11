@@ -1,6 +1,5 @@
 name: "qwen3.5-2p1d-dep4-dep16"
 
-setup_script: rebuild-deepep.sh
 
 dynamo:
   hash: 46520ca59afe992fb5ef61b3197b2316f8df9b2b

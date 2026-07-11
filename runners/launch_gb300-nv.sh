@@ -201,13 +201,6 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     cd "$SRT_REPO_DIR"
     if [[ $PRECISION == "fp8" ]]; then
         git checkout main
-        # The stock configs/rebuild-deepep.sh (setup_script of the wide-EP
-        # fp8 recipes) resolves NVSHMEM by directory name, which can match a
-        # header-less stub in the cu13 nightly image (tilelang's bundled tvm
-        # contrib/nvshmem) and fail the DeepEP build with "nvshmem.h: No
-        # such file or directory". Overlay our header-based resolver.
-        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/rebuild-deepep.sh" \
-            configs/rebuild-deepep.sh
     else
         git checkout sa-submission-q2-2026
     fi
