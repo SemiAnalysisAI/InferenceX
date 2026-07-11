@@ -221,23 +221,28 @@ EOF
 
         # Tuned DeepSeek-V4 serving recipe for this section's image:
         # decode-only CUDA graphs, sparse MLA with prefill query
-        # quantization, AMXF4 Mega-MoE, NUMA binding, cumem allocator,
-        # and fastsafetensors weight loading.
+        # quantization, AMXF4 Mega-MoE, and NUMA binding.
+        # --enable-cumem-allocator is deliberately absent: LMCacheMPConnector
+        # exports the KV cache to the LMCache server through legacy CUDA IPC
+        # handles, and cuMem/VMM allocations cannot be exported that way
+        # (register_kv_caches fails with cudaErrorInvalidValue).
         VLLM_COMPILATION_CONFIG='{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
         VLLM_TUNING_ARGS=(
             --gpu-memory-utilization 0.85
             --numa-bind
-            --enable-cumem-allocator
             --prefill-schedule-interval 8
             --max-cudagraph-capture-size "$MAX_NUM_SEQS"
-            --load-format fastsafetensors
             --no-enable-flashinfer-autotune
             --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
             --disable-uvicorn-access-log
         )
+        # fastsafetensors stages checkpoint shards on-GPU while loading.
+        # Without --enable-ep-weight-filter every rank stages the full
+        # expert weights and OOMs during load, so it is EP-only here.
         EP_TUNING_ARGS=(
             --moe-backend deep_gemm_amxf4_mega_moe
             --enable-ep-weight-filter
+            --load-format fastsafetensors
         )
         export VLLM_USE_V2_MODEL_RUNNER=1
         export VLLM_USE_RUST_FRONTEND=1
