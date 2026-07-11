@@ -109,6 +109,17 @@ ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 LMCACHE_SERVER_PID=""
 
+# AgentX concurrency counts live session trees, not individual requests.
+# Subagent fan-out can push instantaneous request concurrency above CONC, so
+# leave 2x headroom rather than clipping those bursts at the scheduler.
+MAX_NUM_SEQS=$((2 * CONC))
+
+# Serving-flag overlays: the lmcache arm replaces these with its tuned
+# recipe; Mooncake and GPU-cache baselines keep the stock flags.
+VLLM_COMPILATION_CONFIG='{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+VLLM_TUNING_ARGS=()
+EP_TUNING_ARGS=()
+
 OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
@@ -123,7 +134,6 @@ if agentic_kv_offload_enabled; then
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -187,11 +197,6 @@ EOF
         LMCACHE_VERSION=0.5.1
         agentic_pip_install --quiet --no-cache-dir "lmcache==$LMCACHE_VERSION"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
-        # Async KV loads park requests in WAITING_FOR_REMOTE_KVS holding
-        # blocks; without the PR #45406 scheduler fix the waiting-queue scan
-        # can freeze permanently once nothing is running (hung warmup
-        # stragglers in PR #2153 bring-up).
-        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         LMCACHE_HOST=127.0.0.1
         LMCACHE_PORT=$((PORT + 12000))
@@ -213,6 +218,35 @@ EOF
         LMCACHE_MQ_TIMEOUT=300
         # Identical prefixes must hash to identical cache keys across DP ranks.
         export PYTHONHASHSEED=0
+
+        # Tuned DeepSeek-V4 serving recipe for this section's image:
+        # decode-only CUDA graphs, sparse MLA with prefill query
+        # quantization, AMXF4 Mega-MoE, NUMA binding, cumem allocator,
+        # and fastsafetensors weight loading.
+        VLLM_COMPILATION_CONFIG='{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+        VLLM_TUNING_ARGS=(
+            --gpu-memory-utilization 0.85
+            --numa-bind
+            --enable-cumem-allocator
+            --prefill-schedule-interval 8
+            --max-cudagraph-capture-size "$MAX_NUM_SEQS"
+            --load-format fastsafetensors
+            --no-enable-flashinfer-autotune
+            --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+            --disable-uvicorn-access-log
+        )
+        EP_TUNING_ARGS=(
+            --moe-backend deep_gemm_amxf4_mega_moe
+            --enable-ep-weight-filter
+        )
+        export VLLM_USE_V2_MODEL_RUNNER=1
+        export VLLM_USE_RUST_FRONTEND=1
+        export VLLM_DEEPSEEK_V4_USE_MEGA_MOE=1
+        export VLLM_USE_FLASHINFER_MOE_FP8=0
+        export VLLM_DEEP_GEMM_WARMUP=skip
+        export VLLM_DSV4_MEGA_FP8_COMBINE=1
+        export VLLM_RPC_TIMEOUT=600000
+        export TILELANG_CLEANUP_TEMP_FILES=1
 
         echo "Starting LMCache MP server on port $LMCACHE_PORT..."
         # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
@@ -274,13 +308,8 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    EP_ARGS=(--enable-expert-parallel "${EP_TUNING_ARGS[@]}")
 fi
-
-# AgentX concurrency counts live session trees, not individual requests.
-# Subagent fan-out can push instantaneous request concurrency above CONC, so
-# leave 2x headroom rather than clipping those bursts at the scheduler.
-MAX_NUM_SEQS=$((2 * CONC))
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
@@ -298,7 +327,8 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${VLLM_CP_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --compilation-config "$VLLM_COMPILATION_CONFIG"
+    "${VLLM_TUNING_ARGS[@]}"
     --attention_config.use_fp4_indexer_cache=True
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4

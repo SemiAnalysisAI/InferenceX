@@ -127,7 +127,6 @@ if agentic_kv_offload_enabled; then
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -189,11 +188,6 @@ EOF
         LMCACHE_VERSION=0.5.1
         agentic_pip_install --quiet --no-cache-dir "lmcache==$LMCACHE_VERSION"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
-        # Async KV loads park requests in WAITING_FOR_REMOTE_KVS holding
-        # blocks; without the PR #45406 scheduler fix the waiting-queue scan
-        # can freeze permanently once nothing is running (hung warmup
-        # stragglers in PR #2153 bring-up).
-        python3 "$(dirname "$0")/patch_vllm_pr45406.py"
 
         LMCACHE_HOST=127.0.0.1
         LMCACHE_PORT=$((PORT + 12000))

@@ -1785,10 +1785,10 @@ dsv4-fp4-b200-vllm-agentic:
 # LMCache CPU-offload arm of dsv4-fp4-b200-vllm-agentic, split into its own
 # config so it can be triggered/tested independently of the Mooncake curve.
 # Points mirror the Mooncake offload points; the GPU-cache (kv-offloading:
-# none) baselines live in the parent config only. Runs the v0.24.0 image
-# (the LMCache-0.5.x-validated pairing) while the parent stays on v0.23.0.
+# none) baselines live in the parent config only. Runs a tuned vLLM build
+# while the parent stays on the stock v0.23.0 image.
 dsv4-fp4-b200-vllm-agentic-lmcache:
-  image: vllm/vllm-openai:v0.24.0
+  image: inferactinc/public:sprint-agentx-fast-x86_64-cu13.0.1-6a1e7bf
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
