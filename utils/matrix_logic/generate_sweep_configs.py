@@ -89,6 +89,15 @@ def effective_gpu_count(benchmark: dict) -> int:
         * benchmark.get(Fields.PCP_SIZE.value, 1)
     )
 
+def with_worker_parallelism_defaults(worker: dict) -> dict:
+    """Return a worker config with explicit parallelism defaults."""
+    return {
+        **worker,
+        Fields.PP.value: worker.get(Fields.PP.value, 1),
+        Fields.DCP_SIZE.value: worker.get(Fields.DCP_SIZE.value, 1),
+        Fields.PCP_SIZE.value: worker.get(Fields.PCP_SIZE.value, 1),
+    }
+
 
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
@@ -405,8 +414,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     # spec_decoding defaults to "none" if not specified
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
 
                     # Get concurrency values (can be list or range)
                     conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -605,8 +616,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
             for bmk in bmk_space:
                 if is_multinode:
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
@@ -787,8 +800,10 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 if is_multinode:
                     # Multinode config
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
 
                     # Get concurrency values
                     if Fields.CONC_LIST.value in bmk:
@@ -900,8 +915,10 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
 
             for bmk in bmk_space:
                 if is_multinode:
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)

@@ -68,20 +68,38 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
 
     prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
     prefill_tp = env_int("PREFILL_TP")
+    prefill_pp = env_int("PREFILL_PP_SIZE", 1)
+    prefill_dcp_size = env_int("PREFILL_DCP_SIZE", 1)
+    prefill_pcp_size = env_int("PREFILL_PCP_SIZE", 1)
     prefill_ep = env_int("PREFILL_EP", 1)
     prefill_dp_attention = os.environ.get("PREFILL_DP_ATTN", "false")
     decode_num_workers = env_int("DECODE_NUM_WORKERS")
     decode_tp = env_int("DECODE_TP")
+    decode_pp = env_int("DECODE_PP_SIZE", 1)
+    decode_dcp_size = env_int("DECODE_DCP_SIZE", 1)
+    decode_pcp_size = env_int("DECODE_PCP_SIZE", 1)
     decode_ep = env_int("DECODE_EP", 1)
     decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
+    worker_parallelism = (
+        prefill_pp,
+        prefill_dcp_size,
+        prefill_pcp_size,
+        decode_pp,
+        decode_dcp_size,
+        decode_pcp_size,
+    )
+    if any(value <= 0 for value in worker_parallelism):
+        raise SystemExit(
+            "Multinode PP, DCP, and PCP sizes must be positive integers."
+        )
     prefill_hardware = os.environ.get("PREFILL_HARDWARE", "")
     decode_hardware = os.environ.get("DECODE_HARDWARE", "")
     if bool(prefill_hardware) != bool(decode_hardware):
         raise SystemExit(
             "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
         )
-    num_prefill_gpu = prefill_num_workers * prefill_tp
-    num_decode_gpu = decode_num_workers * decode_tp
+    num_prefill_gpu = prefill_num_workers * prefill_tp * prefill_pp * prefill_pcp_size
+    num_decode_gpu = decode_num_workers * decode_tp * decode_pp * decode_pcp_size
     num_gpus = num_prefill_gpu + num_decode_gpu
     tp = prefill_tp + decode_tp
     ep = max(prefill_ep, decode_ep)
@@ -94,11 +112,17 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
         {
             "prefill_num_workers": prefill_num_workers,
             "prefill_tp": prefill_tp,
+            "prefill_pp": prefill_pp,
+            "prefill_dcp_size": prefill_dcp_size,
+            "prefill_pcp_size": prefill_pcp_size,
             "prefill_ep": prefill_ep,
             "prefill_dp_attention": prefill_dp_attention,
             "num_prefill_gpu": num_prefill_gpu,
             "decode_num_workers": decode_num_workers,
             "decode_tp": decode_tp,
+            "decode_pp": decode_pp,
+            "decode_dcp_size": decode_dcp_size,
+            "decode_pcp_size": decode_pcp_size,
             "decode_ep": decode_ep,
             "decode_dp_attention": decode_dp_attention,
             "num_decode_gpu": num_decode_gpu,
