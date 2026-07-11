@@ -82,11 +82,21 @@ def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
 
 
 def effective_gpu_count(benchmark: dict) -> int:
-    """Return GPUs used by a single-node TP/PCP topology."""
+    """Return GPUs used by a single-node TP/PP/PCP topology."""
     return (
         benchmark[Fields.TP.value]
+        * benchmark.get(Fields.PP.value, 1)
         * benchmark.get(Fields.PCP_SIZE.value, 1)
     )
+
+def with_worker_parallelism_defaults(worker: dict) -> dict:
+    """Return a worker config with explicit parallelism defaults."""
+    return {
+        **worker,
+        Fields.PP.value: worker.get(Fields.PP.value, 1),
+        Fields.DCP_SIZE.value: worker.get(Fields.DCP_SIZE.value, 1),
+        Fields.PCP_SIZE.value: worker.get(Fields.PCP_SIZE.value, 1),
+    }
 
 
 def agentic_dram_offload_gb(
@@ -107,6 +117,7 @@ def agentic_dram_offload_gb(
     if gpu_count > gpus_per_node:
         raise ValueError(
             f"tp={benchmark[Fields.TP.value]} with "
+            f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
             f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
             f"requires {gpu_count} GPUs and exceeds "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
@@ -435,8 +446,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     # spec_decoding defaults to "none" if not specified
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
 
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
 
                     # Get concurrency values (can be list or range)
                     conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -506,6 +519,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
+                    pp = bmk.get(Fields.PP.value, 1)
                     dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
@@ -600,6 +614,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.ISL.value: isl,
                                 Fields.OSL.value: osl,
                                 Fields.TP.value: tp,
+                                Fields.PP.value: pp,
                                 Fields.DCP_SIZE.value: dcp_size,
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.CONC.value: conc,
@@ -633,13 +648,16 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
             for bmk in bmk_space:
                 if is_multinode:
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 else:
                     tp = bmk[Fields.TP.value]
+                    pp = bmk.get(Fields.PP.value, 1)
                     dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
@@ -726,6 +744,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.FRAMEWORK.value: framework,
                                 Fields.RUNNER.value: runner_value,
                                 Fields.TP.value: tp,
+                                Fields.PP.value: pp,
                                 Fields.DCP_SIZE.value: dcp_size,
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
@@ -813,8 +832,10 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 if is_multinode:
                     # Multinode config
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
 
                     # Get concurrency values
                     if Fields.CONC_LIST.value in bmk:
@@ -862,6 +883,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 else:
                     # Single-node config
                     tp = bmk[Fields.TP.value]
+                    pp = bmk.get(Fields.PP.value, 1)
                     dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
@@ -903,6 +925,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.ISL.value: isl,
                                 Fields.OSL.value: osl,
                                 Fields.TP.value: tp,
+                                Fields.PP.value: pp,
                                 Fields.DCP_SIZE.value: dcp_size,
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.CONC.value: conc,
@@ -924,13 +947,16 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
 
             for bmk in bmk_space:
                 if is_multinode:
-                    prefill = bmk[Fields.PREFILL.value]
-                    decode = bmk[Fields.DECODE.value]
+                    prefill = with_worker_parallelism_defaults(
+                        bmk[Fields.PREFILL.value])
+                    decode = with_worker_parallelism_defaults(
+                        bmk[Fields.DECODE.value])
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 else:
                     tp = bmk[Fields.TP.value]
+                    pp = bmk.get(Fields.PP.value, 1)
                     dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
@@ -1010,6 +1036,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.FRAMEWORK.value: framework,
                                 Fields.RUNNER.value: runner_value,
                                 Fields.TP.value: tp,
+                                Fields.PP.value: pp,
                                 Fields.DCP_SIZE.value: dcp_size,
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,

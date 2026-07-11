@@ -1064,9 +1064,15 @@ append_lm_eval_summary() {
     fi
 
     local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
+    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
     local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
     local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
     local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
+    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
     local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
     local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
 
@@ -1113,16 +1119,23 @@ append_lm_eval_summary() {
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
   "tp": ${TP:-1},
+  "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
   "pcp_size": ${PCP_SIZE:-1},
   "conc": ${metadata_conc},
 ${batch_metadata}  "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
   "prefill_tp": ${prefill_tp},
+  "prefill_pp": ${prefill_pp},
+  "prefill_dcp_size": ${prefill_dcp_size},
+  "prefill_pcp_size": ${prefill_pcp_size},
   "prefill_ep": ${prefill_ep},
   "prefill_dp_attention": ${prefill_dp_json},
   "prefill_num_workers": ${prefill_num_workers},
   "decode_tp": ${decode_tp},
+  "decode_pp": ${decode_pp},
+  "decode_dcp_size": ${decode_dcp_size},
+  "decode_pcp_size": ${decode_pcp_size},
   "decode_ep": ${decode_ep},
   "decode_dp_attention": ${decode_dp_json},
   "decode_num_workers": ${decode_num_workers},
