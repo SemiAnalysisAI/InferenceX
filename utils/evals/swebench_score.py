@@ -195,6 +195,7 @@ def run_harness(
     max_workers: int,
     namespace: Optional[str],
     modal: bool = False,
+    timeout: Optional[int] = None,
 ) -> None:
     """Invoke the official swebench harness (local Docker, or Modal sandboxes)."""
     cmd = [
@@ -203,6 +204,11 @@ def run_harness(
         "--predictions_path", str(predictions_path),
         "--run_id", run_id,
     ]
+    if timeout is not None:
+        # Per-instance test timeout (harness default 1800s). Real test runs
+        # finish in ~seconds-to-minutes; the default means each persistently
+        # erroring instance stalls the run's tail for a full 30 min.
+        cmd += ["--timeout", str(timeout)]
     if modal:
         # Modal remote sandboxes instead of local Docker (no Docker on the node).
         # swebench 4.1.0 uses --max_workers in both modal and Docker modes;
@@ -337,6 +343,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--run-id", default=None, help="harness run id (default: task name)")
     parser.add_argument("--max-workers", type=int, default=4)
     parser.add_argument(
+        "--instance-timeout", type=int, default=None,
+        help="per-instance test timeout in seconds (harness default 1800)",
+    )
+    parser.add_argument(
         "--namespace", default=None,
         help="local-Docker --namespace value (pass '' on arm/Mac to build images locally)",
     )
@@ -405,6 +415,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         run_harness(
             predictions_path, args.dataset_name, run_id,
             out_dir, args.max_workers, args.namespace, modal=args.modal,
+            timeout=args.instance_timeout,
         )
         report_path = find_report(out_dir, args.model_name, run_id)
         report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))

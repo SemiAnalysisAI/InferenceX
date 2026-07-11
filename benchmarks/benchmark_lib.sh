@@ -1821,6 +1821,11 @@ run_swebench_eval() {
     # rather than passing --modal without the modal package or credentials.
     local modal_args=()
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then modal_args=(--modal); fi
+    # Optional per-instance test timeout (harness default 1800s): real tests
+    # finish in seconds-to-minutes, so persistently-erroring instances gate the
+    # scoring tail at the full default.
+    local itimeout_args=()
+    if [ -n "${SWEBENCH_EVAL_TIMEOUT:-}" ]; then itimeout_args=(--instance-timeout "$SWEBENCH_EVAL_TIMEOUT"); fi
     # Guard against a stalled scoring backend (e.g. Modal image-build queue):
     # kill scoring after SWEBENCH_SCORE_TIMEOUT seconds (default 2h) rather
     # than holding the GPU allocation until the slurm wall clock.
@@ -1834,6 +1839,7 @@ run_swebench_eval() {
         --max-workers "${SWEBENCH_MAX_WORKERS:-4}" \
         --lm-eval-version "$lm_eval_version" \
         "${modal_args[@]}" \
+        "${itimeout_args[@]}" \
         "${ns_args[@]}" \
         || score_rc=$?
     rm -rf "$gen_dir" 2>/dev/null || true

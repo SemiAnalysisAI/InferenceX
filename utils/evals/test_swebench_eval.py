@@ -136,6 +136,24 @@ def test_parse_resolved_raises_on_garbage():
 
 # --- harness command construction (Docker vs Modal) ------------------------
 
+def test_run_harness_instance_timeout(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(sbs.subprocess, "run", lambda cmd, **kw: captured.setdefault("cmd", cmd))
+    sbs.run_harness(
+        tmp_path / "p.jsonl", "ds", "rid", tmp_path, 4, None, modal=True, timeout=900,
+    )
+    cmd = captured["cmd"]
+    i = cmd.index("--timeout")
+    assert cmd[i + 1] == "900"
+
+
+def test_run_harness_no_timeout_by_default(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(sbs.subprocess, "run", lambda cmd, **kw: captured.setdefault("cmd", cmd))
+    sbs.run_harness(tmp_path / "p.jsonl", "ds", "rid", tmp_path, 4, None, modal=True)
+    assert "--timeout" not in captured["cmd"]
+
+
 def _captured_harness_cmd(monkeypatch, tmp_path, *, modal, namespace):
     captured = {}
     monkeypatch.setattr(sbs.subprocess, "run", lambda cmd, **kw: captured.setdefault("cmd", cmd))
