@@ -240,7 +240,10 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
-    kv_offloading: Literal["none"] = Field(alias=Fields.KV_OFFLOADING.value)
+    kv_offloading: Literal["none", "dram"] = Field(alias=Fields.KV_OFFLOADING.value)
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
+    )
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -249,6 +252,10 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
         return _validate_worker_hardware_pair(self)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
