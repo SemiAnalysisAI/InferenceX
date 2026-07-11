@@ -4725,6 +4725,6 @@
     - "Add LMCache 0.5.1 DRAM KV-offload config (kv-offload-backend: lmcache) as a standalone section alongside the Mooncake parent (B300 section deferred)"
     - "Image vllm/vllm-openai:v0.24.0 for the LMCache section (parent stays on v0.23.0)"
     - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB after full-budget pinned pools OOM-killed nodes in bring-up"
-    - "Adopt the vLLM perf flags from #2138 (Mega-MoE, FULL_DECODE_ONLY cudagraphs, sparse MLA attention, NUMA binding) and the vLLM PR #45406 scheduler-freeze backport for async KV loads (waiver: docs/waiver/2153.md)"
+    - "Apply the vLLM PR #45406 scheduler-freeze backport for async KV loads (waiver: docs/waiver/2153.md); serving flags stay on the stock v0.23-era recipe"
     - "LMCache points mirror the Mooncake offload points: B200 TP8 conc 8-16, TP8-DEP8 conc 16-68"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2153

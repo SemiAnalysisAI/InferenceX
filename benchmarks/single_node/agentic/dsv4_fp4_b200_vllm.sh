@@ -274,10 +274,7 @@ fi
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(
-        --enable-expert-parallel
-        --moe-backend deep_gemm_mega_moe
-    )
+    EP_ARGS=(--enable-expert-parallel)
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -301,20 +298,15 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${VLLM_CP_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --prefill-schedule-interval 8
-    --numa-bind
-    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-    --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
     --attention_config.use_fp4_indexer_cache=True
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
-    --no-enable-flashinfer-autotune
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
-    --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
