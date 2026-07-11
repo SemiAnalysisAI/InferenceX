@@ -87,7 +87,7 @@ class EPBackend(abc.ABC):
         self.world_size = world_size
         self.local_rank = local_rank
         self.device = device
-        self.mode = getattr(args, "mode", "normal")
+        self.mode = args.mode
         if self.mode not in self.SUPPORTED_MODES:
             raise ValueError(f"{self.name} does not support mode {self.mode!r}")
 

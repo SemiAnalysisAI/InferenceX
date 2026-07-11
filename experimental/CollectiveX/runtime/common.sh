@@ -814,8 +814,8 @@ collx_cleanup_stage() {
 # argv decoded from the shard control (config.py case-args), never as env.
 # shellcheck disable=SC2153
 collx_run_shard() {
-  local build_log build_rc expected_cases ci=0 failed_cases=0
-  local runtime_log run_rc argv_file shard wrap
+  local build_log expected_cases ci=0 failed_cases=0
+  local runtime_log argv_file shard wrap
   local -a container_args ep_args
   [ "${NODES:-0}" -ge 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
     || collx_die "invalid shard launcher placement"
@@ -842,16 +842,14 @@ collx_run_shard() {
 
   collx_log "shard backend preparation: bench=$COLLX_BENCH nodes=$NODES"
   build_log="$(collx_private_log_path backend-prepare)"
-  build_rc=0
-  srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
+  if ! srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
     --container-name="$container_name" --container-image="$SQUASH_FILE" \
     "${container_args[@]}" --export=ALL \
     bash /ix/experimental/CollectiveX/runtime/prepare_backend.sh \
-    </dev/null >"$build_log" 2>&1 || build_rc=$?
-  if [ "$build_rc" != 0 ]; then
+    </dev/null >"$build_log" 2>&1; then
     collx_log "ERROR: backend preparation failed"
     collx_log_tail "$build_log"
-    return "$build_rc"
+    return 1
   fi
 
   argv_file="$(mktemp)" || return 1
@@ -865,15 +863,14 @@ collx_run_shard() {
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
-    run_rc=0
-    timeout -k 30 "${COLLX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
+    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-900}" \
+      srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export=ALL \
       bash -c "$wrap" _ "${ep_args[@]}" \
-      </dev/null >"$runtime_log" 2>&1 || run_rc=$?
-    if [ "$run_rc" != 0 ]; then
+      </dev/null >"$runtime_log" 2>&1; then
       collx_log "ERROR: case $ci failed"
       collx_log_tail "$runtime_log"
       failed_cases=$((failed_cases + 1))
@@ -904,22 +901,20 @@ collx_remove_distributed_container() {
 }
 
 collx_launcher_cleanup() {
-  local rc="$1" stage_root="${MOUNT_SRC:-}" allocation_stopped=1
+  local rc="$1" stage_root="${MOUNT_SRC:-}"
   trap - EXIT HUP INT TERM
   if [ -n "${JOB_ID:-}" ]; then
     collx_remove_distributed_container "$JOB_ID" "${NODES:-1}"
     if ! collx_cleanup_allocation; then
-      allocation_stopped=0
       [ "$rc" != 0 ] || rc=1
+      exit "$rc"
     fi
   fi
-  if [ "$rc" != 0 ] && [ "$allocation_stopped" = 1 ] && [ -n "${REPO_ROOT:-}" ] \
-      && [ -d "$stage_root/experimental/CollectiveX" ] \
+  if [ -n "${REPO_ROOT:-}" ] && [ -n "$stage_root" ] \
       && [ "$stage_root" != "$REPO_ROOT" ]; then
-    collx_collect_results "$stage_root" "$REPO_ROOT" || true
-  fi
-  if [ "$allocation_stopped" = 1 ] && [ -n "${REPO_ROOT:-}" ] \
-      && [ -n "$stage_root" ] && [ "$stage_root" != "$REPO_ROOT" ]; then
+    if [ "$rc" != 0 ] && [ -d "$stage_root/experimental/CollectiveX" ]; then
+      collx_collect_results "$stage_root" "$REPO_ROOT" || true
+    fi
     if ! collx_cleanup_stage "$stage_root" "$REPO_ROOT"; then
       [ "$rc" != 0 ] || rc=1
     fi

@@ -22,7 +22,7 @@ def case_id(sku: str, case: dict) -> str:
     parts = (
         sku,
         case["backend"],
-        case.get("workload") or "manual",
+        case["workload"],
         case["mode"],
         case["phase"],
         f"ep{int(case['ep'])}",
@@ -68,8 +68,8 @@ def format_collective_version(raw) -> str:
 
 def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
-    ap.add_argument("--mode", default="normal", choices=["normal"])
-    ap.add_argument("--phase", default="decode", choices=["decode", "prefill"],
+    ap.add_argument("--mode", required=True, choices=["normal"])
+    ap.add_argument("--phase", required=True, choices=["decode", "prefill"],
                     help="token-size regime label: decode (small T) / prefill (large T)")
     ap.add_argument("--tokens-ladder", required=True,
                     help="space/comma-separated source-tokens-per-rank sweep; the matrix "
@@ -78,10 +78,10 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topk", type=int, required=True)
     ap.add_argument("--experts", type=int, required=True,
                     help="TOTAL experts (fixed across EP degrees)")
-    ap.add_argument("--routing", default="uniform", choices=["uniform"])
-    ap.add_argument("--case-id", default="")
-    ap.add_argument("--suite", default="")
-    ap.add_argument("--workload-name", default="")
+    ap.add_argument("--routing", required=True, choices=["uniform"])
+    ap.add_argument("--case-id", required=True)
+    ap.add_argument("--suite", required=True)
+    ap.add_argument("--workload-name", required=True)
     ap.add_argument("--seed", type=int, required=True,
                     help="routing-trace seed; part of the workload identity in configs/suites.yaml")
     ap.add_argument(
@@ -105,10 +105,8 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--scope", required=True, choices=["scale-up", "scale-out"])
     ap.add_argument("--scale-up-transport", required=True)
     ap.add_argument("--scale-out-transport", default="")
-    # gpus-per-node=0 means one node containing the whole EP group.
-    ap.add_argument("--gpus-per-node", type=int, default=0)
-    ap.add_argument("--scale-up-domain", type=int, default=0, help="0 = gpus_per_node*ep (one domain)")
-    ap.add_argument("--timestamp")
+    ap.add_argument("--gpus-per-node", type=int, required=True)
+    ap.add_argument("--scale-up-domain", type=int, required=True)
     ap.add_argument("--out", required=True)
 
 
@@ -494,7 +492,7 @@ def _run_expert_oracle(
 
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
-    mode = getattr(args, "mode", "normal")
+    mode = args.mode
     if mode != "normal":
         if rank == 0:
             print(f"ERROR: unknown CollectiveX case mode {mode!r}")
@@ -513,11 +511,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: experts ({args.experts}) must divide ep_size ({ep_size})")
         return 2
     experts_per_rank = args.experts // ep_size
-    # gpus-per-node=0 / scale-up-domain=0 mean "the whole EP group" (manual runs).
-    gpn = args.gpus_per_node or ep_size
-    scale_up_domain = args.scale_up_domain or gpn
-    suite = args.suite or "manual"
-    workload_name = args.workload_name or "manual"
+    gpn = args.gpus_per_node
+    scale_up_domain = args.scale_up_domain
+    suite = args.suite
+    workload_name = args.workload_name
     if getattr(backend, "mode", None) != mode:
         if rank == 0:
             print(f"ERROR: backend mode {getattr(backend, 'mode', None)!r} != {mode!r}")
@@ -563,8 +560,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         problems[T] = problem
         idx_g, w_g = point.global_idx, point.global_weights
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank)
-        rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
-                                                      gpn, args.scale_up_domain or None)
+        rstats["locality"] = routing.routing_locality(
+            idx_g, experts_per_rank, ep_size, max(1, T), gpn, scale_up_domain
+        )
         point_routing_consistent = _same_tensors_across_ranks(
             torch, dist, device, idx_g, w_g
         )
@@ -716,7 +714,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # status=valid requires correctness AND a proven-identical routing trace across ranks.
     all_ok = bool(rows) and all(r["correctness"]["passed"] for r in rows) and routing_consistent
 
-    generated_at = args.timestamp or _dt.datetime.now().astimezone().isoformat()
+    generated_at = _dt.datetime.now().astimezone().isoformat()
     nodes = int(os.environ.get("SLURM_NNODES", "1"))
     scheduled_case = {
             "backend": backend.name,
@@ -741,11 +739,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     }
     case_factors = {"case": scheduled_case, "sku": args.runner}
     computed_case_id = case_id(args.runner, scheduled_case)
-    if args.case_id and args.case_id != computed_case_id:
+    if args.case_id != computed_case_id:
         raise ValueError(
             f"scheduled case ID does not match realized factors: {args.case_id} != {computed_case_id}"
         )
-    case_identifier = args.case_id or computed_case_id
     git_run = getattr(args, "git_run", None) or {}
     allocation_factors = {
         "run_attempt": git_run.get("run_attempt"),
@@ -767,7 +764,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "allocation_factors": allocation_factors,
             "attempt_ordinal": attempt_ordinal,
             "case_factors": case_factors,
-            "case_id": case_identifier,
+            "case_id": args.case_id,
         },
         "workload": {
             "cross_rank_consistent": routing_consistent,

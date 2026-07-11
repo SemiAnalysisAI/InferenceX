@@ -210,9 +210,9 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     get = lambda key, default="": str(case.get(key) or default)
     argv = [
         "--backend", get("backend"),
-        "--mode", get("mode", "normal"),
-        "--phase", get("phase", "decode"),
-        "--routing", get("routing", "uniform"),
+        "--mode", str(case["mode"]),
+        "--phase", str(case["phase"]),
+        "--routing", str(case["routing"]),
         "--gpus-per-node", get("gpus_per_node", "0"),
         "--scale-up-domain", get("scale_up_domain", "0"),
         "--scope", get("scope", "scale-up"),
@@ -224,7 +224,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
         "--experts", get("experts"),
         "--seed", get("seed"),
         "--runner", runner,
-        "--topology-class", get("topology_class", "manual"),
+        "--topology-class", get("topology_class"),
         "--transport", get("transport", "unknown"),
         "--case-id", get("case_id"),
         "--suite", get("suite"),
@@ -235,7 +235,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
         if value:
             argv += [flag, value]
-    out = f"results/{runner}_{get('backend')}_{get('phase', 'decode')}_{ts}-c{index:03d}.json"
+    out = f"results/{runner}_{get('backend')}_{case['phase']}_{ts}-c{index:03d}.json"
     argv += ["--out", out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 

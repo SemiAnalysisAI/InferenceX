@@ -70,10 +70,10 @@ class MoRIBackend(EPBackend):
         topology = capability.topology_for(runner, world_size)
         if topology is None:
             raise RuntimeError(f"{runner!r} does not register an EP{world_size} topology")
-        gpus_per_node = int(args.gpus_per_node or world_size)
+        gpus_per_node = int(args.gpus_per_node)
         observed = {
             "gpus_per_node": gpus_per_node,
-            "scale_up_domain": int(args.scale_up_domain or gpus_per_node),
+            "scale_up_domain": int(args.scale_up_domain),
             "scope": args.scope,
             "scale_up_transport": args.scale_up_transport,
             "scale_out_transport": args.scale_out_transport or None,

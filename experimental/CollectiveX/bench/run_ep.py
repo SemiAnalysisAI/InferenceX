@@ -55,7 +55,7 @@ def main() -> int:
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
-    if args.case_id and not ep_harness.is_case_id(args.case_id):
+    if not ep_harness.is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
     # Seed and timing arrive baked into the case argv from the single
@@ -106,13 +106,13 @@ def main() -> int:
             file=sys.stderr,
         )
         return 5
-    observed_gpus_per_node = args.gpus_per_node or device_count
+    observed_gpus_per_node = args.gpus_per_node
     observed_nodes = world_size // observed_gpus_per_node
     topology = capability.topology_for(args.runner, world_size)
     observed_topology = {
         "nodes": observed_nodes,
         "gpus_per_node": observed_gpus_per_node,
-        "scale_up_domain": args.scale_up_domain or observed_gpus_per_node,
+        "scale_up_domain": args.scale_up_domain,
         "scope": args.scope,
         "scale_up_transport": args.scale_up_transport,
         "scale_out_transport": args.scale_out_transport or None,

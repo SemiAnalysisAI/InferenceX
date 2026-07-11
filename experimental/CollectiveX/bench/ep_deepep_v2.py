@@ -70,11 +70,7 @@ def _hybrid_num_allocated_qps(world_size: int) -> int:
 
 
 def _configure_gin_mode(args, world_size: int) -> bool:
-    scale_up_domain = int(
-        getattr(args, "scale_up_domain", None)
-        or getattr(args, "gpus_per_node", None)
-        or world_size
-    )
+    scale_up_domain = int(args.scale_up_domain)
     allow_hybrid_mode = world_size > scale_up_domain
     if allow_hybrid_mode:
         os.environ.pop("EP_DISABLE_GIN", None)
@@ -139,11 +135,7 @@ class DeepEPV2Backend(EPBackend):
         self.max_tokens = spec.max_tokens_per_rank
         _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
-        scale_up_domain = int(
-            getattr(args, "scale_up_domain", None)
-            or getattr(args, "gpus_per_node", None)
-            or world_size
-        )
+        scale_up_domain = int(args.scale_up_domain)
         allow_hybrid_mode = _configure_gin_mode(args, world_size)
         gin_enabled = allow_hybrid_mode
         self.buffer = ElasticBuffer(
