@@ -17,8 +17,7 @@ from ep_backend import EPBackend, RankInputs  # noqa: E402
 
 def args(**updates):
     values = dict(
-        experts=8, phase="decode", tokens_ladder="",
-        conditioning_ladder="1 2 4 8 16 32 64 128", routing="uniform", seed=0,
+        experts=8, phase="decode", tokens_ladder="", routing="uniform", seed=0,
         hidden=16, topk=2, mode="normal",
     )
     values.update(updates)
@@ -58,7 +57,7 @@ class FakeBackend(EPBackend):
     def buffer_cap(self, options):
         return self.cap
 
-    def _build_rank_inputs(self, options, tokens, *, retain_global):
+    def _build_rank_inputs(self, options, tokens):
         return RankInputs(
             tokens_per_rank=tokens, topk_idx=None, topk_weights=None,
             activations=None,
@@ -66,19 +65,19 @@ class FakeBackend(EPBackend):
 
 
 class BackendTests(unittest.TestCase):
-    def test_input_plan_sizes_for_measured_and_conditioning_ladders(self):
+    def test_input_plan_sizes_for_the_measured_ladder(self):
         backend = FakeBackend(args(tokens_ladder="8 16"), world_size=2)
         spec = backend.make_inputs(backend.args)
         self.assertTrue(spec.ok)
         self.assertEqual(spec.ladder, [8, 16])
-        self.assertEqual(spec.max_tokens_per_rank, 128)
+        self.assertEqual(spec.max_tokens_per_rank, 16)
         self.assertEqual((spec.ep_size, spec.experts_per_rank), (2, 4))
         self.assertEqual(sorted(spec.points), [8, 16])
 
-    def test_invalid_ladder_or_small_buffer_fails_before_execution(self):
+    def test_invalid_or_fully_clamped_ladder_fails_before_execution(self):
         for backend, message in (
             (FakeBackend(args(tokens_ladder="0")), "empty token ladder"),
-            (FakeBackend(args(), cap=64), "buffer cap 64"),
+            (FakeBackend(args(tokens_ladder="128"), cap=64), "cap=64"),
         ):
             with self.subTest(message=message):
                 spec = backend.make_inputs(backend.args)

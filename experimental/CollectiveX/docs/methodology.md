@@ -90,7 +90,9 @@ and baked into every scheduled case:
 
 Measured roundtrip p99 is the headline latency. Decode and prefill identify the serving regime
 represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
-identical shape. A fixed untimed conditioning ramp precedes every measured shape.
+identical shape. Before anything is timed or correctness-checked, an untimed conditioning pass
+walks the case's measured shapes in ascending order (8 full roundtrips per shape) to settle
+clocks, fabric, and buffer state; these rounds are never measured or emitted.
 
 Logical payload bandwidth is:
 

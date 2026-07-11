@@ -361,8 +361,7 @@ class CaseArgvContract(unittest.TestCase):
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
-        "ladder": "1 2 4", "conditioning_ladder": "1 2 4 8",
-        "timing": "8:128:32",
+        "ladder": "1 2 4", "timing": "8:128:32",
         "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
         "suite": "ep-core", "workload": "deepseek-v3",
     }
@@ -405,7 +404,6 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.hidden, args.topk, args.experts), (7168, 8, 256))
         self.assertEqual((args.gpus_per_node, args.scale_up_domain), (8, 8))
         self.assertEqual(args.tokens_ladder, "1 2 4")
-        self.assertEqual(args.conditioning_ladder, "1 2 4 8")
         self.assertEqual(args.scale_out_transport, "rdma")
         self.assertEqual(args.case_id, self.CASE["case_id"])
         self.assertEqual(args.version, 1)
@@ -424,7 +422,7 @@ class CaseArgvContract(unittest.TestCase):
             os.environ, COLLX_BENCH="mori", COLLX_TOPO="mi355x-xgmi", COLLX_TRANSPORT="xgmi",
             COLLX_GPUS_PER_NODE="8", COLLX_SCALE_UP_DOMAIN="8",
             COLLX_HIDDEN="7168", COLLX_TOPK="8", COLLX_EXPERTS="256",
-            COLLX_TOKENS_LADDER="256 512", COLLX_CONDITIONING_LADDER="1 2 4",
+            COLLX_TOKENS_LADDER="256 512",
             COLLX_ITERS="8", COLLX_TRIALS="128", COLLX_WARMUP="32",
         )
         result = subprocess.run(
@@ -437,7 +435,7 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.topology_class, "mi355x-xgmi")
         self.assertEqual(args.transport, "xgmi")
         self.assertEqual(args.seed, 67)
-        self.assertEqual(args.conditioning_ladder, "1 2 4")
+        self.assertEqual(args.tokens_ladder, "256 512")
         self.assertEqual(args.out, "results/mi355x_mori_prefill_TS-c001.json")
 
     def test_manual_args_without_workload_env_fails_the_run_ep_parser(self) -> None:

@@ -70,13 +70,10 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
     ap.add_argument("--mode", default="normal", choices=["normal"])
     ap.add_argument("--phase", default="decode", choices=["decode", "prefill"],
-                    help="token-size regime: decode (small T) / prefill (large T) — picks the conditioning ramp")
+                    help="token-size regime label: decode (small T) / prefill (large T)")
     ap.add_argument("--tokens-ladder", required=True,
                     help="space/comma-separated source-tokens-per-rank sweep; the matrix "
                          "supplies the workload's phase ladder from configs/suites.yaml")
-    ap.add_argument("--conditioning-ladder", required=True,
-                    help="space/comma-separated untimed warm ramp replayed before each measured "
-                         "shape; the matrix supplies the workload's phase ramp from configs/suites.yaml")
     ap.add_argument("--hidden", type=int, required=True)
     ap.add_argument("--topk", type=int, required=True)
     ap.add_argument("--experts", type=int, required=True,
@@ -511,7 +508,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: {spec.message}")
         return spec.rc
     cap = spec.cap
-    conditioning_ladder = spec.conditioning_ladder
     ladder, dropped = spec.ladder, spec.dropped
     if rank == 0 and dropped:
         print(f"NOTE: dropped tokens/rank {dropped} — exceed {backend.name} buffer cap {cap} "
@@ -521,17 +517,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # Inputs determine the communicator capacity.
     backend.create_buffer(spec)
 
-    for wt in conditioning_ladder:
-        # Settle clocks and fabric with the configured untimed ramp.
-        cwp = spec.conditioning_points[wt]
-        wp = backend.make_problem(
-            wt, cwp.topk_idx.to(device), cwp.topk_weights.to(device), cwp.activations
+    # ---- Pass 0: settle clocks/fabric untimed by walking the measured shapes
+    # ascending (cold-jump-safe ramp) before anything gate-bearing or timed runs.
+    # These rounds are never measured or emitted.
+    problems = {}
+    for T in ladder:
+        point = spec.points[T]
+        problems[T] = backend.make_problem(
+            T, point.topk_idx.to(device), point.topk_weights.to(device), point.activations
         )
-        backend.warm(wp, CONDITIONING_ROUNDS_PER_SHAPE)
+        backend.warm(problems[T], CONDITIONING_ROUNDS_PER_SHAPE)
     torch.cuda.synchronize()
     dist.barrier()
-    # ---- Pass 1: build each deterministic problem and run the expert oracle. ----
-    problems, gate, gts, global_traces, input_snapshots = {}, {}, {}, {}, {}
+    # ---- Pass 1: run the expert oracle over each warmed deterministic problem. ----
+    gate, gts, global_traces, input_snapshots = {}, {}, {}, {}
     routing_consistent = True
     for T in ladder:
         gt = T * ep_size
@@ -545,10 +544,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             torch, dist, device, idx_g, w_g
         )
         routing_consistent = routing_consistent and point_routing_consistent
-        my_cnt = T
-        problem = backend.make_problem(
-            my_cnt, point.topk_idx.to(device), point.topk_weights.to(device), point.activations
-        )
+        problem = problems[T]
         input_snapshots[T] = (
             problem.x.clone(), problem.topk_idx.clone(), problem.topk_weights.clone()
         )
@@ -562,7 +558,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             and torch.equal(problem.topk_idx, before_idx)
             and torch.equal(problem.topk_weights, before_weights)
         )
-        problems[T] = problem
         global_traces[T] = (idx_g, w_g)
         gate[T] = {
             "rstats": rstats,
@@ -573,7 +568,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "pre_input_unchanged": pre_input_unchanged,
         }
 
-    # ---- Pass 2: every backend uses the same ascending point order and conditioning ramp.
+    # ---- Pass 2: every backend uses the same rotated point order.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
     disp_pool = {T: [] for T in ladder}     # pooled per-iteration cross-rank MAX (dispatch)
     stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work

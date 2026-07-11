@@ -155,9 +155,9 @@ class DeepEPV2Backend(EPBackend):
         self.group = dist.group.WORLD
 
     def create_buffer(self, spec):
-        # Local aliases keep the moved buffer-construction body byte-verbatim. The cap
-        # equals the value the deleted __init__ ladder-peek computed
-        # (token_ladder(.., None) + conditioning), so the JIT directory stays stable.
+        # max_tokens is the measured-ladder maximum; the historical values (which
+        # also folded in the conditioning ramp) are identical because the ramp
+        # never exceeded the measured maximum, so the JIT directory stays stable.
         args, world_size, device = self.args, self.world_size, self.device
         self.max_tokens = spec.max_tokens_per_rank
         _require_runtime()

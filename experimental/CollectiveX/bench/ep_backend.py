@@ -18,14 +18,12 @@ from ep_harness import (
 
 @dataclass
 class RankInputs:
-    """Inputs for one token-ladder shape at ``tokens_per_rank`` tokens on this rank.
+    """Inputs for one token-ladder shape at tokens_per_rank tokens on this rank.
 
-    ``topk_idx``/``topk_weights`` are this rank's contiguous slice of the global
-    routing trace (host tensors; moved to device at ``make_problem`` time);
-    ``activations`` are the rank's token activations (already on device). The
-    global trace is retained for measured ladder shapes so Pass 1 can compute
-    routing statistics and input snapshots; warm-only conditioning shapes leave
-    it ``None``.
+    topk_idx/topk_weights are this rank's contiguous slice of the global routing trace
+    (host tensors; moved to device at make_problem time); activations are the rank's token
+    activations (already on device). The global trace is retained so Pass 1 can compute
+    routing statistics and input snapshots.
     """
 
     tokens_per_rank: int
@@ -40,9 +38,9 @@ class RankInputs:
 class WorkloadSpec:
     """Numeric shape + materialised inputs for one fully-specified sweep line.
 
-    Fully default-constructible so ``make_inputs`` can early-return a tensor-free
-    spec (``ok=False`` + ``rc``) on an empty ladder or a buffer cap too small for
-    the conditioning ladder; the driver prints ``message`` and returns ``rc``.
+    Fully default-constructible so make_inputs can early-return a tensor-free
+    spec (ok=False + rc) on an empty ladder; the driver prints message and
+    returns rc
     """
 
     ok: bool = True
@@ -54,21 +52,18 @@ class WorkloadSpec:
     dropped: list = field(default_factory=list)
     max_tokens_per_rank: int = 0
     ladder: list = field(default_factory=list)
-    conditioning_ladder: list = field(default_factory=list)
     points: dict = field(default_factory=dict)
-    conditioning_points: dict = field(default_factory=dict)
 
 
 class EPBackend(abc.ABC):
     """One expert-parallel dispatch/combine transport under a fixed benchmark contract.
 
-    Subclasses implement the transport (``create_buffer``, ``dispatch``, ``stage``,
-    ``combine``, ``recv_tokens``, ``inspect_dispatch``, ``combine_transformed``);
+    Subclasses implement the transport (create_buffer, dispatch, stage,
+    combine, recv_tokens, inspect_dispatch, combine_transformed);
     everything the driver and the oracles need beyond that is provided here.
     Dispatch and combine are fixed BF16, so no adapter selects a precision codec.
     """
 
-    # ---- Contract flags (class defaults; subclasses override) ----
     name: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     stage_device_work = False
@@ -100,7 +95,7 @@ class EPBackend(abc.ABC):
 
     @abc.abstractmethod
     def create_buffer(self, spec: WorkloadSpec):
-        """Size the communicator from ``spec`` before the first dispatch."""
+        """Size the communicator from spec before the first dispatch."""
 
     @abc.abstractmethod
     def dispatch(self, problem):
@@ -108,7 +103,7 @@ class EPBackend(abc.ABC):
 
     @abc.abstractmethod
     def stage(self, problem, handle):
-        """Prepare the combine input on ``handle`` (copy into place)."""
+        """Prepare the combine input on handle (copy into place)."""
 
     @abc.abstractmethod
     def combine(self, problem, handle):
@@ -129,32 +124,19 @@ class EPBackend(abc.ABC):
     # ---- Input generation (shared) ---------------------------------------------------
 
     def buffer_cap(self, args):
-        """Max tokens/rank the communicator can serve, or ``None`` when unbounded."""
+        """Max tokens/rank the communicator can serve, or None when unbounded."""
         return None
 
     def make_inputs(self, args) -> WorkloadSpec:
         """Resolve the token ladder and materialise per-rank inputs for the sweep.
 
         Buffer sizing needs the ladder *numbers* (not the input tensors), so this
-        runs before ``create_buffer``. Returns a tensor-free spec with ``ok=False``
-        when the ladder is empty or the cap cannot serve the conditioning ladder.
+        runs before create_buffer. Returns a tensor-free spec with ok=False
+        when the ladder is empty.
         """
         ep_size = self.world_size
         experts_per_rank = args.experts // ep_size
-        conditioning_ladder, _ = token_ladder(args.conditioning_ladder, None)
-        if not conditioning_ladder:
-            return WorkloadSpec(
-                ok=False, rc=2,
-                message=f"empty conditioning ladder (phase={args.phase})",
-            )
         cap = self.buffer_cap(args)
-        if cap is not None and cap < conditioning_ladder[-1]:
-            return WorkloadSpec(
-                ok=False, rc=2,
-                message=(
-                    f"{self.name} buffer cap {cap} cannot run the conditioning ladder"
-                ),
-            )
         ladder, dropped = token_ladder(args.tokens_ladder, cap)
         if not ladder:
             return WorkloadSpec(
@@ -166,23 +148,14 @@ class EPBackend(abc.ABC):
             experts_per_rank=experts_per_rank,
             cap=cap,
             dropped=list(dropped),
-            max_tokens_per_rank=max(list(ladder) + conditioning_ladder),
+            max_tokens_per_rank=max(ladder),
             ladder=list(ladder),
-            conditioning_ladder=conditioning_ladder,
         )
-        # Conditioning shapes are warmed but never emitted.
-        for wt in conditioning_ladder:
-            spec.conditioning_points[wt] = self._build_rank_inputs(
-                args, wt, retain_global=False
-            )
         for tokens_per_rank in ladder:
-            point = self._build_rank_inputs(
-                args, tokens_per_rank, retain_global=True
-            )
-            spec.points[tokens_per_rank] = point
+            spec.points[tokens_per_rank] = self._build_rank_inputs(args, tokens_per_rank)
         return spec
 
-    def _build_rank_inputs(self, args, tokens_per_rank, *, retain_global) -> RankInputs:
+    def _build_rank_inputs(self, args, tokens_per_rank) -> RankInputs:
         """Build one rank's deterministic inputs for a tokens-per-rank shape."""
         import torch
         import routing
@@ -202,12 +175,12 @@ class EPBackend(abc.ABC):
             topk_idx=idx_s.contiguous(),
             topk_weights=w_s.contiguous(),
             activations=activations,
-            global_idx=idx_g if retain_global else None,
-            global_weights=w_g if retain_global else None,
+            global_idx=idx_g,
+            global_weights=w_g,
         )
 
     def make_problem(self, T, idx, weights, x):
-        """Assemble the per-shape problem namespace (BF16 dispatch sends ``x`` directly)."""
+        """Assemble the per-shape problem namespace (BF16 dispatch sends x directly)."""
         import torch
 
         return types.SimpleNamespace(
@@ -321,7 +294,7 @@ class EPBackend(abc.ABC):
         return time_us(torch, lambda p=problem, hx=hh: self.combine(p, hx), 0, iters)
 
     def finalize(self, rc):
-        """Barrier and tear down the process group; returns ``rc``."""
+        """Barrier and tear down the process group; returns rc."""
         import torch.distributed as dist
 
         try:

@@ -87,13 +87,13 @@ def _timing(document: dict[str, Any]) -> tuple[int, int, int]:
     return timing[keys[0]], timing[keys[1]], timing[keys[2]]
 
 
-def _ladder(workloads: dict[str, Any], workload: str, group: str, phase: str) -> str:
-    points = workloads[workload].get(group, {}).get(phase)
+def _ladder(workloads: dict[str, Any], workload: str, phase: str) -> str:
+    points = workloads[workload].get("token_ladders", {}).get(phase)
     if (not isinstance(points, list) or not points
             or not all(_positive_int(point) for point in points)
             or points != sorted(set(points))):
         raise SystemExit(
-            f"workload {workload!r} has no valid {phase} ladder in {group}: {points!r}"
+            f"workload {workload!r} has no valid {phase} token ladder: {points!r}"
         )
     return " ".join(map(str, points))
 
@@ -228,9 +228,6 @@ def resolve_matrix(
                         "experts": experts,
                         "seed": seed,
                         "ladder": case_ladder,
-                        "conditioning_ladder": _ladder(
-                            workloads, workload, "conditioning_ladders", phase
-                        ),
                         "mode": mode,
                         "timing": timing_profile,
                         **{field: topology[field] for field in TOPOLOGY_FIELDS},
@@ -250,7 +247,7 @@ def resolve_matrix(
                     if disposition == "runnable":
                         shards.setdefault((platform_name, target, nodes), []).append(case)
 
-                requested_ladder = _ladder(workloads, workload, "token_ladders", phase)
+                requested_ladder = _ladder(workloads, workload, phase)
                 if capability_disposition == "unsupported":
                     add_case(
                         requested_ladder,

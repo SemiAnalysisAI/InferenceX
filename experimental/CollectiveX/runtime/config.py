@@ -217,7 +217,6 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, seed: str, ind
         "--scale-up-transport", get("scale_up_transport", "unknown"),
         "--scale-out-transport", get("scale_out_transport"),
         "--tokens-ladder", get("ladder"),
-        "--conditioning-ladder", get("conditioning_ladder"),
         "--hidden", get("hidden"),
         "--topk", get("topk"),
         "--experts", get("experts"),
@@ -272,7 +271,6 @@ def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None
         "scale_up_transport": env("COLLX_SCALE_UP_TRANSPORT", "unknown"),
         "scale_out_transport": env("COLLX_SCALE_OUT_TRANSPORT", ""),
         "ladder": env("COLLX_TOKENS_LADDER", ""),
-        "conditioning_ladder": env("COLLX_CONDITIONING_LADDER", ""),
         # No workload or timing fallbacks: a manual run states its full shape and
         # profile or run_ep.py rejects the argv. The scheduled values live in
         # configs/suites.yaml.
