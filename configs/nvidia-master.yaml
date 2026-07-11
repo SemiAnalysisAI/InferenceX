@@ -3184,7 +3184,7 @@ dsv4-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.25.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300
+  runner: cluster:b300-nv
   precision: fp4
   framework: vllm
   multinode: false
@@ -3279,7 +3279,7 @@ dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.25.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b300
+  runner: cluster:b300-nv
   precision: fp4
   framework: vllm
   multinode: false
