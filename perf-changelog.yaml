@@ -4756,5 +4756,5 @@
   description:
     - "Update the vLLM image to nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
     - "Install FlashInfer 0.6.15.dev20260710 with upstream SM100 low-M MXFP8 split-K support"
-    - "Remove the explicit FlashInfer TRT-LLM all-reduce backend override"
+    - "Use the explicit FlashInfer TRT-LLM all-reduce backend override"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
