@@ -10,8 +10,10 @@ from pathlib import Path
 import shutil
 
 
+# NOTE: never exclude .shards — the per-leg control JSON (COLLX_SHARD_FILE) lives there
+# and must reach the staged tree, or the cross-node preflight fails "test -r shard" (exit 11).
 EXCLUDES = {"__pycache__", "results", ".collx_workloads", ".collx_backend", ".collx_sources",
-            ".shards", ".venv", ".pytest_cache", "private-infra.md", "goal.md", "notes.md"}
+            ".venv", ".pytest_cache", "private-infra.md", "goal.md", "notes.md"}
 
 
 def implicit_stage_base(args) -> None:

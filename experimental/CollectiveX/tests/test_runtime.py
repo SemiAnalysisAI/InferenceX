@@ -223,14 +223,21 @@ class StageTests(unittest.TestCase):
             (source / "runtime").mkdir(parents=True)
             (source / "runtime" / "common.sh").write_text("test")
             (source / "goal.md").write_text("private")
+            # The per-leg control JSON must reach the staged tree, or the cross-node
+            # preflight fails "test -r shard" (exit 11) and aborts every leg at
+            # repository-stage. .shards must NOT be excluded.
+            (source / ".shards").mkdir()
+            (source / ".shards" / "leg.json").write_text("{}")
             args = type("Args", (), {"stage": str(target)})
             stage.create_stage(args)
             copy_args = type(
                 "Args", (), {"source": str(source), "target": str(target / "experimental" / "CollectiveX")}
             )
             stage.copy_repository(copy_args)
-            self.assertTrue((target / "experimental" / "CollectiveX" / "runtime" / "common.sh").is_file())
-            self.assertFalse((target / "experimental" / "CollectiveX" / "goal.md").exists())
+            staged = target / "experimental" / "CollectiveX"
+            self.assertTrue((staged / "runtime" / "common.sh").is_file())
+            self.assertTrue((staged / ".shards" / "leg.json").is_file())
+            self.assertFalse((staged / "goal.md").exists())
             cleanup_args = type("Args", (), {"root": str(target)})
             stage.validate_cleanup(cleanup_args)
 
