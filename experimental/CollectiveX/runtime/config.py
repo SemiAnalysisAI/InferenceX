@@ -19,17 +19,19 @@ FIELDS = {
     "ib_gid_index": "COLLX_IB_GID_INDEX", "rdma_service_level": "COLLX_RDMA_SERVICE_LEVEL",
     "rdma_traffic_class": "COLLX_RDMA_TRAFFIC_CLASS",
 }
-REQUIRED = {
-    "h100-dgxc": {"partition", "account", "squash_dir"},
-    "h200-dgxc": {"partition", "squash_dir"},
-    "b200-dgxc": {"partition", "account", "squash_dir"},
-    "b300": {"partition", "account", "squash_dir"},
-    "gb200": {"partition", "account", "storage_roots"},
-    "gb300": {"partition", "account", "squash_dir", "enroot_cache_path"},
-    "mi300x": {"partition", "squash_dir"},
-    "mi325x": {"partition", "squash_dir"},
-    "mi355x": {"partition", "squash_dir"},
-}
+
+
+def _platforms() -> dict:
+    """The per-SKU platform registry (configs/platform_config.json). Callers
+    fail closed on a missing file, unknown SKU, or missing field."""
+    path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "configs", "platform_config.json",
+    )
+    with open(path, encoding="utf-8") as stream:
+        return json.load(stream)["platforms"]
+
+
 OPERATOR_ENV = (
     "COLLECTIVEX_OPERATOR_CONFIG_CONTENT", "COLLECTIVEX_NETWORK_CONFIG_CONTENT",
     "COLLECTIVEX_H100_CONFIG_CONTENT", "COLLECTIVEX_B300_CONFIG_CONTENT",
@@ -45,20 +47,14 @@ def emit(values: dict[str, object]) -> None:
 
 
 def _network_overlay(runner: str) -> dict[str, object]:
-    """Repo-tracked per-SKU scale-out RDMA selectors (configs/network-config.json),
-    overlaid onto the base operator config. Only network FIELDS are taken, so top-level
-    notes and unknown keys are ignored; a missing/invalid file is a no-op fallback to the
-    base/secret network fields."""
-    net_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "configs", "network-config.json",
-    )
+    """Repo-tracked per-SKU scale-out RDMA selectors — the `network` block of the
+    SKU's configs/platform_config.json entry — overlaid onto the base operator
+    config. Only network FIELDS are taken, so identity keys and notes are ignored;
+    a missing/invalid file is a no-op fallback to the base/secret network fields."""
     try:
-        with open(net_path, encoding="utf-8") as stream:
-            document = json.load(stream)
-    except (OSError, json.JSONDecodeError):
+        block = _platforms().get(runner, {}).get("network", {})
+    except (KeyError, OSError, TypeError, json.JSONDecodeError):
         return {}
-    block = document.get("runners", {}).get(runner, {})
     return {key: value for key, value in block.items() if key in FIELDS}
 
 
@@ -69,9 +65,10 @@ def operator_config(path: str, runner: str) -> None:
         runners = document["runners"]
         selected = dict(runners[runner])
         # Overlay repo-tracked scale-out RDMA selectors onto the base runner config;
-        # SKUs absent from network-config.json keep their base/secret network fields.
+        # SKUs without a platform_config.json network block keep their base/secret
+        # network fields.
         selected.update(_network_overlay(runner))
-        missing = REQUIRED[runner] - set(selected)
+        missing = set(_platforms()[runner]["operator_fields"]) - set(selected)
         if missing:
             print("validation-missing-required-" + "-".join(sorted(missing)), file=sys.stderr)
             raise SystemExit(1)
@@ -286,23 +283,29 @@ def manual_args(phase: str, index: int, runner: str, ts: str, seed: str) -> None
 
 
 def canonical_policy(runner: str, nodes: int, gpus_per_node: int, multiarch: str, amd: str, mori: str) -> None:
-    if runner in {"h100-dgxc", "h200-dgxc", "b200-dgxc", "b300"}:
-        expected, allowed, family = 8, {1, 2}, "nvidia"
-    elif runner in {"gb200", "gb300"}:
-        expected, allowed, family = 4, {2, 4}, "gb"
-    elif runner in {"mi300x", "mi325x", "mi355x"}:
-        expected, allowed, family = 8, {1, 2}, "amd"
-    else:
+    try:
+        entry = _platforms()[runner]
+        expected = int(entry["gpus_per_node"])
+        vendor = entry["vendor"]
+        run_timeout = int(entry["run_timeout"])
+        master_port = entry.get("master_port")
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         raise SystemExit(1)
+    # Node counts realizing the registered EP degrees (8 and 16, matching
+    # capability._topologies) on this SKU's fixed gpus_per_node.
+    allowed = {max(1, 8 // expected), 16 // expected}
     if nodes not in allowed or gpus_per_node != expected:
         raise SystemExit(1)
     values = {"COLLX_NGPUS": nodes * expected,
-              "COLLX_RUN_TIMEOUT": 1800 if family == "amd" else 900,
-              "COLLX_IMAGE": amd if family == "amd" else multiarch}
-    if family == "gb": values["COLLX_MASTER_PORT"] = 29551
-    if family == "amd":
-        values.update(COLLX_MORI_KERNEL_TYPE="internode-v1" if nodes == 2 else "asyncll",
-                      MORI_COMMIT=mori, MORI_DISABLE_AUTO_XGMI=0, MORI_ENABLE_SDMA=1,
+              "COLLX_RUN_TIMEOUT": run_timeout,
+              "COLLX_IMAGE": amd if vendor == "amd" else multiarch}
+    if master_port is not None:
+        values["COLLX_MASTER_PORT"] = int(master_port)
+    if vendor == "amd":
+        # The MoRI kernel is derived by the adapter from (arch, scope); no
+        # kernel-type env is emitted (COLLX_MORI_KERNEL_TYPE survives only as an
+        # optional cross-check the adapter honors if a launcher still sets it).
+        values.update(MORI_COMMIT=mori, MORI_DISABLE_AUTO_XGMI=0, MORI_ENABLE_SDMA=1,
                       MORI_APP_LOG_LEVEL="info", MORI_SHMEM_LOG_LEVEL="info", MORI_IO_LOG_LEVEL="info")
     emit(values)
 

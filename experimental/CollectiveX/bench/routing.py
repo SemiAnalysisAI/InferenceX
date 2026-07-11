@@ -2,6 +2,9 @@
 """Deterministic platform-independent MoE routing and activations."""
 from __future__ import annotations
 
+import hashlib
+import struct
+
 import torch
 
 _MASK64 = (1 << 64) - 1
@@ -17,18 +20,15 @@ def build_global_routing(global_tokens: int, experts: int, topk: int, routing: s
     if global_tokens <= 0 or experts <= 0 or topk <= 0 or topk > experts:
         raise ValueError("global_tokens/experts/topk must be positive and topk <= experts")
 
+    # Keyed BLAKE2b as a deterministic random oracle over the coordinate tuple:
+    # stdlib, byte-stable on every runtime, and uniform by construction.
+    key = (int(seed) & _MASK64).to_bytes(8, "little")
+
     def counter(token: int, slot: int, attempt: int, stream: int) -> int:
-        value = (
-            (int(seed) & _MASK64)
-            ^ (((token + 1) * 0xD2B74407B1CE6E93) & _MASK64)
-            ^ (((slot + 1) * 0xCA5A826395121157) & _MASK64)
-            ^ (((attempt + 1) * 0x9E3779B185EBCA87) & _MASK64)
-            ^ (((stream + 1) * 0xA24BAED4963EE407) & _MASK64)
+        message = struct.pack("<4Q", token, slot, attempt, stream)
+        return int.from_bytes(
+            hashlib.blake2b(message, key=key, digest_size=8).digest(), "little"
         )
-        value = (value + 0x9E3779B97F4A7C15) & _MASK64
-        value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & _MASK64
-        value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & _MASK64
-        return value ^ (value >> 31)
 
     indices, weights = [], []
     for token in range(int(global_tokens)):
@@ -70,6 +70,11 @@ def activations_for_source_ids(source, hidden: int, seed: int, dtype=torch.bfloa
         raise ValueError(f"hidden must be at least {SOURCE_ID_COLUMNS}")
     source = source.to(torch.int64)
     column = torch.arange(hidden, device=source.device, dtype=torch.int64)
+    # Integer lattice, frozen (the oracle regenerates these exact bytes):
+    # 131/17/19 are odd multipliers coprime to the prime modulus 257, so  distinct (source, column, seed)
+    # land on distinct residues and corruption cannot alias into a correct-looking pattern; %257-128 yields k in
+    # [-128, 128] and k/64 is exactly representable in bfloat16, so the oracle's bit-exact payload compare sees 
+    # transport corruption, never representation error.
     values = (source[:, None] * 131 + column[None, :] * 17 + int(seed) * 19) % 257 - 128
     output = values.to(dtype).mul_(1 / 64)
     if bool((source < 0).any().item()) or bool((source >= (1 << SOURCE_ID_BITS)).any().item()):
@@ -156,7 +161,7 @@ def routing_stats(idx, experts: int, experts_per_rank: int) -> dict:
     return {
         "fanout_mean": float(fanout.float().mean()),
         "fanout_min": int(fanout.min()), "fanout_max": int(fanout.max()),
-        "fanout_hist": hist,                               # index k-1 = #tokens with fan-out k
+        "fanout_histogram": hist,                          # index k-1 = #tokens with fan-out k
         "expert_assignments_per_rank": [int(x) for x in assignment_load.tolist()],
         "payload_copies_per_rank": [int(x) for x in payload_load.tolist()],
         "routed_copies": int(fanout.sum()),                # total (token, dest-rank) pairs

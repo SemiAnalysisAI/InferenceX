@@ -58,9 +58,9 @@ decided only by the emitted artifact.
 
 One deterministic workload is generated over the global token batch from the workload's seed in
 `configs/suites.yaml` (part of the workload identity, baked into every scheduled case) and sliced by
-source rank; a stdlib integer counter produces byte-identical expert indices, gate weights, and
-activations on every runtime, and the harness proves the realized routing trace identical across
-ranks before a case can succeed.
+source rank; a keyed BLAKE2b counter over the (token, slot, attempt, stream) coordinates produces
+byte-identical expert indices and gate weights on every runtime, and the harness proves the
+realized routing trace identical across ranks before a case can succeed.
 
 Routing traffic distinguishes:
 
@@ -90,9 +90,10 @@ and baked into every scheduled case:
 
 Measured roundtrip p99 is the headline latency. Decode and prefill identify the serving regime
 represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
-identical shape. Before anything is timed or correctness-checked, an untimed conditioning pass
-walks the case's measured shapes in ascending order (8 full roundtrips per shape) to settle
-clocks, fabric, and buffer state; these rounds are never measured or emitted.
+identical shape. Ascending through the ladder, each measured shape is conditioned with 8 untimed
+full roundtrips — settling clocks, fabric, and buffer state — before it is correctness-checked;
+all timing happens after every shape is warmed and checked. Conditioning rounds are never
+measured or emitted.
 
 Logical payload bandwidth is:
 

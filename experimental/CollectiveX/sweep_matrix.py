@@ -182,7 +182,11 @@ def resolve_matrix(
         suite_targets = [target for target in targets if target in suite_backends]
         if not suite_targets:
             continue
-        for platform_name in suite["platforms"]:
+        # "all" = every SKU in configs/platform_config.json (via capability).
+        suite_platforms = suite["platforms"]
+        if suite_platforms == "all":
+            suite_platforms = sorted(cap.PLATFORMS)
+        for platform_name in suite_platforms:
             if only_sku and platform_name != only_sku:
                 continue
             if platform_name in excluded:

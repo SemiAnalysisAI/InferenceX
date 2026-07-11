@@ -22,14 +22,20 @@ source runtime/common.sh
 collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${COLLX_NODES:-1}"
 
 # Resolve and verify the actual CUDA target before compiling source kernels.
+# Expected target derives from the SKU's `arch` in configs/platform_config.json
+# (smXYZ -> "XY.Z"); non-sm (AMD) SKUs have no CUDA target and fail here.
 collx_cuda_arch() {
   local expected detected
-  case "$COLLX_RUNNER" in
-    h100*|h200*) expected="9.0" ;;
-    b200*|gb200*) expected="10.0" ;;
-    b300*|gb300*) expected="10.3" ;;
-    *) collx_log "ERROR: no CUDA target registered for $COLLX_RUNNER"; return 1 ;;
-  esac
+  expected="$(python3 - "$COLLX_RUNNER" <<'PY'
+import json, sys
+arch = json.load(open("configs/platform_config.json"))["platforms"][sys.argv[1]]["arch"]
+digits = arch.removeprefix("sm")
+print(f"{digits[:-1]}.{digits[-1]}" if arch.startswith("sm") and digits.isdigit() else "")
+PY
+)" || { collx_log "ERROR: no platform registry entry for $COLLX_RUNNER"; return 1; }
+  [ -n "$expected" ] || {
+    collx_log "ERROR: no CUDA target registered for $COLLX_RUNNER"; return 1
+  }
   detected="$(python3 - <<'PY'
 import torch
 

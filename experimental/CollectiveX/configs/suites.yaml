@@ -40,7 +40,8 @@ suites:
   ep-core:
     mode: normal
     workloads: [deepseek-v3]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi325x, mi355x]
+    # "all" = every SKU registered in configs/platform_config.json; a suite may list a subset.
+    platforms: all
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode, prefill]

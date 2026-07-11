@@ -11,5 +11,4 @@ gpucore.*
 # Local plans and infrastructure inventory.
 goal.md
 notes.md
-configs/platforms.yaml
 private-infra.md

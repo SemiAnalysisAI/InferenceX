@@ -14,6 +14,8 @@ os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 
 import torch
 import torch.distributed as dist
+
+import capability
 from ep_backend import EPBackend
 
 try:
@@ -54,14 +56,15 @@ class MoRIBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        # The runner pins the AMD GPU architecture MoRI is built against. This is a
-        # hardware-lineage contract, independent of the (fixed BF16) communication path.
+        # The runner pins the AMD GPU architecture MoRI is built against
+        # (configs/platform_config.json). This is a hardware-lineage contract,
+        # independent of the (fixed BF16) communication path.
         runner = str(getattr(args, "runner", ""))
-        if runner.startswith("mi355x"):
-            expected_arch = "gfx950"
-        elif runner.startswith(("mi300x", "mi325x")):
-            expected_arch = "gfx942"
-        else:
+        platform_entry = capability.PLATFORMS.get(runner, {})
+        expected_arch = (
+            platform_entry.get("arch") if platform_entry.get("vendor") == "amd" else None
+        )
+        if not expected_arch:
             raise RuntimeError(
                 f"MoRI has no pinned GPU architecture for runner {runner!r}"
             )
@@ -75,89 +78,58 @@ class MoRIBackend(EPBackend):
                 f"MoRI runner {runner!r} realized architecture {realized_arch!r}, "
                 f"expected {expected_arch!r}"
             )
+        # Realized placement must match the registered topology for this SKU/EP
+        # cell (configs/platform_config.json via capability) field-for-field.
+        topology = capability.topology_for(runner, world_size)
+        if topology is None:
+            raise RuntimeError(f"{runner!r} does not register an EP{world_size} topology")
         gpus_per_node = int(args.gpus_per_node or world_size)
-        scale_up_domain = int(args.scale_up_domain or gpus_per_node)
-        scale_out = world_size > scale_up_domain
-        if (
-            gpus_per_node <= 0
-            or scale_up_domain <= 0
-            or world_size % gpus_per_node
-            or world_size % scale_up_domain
-        ):
-            raise RuntimeError("MoRI placement is not divisible into complete domains")
-        if scale_out != (args.scope == "scale-out"):
-            raise RuntimeError("MoRI requested scope differs from the EP topology")
-        if not scale_out and (
-            world_size != 8
-            or gpus_per_node != 8
-            or scale_up_domain != 8
-            or args.scale_up_transport != "xgmi"
-            or args.scale_out_transport
-            or args.transport != "xgmi"
-        ):
-            raise RuntimeError("MoRI scale-up is pinned to EP8 over one XGMI domain")
-        if scale_out and (
-            world_size != 16
-            or gpus_per_node != 8
-            or scale_up_domain != 8
-            or args.scale_up_transport != "xgmi"
-            or args.scale_out_transport != "rdma"
-            or args.transport != "xgmi-rdma"
-        ):
-            raise RuntimeError(
-                "MoRI InterNodeV1 is pinned to EP16 over two 8-GPU XGMI/RDMA nodes"
-            )
-        self.block_num = 80
-        self.rdma_block_num = 0
-        self.num_qps = 1
-        self.dispatch_warps = 16
-        self.combine_warps = 8
+        observed = {
+            "gpus_per_node": gpus_per_node,
+            "scale_up_domain": int(args.scale_up_domain or gpus_per_node),
+            "scope": args.scope,
+            "scale_up_transport": args.scale_up_transport,
+            "scale_out_transport": args.scale_out_transport or None,
+            "transport": args.transport,
+        }
+        for field, value in observed.items():
+            if value != topology[field]:
+                raise RuntimeError(
+                    f"MoRI {field}={value!r} differs from the registered "
+                    f"EP{world_size} topology ({topology[field]!r})"
+                )
+        scale_out = topology["scope"] == "scale-out"
 
-        # MI355X uses the direct intranode kernel. MI300X/MI325X use MoRI's split
-        # AsyncLL send/receive kernel as their normal-mode XGMI transport.
-        kernel_request = os.environ.get("COLLX_MORI_KERNEL_TYPE", "intranode").strip().lower()
-        self._kernel_type = None
-        self._async_ll = False
-        self._inter_node = False
-        if kernel_request in ("asyncll", "async_ll", "async-ll"):
-            if scale_out:
-                raise RuntimeError("MoRI EP16 must use InterNodeV1, not AsyncLL")
-            kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
-            if kernel_enum is None or not hasattr(kernel_enum, "AsyncLL"):
-                raise RuntimeError(
-                    "COLLX_MORI_KERNEL_TYPE=asyncll requires "
-                    "EpDispatchCombineKernelType.AsyncLL"
-                )
-            self._kernel_type = kernel_enum.AsyncLL
-            self._async_ll = True
-            self.block_num = 64
-            self.dispatch_warps = self.combine_warps = 8
-        elif kernel_request in ("internode-v1", "internode_v1", "internodev1"):
-            if not scale_out:
-                raise RuntimeError("MoRI InterNodeV1 is valid only for scale-out EP16")
-            kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
-            if kernel_enum is None or not hasattr(kernel_enum, "InterNodeV1"):
-                raise RuntimeError(
-                    "COLLX_MORI_KERNEL_TYPE=internode-v1 requires "
-                    "EpDispatchCombineKernelType.InterNodeV1"
-                )
-            self._kernel_type = kernel_enum.InterNodeV1
-            self._inter_node = True
-            self.block_num = 96
-            self.rdma_block_num = 64
-            self.dispatch_warps = self.combine_warps = 8
-        elif kernel_request not in ("intranode", "intra_node", "intra-node", ""):
-            raise RuntimeError(
-                f"unknown COLLX_MORI_KERNEL_TYPE={kernel_request!r} "
-                "(expected intranode|asyncll|internode-v1)"
-            )
-        elif scale_out:
-            raise RuntimeError("MoRI scale-out EP16 requires COLLX_MORI_KERNEL_TYPE=internode-v1")
-        self.kernel_generation = (
-            "inter-node-v1" if self._inter_node
-            else "async-ll" if self._async_ll
-            else "intranode"
+        # The kernel is a pinned function of the cell, not an operator choice:
+        # scale-out EP16 runs InterNodeV1; scale-up runs the direct intranode
+        # kernel on gfx950 (MI355X) and the split AsyncLL send/receive kernel on
+        # gfx942 (MI300X/MI325X). IntraNode is mori's default (`kernel_type`
+        # kwarg omitted); the named kernels require their enum member — an
+        # image-lineage check.
+        # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
+        kernel_name, self.kernel_generation, blocks = (
+            ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
+            else ("IntraNode", "intranode", (80, 0, 16, 8)) if expected_arch == "gfx950"
+            else ("AsyncLL", "async-ll", (64, 0, 8, 8))
         )
+        requested = os.environ.get("COLLX_MORI_KERNEL_TYPE", "")
+        if requested and re.sub(r"[-_]", "", requested.strip().lower()) != kernel_name.lower():
+            raise RuntimeError(
+                f"COLLX_MORI_KERNEL_TYPE={requested!r} differs from the pinned "
+                f"{kernel_name} kernel for this cell"
+            )
+        self._kernel_type = None
+        if kernel_name != "IntraNode":
+            kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
+            if kernel_enum is None or not hasattr(kernel_enum, kernel_name):
+                raise RuntimeError(
+                    f"this MoRI image lacks EpDispatchCombineKernelType.{kernel_name}"
+                )
+            self._kernel_type = getattr(kernel_enum, kernel_name)
+        self._inter_node = kernel_name == "InterNodeV1"
+        self._async_ll = kernel_name == "AsyncLL"
+        self.num_qps = 1
+        self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
         self._external_input = self._async_ll or self._inter_node
         # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
         # input kernels consume the dispatch output directly, so their stage is not applicable.

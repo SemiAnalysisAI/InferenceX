@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Public runner and backend capability registry for CollectiveX."""
+"""Public runner and backend capability registry for CollectiveX.
+
+Per-SKU platform identity lives in configs/platform_config.json; this module
+derives the EP topologies from it and holds backend capability."""
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Any
 
 
 DEEPEP_V2_SKU_CAPABILITIES = {
     "h100-dgxc": {
-        "schedulable": False,
-        "basis": "current-runner-nccl-device-api-symmetric-memory-unavailable",
+        "schedulable": True,
+        "basis": "current-runner-ep8-lsa-elasticbuffer-validated",
     },
     "h200-dgxc": {"schedulable": True, "basis": "upstream-sm90-requirement"},
     "b200-dgxc": {"schedulable": True, "basis": "upstream-sm100-result"},
@@ -88,53 +93,33 @@ def _platform(
     }
 
 
-PLATFORMS = {
-    "h100-dgxc": _platform(
-        vendor="nvidia", arch="sm90", machine="amd64", product="h100",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="nvlink",
-        launcher="single-slurm",
-    ),
-    "h200-dgxc": _platform(
-        vendor="nvidia", arch="sm90", machine="amd64", product="h200",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="nvlink",
-        launcher="single-slurm",
-    ),
-    "b200-dgxc": _platform(
-        vendor="nvidia", arch="sm100", machine="amd64", product="b200",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="nvlink",
-        launcher="single-slurm",
-    ),
-    "b300": _platform(
-        vendor="nvidia", arch="sm103", machine="amd64", product="b300",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="nvlink",
-        launcher="single-slurm",
-    ),
-    "gb200": _platform(
-        vendor="nvidia", arch="sm100", machine="arm64", product="gb200",
-        gpus_per_node=4, scale_up_domain=72, scale_up_transport="mnnvl",
-        launcher="gb-nv",
-    ),
-    "gb300": _platform(
-        vendor="nvidia", arch="sm103", machine="arm64", product="gb300",
-        gpus_per_node=4, scale_up_domain=72, scale_up_transport="mnnvl",
-        launcher="gb-nv",
-    ),
-    "mi300x": _platform(
-        vendor="amd", arch="gfx942", machine="amd64", product="mi300x",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
-        launcher="mi-amds",
-    ),
-    "mi325x": _platform(
-        vendor="amd", arch="gfx942", machine="amd64", product="mi325x",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
-        launcher="mi-amds",
-    ),
-    "mi355x": _platform(
-        vendor="amd", arch="gfx950", machine="amd64", product="mi355x",
-        gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
-        launcher="mi-amds",
-    ),
-}
+def _load_platforms() -> dict[str, dict[str, Any]]:
+    """Build the registry from configs/platform_config.json — fails loudly at
+    import on a missing file, missing field, or wrong-typed value."""
+    path = Path(__file__).resolve().parent / "configs" / "platform_config.json"
+    with path.open(encoding="utf-8") as stream:
+        document = json.load(stream)
+    platforms: dict[str, dict[str, Any]] = {}
+    for name, entry in document["platforms"].items():
+        identity = {
+            field: entry[field]
+            for field in (
+                "vendor", "arch", "machine", "product", "scale_up_transport", "launcher"
+            )
+        }
+        placement = {
+            field: entry[field]
+            for field in ("gpus_per_node", "scale_up_domain")
+        }
+        if not all(isinstance(value, str) and value for value in identity.values()):
+            raise ValueError(f"platform {name!r} has a non-string identity field")
+        if not all(isinstance(value, int) and value > 0 for value in placement.values()):
+            raise ValueError(f"platform {name!r} has a non-positive placement field")
+        platforms[name] = _platform(**identity, **placement)
+    return platforms
+
+
+PLATFORMS = _load_platforms()
 
 # Source pins and images live in configs/backends.json; this registry holds
 # only what scheduling reads: vendor and per-SKU capability.
@@ -151,6 +136,11 @@ SWEEP_BACKENDS = tuple(BACKENDS)
 # Keep these narrower than platform overrides so working reference paths remain
 # measurable on the same fabric.
 BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
+    ("h100-dgxc", "deepep-v2", 16): (
+        "DeepEP V2 EP16 requires NCCL GIN over the H100 scale-out fabric, "
+        "unverified on current runners; EP8 (LSA) validated on-node 2026-07-11 — "
+        "scheduled EP8 only for now"
+    ),
     ("b300", "deepep-v2", 16): (
         "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
         "unprovisioned on B300 hosts"

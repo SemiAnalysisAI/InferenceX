@@ -51,14 +51,7 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
-    ap.add_argument(
-        "--backend",
-        required=True,
-        choices=[
-            "deepep-v2",
-            "mori",
-        ],
-    )
+    ap.add_argument("--backend", required=True, choices=["deepep-v2", "mori"])
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -81,15 +74,9 @@ def main() -> int:
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
-    os.environ.setdefault("MASTER_ADDR", "localhost")
-    os.environ.setdefault("MASTER_PORT", "12355")
 
     import capability
 
-    sku = capability.PLATFORMS.get(args.runner)
-    if sku is None:
-        print(f"ERROR: unknown runner identity {args.runner!r}", file=sys.stderr)
-        return 5
     machine = {"x86_64": "amd64", "aarch64": "arm64"}.get(
         platform.machine(), platform.machine()
     )
@@ -120,15 +107,6 @@ def main() -> int:
         )
         return 5
     observed_gpus_per_node = args.gpus_per_node or device_count
-    if observed_gpus_per_node != sku["gpus_per_node"]:
-        print(
-            f"ERROR: {args.runner} requires {sku['gpus_per_node']} GPUs per node",
-            file=sys.stderr,
-        )
-        return 5
-    if world_size % observed_gpus_per_node:
-        print("ERROR: distributed world is not divisible by GPUs per node", file=sys.stderr)
-        return 5
     observed_nodes = world_size // observed_gpus_per_node
     topology = capability.topology_for(args.runner, world_size)
     observed_topology = {
@@ -168,10 +146,7 @@ def main() -> int:
         "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA")
         or os.environ.get("GITHUB_SHA"),
     }
-    if any(_run.values()):
-        args.git_run = _run
-    else:
-        args.git_run = None
+    args.git_run = _run if any(_run.values()) else None
 
     # Import the backend class only after torch initializes. The selected mode is an
     # explicit case dimension; adapters do not infer it from the token ladder.

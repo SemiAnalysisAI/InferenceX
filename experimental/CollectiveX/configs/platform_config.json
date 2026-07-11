@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "notes": [
+    "Per-SKU platform registry: public identity (vendor/arch/machine/product), fixed",
+    "placement (gpus_per_node, scale_up_domain, scale_up_transport), launcher, the",
+    "operator-config fields the SKU requires, and canonical runtime policy",
+    "(run_timeout, optional master_port). capability.py derives the EP topologies",
+    "from these values; suites.yaml 'platforms: all' resolves to every SKU listed",
+    "here; runtime/config.py derives its operator-config schema and canonical policy from them.",
+    "The optional 'network' block carries the SKU's operator-approved scale-out RDMA",
+    "selectors, overlaid onto the base operator config by runtime/config.py."
+  ],
+  "platforms": {
+    "h100-dgxc": {
+      "vendor": "nvidia",
+      "arch": "sm90",
+      "machine": "amd64",
+      "product": "h100",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "operator_fields": [
+        "partition",
+        "account",
+        "squash_dir"
+      ],
+      "run_timeout": 900
+    },
+    "h200-dgxc": {
+      "vendor": "nvidia",
+      "arch": "sm90",
+      "machine": "amd64",
+      "product": "h200",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "operator_fields": [
+        "partition",
+        "squash_dir"
+      ],
+      "run_timeout": 900
+    },
+    "b200-dgxc": {
+      "vendor": "nvidia",
+      "arch": "sm100",
+      "machine": "amd64",
+      "product": "b200",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "operator_fields": [
+        "partition",
+        "account",
+        "squash_dir"
+      ],
+      "run_timeout": 900
+    },
+    "b300": {
+      "vendor": "nvidia",
+      "arch": "sm103",
+      "machine": "amd64",
+      "product": "b300",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "operator_fields": [
+        "partition",
+        "account",
+        "squash_dir"
+      ],
+      "run_timeout": 900
+    },
+    "gb200": {
+      "vendor": "nvidia",
+      "arch": "sm100",
+      "machine": "arm64",
+      "product": "gb200",
+      "gpus_per_node": 4,
+      "scale_up_domain": 72,
+      "scale_up_transport": "mnnvl",
+      "launcher": "gb-nv",
+      "operator_fields": [
+        "partition",
+        "account",
+        "storage_roots"
+      ],
+      "run_timeout": 900,
+      "master_port": 29551
+    },
+    "gb300": {
+      "vendor": "nvidia",
+      "arch": "sm103",
+      "machine": "arm64",
+      "product": "gb300",
+      "gpus_per_node": 4,
+      "scale_up_domain": 72,
+      "scale_up_transport": "mnnvl",
+      "launcher": "gb-nv",
+      "operator_fields": [
+        "partition",
+        "account",
+        "squash_dir",
+        "enroot_cache_path"
+      ],
+      "run_timeout": 900,
+      "master_port": 29551
+    },
+    "mi300x": {
+      "vendor": "amd",
+      "arch": "gfx942",
+      "machine": "amd64",
+      "product": "mi300x",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "operator_fields": [
+        "partition",
+        "squash_dir"
+      ],
+      "run_timeout": 1800
+    },
+    "mi325x": {
+      "vendor": "amd",
+      "arch": "gfx942",
+      "machine": "amd64",
+      "product": "mi325x",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "operator_fields": [
+        "partition",
+        "squash_dir"
+      ],
+      "run_timeout": 1800
+    },
+    "mi355x": {
+      "vendor": "amd",
+      "arch": "gfx950",
+      "machine": "amd64",
+      "product": "mi355x",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "network": {
+        "socket_ifname": "eno0",
+        "rdma_devices": "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7",
+        "ib_gid_index": 1
+      },
+      "operator_fields": [
+        "partition",
+        "squash_dir"
+      ],
+      "run_timeout": 1800
+    }
+  }
+}

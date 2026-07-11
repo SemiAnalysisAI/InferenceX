@@ -141,6 +141,34 @@ def percentile(xs: list[float], q: float) -> float:
     return s[i]
 
 
+def _pcts(xs):
+    return ({"p50": percentile(xs, 50), "p90": percentile(xs, 90),
+             "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
+
+
+def _component(percentiles, count, *, derived=False):
+    if percentiles is None:
+        return {"availability": "unavailable", "origin": None,
+                "percentiles_us": None, "sample_count": 0}
+    return {
+        "availability": "derived" if derived else "measured",
+        "origin": "derived-percentile-sum" if derived else "measured",
+        "percentiles_us": percentiles,
+        "sample_count": 0 if derived else count,
+    }
+
+
+# The exact routing fields each row publishes — a whitelist so a new stat in
+# routing.routing_stats never leaks into the artifact unreviewed.
+_ROUTING_FIELDS = (
+    "empty_expert_count", "empty_rank_count", "expert_assignment_rank_cv",
+    "expert_assignments_per_rank", "expert_load_cv", "expert_load_max",
+    "expert_load_mean", "expert_load_min", "fanout_histogram", "fanout_max",
+    "fanout_mean", "fanout_min", "hotspot_ratio", "locality",
+    "payload_copies_per_rank", "payload_rank_cv", "routed_copies",
+)
+
+
 def _write_bytes_atomic(path: str, payload: bytes) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     temporary = f"{path}.tmp-{os.getpid()}"
@@ -517,25 +545,22 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # Inputs determine the communicator capacity.
     backend.create_buffer(spec)
 
-    # ---- Pass 0: settle clocks/fabric untimed by walking the measured shapes
-    # ascending (cold-jump-safe ramp) before anything gate-bearing or timed runs.
-    # These rounds are never measured or emitted.
-    problems = {}
-    for T in ladder:
-        point = spec.points[T]
-        problems[T] = backend.make_problem(
-            T, point.topk_idx.to(device), point.topk_weights.to(device), point.activations
-        )
-        backend.warm(problems[T], CONDITIONING_ROUNDS_PER_SHAPE)
-    torch.cuda.synchronize()
-    dist.barrier()
-    # ---- Pass 1: run the expert oracle over each warmed deterministic problem. ----
-    gate, gts, global_traces, input_snapshots = {}, {}, {}, {}
+    # ---- Pass 1: per shape, ascending (a cold-jump-safe ramp): warm untimed,
+    # then prove workload identity and run the expert oracle. The untimed warm
+    # rounds settle clocks/fabric BEFORE anything gate-bearing runs at that shape
+    # and are never measured or emitted. ----
+    problems, gate, gts, global_traces, input_snapshots = {}, {}, {}, {}, {}
     routing_consistent = True
     for T in ladder:
         gt = T * ep_size
         gts[T] = gt
         point = spec.points[T]
+        problem = backend.make_problem(
+            T, point.topk_idx.to(device), point.topk_weights.to(device), point.activations
+        )
+        backend.warm(problem, CONDITIONING_ROUNDS_PER_SHAPE)
+        torch.cuda.synchronize()
+        problems[T] = problem
         idx_g, w_g = point.global_idx, point.global_weights
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank)
         rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
@@ -544,7 +569,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             torch, dist, device, idx_g, w_g
         )
         routing_consistent = routing_consistent and point_routing_consistent
-        problem = problems[T]
         input_snapshots[T] = (
             problem.x.clone(), problem.topk_idx.clone(), problem.topk_weights.clone()
         )
@@ -620,27 +644,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         })
 
     # ---- Pass 4: percentiles (p50/p90/p95/p99, nearest-rank) from pooled samples + bytes + row ----
-    def pcts(xs):
-        return ({"p50": percentile(xs, 50), "p90": percentile(xs, 90),
-                 "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
-
-    def component(percentiles, count, *, derived=False):
-        if percentiles is None:
-            return {"availability": "unavailable", "origin": None,
-                    "percentiles_us": None, "sample_count": 0}
-        return {
-            "availability": "derived" if derived else "measured",
-            "origin": "derived-percentile-sum" if derived else "measured",
-            "percentiles_us": percentiles,
-            "sample_count": 0 if derived else count,
-        }
     rows = []
     for T in ladder:
         gt = gts[T]
         g = gate[T]
         rstats = g["rstats"]
         d, s, c, rt = disp_pool[T], stage_pool[T], comb_pool[T], rt_pool[T]
-        dp, sp, cp, rtp = pcts(d), pcts(s), pcts(c), pcts(rt)
+        dp, sp, cp, rtp = _pcts(d), _pcts(s), _pcts(c), _pcts(rt)
         # isolated_sum = SUM of the isolated dispatch+stage+combine percentiles. Stage contributes
         # zero when it is explicitly not applicable. This is NOT a measured chained operation
         # (can't reveal shared sync / launch amortization / overlap) — do NOT use for throughput
@@ -655,26 +665,23 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
-        # Canonical LOGICAL payload bytes come from the routing trace (NOT backend recv
-        # tensors): one copy per unique (token, dest-rank) pair.
-        logical_copies = rstats["routed_copies"]
-        H = args.hidden
         throughput = {
             percentile_name: gt / (latency_us * 1e-6)
             for percentile_name, latency_us in rtp.items()
         }
-        # Dispatch and combine move the same logical payload; the roundtrip is
-        # their sum and stage moves nothing.
-        one_way_bytes = logical_byte_provenance(logical_copies, H)
+        # Canonical LOGICAL payload bytes come from the routing trace (NOT backend recv
+        # tensors): one copy per unique (token, dest-rank) pair. Dispatch and combine
+        # move the same logical payload; the roundtrip is their sum and stage moves nothing.
+        one_way_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
         roundtrip_bytes = {field: 2 * value for field, value in one_way_bytes.items()}
         stage_bytes = dict.fromkeys(one_way_bytes, 0)
         rows.append({
             "components": {
-                "combine": component(cp, len(c)),
-                "dispatch": component(dp, len(d)),
-                "isolated_sum": component(isum, 0, derived=True),
-                "roundtrip": component(rtp, len(rt)),
-                "stage": component(sp, len(s)),
+                "combine": _component(cp, len(c)),
+                "dispatch": _component(dp, len(d)),
+                "isolated_sum": _component(isum, 0, derived=True),
+                "roundtrip": _component(rtp, len(rt)),
+                "stage": _component(sp, len(s)),
             },
             "correctness": {
                 "max_relative_error": max_rel,
@@ -693,25 +700,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "min": recv_min,
                 "total": recv_total,
             },
-            "routing": {
-                "empty_expert_count": rstats["empty_expert_count"],
-                "empty_rank_count": rstats["empty_rank_count"],
-                "expert_assignment_rank_cv": rstats["expert_assignment_rank_cv"],
-                "expert_assignments_per_rank": rstats["expert_assignments_per_rank"],
-                "expert_load_cv": rstats["expert_load_cv"],
-                "expert_load_max": rstats["expert_load_max"],
-                "expert_load_mean": rstats["expert_load_mean"],
-                "expert_load_min": rstats["expert_load_min"],
-                "fanout_histogram": rstats["fanout_hist"],
-                "fanout_max": rstats["fanout_max"],
-                "fanout_mean": rstats["fanout_mean"],
-                "fanout_min": rstats["fanout_min"],
-                "hotspot_ratio": rstats["hotspot_ratio"],
-                "locality": rstats.get("locality"),
-                "payload_copies_per_rank": rstats["payload_copies_per_rank"],
-                "payload_rank_cv": rstats["payload_rank_cv"],
-                "routed_copies": rstats["routed_copies"],
-            },
+            "routing": {key: rstats[key] for key in _ROUTING_FIELDS},
             "token_rate_at_latency_percentile": throughput,
             "tokens_per_rank": T,
         })

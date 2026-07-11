@@ -58,6 +58,54 @@ collx_fail_stage() {
   return 1
 }
 
+# Shared launcher skeleton: the identity-stage boilerplate every launcher runs
+# before any SKU-specific work.
+collx_launcher_prologue() {
+  JOB_ID=""
+  collx_install_launcher_fail_safe
+  collx_set_failure_stage setup
+  collx_load_operator_config
+  collx_lock_canonical_gha_env "$1"
+}
+
+# Validate launcher topology overrides against the platform registry — the
+# single source for gpus_per_node/scale_up_domain. Allowed node counts realize
+# EP8/EP16 on the registered gpus_per_node, exactly as runtime/config.py
+# derives them for shard decoding.
+collx_require_registered_topology() {
+  local runner="$1" nodes="$2" gpn="$3" domain="$4" ngpus="$5"
+  local registry="$COLLX_DIR/configs/platform_config.json"
+  local expected reg_gpn reg_domain low high
+  expected="$(python3 - "$runner" "$registry" <<'PY'
+import json, sys
+platform = json.load(open(sys.argv[2]))["platforms"][sys.argv[1]]
+print(platform["gpus_per_node"], platform["scale_up_domain"])
+PY
+)" || collx_die "no platform registry entry for $runner"
+  read -r reg_gpn reg_domain <<< "$expected"
+  [ "$gpn" = "$reg_gpn" ] || collx_die "$runner requires $reg_gpn GPUs per node"
+  [ "$domain" = "$reg_domain" ] \
+    || collx_die "$runner requires a $reg_domain-GPU scale-up domain"
+  low=$((8 / reg_gpn)); [ "$low" -ge 1 ] || low=1
+  high=$((16 / reg_gpn))
+  [ "$nodes" = "$low" ] || [ "$nodes" = "$high" ] \
+    || collx_die "$runner supports $low or $high nodes"
+  [ "$ngpus" = "$((nodes * gpn))" ] \
+    || collx_die "$runner world size must equal nodes x GPUs per node"
+}
+
+# Shared launcher tail: run the shard, collect artifacts, and fold both return
+# codes into FINAL_RC (run failures win; collection failures surface otherwise).
+collx_execute_and_collect() {
+  local mount_src="$1" repo_root="$2" run_rc=0 collect_rc=0
+  collx_set_failure_stage container-launch
+  collx_run_shard || run_rc=$?
+  collx_collect_results "$mount_src" "$repo_root" || collect_rc=$?
+  [ "$run_rc" != 0 ] || [ "$collect_rc" = 0 ] || collx_set_failure_stage artifact-collection
+  FINAL_RC="$run_rc"
+  [ "$FINAL_RC" != 0 ] || FINAL_RC="$collect_rc"
+}
+
 collx_job_root_is_safe() {
   local root="$1"
   if [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]]; then
@@ -215,7 +263,7 @@ collx_apply_network_profile() {
   [ -n "${COLLX_RDMA_DEVICES:-}" ] \
     || collx_die "RDMA execution requires a private device selector"
   if [ "$scaleout" = 1 ] && [ -n "${COLLX_SOCKET_IFNAME:-}" ]; then
-    [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]] \
+    [[ "$COLLX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
       || collx_die "invalid private socket interface selector"
     export NCCL_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$COLLX_SOCKET_IFNAME"
   fi
@@ -928,13 +976,13 @@ collx_lock_canonical_gha_env() {
     printf -v "$policy_key" '%s' "$policy_value"
   done < "$policy_file"
   rm -f -- "$policy_file"
-  unset COLLX_PUBLIC_RUNNER COLLX_GB_PRODUCT COLLX_DRYRUN COLLX_TIMING
+  unset COLLX_PUBLIC_RUNNER COLLX_DRYRUN COLLX_TIMING
   unset COLLX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE
   export COLLX_IMAGE COLLX_NGPUS COLLX_RUN_TIMEOUT
   case "$runner" in
     gb200|gb300) export COLLX_MASTER_PORT ;;
     mi300x|mi325x|mi355x)
-      export COLLX_MORI_KERNEL_TYPE MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
+      export MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;
   esac
@@ -1184,7 +1232,7 @@ collx_stage_path() {
 
 # Stage only the public benchmark tree into the private execution child.
 collx_stage_repo() {
-  local repo_root="$1" stage_dir="$2" expected log copy_error
+  local repo_root="$1" stage_dir="$2" expected log
   expected="$(collx_stage_path "$repo_root" "${COLLX_STAGE_DIR:-}")" \
     || collx_die "configured stage base is unavailable or unsafe"
   [ "$stage_dir" = "$expected" ] \
@@ -1196,9 +1244,6 @@ collx_stage_repo() {
   if ! python3 "$COLLX_RUNTIME_DIR/stage.py" copy-repository \
       "$repo_root/experimental/CollectiveX" \
       "$stage_dir/experimental/CollectiveX" > "$log" 2>&1; then
-    copy_error="$(grep -aoE 'collectivex-stage-copy-error=[A-Za-z]+:[0-9]+' "$log" \
-      | tail -n 1 || true)"
-    [ -z "$copy_error" ] || collx_log "ERROR: repository-stage-$copy_error"
     rm -rf -- "$stage_dir" >/dev/null 2>&1 \
       || collx_log "ERROR: cannot remove the incomplete execution stage"
     collx_fail_stage repository-stage "$log" || true

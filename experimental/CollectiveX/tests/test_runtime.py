@@ -28,6 +28,51 @@ import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
 
 
+# configs/platform_config.json is the single per-SKU registry shared by
+# capability.py (topologies), runtime/config.py (operator schema, network
+# overlay, canonical policy), runtime/prepare_backend.sh (CUDA target), and
+# bench/ep_mori.py (arch pin). Validate its shape once so a malformed entry
+# fails here instead of on an allocation.
+class PlatformRegistryTests(unittest.TestCase):
+    REGISTRY = RUNTIME.parent / "configs" / "platform_config.json"
+    NETWORK_FIELDS = {
+        "socket_ifname", "rdma_devices", "ib_gid_index",
+        "rdma_service_level", "rdma_traffic_class",
+    }
+
+    def test_every_platform_entry_is_complete_and_typed(self) -> None:
+        platforms = json.loads(self.REGISTRY.read_text())["platforms"]
+        self.assertTrue(platforms)
+        for name, entry in platforms.items():
+            with self.subTest(sku=name):
+                for field in ("vendor", "arch", "machine", "product",
+                              "scale_up_transport", "launcher"):
+                    self.assertIsInstance(entry[field], str)
+                    self.assertTrue(entry[field])
+                for field in ("gpus_per_node", "scale_up_domain", "run_timeout"):
+                    self.assertIsInstance(entry[field], int)
+                    self.assertGreater(entry[field], 0)
+                self.assertTrue(entry["operator_fields"])
+                self.assertLessEqual(
+                    set(entry.get("network", {})), self.NETWORK_FIELDS
+                )
+                if entry["scale_up_transport"] == "mnnvl":
+                    self.assertIn("master_port", entry)
+                if entry["vendor"] == "nvidia":
+                    self.assertRegex(entry["arch"], r"^sm\d+$")
+                else:
+                    self.assertRegex(entry["arch"], r"^gfx\d+$")
+
+    def test_capability_loads_exactly_the_registry_skus(self) -> None:
+        sys.path.insert(0, str(RUNTIME.parent))
+        try:
+            import capability
+        finally:
+            sys.path.pop(0)
+        platforms = json.loads(self.REGISTRY.read_text())["platforms"]
+        self.assertEqual(set(capability.PLATFORMS), set(platforms))
+
+
 class ProbeTests(unittest.TestCase):
     def test_default_route_interface(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -448,6 +493,49 @@ class CaseArgvContract(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 self._run_ep_parser().parse_args(self._decode(result.stdout))
+
+
+# collx_require_registered_topology (runtime/common.sh) validates every
+# launcher's topology overrides against configs/platform_config.json through a
+# bash -> python3 seam. Exercise the real function under bash so a registry
+# rename or argv reshuffle fails here instead of on an allocation.
+class LauncherTopologyContract(unittest.TestCase):
+    CASES = (
+        # (expect_pass, runner, nodes, gpn, scale_up_domain, ngpus)
+        (True, "gb200", 2, 4, 72, 8),
+        (True, "gb300", 4, 4, 72, 16),
+        (True, "mi355x", 1, 8, 8, 8),
+        (True, "h100-dgxc", 2, 8, 8, 16),
+        (False, "gb200", 3, 4, 72, 12),    # node count realizes no EP degree
+        (False, "gb200", 2, 8, 72, 16),    # gpus_per_node contradicts registry
+        (False, "b300", 1, 8, 4, 8),       # scale-up domain contradicts registry
+        (False, "b300", 1, 8, 8, 9),       # world != nodes x gpus_per_node
+        (False, "nosuchsku", 1, 8, 8, 8),  # unknown registry key
+    )
+
+    def test_registry_topology_validation(self) -> None:
+        collx_dir = RUNTIME.parent
+        script = (
+            "set -uo pipefail\n"
+            f'cd "{collx_dir}"\n'
+            f'COLLX_DIR="{collx_dir}"\n'
+            "source runtime/common.sh 2>/dev/null || true\n"
+            'collx_require_registered_topology "$@"\n'
+        )
+        for expect_pass, runner, nodes, gpn, domain, ngpus in self.CASES:
+            with self.subTest(runner=runner, nodes=nodes, gpn=gpn,
+                              domain=domain, ngpus=ngpus):
+                result = subprocess.run(
+                    ["bash", "-c", script, "_", runner, str(nodes), str(gpn),
+                     str(domain), str(ngpus)],
+                    capture_output=True,
+                    env={k: v for k, v in os.environ.items()
+                         if not k.startswith("COLLX_")},
+                )
+                if expect_pass:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

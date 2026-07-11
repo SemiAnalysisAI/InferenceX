@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # CollectiveX shared AMD Slurm launcher (one or two nodes).
-# shellcheck disable=SC2016,SC2034
+# shellcheck disable=SC2034
+#
+# Flow (section banners below match the collx_set_failure_stage labels GHA reports;
+# container-import runs inside the allocation retry loop on these clusters):
+#   identity -> setup -> repository-stage -> scheduler-allocation + container-import
+#   -> container-launch -> artifact-collection
 set -euo pipefail
 
 HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -9,35 +14,27 @@ REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
 # shellcheck source=../runtime/common.sh
 source "$HERE/../runtime/common.sh"
 
+# ---- identity: resolve SKU, backend, platform -------------------------------
 RUNNER="${COLLX_SHARD_SKU:-${COLLX_PUBLIC_RUNNER:-}}"
 case "$RUNNER" in
-  mi300x|mi325x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
-  mi355x) CPUS_PER_TASK=128; DEVICE_MOUNTS="" ;;
+  mi300x|mi325x) CPUS_PER_NODE=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  mi355x) CPUS_PER_NODE=128; DEVICE_MOUNTS="" ;;
   *) collx_die "set COLLX_SHARD_SKU or COLLX_PUBLIC_RUNNER to a registered AMD SKU" ;;
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
 export COLLX_IMAGE_PLATFORM=linux/amd64
-JOB_ID=""
-collx_install_launcher_fail_safe
-collx_set_failure_stage setup
-collx_load_operator_config
-collx_lock_canonical_gha_env "$RUNNER"
+# ---- setup: operator config, canonical env, topology, network profile -------
+collx_launcher_prologue "$RUNNER"
 
 NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
 SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
-EXPECTED_WORLD=$((NODES * GPN))
-NGPUS="${COLLX_NGPUS:-$EXPECTED_WORLD}"
+NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 TIME_MIN="${COLLX_TIME:-60}"
 EXCLUDE_NODES="${COLLX_EXCLUDE_NODES:-}"
 NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-[ "$NODES" = 1 ] || [ "$NODES" = 2 ] \
-  || collx_die "$RUNNER supports one or two nodes"
-[ "$GPN" = 8 ] || collx_die "$RUNNER requires eight GPUs per node"
-[ "$SCALE_UP_DOMAIN" = 8 ] || collx_die "$RUNNER requires an eight-GPU scale-up domain"
-[ "$NGPUS" = "$EXPECTED_WORLD" ] \
-  || collx_die "$RUNNER world size must equal nodes x GPUs per node"
+collx_require_registered_topology "$RUNNER" "$NODES" "$GPN" "$SCALE_UP_DOMAIN" "$NGPUS"
 case "$COLLX_BENCH" in
   mori) ;;
   *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
@@ -50,20 +47,11 @@ if [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
   export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
   export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
   export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
-  [ "$COLLX_BENCH" != mori ] \
-    || export COLLX_IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_AMD_MORI}"
-fi
-if [ "$COLLX_BENCH" = mori ]; then
-  if [ "$NODES" -gt 1 ]; then
-    export COLLX_MORI_KERNEL_TYPE=internode-v1
-  elif [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
-    export COLLX_MORI_KERNEL_TYPE="${COLLX_MORI_KERNEL_TYPE:-asyncll}"
-  else
-    export COLLX_MORI_KERNEL_TYPE="${COLLX_MORI_KERNEL_TYPE:-intranode}"
-  fi
+  # The backend case above admits only mori, so its image override is unconditional.
+  export COLLX_IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_AMD_MORI}"
 fi
 IMAGE="${COLLX_IMAGE:-$(collx_default_image "$RUNNER")}"
-export COLLX_RUNNER="$RUNNER" COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
+export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
 export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN" COLLX_TS="$TS"
 export COLLX_SCALE_UP_TRANSPORT=xgmi
 if [ "$NODES" -gt 1 ]; then
@@ -80,18 +68,24 @@ collx_require_vars COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
 PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 
 collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
+
+# ---- repository-stage: compute-visible copy of the checkout -----------------
 collx_set_failure_stage repository-stage
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 [ "${COLLX_DRYRUN:-0}" != 1 ] || { collx_log "COLLX_DRYRUN=1 - not allocating"; exit 0; }
 collx_set_failure_stage setup
 collx_select_image "$IMAGE"
+
+# ---- scheduler-allocation + container-import: retry until nodes validate ----
+# Each attempt must pass the network profile AND import the squash; a rejected
+# allocation is cancelled and its nodes excluded from the next attempt.
 collx_set_failure_stage scheduler-allocation
 command -v salloc >/dev/null || collx_die "salloc not found on this runner"
 
 allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
   --time="$TIME_MIN" --ntasks-per-node="$GPN"
-  --cpus-per-task="$((CPUS_PER_TASK / GPN))")
+  --cpus-per-task="$((CPUS_PER_NODE / GPN))")
 if [ "$RUNNER" = mi355x ]; then
   allocation+=(--exclusive)
 fi
@@ -145,16 +139,9 @@ collx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${COLLX_SHARD_FILE:-}"
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
 
+# ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
-run_rc=0
-collx_set_failure_stage container-launch
-collx_run_shard || run_rc=$?
-
-collect_rc=0
-collx_collect_results "$MOUNT_SRC" "$REPO_ROOT" || collect_rc=$?
-[ "$run_rc" != 0 ] || [ "$collect_rc" = 0 ] || collx_set_failure_stage artifact-collection
-final_rc="$run_rc"
-[ "$final_rc" != 0 ] || final_rc="$collect_rc"
+collx_execute_and_collect "$MOUNT_SRC" "$REPO_ROOT"
 rm -f "$MOUNT_SRC"/experimental/CollectiveX/gpucore.* 2>/dev/null || true
 collx_log "done - result artifacts collected"
-exit "$final_rc"
+exit "$FINAL_RC"

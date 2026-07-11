@@ -22,7 +22,7 @@ Cases use a fixed timing profile from `configs/suites.yaml`: 128 trials x 8 time
 with 32 synchronized full roundtrip warmups before each measured component at every trial/point. Component measurement order rotates each
 trial so every timed component occupies every position in the sequence; each iteration takes the
 cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the headline latency. A
-stdlib integer counter produces byte-identical routing and gate weights.
+keyed BLAKE2b counter produces byte-identical routing and gate weights on every runtime.
 
 Correctness is checked against the reference activation. The combine gate is `rtol=0.05, atol=0.02`
 for the BF16 communication path. Any failed rank or point makes the case ineligible in the result
@@ -84,19 +84,14 @@ Runner-local Slurm and storage values use a strict per-SKU JSON document at
 `$XDG_CONFIG_HOME/inferencex/collectivex.json` or `COLLECTIVEX_OPERATOR_CONFIG`. Unknown runners,
 fields, duplicate keys, and non-JSON input fail closed; configuration is never evaluated as shell.
 GHA passes encrypted `COLLECTIVEX_OPERATOR_CONFIG_V1` content to the launcher, which validates it,
-exports the selected SKU's values, and deletes the temporary copy before allocation. Per-SKU
-scale-out RDMA selectors live in the tracked `configs/network-config.json` overlay. Required JSON
-fields are:
+exports the selected SKU's values, and deletes the temporary copy before allocation.
 
-| SKU | Variables |
-|---|---|
-| `h100-dgxc` | `partition`, `account`, `squash_dir` |
-| `h200-dgxc` | `partition`, `squash_dir` |
-| `b200-dgxc` | `partition`, `account`, `squash_dir` |
-| `b300` | `partition`, `account`, `squash_dir` |
-| `gb200` | `partition`, `account`, ordered `storage_roots` |
-| `gb300` | `partition`, `account`, `squash_dir`, `enroot_cache_path` |
-| `mi300x`, `mi325x`, `mi355x` | `partition`, `squash_dir` |
+All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
+identity (vendor/arch/machine/product), fixed placement, launcher, canonical runtime policy
+(run timeout, master port), the operator-config fields each SKU must supply
+(`operator_fields`), and the SKU's scale-out RDMA selectors (`network` block, overlaid onto the
+base operator config). `capability.py` derives EP topologies from it, and a suite's
+`platforms: all` in `configs/suites.yaml` resolves to every SKU registered there.
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
 its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class`

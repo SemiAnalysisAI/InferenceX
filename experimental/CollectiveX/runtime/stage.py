@@ -11,7 +11,7 @@ import shutil
 
 
 EXCLUDES = {"__pycache__", "results", ".collx_workloads", ".collx_backend", ".collx_sources",
-            "platforms.yaml", "private-infra.md", "goal.md", "notes.md"}
+            ".shards", ".venv", ".pytest_cache", "private-infra.md", "goal.md", "notes.md"}
 
 
 def implicit_stage_base(args) -> None:
@@ -47,9 +47,7 @@ def validate_stage_path(args) -> None:
 
 
 def create_stage(args) -> None:
-    stage = Path(args.stage)
-    stage.mkdir(mode=0o700)
-    (stage / "experimental").mkdir(mode=0o700)
+    Path(args.stage).mkdir(mode=0o700)
 
 
 def copy_repository(args) -> None:

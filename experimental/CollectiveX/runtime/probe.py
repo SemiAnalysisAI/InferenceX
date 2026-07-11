@@ -69,23 +69,24 @@ def validate_network_profile(socket_names: str, rdma_devices: str, gid_index: st
                              sys_root: Path = Path("/sys"),
                              route_path: Path = Path("/proc/net/route")) -> None:
     # Prove the operator-pinned scale-out fabric on this node: resolve the cross-node socket
-    # interface (operator selector, else this node's default route), confirm each socket
-    # interface is live, and confirm every pinned RDMA port is active with a consistent link
-    # layer. On success emit the socket-interface-selected and rdma-link-layer markers the
-    # launcher consumes; on any failure emit the diagnostic marker and exit non-zero.
-    names = socket_names or default_route_interface(route_path)
-    if not names:
+    # interface (operator selector, else this node's default route), confirm it is live, and
+    # confirm every pinned RDMA port is active with a consistent link layer. On success emit
+    # the socket-interface-selected and rdma-link-layer markers the launcher consumes; on any
+    # failure emit the diagnostic marker and exit non-zero. The seam carries exactly ONE socket
+    # interface: the launcher's marker-extraction regex has no comma, so a multi-interface
+    # selector could never survive past this probe — fail it loudly here instead.
+    interface = socket_names or default_route_interface(route_path)
+    if not interface:
         _emit("socket-interface-1=default-route-missing")
         raise SystemExit(1)
-    _emit(f"socket-interface-selected={names}")
-    for ordinal, interface in enumerate((n for n in names.split(",") if n), start=1):
-        net = sys_root / "class" / "net" / interface
-        if not net.is_dir():
-            _emit(f"socket-interface-{ordinal}=missing"); raise SystemExit(1)
-        operstate = net / "operstate"
-        state = operstate.read_text().strip() if operstate.is_file() else ""
-        if state not in ("up", "unknown"):
-            _emit(f"socket-interface-{ordinal}=down"); raise SystemExit(1)
+    _emit(f"socket-interface-selected={interface}")
+    net = sys_root / "class" / "net" / interface
+    if not net.is_dir():
+        _emit("socket-interface-1=missing"); raise SystemExit(1)
+    operstate = net / "operstate"
+    state = operstate.read_text().strip() if operstate.is_file() else ""
+    if state not in ("up", "unknown"):
+        _emit("socket-interface-1=down"); raise SystemExit(1)
     profile = ""
     for ordinal, selector in enumerate((s for s in rdma_devices.split(",") if s), start=1):
         device, _, configured_port = selector.partition(":")
