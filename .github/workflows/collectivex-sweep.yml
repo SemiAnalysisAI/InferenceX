@@ -193,7 +193,7 @@ jobs:
           set -euo pipefail
           umask 077
           operator_config="$COLLX_JOB_ROOT/operator-config.json"
-          python3 experimental/CollectiveX/runtime/config.py \
+          python3 "$COLLX_SOURCE_ROOT/experimental/CollectiveX/runtime/config.py" \
             merge-operator-config "$operator_config"
           # The merged config has been written to $operator_config; hand the
           # launcher the path only. The raw secret *_CONTENT vars must be cleared
