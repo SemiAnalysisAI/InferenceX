@@ -81,7 +81,7 @@ contracts separate.
 Every measured component uses one fixed timing profile, defined once in `configs/suites.yaml`
 and baked into every scheduled case:
 
-- 128 trials x 8 timed iterations = 1024 observations;
+- 256 trials x 8 timed iterations = 2048 observations;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at
   every trial/point;
 - component measurement order rotates each trial (`trial_order`) so every timed component occupies

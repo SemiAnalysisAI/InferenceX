@@ -18,11 +18,12 @@ precision is not a swept dimension. Every case runs the single normal-mode contr
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Coverage is uniform routing only.
 
-Cases use a fixed timing profile from `configs/suites.yaml`: 128 trials x 8 timed iterations (1024 samples per component)
-with 32 synchronized full roundtrip warmups before each measured component at every trial/point. Component measurement order rotates each
-trial so every timed component occupies every position in the sequence; each iteration takes the
-cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the headline latency. A
-keyed BLAKE2b counter produces byte-identical routing and gate weights on every runtime.
+Cases use a fixed timing profile from `configs/suites.yaml`: 256 trials x 8 timed iterations (2048
+samples per component) with 32 synchronized full roundtrip warmups before each measured component at
+every trial/point. Component measurement order rotates each trial so every timed component occupies
+every position in the sequence; each iteration takes the cross-rank maximum before nearest-rank
+p50/p90/p95/p99, and roundtrip p99 is the headline latency. A keyed BLAKE2b counter produces
+byte-identical routing and gate weights on every runtime.
 
 Correctness is checked against the reference activation. The combine gate is `rtol=0.05, atol=0.02`
 for the BF16 communication path. Any failed rank or point makes the case ineligible in the result

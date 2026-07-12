@@ -14,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest import mock
 
 
 RUNTIME = Path(__file__).resolve().parents[1] / "runtime"
@@ -77,34 +76,6 @@ class ProbeTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
-    def test_merge_operator_config_applies_overlays(self) -> None:
-        base = {"runners": {"h100-dgxc": {"partition": "gpu"}}}
-        overlay = {"runners": {"h100-dgxc": {"account": "bench"}}}
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "operator.json"
-            with mock.patch.dict(os.environ, {
-                "COLLECTIVEX_OPERATOR_CONFIG_CONTENT": json.dumps(base),
-                "COLLECTIVEX_H100_CONFIG_CONTENT": json.dumps(overlay),
-            }, clear=True):
-                config.merge_operator_config(str(path))
-            self.assertEqual(
-                json.loads(path.read_text())["runners"]["h100-dgxc"],
-                {"partition": "gpu", "account": "bench"},
-            )
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-
-    def test_merge_operator_config_tolerates_absent_base(self) -> None:
-        # De-secreted operator config: the base secret is deleted (empty CONTENT).
-        # Merge must still write {"runners":{}} so the launcher finds a config file
-        # and falls back to the tracked platform_config.json baseline.
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "operator.json"
-            with mock.patch.dict(
-                os.environ, {"COLLECTIVEX_OPERATOR_CONFIG_CONTENT": ""}, clear=True
-            ):
-                config.merge_operator_config(str(path))
-            self.assertEqual(json.loads(path.read_text()), {"runners": {}})
-
     def test_operator_config_emits_allowlisted_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "operator.json"
@@ -342,7 +313,7 @@ class CaseArgvContract(unittest.TestCase):
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
-        "ladder": "1 2 4", "timing": "8:128:32",
+        "ladder": "1 2 4", "timing": "8:256:32",
         "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
         "suite": "ep-core", "workload": "deepseek-v3",
     }
@@ -387,7 +358,7 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.case_id, self.CASE["case_id"])
         self.assertEqual(args.version, 1)
         self.assertEqual(args.seed, self.CASE["seed"])
-        self.assertEqual((args.iters, args.trials, args.warmup), (8, 128, 32))
+        self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
         self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_decode_TS-c000.json")
 
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:

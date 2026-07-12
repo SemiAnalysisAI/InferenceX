@@ -63,16 +63,13 @@ PY
 
 collx_prepare_cuda_cccl() {
   local cccl="" candidate cuda_home nvcc
-  nvcc="$(command -v nvcc)" \
-    || { collx_log "ERROR: CUDA nvcc is unavailable"; return 1; }
-  nvcc="$(readlink -f -- "$nvcc")" \
-    || { collx_log "ERROR: CUDA nvcc cannot be resolved"; return 1; }
+  nvcc="$(command -v nvcc)" || { collx_log "ERROR: CUDA nvcc is unavailable"; return 1; }
+  nvcc="$(readlink -f -- "$nvcc")" || { collx_log "ERROR: CUDA nvcc cannot be resolved"; return 1; }
   case "$nvcc" in
     */bin/nvcc) cuda_home="${nvcc%/bin/nvcc}" ;;
     *) collx_log "ERROR: CUDA nvcc has an unexpected path"; return 1 ;;
   esac
-  [ -x "$cuda_home/bin/nvcc" ] && [ -d "$cuda_home/include" ] \
-    && [ -d "$cuda_home/lib64" ] \
+  [ -x "$cuda_home/bin/nvcc" ] && [ -d "$cuda_home/include" ] && [ -d "$cuda_home/lib64" ] \
     || { collx_log "ERROR: CUDA toolkit root is incomplete"; return 1; }
   for candidate in "$cuda_home"/targets/*/include/cccl; do
     if [ -d "$candidate" ]; then
@@ -180,9 +177,7 @@ collx_activate_deepep_v2() {
 collx_probe_deepep_v2() {
   python3 - <<'PY'
 import inspect
-
 import deep_ep
-
 assert inspect.isclass(deep_ep.ElasticBuffer)
 PY
 }

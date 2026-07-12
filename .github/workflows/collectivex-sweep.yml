@@ -176,33 +176,12 @@ jobs:
       # Merge the base + per-SKU operator-config secrets into one validated mode-0600 file, then run the SKU launcher (allocate -> stage -> build -> run cases).
       - name: Execute sweep cell ${{ matrix.id }}
         id: sweep_shard
-        env:
-          COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
-          COLLECTIVEX_NETWORK_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_NETWORK_CONFIG_V1 }}
-          COLLECTIVEX_H100_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_H100_CONFIG_V1 }}
-          COLLECTIVEX_B300_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B300_CONFIG_V1 }}
-          COLLECTIVEX_B200_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B200_CONFIG_V1 }}
-          COLLECTIVEX_MI300_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI300_CONFIG_V1 }}
-          COLLECTIVEX_MI355_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI355_CONFIG_V1 }}
-          COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
         run: |
           set -euo pipefail
           umask 077
-          operator_config="$COLLX_JOB_ROOT/operator-config.json"
-          python3 "$COLLX_SOURCE_ROOT/experimental/CollectiveX/runtime/config.py" \
-            merge-operator-config "$operator_config"
-          # The merged config has been written to $operator_config; hand the
-          # launcher the path only. The raw secret *_CONTENT vars must be cleared
-          # here, otherwise collx_load_operator_config sees them still set and tries
-          # to re-create operator-config.json (O_EXCL) that this step already
-          # wrote, failing with "cannot create ephemeral runner configuration".
-          unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
-          unset COLLECTIVEX_H100_CONFIG_CONTENT COLLECTIVEX_B300_CONFIG_CONTENT
-          unset COLLECTIVEX_B200_CONFIG_CONTENT
-          unset COLLECTIVEX_MI300_CONFIG_CONTENT COLLECTIVEX_MI355_CONFIG_CONTENT
-          unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
-          export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
-          export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
+          # Runner-local Slurm/storage config comes from the tracked
+          # configs/platform_config.json baseline (no operator secret); the
+          # launcher's collx_load_operator_config emits it per SKU.
           cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"

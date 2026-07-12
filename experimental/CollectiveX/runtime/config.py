@@ -31,14 +31,6 @@ def _platforms() -> dict:
         return json.load(stream)["platforms"]
 
 
-OPERATOR_ENV = (
-    "COLLECTIVEX_OPERATOR_CONFIG_CONTENT", "COLLECTIVEX_NETWORK_CONFIG_CONTENT",
-    "COLLECTIVEX_H100_CONFIG_CONTENT", "COLLECTIVEX_B300_CONFIG_CONTENT",
-    "COLLECTIVEX_B200_CONFIG_CONTENT", "COLLECTIVEX_MI300_CONFIG_CONTENT",
-    "COLLECTIVEX_MI355_CONFIG_CONTENT",
-)
-
-
 def emit(values: dict[str, object]) -> None:
     for field, value in values.items():
         name = FIELDS.get(field, field)
@@ -99,49 +91,6 @@ def operator_config(path: str, runner: str) -> None:
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-config", file=sys.stderr)
         raise SystemExit(1)
-
-
-def merge_operator_config(path: str) -> None:
-    """Merge the base and per-cluster encrypted operator documents."""
-    def pairs(items):
-        result = {}
-        for key, value in items:
-            if key in result:
-                raise ValueError("duplicate configuration key")
-            result[key] = value
-        return result
-
-    def load_env(name: str) -> dict:
-        return json.loads(
-            os.environ[name], object_pairs_hook=pairs,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()),
-        )
-
-    # An absent/blank base secret (all operator config de-secreted into the
-    # tracked platform_config.json) yields an empty base; the per-SKU registry
-    # `operator` block then supplies every field downstream. A present base is
-    # still parsed strictly. Overlay secrets are already skipped when empty.
-    base = (load_env(OPERATOR_ENV[0])
-            if os.environ.get(OPERATOR_ENV[0], "").strip() else {"runners": {}})
-    if not isinstance(base.get("runners"), dict):
-        raise ValueError("invalid operator runners")
-    base = {"runners": base["runners"]}
-    for name in OPERATOR_ENV[1:]:
-        if not os.environ.get(name):
-            continue
-        overlay = load_env(name)
-        if not isinstance(overlay.get("runners"), dict):
-            raise ValueError("invalid overlay runners")
-        for runner, fields in overlay["runners"].items():
-            if not isinstance(fields, dict) or not fields:
-                raise ValueError("invalid overlay runner")
-            base["runners"].setdefault(runner, {}).update(fields)
-    payload = json.dumps(base, sort_keys=True, separators=(",", ":")) + "\n"
-    if len(payload.encode()) > 65536:
-        raise ValueError("merged operator configuration is too large")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-        stream.write(payload)
 
 
 def load(path: str) -> dict:
@@ -210,7 +159,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     for name, names in {
-        "operator-config": ("path", "runner"), "merge-operator-config": ("path",),
+        "operator-config": ("path", "runner"),
         "case-count": ("path",),
         "case-args": ("path", "index", "runner", "ts",
                       "ngpus", "nodes", "gpus_per_node", "scale_up_domain"),
@@ -219,7 +168,6 @@ def main() -> None:
         for arg in names: command.add_argument(arg)
     args = parser.parse_args()
     if args.command == "operator-config": operator_config(args.path, args.runner)
-    elif args.command == "merge-operator-config": merge_operator_config(args.path)
     elif args.command == "case-count": case_count(args.path)
     elif args.command == "case-args":
         case_args(args.path, int(args.index), args.runner, args.ts,

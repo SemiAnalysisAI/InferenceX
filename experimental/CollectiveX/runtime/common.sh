@@ -70,7 +70,7 @@ collx_job_root_is_safe() {
 collx_load_operator_config() {
   [ -n "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" ] \
     && [ "$COLLECTIVEX_OPERATOR_CONFIG_LOADED" = "$$" ] && return 0
-  local config_path generated=0 parsed_path key value
+  local config_path parsed_path key value
   unset COLLX_PARTITION COLLX_ACCOUNT COLLX_QOS COLLX_SQUASH_DIR COLLX_STAGE_DIR COLLX_ENROOT_CACHE_PATH
   unset ENROOT_CACHE_PATH
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
@@ -78,51 +78,25 @@ collx_load_operator_config() {
   unset COLLX_RDMA_TRAFFIC_CLASS
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
-  if [ -n "${COLLECTIVEX_OPERATOR_CONFIG_CONTENT:-}" ]; then
-    umask 077
-    if collx_job_root_is_safe "${COLLX_JOB_ROOT:-}"; then
-      config_path="$COLLX_JOB_ROOT/operator-config.json"
-      (set -C; : > "$config_path") 2>/dev/null \
-        || collx_die "cannot create ephemeral runner configuration"
-    else
-      config_path="$(mktemp /tmp/inferencex-collectivex-config.XXXXXX)" \
-        || collx_die "cannot create ephemeral runner configuration"
-    fi
-    generated=1
-    if ! printf '%s' "$COLLECTIVEX_OPERATOR_CONFIG_CONTENT" > "$config_path"; then
-      unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT
-      rm -f -- "$config_path"
-      collx_die "cannot materialize runner configuration"
-    fi
-  elif [ "${COLLECTIVEX_OPERATOR_CONFIG_REQUIRED:-0}" = 1 ]; then
-    unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT
-    collx_die "runner configuration is unavailable"
-  fi
-  unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
   if [ ! -e "$config_path" ]; then
-    [ "${COLLECTIVEX_CANONICAL_GHA:-0}" != 1 ] \
-      || collx_die "runner configuration is unavailable"
+    # No operator document: a host-utility step (no SKU) is a no-op; a known SKU
+    # emits the tracked platform_config.json operator baseline ("-" sentinel).
+    # An optional local file at COLLECTIVEX_OPERATOR_CONFIG/XDG still overlays it.
     if [ -z "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-}}" ]; then
       COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
       return 0
     fi
-    # No operator document, but the SKU is known: the tracked registry's
-    # per-SKU `operator` block still supplies baseline fields, so emit
-    # registry-only values ("-" sentinel; a no-op for SKUs without a block).
     config_path="-"
   fi
   umask 077
-  parsed_path="$(mktemp /tmp/inferencex-collectivex-parsed.XXXXXX)" || {
-    [ "$generated" = 0 ] || rm -f -- "$config_path"
-    collx_die "cannot parse runner configuration"
-  }
+  parsed_path="$(mktemp /tmp/inferencex-collectivex-parsed.XXXXXX)" \
+    || collx_die "cannot parse runner configuration"
   if ! python3 "$COLLX_RUNTIME_DIR/config.py" operator-config "$config_path" \
       "${COLLX_RUNNER:-${COLLX_SHARD_SKU:-}}" \
       > "$parsed_path"
   then
     rm -f -- "$parsed_path"
-    [ "$generated" = 0 ] || rm -f -- "$config_path"
-    unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
+    unset COLLECTIVEX_OPERATOR_CONFIG
     collx_die "runner-local configuration failed"
   fi
   while IFS= read -r -d '' key && IFS= read -r -d '' value; do
@@ -130,10 +104,7 @@ collx_load_operator_config() {
     export "${key?}"
   done < "$parsed_path"
   rm -f -- "$parsed_path"
-  if [ "$generated" = 1 ] || [ "${COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL:-0}" = 1 ]; then
-    rm -f -- "$config_path" || collx_die "cannot remove ephemeral runner configuration"
-  fi
-  unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
+  unset COLLECTIVEX_OPERATOR_CONFIG
   COLLECTIVEX_OPERATOR_CONFIG_LOADED="$$"
 }
 
