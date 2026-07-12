@@ -154,8 +154,8 @@ Identifiers are readable factor strings:
   slug-normalized; and
 - `attempt_ordinal`: a positive integer distinguishing repeat executions of one `case_id`.
 
-Backend source pins live in `configs/backends.json` and are enforced at fetch by commit; the DeepEP
-V2 build is verified at run time by its commit-derived wheel tag.
+Backend source pins live in `runtime/common.sh` and are enforced by exact fetched-commit comparison;
+the loaded DeepEP V2 build is checked for the required `ElasticBuffer` API.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
 not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or

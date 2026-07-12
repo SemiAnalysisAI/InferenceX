@@ -28,11 +28,8 @@ import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
 
 
-# configs/platform_config.json is the single per-SKU registry shared by
-# capability.py (topologies), runtime/config.py (operator schema and network
-# overlay), runtime/prepare_backend.sh (CUDA target), and
-# bench/ep_mori.py (arch pin). Validate its shape once so a malformed entry
-# fails here instead of on an allocation.
+# configs/platform_config.json is shared by matrix scheduling, operator/network
+# loading, and backend builds.
 class PlatformRegistryTests(unittest.TestCase):
     REGISTRY = RUNTIME.parent / "configs" / "platform_config.json"
     NETWORK_FIELDS = {
@@ -45,30 +42,20 @@ class PlatformRegistryTests(unittest.TestCase):
         self.assertTrue(platforms)
         for name, entry in platforms.items():
             with self.subTest(sku=name):
-                for field in ("vendor", "arch", "machine", "product",
-                              "scale_up_transport", "launcher"):
+                for field in ("arch", "product", "scale_up_transport", "launcher"):
                     self.assertIsInstance(entry[field], str)
                     self.assertTrue(entry[field])
                 for field in ("gpus_per_node", "scale_up_domain"):
                     self.assertIsInstance(entry[field], int)
                     self.assertGreater(entry[field], 0)
-                self.assertTrue(entry["operator_fields"])
+                self.assertTrue(entry["backends"])
+                for degrees in entry["backends"].values():
+                    self.assertTrue(degrees)
+                    self.assertLessEqual(set(degrees), {8, 16})
                 self.assertLessEqual(
                     set(entry.get("network", {})), self.NETWORK_FIELDS
                 )
-                if entry["vendor"] == "nvidia":
-                    self.assertRegex(entry["arch"], r"^sm\d+$")
-                else:
-                    self.assertRegex(entry["arch"], r"^gfx\d+$")
-
-    def test_capability_loads_exactly_the_registry_skus(self) -> None:
-        sys.path.insert(0, str(RUNTIME.parent))
-        try:
-            import capability
-        finally:
-            sys.path.pop(0)
-        platforms = json.loads(self.REGISTRY.read_text())["platforms"]
-        self.assertEqual(set(capability.PLATFORMS), set(platforms))
+                self.assertRegex(entry["arch"], r"^(sm|gfx)\d+$")
 
 
 class ProbeTests(unittest.TestCase):
@@ -172,69 +159,6 @@ class ConfigTests(unittest.TestCase):
         # behavior: nothing emitted, no validation failure. mi325x is the last
         # still-secret-fed SKU (no SSH access target to derive a baseline).
         self.assertEqual(self._emit_registry_only("mi325x"), b"")
-
-# configs/backends.json is the single definition of backend source pins and
-# container images; config.py backend-registry validates it and emits the
-# COLLX_* names common.sh consumes at source time. These tests pin both sides
-# of that seam so a rename or malformed registry fails here, not on a runner.
-class BackendRegistryTests(unittest.TestCase):
-    EMITTED = {
-        "COLLX_IMAGE_MULTIARCH", "COLLX_IMAGE_AMD_MORI",
-        "COLLX_DEEPEP_V2_REPO", "COLLX_DEEPEP_V2_COMMIT",
-    }
-
-    @staticmethod
-    def _emitted_pairs() -> dict[str, str]:
-        result = subprocess.run(
-            [sys.executable, str(RUNTIME / "config.py"), "backend-registry"],
-            capture_output=True, check=True,
-        )
-        parts = result.stdout.split(b"\0")
-        assert parts[-1] == b""
-        values = [part.decode() for part in parts[:-1]]
-        return dict(zip(values[::2], values[1::2], strict=True))
-
-    def test_registry_emits_exactly_the_declared_names(self) -> None:
-        pairs = self._emitted_pairs()
-        self.assertEqual(set(pairs), self.EMITTED)
-        for name, value in pairs.items():
-            if "_COMMIT" in name:
-                self.assertRegex(value, r"^[0-9a-f]{40}$", name)
-            elif name.endswith("_REPO"):
-                self.assertTrue(value.startswith("https://"), name)
-            else:
-                self.assertRegex(value, r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$", name)
-
-    def test_common_sh_requires_every_emitted_name(self) -> None:
-        # The loader's fail-closed loop and the registry emit must not drift.
-        common = (RUNTIME / "common.sh").read_text()
-        for name in self.EMITTED:
-            self.assertIn(name, common)
-
-    def test_registry_values_come_from_the_tracked_file(self) -> None:
-        document = json.loads(
-            (RUNTIME.parent / "configs" / "backends.json").read_text()
-        )
-        pairs = self._emitted_pairs()
-        self.assertEqual(
-            pairs["COLLX_DEEPEP_V2_COMMIT"],
-            document["backends"]["deepep-v2"]["commit"],
-        )
-        self.assertEqual(pairs["COLLX_IMAGE_MULTIARCH"], document["images"]["multiarch"]["ref"])
-
-    def test_registry_fails_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            missing = Path(directory) / "absent.json"
-            with self.assertRaises(SystemExit):
-                config.backend_registry(str(missing))
-            malformed = Path(directory) / "backends.json"
-            document = json.loads(
-                (RUNTIME.parent / "configs" / "backends.json").read_text()
-            )
-            document["backends"]["deepep-v2"]["commit"] = "not-a-sha"
-            malformed.write_text(json.dumps(document))
-            with self.assertRaises(SystemExit):
-                config.backend_registry(str(malformed))
 
 
 class StageTests(unittest.TestCase):

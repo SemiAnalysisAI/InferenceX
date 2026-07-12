@@ -33,7 +33,7 @@ class MatrixTests(unittest.TestCase):
                 for index in range(2)
             ]
         self.assertEqual(outputs[0], outputs[1])
-        self.assertEqual([case["case_id"] for case in outputs[0]["cases"]], cell["case_ids"])
+        self.assertEqual(outputs[0]["cases"], cell["cases"])
 
     def test_sku_and_ep_filters_only_remove_cases(self):
         full = matrix(suites="all", backends="all")
@@ -47,6 +47,16 @@ class MatrixTests(unittest.TestCase):
             }
             actual = {item["case"]["case_id"]: item for item in partial["requested_cases"]}
             self.assertEqual(actual, expected)
+
+    def test_only_real_platform_cells_are_unsupported(self):
+        document = matrix(suites="all", backends="all")
+        unsupported = {
+            (item["sku"], item["case"]["backend"], item["case"]["ep"])
+            for item in document["requested_cases"] if item["disposition"] == "unsupported"
+        }
+        self.assertEqual(unsupported, set(sweep_matrix.CELL_EXCLUSIONS))
+        for item in document["requested_cases"]:
+            self.assertIn(item["case"]["backend"], sweep_matrix.PLATFORMS[item["sku"]]["backends"])
 
     def test_invalid_filters_fail_closed(self):
         for options in (

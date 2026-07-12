@@ -70,10 +70,7 @@ jobs:
 
           matrix = json.loads(pathlib.Path("matrix_full.json").read_text())
           cells = matrix["include"]
-          slim = {"include": [
-              {key: value for key, value in cell.items() if key != "case_ids"}
-              for cell in cells
-          ]}
+          slim = {"include": cells}
           with open(sys.argv[1], "a", encoding="utf-8") as output:
               output.write(f"matrix={json.dumps(slim, separators=(',', ':'))}\n")
               output.write(f"n={len(cells)}\n")
@@ -109,7 +106,6 @@ jobs:
       COLLX_SHARD_SKU: ${{ matrix.sku }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      COLLECTIVEX_ARTIFACT_NAME: ${{ format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
       # Consolidated shards run one bounded build-group in one Slurm allocation.
       # MI300X's compute partition has a 180-minute ceiling; the other production
       # pools accept 300 minutes. Allocations release as soon as the shard finishes.

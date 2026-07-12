@@ -11,28 +11,13 @@ COLLX_RUNTIME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
-# Public benchmark identity (backend source pins + container images) is data,
-# not launcher state: configs/backends.json. config.py validates the registry
-# and emits the COLLX_* names consumed here, by prepare_backend.sh (which
-# re-sources this file in-container), and by the launchers.
-collx_load_backend_registry() {
-  local registry key value name
-  registry="$(mktemp /tmp/inferencex-collectivex-registry.XXXXXX)" \
-    || collx_die "cannot stage the backend registry"
-  if ! python3 "$COLLX_RUNTIME_DIR/config.py" backend-registry > "$registry"; then
-    rm -f -- "$registry"
-    collx_die "invalid backend registry (configs/backends.json)"
-  fi
-  while IFS= read -r -d '' key && IFS= read -r -d '' value; do
-    printf -v "$key" '%s' "$value"
-  done < "$registry"
-  rm -f -- "$registry"
-  for name in COLLX_IMAGE_MULTIARCH COLLX_IMAGE_AMD_MORI \
-      COLLX_DEEPEP_V2_REPO COLLX_DEEPEP_V2_COMMIT; do
-    [ -n "${!name:-}" ] || collx_die "backend registry omits $name"
-  done
-}
-collx_load_backend_registry
+# Image defaults are consumed by the SKU launchers after sourcing this file.
+# shellcheck disable=SC2034
+COLLX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
+# shellcheck disable=SC2034
+COLLX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
+COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
+COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {
@@ -470,7 +455,6 @@ collx_cleanup_allocation() {
   return 1
 }
 
-# Image references come from configs/backends.json (collx_load_backend_registry).
 # Import uses the configured tag because Enroot cannot reliably import a
 # digest-qualified Docker Hub reference non-interactively.
 collx_select_image() {

@@ -81,7 +81,7 @@ collx_prepare_cuda_cccl() {
     fi
   done
   [ -n "$cccl" ] || { collx_log "ERROR: CUDA CCCL headers are unavailable"; return 1; }
-  export CUDA_HOME="$cuda_home" COLLX_CUDA_CCCL="$cccl"
+  export CUDA_HOME="$cuda_home"
   export CPATH="$cccl:${CPATH:-}"
   export NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}"
 }

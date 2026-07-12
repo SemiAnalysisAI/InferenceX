@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import inspect
-import json
 import os
 import sys
 import types
@@ -22,7 +21,7 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# Source pins (PR #605 head + #630/#640 fixes) live in configs/backends.json;
+# Source pins (PR #605 head + #630/#640 fixes) live in runtime/common.sh;
 # the launcher fetches and builds them from that checkout. This adapter no longer
 # verifies the wheel's commit tag against the pin — it checks only that the loaded
 # deep_ep exposes ElasticBuffer (the from-source PR #605 capability).
@@ -41,14 +40,6 @@ def _jit_cache_directory(
         int(allow_hybrid_mode), realized["allocated_qps"], realized["num_sms"],
     )
     return "jit-" + "-".join(str(value) for value in values)
-
-
-def _require_cross_rank_equal(value, label: str) -> None:
-    gathered = [None] * dist.get_world_size()
-    dist.all_gather_object(gathered, value)
-    canonical = {json.dumps(item, sort_keys=True, separators=(",", ":")) for item in gathered}
-    if len(canonical) != 1:
-        raise RuntimeError(f"DeepEP V2 {label} differs across ranks")
 
 
 # GIN/GDAKI allocates num_allocated_qps device QPs per peer rank on the local NIC
@@ -79,32 +70,6 @@ def _configure_gin_mode(args, world_size: int) -> bool:
     return allow_hybrid_mode
 
 
-def _lsa_topology_is_valid(
-    gin_enabled: bool,
-    world_size: int,
-    scale_up_domain: int,
-    config: dict[str, int | bool],
-) -> bool:
-    if gin_enabled:
-        domains = world_size // scale_up_domain
-        return (
-            world_size % scale_up_domain == 0
-            and domains > 1
-            and config["physical_rdma_ranks"] == domains
-            and config["physical_nvlink_ranks"] == scale_up_domain
-            and config["logical_scaleout_ranks"] == domains
-            and config["logical_scaleup_ranks"] == scale_up_domain
-            and config["is_scaleup_nvlink"] is True
-        )
-    return (
-        config["physical_rdma_ranks"] == 1
-        and config["physical_nvlink_ranks"] == world_size
-        and config["logical_scaleout_ranks"] == 1
-        and config["logical_scaleup_ranks"] == world_size
-        and config["is_scaleup_nvlink"] is True
-    )
-
-
 def _require_runtime() -> None:
     """Capability check only: the loaded deep_ep must expose ElasticBuffer (still
     catches the b300 image-bundled deep_ep 1.2.1 shadowing the from-source build,
@@ -131,13 +96,11 @@ class DeepEPV2Backend(EPBackend):
         # max_tokens is the measured-ladder maximum; the historical values (which
         # also folded in the conditioning ramp) are identical because the ramp
         # never exceeded the measured maximum, so the JIT directory stays stable.
-        args, world_size, device = self.args, self.world_size, self.device
+        args, world_size = self.args, self.world_size
         self.max_tokens = spec.max_tokens_per_rank
         _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
-        scale_up_domain = int(args.scale_up_domain)
         allow_hybrid_mode = _configure_gin_mode(args, world_size)
-        gin_enabled = allow_hybrid_mode
         self.buffer = ElasticBuffer(
             self.group,
             num_max_tokens_per_rank=self.max_tokens,
@@ -161,41 +124,18 @@ class DeepEPV2Backend(EPBackend):
             self.buffer.get_theoretical_num_sms(tuning_num_experts, args.topk)
         )
         self.num_qps = int(self.buffer.get_theoretical_num_qps(self.num_sms))
-        properties = torch.cuda.get_device_properties(device)
-        device_sms = int(properties.multi_processor_count)
-        jit_config = {
+        realized = {
             "num_sms": self.num_sms,
-            "num_qps": self.num_qps,
             "allocated_qps": int(self.buffer.num_allocated_qps),
-            "logical_scaleout_ranks": int(self.buffer.num_scaleout_ranks),
-            "logical_scaleup_ranks": int(self.buffer.num_scaleup_ranks),
-            "physical_rdma_ranks": int(self.buffer.num_rdma_ranks),
-            "physical_nvlink_ranks": int(self.buffer.num_nvlink_ranks),
-            "is_scaleup_nvlink": self.buffer.num_scaleup_ranks == self.buffer.num_nvlink_ranks,
-            "device_arch_major": int(properties.major),
-            "device_arch_minor": int(properties.minor),
-            "device_sms": device_sms,
-            "device_smem_bytes": int(properties.shared_memory_per_block_optin),
-            "gpu_timeout_cycles": 100 * int(properties.clock_rate) * 1000,
         }
-        _require_cross_rank_equal(jit_config, "JIT configuration")
-        if not _lsa_topology_is_valid(
-            gin_enabled, world_size, scale_up_domain, jit_config
-        ):
-            raise RuntimeError("DeepEP V2 realized communication domains differ from topology")
         jit_cache_directory = _jit_cache_directory(
             args,
             world_size,
             self.max_tokens,
             allow_hybrid_mode,
-            jit_config,
+            realized,
         )
         os.environ["EP_JIT_CACHE_DIR"] = str(jit_root / jit_cache_directory)
-        realized_config = {
-            "num_max_tokens_per_rank": self.max_tokens,
-            **jit_config,
-        }
-        _require_cross_rank_equal(realized_config, "realized tuning/topology")
 
     def _topk_idx_dtype(self):
         # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.

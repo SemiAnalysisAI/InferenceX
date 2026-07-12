@@ -32,11 +32,9 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_MULTIARCH}"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-export COLLX_TS="$TS" COLLX_TOPO="${PRODUCT}-nvl72-mnnvl"
-export COLLX_SCOPE=scale-up COLLX_TRANSPORT=mnnvl COLLX_SCALE_UP_TRANSPORT=mnnvl
+export COLLX_TRANSPORT=mnnvl
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 export COLLX_NGPUS="$NGPUS"
-unset COLLX_SCALE_OUT_TRANSPORT
 case "$COLLX_BENCH" in
   deepep-v2) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;

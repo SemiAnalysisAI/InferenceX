@@ -23,7 +23,6 @@ try:  # Shard extraction on GPU runners is intentionally stdlib-only.
 except ModuleNotFoundError:  # pragma: no cover - exercised by the workflow environment
     yaml = None
 
-import capability as cap  # noqa: E402
 import ep_harness  # noqa: E402
 
 
@@ -31,6 +30,60 @@ TOPOLOGY_FIELDS = (
     "nodes", "gpus_per_node", "scale_up_domain", "scope", "scale_up_transport",
     "scale_out_transport", "transport", "topology_class",
 )
+
+
+def _load_platforms() -> dict[str, dict[str, Any]]:
+    with (HERE / "configs" / "platform_config.json").open(encoding="utf-8") as stream:
+        return json.load(stream)["platforms"]
+
+
+PLATFORMS = _load_platforms()
+SWEEP_BACKENDS = tuple(dict.fromkeys(
+    backend for platform in PLATFORMS.values() for backend in platform["backends"]
+))
+
+# Only real per-cell platform walls belong here. Backend/platform mismatches are
+# filtered by each platform's `backends` map and never become synthetic rows.
+CELL_EXCLUSIONS = {
+    ("h100-dgxc", "deepep-v2", 16): (
+        "DeepEP V2 EP16 requires NCCL GIN over the H100 scale-out fabric, "
+        "unverified on current runners; EP8 is validated"
+    ),
+    ("b300", "deepep-v2", 16): (
+        "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA"
+    ),
+    ("mi300x", "mori", 16): (
+        "Pinned MoRI distributed initialization does not complete on MI300X EP16"
+    ),
+    ("mi325x", "mori", 16): (
+        "MoRI EP16 and its internode RDMA selectors are unvalidated on MI325X"
+    ),
+}
+
+
+def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
+    gpus_per_node = platform["gpus_per_node"]
+    if ep % gpus_per_node:
+        raise SystemExit(f"EP{ep} is not divisible by {gpus_per_node} GPUs per node")
+    product = platform["product"]
+    domain = platform["scale_up_domain"]
+    scale_up = platform["scale_up_transport"]
+    scale_out = ep > domain
+    scale_up_class = (
+        f"{product}-nvl{domain}-mnnvl" if scale_up == "mnnvl"
+        else f"{product}-xgmi" if scale_up == "xgmi"
+        else f"{product}-{scale_up}-island"
+    )
+    return {
+        "nodes": ep // gpus_per_node,
+        "gpus_per_node": gpus_per_node,
+        "scale_up_domain": domain,
+        "scope": "scale-out" if scale_out else "scale-up",
+        "scale_up_transport": scale_up,
+        "scale_out_transport": "rdma" if scale_out else None,
+        "transport": f"{scale_up}-rdma" if scale_out else scale_up,
+        "topology_class": f"{product}-{scale_up}-rdma" if scale_out else scale_up_class,
+    }
 
 
 if yaml is not None:
@@ -99,7 +152,7 @@ def _ladder(workloads: dict[str, Any], workload: str, phase: str) -> str:
 
 
 def _select_backends(backend: str, backends: str) -> list[str]:
-    available = list(cap.SWEEP_BACKENDS)
+    available = list(SWEEP_BACKENDS)
     if backend and backends:
         raise SystemExit("--backend and --backends are mutually exclusive")
     if backends:
@@ -140,15 +193,15 @@ def resolve_matrix(
         if not value.isdigit() or int(value) <= 0:
             raise SystemExit(f"invalid --ep-sizes {ep_sizes!r}; expected positive integers")
         selected_eps.add(int(value))
-    if only_sku and only_sku not in cap.PLATFORMS:
-        raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(cap.PLATFORMS)}")
+    if only_sku and only_sku not in PLATFORMS:
+        raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
     # --exclude-skus narrows the matrix to a subset by dropping whole runner pools
     # — e.g. exclude a SKU whose cluster is unavailable. It only omits cases.
     excluded = {value.strip() for value in exclude_skus.split(",") if value.strip()}
-    unknown_excluded = sorted(excluded - set(cap.PLATFORMS))
+    unknown_excluded = sorted(excluded - set(PLATFORMS))
     if unknown_excluded:
         raise SystemExit(
-            f"unknown --exclude-skus {unknown_excluded}; have {sorted(cap.PLATFORMS)}"
+            f"unknown --exclude-skus {unknown_excluded}; have {sorted(PLATFORMS)}"
         )
     if only_sku and only_sku in excluded:
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
@@ -178,14 +231,14 @@ def resolve_matrix(
         mode = suite["mode"]
         phases = suite["phases"]
         routings = suite["routings"]
-        suite_backends = set(suite.get("backends", cap.SWEEP_BACKENDS))
+        suite_backends = set(suite.get("backends", SWEEP_BACKENDS))
         suite_targets = [target for target in targets if target in suite_backends]
         if not suite_targets:
             continue
-        # "all" = every SKU in configs/platform_config.json (via capability).
+        # "all" = every SKU in configs/platform_config.json.
         suite_platforms = suite["platforms"]
         if suite_platforms == "all":
-            suite_platforms = sorted(cap.PLATFORMS)
+            suite_platforms = sorted(PLATFORMS)
         for platform_name in suite_platforms:
             if only_sku and platform_name != only_sku:
                 continue
@@ -198,20 +251,12 @@ def resolve_matrix(
             ):
                 if selected_eps and ep not in selected_eps:
                     continue
-                topology = cap.topology_for(platform_name, ep)
-                if topology is None:
-                    raise SystemExit(
-                        f"suite {suite_name}: {platform_name} EP{ep} is not registered"
-                    )
+                platform = PLATFORMS[platform_name]
+                runnable_eps = platform["backends"].get(target)
+                if runnable_eps is None:
+                    continue
+                topology = _topology(platform, ep)
                 nodes = int(topology["nodes"])
-                capability_disposition, capability_detail = cap.resolve_disposition(
-                    platform_name,
-                    target,
-                    ep=ep,
-                    nodes=nodes,
-                    routing=routing,
-                    mode=mode,
-                )
                 hidden, topk, experts, seed = _dims(workloads, workload)
 
                 def add_case(
@@ -252,12 +297,17 @@ def resolve_matrix(
                         shards.setdefault((platform_name, target, nodes), []).append(case)
 
                 requested_ladder = _ladder(workloads, workload, phase)
-                if capability_disposition == "unsupported":
+                if ep not in runnable_eps:
+                    detail = CELL_EXCLUSIONS.get((platform_name, target, ep))
+                    if detail is None:
+                        raise SystemExit(
+                            f"{platform_name} {target} EP{ep} is not runnable and has no exclusion"
+                        )
                     add_case(
                         requested_ladder,
                         "unsupported",
                         "backend-platform-unsupported",
-                        capability_detail,
+                        detail,
                     )
                     continue
                 add_case(requested_ladder, "runnable", None, None)
@@ -275,10 +325,8 @@ def resolve_matrix(
                 "id": shard_id,
                 "sku": sku,
                 "backend": target,
-                "launcher": cap.PLATFORMS[sku]["launcher"],
+                "launcher": PLATFORMS[sku]["launcher"],
                 **{field: chunk[0][field] for field in TOPOLOGY_FIELDS},
-                "n": len(chunk),
-                "case_ids": [case["case_id"] for case in chunk],
                 "cases": chunk,
             })
     include = [
@@ -304,7 +352,7 @@ def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str
     source = matches[0]
     control = {
         key: source[key]
-        for key in ("id", "sku", "backend", "nodes", "n", "cases")
+        for key in ("id", "sku", "backend", "nodes", "cases")
     }
     control["version"] = document["version"]
     output = Path(output_path)
@@ -339,7 +387,7 @@ def main() -> int:
         if not all((args.shard_id, args.out)):
             parser.error("shard extraction requires --shard-id and --out")
         control = extract_shard(args.extract_from, args.shard_id, args.out)
-        print(f"extracted {control['id']}: {control['n']} cases", file=sys.stderr)
+        print(f"extracted {control['id']}: {len(control['cases'])} cases", file=sys.stderr)
         print(json.dumps(control, separators=(",", ":")))
         return 0
 

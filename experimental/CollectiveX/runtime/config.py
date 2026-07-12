@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 
 
@@ -77,10 +76,6 @@ def operator_config(path: str, runner: str) -> None:
         # SKUs without a platform_config.json network block keep their base/secret
         # network fields.
         selected.update(_network_overlay(runner))
-        missing = set(_platforms()[runner]["operator_fields"]) - set(selected)
-        if missing:
-            print("validation-missing-required-" + "-".join(sorted(missing)), file=sys.stderr)
-            raise SystemExit(1)
         allowed = set(FIELDS) | {"storage_roots"}
         if set(selected) - allowed:
             raise ValueError
@@ -149,53 +144,6 @@ def merge_operator_config(path: str) -> None:
         stream.write(payload)
 
 
-# Same acceptance as common.sh collx_select_image; keep the two in sync.
-_IMAGE_REF = re.compile(r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$")
-_GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
-
-
-def backend_registry(path: str | None = None) -> None:
-    """Validate the public backend registry (configs/backends.json) and emit the
-    COLLX_* source-pin and image names consumed by common.sh at source time.
-    Unlike the network overlay this file is required: a missing or malformed
-    registry fails closed rather than falling back."""
-    if path is None:
-        path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "configs", "backends.json",
-        )
-    try:
-        with open(path, encoding="utf-8") as stream:
-            document = json.load(stream)
-        def sha(value: object) -> str:
-            if not isinstance(value, str) or not _GIT_SHA.fullmatch(value):
-                raise ValueError
-            return value
-
-        def image(name: str) -> str:
-            ref = document["images"][name]["ref"]
-            if not isinstance(ref, str) or not _IMAGE_REF.fullmatch(ref):
-                raise ValueError
-            return ref
-
-        def repo(backend: dict) -> str:
-            url = backend["repo"]
-            if not isinstance(url, str) or not url.startswith("https://"):
-                raise ValueError
-            return url
-
-        v2 = document["backends"]["deepep-v2"]
-        emit({
-            "COLLX_IMAGE_MULTIARCH": image("multiarch"),
-            "COLLX_IMAGE_AMD_MORI": image("amd-mori"),
-            "COLLX_DEEPEP_V2_REPO": repo(v2),
-            "COLLX_DEEPEP_V2_COMMIT": sha(v2["commit"]),
-        })
-    except (IndexError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
-        print("validation-invalid-backend-registry", file=sys.stderr)
-        raise SystemExit(1)
-
-
 def load(path: str) -> dict:
     with open(path, encoding="utf-8") as stream:
         return json.load(stream)
@@ -209,33 +157,32 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     """Emit one null-delimited run_ep.py argv — the only case-to-invocation codec."""
     get = lambda key, default="": str(case.get(key) or default)
     argv = [
-        "--backend", get("backend"),
+        "--backend", str(case["backend"]),
         "--mode", str(case["mode"]),
         "--phase", str(case["phase"]),
         "--routing", str(case["routing"]),
-        "--gpus-per-node", get("gpus_per_node", "0"),
-        "--scale-up-domain", get("scale_up_domain", "0"),
-        "--scope", get("scope", "scale-up"),
-        "--scale-up-transport", get("scale_up_transport", "unknown"),
+        "--gpus-per-node", str(case["gpus_per_node"]),
+        "--scale-up-domain", str(case["scale_up_domain"]),
+        "--scope", str(case["scope"]),
+        "--scale-up-transport", str(case["scale_up_transport"]),
         "--scale-out-transport", get("scale_out_transport"),
-        "--tokens-ladder", get("ladder"),
-        "--hidden", get("hidden"),
-        "--topk", get("topk"),
-        "--experts", get("experts"),
-        "--seed", get("seed"),
+        "--tokens-ladder", str(case["ladder"]),
+        "--hidden", str(case["hidden"]),
+        "--topk", str(case["topk"]),
+        "--experts", str(case["experts"]),
+        "--seed", str(case["seed"]),
         "--runner", runner,
-        "--topology-class", get("topology_class"),
-        "--transport", get("transport", "unknown"),
-        "--case-id", get("case_id"),
-        "--suite", get("suite"),
-        "--workload-name", get("workload"),
+        "--topology-class", str(case["topology_class"]),
+        "--transport", str(case["transport"]),
+        "--case-id", str(case["case_id"]),
+        "--suite", str(case["suite"]),
+        "--workload-name", str(case["workload"]),
         "--version", str(version),
     ]
-    iters, trials, warmup = (get("timing").split(":") + ["", "", ""])[:3]
+    iters, trials, warmup = str(case["timing"]).split(":")
     for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
-        if value:
-            argv += [flag, value]
-    out = f"results/{runner}_{get('backend')}_{case['phase']}_{ts}-c{index:03d}.json"
+        argv += [flag, value]
+    out = f"results/{runner}_{case['backend']}_{case['phase']}_{ts}-c{index:03d}.json"
     argv += ["--out", out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 
@@ -264,7 +211,7 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     for name, names in {
         "operator-config": ("path", "runner"), "merge-operator-config": ("path",),
-        "backend-registry": (), "case-count": ("path",),
+        "case-count": ("path",),
         "case-args": ("path", "index", "runner", "ts",
                       "ngpus", "nodes", "gpus_per_node", "scale_up_domain"),
     }.items():
@@ -273,7 +220,6 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "operator-config": operator_config(args.path, args.runner)
     elif args.command == "merge-operator-config": merge_operator_config(args.path)
-    elif args.command == "backend-registry": backend_registry()
     elif args.command == "case-count": case_count(args.path)
     elif args.command == "case-args":
         case_args(args.path, int(args.index), args.runner, args.ts,

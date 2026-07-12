@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import ctypes
 import os
-import platform
 import sys
 
 # Make the sibling bench/ modules importable when run as `bench/run_ep.py` under
@@ -75,69 +74,8 @@ def main() -> int:
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
 
-    import capability
-
-    machine = {"x86_64": "amd64", "aarch64": "arm64"}.get(
-        platform.machine(), platform.machine()
-    )
-    props = torch.cuda.get_device_properties(device)
-    if torch.version.hip:
-        vendor = "amd"
-        accelerator = str(getattr(props, "gcnArchName", "")).split(":", 1)[0]
-    else:
-        vendor = "nvidia"
-        major, minor = torch.cuda.get_device_capability(device)
-        accelerator = f"sm{major}{minor}"
+    vendor = "amd" if torch.version.hip else "nvidia"
     device_name = torch.cuda.get_device_name(device)
-    device_count = torch.cuda.device_count()
-    identity_issues = capability.runtime_identity_issues(
-        args.runner,
-        vendor=vendor,
-        arch=accelerator,
-        machine=machine,
-        device_name=device_name,
-        device_count=device_count,
-        world_size=world_size,
-    )
-    if identity_issues:
-        print(
-            f"ERROR: runtime identity does not match {args.runner}: "
-            + "; ".join(identity_issues),
-            file=sys.stderr,
-        )
-        return 5
-    observed_gpus_per_node = args.gpus_per_node
-    observed_nodes = world_size // observed_gpus_per_node
-    topology = capability.topology_for(args.runner, world_size)
-    observed_topology = {
-        "nodes": observed_nodes,
-        "gpus_per_node": observed_gpus_per_node,
-        "scale_up_domain": args.scale_up_domain,
-        "scope": args.scope,
-        "scale_up_transport": args.scale_up_transport,
-        "scale_out_transport": args.scale_out_transport or None,
-        "transport": args.transport,
-        "topology_class": args.topology_class,
-    }
-    if topology is None or any(
-        observed_topology[field] != topology[field] for field in observed_topology
-    ):
-        print(
-            f"ERROR: runtime topology does not match {args.runner} EP{world_size}",
-            file=sys.stderr,
-        )
-        return 5
-    schedulable, reason = capability.resolve(
-        args.runner,
-        args.backend,
-        ep=world_size,
-        nodes=observed_nodes,
-        routing=args.routing,
-        mode=args.mode,
-    )
-    if not schedulable:
-        print(f"ERROR: scheduled case is unsupported: {reason}", file=sys.stderr)
-        return 5
     args.runtime_device_product = device_name
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
     _run = {

@@ -35,7 +35,6 @@ case "$RUNNER" in
     ;;
   *) collx_die "COLLX_SHARD_SKU is not a registered NVIDIA SKU" ;;
 esac
-TOPO="${PRODUCT}-nvlink-island"
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
 export COLLX_IMAGE_PLATFORM=linux/amd64 COLLX_VENDOR=nvidia
 # ---- setup: operator config, canonical env, topology, network profile -------
@@ -54,13 +53,10 @@ esac
 
 export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
 export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
-export COLLX_TS="$TS" COLLX_SCALE_UP_TRANSPORT=nvlink
 if [ "$NODES" -gt 1 ]; then
-  export COLLX_SCOPE=scale-out COLLX_SCALE_OUT_TRANSPORT=rdma
-  export COLLX_TRANSPORT=nvlink-rdma COLLX_TOPO="${PRODUCT}-nvlink-rdma"
+  export COLLX_TRANSPORT=nvlink-rdma
 else
-  export COLLX_SCOPE=scale-up COLLX_TRANSPORT=nvlink COLLX_TOPO="$TOPO"
-  unset COLLX_SCALE_OUT_TRANSPORT
+  export COLLX_TRANSPORT=nvlink
 fi
 export NCCL_CUMEM_ENABLE=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"

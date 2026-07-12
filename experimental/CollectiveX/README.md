@@ -89,14 +89,10 @@ SKU runs entirely from its tracked baseline, and any field the baseline already 
 secret.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
-identity (vendor/arch/machine/product), fixed placement, launcher, the operator-config fields each
-SKU must supply (`operator_fields`), the tracked baseline values for those fields (`operator` block,
-overridden per field by an operator document/secret when present), and the SKU's scale-out RDMA
-selectors (`network` block, overlaid the same way). A SKU whose `operator` block already covers its
-`operator_fields` needs no secret; SKUs without a complete baseline stay secret-fed and fail closed
-with a `validation-missing-required-*` marker if the secret is gone. `capability.py` derives EP
-topologies from it, and a suite's `platforms: all` in `configs/suites.yaml` resolves to every SKU
-registered there.
+architecture/product, fixed placement, launcher, runnable backend/EP pairs, tracked operator
+defaults, and scale-out RDMA selectors. Operator documents can override the defaults. Launchers
+declare and check the fields they actually require. `sweep_matrix.py` derives EP topology from the
+placement fields, and a suite's `platforms: all` resolves to every registered SKU.
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
 its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class`
@@ -130,10 +126,9 @@ validated compute-visible account home. Backend preparation runs from that stage
 
 Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
 platform, so one run never reuses another run's imported filesystem. Backend source pins and image
-references live in `configs/backends.json`; the DeepEP V2 build is fetched at the pinned commit,
-verified by the wheel's commit-derived local-version tag and `ElasticBuffer` presence, and cached in
-a cluster-local build cache keyed by architecture, image, and commit. Only the fixed
-`/cx-cache` mount reaches the container.
+references live in `runtime/common.sh`; the DeepEP V2 build is fetched and verified at the pinned
+commit, checked for `ElasticBuffer`, and cached in a cluster-local build cache keyed by architecture,
+image, and commit. Only the fixed `/cx-cache` mount reaches the container.
 
 ## Local Checks
 
@@ -145,5 +140,5 @@ uv run --with-requirements experimental/CollectiveX/requirements.txt \
 bash -n experimental/CollectiveX/runtime/*.sh experimental/CollectiveX/launchers/*.sh
 ```
 
-Core paths are `capability.py`, `configs/`, `sweep_matrix.py`, `summarize.py`,
-`bench/`, `runtime/`, `launchers/`, and `tests/`.
+Core paths are `configs/`, `sweep_matrix.py`, `summarize.py`, `bench/`, `runtime/`, `launchers/`,
+and `tests/`.

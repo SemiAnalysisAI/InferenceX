@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import re
 import sys
 import types
 
@@ -14,7 +13,6 @@ os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 import torch
 import torch.distributed as dist
 
-import capability
 from ep_backend import EPBackend
 
 try:
@@ -43,49 +41,11 @@ class MoRIBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        # The runner pins the AMD GPU architecture MoRI is built against
-        # (configs/platform_config.json). This is a hardware-lineage contract,
-        # independent of the (fixed BF16) communication path.
         runner = str(getattr(args, "runner", ""))
-        platform_entry = capability.PLATFORMS.get(runner, {})
-        expected_arch = (
-            platform_entry.get("arch") if platform_entry.get("vendor") == "amd" else None
-        )
-        if not expected_arch:
-            raise RuntimeError(
-                f"MoRI has no pinned GPU architecture for runner {runner!r}"
-            )
-
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
-        device_properties = torch.cuda.get_device_properties(device)
-        realized_arch = str(getattr(device_properties, "gcnArchName", "")).split(":", 1)[0]
-        if realized_arch != expected_arch:
-            raise RuntimeError(
-                f"MoRI runner {runner!r} realized architecture {realized_arch!r}, "
-                f"expected {expected_arch!r}"
-            )
-        # Realized placement must match the registered topology for this SKU/EP
-        # cell (configs/platform_config.json via capability) field-for-field.
-        topology = capability.topology_for(runner, world_size)
-        if topology is None:
-            raise RuntimeError(f"{runner!r} does not register an EP{world_size} topology")
         gpus_per_node = int(args.gpus_per_node)
-        observed = {
-            "gpus_per_node": gpus_per_node,
-            "scale_up_domain": int(args.scale_up_domain),
-            "scope": args.scope,
-            "scale_up_transport": args.scale_up_transport,
-            "scale_out_transport": args.scale_out_transport or None,
-            "transport": args.transport,
-        }
-        for field, value in observed.items():
-            if value != topology[field]:
-                raise RuntimeError(
-                    f"MoRI {field}={value!r} differs from the registered "
-                    f"EP{world_size} topology ({topology[field]!r})"
-                )
-        scale_out = topology["scope"] == "scale-out"
+        scale_out = args.scope == "scale-out"
 
         # The kernel is a pinned function of the cell, not an operator choice:
         # scale-out EP16 runs InterNodeV1; scale-up runs the direct intranode
@@ -96,15 +56,9 @@ class MoRIBackend(EPBackend):
         # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
         kernel_name, self.kernel_generation, blocks = (
             ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
-            else ("IntraNode", "intranode", (80, 0, 16, 8)) if expected_arch == "gfx950"
+            else ("IntraNode", "intranode", (80, 0, 16, 8)) if runner == "mi355x"
             else ("AsyncLL", "async-ll", (64, 0, 8, 8))
         )
-        requested = os.environ.get("COLLX_MORI_KERNEL_TYPE", "")
-        if requested and re.sub(r"[-_]", "", requested.strip().lower()) != kernel_name.lower():
-            raise RuntimeError(
-                f"COLLX_MORI_KERNEL_TYPE={requested!r} differs from the pinned "
-                f"{kernel_name} kernel for this cell"
-            )
         self._kernel_type = None
         if kernel_name != "IntraNode":
             kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)

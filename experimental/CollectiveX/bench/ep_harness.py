@@ -101,10 +101,10 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     # provenance / output
     ap.add_argument("--runner", required=True)
     ap.add_argument("--topology-class", required=True)
-    ap.add_argument("--transport", default="")
+    ap.add_argument("--transport", required=True)
     ap.add_argument("--scope", required=True, choices=["scale-up", "scale-out"])
     ap.add_argument("--scale-up-transport", required=True)
-    ap.add_argument("--scale-out-transport", default="")
+    ap.add_argument("--scale-out-transport", required=True)
     ap.add_argument("--gpus-per-node", type=int, required=True)
     ap.add_argument("--scale-up-domain", type=int, required=True)
     ap.add_argument("--out", required=True)
@@ -184,10 +184,10 @@ def _write_bytes_atomic(path: str, payload: bytes) -> None:
 
 
 def _write_json_atomic(path: str, value) -> None:
-    payload = (
-        json.dumps(value, allow_nan=False, ensure_ascii=False, indent=2) + "\n"
-    ).encode()
-    return _write_bytes_atomic(path, payload)
+    payload = json.dumps(
+        value, allow_nan=False, ensure_ascii=False, separators=(",", ":")
+    ).encode() + b"\n"
+    _write_bytes_atomic(path, payload)
 
 
 def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[float]:
