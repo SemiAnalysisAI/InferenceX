@@ -41,6 +41,7 @@ def valid_single_node_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "tp": 8,
+        "pp": 1,
         "dcp-size": 1,
         "pcp-size": 1,
         "ep": 1,
@@ -241,6 +242,7 @@ class TestWorkerConfig:
         assert config.tp == 4
         assert config.ep == 4
         assert config.dp_attn is True
+        assert (config.pp, config.dcp_size, config.pcp_size) == (1, 1, 1)
 
     def test_worker_config_with_additional_settings(self):
         """Worker config with additional settings should pass."""
@@ -257,6 +259,39 @@ class TestWorkerConfig:
         })
         assert len(config.additional_settings) == 3
         assert "DECODE_MAX_NUM_TOKENS=256" in config.additional_settings
+
+    def test_worker_parallelism_fields(self):
+        config = WorkerConfig(**{
+            "num-worker": 2,
+            "tp": 4,
+            "pp": 2,
+            "dcp-size": 2,
+            "pcp-size": 2,
+            "ep": 1,
+            "dp-attn": False,
+        })
+        assert (config.pp, config.dcp_size, config.pcp_size) == (2, 2, 2)
+
+    @pytest.mark.parametrize("field", ["pp", "dcp-size", "pcp-size"])
+    def test_worker_parallelism_fields_must_be_positive(self, field):
+        with pytest.raises(Exception, match="greater than 0"):
+            WorkerConfig(**{
+                "num-worker": 2,
+                "tp": 4,
+                field: 0,
+                "ep": 1,
+                "dp-attn": False,
+            })
+
+    def test_worker_dcp_size_must_divide_tp(self):
+        with pytest.raises(Exception, match="must be divisible"):
+            WorkerConfig(**{
+                "num-worker": 2,
+                "tp": 4,
+                "dcp-size": 3,
+                "ep": 1,
+                "dp-attn": False,
+            })
 
     def test_worker_config_missing_required_field(self):
         """Missing required field should fail."""
@@ -348,6 +383,7 @@ class TestAgenticMatrixEntries:
             "framework": "vllm",
             "runner": "cluster:b200-dgxc",
             "tp": 8,
+            "pp": 1,
             "dcp-size": 1,
             "pcp-size": 1,
             "ep": 1,
@@ -595,6 +631,21 @@ class TestSingleNodeSearchSpaceEntry:
             "conc-list": [4, 8, 16, 32, 64, 128],
         })
         assert entry.conc_list == [4, 8, 16, 32, 64, 128]
+
+    def test_pp_defaults_to_one(self):
+        entry = SingleNodeSearchSpaceEntry(**{
+            "tp": 4,
+            "conc-list": [4],
+        })
+        assert entry.pp == 1
+
+    def test_pp_must_be_positive_integer(self):
+        with pytest.raises(Exception, match="greater than 0"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "pp": 0,
+                "conc-list": [4],
+            })
 
     def test_dcp_size_must_divide_tp(self):
         with pytest.raises(Exception, match="must be divisible"):

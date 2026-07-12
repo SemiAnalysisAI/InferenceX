@@ -45,6 +45,7 @@ AGG_TOP_LEVEL_KEYS = {
     "scenario_type",
     "is_multinode",
     "tp",
+    "pp",
     "dcp_size",
     "pcp_size",
     "ep",
@@ -324,6 +325,7 @@ def _run_processor(
             "FRAMEWORK": "vllm",
             "PRECISION": "fp4",
             "TP": "4",
+            "PP_SIZE": "1",
             "DCP_SIZE": "1",
             "PCP_SIZE": "1",
             "EP_SIZE": "1",
@@ -442,20 +444,21 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     agg = _run_processor(
         result_dir,
         output_dir,
-        env_overrides={"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"},
+        env_overrides={"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"},
     )
     throughput = agg["request_metrics"]["throughput"]
     per_gpu = throughput["per_gpu"]
+    assert agg["pp"] == 2
     assert agg["dcp_size"] == 2
     assert agg["pcp_size"] == 2
     assert per_gpu["total_tput_tps"] == pytest.approx(
-        throughput["total"]["tokens_per_second"] / 8
+        throughput["total"]["tokens_per_second"] / 16
     )
     assert per_gpu["input_tput_tps"] == pytest.approx(
-        throughput["input"]["tokens_per_second"] / 8
+        throughput["input"]["tokens_per_second"] / 16
     )
     assert per_gpu["output_tput_tps"] == pytest.approx(
-        throughput["output"]["tokens_per_second"] / 8
+        throughput["output"]["tokens_per_second"] / 16
     )
 
 
@@ -481,11 +484,17 @@ def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
             "DISAGG": "true",
             "PREFILL_NUM_WORKERS": "1",
             "PREFILL_TP": "8",
+            "PREFILL_PP_SIZE": "2",
+            "PREFILL_DCP_SIZE": "2",
+            "PREFILL_PCP_SIZE": "2",
             "PREFILL_EP": "8",
             "PREFILL_DP_ATTN": "false",
             "PREFILL_HARDWARE": "b200",
             "DECODE_NUM_WORKERS": "2",
             "DECODE_TP": "8",
+            "DECODE_PP_SIZE": "2",
+            "DECODE_DCP_SIZE": "4",
+            "DECODE_PCP_SIZE": "1",
             "DECODE_EP": "8",
             "DECODE_DP_ATTN": "false",
             "DECODE_HARDWARE": "h100",
@@ -494,6 +503,18 @@ def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
 
     assert agg["prefill_hw"] == "b200"
     assert agg["decode_hw"] == "h100"
+    assert (
+        agg["prefill_pp"],
+        agg["prefill_dcp_size"],
+        agg["prefill_pcp_size"],
+        agg["num_prefill_gpu"],
+    ) == (2, 2, 2, 32)
+    assert (
+        agg["decode_pp"],
+        agg["decode_dcp_size"],
+        agg["decode_pcp_size"],
+        agg["num_decode_gpu"],
+    ) == (2, 4, 1, 32)
 
 
 def test_multinode_processor_omits_homogeneous_hardware(tmp_path: Path):
