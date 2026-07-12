@@ -238,10 +238,16 @@ EOF
         # fastsafetensors stages checkpoint shards on-GPU while loading.
         # Without --enable-ep-weight-filter every rank stages the full
         # expert weights and OOMs during load, so it is EP-only here.
+        # The 0.85 GPU memory utilization is also EP-only: the Mega-MoE
+        # path JIT-loads DeepGEMM kernels at runtime, and those driver
+        # allocations live outside the vLLM pool (at the default
+        # utilization they fail with CUDA_ERROR_OUT_OF_MEMORY). The
+        # non-EP points keep the default for a larger KV cache pool.
         EP_TUNING_ARGS=(
             --moe-backend deep_gemm_amxf4_mega_moe
             --enable-ep-weight-filter
             --load-format fastsafetensors
+            --gpu-memory-utilization 0.85
         )
         export VLLM_USE_V2_MODEL_RUNNER=1
         export VLLM_USE_RUST_FRONTEND=1
