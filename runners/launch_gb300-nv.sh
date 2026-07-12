@@ -191,7 +191,7 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Overlay our version-controlled Qwen3.5 recipes onto the srt-slurm checkout.
     # fp8 recipes pin dynamo by commit hash (source install), which needs the
-    # cargo/maturin bootstrap that only exists on srt-slurm:main — the
+    # cargo/maturin bootstrap included in the srt-slurm v1.0.25 release — the
     # sa-submission-q2-2026 sglang install path assumes maturin ships in the
     # image, and the lmsysorg/sglang nightly-dev-cu13 image doesn't include it.
     # Same branch the identical gb200-fp8 recipes run on. fp4 recipes pin
@@ -200,7 +200,7 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     if [[ $PRECISION == "fp8" ]]; then
-        git checkout main
+        git checkout v1.0.25
     else
         git checkout sa-submission-q2-2026
     fi
@@ -328,7 +328,7 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 #   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
 #     /scratch/models, and
 #   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
-#     and which runs on srt-slurm:main (the branch that has the preflight;
+#     and which runs on srt-slurm:v1.0.25 (the release that has the preflight;
 #     qwen3.5 fp4 runs on sa-submission-q2-2026, which has none).
 # The engine still fails loudly at runtime if the path is genuinely missing on
 # the compute node. Other fixed-seq-len recipes resolve model.path to a
