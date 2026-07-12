@@ -103,7 +103,7 @@ backend:
       ep-size: 1
       # kv-cache offload
       enable-hierarchical-cache: true
-      hicache-ratio: 1
+      hicache-ratio: 6
       hicache-write-policy: write_through
       hicache-io-backend: kernel
       # mtp section
