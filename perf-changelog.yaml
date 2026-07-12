@@ -4724,3 +4724,12 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+    - dsv4-fp4-b200-vllm-mtp
+    - dsv4-fp4-b300-vllm
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Bump vLLM image to v0.25.0 for DeepSeek-V4-Pro FP4 on B200 and B300."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2169
