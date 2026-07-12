@@ -49,9 +49,6 @@ CELL_EXCLUSIONS = {
         "DeepEP V2 EP16 requires NCCL GIN over the H100 scale-out fabric, "
         "unverified on current runners; EP8 is validated"
     ),
-    ("b300", "deepep-v2", 16): (
-        "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA"
-    ),
     ("mi300x", "mori", 16): (
         "Pinned MoRI distributed initialization does not complete on MI300X EP16"
     ),

@@ -57,7 +57,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8]},
+      "backends": {"deepep-v2": [8, 16]},
       "operator": {
         "partition": "batch_1",
         "account": "benchmark",
