@@ -76,12 +76,30 @@ if is_multinode:
     decode_gpus = int(multinode_env['DECODE_GPUS'])
     prefill_num_workers = int(multinode_env['PREFILL_NUM_WORKERS'])
     prefill_tp = int(multinode_env['PREFILL_TP'])
+    prefill_pp = int(os.environ.get('PREFILL_PP_SIZE', '1'))
+    prefill_dcp_size = int(os.environ.get('PREFILL_DCP_SIZE', '1'))
+    prefill_pcp_size = int(os.environ.get('PREFILL_PCP_SIZE', '1'))
     prefill_ep = int(multinode_env['PREFILL_EP'])
     prefill_dp_attn = multinode_env['PREFILL_DP_ATTN']
     decode_num_workers = int(multinode_env['DECODE_NUM_WORKERS'])
     decode_tp = int(multinode_env['DECODE_TP'])
+    decode_pp = int(os.environ.get('DECODE_PP_SIZE', '1'))
+    decode_dcp_size = int(os.environ.get('DECODE_DCP_SIZE', '1'))
+    decode_pcp_size = int(os.environ.get('DECODE_PCP_SIZE', '1'))
     decode_ep = int(multinode_env['DECODE_EP'])
     decode_dp_attn = multinode_env['DECODE_DP_ATTN']
+    worker_parallelism = (
+        prefill_pp,
+        prefill_dcp_size,
+        prefill_pcp_size,
+        decode_pp,
+        decode_dcp_size,
+        decode_pcp_size,
+    )
+    if any(value <= 0 for value in worker_parallelism):
+        raise ValueError(
+            "Multinode PP, DCP, and PCP sizes must be positive integers."
+        )
 
     total_gpus = prefill_gpus + decode_gpus
     if total_gpus <= 0:
@@ -92,14 +110,23 @@ if is_multinode:
     output_tput_denominator = decode_gpus if decode_gpus > 0 else total_gpus
     output_decode_tp = decode_tp if decode_gpus > 0 else 0
     output_decode_ep = decode_ep if decode_gpus > 0 else 0
+    output_decode_pp = decode_pp if decode_gpus > 0 else 1
+    output_decode_dcp_size = decode_dcp_size if decode_gpus > 0 else 1
+    output_decode_pcp_size = decode_pcp_size if decode_gpus > 0 else 1
 
     multi_node_data = {
         'is_multinode': True,
         'prefill_tp': prefill_tp,
+        'prefill_pp': prefill_pp,
+        'prefill_dcp_size': prefill_dcp_size,
+        'prefill_pcp_size': prefill_pcp_size,
         'prefill_ep': prefill_ep,
         'prefill_dp_attention': prefill_dp_attn,
         'prefill_num_workers': prefill_num_workers,
         'decode_tp': output_decode_tp,
+        'decode_pp': output_decode_pp,
+        'decode_dcp_size': output_decode_dcp_size,
+        'decode_pcp_size': output_decode_pcp_size,
         'decode_ep': output_decode_ep,
         'decode_dp_attention': decode_dp_attn,
         'decode_num_workers': decode_num_workers,
@@ -122,15 +149,17 @@ else:
     tp_size = int(single_node_env['TP'])
     ep_size = int(single_node_env['EP_SIZE'])
     dp_attention = single_node_env['DP_ATTENTION']
+    pp = int(os.environ.get('PP_SIZE', '1'))
     dcp_size = int(os.environ.get('DCP_SIZE', '1'))
     pcp_size = int(os.environ.get('PCP_SIZE', '1'))
-    if dcp_size <= 0 or pcp_size <= 0:
-        raise ValueError("DCP_SIZE and PCP_SIZE must be positive integers.")
-    num_gpus = tp_size * pcp_size
+    if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
+        raise ValueError("PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers.")
+    num_gpus = tp_size * pp * pcp_size
 
     single_node_data = {
         'is_multinode': False,
         'tp': tp_size,
+        'pp': pp,
         'dcp_size': dcp_size,
         'pcp_size': pcp_size,
         'ep': ep_size,
