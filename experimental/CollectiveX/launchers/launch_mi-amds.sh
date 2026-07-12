@@ -21,7 +21,7 @@ case "$RUNNER" in
   *) collx_die "COLLX_SHARD_SKU is not a registered AMD SKU" ;;
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}"
-export COLLX_IMAGE_PLATFORM=linux/amd64 COLLX_VENDOR=amd
+export COLLX_VENDOR=amd
 # ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 
@@ -43,7 +43,7 @@ export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
 export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
 export MORI_SHMEM_LOG_LEVEL="${MORI_SHMEM_LOG_LEVEL:-info}"
 export MORI_IO_LOG_LEVEL="${MORI_IO_LOG_LEVEL:-info}"
-IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_AMD_MORI}"
+IMAGE="$COLLX_IMAGE"
 export COLLX_NGPUS="$NGPUS" COLLX_NODES="$NODES"
 export COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 if [ "$NODES" -gt 1 ]; then
@@ -53,7 +53,7 @@ else
 fi
 export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-1800}"
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
-collx_require_vars COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
+collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR COLLX_STAGE_DIR
 PARTITION="$COLLX_PARTITION"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 
 collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"

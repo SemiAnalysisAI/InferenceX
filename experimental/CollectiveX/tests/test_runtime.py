@@ -33,7 +33,7 @@ class PlatformRegistryTests(unittest.TestCase):
     REGISTRY = RUNTIME.parent / "configs" / "platform_config.json"
     NETWORK_FIELDS = {
         "socket_ifname", "rdma_devices", "ib_gid_index",
-        "rdma_service_level", "rdma_traffic_class",
+        "rdma_service_level", "rdma_traffic_class", "rail_isolated",
     }
 
     def test_every_platform_entry_is_complete_and_typed(self) -> None:
@@ -41,7 +41,10 @@ class PlatformRegistryTests(unittest.TestCase):
         self.assertTrue(platforms)
         for name, entry in platforms.items():
             with self.subTest(sku=name):
-                for field in ("arch", "product", "scale_up_transport", "launcher"):
+                for field in (
+                    "arch", "product", "image", "image_platform",
+                    "scale_up_transport", "launcher",
+                ):
                     self.assertIsInstance(entry[field], str)
                     self.assertTrue(entry[field])
                 for field in ("gpus_per_node", "scale_up_domain"):
@@ -55,6 +58,8 @@ class PlatformRegistryTests(unittest.TestCase):
                     set(entry.get("network", {})), self.NETWORK_FIELDS
                 )
                 self.assertRegex(entry["arch"], r"^(sm|gfx)\d+$")
+                self.assertRegex(entry["image"], r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$")
+                self.assertIn(entry["image_platform"], {"linux/amd64", "linux/arm64"})
 
 
 class ProbeTests(unittest.TestCase):
@@ -102,6 +107,8 @@ class ConfigTests(unittest.TestCase):
             os.close(read_fd)
             self.assertIn(b"COLLX_PARTITION\0gpu\0", payload)
             self.assertIn(b"COLLX_SQUASH_DIR\0" + directory.encode() + b"\0", payload)
+            self.assertIn(b"COLLX_IMAGE\0lmsysorg/sglang:v0.5.11-cu130\0", payload)
+            self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/amd64\0", payload)
 
     def _emit_registry_only(self, runner: str) -> bytes:
         read_fd, write_fd = os.pipe()
@@ -125,11 +132,12 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
         self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
 
-    def test_operator_config_registry_only_skips_secret_fed_sku(self) -> None:
-        # SKUs without a tracked operator block keep the historical no-config
-        # behavior: nothing emitted, no validation failure. mi325x is the last
-        # still-secret-fed SKU (no SSH access target to derive a baseline).
-        self.assertEqual(self._emit_registry_only("mi325x"), b"")
+    def test_operator_config_registry_only_emits_image_for_secret_fed_sku(self) -> None:
+        # A SKU without tracked operator settings still gets its public image
+        # configuration; private scheduler values can arrive through the overlay.
+        payload = self._emit_registry_only("mi325x")
+        self.assertIn(b"COLLX_IMAGE\0rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701\0", payload)
+        self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/amd64\0", payload)
 
 
 class StageTests(unittest.TestCase):

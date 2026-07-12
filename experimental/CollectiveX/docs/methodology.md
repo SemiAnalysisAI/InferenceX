@@ -119,10 +119,12 @@ routing cannot pass an identity roundtrip. For every rank and point it verifies:
 5. dispatched payload/metadata and combined output again after timing.
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
-gate-weighted expert aggregate before combine, independently derives `sum(gate * expert(token))`, and
-checks the dispatch metadata and transformed output. It compares against the reference activation.
-The combine gate is `rtol=0.05, atol=0.02` for the BF16 communication path. This threshold is a correctness gate, not an estimate of transport
-error. Any failed rank or point makes the case ineligible in the result it writes.
+gate-weighted expert aggregate before combine and derives the expected combine from the values
+actually communicated: each destination rank's FP32 aggregate is cast to the payload dtype (BF16)
+exactly as the adapter casts it, and those exact contributions are summed. The gate is therefore
+tight — max elementwise relative error (denominator clamped at 0.02) below `8 * 2^-8`, the bound for
+eight rank contributions accumulated and stored in BF16. It is a correctness gate, not an estimate
+of transport error. Any failed rank or point makes the case ineligible in the result it writes.
 Pre/post dispatch behavior is checked against canonical source-token metadata and expected output.
 Native receive slots may be assigned nondeterministically, so physical receive order is not treated
 as a correctness property.

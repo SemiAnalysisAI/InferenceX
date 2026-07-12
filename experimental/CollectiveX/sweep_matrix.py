@@ -42,18 +42,39 @@ SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
 
-# Only real per-cell platform walls belong here. Backend/platform mismatches are
-# filtered by each platform's `backends` map and never become synthetic rows.
+# Real per-cell platform walls: (sku, backend, ep) the matrix marks `unsupported`
+# with the reason surfaced to consumers, rather than scheduling. Backend/platform
+# mismatches are already filtered by each platform's `backends` map and never
+# reach here.
+#
+# "Walled" (listed here) = never scheduled -> shows as `unsupported`.
+# "Red" (NOT listed here) = kept in `backends`, scheduled, and allowed to fail so
+# the failure is visible on the frontend instead of hidden. The current example
+# is mi355x mori EP16: it runs, but the Pensando/Pollara NIC's ~1 GiB single-MR
+# limit rejects the 6 GiB symmetric SHMEM heap (RegisterRdmaMemoryRegion errno 22)
+# -- a hardware ceiling, so it reds every attempt. Prefer keeping a known-red cell
+# schedulable when the failure is worth surfacing; move it here only when running
+# it wastes an allocation for no new signal.
 CELL_EXCLUSIONS = {
-    ("h100-dgxc", "deepep-v2", 16): (
-        "DeepEP V2 EP16 requires NCCL GIN over the H100 scale-out fabric, "
-        "unverified on current runners; EP8 is validated"
-    ),
     ("mi300x", "mori", 16): (
-        "Pinned MoRI distributed initialization does not complete on MI300X EP16"
+        "EP16 is MoRI InterNodeV1 over 2x8 XGMI + RoCE, blocked three ways: no "
+        "tracked internode `network` block (the former selectors were deleted "
+        "with the operator secrets, so there is nothing to overlay -- they must "
+        "be re-derived on the metal: bnxt_re0..7, RoCEv2 is IPv6-only at gid 3); "
+        "pinned-MoRI distributed init has not completed on MI300X EP16; and the "
+        "cluster cannot schedule anything (verified 2026-07-12: bare srun fails "
+        "'Nodes ... are still not ready' on every node, including one whose "
+        "slurmd is active -- a controller-side dynamic-node registration fault, "
+        "SRE-level). EP8 (single-node AsyncLL over XGMI) additionally needs a "
+        "rebuilt operator block once the cluster schedules; until then dispatch "
+        "with --exclude-skus mi300x, as run 29193126476 did for mi325x."
     ),
     ("mi325x", "mori", 16): (
-        "MoRI EP16 and its internode RDMA selectors are unvalidated on MI325X"
+        "EP16 (MoRI InterNodeV1) is unvalidated on MI325X and cannot be brought "
+        "up: no tracked internode `network` block (nothing survived the operator "
+        "secret deletion), no online runners, and no access path to derive "
+        "selectors or validate. Un-wall = restore runners and access, derive the "
+        "RoCE selectors, then validate a 2-node run."
     ),
 }
 

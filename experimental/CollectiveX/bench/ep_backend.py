@@ -271,8 +271,16 @@ class EPBackend(abc.ABC):
         def prep_stage(p=problem):
             return self.dispatch(p)
 
+        def stage_op(hh, p=problem):
+            self.stage(p, hh)
+            return hh
+
+        # Drain each timed stage's dispatch with an untimed combine where the
+        # backend requires the pair (same rule as benchmark_dispatch).
         return time_us(
-            torch, lambda hh, p=problem: self.stage(p, hh), 0, iters, pre=prep_stage,
+            torch, stage_op, 0, iters, pre=prep_stage,
+            post=(lambda hh, p=problem: self.combine(p, hh))
+            if self.dispatch_needs_combine_cleanup else None,
         )
 
     def benchmark_combine(self, problem, warmup, iters):

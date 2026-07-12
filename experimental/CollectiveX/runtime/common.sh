@@ -11,11 +11,6 @@ COLLX_RUNTIME_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
-# Image defaults are consumed by the SKU launchers after sourcing this file.
-# shellcheck disable=SC2034
-COLLX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
-# shellcheck disable=SC2034
-COLLX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701"
 COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 
@@ -64,18 +59,18 @@ collx_job_root_is_safe() {
     && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ]
 }
 
-# Runner-local deployment settings are strict JSON kept outside the checkout.
-# Only the selected runner's allowlisted values are exported; the document is
-# never sourced or evaluated as shell.
+# Load the selected SKU's public platform settings plus any allowlisted local
+# operator overrides; JSON values are never sourced or evaluated as shell.
 collx_load_operator_config() {
   [ -n "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" ] \
     && [ "$COLLECTIVEX_OPERATOR_CONFIG_LOADED" = "$$" ] && return 0
   local config_path parsed_path key value
+  unset COLLX_IMAGE COLLX_IMAGE_PLATFORM
   unset COLLX_PARTITION COLLX_ACCOUNT COLLX_QOS COLLX_SQUASH_DIR COLLX_STAGE_DIR COLLX_ENROOT_CACHE_PATH
   unset ENROOT_CACHE_PATH
   unset COLLX_EXCLUDE_NODES COLLX_NODELIST COLLX_LOCK_DIR COLLX_MASTER_PORT
   unset COLLX_SOCKET_IFNAME COLLX_RDMA_DEVICES COLLX_IB_GID_INDEX COLLX_RDMA_SERVICE_LEVEL
-  unset COLLX_RDMA_TRAFFIC_CLASS
+  unset COLLX_RDMA_TRAFFIC_CLASS COLLX_RAIL_ISOLATED
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ ! -e "$config_path" ]; then
@@ -131,7 +126,7 @@ collx_require_vars() {
     [ -n "${!name:-}" ] || missing+=("$name")
   done
   [ "${#missing[@]}" -eq 0 ] || collx_die \
-    "missing runner-local configuration: ${missing[*]} (set them in COLLECTIVEX_OPERATOR_CONFIG)"
+    "missing platform or runner configuration: ${missing[*]}"
 }
 
 collx_export_gid_index_for_link_layer() {
@@ -157,7 +152,7 @@ collx_apply_network_profile() {
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || collx_die "invalid network placement"
   unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
-  unset NCCL_IB_GID_INDEX NCCL_IB_SL
+  unset NCCL_IB_GID_INDEX NCCL_IB_SL NCCL_IB_MERGE_NICS NCCL_CROSS_NIC
   unset NVSHMEM_ENABLE_NIC_PE_MAPPING
   unset NVSHMEM_HCA_LIST NVSHMEM_IB_GID_INDEX NVSHMEM_IB_SL
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
@@ -192,6 +187,20 @@ collx_apply_network_profile() {
   fi
   export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
   export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
+  # The selector enumerates individual ports. NCCL's default dual-port fusion
+  # would collapse each card into one "fused" device, and any fused device
+  # disables NCCL GIN (init.cc nicFused gate) — the deep_ep EP16 hybrid path
+  # then asserts railedGinType == NCCL_GIN_TYPE_NONE. Single-port selectors are
+  # unaffected, so pin unmerged operation for every scale-out run.
+  export NCCL_IB_MERGE_NICS=0
+  if [ -n "${COLLX_RAIL_ISOLATED:-}" ]; then
+    [[ "$COLLX_RAIL_ISOLATED" =~ ^[01]$ ]] \
+      || collx_die "invalid private rail isolation flag"
+    # Rail-isolated multi-plane fabrics (per-port rail subnets, no cross-rail
+    # routing): cross-NIC pairs black-hole at QP RTR, and NCCL's RAIL GIN
+    # connection type is the one the fabric supports.
+    [ "$COLLX_RAIL_ISOLATED" != 1 ] || export NCCL_CROSS_NIC=0
+  fi
   if [ -n "${COLLX_IB_GID_INDEX:-}" ]; then
     [[ "$COLLX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$COLLX_IB_GID_INDEX" -le 255 ] \
       || collx_die "invalid private IB GID index"
@@ -577,8 +586,13 @@ collx_ensure_squash() {
     || { collx_log_tail "$log"; return 1; }
   { exec {lock_fd}>"$locks/${key}.lock"; } 2>> "$log" \
     || { collx_log_tail "$log"; return 1; }
-  flock -w 900 "$lock_fd" 2>> "$log" \
-    || { collx_log_tail "$log"; return 1; }
+  # A concurrent leg of the same run holds this lock for its full import
+  # (measured ~18 minutes for the 32 GB sglang squash on b300), so the wait
+  # must outlast an import and a timeout must say so — the empty import log
+  # would otherwise make this the only silent launcher death.
+  flock -w 2700 "$lock_fd" 2>> "$log" \
+    || { collx_log "ERROR: timed out waiting for the container import lock"
+         collx_log_tail "$log"; return 1; }
   if unsquashfs -l "$sq" >/dev/null 2>&1; then
     collx_log "container squash ready"
   else

@@ -37,8 +37,12 @@ def case_id(sku: str, case: dict) -> str:
 # Workload and timing values arrive from configs/suites.yaml through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
 # Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
-ORACLE_RTOL = 5e-2
-ORACLE_ATOL = 2e-2
+# The expectation reproduces the exact per-rank BF16 contributions, so a correct
+# backend's only residual is its cross-rank accumulation: <= topk (8) BF16
+# additions/store at one ulp (2^-8) each. Below the magnitude floor the gate is
+# effectively absolute (cancellation makes relative error meaningless there).
+COMBINE_REL_TOL = 8 * 2.0 ** -8
+COMBINE_MAG_FLOOR = 2e-2
 
 def logical_byte_provenance(logical_copies: int, hidden: int) -> dict[str, int]:
     """Return comparable logical BF16 activation bytes for one direction.
@@ -306,20 +310,27 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     return transformed.to(payload.dtype)
 
 
-def _expected_transformed_combine(torch, problem):
-    """Independently derive sum_i gate_i * expert_i(x) for each source token."""
+def _expected_transformed_combine(torch, problem, experts_per_rank):
+    """Sum the exact per-destination-rank contributions combine receives: each
+    rank's FP32 local-expert aggregate is cast to the payload dtype before the
+    sum (as _expert_transform casts it), so the expectation models the
+    communicated BF16 rounding instead of hiding it inside a wide tolerance."""
     semantic_x = getattr(problem, "oracle_x", problem.x)
-    expected = torch.zeros_like(semantic_x, dtype=torch.float32)
     expert_ids = problem.topk_idx.to(torch.int64)
     weights = problem.topk_weights.to(torch.float32)
     pattern = _column_pattern(torch, semantic_x.shape[1], semantic_x.device)
-    for slot in range(expert_ids.shape[1]):
-        gate = weights[:, slot].unsqueeze(1)
-        scale, offset_a, offset_b = (
-            c.unsqueeze(1) for c in _expert_coefficients(torch, expert_ids[:, slot])
+    destination = expert_ids // experts_per_rank
+    scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
+    expected = torch.zeros_like(semantic_x, dtype=torch.float32)
+    for rank_id in destination.unique().tolist():
+        gate = weights * (destination == rank_id)
+        contribution = (
+            semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
+            + (gate * offset_a).sum(dim=1, keepdim=True)
+            + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
         )
-        expert_output = semantic_x.float() * scale + offset_a + offset_b * pattern.unsqueeze(0)
-        expected.add_(gate * expert_output)
+        # Unrouted tokens contribute an exact zero (all gates zero) — no mask needed.
+        expected += contribution.to(semantic_x.dtype).float()
     return expected
 
 
@@ -334,13 +345,12 @@ def _oracle_report(**fields):
     emitted correctness dict carries identical keys."""
     report = {
         "passed": False,
-        "atol": ORACLE_ATOL,
-        "rtol": ORACLE_RTOL,
+        "rel_tol": COMBINE_REL_TOL,
+        "mag_floor": COMBINE_MAG_FLOOR,
         "combine_weight_semantics": "undeclared",
         "receive_count": 0,
         "max_absolute_error": None,
         "max_elementwise_relative_error": None,
-        "max_relative_error": None,
         "max_weight_error": None,
         "checks": dict.fromkeys(_ORACLE_CHECKS, False),
     }
@@ -445,25 +455,21 @@ def _run_expert_oracle(
     view.combine_input = transformed
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
-    expected_combined = _expected_transformed_combine(torch, problem)
+    expected_combined = _expected_transformed_combine(torch, problem, experts_per_rank)
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
-        max_absolute_error = max_elementwise_relative_error = max_relative_error = 0.0
+        max_absolute_error = max_elementwise_relative_error = 0.0
         combine_values_ok = True
         if combined.numel():
             absolute_error = (combined.float() - expected_combined).abs()
             max_absolute_error = float(absolute_error.max().item())
-            max_relative_error = max_absolute_error / (
-                float(expected_combined.abs().max().item()) + 1e-6
-            )
             max_elementwise_relative_error = float(
-                (absolute_error / expected_combined.abs().clamp_min(ORACLE_ATOL)).max().item()
+                (absolute_error / expected_combined.abs().clamp_min(COMBINE_MAG_FLOOR))
+                .max().item()
             )
-            combine_values_ok = bool(torch.allclose(
-                combined.float(), expected_combined, rtol=ORACLE_RTOL, atol=ORACLE_ATOL
-            ))
+            combine_values_ok = max_elementwise_relative_error < COMBINE_REL_TOL
     else:
-        max_absolute_error = max_elementwise_relative_error = max_relative_error = None
+        max_absolute_error = max_elementwise_relative_error = None
         combine_values_ok = False
     checks = {
         "combine_values": combine_values_ok,
@@ -475,16 +481,11 @@ def _run_expert_oracle(
         "weights": weights_ok,
     }
     return _oracle_report(
-        passed=bool(
-            all(checks.values())
-            and max_relative_error is not None
-            and max_relative_error < ORACLE_RTOL
-        ),
+        passed=all(checks.values()),
         combine_weight_semantics=combine_weight_semantics,
         receive_count=receive_count,
         max_absolute_error=max_absolute_error,
         max_elementwise_relative_error=max_elementwise_relative_error,
-        max_relative_error=max_relative_error,
         max_weight_error=max_weight_error,
         checks=checks,
     )
@@ -584,7 +585,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gate[T] = {
             "rstats": rstats,
             "recv_local": oracle["receive_count"],
-            "max_rel": oracle["max_relative_error"] or 0.0,
+            "max_rel": oracle["max_elementwise_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
             "pre_input_unchanged": pre_input_unchanged,
@@ -637,7 +638,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gate[T].update({
             "input_unchanged": input_unchanged,
             "local_ok": int(pre["passed"] and post["passed"] and input_unchanged),
-            "max_rel": max(pre["max_relative_error"] or 0.0, post["max_relative_error"] or 0.0),
+            "max_rel": max(
+                pre["max_elementwise_relative_error"] or 0.0,
+                post["max_elementwise_relative_error"] or 0.0,
+            ),
             "oracle_post": post,
         })
 
@@ -682,6 +686,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "stage": _component(sp, len(s)),
             },
             "correctness": {
+                # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
+                # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,
                 "passed": point_ok,
             },
@@ -755,7 +761,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         attempt_ordinal = 0
     if attempt_ordinal <= 0:
         raise ValueError("COLLX_ATTEMPT_ID must be a positive integer")
-    headline = next((r for r in rows if r["tokens_per_rank"] == 64), rows[len(rows) // 2])
     doc = {
         "version": args.version,
         "record_type": "case-attempt",
@@ -811,14 +816,24 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     }
     if rank == 0:
         _write_json_atomic(args.out, doc)
-        dispatch_percentiles = headline["components"]["dispatch"]["percentiles_us"]
-        dispatch_p99 = dispatch_percentiles["p99"] if dispatch_percentiles else None
-        component_summary = (f"disp_p99={dispatch_p99:.1f}us "
-                             if dispatch_p99 is not None
-                             else "components=unavailable ")
+        # Ladder ends + two interior points — one mid-ladder headline hides the
+        # low-token (startup-dominated) behavior.
+        summary_rows = []
+        for tokens in (ladder[0], 8, 64, ladder[-1]):
+            row = next((r for r in rows if r["tokens_per_rank"] == tokens), None)
+            if row is not None and row not in summary_rows:
+                summary_rows.append(row)
+
+        def _point_summary(row):
+            percentiles = row["components"]["dispatch"]["percentiles_us"]
+            if not percentiles:
+                return f"T={row['tokens_per_rank']}:n/a"
+            return f"T={row['tokens_per_rank']}:disp_p99={percentiles['p99']:.1f}us"
+
+        component_summary = " ".join(_point_summary(row) for row in summary_rows)
         print(f"{backend.name} ep-dispatch-combine [{args.phase}/{mode}]: "
               f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
-              f"headline T={headline['tokens_per_rank']} {component_summary}"
+              f"{component_summary} "
               f"-> {args.out}")
     # CI honesty: run_sweep's return code is the only success signal collx_run_shard (and thus CI)
     # reads — the doc is uploaded regardless, via the launcher's always() stage step. A captured

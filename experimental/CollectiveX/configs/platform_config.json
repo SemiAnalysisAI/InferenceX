@@ -3,21 +3,30 @@
     "h100-dgxc": {
       "arch": "sm90",
       "product": "h100",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8]},
+      "backends": {"deepep-v2": [8, 16]},
       "operator": {
         "partition": "hpc-gpu-1",
         "account": "customer",
         "squash_dir": "/mnt/nfs/sa-shared/cx-squash",
-        "exclude_nodes": "hpc-gpu-1-7"
+        "exclude_nodes": "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+      },
+      "network": {
+        "socket_ifname": "eth0",
+        "rdma_devices": "mlx5_18,mlx5_19,mlx5_20,mlx5_21,mlx5_22,mlx5_23,mlx5_24,mlx5_25,mlx5_26,mlx5_27,mlx5_28,mlx5_29,mlx5_30,mlx5_31,mlx5_32,mlx5_33",
+        "ib_gid_index": "3"
       }
     },
     "h200-dgxc": {
       "arch": "sm90",
       "product": "h200",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
@@ -34,6 +43,8 @@
     "b200-dgxc": {
       "arch": "sm100",
       "product": "b200",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
@@ -53,6 +64,8 @@
     "b300": {
       "arch": "sm103",
       "product": "b300",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
@@ -67,12 +80,15 @@
       "network": {
         "socket_ifname": "bond0",
         "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_8,mlx5_9,mlx5_10,mlx5_11,mlx5_16,mlx5_17,mlx5_20,mlx5_21,mlx5_22,mlx5_23",
-        "ib_gid_index": "3"
+        "ib_gid_index": "3",
+        "rail_isolated": "1"
       }
     },
     "gb200": {
       "arch": "sm100",
       "product": "gb200",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
       "scale_up_transport": "mnnvl",
@@ -89,6 +105,8 @@
     "gb300": {
       "arch": "sm103",
       "product": "gb300",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/arm64",
       "gpus_per_node": 4,
       "scale_up_domain": 72,
       "scale_up_transport": "mnnvl",
@@ -105,6 +123,8 @@
     "mi300x": {
       "arch": "gfx942",
       "product": "mi300x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
@@ -114,6 +134,8 @@
     "mi325x": {
       "arch": "gfx942",
       "product": "mi325x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
@@ -123,6 +145,8 @@
     "mi355x": {
       "arch": "gfx950",
       "product": "mi355x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
       "gpus_per_node": 8,
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",

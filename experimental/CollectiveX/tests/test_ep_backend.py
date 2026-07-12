@@ -112,6 +112,28 @@ class BackendTests(unittest.TestCase):
         self.assertIn("post", captured)
         self.assertEqual(backend.calls, ["dispatch", "stage", "combine"])
 
+    def test_stage_cleanup_matches_the_dispatch_contract(self):
+        # MoRI-shaped backends (dispatch_needs_combine_cleanup) must not leak an
+        # un-combined dispatch out of an isolated-stage iteration.
+        for needs_cleanup, calls in (
+            (True, ["dispatch", "stage", "combine"]), (False, ["dispatch", "stage"]),
+        ):
+            backend = FakeBackend(args())
+            backend.dispatch_needs_combine_cleanup = needs_cleanup
+
+            def fake_time(_torch, operation, _warmup, _iters, **kwargs):
+                result = operation(kwargs["pre"]())
+                if kwargs["post"] is not None:
+                    kwargs["post"](result)
+                return [1.0]
+
+            with mock.patch.dict(sys.modules, {"torch": types.SimpleNamespace()}), mock.patch.object(
+                ep_backend, "time_us", side_effect=fake_time
+            ):
+                backend.benchmark_stage(object(), 0, 1)
+            with self.subTest(needs_cleanup=needs_cleanup):
+                self.assertEqual(backend.calls, calls)
+
     def test_mode_is_fail_closed(self):
         with self.assertRaises(ValueError):
             FakeBackend(args(mode="unsupported"))

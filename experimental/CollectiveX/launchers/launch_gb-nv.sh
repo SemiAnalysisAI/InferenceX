@@ -22,7 +22,7 @@ case "$PRODUCT" in
 esac
 RUNNER="$PRODUCT"
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
-export COLLX_IMAGE_PLATFORM=linux/arm64 COLLX_VENDOR=nvidia
+export COLLX_VENDOR=nvidia
 # ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 NODES="${COLLX_NODES:-2}"; GPN="${COLLX_GPUS_PER_NODE:-4}"
@@ -30,7 +30,7 @@ SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-72}"
 NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
-IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_MULTIARCH}"
+IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 export COLLX_TRANSPORT=mnnvl
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
@@ -39,7 +39,7 @@ case "$COLLX_BENCH" in
   deepep-v2) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
 esac
-collx_require_vars COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
+collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH
 PARTITION="$COLLX_PARTITION"; ACCOUNT="$COLLX_ACCOUNT"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 [ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"

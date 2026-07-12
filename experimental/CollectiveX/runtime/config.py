@@ -16,8 +16,13 @@ FIELDS = {
     "nodelist": "COLLX_NODELIST", "lock_dir": "COLLX_LOCK_DIR",
     "socket_ifname": "COLLX_SOCKET_IFNAME", "rdma_devices": "COLLX_RDMA_DEVICES",
     "ib_gid_index": "COLLX_IB_GID_INDEX", "rdma_service_level": "COLLX_RDMA_SERVICE_LEVEL",
-    "rdma_traffic_class": "COLLX_RDMA_TRAFFIC_CLASS",
+    "rdma_traffic_class": "COLLX_RDMA_TRAFFIC_CLASS", "rail_isolated": "COLLX_RAIL_ISOLATED",
 }
+PLATFORM_FIELDS = {
+    "image": "COLLX_IMAGE",
+    "image_platform": "COLLX_IMAGE_PLATFORM",
+}
+OUTPUT_FIELDS = {**FIELDS, **PLATFORM_FIELDS}
 
 
 def _platforms() -> dict:
@@ -33,7 +38,7 @@ def _platforms() -> dict:
 
 def emit(values: dict[str, object]) -> None:
     for field, value in values.items():
-        name = FIELDS.get(field, field)
+        name = OUTPUT_FIELDS.get(field, field)
         sys.stdout.buffer.write(name.encode() + b"\0" + str(value).encode() + b"\0")
 
 
@@ -51,16 +56,12 @@ def _network_overlay(runner: str) -> dict[str, object]:
 
 def operator_config(path: str, runner: str) -> None:
     try:
+        platform = _platforms()[runner]
         # The registry's tracked per-SKU `operator` block is the baseline
         # (de-secreted by operator decision); an operator config document, when
-        # provided, overrides it per field. Path "-" means registry-only — and
-        # for SKUs with no tracked block it preserves the no-config behavior
-        # (emit nothing).
-        selected = dict(_platforms()[runner].get("operator", {}))
-        if path == "-":
-            if not selected:
-                return
-        else:
+        # provided, overrides it per field. Path "-" means registry-only.
+        selected = dict(platform.get("operator", {}))
+        if path != "-":
             with open(path, encoding="utf-8") as stream:
                 document = json.load(stream)
             selected.update(document["runners"].get(runner, {}))
@@ -87,6 +88,7 @@ def operator_config(path: str, runner: str) -> None:
                 raise ValueError
         if any(not isinstance(value, (str, int)) or "\0" in str(value) for value in selected.values()):
             raise ValueError
+        selected.update({field: platform[field] for field in PLATFORM_FIELDS})
         emit(selected)
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-config", file=sys.stderr)

@@ -36,7 +36,7 @@ case "$RUNNER" in
   *) collx_die "COLLX_SHARD_SKU is not a registered NVIDIA SKU" ;;
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-deepep-v2}"
-export COLLX_IMAGE_PLATFORM=linux/amd64 COLLX_VENDOR=nvidia
+export COLLX_VENDOR=nvidia
 # ---- setup: operator config, canonical env, topology, network profile -------
 collx_launcher_prologue "$RUNNER"
 
@@ -44,7 +44,7 @@ NODES="${COLLX_NODES:-1}"; GPN="${COLLX_GPUS_PER_NODE:-8}"
 SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-8}"
 NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
-IMAGE="${COLLX_IMAGE:-$COLLX_IMAGE_MULTIARCH}"
+IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   deepep-v2) ;;
@@ -60,7 +60,7 @@ else
 fi
 export NCCL_CUMEM_ENABLE=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
-collx_require_vars COLLX_PARTITION COLLX_SQUASH_DIR
+collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_SQUASH_DIR
 [ "$REQUIRE_ACCOUNT" = 0 ] || collx_require_vars COLLX_ACCOUNT
 # b300 /home and /scratch are node-local; h100-dgxc /home is login-local (absent on
 # compute nodes) — on both, the implicit passwd-home stage base is compute-invisible,
