@@ -1752,13 +1752,14 @@ dsv4-fp4-b200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 32 }
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic:
@@ -1840,14 +1841,13 @@ dsv4-fp4-b200-vllm-mtp:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 128, spec-decoding: mtp }
+      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 4096, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      # 8k/1k TP=8 caps at conc=16 (not 32) to avoid OOM observed at conc=32:
-      # https://github.com/SemiAnalysisAI/InferenceX/actions/runs/25134892257/job/73670854021
-      - { tp: 8, conc-start: 1, conc-end: 16, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
