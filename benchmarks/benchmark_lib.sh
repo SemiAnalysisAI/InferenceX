@@ -1345,7 +1345,10 @@ PYPATCH
 
 _install_swebench_deps() {
     # Best-effort (mirrors _install_lm_eval_deps); a real failure surfaces at scoring.
-    python3 -m pip install -q --no-cache-dir --break-system-packages swebench || true
+    # Pinned: the scoring-harness CLI flags (--modal true / --max_workers /
+    # --timeout) and the _patch_swebench_scoring anchors are verified against
+    # 4.1.0; an unpinned upgrade could drift either. Bump deliberately.
+    python3 -m pip install -q --no-cache-dir --break-system-packages 'swebench==4.1.0' || true
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then
         python3 -m pip install -q --no-cache-dir --break-system-packages modal || true
         _patch_swebench_scoring || \

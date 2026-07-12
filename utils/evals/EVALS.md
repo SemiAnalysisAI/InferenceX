@@ -188,20 +188,27 @@ append_lm_eval_summary
 - Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
-- Generation modes (`SWEBENCH_GEN_MODE`): `single-shot` (default; lm-eval, one prompt per
-  instance — cheap floor baseline) or `agentic` (mini-swe-agent loop against the local endpoint;
-  each instance's shell runs in a Modal sandbox via swe-rex — the real SWE-bench setting). Agentic
-  knobs: `SWEBENCH_AGENT_WORKERS` (8), `SWEBENCH_AGENT_STEP_LIMIT` (30), `SWEBENCH_AGENT_TIMEOUT` (4h).
-- Knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
-  `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only),
-  `SWEBENCH_USE_MODAL=true` (score on Modal remote sandboxes instead of local Docker). Modal
-  credentials: set `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide
-  `~/.modal.toml`; if the file is absent the env vars are bootstrapped into it automatically.
-  The scoring dataset is derived from the YAML's `dataset_path` so generation and scoring can't
-  diverge; `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
-- **Requires Docker + ~120 GB disk on the scoring host.** This is an MVP; the single-shot prompt and
-  diff extraction still need tuning to reach published resolved-rates, and the `thresholds.json` entry
-  needs calibration from a baseline run.
+- Generation modes (`SWEBENCH_GEN_MODE`): `agentic` (default; mini-swe-agent loop against the
+  local endpoint, each instance's shell running in a Modal sandbox via swe-rex — the real
+  SWE-bench setting) or `single-shot` (lm-eval, one prompt per instance — a ~10% floor baseline,
+  kept only as an explicit debugging escape hatch). Agentic knobs: `SWEBENCH_AGENT_WORKERS`
+  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (75), `SWEBENCH_AGENT_TIMEOUT`
+  (4h), `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), `SWEBENCH_MODAL_APP_NAME`
+  (`infx-evals-swe`).
+- Run size: `EVAL_LIMIT` empty runs the 50-instance CI slice; `EVAL_LIMIT=full` (or `0`) runs the
+  whole ~300-instance split; a positive integer runs the first N.
+- Scoring knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
+  `SWEBENCH_EVAL_SANDBOX_CPU` (cores per scoring sandbox, default 2), `SWEBENCH_EVAL_TIMEOUT`
+  (per-instance test timeout, default 900s), `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac),
+  `SWEBENCH_SKIP_SCORE=true` (generate-only), `SWEBENCH_USE_MODAL=true` (score on Modal remote
+  sandboxes instead of local Docker — the CI path). Modal credentials: set
+  `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide `~/.modal.toml`;
+  if the file is absent the env vars are bootstrapped into it automatically. The scoring dataset
+  is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
+  `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
+- Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
+  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.json` gate is `0.50`, calibrated
+  from full-split runs (54%) with the 50-slice comfortably above (62–76%).
 
 ## Task files
 The following files are task definitions from lm-eval; more information on changes lives within the files:
