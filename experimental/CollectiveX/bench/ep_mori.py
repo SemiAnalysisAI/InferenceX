@@ -6,8 +6,10 @@ import os
 import sys
 import types
 
-# MoRI registers the whole symmetric heap at import time. The pinned upstream
-# inter-node benchmark uses 6 GiB for its InterNodeV1 staging and signal buffers.
+# MoRI reads the symmetric-heap size when the heap is created (at shmem init,
+# once a process group exists — see create_buffer). The pinned upstream
+# inter-node benchmark uses 6 GiB for its InterNodeV1 staging and signal
+# buffers; under VMM_HEAP this is a virtual reservation backed on demand.
 os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 
 import torch
@@ -81,6 +83,17 @@ class MoRIBackend(EPBackend):
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
+        # Scale-out EP16 registers the symmetric heap over the AMD AI NIC. The
+        # default STATIC_HEAP registers it as one contiguous MR; on the Ionic
+        # stack that registration fails during InterNodeV1 init (an EINVAL that
+        # is a firmware command failure, not an MR-size violation — the NIC
+        # advertises multi-GiB max_mr_size). VMM_HEAP backs the same reservation
+        # with on-demand 64 MiB DMA-BUF chunks, the supported inter-node path
+        # (MoRI PR #155, validated on MI355X + AI NIC). Read at heap init below,
+        # so it must precede shmem_torch_process_group_init. Scale-up EP8 is
+        # intranode (no RDMA registration) and keeps the default heap.
+        if self._inter_node:
+            os.environ["MORI_SHMEM_MODE"] = "VMM_HEAP"
         mori.shmem.shmem_torch_process_group_init("default")
         realized_qps = int(mori.shmem.shmem_num_qp_per_pe())
         if realized_qps < self.num_qps:
