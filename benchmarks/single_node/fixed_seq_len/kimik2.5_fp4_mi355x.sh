@@ -46,21 +46,19 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export AMDGCN_USE_BUFFER_OPS=1
+export VLLM_ROCM_USE_AITER_MLA_PS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-
-# Disable AITER RMSNorm for TP < 8 due to accuracy issues
-if [ "${TP}" -lt 8 ]; then
-  export VLLM_ROCM_USE_AITER_RMSNORM=0
-fi
+export VLLM_ROCM_USE_SKINNY_GEMM=0
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+export VLLM_ROCM_USE_AITER_TUNED_UNQUANTISED_GEMM=1
+export VLLM_ROCM_DISABLE_ATTENTION_LINEAR_LAYER_DYNAMIC_MXFP4_QUANT=1
 
 if [ "${EP_SIZE:-0}" -gt 1 ]; then
   EP=" --enable-expert-parallel"
 else
   EP=" "
 fi
-
-# following AMD andy luo's recipe
-# https://x.com/linluo77/status/2017024513595301985
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -69,13 +67,21 @@ set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
---gpu-memory-utilization 0.90 \
---max-model-len $MAX_MODEL_LEN \
---block-size=1 \
---no-enable-prefix-caching \
 --trust-remote-code \
 --no-enable-prefix-caching \
---mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
+--max-model-len $MAX_MODEL_LEN \
+--max-num-seqs 512 \
+--max-num-batched-tokens 65536 \
+--reasoning-parser kimi_k2 \
+--tool-call-parser kimi_k2 \
+--enable-auto-tool-choice \
+--gpu-memory-utilization 0.9 \
+--mm-encoder-tp-mode data \
+--attention-backend ROCM_AITER_MLA \
+--block-size 1 \
+--kv-cache-dtype fp8 \
+--compilation-config '{"pass_config": {"fuse_allreduce_rms": true, "eliminate_noops": true, "fuse_rope_kvcache_cat_mla": true}, "custom_ops": ["none", "+rms_norm"], "compile_ranges_endpoints": [64], "cudagraph_mode": "full_and_piecewise", "use_inductor_graph_partition": true}' \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
