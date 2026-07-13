@@ -4605,6 +4605,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-atom
+  description:
+    - "Update ATOM image from rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511 to rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539"
+    - "Enable ATOM_DISABLE_MMAP=true, AITER_QUICK_REDUCE_QUANTIZATION=INT4, AITER_MXFP4_INTERMEDIATE=1; add --scheduler-delay-factor 1 to server launch"
+    - "Conc 4 only for both 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2132
+
+- config-keys:
     - dsv4-fp4-mi355x-vllm-agentic
   description:
     - "Update vLLM ROCm image from v0.22.0 to nightly-09663abde0f50944a8d5ea30120666024b503faa"
@@ -4716,3 +4724,12 @@
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+    - dsv4-fp4-b200-vllm-mtp
+    - dsv4-fp4-b300-vllm
+    - dsv4-fp4-b300-vllm-mtp
+  description:
+    - "Bump vLLM image to v0.25.0 for DeepSeek-V4-Pro FP4 on B200 and B300."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2169
