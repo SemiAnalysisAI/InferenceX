@@ -152,15 +152,11 @@ env:
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
-  # SWE-bench scoring runs on Modal (GPU runners have no Docker); creds are
-  # bootstrapped into ~/.modal.toml by benchmark_lib.sh:_ensure_modal_credentials.
+  # GPU runners use Modal instead of local Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-  # Known-bad b300 nodes, excluded until infra repairs them (salloc honors
-  # this env natively). b300-005: NCCL/CUDA init death (jobs 30508/30548).
-  # b300-006: wedged nvidia driver, container-cli rpc timeout (run
-  # 28958779201). Remove entries as nodes are fixed.
+  # Exclude broken b300 nodes until infrastructure repairs them.
   SALLOC_EXCLUDE: 'b300-005,b300-006'
 
 permissions:

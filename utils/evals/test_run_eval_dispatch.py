@@ -1,20 +1,15 @@
-"""run_eval framework dispatch.
+"""Behavioral tests for eval dispatch and shell integration."""
 
-Scenario picks the default framework (agentic-coding -> swebench, fixed-seq-len
--> lm-eval); an explicit EVAL_FRAMEWORK env or --framework arg overrides it.
-"""
+from __future__ import annotations
 
 import os
 import stat
 import subprocess
-import tempfile
 from pathlib import Path
 
 BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
 
-# Stub the framework runners so dispatch is observable without a server/Docker,
-# and pin EVAL_MAX_MODEL_LEN so run_eval skips context computation. CLI_FW is
-# only forwarded as --framework when set (so we can test the no-arg path).
+# Replace external runners so dispatch can be observed without a model server.
 _SCRIPT = r'''
 source "$BENCHMARK_LIB"
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
@@ -26,10 +21,7 @@ run_eval ${CLI_FW:+--framework "$CLI_FW"} --port 8888
 
 
 def _dispatch(*, is_agentic: str = "0", cli_fw=None, env_fw=None) -> str:
-    # AgentX v1.0 added a source-time guard in benchmark_lib.sh that requires
-    # KV_OFFLOADING to be set whenever the scenario is agentic (IS_AGENTIC=1 /
-    # SCENARIO_TYPE=agentic-coding). KV_OFFLOADING=none satisfies it without
-    # affecting framework dispatch, which only reads scenario + framework knobs.
+    # Agentic scenarios require an explicit KV-offload setting at source time.
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
@@ -79,14 +71,53 @@ def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0", cli_fw="lm-eval")
 
 
-# --- EVAL_LIMIT smoke-test knob --------------------------------------------
-#
-# Use a shim python3 on PATH that echoes its args and exits 0 so we can
-# observe the constructed lm_eval command line without a real server.
+def _run_invalid_call(call: str) -> subprocess.CompletedProcess:
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "KV_OFFLOADING": "none",
+    }
+    return subprocess.run(
+        ["bash", "-c", f'source "$BENCHMARK_LIB"; {call}'],
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+
+def test_run_eval_rejects_missing_framework_value():
+    result = _run_invalid_call("run_eval --framework")
+    assert result.returncode == 2
+    assert "--framework requires a value" in result.stderr
+
+
+def test_run_lm_eval_rejects_missing_option_value():
+    result = _run_invalid_call("run_lm_eval --port")
+    assert result.returncode == 2
+    assert "--port requires a value" in result.stderr
+
+
+def test_lm_patch_copy_resolves_outside_repo(tmp_path):
+    script = r'''
+source "$BENCHMARK_LIB"
+cd "$OTHER_CWD"
+_patch_lm_eval
+patch_dir=${PYTHONPATH%%:*}
+cmp "$(_eval_patches_dir)/lm_eval_sitecustomize.py" "$patch_dir/sitecustomize.py"
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "OTHER_CWD": str(tmp_path),
+        "KV_OFFLOADING": "none",
+    }
+    subprocess.run(["bash", "-c", script], env=env, check=True)
+
+
+# A python shim exposes the generated lm-eval command without a model server.
 
 _EVAL_LIMIT_SCRIPT = r'''
 set -e
-# Build a tiny python3 shim that just echoes its args to stdout
 SHIM_DIR=$(mktemp -d)
 cat > "$SHIM_DIR/python3" <<'PY'
 #!/usr/bin/env bash
@@ -102,7 +133,6 @@ export MODEL_NAME=test-model
 export OPENAI_API_KEY=EMPTY
 export INFERENCEX_LM_EVAL_RUNTIME_READY=true
 
-# Intercept _install_lm_eval_deps and _patch_lm_eval so they are no-ops
 _install_lm_eval_deps() { :; }
 _patch_lm_eval() { :; }
 
@@ -111,7 +141,6 @@ PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999 2>&1
 
 
 def _run_lm_eval_cmdline(*, eval_limit=None) -> str:
-    """Run run_lm_eval with a python3 shim and return captured stdout."""
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
@@ -245,104 +274,8 @@ def test_modal_creds_no_remap_when_disabled(tmp_path):
     assert "TOML_EXISTS" not in out
 
 
-# --- SWEBENCH_NAMESPACE ns_args construction tests -------------------------
-#
-# Tests that the ns_args array construction in benchmark_lib.sh handles the
-# three cases correctly: unset (0 args), empty (2 args with empty value),
-# and set-with-value (2 args with the value).
 
-_NS_ARGS_SNIPPET = r'''
-# Replicate the ns_args construction from benchmark_lib.sh (wrapped in a
-# function so `local` is valid, matching the original context).
-_test_ns_args() {
-    local ns_args=()
-    if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
-    echo "COUNT=${#ns_args[@]}"
-    if [ "${#ns_args[@]}" -gt 0 ]; then
-        echo "ARG0=${ns_args[0]}"
-        echo "ARG1=${ns_args[1]}"
-    fi
-}
-_test_ns_args
-'''
-
-
-def _run_ns_args(*, namespace_set: bool, namespace_value: str = "") -> dict:
-    """Run the ns_args snippet and return a dict of parsed KEY=VALUE outputs."""
-    if namespace_set:
-        env_extra = {"SWEBENCH_NAMESPACE": namespace_value}
-    else:
-        env_extra = {}
-    env = {k: v for k, v in os.environ.items() if k != "SWEBENCH_NAMESPACE"}
-    env.update(env_extra)
-    script = "set -e\n" + _NS_ARGS_SNIPPET
-    res = subprocess.run(
-        ["bash", "-c", script],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    parsed = {}
-    for line in res.stdout.splitlines():
-        if "=" in line:
-            k, _, v = line.partition("=")
-            parsed[k] = v
-    return parsed
-
-
-def test_ns_args_unset_produces_zero_args():
-    """When SWEBENCH_NAMESPACE is unset, ns_args should be empty (0 args)."""
-    result = _run_ns_args(namespace_set=False)
-    assert result["COUNT"] == "0", f"Expected COUNT=0, got: {result}"
-
-
-def test_ns_args_empty_produces_two_args():
-    """When SWEBENCH_NAMESPACE is set but empty, ns_args should be (--namespace '')."""
-    result = _run_ns_args(namespace_set=True, namespace_value="")
-    assert result["COUNT"] == "2", f"Expected COUNT=2, got: {result}"
-    assert result["ARG0"] == "--namespace"
-    assert result["ARG1"] == ""
-
-
-def test_ns_args_value_produces_two_args():
-    """When SWEBENCH_NAMESPACE has a value, ns_args should be (--namespace <value>)."""
-    result = _run_ns_args(namespace_set=True, namespace_value="my-namespace")
-    assert result["COUNT"] == "2", f"Expected COUNT=2, got: {result}"
-    assert result["ARG0"] == "--namespace"
-    assert result["ARG1"] == "my-namespace"
-
-
-def test_benchmark_lib_no_longer_uses_old_namespace_pattern():
-    """Static assertion: benchmark_lib.sh must not contain the old word-split pattern."""
-    content = BENCHMARK_LIB.read_text()
-    assert "${SWEBENCH_NAMESPACE+--namespace" not in content, (
-        "benchmark_lib.sh still contains the old ${SWEBENCH_NAMESPACE+--namespace ...} pattern"
-    )
-    assert "ns_args" in content, (
-        "benchmark_lib.sh does not contain the ns_args fix"
-    )
-
-
-# --- include_path wiring for swebench generation ---------------------------
-#
-# The pinned lm-eval (0.4.9.2, ref b315ef3) crashes with
-# KeyError: '<task_name>' in pretty_print_task when --tasks receives a path to
-# an external YAML whose task: name is not in lm-eval's bundled registry.
-# The fix is to invoke with --include_path <dir> --tasks <task-name> instead.
-#
-# Two tests:
-#   1. Dynamic: drive run_lm_eval directly via the shim with
-#      EVAL_INCLUDE_PATH=utils/evals and EVAL_TASKS_DIR=swebench_lite; assert
-#      --include_path utils/evals and --tasks swebench_lite appear in argv and
-#      that argv contains no .yaml path in the --tasks position.
-#   2. Default (EVAL_INCLUDE_PATH unset): --include_path must be absent and
-#      --tasks must carry the default utils/evals/gsm8k.yaml path unchanged.
-#   3. Static: run_swebench_eval's source must contain the EVAL_INCLUDE_PATH
-#      wiring (EVAL_INCLUDE_PATH= and dirname), proving the include-path form
-#      is wired for the swebench generation call.
-
-# Reuse the shim-based _EVAL_LIMIT_SCRIPT infrastructure.
+# lm-eval requires external task YAMLs to be registered through --include_path.
 _INCLUDE_PATH_SCRIPT = r'''
 set -e
 SHIM_DIR=$(mktemp -d)
@@ -372,7 +305,6 @@ def _run_lm_eval_with_include_path(
     eval_include_path: str | None = None,
     eval_tasks_dir: str | None = None,
 ) -> str:
-    """Run run_lm_eval with the shim and optional EVAL_INCLUDE_PATH/EVAL_TASKS_DIR."""
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
@@ -395,7 +327,6 @@ def _run_lm_eval_with_include_path(
 
 
 def test_include_path_injected_when_eval_include_path_set():
-    """When EVAL_INCLUDE_PATH is set, --include_path <dir> appears before --tasks."""
     out = _run_lm_eval_with_include_path(
         eval_include_path="utils/evals",
         eval_tasks_dir="swebench_lite",
@@ -406,15 +337,13 @@ def test_include_path_injected_when_eval_include_path_set():
     assert "--tasks swebench_lite" in out, (
         f"Expected '--tasks swebench_lite' in output:\n{out}"
     )
-    # Must NOT pass a .yaml path to --tasks
     assert ".yaml" not in out.split("--tasks")[1].split()[0], (
         f"--tasks must not contain a .yaml path when include_path is set:\n{out}"
     )
 
 
 def test_include_path_absent_when_eval_include_path_unset():
-    """When EVAL_INCLUDE_PATH is unset, --include_path must not appear and --tasks carries the default yaml path."""
-    out = _run_lm_eval_with_include_path()  # both env vars unset
+    out = _run_lm_eval_with_include_path()
     assert "--include_path" not in out, (
         f"Expected no '--include_path' in output:\n{out}"
     )
@@ -423,15 +352,34 @@ def test_include_path_absent_when_eval_include_path_unset():
     )
 
 
-def test_swebench_eval_source_contains_include_path_wiring():
-    """Static: run_swebench_eval source must wire EVAL_INCLUDE_PATH and use dirname."""
-    content = BENCHMARK_LIB.read_text()
-    assert "EVAL_INCLUDE_PATH=" in content, (
-        "benchmark_lib.sh run_swebench_eval does not set EVAL_INCLUDE_PATH"
+def test_swebench_single_shot_registers_task_yaml():
+    script = r'''
+source "$BENCHMARK_LIB"
+run_lm_eval() {
+    echo "TASK=$EVAL_TASKS_DIR"
+    echo "INCLUDE=$EVAL_INCLUDE_PATH"
+    return 9
+}
+export SWEBENCH_GEN_MODE=single-shot
+export EVAL_TASKS_DIR="$TASK_YAML"
+export MODEL=test-model
+run_swebench_eval
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "TASK_YAML": str(BENCHMARK_LIB.parents[1] / "utils/evals/swebench_lite.yaml"),
+        "KV_OFFLOADING": "none",
+    }
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
     )
-    assert 'dirname "$yaml_path"' in content or "dirname \"$yaml_path\"" in content, (
-        "benchmark_lib.sh run_swebench_eval does not derive EVAL_INCLUDE_PATH via dirname"
-    )
+    assert result.returncode == 9
+    assert "TASK=swebench_lite" in result.stdout
+    assert f"INCLUDE={BENCHMARK_LIB.parents[1] / 'utils/evals'}" in result.stdout
 
 
 def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):

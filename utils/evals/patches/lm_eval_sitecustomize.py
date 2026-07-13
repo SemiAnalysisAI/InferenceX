@@ -1,60 +1,46 @@
-"""lm-eval compatibility patches, loaded via sitecustomize.
+"""Runtime compatibility hooks for lm-eval 0.4.9.2."""
 
-_patch_lm_eval (benchmarks/benchmark_lib.sh) copies this file into a temp
-dir as sitecustomize.py and prepends that dir to PYTHONPATH, so Python
-imports it automatically before lm_eval runs.
+import json
 
-1. Reasoning token handling: extracts reasoning_content when
-   message.content is empty.
-2. TRT compatibility: avoids injecting {"type": "text"} for non-HF
-   tokenizers.
-"""
-# --- Patch LocalChatCompletion.parse_generations to handle empty content with reasoning_content ---
-import re, sys, unicodedata, json
-from lm_eval.filters import extraction as ex
-from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
+from lm_eval.models.openai_completions import LocalChatCompletion
 
-def _le_parse_generations(outputs, **kwargs):
-      res = []
-      if not isinstance(outputs, list):
-          outputs = [outputs]
-      for out in (outputs or []):
-          try:
-              choices = out.get("choices", [])
-              tmp = ["" for _ in choices]
-              for choice in choices:
-                  idx = choice.get("index", 0)
-                  msg = (choice.get("message") or {})
-                  content = msg.get("content")
-                  if content in (None, "", []):
-                      content = msg.get("reasoning_content") or ""
-                  tmp[idx] = content
-          except Exception:
-              tmp = [""]
-          res.extend(tmp)
-      return res
 
-# Keep staticmethod semantics
-_LCC.parse_generations = staticmethod(_le_parse_generations)
+def _parse_generations(outputs, **kwargs):
+    results = []
+    if not isinstance(outputs, list):
+        outputs = [outputs]
+    for output in outputs or []:
+        try:
+            choices = output.get("choices", [])
+            parsed = ["" for _ in choices]
+            for choice in choices:
+                index = choice.get("index", 0)
+                message = choice.get("message") or {}
+                content = message.get("content")
+                if content in (None, "", []):
+                    content = message.get("reasoning_content") or ""
+                parsed[index] = content
+        except Exception:
+            parsed = [""]
+        results.extend(parsed)
+    return results
 
-# --- Patch TemplateAPI.apply_chat_template to avoid injecting "type": "text" for TRT ---
+
+LocalChatCompletion.parse_generations = staticmethod(_parse_generations)
+
 try:
-    from lm_eval.models import api_models as _api_models
-    _TemplateAPI = _api_models.TemplateAPI
-    _JsonChatStr = _api_models.JsonChatStr
-except Exception:
-    _TemplateAPI = None
-    _JsonChatStr = None
+    from lm_eval.models.api_models import JsonChatStr, TemplateAPI
+except ImportError:
+    JsonChatStr = None
+    TemplateAPI = None
 
-if _TemplateAPI is not None and _JsonChatStr is not None:
-    _orig_apply_chat_template = _TemplateAPI.apply_chat_template
+if TemplateAPI is not None and JsonChatStr is not None:
 
-    def _patched_apply_chat_template(
+    def _apply_chat_template(
         self,
         chat_history,
         add_generation_prompt: bool = True,
     ):
-        """Applies a chat template to a list of chat history between user and model."""
         if self.tokenizer_backend == "huggingface" and self.tokenized_requests:
             return self.tokenizer.apply_chat_template(
                 chat_history,
@@ -62,15 +48,8 @@ if _TemplateAPI is not None and _JsonChatStr is not None:
                 add_generation_prompt=add_generation_prompt,
                 continue_final_message=not add_generation_prompt,
             )
-        elif self.tokenizer_backend == "remote" and self.tokenized_requests:
+        if self.tokenizer_backend == "remote" and self.tokenized_requests:
             return chat_history
-        else:
-            # NOTE: we no longer inject `"type": "text"` when tokenizer is None / non-HF
-            return _JsonChatStr(
-                json.dumps(
-                    [{**item} for item in chat_history],
-                    ensure_ascii=False,
-                )
-            )
+        return JsonChatStr(json.dumps(list(chat_history), ensure_ascii=False))
 
-    _TemplateAPI.apply_chat_template = _patched_apply_chat_template
+    TemplateAPI.apply_chat_template = _apply_chat_template

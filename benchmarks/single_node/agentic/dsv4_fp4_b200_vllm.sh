@@ -239,11 +239,8 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    # Eval-only: skip the multi-turn agentic replay and run the eval against the
-    # live server. run_eval auto-selects swebench for agentic-coding scenario.
     maybe_run_eval "$PORT"
 else
-    # ---- Run benchmark ------------------------------------------------------
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi

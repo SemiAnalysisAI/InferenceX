@@ -1,40 +1,7 @@
 #!/usr/bin/env python3
-"""Validate eval scores against minimum thresholds.
+"""Validate eval scores against per-task and per-model thresholds."""
 
-Reads lm-eval results JSON files and checks that scored metrics meet the
-required minimum.  Thresholds are configured per-task, with optional per-model
-overrides, in a YAML config file (default: utils/evals/thresholds.yaml):
-
-    default:
-      gsm8k: 0.85
-      gpqa_diamond_cot_n_shot: 0.30
-    models:
-      dsv4:
-        gsm8k: 0.90
-      glm5:
-        gsm8k: 0.92
-
-The model is identified by its `infmax_model_prefix` (e.g. "dsv4", "glm5"),
-read from meta_env.json in the current directory -- written alongside the
-results*.json files by the eval harness.  For each task the threshold is
-resolved most-specific-first:
-
-    models[<prefix>][<task>]  ->  default[<task>]  ->  --min-score
-
-Models without an entry under "models" (or runs where the prefix can't be
-determined) fall back to the global default, then to --min-score.
-
-A legacy flat config ({"gsm8k": 0.85, ...}) is still accepted and treated as
-the global default with no per-model overrides.  JSON configs also still load:
-JSON is a YAML subset, and when PyYAML is unavailable the loader falls back to
-the json module (a YAML-only config then fails with a clear error).
-
-Usage:
-    python3 utils/evals/validate_scores.py
-    python3 utils/evals/validate_scores.py --thresholds my_thresholds.yaml
-    python3 utils/evals/validate_scores.py --model-prefix dsv4
-    python3 utils/evals/validate_scores.py --min-score 0.90  # flat fallback
-"""
+from __future__ import annotations
 import argparse
 import glob
 import json
@@ -213,17 +180,11 @@ def validate_batch_manifest(
 
 
 def main() -> int:
-    # CI merges this script's stdout and stderr into a single log.  When stdout
-    # is a pipe it is block-buffered by default and only flushes at exit, which
-    # pushes the informational header (e.g. "Loaded thresholds...") below the
-    # unbuffered stderr FAIL lines.  Force line buffering on both streams so
-    # every line reaches the log in emission order.
+    # Preserve stdout/stderr ordering in merged CI logs.
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(line_buffering=True)
         except (AttributeError, ValueError):
-            # Best-effort only: some wrapped streams (e.g. pytest's capture
-            # object) don't support reconfigure; leave their buffering as-is.
             pass
 
     parser = argparse.ArgumentParser(description="Validate eval scores")

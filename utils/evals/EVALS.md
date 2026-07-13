@@ -166,9 +166,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 
 ### Runtime patches (`utils/evals/patches/`)
 
-Runtime patches to third-party eval deps live as standalone Python files under
-`utils/evals/patches/`, applied by the `_patch_*` helpers in
-`benchmarks/benchmark_lib.sh` (rationale lives in each file's docstring):
+The benchmark helpers invoke these standalone scripts against pinned dependencies.
+Source rewrites are anchor-checked, idempotent, and atomic.
 
 - `lm_eval_sitecustomize.py` (`_patch_lm_eval`): reasoning-token handling
   (extracts `reasoning_content` when `message.content` is empty) and TRT
@@ -181,19 +180,18 @@ Runtime patches to third-party eval deps live as standalone Python files under
 
 ### SWE-bench Lite (`--framework swebench`)
 
-SWE-bench is **not** a `generate_until` QA task — it requires applying the model's
-patch to a repo and running tests in Docker, which lm-eval cannot do. So it runs
-through a dedicated framework that reuses lm-eval for *generation* only, then scores
-with the official `swebench` harness and emits an lm-eval-shaped results JSON
-(metric `exact_match,resolved` = resolved-rate) so collect/validate work unchanged.
+SWE-bench requires applying each generated patch and running repository tests.
+The dedicated framework uses mini-swe-agent for agentic generation by default,
+then scores predictions with the official SWE-bench harness. It emits
+`exact_match,resolved` in the existing lm-eval result shape so collection and
+validation remain shared with the other evals.
 
 ```bash
-run_eval --framework swebench --port "$PORT"   # generation (lm-eval) -> scoring (swebench)
+run_eval --framework swebench --port "$PORT"
 append_lm_eval_summary
 ```
 
-- Task: `utils/evals/swebench_lite.yaml` (generation) — SWE-bench Lite, the ~300-instance curated
-  quick-eval subset (no difficulty filter needed; Lite is already the lightweight set).
+- Task metadata and single-shot prompt: `utils/evals/swebench_lite.yaml`.
 - Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.

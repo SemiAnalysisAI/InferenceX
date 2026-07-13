@@ -1,10 +1,4 @@
-"""Tests for the SWE-bench Lite eval MVP (generation -> scoring -> lm-eval shape).
-
-Pure-stdlib paths (extract_patch, predictions, report parsing, results shape)
-run on any interpreter. The dataset filter and the collect/validate integration
-guard on optional deps / interpreter version so the file imports cleanly even on
-the macOS system python 3.9 used for local spot-checks.
-"""
+"""Behavioral tests for SWE-bench prediction generation and scoring."""
 
 import json
 import sys

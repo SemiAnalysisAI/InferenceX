@@ -1,49 +1,12 @@
-"""Patch swebench's Modal scorer (run_evaluation_modal.py), idempotent and
-anchor-checked like patch_swebench_agent.py. Run by _patch_swebench_scoring
-in benchmarks/benchmark_lib.sh.
+"""Runtime fixes for SWE-bench 4.1.0 Modal sandbox resource handling."""
 
-1. cpu=4 hardcoded per eval sandbox: Modal bills RESERVED cores and the test
-   runs are overwhelmingly single-threaded pytest, so 300 instances reserve
-   ~4x what they use. Patched to SWEBENCH_EVAL_SANDBOX_CPU (default 2 ->
-   measured $80.83 -> $41.57 per full-300 with identical results).
+import math
+import os
+import sys
+from pathlib import Path
 
-2. run_instance_modal never finalizes its ModalSandboxRuntime (the __exit__
-   that terminates the sandbox exists but nothing calls it), so every eval
-   sandbox idle-bills after its tests finish until the 30-min sandbox
-   timeout or app teardown. Invisible on the fast 50-slice (the whole app
-   ends in ~2 min); on full-300 the slow tail keeps the app alive ~40 min
-   and all 300 sandboxes bill ~30 min for ~3 min of work. A finally: on the
-   function's main try/except chain terminates the sandbox on every exit
-   path the moment the instance's evaluation ends.
-"""
-import os, sys
-
-cpu = os.environ.get("SWEBENCH_EVAL_SANDBOX_CPU", "2")
-try:
-    float(cpu)
-except ValueError:
-    print(f"WARN: SWEBENCH_EVAL_SANDBOX_CPU={cpu!r} is not numeric; leaving cpu=4", file=sys.stderr)
-    sys.exit(1)
-
-import swebench.harness.modal_eval.run_evaluation_modal as rem
-path = rem.__file__
-src = open(path).read()
-ok = True
-changed = False
-
-# hunk 1: reserved-cpu reduction
-if "inferencex scoring-cpu patch" in src:
-    print(f"[swebench] {path}: scoring-cpu patch already applied")
-elif src.count("cpu=4,") != 1:
-    print(f"WARN: [swebench] {path}: cpu=4 anchor not found exactly once "
-          f"(count={src.count('cpu=4,')}); skipping", file=sys.stderr)
-    ok = False
-else:
-    src = src.replace("cpu=4,", f"cpu={cpu},  # inferencex scoring-cpu patch")
-    changed = True
-    print(f"[swebench] {path}: eval sandbox cpu=4 -> cpu={cpu}")
-
-# hunk 2: terminate the sandbox when the instance's evaluation ends
+CPU_ANCHOR = "cpu=4,"
+CPU_MARKER = "inferencex scoring-cpu patch"
 LIFECYCLE_ANCHOR = (
     "            log_dir=log_dir,\n"
     "            errored=True,\n"
@@ -52,7 +15,7 @@ LIFECYCLE_ANCHOR = (
     "\n"
     "def run_instances_modal("
 )
-LIFECYCLE_NEW = (
+LIFECYCLE_REPLACEMENT = (
     "            log_dir=log_dir,\n"
     "            errored=True,\n"
     "        )\n"
@@ -65,17 +28,72 @@ LIFECYCLE_NEW = (
     "\n"
     "def run_instances_modal("
 )
-if "inferencex sandbox lifecycle patch" in src:
-    print(f"[swebench] {path}: sandbox lifecycle patch already applied")
-elif src.count(LIFECYCLE_ANCHOR) != 1:
-    print(f"WARN: [swebench] {path}: lifecycle anchor not found exactly once "
-          f"(count={src.count(LIFECYCLE_ANCHOR)}); skipping", file=sys.stderr)
-    ok = False
-else:
-    src = src.replace(LIFECYCLE_ANCHOR, LIFECYCLE_NEW)
-    changed = True
-    print(f"[swebench] {path}: eval sandboxes now terminate on instance completion")
+LIFECYCLE_MARKER = "inferencex sandbox lifecycle patch"
 
-if changed:
-    open(path, "w").write(src)
-sys.exit(0 if ok else 1)
+
+def _cpu_value() -> str:
+    value = os.environ.get("SWEBENCH_EVAL_SANDBOX_CPU", "2")
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise ValueError(
+            f"SWEBENCH_EVAL_SANDBOX_CPU={value!r} must be numeric"
+        ) from error
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValueError(
+            f"SWEBENCH_EVAL_SANDBOX_CPU={value!r} must be positive and finite"
+        )
+    return value
+
+
+def patch(path: str, cpu: str) -> bool:
+    source_path = Path(path)
+    source = source_path.read_text()
+    cpu_applied = CPU_MARKER in source
+    lifecycle_applied = LIFECYCLE_MARKER in source
+    failures = []
+
+    if not cpu_applied and source.count(CPU_ANCHOR) != 1:
+        failures.append(f"{CPU_ANCHOR!r} found {source.count(CPU_ANCHOR)} times")
+    if not lifecycle_applied and source.count(LIFECYCLE_ANCHOR) != 1:
+        failures.append(
+            f"lifecycle anchor found {source.count(LIFECYCLE_ANCHOR)} times"
+        )
+    if failures:
+        for failure in failures:
+            print(
+                f"WARN: [swebench] {source_path}: {failure}; no changes written",
+                file=sys.stderr,
+            )
+        return False
+
+    if not cpu_applied:
+        source = source.replace(
+            CPU_ANCHOR,
+            f"cpu={cpu},  # {CPU_MARKER}",
+        )
+    if not lifecycle_applied:
+        source = source.replace(LIFECYCLE_ANCHOR, LIFECYCLE_REPLACEMENT)
+
+    if cpu_applied and lifecycle_applied:
+        print(f"[swebench] {source_path}: patch already applied")
+    else:
+        source_path.write_text(source)
+        print(f"[swebench] {source_path}: patch applied with cpu={cpu}")
+    return True
+
+
+def main() -> int:
+    try:
+        cpu = _cpu_value()
+    except ValueError as error:
+        print(f"WARN: {error}; leaving SWE-bench unmodified", file=sys.stderr)
+        return 1
+
+    import swebench.harness.modal_eval.run_evaluation_modal as modal_evaluation
+
+    return 0 if patch(modal_evaluation.__file__, cpu) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
