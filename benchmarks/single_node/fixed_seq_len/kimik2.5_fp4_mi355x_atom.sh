@@ -60,7 +60,6 @@ python3 -m atom.entrypoints.openai_server \
     --enable-dp-attention \
     --enable-tbo \
     --prefill-batch-token-threshold 10240 \
-    --scheduler-delay-factor 1 \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --trust-remote-code \
     > $SERVER_LOG 2>&1 &
