@@ -37,10 +37,11 @@ def case_id(sku: str, case: dict) -> str:
 # Workload and timing values arrive from configs/suites.yaml through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
 # Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
-# The expectation reproduces the exact per-rank BF16 contributions, so a correct
-# backend's only residual is its cross-rank accumulation: <= topk (8) BF16
-# additions/store at one ulp (2^-8) each. Below the magnitude floor the gate is
-# effectively absolute (cancellation makes relative error meaningless there).
+# _expected_transformed_combine reproduces the two-level (intra-domain FP32,
+# per-domain BF16 scale-out partial) reduction, so a correct backend's only
+# residual is the accumulation-order ambiguity the model cannot pin down: at most
+# topk (8) BF16 stores at one ulp (2^-8) each. Below the magnitude floor the gate
+# is effectively absolute (cancellation makes relative error meaningless there).
 COMBINE_REL_TOL = 8 * 2.0 ** -8
 COMBINE_MAG_FLOOR = 2e-2
 
@@ -310,27 +311,46 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     return transformed.to(payload.dtype)
 
 
-def _expected_transformed_combine(torch, problem, experts_per_rank):
-    """Sum the exact per-destination-rank contributions combine receives: each
-    rank's FP32 local-expert aggregate is cast to the payload dtype before the
-    sum (as _expert_transform casts it), so the expectation models the
-    communicated BF16 rounding instead of hiding it inside a wide tolerance."""
+def _expected_transformed_combine(torch, problem, experts_per_rank, scale_up_domain):
+    """Reproduce the two-level reduction combine actually performs, so the
+    expectation carries the same BF16 rounding a correct backend does rather than
+    hiding it in a wide tolerance. Each destination rank casts its FP32 local
+    aggregate to the payload dtype (as _expert_transform does). Ranks sharing a
+    scale-up domain (NVLink/MNNVL) then reduce in FP32, and each domain casts its
+    aggregate to the payload dtype for the scale-out send before those
+    communicated BF16 partials are summed. When the whole EP group fits in one
+    scale-up domain (ep_size <= scale_up_domain — every EP8 case and the MNNVL
+    EP16 cases) there is a single domain and no scale-out rounding; a multi-node
+    RoCE EP16 group has one BF16 partial per node, and omitting that cast is what
+    left the scale-out combine ~0.048 off a single-domain reference."""
     semantic_x = getattr(problem, "oracle_x", problem.x)
     expert_ids = problem.topk_idx.to(torch.int64)
     weights = problem.topk_weights.to(torch.float32)
     pattern = _column_pattern(torch, semantic_x.shape[1], semantic_x.device)
+    dtype = semantic_x.dtype
     destination = expert_ids // experts_per_rank
+    ranks_per_domain = max(1, scale_up_domain)
+    domains: dict[int, object] = {}
     scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
-    expected = torch.zeros_like(semantic_x, dtype=torch.float32)
     for rank_id in destination.unique().tolist():
         gate = weights * (destination == rank_id)
+        # Per-rank BF16 output, FP32-accumulated within its scale-up domain.
         contribution = (
             semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
             + (gate * offset_a).sum(dim=1, keepdim=True)
             + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-        )
-        # Unrouted tokens contribute an exact zero (all gates zero) — no mask needed.
-        expected += contribution.to(semantic_x.dtype).float()
+        ).to(dtype).float()
+        domain = rank_id // ranks_per_domain
+        if domain in domains:
+            domains[domain] += contribution
+        else:
+            domains[domain] = contribution
+    # Each domain's aggregate is cast to the communicated payload dtype (the
+    # scale-out send) before the partials are summed. Unrouted tokens carry an
+    # exact zero through every level (all gates zero) — no mask needed.
+    expected = torch.zeros_like(semantic_x, dtype=torch.float32)
+    for domain in sorted(domains):
+        expected += domains[domain].to(dtype).float()
     return expected
 
 
@@ -369,6 +389,7 @@ def _run_expert_oracle(
     global_weights,
     rank: int,
     experts_per_rank: int,
+    scale_up_domain: int,
     seed: int,
 ):
     """Verify one real dispatch/transform/combine without entering a timed region."""
@@ -455,7 +476,9 @@ def _run_expert_oracle(
     view.combine_input = transformed
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
-    expected_combined = _expected_transformed_combine(torch, problem, experts_per_rank)
+    expected_combined = _expected_transformed_combine(
+        torch, problem, experts_per_rank, scale_up_domain
+    )
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
         max_absolute_error = max_elementwise_relative_error = 0.0
@@ -573,7 +596,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         )
         oracle = _run_expert_oracle(
             torch, routing, backend, problem, idx_g, w_g, rank, experts_per_rank,
-            args.seed,
+            scale_up_domain, args.seed,
         )
         before_x, before_idx, before_weights = input_snapshots[T]
         pre_input_unchanged = (
@@ -632,7 +655,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         idx_g, w_g = global_traces[T]
         post = _run_expert_oracle(
             torch, routing, backend, problem, idx_g, w_g, rank, experts_per_rank,
-            args.seed,
+            scale_up_domain, args.seed,
         )
         pre = gate[T]["oracle_pre"]
         gate[T].update({

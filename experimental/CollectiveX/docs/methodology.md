@@ -120,11 +120,16 @@ routing cannot pass an identity roundtrip. For every rank and point it verifies:
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values
-actually communicated: each destination rank's FP32 aggregate is cast to the payload dtype (BF16)
-exactly as the adapter casts it, and those exact contributions are summed. The gate is therefore
-tight — max elementwise relative error (denominator clamped at 0.02) below `8 * 2^-8`, the bound for
-eight rank contributions accumulated and stored in BF16. It is a correctness gate, not an estimate
-of transport error. Any failed rank or point makes the case ineligible in the result it writes.
+actually communicated, reproducing the two-level reduction: each destination rank casts its FP32
+aggregate to the payload dtype (BF16) exactly as the adapter does; ranks sharing a scale-up domain
+(NVLink/MNNVL) reduce in FP32, and each domain casts its aggregate to BF16 for the scale-out send
+before those partials are summed. A group that fits in one scale-up domain (`ep_size <=
+scale_up_domain` — every EP8 case and the MNNVL EP16 cases) has a single domain and no scale-out
+rounding; a multi-node RoCE EP16 group carries one BF16 partial per node. Modelling that per-domain
+cast is what lets the gate stay tight — max elementwise relative error (denominator clamped at 0.02)
+below `8 * 2^-8`, the residual accumulation-order ambiguity — across scale-up and scale-out topologies
+alike (omitting it left multi-node EP16 ~0.048 off, above the gate). It is a correctness gate, not an
+estimate of transport error. Any failed rank or point makes the case ineligible in the result it writes.
 Pre/post dispatch behavior is checked against canonical source-token metadata and expected output.
 Native receive slots may be assigned nondeterministically, so physical receive order is not treated
 as a correctness property.
