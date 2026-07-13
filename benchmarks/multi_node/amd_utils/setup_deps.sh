@@ -79,49 +79,6 @@ install_amd_quark() {
 }
 
 # ---------------------------------------------------------------------------
-# SGLang: prevent TP-rank collective desync deadlock in disaggregation prefill.
-#
-# resolve_waiting_queue_bootstrap() runs poll_and_all_reduce_attn_cp_tp_group()
-# over `candidates`. The upstream candidate set (all non-aborted waiting reqs)
-# can differ across TP ranks, so some ranks enter the all_reduce while others
-# skip it -> hang. Narrow candidates to optimistic (pending_bootstrap) requests,
-# which is consistent across ranks and is the only set finalize_bootstrap acts on.
-# ---------------------------------------------------------------------------
-patch_disagg_prefill_bootstrap_desync() {
-    python3 -c '
-import os, sys
-
-target = "/sgl-workspace/sglang/python/sglang/srt/disaggregation/prefill.py"
-if not os.path.isfile(target):
-    print("[SETUP] disaggregation/prefill.py not found, skipping")
-    sys.exit(0)
-
-src = open(target).read()
-
-old = "        candidates = [req for req in self.waiting_queue if not is_aborted(req)]"
-new = (
-    "        candidates = [\n"
-    "            req\n"
-    "            for req in self.waiting_queue\n"
-    "            if req.pending_bootstrap and not is_aborted(req)\n"
-    "        ]"
-)
-
-if new in src:
-    print("[SETUP] prefill bootstrap-desync patch already applied")
-    sys.exit(0)
-
-if old not in src:
-    print("[SETUP] WARN: resolve_waiting_queue_bootstrap pattern not found — sglang version may have changed")
-    sys.exit(0)
-
-open(target, "w").write(src.replace(old, new))
-print("[SETUP] Patched: disaggregation/prefill.py resolve_waiting_queue_bootstrap candidates")
-'
-    _SETUP_INSTALLED+=("prefill-bootstrap-desync-fix")
-}
-
-# ---------------------------------------------------------------------------
 # SGLang: Install latest transformers for GLM model type support.
 #
 # GLM-5 (zai-org/GLM-5-FP8) requires a transformers build that includes
@@ -162,8 +119,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PATH="${UCX_HOME}/bin:/usr/local/bin/etcd:/root/.cargo/bin:${PATH}"
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 else
-    # patch_disagg_prefill_bootstrap_desync
-
     install_transformers_glm5
 fi
 
