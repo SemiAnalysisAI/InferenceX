@@ -8,8 +8,7 @@
 # At runtime the recipe swaps the image's FlashInfer for the first pinned
 # nightly containing the upstream SM100 low-M MXFP8 split-K kernel
 # (flashinfer-ai/flashinfer#3847), then restores the pre-#3687 AutoTuner,
-# reverts the communication workspace changes from #3745, and restores the
-# pre-#3582 trtllm-gen KV counter layout.
+# and restores the pre-#3582 trtllm-gen KV counter layout.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -52,14 +51,6 @@ patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_REVERT_PATCH}" >/dev/nu
     || { echo "FlashInfer PR #3687 revert patch does not apply" >&2; exit 1; }
 patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_REVERT_PATCH}" \
     || { echo "FlashInfer PR #3687 revert patch failed" >&2; exit 1; }
-
-# Reverse the runtime communication changes from flashinfer-ai/flashinfer#3745
-# while leaving the 0.6.15 GEMM, MoE, and attention code unchanged.
-COMM_REVERT_PATCH="$(dirname "$0")/patches/flashinfer-revert-pr-3745.patch"
-patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${COMM_REVERT_PATCH}" >/dev/null \
-    || { echo "FlashInfer PR #3745 revert patch does not apply" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "${COMM_REVERT_PATCH}" \
-    || { echo "FlashInfer PR #3745 revert patch failed" >&2; exit 1; }
 
 # Reverse flashinfer-ai/flashinfer#3582 so trtllm-gen KV counters use the
 # original shared workspace layout for this performance bisect.
