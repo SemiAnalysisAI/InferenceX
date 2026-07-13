@@ -38,6 +38,7 @@ class Fields(Enum):
 
     # Search-space/benchmark fields
     TP = 'tp'
+    PP = 'pp'
     DCP_SIZE = 'dcp-size'
     PCP_SIZE = 'pcp-size'
     CONC_START = 'conc-start'
@@ -88,8 +89,8 @@ class Fields(Enum):
 """
 
 
-def _validate_single_node_topology(self):
-    """Validate context-parallel settings shared by single-node schemas."""
+def _validate_tp_context_topology(self):
+    """Validate TP/DCP topology shared by single-node and worker schemas."""
     if self.tp % self.dcp_size != 0:
         raise ValueError(
             f"'{Fields.TP.value}' ({self.tp}) must be divisible by "
@@ -115,6 +116,7 @@ class SingleNodeMatrixEntry(BaseModel):
     isl: int
     osl: int
     tp: int
+    pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
@@ -128,7 +130,7 @@ class SingleNodeMatrixEntry(BaseModel):
 
     @model_validator(mode='after')
     def validate_single_node_topology(self):
-        return _validate_single_node_topology(self)
+        return _validate_tp_context_topology(self)
 
 
 class WorkerConfig(BaseModel):
@@ -137,11 +139,20 @@ class WorkerConfig(BaseModel):
 
     num_worker: int = Field(alias=Fields.NUM_WORKER.value)
     tp: int
+    pp: int = Field(default=1, gt=0, strict=True)
+    dcp_size: int = Field(
+        default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
+    pcp_size: int = Field(
+        default=1, alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     hardware: Optional[str] = Field(default=None, min_length=1)
     additional_settings: Optional[List[str]] = Field(
         default=[], alias=Fields.ADDITIONAL_SETTINGS.value)
+
+    @model_validator(mode='after')
+    def validate_worker_topology(self):
+        return _validate_tp_context_topology(self)
 
 
 def _validate_worker_hardware_pair(self):
@@ -199,6 +210,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     framework: str
     runner: str
     tp: int
+    pp: int = Field(gt=0, strict=True)
     dcp_size: int = Field(alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
@@ -221,7 +233,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
 
     @model_validator(mode='after')
     def validate_single_node_topology(self):
-        return _validate_single_node_topology(self)
+        return _validate_tp_context_topology(self)
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
@@ -382,6 +394,7 @@ class SingleNodeSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     tp: int
+    pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(
         default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(
@@ -404,7 +417,7 @@ class SingleNodeSearchSpaceEntry(BaseModel):
 
     @model_validator(mode='after')
     def validate_single_node_topology(self):
-        return _validate_single_node_topology(self)
+        return _validate_tp_context_topology(self)
 
 
 class MultiNodeSearchSpaceEntry(BaseModel):
@@ -456,6 +469,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     tp: Optional[int] = None
+    pp: int = Field(default=1, gt=0, strict=True)
     dcp_size: int = Field(
         default=1, alias=Fields.DCP_SIZE.value, gt=0, strict=True)
     pcp_size: int = Field(
@@ -501,15 +515,25 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                     f"Single-node agentic search-space entries must specify "
                     f"{Fields.KV_OFFLOADING.value}"
                 )
-            _validate_single_node_topology(self)
+            _validate_tp_context_topology(self)
         if has_complete_multinode:
-            if (
-                "dcp_size" in self.model_fields_set
-                or "pcp_size" in self.model_fields_set
-            ):
+            explicitly_single_node_fields = {
+                "pp",
+                "dcp_size",
+                "pcp_size",
+            } & self.model_fields_set
+            if explicitly_single_node_fields:
+                field_names = ", ".join(
+                    f"'{name}'"
+                    for name in (
+                        Fields.PP.value,
+                        Fields.DCP_SIZE.value,
+                        Fields.PCP_SIZE.value,
+                    )
+                )
                 raise ValueError(
                     "Multinode agentic search-space entries cannot specify "
-                    f"'{Fields.DCP_SIZE.value}' or '{Fields.PCP_SIZE.value}'"
+                    f"{field_names}"
                 )
             _validate_worker_hardware_pair(self)
         return self
