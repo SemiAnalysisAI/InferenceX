@@ -238,18 +238,15 @@ EOF
         # fastsafetensors stages checkpoint shards on-GPU while loading.
         # Without --enable-ep-weight-filter every rank stages the full
         # expert weights and OOMs during load, so it is EP-only here.
-        # The reduced GPU memory utilization is also EP-only: the Mega-MoE
-        # path JIT-loads DeepGEMM/TileLang kernels at runtime, and those
-        # driver allocations live outside the vLLM pool (at the default
-        # utilization they fail with CUDA_ERROR_OUT_OF_MEMORY). 0.85 is
-        # stable but costs KV-cache headroom at high concurrency; 0.88
-        # aims to keep the JIT headroom while recovering throughput. The
-        # non-EP points keep the default for a larger KV cache pool.
+        # GPU memory utilization stays at the vLLM default: the Mega-MoE
+        # path JIT-loads DeepGEMM/TileLang kernels at runtime and those
+        # driver allocations live outside the vLLM pool, so
+        # VLLM_DEEP_GEMM_WARMUP=skip (exported below) keeps DeepGEMM from
+        # front-loading them all during startup.
         EP_TUNING_ARGS=(
             --moe-backend deep_gemm_amxf4_mega_moe
             --enable-ep-weight-filter
             --load-format fastsafetensors
-            --gpu-memory-utilization 0.88
         )
         export VLLM_USE_V2_MODEL_RUNNER=1
         export VLLM_USE_RUST_FRONTEND=1
@@ -259,6 +256,9 @@ EOF
         export VLLM_DSV4_MEGA_FP8_COMBINE=1
         export VLLM_RPC_TIMEOUT=600000
         export TILELANG_CLEANUP_TEMP_FILES=1
+        # Per-engine scheduler stats every 5s, to diagnose per-DP-rank KV
+        # cache imbalance under the session-sticky router.
+        export VLLM_LOG_STATS_INTERVAL=5
 
         echo "Starting LMCache MP server on port $LMCACHE_PORT..."
         # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
