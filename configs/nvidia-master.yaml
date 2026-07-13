@@ -5,6 +5,7 @@ dsr1-fp4-b200-dynamo-trt:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -391,6 +392,7 @@ dsr1-fp8-b200-dynamo-trt:
   runner: b200-multinode
   precision: fp8
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -841,6 +843,7 @@ dsr1-fp4-b300-dynamo-trt:
   runner: b300
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -1254,6 +1257,7 @@ dsr1-fp8-b300-dynamo-trt:
   runner: b300
   precision: fp8
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -1778,10 +1782,10 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
       # Sample the useful MooncakeStore range without repeating its collapsed
       # high-concurrency tail.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [8, 10, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [8, 10, 16] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 32, 38, 44, 50] }
       # Retain the external-cache transition and peak-throughput region.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 38, 44, 56, 64, 66, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [16, 38, 44, 56, 64, 66, 68] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -2337,6 +2341,7 @@ glm5-fp4-gb300-dynamo-trt:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -2457,6 +2462,7 @@ glm5-fp4-gb300-dynamo-trt:
           tp: 16
           ep: 16
           dp-attn: true
+
       - conc-list: [ 2253 ]
         prefill:
           num-worker: 3
@@ -2809,7 +2815,7 @@ kimik2.5-int4-b200-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 64, 96, 128] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [32, 64, 96, 128] }
 
 kimik2.5-int4-b300-vllm:
   image: vllm/vllm-openai:v0.24.0
@@ -2864,7 +2870,7 @@ kimik2.5-int4-h200-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -2976,7 +2982,7 @@ kimik2.5-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -3220,12 +3226,12 @@ dsv4-fp4-b300-vllm-agentic:
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
       - { tp: 4, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 18, 20, 24] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [16, 18, 20, 24] }
       # TP8 remains cache-resident through conc 52.
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 32, 40, 48, 52] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [52] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [52] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [8, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [32] }
       # TP8 DEP retains representative low, peak, and transition points.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144] }
 
@@ -3429,6 +3435,7 @@ dsr1-fp8-h200-dynamo-trt:
   runner: h200-multinode
   precision: fp8
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -3973,6 +3980,7 @@ dsr1-fp8-h100-dynamo-trt:
   runner: h100-multinode
   precision: fp8
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -4444,6 +4452,7 @@ dsr1-fp8-h100-dynamo-sglang:
   runner: h100-multinode
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -4605,6 +4614,7 @@ dsr1-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -4962,6 +4972,7 @@ dsr1-fp8-gb200-dynamo-trt:
   runner: gb200
   precision: fp8
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5390,6 +5401,7 @@ dsr1-fp8-gb200-dynamo-sglang:
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5519,6 +5531,7 @@ dsr1-fp8-gb300-dynamo-sglang:
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5632,6 +5645,7 @@ dsr1-fp4-gb200-dynamo-sglang:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5747,6 +5761,7 @@ dsr1-fp4-gb300-dynamo-trt:
   runner: gb300
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6174,6 +6189,7 @@ dsr1-fp4-gb300-dynamo-sglang:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6289,6 +6305,7 @@ dsr1-fp8-gb300-dynamo-trt:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6701,6 +6718,7 @@ dsr1-fp8-h200-dynamo-sglang:
   runner: h200-multinode
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6958,6 +6976,7 @@ dsr1-fp4-b200-dynamo-sglang:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7094,6 +7113,7 @@ dsr1-fp8-b200-dynamo-sglang:
   runner: b200-multinode
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7265,6 +7285,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
   runner: b200-multinode
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7465,6 +7486,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7675,6 +7697,7 @@ kimik2.5-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8046,6 +8069,7 @@ kimik2.5-fp4-gb300-dynamo-trt:
   runner: gb300
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8389,6 +8413,7 @@ kimik2.5-fp4-gb200-dynamo-vllm:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8511,6 +8536,7 @@ dsv4-fp4-b200-dynamo-vllm:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8593,6 +8619,7 @@ dsv4-fp4-gb200-dynamo-vllm:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8693,6 +8720,7 @@ dsv4-fp4-gb200-llmd-vllm:
   runner: gb200
   precision: fp4
   framework: llmd-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8817,6 +8845,7 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8897,6 +8926,7 @@ dsv4-fp4-gb200-dynamo-sglang:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -9024,6 +9054,7 @@ qwen3.5-fp8-gb200-dynamo-sglang:
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -9133,6 +9164,7 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -9269,6 +9301,7 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9552,6 +9585,7 @@ dsv4-fp4-b300-dynamo-vllm:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9608,6 +9642,7 @@ dsv4-fp4-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9701,6 +9736,7 @@ dsv4-fp4-gb300-dynamo-trt:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -10097,6 +10133,7 @@ dsv4-fp4-gb300-dynamo-trt-mtp:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -10520,6 +10557,7 @@ dsv4-fp4-gb300-dynamo-sglang:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -10634,6 +10672,7 @@ glm5-fp8-b200-dynamo-sglang:
   runner: b200-dgxc
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -10848,6 +10887,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -10992,7 +11032,7 @@ kimik2.5-int4-h100-vllm:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 12, 16, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [1, 2, 4, 8, 12, 16, 20] }
 
 qwen3.5-fp8-h100-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -11041,6 +11081,7 @@ glm5-fp4-gb200-dynamo-sglang:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -11318,6 +11359,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # Pure tensor parallel (STP), 8k1k baseline-low-latency sweep.
       # Total: 8 GB300 GPUs.
       - spec-decoding: "none"
+        kv-p2p-transfer: mooncake
         conc-list: [1, 4, 8, 16, 32, 64, 256]
         prefill:
           num-worker: 1
@@ -11334,6 +11376,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # 5P1D wide-EP: 5 prefill workers @ DEP4 + 1 decode worker @ DEP16.
       # NIXL transfer. Total: 36 GB300 GPUs (5*4 + 4*4).
       - spec-decoding: "none"
+        kv-p2p-transfer: nixl
         conc-list: [2048]
         prefill:
           num-worker: 5
@@ -11350,6 +11393,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # 6P1D wide-EP: 6 prefill workers @ DEP4 + 1 decode worker @ DEP16.
       # Mooncake transfer. Total: 40 GB300 GPUs (6*4 + 4*4).
       - spec-decoding: "none"
+        kv-p2p-transfer: mooncake
         conc-list: [5120]
         prefill:
           num-worker: 6
@@ -11366,6 +11410,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # 7P1D wide-EP: 7 prefill workers @ DEP4 + 1 decode worker @ DEP16.
       # Mooncake transfer. Total: 44 GB300 GPUs (7*4 + 4*4).
       - spec-decoding: "none"
+        kv-p2p-transfer: mooncake
         conc-list: [5120]
         prefill:
           num-worker: 7
@@ -11387,6 +11432,7 @@ glm5-fp4-gb300-dynamo-sglang:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -11597,6 +11643,7 @@ glm5-fp8-gb200-dynamo-sglang:
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -11821,6 +11868,7 @@ glm5-fp4-gb300-dynamo-sglang-mtp:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12089,6 +12137,7 @@ glm5-fp8-gb300-dynamo-sglang:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12299,6 +12348,7 @@ glm5-fp8-gb300-dynamo-sglang-mtp:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12494,7 +12544,7 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.22.0
@@ -12509,9 +12559,9 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 24, 32, 36] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache }, conc-list: [16, 24, 32, 36] }
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache }, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
 
 # CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
 # subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
@@ -12524,6 +12574,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12594,7 +12645,7 @@ qwen3.5-fp8-h100-sglang-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
 # MiniMax-M3 NVFP4 disagg sweep on the same B300 topology matrix as the MXFP8
 # baseline above. The image includes vLLM PR #46380, so no runtime patch is
@@ -12606,6 +12657,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
   runner: b300
   precision: fp8
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12822,6 +12874,7 @@ minimaxm3-fp4-b300-dynamo-vllm:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -13038,6 +13091,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -13311,6 +13365,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
   runner: gb200
   precision: fp8
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -13877,6 +13932,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14049,8 +14105,8 @@ minimaxm3-fp8-h100-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
 
 minimaxm3-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
@@ -14070,7 +14126,7 @@ minimaxm3-fp8-h200-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
 dsv4-fp4-b200-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
@@ -14085,11 +14141,11 @@ dsv4-fp4-b200-sglang-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none,     conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [8, 10, 16, 32, 40, 44] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 10, 16, 32, 40, 44] }
       # DEP without HiCache is already degraded at conc 52 (2,098 tok/s/GPU),
       # so resolve its pre-52 cliff instead of repeating the collapsed tail.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,    conc-list: [16, 24, 32, 38, 44, 48, 50, 52] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
 
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP
@@ -14109,7 +14165,7 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 20, 24, 32] }
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [8, 16, 24, 32, 40, 64] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [52, 72, 100, 128, 144, 196, 512] }
 
 # DEP8 prefill uses an 8K batch because 16K OOMs in the FP4 MoE intermediate;
@@ -14123,6 +14179,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d-tep8-tp8:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14179,6 +14236,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14235,6 +14293,7 @@ glm5-fp4-gb300-dynamo-trt-mtp:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14562,8 +14621,6 @@ glm5-fp4-gb300-dynamo-trt-mtp:
           tp: 16
           ep: 16
           dp-attn: true
-
-
 qwen3.5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -14573,6 +14630,7 @@ qwen3.5-fp8-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  kv-p2p-transfer: mooncake
   scenarios:
     fixed-seq-len:
     - isl: 1024
