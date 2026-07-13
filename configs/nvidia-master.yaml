@@ -14178,6 +14178,8 @@ kimik2.6-fp4-b300-dynamo-vllm:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260529" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
