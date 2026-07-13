@@ -7,9 +7,9 @@
 #
 # At runtime the recipe swaps the image's FlashInfer for the first pinned
 # nightly containing the upstream SM100 low-M MXFP8 split-K kernel
-# (flashinfer-ai/flashinfer#3847), then backports the AutoTuner non-Tensor guard
-# fix from flashinfer-ai/flashinfer#3918, reverts the communication workspace
-# changes from #3745, and restores the pre-#3582 trtllm-gen KV counter layout.
+# (flashinfer-ai/flashinfer#3847), then restores the pre-#3687 AutoTuner,
+# reverts the communication workspace changes from #3745, and restores the
+# pre-#3582 trtllm-gen KV counter layout.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -38,19 +38,20 @@ python3 -m pip install \
     "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+cu130-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
     || { echo "FlashInfer nightly install failed" >&2; exit 1; }
 
-# The pinned nightly predates flashinfer-ai/flashinfer#3918. Apply only its
-# runtime fix; the upstream test change is intentionally not backported.
-AUTOTUNER_PATCH="$(dirname "$0")/patches/flashinfer-autotuner-non-tensor-guard.patch"
+# Reverse all runtime changes from flashinfer-ai/flashinfer#3687 to restore the
+# 0708 AutoTuner implementation and its original call sites. This intentionally
+# does not apply the later flashinfer-ai/flashinfer#3918 guard fix.
+AUTOTUNER_REVERT_PATCH="$(dirname "$0")/patches/flashinfer-revert-pr-3687.patch"
 if ! command -v patch >/dev/null 2>&1; then
     apt-get update -y && apt-get install -y --no-install-recommends patch \
         || { echo "Failed to install patch(1)" >&2; exit 1; }
 fi
 SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
     || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
-patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_PATCH}" >/dev/null \
-    || { echo "FlashInfer AutoTuner non-Tensor guard patch does not apply" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_PATCH}" \
-    || { echo "FlashInfer AutoTuner non-Tensor guard patch failed" >&2; exit 1; }
+patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_REVERT_PATCH}" >/dev/null \
+    || { echo "FlashInfer PR #3687 revert patch does not apply" >&2; exit 1; }
+patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_REVERT_PATCH}" \
+    || { echo "FlashInfer PR #3687 revert patch failed" >&2; exit 1; }
 
 # Reverse the runtime communication changes from flashinfer-ai/flashinfer#3745
 # while leaving the 0.6.15 GEMM, MoE, and attention code unchanged.
