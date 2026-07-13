@@ -13,14 +13,12 @@ from typing import Iterator, Optional
 DEFAULT_DATASET = "princeton-nlp/SWE-bench_Lite"
 DEFAULT_TASK = "swebench_lite"
 
-# Prefer fenced diffs, then accept a bare diff body.
 _FENCED_DIFF_RE = re.compile(
     r"```(?:diff|patch)?\s*\n(?P<body>.*?)```",
     re.DOTALL | re.IGNORECASE,
 )
 _DIFF_GIT_RE = re.compile(r"(?:^|\n)(diff --git .*)", re.DOTALL)
 
-# A bare patch ends at the first line that cannot belong to a unified diff.
 _DIFF_LINE_PREFIXES = (
     "diff ", "index ", "--- ", "+++ ", "@@", "+", "-", " ", "\\",
     "old mode ", "new mode ", "new file mode ", "deleted file mode ",
@@ -175,14 +173,13 @@ def find_report(work_dir: Path, model_name: str, run_id: str) -> Path:
     """Locate the harness report JSON, tolerant to known layout variants."""
     sanitized = model_name.replace("/", "__")
     candidates = [
-        work_dir / f"{sanitized}.{run_id}.json",          # classic: <model>.<run_id>.json
+        work_dir / f"{sanitized}.{run_id}.json",
         work_dir / f"{model_name}.{run_id}.json",
-        work_dir / "evaluation_results" / "results.json",  # newer layout
+        work_dir / "evaluation_results" / "results.json",
     ]
     for path in candidates:
         if path.exists():
             return path
-    # Broad fallback: any *.json mentioning resolved/total at the top level.
     for path in sorted(work_dir.rglob("*.json")):
         try:
             data = json.loads(path.read_text())
@@ -312,7 +309,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     run_id = args.run_id or args.task_name
 
     if args.predictions_file:
-        # Agent harnesses emit either JSONL or a dict keyed by instance ID.
         src = Path(args.predictions_file)
         text = src.read_text(encoding="utf-8", errors="replace")
         try:
@@ -352,7 +348,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         report_path = find_report(out_dir, args.model_name, run_id)
         report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
-        # Stage the report under the workflow's stable artifact name.
+        # Workflow artifact collection requires a stable report name.
         staged = out_dir / f"swebench_report_{args.task_name}.json"
         if report_path.resolve() != staged.resolve():
             staged.write_text(json.dumps(report, indent=2), encoding="utf-8")

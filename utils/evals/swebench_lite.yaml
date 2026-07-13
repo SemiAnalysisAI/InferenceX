@@ -1,21 +1,6 @@
-# SWE-bench Lite -- GENERATION ONLY.
-#
-# Lite is the ~300-instance curated subset for quick evals (no difficulty labels;
-# it's already the lightweight set, so no filtering is needed -- unlike Verified,
-# which carries a `difficulty` field).
-#
-# lm-eval is used purely to drive the served OpenAI-compatible endpoint and dump
-# one candidate patch per instance via --log_samples. The metric below is a
-# PLACEHOLDER that lm-eval computes but we ignore: the real resolved-rate comes
-# from utils/evals/swebench_score.py running the official `swebench` harness,
-# which then emits an lm-eval-shaped results JSON for collect/validate.
-#
-# Run it through the dedicated framework, not bare lm-eval:
-#   run_eval --framework swebench --port "$PORT"
-# which wires generation -> scoring. Bare `--tasks swebench_lite.yaml` would
-# produce only the meaningless placeholder metric.
+# lm-eval only generates patches here; the official harness computes resolved rate.
 task: swebench_lite
-dataset_path: princeton-nlp/SWE-bench_Lite  # also mirrored at SWE-bench/SWE-bench_Lite
+dataset_path: princeton-nlp/SWE-bench_Lite
 output_type: generate_until
 test_split: test
 
@@ -37,9 +22,7 @@ doc_to_text: |
   +++ b/path/to/file.py
   @@ ... @@
   ```
-# The gold patch is the nominal target. lm-eval's exact_match against it is
-# meaningless for patches (overwritten by the harness score); it only exists so
-# generate_until has a target + a metric and does not error.
+# lm-eval requires a target even though the official harness replaces this metric.
 doc_to_target: "{{patch}}"
 
 generation_kwargs:

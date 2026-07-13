@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))      # utils
 import swebench_score as sbs
 
 
-# --- diff extraction -------------------------------------------------------
 
 def test_extract_patch_from_diff_fence():
     text = (
@@ -35,8 +34,7 @@ def test_extract_patch_bare_diff_git():
 
 
 def test_extract_patch_bare_diff_strips_trailing_prose():
-    # A bare diff followed by an explanation must not glue the prose onto the
-    # patch (git apply would reject it -> instance scored unresolved).
+    # Trailing prose would make git apply reject the patch.
     text = (
         "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"
         "\nNotes:\nThis fixes #123.\n"
@@ -48,7 +46,6 @@ def test_extract_patch_bare_diff_strips_trailing_prose():
 
 
 def test_extract_patch_keeps_multi_file_and_interior_context():
-    # Multiple files + a blank context line (represented as " ") stay intact.
     text = (
         "```diff\n"
         "diff --git a/a b/a\n@@ -1,2 +1,2 @@\n context\n-x\n+y\n"
@@ -63,11 +60,9 @@ def test_extract_patch_keeps_multi_file_and_interior_context():
 
 def test_extract_patch_empty_when_no_diff():
     assert sbs.extract_patch("") == ""
-    # Prose with no diff markers falls back to the raw text (harness will reject).
     assert sbs.extract_patch("just words").strip() == "just words"
 
 
-# --- samples -> predictions ------------------------------------------------
 
 def _write_samples(dirpath: Path, records: list[dict]) -> None:
     with (dirpath / "samples_swebench_lite_2026.jsonl").open("w") as fh:
@@ -99,7 +94,6 @@ def test_build_predictions_raises_without_samples(tmp_path):
         sbs.build_predictions(tmp_path, "m")
 
 
-# --- report parsing --------------------------------------------------------
 
 def test_parse_resolved_classic_counts():
     assert sbs.parse_resolved(
@@ -108,10 +102,7 @@ def test_parse_resolved_classic_counts():
 
 
 def test_parse_resolved_prefers_submitted_over_dataset_total():
-    # With EVAL_LIMIT the harness reports total_instances = len(dataset) even
-    # when only N predictions were submitted; the denominator must be the
-    # submitted count or a 32/50 run deflates to 32/300 and trips the
-    # threshold gate.
+    # Limited runs use submitted predictions, not the full dataset, as the denominator.
     assert sbs.parse_resolved(
         {"resolved_instances": 32, "submitted_instances": 50, "total_instances": 300}
     ) == (32, 50)
@@ -119,7 +110,6 @@ def test_parse_resolved_prefers_submitted_over_dataset_total():
 
 def test_parse_resolved_from_id_lists():
     report = {"resolved_ids": ["a", "b", "c"], "completed_ids": ["a", "b", "c", "d"]}
-    # no total_instances -> falls back to completed_ids length
     assert sbs.parse_resolved(report) == (3, 4)
 
 
@@ -128,7 +118,6 @@ def test_parse_resolved_raises_on_garbage():
         sbs.parse_resolved({"nope": 1})
 
 
-# --- harness command construction (Docker vs Modal) ------------------------
 
 def test_run_harness_instance_timeout(monkeypatch, tmp_path):
     captured = {}
@@ -173,7 +162,6 @@ def test_run_harness_docker_uses_max_workers_and_namespace(monkeypatch, tmp_path
     assert "--modal" not in cmd
 
 
-# --- lm-eval-shaped results ------------------------------------------------
 
 def test_build_results_json_is_lm_eval_shaped():
     res = sbs.build_results_json(
@@ -224,7 +212,6 @@ def test_predictions_only_writes_predictions_no_results(tmp_path):
     assert not (out / "results_swebench_lite.json").exists()
 
 
-# --- integration with the existing pipeline (needs tabulate + py3.10+) -----
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="repo modules use py3.10 syntax")
 def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
@@ -243,19 +230,17 @@ def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
     )
     (art / "results_swebench_lite.json").write_text(json.dumps(res))
 
-    # collect surfaces the resolved-rate as the unified `score`.
     rows = cer.collect_eval_rows(tmp_path)
     assert len(rows) == 1
     assert rows[0]["task"] == "swebench_lite"
     assert rows[0]["score"] == pytest.approx(0.6)
 
-    # validate_scores gates exact_match,resolved against thresholds.yaml (0.50).
     monkeypatch.chdir(art)
     monkeypatch.setattr(sys, "argv", [
         "validate_scores.py",
         "--results-glob", "results_swebench_lite.json",
     ])
-    assert vs.main() == 0  # 0.6 >= 0.50 threshold
+    assert vs.main() == 0
 
 
 def test_predictions_file_mode_skips_samples_and_scores(tmp_path):

@@ -726,7 +726,6 @@ _eval_patches_dir() {
     cd "$(dirname "${BASH_SOURCE[0]}")/../utils/evals/patches" && pwd
 }
 
-# Load compatibility hooks without modifying the lm-eval installation.
 _patch_lm_eval() {
     local patch_dir
     patch_dir="$(mktemp -d)"
@@ -1107,12 +1106,7 @@ META
     echo "Moved eval artifacts to: $(pwd)"
 }
 
-# ------------------------------
-# SWE-bench eval helpers
-# ------------------------------
 
-# Generate with mini-swe-agent, score with the official harness, and emit the
-# existing lm-eval result shape. Environment controls are documented in EVALS.md.
 _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
@@ -1120,13 +1114,12 @@ _install_swebench_agent_deps() {
         echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
 }
 
-# Patch sandbox cleanup and diff submission in the pinned agent dependencies.
 _patch_swebench_agent() {
     python3 "$(_eval_patches_dir)/patch_swebench_agent.py"
 }
 
 _install_swebench_deps() {
-    # Patch anchors are verified against SWE-bench 4.1.0.
+    # Runtime patch anchors require SWE-bench 4.1.0.
     python3 -m pip install -q --no-cache-dir --break-system-packages 'swebench==4.1.0' || true
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then
         python3 -m pip install -q --no-cache-dir --break-system-packages modal || true
@@ -1135,7 +1128,6 @@ _install_swebench_deps() {
     fi
 }
 
-# Patch Modal scorer CPU allocation and sandbox teardown.
 _patch_swebench_scoring() {
     python3 "$(_eval_patches_dir)/patch_swebench_scoring.py"
 }
@@ -1143,7 +1135,7 @@ _patch_swebench_scoring() {
 # The SWE-bench harness requires ~/.modal.toml even when Modal reads env credentials.
 _ensure_modal_credentials() {
     if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
-    # Normalize secrets before either Modal or the generated config consumes them.
+    # CI secrets may contain surrounding whitespace or quotes.
     if [ -n "${MODAL_TOKEN_ID:-}" ]; then
         MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
         export MODAL_TOKEN_ID
@@ -1169,7 +1161,6 @@ _ensure_modal_credentials() {
     fi
 }
 
-# Run the scenario-selected eval and stage all available artifacts.
 maybe_run_eval() {
     local port="${1:-${PORT:-8888}}"
     if [ "${RUN_EVAL}" = "true" ]; then
@@ -1181,8 +1172,6 @@ maybe_run_eval() {
     fi
 }
 
-# Generate patches against the local model while swe-rex runs instance shells on
-# Modal. Predictions are written to <gen_dir>/agent_out/preds.json.
 _run_swebench_agentic_generation() {
     local gen_dir="$1"; shift
     local port="${PORT:-8888}"
@@ -1194,9 +1183,9 @@ _run_swebench_agentic_generation() {
     done
 
     _install_swebench_agent_deps
-    _ensure_modal_credentials  # the agent's execution sandboxes run on Modal
+    _ensure_modal_credentials
 
-    # minisweagent prints a banner before the requested config path.
+    # minisweagent logs before printing its config path.
     local default_cfg
     default_cfg=$(python3 -c 'import minisweagent, os; print(os.path.join(os.path.dirname(minisweagent.__file__), "config/benchmarks/swebench.yaml"))' 2>/dev/null | tail -n 1)
     if [ ! -f "$default_cfg" ]; then
@@ -1204,7 +1193,6 @@ _run_swebench_agentic_generation() {
         return 1
     fi
 
-    # Extend the shipped prompt and override only runtime settings.
     local cfg="$gen_dir/mini_swebench_overrides.yaml"
     SWEBENCH_AGENT_PORT="$port" python3 - "$default_cfg" "$cfg" <<'PYGEN'
 import os, sys, yaml
@@ -1231,10 +1219,9 @@ env.update({
     # Image cold starts exceed mini-swe-agent's 60-second default.
     "startup_timeout": float(os.environ.get("SWEBENCH_AGENT_STARTUP_TIMEOUT", "900")),
     "timeout": int(os.environ.get("SWEBENCH_AGENT_CMD_TIMEOUT", "300")),
-    # Cleanup is immediate; this bounds any sandbox missed by both cleanup paths.
+    # runtime_timeout caps billing if cleanup misses a sandbox.
     "runtime_timeout": float(os.environ.get("SWEBENCH_AGENT_RUNTIME_TIMEOUT", "3600")),
 })
-# Leave Modal's CPU default unless the caller requests a reservation.
 agent_cpu = os.environ.get("SWEBENCH_AGENT_SANDBOX_CPU", "")
 if agent_cpu:
     env["modal_sandbox_kwargs"] = {"cpu": float(agent_cpu)}
@@ -1253,7 +1240,6 @@ d["model"] = {
 yaml.safe_dump(d, open(out_path, "w"), default_flow_style=False, sort_keys=False)
 PYGEN
 
-    # Default to the 50-instance CI slice; full and 0 select the complete split.
     case "${EVAL_LIMIT:-}" in
         "")           EVAL_LIMIT="${SWEBENCH_DEFAULT_EVAL_LIMIT:-50}" ;;
         full|FULL|0)  EVAL_LIMIT="" ;;
@@ -1313,13 +1299,13 @@ PYGEN
     elif [ "$agen_rc" -eq 0 ] && [ "$wait_rc" -ne 0 ]; then
         agen_rc=$wait_rc
     fi
-    # Sweep only this app. Concurrent jobs must use distinct Modal app names.
+    # App-scoped sweeps avoid unrelated sandboxes but require unique concurrent app names.
     [ "${SWEBENCH_SANDBOX_SWEEP:-1}" = "1" ] && python3 - <<'PYSWEEP' || true
 try:
     import os
     import modal
     name = os.environ.get("SWEBENCH_MODAL_APP_NAME", "infx-evals-swe")
-    app = modal.App.lookup(name)  # raises if absent (nothing was created -> nothing to sweep)
+    app = modal.App.lookup(name)
     n = 0
     for sb in modal.Sandbox.list(app_id=app.app_id):
         try:
@@ -1332,7 +1318,7 @@ except Exception as e:
     print(f"[swebench-agentic] sandbox sweep skipped: {e}")
 PYSWEEP
     if [ "$agen_rc" -ne 0 ]; then
-        # Score predictions written before a generation failure.
+        # Preserve scoreable predictions from partial runs.
         local salvage_count
         salvage_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$gen_dir/agent_out/preds.json" 2>/dev/null || echo 0)
         if [ "${salvage_count:-0}" -gt 0 ]; then
@@ -1370,11 +1356,10 @@ run_swebench_eval() {
         return 1
     fi
 
-    # Agentic generation is the default; single-shot is a debugging escape hatch.
     local gen_mode="${SWEBENCH_GEN_MODE:-agentic}"
     local score_input=()
     if [ "$gen_mode" = "agentic" ]; then
-        # The agent command is fixed to SWE-bench Lite.
+        # mini-extra's lite subset cannot generate other datasets.
         case "$dataset" in
             *SWE-bench_Lite|*SWE-bench_Lite/*) ;;
             *)
@@ -1392,10 +1377,8 @@ run_swebench_eval() {
         score_input=(--predictions-file "$gen_dir/agent_out/preds.json")
         mkdir -p "$out_dir"
         cp -f "$gen_dir/agent_out/preds.json" "$out_dir/agent_preds.json" 2>/dev/null || true
-        # Flatten trajectories into the workflow's artifact staging directory.
         find "$gen_dir/agent_out" -name "*.traj*" -exec cp -f {} "$out_dir/" \; 2>/dev/null || true
     else
-        # Register the external task YAML before single-shot lm-eval generation.
         local prev_tasks_dir="${EVAL_TASKS_DIR:-}"
         local prev_include_path="${EVAL_INCLUDE_PATH:-}"
         export EVAL_TASKS_DIR="$task_name"
@@ -1420,7 +1403,6 @@ run_swebench_eval() {
     lm_eval_version=$(python3 -c 'import lm_eval; print(lm_eval.__version__)' 2>/dev/null || echo unknown)
 
     if [ "${SWEBENCH_SKIP_SCORE:-false}" = "true" ]; then
-        # Stage predictions without invoking a scoring backend.
         local skip_rc=0
         python3 utils/evals/swebench_score.py \
             "${score_input[@]}" --out-dir "$out_dir" \
@@ -1431,7 +1413,6 @@ run_swebench_eval() {
         return "$skip_rc"
     fi
 
-    # Score with local Docker or Modal and emit the normalized result JSON.
     if [ "${INFERENCEX_SWEBENCH_RUNTIME_READY:-false}" != "true" ]; then
         _install_swebench_deps
         export INFERENCEX_SWEBENCH_RUNTIME_READY=true
@@ -1442,7 +1423,6 @@ run_swebench_eval() {
     if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
     local modal_args=()
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then modal_args=(--modal); fi
-    # Bound each instance and the complete scoring subprocess separately.
     local itimeout_args=(--instance-timeout "${SWEBENCH_EVAL_TIMEOUT:-900}")
     # Prevent a stalled backend from holding the GPU allocation indefinitely.
     timeout "${SWEBENCH_SCORE_TIMEOUT:-7200}" \
@@ -1490,7 +1470,6 @@ run_eval() {
         esac
     done
 
-    # Agentic scenarios default to SWE-bench; fixed-sequence scenarios use lm-eval.
     local scenario_default="lm-eval"
     if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
         scenario_default="swebench"

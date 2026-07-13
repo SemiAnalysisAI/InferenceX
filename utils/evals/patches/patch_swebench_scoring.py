@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 CPU_ANCHOR = "cpu=4,"
-CPU_MARKER = "inferencex scoring-cpu patch"
+CPU_MARKER = "reduce idle Modal CPU billing"
 LIFECYCLE_ANCHOR = (
     "            log_dir=log_dir,\n"
     "            errored=True,\n"
@@ -19,7 +19,7 @@ LIFECYCLE_REPLACEMENT = (
     "            log_dir=log_dir,\n"
     "            errored=True,\n"
     "        )\n"
-    "    finally:  # inferencex sandbox lifecycle patch\n"
+    "    finally:  # stop billing after evaluation\n"
     "        try:\n"
     "            runner.sandbox.terminate()\n"
     "        except Exception:\n"
@@ -28,7 +28,7 @@ LIFECYCLE_REPLACEMENT = (
     "\n"
     "def run_instances_modal("
 )
-LIFECYCLE_MARKER = "inferencex sandbox lifecycle patch"
+LIFECYCLE_MARKER = "stop billing after evaluation"
 
 
 def _cpu_value() -> str:

@@ -49,7 +49,7 @@ def main() -> int:
         [
             (
                 "    agent = None\n    exit_status = None",
-                "    agent = None\n    env = None  # inferencex sandbox cleanup\n    exit_status = None",
+                "    agent = None\n    env = None\n    exit_status = None",
                 "",
             ),
             (
@@ -59,7 +59,7 @@ def main() -> int:
                 "        info = agent.run(task)\n"
                 '        exit_status = info.get("exit_status")\n'
                 '        result = info.get("submission")\n'
-                "        if not result and env is not None:  # inferencex diff fallback\n"
+                "        if not result and env is not None:\n"
                 "            try:\n"
                 '                _fb = env.execute("git diff")\n'
                 '                _fb_out = (_fb.get("output") or "").strip()\n'
@@ -75,7 +75,7 @@ def main() -> int:
                 '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}',
                 '        exit_status, result = type(e).__name__, ""\n'
                 '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}\n'
-                "        if env is not None:  # inferencex exception diff fallback\n"
+                "        if env is not None:\n"
                 "            try:\n"
                 '                _fb = env.execute("git diff")\n'
                 '                _fb_out = (_fb.get("output") or "").strip()\n'
@@ -107,15 +107,15 @@ def main() -> int:
         [
             (
                 'self._app = modal.App.lookup("swe-rex", create_if_missing=True)',
-                f'self._app = modal.App.lookup("{app_name}", create_if_missing=True)  # inferencex app name',
-                "# inferencex app name",
+                f'self._app = modal.App.lookup("{app_name}", create_if_missing=True)  # isolate InferenceX sandboxes',
+                "# isolate InferenceX sandboxes",
             ),
             (
                 "        if self._sandbox is not None:\n"
                 "            exit_code = await self._sandbox.poll.aio()\n"
                 "            if exit_code is not None:\n"
                 "                await self._sandbox.terminate.aio()",
-                "        if self._sandbox is not None:  # inferencex sandbox cleanup\n"
+                "        if self._sandbox is not None:\n"
                 "            try:\n"
                 "                await self._sandbox.terminate.aio()\n"
                 "            except Exception:\n"

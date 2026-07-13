@@ -270,7 +270,6 @@ jobs:
             max-model-len: '0'
             spec-decoding: 'none'
             disagg: 'false'
-            # scenario-type agentic-coding => run_eval auto-selects swebench.
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
