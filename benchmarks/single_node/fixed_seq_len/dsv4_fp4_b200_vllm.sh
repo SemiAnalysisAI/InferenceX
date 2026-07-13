@@ -44,9 +44,11 @@ fi
 GMU_ARGS=()
 MOE_ARGS=()
 EPLB_ARGS=()
+PREFILL_SCHEDULE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
     EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
+    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
 fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
@@ -81,6 +83,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${GMU_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
     "${EPLB_ARGS[@]}" \
+    "${PREFILL_SCHEDULE_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache=True \
     --tokenizer-mode deepseek_v4 \
