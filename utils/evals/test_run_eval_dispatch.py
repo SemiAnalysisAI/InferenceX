@@ -688,3 +688,40 @@ def test_agent_sandbox_cpu_knob(tmp_path):
     assert "GEN_RC=0" in res2.stdout, res2.stdout + res2.stderr
     cfg2 = (gen_dir2 / "mini_swebench_overrides.yaml").read_text()
     assert "modal_sandbox_kwargs" not in cfg2, cfg2
+
+
+def test_eval_limit_rejects_non_positive_integer(tmp_path):
+    """EVAL_LIMIT must be a positive int, 'full', or 0; garbage/negative fails fast
+    (a negative value would otherwise make the completion watchdog fire at once)."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+    )
+    for bad in ("-5", "abc", "3.5"):
+        gd = tmp_path / f"gen_{bad.replace('-','neg').replace('.','_')}"
+        gd.mkdir()
+        res = _run_agentic(shim, gd, {"EVAL_LIMIT": bad})
+        assert "GEN_RC=1" in res.stdout, f"EVAL_LIMIT={bad!r} should fail: {res.stdout}{res.stderr}"
+        assert "must be a positive integer" in res.stdout + res.stderr
+
+
+def test_eval_limit_full_and_zero_accepted(tmp_path):
+    """'full' and '0' are whole-split sentinels, not rejected as non-integers."""
+    shim, gen_dir = _agentic_shim(tmp_path,
+        'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+    )
+    body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
+    (shim / "mini-extra").write_text(body)
+    for sentinel in ("full", "0"):
+        gd = tmp_path / f"gen_{sentinel}"
+        gd.mkdir()
+        res = _run_agentic(shim, gd, {"EVAL_LIMIT": sentinel})
+        assert "GEN_RC=0" in res.stdout, f"EVAL_LIMIT={sentinel!r}: {res.stdout}{res.stderr}"
+    argv = (shim / "argv.log").read_text()
+    assert "--slice" not in argv  # neither sentinel produces a slice bound

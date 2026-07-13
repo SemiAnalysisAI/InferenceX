@@ -19,7 +19,8 @@ Generator eval modes:
 - `--evals-only`: selected evals only.
 - `--all-evals`: every fixed-sequence eval only; equivalent to
   `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
-  sequentially on one engine. Agentic configs are excluded.
+  sequentially on one engine. Agentic-coding configs are included and run
+  SWE-bench (they are excluded only from the default, non-eval sweep).
 
 Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
 implies eval-only there. On PRs, the same names are modifier labels:
