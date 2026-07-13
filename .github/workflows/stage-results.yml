@@ -23,37 +23,23 @@ jobs:
       actions: read
       contents: read
       issues: read
-      pull-requests: read
+      pull-requests: write # Post staging status as github-actions rather than a PAT user
     steps:
       - name: Authorize request and resolve source run
         id: request
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          COMMENT_TOKEN: ${{ secrets.REPO_PAT }}
         with:
           github-token: ${{ github.token }}
           script: |
-            const createComment = async (body) => github.request(
-              'POST /repos/{owner}/{repo}/issues/{issue_number}/comments',
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-                headers: { authorization: `Bearer ${process.env.COMMENT_TOKEN}` },
-              },
-            );
-
             const body = context.payload.comment.body.trim();
             const command = /^\/stage-results(?:\s+(?<runId>\d+))?$/u.exec(body);
             if (!command) {
-              await createComment(
-                [
-                  'Usage: `/stage-results` or `/stage-results <run-id>`.',
-                  '',
-                  '用法：`/stage-results` 或 `/stage-results <run-id>`。',
-                ].join('\n'),
-              );
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: 'Usage: `/stage-results` or `/stage-results <run-id>`.',
+              });
               core.setFailed('Unsupported /stage-results syntax');
               return;
             }
@@ -66,13 +52,12 @@ jobs:
             });
             const permission = permissionResponse.data.permission;
             if (!['admin', 'maintain', 'write'].includes(permission)) {
-              await createComment(
-                [
-                  `@${actor} \`/stage-results\` requires write access to this repository.`,
-                  '',
-                  `@${actor} 只有具备本仓库写入权限的成员才能运行 \`/stage-results\`。`,
-                ].join('\n'),
-              );
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `@${actor} \`/stage-results\` requires write access to this repository.`,
+              });
               core.setFailed(`Actor ${actor} has ${permission} permission`);
               return;
             }
@@ -96,13 +81,12 @@ jobs:
             );
             const fullSweepLabel = fullSweepLabels.find((label) => pullLabels.has(label));
             if (!fullSweepLabel) {
-              await createComment(
-                [
-                  `@${actor} \`/stage-results\` requires a completed run from a PR using one of: ${fullSweepLabels.map((label) => `\`${label}\``).join(', ')}.`,
-                  '',
-                  `@${actor} \`/stage-results\` 只能用于已完成完整 sweep 的 PR；请使用以下标签之一：${fullSweepLabels.map((label) => `\`${label}\``).join('、')}。`,
-                ].join('\n'),
-              );
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `@${actor} \`/stage-results\` requires a completed run from a PR using one of: ${fullSweepLabels.map((label) => `\`${label}\``).join(', ')}.`,
+              });
               core.setFailed('PR does not have a full-sweep label');
               return;
             }
@@ -235,6 +219,25 @@ jobs:
             core.setOutput('requested-by', actor);
             core.setOutput('run-url', run.html_url);
 
+      - name: Acknowledge staging request
+        id: acknowledge
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ steps.request.outputs.run-id }}
+          RUN_URL: ${{ steps.request.outputs.run-url }}
+          REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const body = `@${process.env.REQUESTED_BY} staging [run ${process.env.RUN_ID}](${process.env.RUN_URL}). The shared staging slot is serialized; a completion link will be posted here.`;
+            const comment = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            core.setOutput('comment-id', String(comment.data.id));
+
       - name: Dispatch InferenceX-app staging workflow
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -242,6 +245,7 @@ jobs:
           RUN_ATTEMPT: ${{ steps.request.outputs.run-attempt }}
           RUN_DATE: ${{ steps.request.outputs.run-date }}
           REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
+          COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
         with:
           github-token: ${{ secrets.INFX_FRONTEND_PAT }}
           script: |
@@ -256,26 +260,6 @@ jobs:
                 'run-attempt': process.env.RUN_ATTEMPT,
                 'run-date': process.env.RUN_DATE,
                 'requested-by': process.env.REQUESTED_BY,
+                'comment-id': process.env.COMMENT_ID,
               },
-            });
-
-      - name: Acknowledge staging request
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          RUN_ID: ${{ steps.request.outputs.run-id }}
-          RUN_URL: ${{ steps.request.outputs.run-url }}
-          REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
-        with:
-          github-token: ${{ secrets.REPO_PAT }}
-          script: |
-            const body = [
-              `@${process.env.REQUESTED_BY} staging [run ${process.env.RUN_ID}](${process.env.RUN_URL}). The shared staging slot is serialized; a completion link will be posted here.`,
-              '',
-              `@${process.env.REQUESTED_BY} 正在将[运行 ${process.env.RUN_ID}](${process.env.RUN_URL})发布到预发布环境。共享预发布环境会按顺序处理请求；完成后将在此处发布链接。`,
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
             });
