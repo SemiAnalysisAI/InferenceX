@@ -3,6 +3,17 @@
 # MiniMax-M3 MXFP8 MI355X (gfx950) single-node vLLM recipe.
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # The recipe recommends MXFP8 from TP=4 on gfx950 and requires block size 128.
+#
+# AITER page-16 sparse paged-attention fast path (vllm-project/vllm#47287,
+# merged into the pinned nightly): maps MiniMax-M3's top-k 128-token sparse
+# blocks onto AITER page-16 block tables and runs AITER Gluon paged attention
+# over only the selected KV pages. This is a kernel-level speedup of the same
+# sparse-attention computation (no FLOP reduction), enabled via
+# VLLM_ROCM_USE_AITER=1 + VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 with fp8 KV cache
+# on a TP where each rank has num_kv_heads == 1 (TP4). We deliberately do NOT
+# pass the #47269 --hf-overrides use_index_cache/index_topk_freq cross-layer
+# indexer-skip override: it reduces model-architecture FLOPs, which is
+# disallowed by docs/PR_REVIEW_CHECKLIST.md.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -35,6 +46,14 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # the router-append shared-experts MoE fusion (vllm-project/vllm#46545). 
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
+# Quick all-reduce tuning from the MiniMax-M3 AITER recipe (vllm-project/vllm#47287):
+# keep the bf16 accumulation and only quantize all-reduces above 256 KB.
+export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
+# Enable the AITER page-16 sparse-PA fast path (vllm-project/vllm#47287): the
+# shuffled KV-cache layout lets AITER derive page-16 K/V views from the page-128
+# allocation and route decode/prefill through AITER Gluon paged attention.
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -74,7 +93,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
-    --linear-backend emulation \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &

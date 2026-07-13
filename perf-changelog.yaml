@@ -4750,3 +4750,14 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM image to nightly-9e57de7197f234f9d9187715d96e07e007048c0f, which carries the merged AITER page-16 sparse paged-attention path (vllm-project/vllm#47287)"
+    - "Enable AITER sparse PA for MiniMax-M3's top-k 128-token sparse blocks: export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 (AITER derives page-16 K/V views from the page-128 KV cache and routes decode/prefill through AITER Gluon paged attention), with VLLM_ROCM_USE_AITER=1 and fp8 KV cache on TP4 (num_kv_heads == 1 per rank). This is a kernel-level speedup of the same sparse-attention computation, with no FLOP reduction"
+    - "Add the recipe's quick all-reduce tuning knobs: VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256 (INT6 quick all-reduce unchanged)"
+    - "Remove --linear-backend emulation: the nightly's Triton MXFP8 dense-linear GEMM is now optimized, so emulation is no longer needed"
+    - "Deliberately do NOT pass the #47269 --hf-overrides use_index_cache/index_topk_freq cross-layer indexer-skip override: it reduces model-architecture FLOPs, which is disallowed by docs/PR_REVIEW_CHECKLIST.md"
+    - "Serving flags are otherwise unchanged (--block-size 128, --language-model-only, --moe-backend aiter, --kv-cache-dtype fp8, --attention-backend TRITON_ATTN, minimax_m3 parsers); TP4 conc 1-512 sweep at 1k1k and 8k1k unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
