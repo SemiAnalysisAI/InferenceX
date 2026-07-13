@@ -4742,11 +4742,18 @@
   description:
     - "Bump vLLM image to v0.25.0 for DeepSeek-V4-Pro FP4 on B200 and B300."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2169
-  
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 GB300 disaggregated multinode SGLang benchmarks via Dynamo"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
+    - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
 - config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
     - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
-    - "Prune agentic SGLang configs to measured Pareto points (decode-side MTP only)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
