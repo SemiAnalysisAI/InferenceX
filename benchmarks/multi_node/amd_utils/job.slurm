@@ -42,13 +42,26 @@ if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
 fi
 
 MODEL_NAME="${MODEL_NAME:-None}"
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in $MODELS_YAML"
-    echo "Available models:"
-    grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
-    exit 1
+# Resolve the models.yaml entry the same way server_sglang.sh does: agentic runs
+# (IS_AGENTIC) use the '<model>-AgentX' recipe, non-agentic disaggregated runs use
+# '<model>-DI'. Fall back to the bare model name if the variant key is absent.
+# MODEL_NAME itself is left unchanged so env.sh/server_sglang.sh still see the base name.
+if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+    MODEL_YAML_KEY="${MODEL_NAME}-AgentX"
+else
+    MODEL_YAML_KEY="${MODEL_NAME}-DI"
 fi
-echo "Model found: $MODEL_NAME"
+if ! grep -q "^${MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    if grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
+        MODEL_YAML_KEY="$MODEL_NAME"
+    else
+        echo "Error: Model '$MODEL_YAML_KEY' (nor bare '$MODEL_NAME') not found in $MODELS_YAML"
+        echo "Available models:"
+        grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
+        exit 1
+    fi
+fi
+echo "Model found: $MODEL_YAML_KEY (MODEL_NAME=$MODEL_NAME, IS_AGENTIC=${IS_AGENTIC:-0})"
 
 RUN_FILE="server.sh"
 echo "Runfile set: $RUN_FILE"
