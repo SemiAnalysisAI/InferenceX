@@ -76,6 +76,55 @@ jobs:
               pull_number: context.issue.number,
             });
 
+            const fullSweepLabels = [
+              'full-sweep-enabled',
+              'non-canary-full-sweep-enabled',
+              'full-sweep-fail-fast',
+              'full-sweep-fail-fast-no-canary',
+            ];
+            const pullLabels = new Set(
+              pull.data.labels
+                .map((label) => (typeof label === 'string' ? label : label.name))
+                .filter(Boolean),
+            );
+            const fullSweepLabel = fullSweepLabels.find((label) => pullLabels.has(label));
+            if (!fullSweepLabel) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  `@${actor} \`/stage-results\` requires a completed run from a PR using one of: ${fullSweepLabels.map((label) => `\`${label}\``).join(', ')}.`,
+                  '',
+                  `@${actor} \`/stage-results\` 只能用于已完成完整 sweep 的 PR；请使用以下标签之一：${fullSweepLabels.map((label) => `\`${label}\``).join('、')}。`,
+                ].join('\n'),
+              });
+              core.setFailed('PR does not have a full-sweep label');
+              return;
+            }
+
+            const timelineEvents = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              },
+            );
+            const fullSweepLabelAppliedAt = timelineEvents
+              .filter(
+                (event) => event.event === 'labeled' && event.label?.name === fullSweepLabel,
+              )
+              .reduce(
+                (latest, event) => Math.max(latest, Date.parse(event.created_at ?? '')),
+                Number.NEGATIVE_INFINITY,
+              );
+            if (!Number.isFinite(fullSweepLabelAppliedAt)) {
+              core.setFailed(`Could not verify when ${fullSweepLabel} was applied to the PR`);
+              return;
+            }
+
             const belongsToPullRequest = async (run) => {
               if (run.pull_requests?.some((pr) => pr.number === context.issue.number)) return true;
               const associated = await github.rest.repos.listPullRequestsAssociatedWithCommit({
@@ -128,6 +177,26 @@ jobs:
               core.setFailed(`Run ${run.id} is not a pull-request run of run-sweep.yml`);
               return;
             }
+            if (run.head_sha !== pull.data.head.sha) {
+              core.setFailed(`Run ${run.id} is not for the current PR head ${pull.data.head.sha}`);
+              return;
+            }
+            if (Date.parse(run.created_at) < fullSweepLabelAppliedAt) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  `@${actor} run ${run.id} predates the current \`${fullSweepLabel}\` label. Wait for the full sweep triggered by that label to complete successfully.`,
+                  '',
+                  `@${actor} 运行 ${run.id} 早于当前 \`${fullSweepLabel}\` 标签。请等待该标签触发的完整 sweep 成功完成。`,
+                ].join('\n'),
+              });
+              core.setFailed(
+                `Run ${run.id} predates the current ${fullSweepLabel} label application`,
+              );
+              return;
+            }
             if (run.status !== 'completed' || run.conclusion !== 'success') {
               core.setFailed(`Run ${run.id} must be completed successfully (found ${run.status}/${run.conclusion})`);
               return;
@@ -142,6 +211,20 @@ jobs:
             const usableNames = artifacts
               .filter((artifact) => !artifact.expired)
               .map((artifact) => artifact.name);
+            if (!usableNames.includes('changelog-metadata')) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: [
+                  `@${actor} run ${run.id} cannot be staged because it has no unexpired \`changelog-metadata\` artifact.`,
+                  '',
+                  `@${actor} 无法发布运行 ${run.id}：该运行没有未过期的 \`changelog-metadata\` 产物。`,
+                ].join('\n'),
+              });
+              core.setFailed(`Run ${run.id} has no unexpired changelog-metadata artifact`);
+              return;
+            }
             const hasBenchmarkData = usableNames.some(
               (name) =>
                 name === 'results_bmk' ||
