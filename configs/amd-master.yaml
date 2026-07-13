@@ -355,6 +355,8 @@ qwen3.5-fp8-mi355x-sglang-disagg:
   runner: mi355x-disagg
   precision: fp8
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -482,6 +484,8 @@ qwen3.5-fp4-mi355x-sglang-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -595,6 +599,8 @@ glm5-fp8-mi355x-sglang-disagg:
   runner: mi355x-disagg
   precision: fp8
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -800,13 +806,13 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       # DRAM offload only above the KV cliff. Lower concurrencies fit
       # entirely on-GPU, so paying the offload-path overhead there would
       # just slow them down without measuring anything new.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 40, 48, 56] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [32, 40, 48, 56] }
       # TP=4 probe: half-node layout doubles per-GPU weight footprint
       # (~62 GB on MI355X's 288 GB HBM, plenty of headroom). Restrict to
       # cliff-region concurrencies on both offload modes so we can directly
       # compare TP=4 vs TP=8 at the same conc points.
       - { tp: 4, kv-offloading: none, conc-list: [16, 24, 32, 40] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 24, 32, 40] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [16, 24, 32, 40] }
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539
@@ -873,6 +879,8 @@ dsr1-fp8-mi355x-sglang-disagg:
   runner: mi355x-disagg
   precision: fp8
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -1027,6 +1035,8 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
   runner: mi355x-disagg
   precision: fp8
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -1181,6 +1191,8 @@ kimik2.5-fp4-mi355x-vllm-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
   multinode: true
   disagg: true
   scenarios:
@@ -1233,6 +1245,8 @@ dsr1-fp4-mi355x-sglang-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -1461,6 +1475,8 @@ dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
   runner: mi355x-disagg
   precision: fp4
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -1571,6 +1587,8 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
   runner: mi355x-disagg
   precision: fp4
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -1739,6 +1757,8 @@ dsv4-fp4-mi355x-sglang-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -2063,7 +2083,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
@@ -2083,8 +2103,8 @@ dsv4-fp4-mi355x-vllm-agentic:
     - dram-utilization: 0.60
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [64, 72] }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40, 48] }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [64, 72], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "9229067cec0b3a63bb8a39368d101db7ac0bc3c1" }, conc-list: [32, 40, 48] }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
@@ -2098,6 +2118,8 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
   runner: mi355x-disagg
   precision: fp4
   framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -2348,6 +2370,8 @@ dsv4-fp4-mi355x-atom-disagg:
   runner: mi355x
   precision: fp4
   framework: atom-disagg
+  router: { name: atomesh, version: "087b82d9c1f630e79149ba37e6213257ec9a76f8" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -2467,6 +2491,8 @@ minimaxm3-fp4-mi355x-vllm-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
   multinode: true
   disagg: true
   scenarios:
@@ -2655,6 +2681,8 @@ minimaxm3-fp8-mi355x-atom-disagg:
   runner: mi355x-disagg
   precision: fp8
   framework: atom-disagg
+  router: { name: atomesh, version: "04b120d3040e0dd1a6915e88a3a3c1f588e6684a" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -2725,6 +2753,8 @@ minimaxm3-fp4-mi355x-atom-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: atom-disagg
+  router: { name: atomesh, version: "04b120d3040e0dd1a6915e88a3a3c1f588e6684a" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -2928,6 +2958,8 @@ minimaxm3-fp8-mi355x-vllm-disagg:
   runner: mi355x-disagg
   precision: fp8
   framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
   multinode: true
   disagg: true
   scenarios:
@@ -3034,8 +3066,8 @@ minimaxm3-fp8-mi300x-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
@@ -3058,7 +3090,7 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80] }
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96], router: { name: vllm-router, version: "0.1.14" } }
