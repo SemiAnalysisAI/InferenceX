@@ -274,14 +274,7 @@ EOF
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        git clone https://github.com/LMCache/LMCache.git
-        cd LMCache
-        # https://github.com/LMCache/LMCache/pull/3853
-        git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
-        pip install -r requirements/build.txt
-        pip install grpcio==1.78.0
-        CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
-        cd ..
+        pip install lmcache==0.5.1
 
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
@@ -330,6 +323,7 @@ EOF
             --max-workers "$LMCACHE_MAX_WORKERS"
             --eviction-policy LRU
             --supported-transfer-mode "$LMCACHE_TX_MODE"
+            --no-separate-object-group
         )
         printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
         printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
