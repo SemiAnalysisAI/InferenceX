@@ -21,6 +21,14 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 SERVER_LOG=/workspace/server.log
 
+pushd /root 
+git clone https://github.com/RadeonFlow/up-atom.git -b rf-dpa-tbo-rebase --depth=20
+cd up-atom/
+git checkout 56d3ddaf9fa47e0d414e695a36884432847a12e4
+git diff 945b3127e7bebc722ba6c6fe198fb1c1757a3ed2 > a.txt
+cd /app/ATOM/
+git apply --reject ~/up-atom/a.txt
+popd
 
 export ATOM_DISABLE_MMAP=true # Model load faster.
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
@@ -49,6 +57,9 @@ python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
+    --enable-dp-attention \
+    --enable-tbo \
+    --prefill-batch-token-threshold 10240 \
     --scheduler-delay-factor 1 \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --trust-remote-code \
