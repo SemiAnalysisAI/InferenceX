@@ -1,7 +1,7 @@
 * @InferenceX/core
 
 # AMD master config
-configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
+configs/amd-master.yaml @billishyahao @ChuanLi1101 @chunfangamd @seungrokj @1am9trash
 
 # NVIDIA master config
 configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @jgangani
