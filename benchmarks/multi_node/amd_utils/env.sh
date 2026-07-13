@@ -51,12 +51,12 @@ export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 #   NCCL_IB_GID_INDEX=3: use the routable RoCEv2 GID (fd93:16d3:59b6:012*). Without
 #     it NCCL falls back to RoCEv1 (GID idx 0, link-local) and cross-node comm init
 #     hangs.
-#   NCCL_IB_TC=96 / NCCL_IB_SL=3: put NCCL's own RDMA on the PFC-protected lossless
+#   NCCL_IB_TC=104 / NCCL_IB_SL=3: put NCCL's own RDMA on the PFC-protected lossless
 #     class (DSCP 24 / priority 3). Without it, NCCL's connection handshake can be
 #     dropped on the lossy default queue for some node pairs, hanging ncclCommInitRank.
 # Override for a cluster with a different GID layout / PFC class.
 export NCCL_IB_GID_INDEX="${NCCL_IB_GID_INDEX:-3}"
-export NCCL_IB_TC="${NCCL_IB_TC:-96}"
+export NCCL_IB_TC="${NCCL_IB_TC:-104}"
 export NCCL_IB_SL="${NCCL_IB_SL:-3}"
 
 # =============================================================================
