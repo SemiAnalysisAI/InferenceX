@@ -69,8 +69,10 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+        # use kernel io backendi
+        # page_first: Only compatible with kernel I/O backend, automatically switches to layer_first with direct backend
+        export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-kernel}"
+        export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
         CACHE_ARGS=(
             --enable-hierarchical-cache
             --hicache-ratio "$HICACHE_RATIO"
