@@ -164,12 +164,20 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
 3. Update `utils/collect_eval_results.py` if new metrics need extraction.
 
-### lm-eval patches
+### Runtime patches (`utils/evals/patches/`)
 
-The codebase patches lm-eval compatibility via `_patch_lm_eval`:
+Runtime patches to third-party eval deps live as standalone Python files under
+`utils/evals/patches/`, applied by the `_patch_*` helpers in
+`benchmarks/benchmark_lib.sh` (rationale lives in each file's docstring):
 
-1. Reasoning token handling: extracts `reasoning_content` when `message.content` is empty.
-2. TRT compatibility: avoids injecting `{"type": "text"}` for non-HF tokenizers.
+- `lm_eval_sitecustomize.py` (`_patch_lm_eval`): reasoning-token handling
+  (extracts `reasoning_content` when `message.content` is empty) and TRT
+  compatibility (no `{"type": "text"}` injection for non-HF tokenizers).
+  Copied into a temp dir as `sitecustomize.py` on `PYTHONPATH`.
+- `patch_swebench_agent.py` (`_patch_swebench_agent`): mini-swe-agent/swe-rex
+  sandbox lifecycle cleanup + budget-exhaustion submission fallback.
+- `patch_swebench_scoring.py` (`_patch_swebench_scoring`): swebench Modal
+  scorer reserved-CPU reduction + sandbox termination on instance completion.
 
 ### SWE-bench Lite (`--framework swebench`)
 

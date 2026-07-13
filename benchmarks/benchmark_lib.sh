@@ -722,77 +722,19 @@ _install_lm_eval_deps() {
     fi
 }
 
+# Runtime patches live as standalone Python files under utils/evals/patches/.
+# Resolve that dir from BASH_SOURCE (benchmark_lib.sh always lives at
+# <repo>/benchmarks/) since the cwd varies across serving containers.
+_eval_patches_dir() {
+    echo "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/utils/evals/patches"
+}
+
 # Patch lm-eval filters to be robust to empty strings via sitecustomize
+# (see utils/evals/patches/lm_eval_sitecustomize.py)
 _patch_lm_eval() {
     local patch_dir
     patch_dir="$(mktemp -d)"
-    cat > "$patch_dir/sitecustomize.py" <<'PY'
-# --- Patch LocalChatCompletion.parse_generations to handle empty content with reasoning_content ---
-import re, sys, unicodedata, json
-from lm_eval.filters import extraction as ex
-from lm_eval.models.openai_completions import LocalChatCompletion as _LCC
-
-def _le_parse_generations(outputs, **kwargs):
-      res = []
-      if not isinstance(outputs, list):
-          outputs = [outputs]
-      for out in (outputs or []):
-          try:
-              choices = out.get("choices", [])
-              tmp = ["" for _ in choices]
-              for choice in choices:
-                  idx = choice.get("index", 0)
-                  msg = (choice.get("message") or {})
-                  content = msg.get("content")
-                  if content in (None, "", []):
-                      content = msg.get("reasoning_content") or ""
-                  tmp[idx] = content
-          except Exception:
-              tmp = [""]
-          res.extend(tmp)
-      return res
-
-# Keep staticmethod semantics
-_LCC.parse_generations = staticmethod(_le_parse_generations)
-
-# --- Patch TemplateAPI.apply_chat_template to avoid injecting "type": "text" for TRT ---
-try:
-    from lm_eval.models import api_models as _api_models
-    _TemplateAPI = _api_models.TemplateAPI
-    _JsonChatStr = _api_models.JsonChatStr
-except Exception:
-    _TemplateAPI = None
-    _JsonChatStr = None
-
-if _TemplateAPI is not None and _JsonChatStr is not None:
-    _orig_apply_chat_template = _TemplateAPI.apply_chat_template
-
-    def _patched_apply_chat_template(
-        self,
-        chat_history,
-        add_generation_prompt: bool = True,
-    ):
-        """Applies a chat template to a list of chat history between user and model."""
-        if self.tokenizer_backend == "huggingface" and self.tokenized_requests:
-            return self.tokenizer.apply_chat_template(
-                chat_history,
-                tokenize=False,
-                add_generation_prompt=add_generation_prompt,
-                continue_final_message=not add_generation_prompt,
-            )
-        elif self.tokenizer_backend == "remote" and self.tokenized_requests:
-            return chat_history
-        else:
-            # NOTE: we no longer inject `"type": "text"` when tokenizer is None / non-HF
-            return _JsonChatStr(
-                json.dumps(
-                    [{**item} for item in chat_history],
-                    ensure_ascii=False,
-                )
-            )
-
-    _TemplateAPI.apply_chat_template = _patched_apply_chat_template
-PY
+    cp "$(_eval_patches_dir)/lm_eval_sitecustomize.py" "$patch_dir/sitecustomize.py"
     export PYTHONPATH="${patch_dir}:${PYTHONPATH:-}"
 }
 
@@ -1210,137 +1152,12 @@ _install_swebench_agent_deps() {
         echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
 }
 
-# Patch the installed pinned deps (idempotent, anchor-checked; pinned
-# versions keep the anchors stable):
-#
-# Sandbox lifecycle (observed: batches dying at 59m59s = the 1h
-# runtime_timeout, billing the full hour for ~7-min instances):
-#   - mini-swe-agent 2.4.5: process_instance() never calls env.stop() -- not
-#     even on success -- so EVERY sandbox lives until runtime_timeout.
-#   - swe-rex 1.4.0: ModalDeployment.stop() has its poll check inverted
-#     (terminates only already-exited sandboxes), and start() leaks the
-#     sandbox when the runtime never comes alive (startup timeout).
-#   Best-effort: the post-generation sweep still bounds the damage if an
-#   anchor ever drifts.
-#
-# Budget-exhaustion fallback (6/50 instances per 50-run burn all steps and
-# submit NOTHING -- forensics showed correct fixes can be sitting in the
-# tree): when an instance ends without a submission but with a live sandbox,
-# submit `git diff` of the tree as the patch. Empty scores zero anyway, so
-# this is strictly >=; guarded to require rc 0 and a real diff so an error
-# message can never be submitted as a patch. NOTE: LimitsExceeded does NOT
-# raise into process_instance -- mini's run loop absorbs InterruptAgentFlow
-# and returns normally with an empty submission (verified: 0 fallbacks fired
-# when this hook lived only on the except path) -- so the primary hook is on
-# the normal-return path; the except-path hook stays for real exceptions.
+# Patch the installed pinned mini-swe-agent/swe-rex deps: sandbox lifecycle
+# cleanup + budget-exhaustion submission fallback. Idempotent and
+# anchor-checked (pinned versions keep the anchors stable); rationale and
+# hunks live in utils/evals/patches/patch_swebench_agent.py.
 _patch_swebench_agent() {
-    python3 - <<'PYPATCH'
-import os, sys
-
-SENTINEL = "inferencex sandbox cleanup"
-
-
-def patch(path, replacements):
-    src = open(path).read()
-    if SENTINEL in src:
-        print(f"[swebench-agentic] {path}: cleanup patch already applied")
-        return True
-    ok = True
-    for old, new in replacements:
-        if src.count(old) != 1:
-            print(f"WARN: [swebench-agentic] {path}: patch anchor not found exactly once "
-                  f"(count={src.count(old)}); skipping hunk", file=sys.stderr)
-            ok = False
-            continue
-        src = src.replace(old, new)
-    open(path, "w").write(src)
-    print(f"[swebench-agentic] {path}: sandbox-cleanup patch {'applied' if ok else 'PARTIALLY applied'}")
-    return ok
-
-
-import minisweagent.run.benchmarks.swebench as mini_sb
-import swerex.deployment.modal as rex_modal
-
-mini_ok = patch(mini_sb.__file__, [
-    (
-        "    agent = None\n    exit_status = None",
-        "    agent = None\n    env = None  # inferencex sandbox cleanup\n    exit_status = None",
-    ),
-    (
-        '        info = agent.run(task)\n'
-        '        exit_status = info.get("exit_status")\n'
-        '        result = info.get("submission")',
-        '        info = agent.run(task)\n'
-        '        exit_status = info.get("exit_status")\n'
-        '        result = info.get("submission")\n'
-        "        if not result and env is not None:  # budget-exhaustion fallback: submit the tree's diff\n"
-        "            try:\n"
-        '                _fb = env.execute("git diff")\n'
-        '                _fb_out = (_fb.get("output") or "").strip()\n'
-        '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
-        "                    result = _fb_out + \"\\n\"\n"
-        '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
-        "            except Exception:\n"
-        "                pass",
-    ),
-    (
-        '        exit_status, result = type(e).__name__, ""\n'
-        '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}',
-        '        exit_status, result = type(e).__name__, ""\n'
-        '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}\n'
-        "        if env is not None:  # budget-exhaustion fallback: submit the tree's diff\n"
-        "            try:\n"
-        '                _fb = env.execute("git diff")\n'
-        '                _fb_out = (_fb.get("output") or "").strip()\n'
-        '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
-        "                    result = _fb_out + \"\\n\"\n"
-        '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
-        "            except Exception:\n"
-        "                pass",
-    ),
-    (
-        "    finally:\n        if agent is not None:",
-        "    finally:\n"
-        "        if env is not None and callable(getattr(env, \"stop\", None)):\n"
-        "            try:\n"
-        "                env.stop()\n"
-        "            except Exception:\n"
-        "                pass\n"
-        "        if agent is not None:",
-    ),
-])
-
-APP_NAME = os.environ.get("SWEBENCH_MODAL_APP_NAME", "infx-evals-swe")
-rex_ok = patch(rex_modal.__file__, [
-    (
-        'self._app = modal.App.lookup("swe-rex", create_if_missing=True)',
-        f'self._app = modal.App.lookup("{APP_NAME}", create_if_missing=True)  # inferencex app name',
-    ),
-    (
-        "        if self._sandbox is not None:\n"
-        "            exit_code = await self._sandbox.poll.aio()\n"
-        "            if exit_code is not None:\n"
-        "                await self._sandbox.terminate.aio()",
-        "        if self._sandbox is not None:  # inferencex sandbox cleanup\n"
-        "            try:\n"
-        "                await self._sandbox.terminate.aio()\n"
-        "            except Exception:\n"
-        "                pass",
-    ),
-    (
-        "        await self._wait_until_alive(timeout=remaining_startup_timeout)",
-        "        try:\n"
-        "            await self._wait_until_alive(timeout=remaining_startup_timeout)\n"
-        "        except BaseException:\n"
-        "            try:\n"
-        "                await self._sandbox.terminate.aio()\n"
-        "            except Exception:\n"
-        "                pass\n"
-        "            raise",
-    ),
-])
-sys.exit(0 if (mini_ok and rex_ok) else 1)
-PYPATCH
+    python3 "$(_eval_patches_dir)/patch_swebench_agent.py"
 }
 
 _install_swebench_deps() {
@@ -1356,88 +1173,11 @@ _install_swebench_deps() {
     fi
 }
 
-# Patch swebench's Modal scorer (run_evaluation_modal.py), idempotent and
-# anchor-checked like _patch_swebench_agent:
-#
-# 1. cpu=4 hardcoded per eval sandbox: Modal bills RESERVED cores and the test
-#    runs are overwhelmingly single-threaded pytest, so 300 instances reserve
-#    ~4x what they use. Patched to SWEBENCH_EVAL_SANDBOX_CPU (default 2 ->
-#    measured $80.83 -> $41.57 per full-300 with identical results).
-#
-# 2. run_instance_modal never finalizes its ModalSandboxRuntime (the __exit__
-#    that terminates the sandbox exists but nothing calls it), so every eval
-#    sandbox idle-bills after its tests finish until the 30-min sandbox
-#    timeout or app teardown. Invisible on the fast 50-slice (the whole app
-#    ends in ~2 min); on full-300 the slow tail keeps the app alive ~40 min
-#    and all 300 sandboxes bill ~30 min for ~3 min of work. A finally: on the
-#    function's main try/except chain terminates the sandbox on every exit
-#    path the moment the instance's evaluation ends.
+# Patch swebench's Modal scorer: reserved-CPU reduction + sandbox termination
+# on instance completion. Idempotent and anchor-checked; rationale and hunks
+# live in utils/evals/patches/patch_swebench_scoring.py.
 _patch_swebench_scoring() {
-    python3 - <<'PYPATCH'
-import os, sys
-
-cpu = os.environ.get("SWEBENCH_EVAL_SANDBOX_CPU", "2")
-try:
-    float(cpu)
-except ValueError:
-    print(f"WARN: SWEBENCH_EVAL_SANDBOX_CPU={cpu!r} is not numeric; leaving cpu=4", file=sys.stderr)
-    sys.exit(1)
-
-import swebench.harness.modal_eval.run_evaluation_modal as rem
-path = rem.__file__
-src = open(path).read()
-ok = True
-changed = False
-
-# hunk 1: reserved-cpu reduction
-if "inferencex scoring-cpu patch" in src:
-    print(f"[swebench] {path}: scoring-cpu patch already applied")
-elif src.count("cpu=4,") != 1:
-    print(f"WARN: [swebench] {path}: cpu=4 anchor not found exactly once "
-          f"(count={src.count('cpu=4,')}); skipping", file=sys.stderr)
-    ok = False
-else:
-    src = src.replace("cpu=4,", f"cpu={cpu},  # inferencex scoring-cpu patch")
-    changed = True
-    print(f"[swebench] {path}: eval sandbox cpu=4 -> cpu={cpu}")
-
-# hunk 2: terminate the sandbox when the instance's evaluation ends
-LIFECYCLE_ANCHOR = (
-    "            log_dir=log_dir,\n"
-    "            errored=True,\n"
-    "        )\n"
-    "\n"
-    "\n"
-    "def run_instances_modal("
-)
-LIFECYCLE_NEW = (
-    "            log_dir=log_dir,\n"
-    "            errored=True,\n"
-    "        )\n"
-    "    finally:  # inferencex sandbox lifecycle patch\n"
-    "        try:\n"
-    "            runner.sandbox.terminate()\n"
-    "        except Exception:\n"
-    "            pass\n"
-    "\n"
-    "\n"
-    "def run_instances_modal("
-)
-if "inferencex sandbox lifecycle patch" in src:
-    print(f"[swebench] {path}: sandbox lifecycle patch already applied")
-elif src.count(LIFECYCLE_ANCHOR) != 1:
-    print(f"WARN: [swebench] {path}: lifecycle anchor not found exactly once "
-          f"(count={src.count(LIFECYCLE_ANCHOR)}); skipping", file=sys.stderr)
-    ok = False
-else:
-    src = src.replace(LIFECYCLE_ANCHOR, LIFECYCLE_NEW)
-    changed = True
-    print(f"[swebench] {path}: eval sandboxes now terminate on instance completion")
-
-if changed:
-    open(path, "w").write(src)
-sys.exit(0 if ok else 1)
-PYPATCH
+    python3 "$(_eval_patches_dir)/patch_swebench_scoring.py"
 }
 
 # swebench's validate_modal_credentials() only checks that ~/.modal.toml
