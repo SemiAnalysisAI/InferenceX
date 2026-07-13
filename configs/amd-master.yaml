@@ -1230,6 +1230,54 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+
+# DCP + Expert-Parallel Kimi-K2.7-Code-MXFP4 disaggregated serving using
+# vLLM MultiConnector[NixlConnector + LMCacheMPConnector]. P2P is off for this
+# 1P1D CI point because there is only one prefill instance; LMCache still
+# provides the local L2 cache with 1.2T capacity per instance.
+kimik2.7-code-fp4-mi355x-vllm-disagg-dep-lmcache-nixl-p2poff:
+  image: vllm/vllm-openai-rocm:nightly
+  model: amd/Kimi-K2.7-Code-MXFP4
+  model-prefix: kimik2.7-code
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: "none"
+        conc-list: [ 16 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "PREFILL_KV_CONNECTOR=lmcache-nixl"
+          - "LMCACHE_ENABLE_P2P=false"
+          - "LMCACHE_L1_SIZE_GB=1200"
+          - "LMCACHE_L1_INIT_SIZE_GB=20"
+          - "LMCACHE_L1_READ_TTL_SECONDS=7200"
+          - "DOCKER_PULL_POLICY=always"
+          - "MODEL_NAME=Kimi-K2.7-Code-MXFP4-DEP"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_KV_CONNECTOR=lmcache-nixl"
+          - "LMCACHE_ENABLE_P2P=false"
+          - "LMCACHE_L1_SIZE_GB=1200"
+          - "LMCACHE_L1_INIT_SIZE_GB=20"
+          - "LMCACHE_L1_READ_TTL_SECONDS=7200"
+          - "DOCKER_PULL_POLICY=always"
+          - "MODEL_NAME=Kimi-K2.7-Code-MXFP4-DEP"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2

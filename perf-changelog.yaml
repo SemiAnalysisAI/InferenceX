@@ -4589,3 +4589,12 @@
     - "Image: lmsysorg/sglang:v0.5.12"
     - "14 topologies across 1k/1k and 8k/1k: prefill TP8 STP + decode wide-EP (DEP16/DEP32 high-throughput) and per-node TP8 low-latency, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1895
+
+- config-keys:
+    - kimik2.7-code-fp4-mi355x-vllm-disagg-dep-lmcache-nixl-p2poff
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add one MI355X 1P1D Kimi-K2.7-Code-MXFP4 DEP vLLM disagg CI point using MultiConnector[NixlConnector + LMCacheMPConnector]."
+    - "Configure LMCache 1.2T local L2 on prefill and decode with LMCACHE_ENABLE_P2P=false for the single-prefill p2p-off bring-up path."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2171

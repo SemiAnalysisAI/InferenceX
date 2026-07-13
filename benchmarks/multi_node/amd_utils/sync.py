@@ -144,8 +144,9 @@ def cmd_barrier(args):
 
     if args.enable_port:
         # Keep the port open long enough for slow nodes to pass their barrier.
-        # The previous 30s was too short when setup times vary by minutes.
-        grace = max(60, args.timeout // 2) if args.timeout > 0 else 300
+        # Once all ports are observed as open, only a short grace period is
+        # needed for peers that are in the same polling cycle.
+        grace = 15
         time.sleep(grace)
         close_port()
 
