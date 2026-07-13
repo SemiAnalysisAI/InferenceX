@@ -58,12 +58,6 @@ install_agentic_deps
 # Nightly ROCm image may be missing runtime deps; ensure they are present.
 agentic_pip_install --quiet Pillow fastapi uvicorn
 
-# default
-export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
-# tune
-#export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=60
-#export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=1200
-# tune
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 # vllm-project/router expands the one HTTP backend into one logical worker per
