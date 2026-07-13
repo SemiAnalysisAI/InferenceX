@@ -4758,8 +4758,8 @@
     - "Install FlashInfer 0.6.15.dev20260710"
     - "Use the upstream SM100 low-M MXFP8 split-K implementation included in FlashInfer 0.6.15"
     - "Apply the FlashInfer AutoTuner non-Tensor guard fix from PR #3918"
-    - "Revert the FlashInfer PR #3745 runtime communication workspace changes via a local patch"
-    - "Revert the FlashInfer PR #3582 trtllm-gen KV counter separation via a local runtime patch"
+    - "Apply the FlashInfer PR #3912 AutoTuner memory-leak follow-up via a local runtime patch"
+    - "Keep the upstream FlashInfer PR #3582, PR #3687, and PR #3745 runtime changes"
     - "Use the explicit FlashInfer TRT-LLM all-reduce backend override"
     - "Remove MiniMax 1k1k and 8k1k DEP2 points from this performance bisect"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
