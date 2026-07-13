@@ -1422,7 +1422,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # DP-attention on/off and EP=8.
 
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  image: vllm/vllm-openai-rocm:v0.25.1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds

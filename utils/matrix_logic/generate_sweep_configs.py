@@ -783,6 +783,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -816,6 +817,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                     + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -1081,6 +1083,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -1113,6 +1116,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                     + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
