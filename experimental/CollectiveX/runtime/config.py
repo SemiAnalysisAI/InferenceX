@@ -9,20 +9,14 @@ import os
 import sys
 
 
-FIELDS = {
-    "partition": "COLLX_PARTITION", "account": "COLLX_ACCOUNT", "qos": "COLLX_QOS",
-    "squash_dir": "COLLX_SQUASH_DIR", "stage_dir": "COLLX_STAGE_DIR",
-    "enroot_cache_path": "COLLX_ENROOT_CACHE_PATH", "exclude_nodes": "COLLX_EXCLUDE_NODES",
-    "nodelist": "COLLX_NODELIST", "lock_dir": "COLLX_LOCK_DIR",
-    "socket_ifname": "COLLX_SOCKET_IFNAME", "rdma_devices": "COLLX_RDMA_DEVICES",
-    "ib_gid_index": "COLLX_IB_GID_INDEX", "rdma_service_level": "COLLX_RDMA_SERVICE_LEVEL",
-    "rdma_traffic_class": "COLLX_RDMA_TRAFFIC_CLASS", "rail_isolated": "COLLX_RAIL_ISOLATED",
+OPERATOR_FIELDS = {
+    "partition", "account", "qos", "squash_dir", "stage_dir",
+    "enroot_cache_path", "exclude_nodes", "nodelist", "lock_dir",
 }
-PLATFORM_FIELDS = {
-    "image": "COLLX_IMAGE",
-    "image_platform": "COLLX_IMAGE_PLATFORM",
+NETWORK_FIELDS = {
+    "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
+    "rdma_traffic_class", "rail_isolated",
 }
-OUTPUT_FIELDS = {**FIELDS, **PLATFORM_FIELDS}
 
 
 def _platforms() -> dict:
@@ -38,20 +32,20 @@ def _platforms() -> dict:
 
 def emit(values: dict[str, object]) -> None:
     for field, value in values.items():
-        name = OUTPUT_FIELDS.get(field, field)
+        name = f"COLLX_{field.upper()}"
         sys.stdout.buffer.write(name.encode() + b"\0" + str(value).encode() + b"\0")
 
 
 def _network_overlay(runner: str) -> dict[str, object]:
     """Repo-tracked per-SKU scale-out RDMA selectors — the `network` block of the
     SKU's configs/platform_config.json entry — overlaid onto the base operator
-    config. Only network FIELDS are taken, so identity keys and notes are ignored;
+    config. Only NETWORK_FIELDS are taken, so identity keys and notes are ignored;
     a missing/invalid file is a no-op fallback to the base/secret network fields."""
     try:
         block = _platforms().get(runner, {}).get("network", {})
     except (KeyError, OSError, TypeError, json.JSONDecodeError):
         return {}
-    return {key: value for key, value in block.items() if key in FIELDS}
+    return {key: value for key, value in block.items() if key in NETWORK_FIELDS}
 
 
 def operator_config(path: str, runner: str) -> None:
@@ -69,7 +63,7 @@ def operator_config(path: str, runner: str) -> None:
         # SKUs without a platform_config.json network block keep their base/secret
         # network fields.
         selected.update(_network_overlay(runner))
-        allowed = set(FIELDS) | {"storage_roots"}
+        allowed = OPERATOR_FIELDS | NETWORK_FIELDS | {"storage_roots"}
         if set(selected) - allowed:
             raise ValueError
         roots = selected.pop("storage_roots", None)
@@ -88,7 +82,7 @@ def operator_config(path: str, runner: str) -> None:
                 raise ValueError
         if any(not isinstance(value, (str, int)) or "\0" in str(value) for value in selected.values()):
             raise ValueError
-        selected.update({field: platform[field] for field in PLATFORM_FIELDS})
+        selected.update(image=platform["image"], image_platform=platform["image_platform"])
         emit(selected)
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         print("validation-invalid-config", file=sys.stderr)

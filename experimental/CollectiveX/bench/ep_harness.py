@@ -34,7 +34,7 @@ def case_id(sku: str, case: dict) -> str:
     return "-".join(values)
 
 
-# Workload and timing values arrive from configs/suites.yaml through the matrix.
+# Workload and timing values arrive from configs/sweep.json through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
 # Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
 # _expected_transformed_combine reproduces the two-level (intra-domain FP32,
@@ -78,7 +78,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="token-size regime label: decode (small T) / prefill (large T)")
     ap.add_argument("--tokens-ladder", required=True,
                     help="space/comma-separated source-tokens-per-rank sweep; the matrix "
-                         "supplies the workload's phase ladder from configs/suites.yaml")
+                         "supplies the workload's phase ladder from configs/sweep.json")
     ap.add_argument("--hidden", type=int, required=True)
     ap.add_argument("--topk", type=int, required=True)
     ap.add_argument("--experts", type=int, required=True,
@@ -88,14 +88,14 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--suite", required=True)
     ap.add_argument("--workload-name", required=True)
     ap.add_argument("--seed", type=int, required=True,
-                    help="routing-trace seed; part of the workload identity in configs/suites.yaml")
+                    help="routing-trace seed; part of the workload identity in configs/sweep.json")
     ap.add_argument(
         "--version",
         type=int,
         required=True,
         help="iterable benchmark version copied verbatim into the emitted result",
     )
-    # The single cross-SKU profile (and its rationale) lives in configs/suites.yaml
+    # The single cross-SKU profile lives in configs/sweep.json
     # `timing:`; the matrix bakes it into every scheduled case.
     ap.add_argument("--warmup", type=int, required=True,
                     help="untimed full roundtrips before each trial/point")
@@ -117,7 +117,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
 
 def token_ladder(spec: str, cap: int | None) -> tuple[list[int], list[int]]:
     """Return (ladder, dropped) from an explicit spec (there is no default — the
-    model-specific ladders live in configs/suites.yaml); positive ints; clamped to
+    model-specific ladders live in configs/sweep.json); positive ints; clamped to
     `cap` with dropped points reported (never silently truncated)."""
     want = sorted({t for t in (int(t) for t in spec.replace(",", " ").split() if t) if t > 0})
     if cap is not None:

@@ -11,12 +11,8 @@ on:
         type: choice
         default: all
         options: [all, deepep-v2, mori]
-      suites:
-        description: "'all' or comma-list of suite names"
-        type: string
-        default: all
       only_sku:
-        description: Restrict to one GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi300x|mi355x); blank = all
+        description: Restrict to one GHA runner pool; blank = all
         type: string
         default: ''
       exclude_skus:
@@ -32,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ---- setup: resolve the suites into the shard matrix (the "pending jobs" node) ----
+  # ---- setup: generate the shard matrix and upload its requested coverage ----
   setup:
     runs-on: ubuntu-latest
     outputs:
@@ -41,24 +37,16 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
-      # PyYAML is needed only here to resolve suites.yaml/workloads.yaml; shard extraction on GPU runners stays stdlib-only.
-      - name: Install matrix dependencies
-        run: python3 -m pip install --quiet PyYAML==6.0.2
       - id: gen
         working-directory: experimental/CollectiveX
         env:
           INPUT_BACKEND: ${{ inputs.backend }}
-          INPUT_SUITES: ${{ inputs.suites }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
         run: |
           set -euo pipefail
-          args=(--suites "$INPUT_SUITES")
-          case "$INPUT_BACKEND" in
-            all) args+=(--backends all) ;;
-            *) args+=(--backend "$INPUT_BACKEND") ;;
-          esac
+          args=(--backend "$INPUT_BACKEND")
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")

@@ -25,8 +25,8 @@ fixed BF16 on every backend; precision is not a swept dimension. Every case uses
 `layout-and-dispatch-v1` semantics.
 
 - `ep-core`: uniform routing over the workload's token ladders — for `deepseek-v3`, decode
-  T=1..512 powers of two and prefill T=256..2048 powers of two. Ladders are model-specific and
-  live with the workload in `configs/suites.yaml`.
+  T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
+  live with the workload in `configs/sweep.json`.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`, and
@@ -48,16 +48,17 @@ the exact upstream PR #640 library matcher that excludes NCCL shared-memory mapp
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
-scale-up and uses LSA. MoRI EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X/MI325X
-AsyncLL); EP16 uses pinned InterNodeV1 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps,
-one QP per PE, and external input.
+scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; EP16 uses pinned
+InterNodeV1 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external
+input. No cell runs a low-latency-family kernel: throughput-oriented kernels are measured across the
+full token ladder on both vendors.
 Whether a given SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is
 decided only by the emitted artifact.
 
 ## Workload Identity
 
 One deterministic workload is generated over the global token batch from the workload's seed in
-`configs/suites.yaml` (part of the workload identity, baked into every scheduled case) and sliced by
+`configs/sweep.json` (part of the workload identity, baked into every scheduled case) and sliced by
 source rank; a keyed BLAKE2b counter over the (token, slot, attempt, stream) coordinates produces
 byte-identical expert indices and gate weights on every runtime, and the harness proves the
 realized routing trace identical across ranks before a case can succeed.
@@ -78,7 +79,7 @@ availability, origin, and sample count. A paired-only API reports null isolated 
 `isolated_sum` is derived. The artifact records the mode so a reader can keep distinct measurement
 contracts separate.
 
-Every measured component uses one fixed timing profile, defined once in `configs/suites.yaml`
+Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
 and baked into every scheduled case:
 
 - 256 trials x 8 timed iterations = 2048 observations;
@@ -175,7 +176,10 @@ missing or partial profiles, then probes every allocated node for the configured
 HCA port, and configured GID before backend initialization. It never substitutes a default route,
 inherited runner environment, or transport fallback. Scale-up and MNNVL cases clear the profile;
 scale-out NVIDIA forces `NCCL_NET=IB`, while AMD leaves plugin selection to RCCL. Both use exact HCA
-matching. Selector values remain in encrypted config and mode-0600 private logs.
+matching. Scale-out also pins `NCCL_IB_MERGE_NICS=0` so dual-port NIC fusion cannot disable NCCL GIN
+— which the DeepEP V2 EP16 hybrid path requires — and a rail-isolated fabric (`rail_isolated`) adds
+`NCCL_CROSS_NIC=0`. Selectors come from the tracked platform registry, optionally overlaid by an
+operator config, and appear only in mode-0600 private logs.
 
 Repository staging uses a pre-existing, runner-owned, group/world non-writable shared base outside
 the checkout and workflow workspace. The parent process resolves the exact execution child before

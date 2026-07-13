@@ -1,27 +1,15 @@
 #!/usr/bin/env python3
-"""Resolve CollectiveX suites and extract execution shards.
-
-Mode changes measurement semantics and therefore participates in case identity.
-Dispatch and combine are fixed BF16 benchmark facts, so a case's coordinates are
-suite/workload/backend/topology only; the matrix schedules, it never ranks.
-"""
+"""Build the CollectiveX sweep matrix and extract execution shards."""
 from __future__ import annotations
 
 import argparse
-import itertools
 import json
 from pathlib import Path
 import sys
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE / "bench"))
-
-try:  # Shard extraction on GPU runners is intentionally stdlib-only.
-    import yaml  # type: ignore
-except ModuleNotFoundError:  # pragma: no cover - exercised by the workflow environment
-    yaml = None
 
 import ep_harness  # noqa: E402
 
@@ -32,51 +20,15 @@ TOPOLOGY_FIELDS = (
 )
 
 
-def _load_platforms() -> dict[str, dict[str, Any]]:
-    with (HERE / "configs" / "platform_config.json").open(encoding="utf-8") as stream:
-        return json.load(stream)["platforms"]
+def _load_config(name: str) -> dict[str, Any]:
+    return json.loads((HERE / "configs" / name).read_text(encoding="utf-8"))
 
 
-PLATFORMS = _load_platforms()
+SWEEP = _load_config("sweep.json")
+PLATFORMS = _load_config("platform_config.json")["platforms"]
 SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
-
-# Real per-cell platform walls: (sku, backend, ep) the matrix marks `unsupported`
-# with the reason surfaced to consumers, rather than scheduling. Backend/platform
-# mismatches are already filtered by each platform's `backends` map and never
-# reach here.
-#
-# "Walled" (listed here) = never scheduled -> shows as `unsupported`.
-# "Red" (NOT listed here) = kept in `backends`, scheduled, and allowed to fail so
-# the failure is visible on the frontend instead of hidden. The current example
-# is mi355x mori EP16: it runs, but the Pensando/Pollara NIC's ~1 GiB single-MR
-# limit rejects the 6 GiB symmetric SHMEM heap (RegisterRdmaMemoryRegion errno 22)
-# -- a hardware ceiling, so it reds every attempt. Prefer keeping a known-red cell
-# schedulable when the failure is worth surfacing; move it here only when running
-# it wastes an allocation for no new signal.
-CELL_EXCLUSIONS = {
-    ("mi300x", "mori", 16): (
-        "EP16 is MoRI InterNodeV1 over 2x8 XGMI + RoCE, blocked three ways: no "
-        "tracked internode `network` block (the former selectors were deleted "
-        "with the operator secrets, so there is nothing to overlay -- they must "
-        "be re-derived on the metal: bnxt_re0..7, RoCEv2 is IPv6-only at gid 3); "
-        "pinned-MoRI distributed init has not completed on MI300X EP16; and the "
-        "cluster cannot schedule anything (verified 2026-07-12: bare srun fails "
-        "'Nodes ... are still not ready' on every node, including one whose "
-        "slurmd is active -- a controller-side dynamic-node registration fault, "
-        "SRE-level). EP8 (single-node AsyncLL over XGMI) additionally needs a "
-        "rebuilt operator block once the cluster schedules; until then dispatch "
-        "with --exclude-skus mi300x, as run 29193126476 did for mi325x."
-    ),
-    ("mi325x", "mori", 16): (
-        "EP16 (MoRI InterNodeV1) is unvalidated on MI325X and cannot be brought "
-        "up: no tracked internode `network` block (nothing survived the operator "
-        "secret deletion), no online runners, and no access path to derive "
-        "selectors or validate. Un-wall = restore runners and access, derive the "
-        "RoCE selectors, then validate a 2-node run."
-    ),
-}
 
 
 def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
@@ -87,11 +39,12 @@ def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
     domain = platform["scale_up_domain"]
     scale_up = platform["scale_up_transport"]
     scale_out = ep > domain
-    scale_up_class = (
-        f"{product}-nvl{domain}-mnnvl" if scale_up == "mnnvl"
-        else f"{product}-xgmi" if scale_up == "xgmi"
-        else f"{product}-{scale_up}-island"
-    )
+    if scale_up == "mnnvl":
+        scale_up_class = f"{product}-nvl{domain}-mnnvl"
+    elif scale_up == "xgmi":
+        scale_up_class = f"{product}-xgmi"
+    else:
+        scale_up_class = f"{product}-{scale_up}-island"
     return {
         "nodes": ep // gpus_per_node,
         "gpus_per_node": gpus_per_node,
@@ -104,274 +57,120 @@ def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
     }
 
 
-if yaml is not None:
-    class _UniqueKeyLoader(yaml.SafeLoader):
-        pass
-
-    def _unique_mapping(loader: Any, node: Any, deep: bool = False) -> dict[Any, Any]:
-        result: dict[Any, Any] = {}
-        for key_node, value_node in node.value:
-            key = loader.construct_object(key_node, deep=deep)
-            if key in result:
-                raise SystemExit(f"duplicate YAML key {key!r} at line {key_node.start_mark.line + 1}")
-            result[key] = loader.construct_object(value_node, deep=deep)
-        return result
-
-    _UniqueKeyLoader.add_constructor(
-        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping
-    )
-
-
-def _load(name: str) -> dict[str, Any]:
-    if yaml is None:
-        raise SystemExit("matrix generation requires PyYAML; shard extraction does not")
-    try:
-        with (HERE / "configs" / name).open() as fh:
-            document = yaml.load(fh, Loader=_UniqueKeyLoader)
-    except yaml.YAMLError as exc:
-        raise SystemExit(f"configs/{name} is not valid YAML: {exc}") from exc
-    if not isinstance(document, dict):
-        raise SystemExit(f"configs/{name} must contain a YAML object")
-    return document
-
-
-def _positive_int(value: Any) -> bool:
-    return not isinstance(value, bool) and isinstance(value, int) and value > 0
-
-
-def _dims(workloads: dict[str, Any], name: str) -> tuple[int, int, int, int]:
-    config = workloads[name]
-    seed = config["seed"]
-    # Positive (not just non-negative): the case-argv codec treats falsy fields
-    # as absent, so a seed of 0 would silently defer to the invocation seed.
-    if not _positive_int(seed):
-        raise SystemExit(f"workload {name!r} has no valid routing seed: {seed!r}")
-    return config["hidden"], config["topk"], config["routed_experts"], seed
-
-
-def _timing(document: dict[str, Any]) -> tuple[int, int, int]:
-    keys = ("iters_per_trial", "trials_per_point", "warmup_iters_per_trial")
-    timing = document.get("timing")
-    if (not isinstance(timing, dict) or set(timing) != set(keys)
-            or not all(_positive_int(timing[key]) for key in keys)):
-        raise SystemExit(f"suites.yaml timing must define positive ints {keys}: {timing!r}")
-    return timing[keys[0]], timing[keys[1]], timing[keys[2]]
-
-
-def _ladder(workloads: dict[str, Any], workload: str, phase: str) -> str:
-    points = workloads[workload].get("token_ladders", {}).get(phase)
-    if (not isinstance(points, list) or not points
-            or not all(_positive_int(point) for point in points)
-            or points != sorted(set(points))):
-        raise SystemExit(
-            f"workload {workload!r} has no valid {phase} token ladder: {points!r}"
-        )
-    return " ".join(map(str, points))
-
-
-def _select_backends(backend: str, backends: str) -> list[str]:
-    available = list(SWEEP_BACKENDS)
-    if backend and backends:
-        raise SystemExit("--backend and --backends are mutually exclusive")
-    if backends:
-        names = available if backends == "all" else [
-            value.strip() for value in backends.split(",") if value.strip()
-        ]
-    else:
-        names = [backend or "deepep-v2"]
-    unknown = sorted(set(names) - set(available))
-    if unknown:
-        raise SystemExit(f"unknown backend values {unknown}; have {available}")
-    if len(names) != len(set(names)):
-        raise SystemExit("backend selection contains duplicates")
-    return names
+def _selected_backends(backend: str) -> list[str]:
+    if backend == "all":
+        return list(SWEEP_BACKENDS)
+    if backend not in SWEEP_BACKENDS:
+        raise SystemExit(f"unknown --backend {backend!r}; have {list(SWEEP_BACKENDS)}")
+    return [backend]
 
 
 def resolve_matrix(
-    suites: str = "all",
-    backend: str = "",
-    backends: str = "",
+    backend: str = "all",
     only_sku: str = "",
     exclude_skus: str = "",
     ep_sizes: str = "",
-    max_cases: int = 128,
 ) -> dict[str, Any]:
-    """Resolve suite configuration into allocation-sized workflow shards."""
-    if max_cases <= 0:
-        raise SystemExit("--max-cases must be positive")
-    # --ep-sizes narrows the matrix to specific expert-parallel degrees at dispatch
-    # time: "8" keeps every EP8 shard and drops EP16, so a comprehensive run can
-    # co-schedule the 8-GPU SKUs' single-node EP8 with the GB SKUs' two-node EP8
-    # without dispatching any EP16 leg. Blank keeps every degree. The resulting
-    # matrix is a partial subset that only omits cases; it never reclassifies them.
+    """Resolve the fixed sweep into allocation-sized workflow shards."""
     selected_eps: set[int] = set()
-    for value in (part.strip() for part in ep_sizes.split(",")):
-        if not value:
-            continue
+    for value in filter(None, (part.strip() for part in ep_sizes.split(","))):
         if not value.isdigit() or int(value) <= 0:
             raise SystemExit(f"invalid --ep-sizes {ep_sizes!r}; expected positive integers")
         selected_eps.add(int(value))
+
     if only_sku and only_sku not in PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
-    # --exclude-skus narrows the matrix to a subset by dropping whole runner pools
-    # — e.g. exclude a SKU whose cluster is unavailable. It only omits cases.
     excluded = {value.strip() for value in exclude_skus.split(",") if value.strip()}
-    unknown_excluded = sorted(excluded - set(PLATFORMS))
-    if unknown_excluded:
-        raise SystemExit(
-            f"unknown --exclude-skus {unknown_excluded}; have {sorted(PLATFORMS)}"
-        )
-    if only_sku and only_sku in excluded:
+    unknown = sorted(excluded - set(PLATFORMS))
+    if unknown:
+        raise SystemExit(f"unknown --exclude-skus {unknown}; have {sorted(PLATFORMS)}")
+    if only_sku in excluded:
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
-    suites_document = _load("suites.yaml")
-    iters, trials, warmup = _timing(suites_document)
-    timing_profile = f"{iters}:{trials}:{warmup}"
-    workloads = suites_document["workloads"]
-    registry = suites_document["suites"]
-    select_all = suites == "all"
-    names = (
-        list(registry)
-        if select_all
-        else [value.strip() for value in suites.split(",") if value.strip()]
-    )
-    if not names or len(names) != len(set(names)):
-        raise SystemExit("suite selection must be non-empty and unique")
-    unknown = sorted(set(names) - set(registry))
-    if unknown:
-        raise SystemExit(f"unknown suites {unknown}; have {sorted(registry)}")
-    targets = _select_backends(backend, backends)
-
-    shards: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+    timing = SWEEP["timing"]
+    timing_profile = ":".join(str(timing[key]) for key in (
+        "iters_per_trial", "trials_per_point", "warmup_iters_per_trial",
+    ))
+    workload = SWEEP["workload"]
+    targets = _selected_backends(backend)
     requested_cases: list[dict[str, Any]] = []
-    for suite_name in names:
-        suite = registry[suite_name]
-        mode = suite["mode"]
-        phases = suite["phases"]
-        routings = suite["routings"]
-        suite_backends = set(suite.get("backends", SWEEP_BACKENDS))
-        suite_targets = [target for target in targets if target in suite_backends]
-        if not suite_targets:
-            continue
-        # "all" = every SKU in configs/platform_config.json.
-        suite_platforms = suite["platforms"]
-        if suite_platforms == "all":
-            suite_platforms = sorted(PLATFORMS)
-        for platform_name in suite_platforms:
-            if only_sku and platform_name != only_sku:
-                continue
-            if platform_name in excluded:
-                continue
-            ep_degrees = suite["ep_degrees"]
-            for workload, ep, phase, routing, target in itertools.product(
-                suite["workloads"], ep_degrees, phases, routings,
-                suite_targets,
-            ):
-                if selected_eps and ep not in selected_eps:
-                    continue
-                platform = PLATFORMS[platform_name]
-                runnable_eps = platform["backends"].get(target)
-                if runnable_eps is None:
-                    continue
-                topology = _topology(platform, ep)
-                nodes = int(topology["nodes"])
-                hidden, topk, experts, seed = _dims(workloads, workload)
+    shards: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
 
-                def add_case(
-                    case_ladder: str,
-                    disposition: str,
-                    reason: str | None,
-                    detail: str | None,
-                ) -> None:
-                    case: dict[str, Any] = {
-                        "suite": suite_name,
-                        "workload": workload,
+    for sku in sorted(PLATFORMS):
+        if (only_sku and sku != only_sku) or sku in excluded:
+            continue
+        platform = PLATFORMS[sku]
+        for ep in SWEEP["ep_degrees"]:
+            if selected_eps and ep not in selected_eps:
+                continue
+            topology = _topology(platform, ep)
+            for phase, ladder in workload["token_ladders"].items():
+                for target in targets:
+                    runnable_eps = platform["backends"].get(target)
+                    if runnable_eps is None:
+                        continue
+                    runnable = ep in runnable_eps
+                    case = {
+                        "suite": SWEEP["suite"],
+                        "workload": workload["name"],
                         "backend": target,
-                        "routing": routing,
+                        "routing": SWEEP["routing"],
                         "phase": phase,
                         "ep": ep,
-                        "hidden": hidden,
-                        "topk": topk,
-                        "experts": experts,
-                        "seed": seed,
-                        "ladder": case_ladder,
-                        "mode": mode,
+                        "hidden": workload["hidden"],
+                        "topk": workload["topk"],
+                        "experts": workload["routed_experts"],
+                        "seed": workload["seed"],
+                        "ladder": " ".join(map(str, ladder)),
+                        "mode": SWEEP["mode"],
                         "timing": timing_profile,
                         **{field: topology[field] for field in TOPOLOGY_FIELDS},
                     }
-                    # Same function the harness recomputes at run time — a scheduled
-                    # case ID can never drift from its realized factors.
-                    case["case_id"] = ep_harness.case_id(platform_name, case)
-                    requested_cases.append(
-                        {
-                            "sku": platform_name,
-                            "case": case,
-                            "disposition": disposition,
-                            "reason": reason,
-                            "detail": detail,
-                        }
-                    )
-                    if disposition == "runnable":
-                        shards.setdefault((platform_name, target, nodes), []).append(case)
-
-                requested_ladder = _ladder(workloads, workload, phase)
-                if ep not in runnable_eps:
-                    detail = CELL_EXCLUSIONS.get((platform_name, target, ep))
-                    if detail is None:
-                        raise SystemExit(
-                            f"{platform_name} {target} EP{ep} is not runnable and has no exclusion"
-                        )
-                    add_case(
-                        requested_ladder,
-                        "unsupported",
-                        "backend-platform-unsupported",
-                        detail,
-                    )
-                    continue
-                add_case(requested_ladder, "runnable", None, None)
+                    case["case_id"] = ep_harness.case_id(sku, case)
+                    requested_cases.append({
+                        "sku": sku,
+                        "case": case,
+                        "disposition": "runnable" if runnable else "unsupported",
+                        "reason": None if runnable else "backend-platform-unsupported",
+                        "detail": None,
+                    })
+                    if runnable:
+                        shards.setdefault((sku, target, topology["nodes"]), []).append(case)
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
     for (sku, target, nodes), cases in sorted(shards.items()):
-        chunk_size = max_cases
-        for offset in range(0, len(cases), chunk_size):
-            chunk = cases[offset:offset + chunk_size]
-            part = offset // chunk_size
-            shard_id = f"{sku}-{target}-n{nodes}"
-            if len(cases) > chunk_size:
-                shard_id += f"-p{part}"
-            shards_by_sku.setdefault(sku, []).append({
-                "id": shard_id,
-                "sku": sku,
-                "backend": target,
-                "launcher": PLATFORMS[sku]["launcher"],
-                **{field: chunk[0][field] for field in TOPOLOGY_FIELDS},
-                "cases": chunk,
-            })
+        first = cases[0]
+        shards_by_sku.setdefault(sku, []).append({
+            "id": f"{sku}-{target}-n{nodes}",
+            "sku": sku,
+            "backend": target,
+            "launcher": PLATFORMS[sku]["launcher"],
+            "nodes": nodes,
+            "gpus_per_node": first["gpus_per_node"],
+            "scale_up_domain": first["scale_up_domain"],
+            "cases": cases,
+        })
     include = [
-        shards_by_sku[sku][round_index]
-        for round_index in range(max(map(len, shards_by_sku.values()), default=0))
+        shards_by_sku[sku][index]
+        for index in range(max(map(len, shards_by_sku.values()), default=0))
         for sku in sorted(shards_by_sku)
-        if round_index < len(shards_by_sku[sku])
+        if index < len(shards_by_sku[sku])
     ]
     return {
-        "version": suites_document["version"],
+        "version": SWEEP["version"],
         "requested_cases": requested_cases,
         "include": include,
     }
 
 
 def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str, Any]:
-    """Select one generator-produced shard and write its execution document."""
-    with open(matrix_path) as fh:
-        document = json.load(fh)
+    """Write one generator-produced shard as a runner control document."""
+    document = json.loads(Path(matrix_path).read_text(encoding="utf-8"))
     matches = [item for item in document["include"] if item["id"] == shard_id]
     if len(matches) != 1:
         raise SystemExit(f"expected one shard {shard_id!r}, found {len(matches)}")
     source = matches[0]
-    control = {
-        key: source[key]
-        for key in ("id", "sku", "backend", "nodes", "cases")
-    }
+    control = {key: source[key] for key in ("id", "sku", "backend", "nodes", "cases")}
     control["version"] = document["version"]
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -381,21 +180,10 @@ def extract_shard(matrix_path: str, shard_id: str, output_path: str) -> dict[str
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
-    parser.add_argument("--suites", default="all", help="'all' or comma-list of suites")
-    parser.add_argument("--backend", default="", help="select one EP backend")
-    parser.add_argument("--backends", default="", help="'all' or comma-list of EP backends")
+    parser.add_argument("--backend", default="all")
     parser.add_argument("--only-sku", default="")
-    parser.add_argument(
-        "--exclude-skus",
-        default="",
-        help="comma-list of runner pools to drop (partial matrix); disjoint from --only-sku",
-    )
-    parser.add_argument(
-        "--ep-sizes",
-        default="",
-        help="comma-list of expert-parallel degrees to keep (e.g. 8 drops EP16); blank = all",
-    )
-    parser.add_argument("--max-cases", type=int, default=128)
+    parser.add_argument("--exclude-skus", default="")
+    parser.add_argument("--ep-sizes", default="")
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
@@ -410,21 +198,17 @@ def main() -> int:
         return 0
 
     matrix = resolve_matrix(
-        suites=args.suites,
         backend=args.backend,
-        backends=args.backends,
         only_sku=args.only_sku,
         exclude_skus=args.exclude_skus,
         ep_sizes=args.ep_sizes,
-        max_cases=args.max_cases,
     )
     if args.out:
-        with open(args.out, "w") as fh:
-            json.dump(matrix, fh, sort_keys=True, separators=(",", ":"))
-            fh.write("\n")
-    runnable = sum(
-        item["disposition"] == "runnable" for item in matrix["requested_cases"]
-    )
+        Path(args.out).write_text(
+            json.dumps(matrix, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+    runnable = sum(item["disposition"] == "runnable" for item in matrix["requested_cases"])
     unsupported = len(matrix["requested_cases"]) - runnable
     print(
         f"resolved {len(matrix['include'])} shard-cells, "

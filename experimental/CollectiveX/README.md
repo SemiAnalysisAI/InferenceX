@@ -18,16 +18,18 @@ precision is not a swept dimension. Every case runs the single normal-mode contr
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Coverage is uniform routing only.
 
-Cases use a fixed timing profile from `configs/suites.yaml`: 256 trials x 8 timed iterations (2048
+Cases use a fixed timing profile from `configs/sweep.json`: 256 trials x 8 timed iterations (2048
 samples per component) with 32 synchronized full roundtrip warmups before each measured component at
 every trial/point. Component measurement order rotates each trial so every timed component occupies
 every position in the sequence; each iteration takes the cross-rank maximum before nearest-rank
 p50/p90/p95/p99, and roundtrip p99 is the headline latency. A keyed BLAKE2b counter produces
 byte-identical routing and gate weights on every runtime.
 
-Correctness is checked against the reference activation. The combine gate is `rtol=0.05, atol=0.02`
-for the BF16 communication path. Any failed rank or point makes the case ineligible in the result
-it writes.
+Correctness is checked against an implementation-independent oracle that reproduces the backend's
+two-level reduction — intra-scale-up-domain FP32, then a BF16 cast of each domain's partial for the
+scale-out send. The combine gate is a tight max elementwise relative error below `8 * 2^-8`
+(denominator clamped at 0.02), which holds across scale-up and multi-node scale-out topologies
+alike. Any failed rank or point makes the case ineligible in the result it writes.
 
 The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
@@ -65,7 +67,7 @@ benchmark's return code.
 ## Workflow And Artifacts
 
 `.github/workflows/collectivex-sweep.yml` has two jobs. `setup` generates a public-SKU matrix
-(`backend`, `suites`, `only_sku`, `exclude_skus`, `ep_sizes` inputs) and uploads the matrix.
+(`backend`, `only_sku`, `exclude_skus`, `ep_sizes` inputs) and uploads the matrix.
 `sweep` extracts a strict ignored `.shards/<id>.json` control per matrix entry, executes one
 allocation per shard, fetches pinned DeepEP source before allocation when required, and uploads the
 result artifacts with `always()` so a red or partial run still uploads.
@@ -76,32 +78,36 @@ unsupported cells produce no synthetic record. No step promotes a run,
 builds a dataset, or advances a channel; the neutral artifacts are the output. A consumer downloads
 them and decides what to display.
 
-Credentials stay in encrypted config and are never uploaded. Per-step runner logs are kept on the
-runner for postmortem; result artifacts carry only the fields listed in the methodology.
+No operator credentials are passed to the workflow or uploaded; runner-local overrides and any
+selectors stay on the runner. Per-step runner logs are kept on the runner for postmortem, and
+result artifacts carry only the fields listed in the methodology.
 
 ## Runner Configuration
 
-Runner-local Slurm and storage values use a strict per-SKU JSON document at
-`$XDG_CONFIG_HOME/inferencex/collectivex.json` or `COLLECTIVEX_OPERATOR_CONFIG`. Unknown runners,
-fields, duplicate keys, and non-JSON input fail closed; configuration is never evaluated as shell.
-GHA passes encrypted `COLLECTIVEX_OPERATOR_CONFIG_V1` content to the launcher, which validates it
-and overlays it, per field, onto the tracked baseline. The secret is optional: when it is absent a
-SKU runs entirely from its tracked baseline, and any field the baseline already supplies needs no
-secret.
+Each SKU's Slurm and storage values come from its tracked baseline in the registry. An optional
+runner-local JSON document at `$XDG_CONFIG_HOME/inferencex/collectivex.json` or
+`COLLECTIVEX_OPERATOR_CONFIG` overlays that baseline per field; unknown runners, fields, duplicate
+keys, and non-JSON input fail closed, and configuration is never evaluated as shell. GHA passes no
+operator secret, so a SKU runs entirely from its tracked baseline unless a runner-local document is
+present.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
-architecture/product, fixed placement, launcher, runnable backend/EP pairs, tracked operator
-defaults, and scale-out RDMA selectors. Operator documents can override the defaults. Launchers
+architecture/product, container image and platform, fixed placement, launcher, runnable backend/EP
+pairs, tracked operator defaults, and scale-out RDMA selectors. Operator documents can override the defaults. Launchers
 declare and check the fields they actually require. `sweep_matrix.py` derives EP topology from the
-placement fields, and a suite's `platforms: all` resolves to every registered SKU.
+placement fields; the sweep includes every registered SKU by default.
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices` for
-its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class`
-are also allowlisted. Service level and traffic class are mapped into MoRI's RDMA/IO QoS environment.
+its operator-approved fabric; optional `ib_gid_index`, `rdma_service_level`, `rdma_traffic_class`,
+and `rail_isolated` are also allowlisted. Service level and traffic class are mapped into MoRI's
+RDMA/IO QoS environment.
 CollectiveX does not heuristically select a management route or HCA. After allocation, every
 non-MNNVL scale-out node must prove that all configured interfaces and active HCA ports exist before
 backend setup. Scale-up and MNNVL jobs clear these overrides. Scale-out NCCL/RCCL is pinned to `IB`
 with exact-match HCA selectors so a socket fallback fails instead of being mislabeled as RDMA.
+Scale-out also disables NCCL dual-port NIC fusion (`NCCL_IB_MERGE_NICS=0`): a fused device disables
+NCCL GIN, which the DeepEP V2 EP16 hybrid path requires, and a rail-isolated fabric
+(`rail_isolated=1`, e.g. B300's multi-plane RoCE) additionally sets `NCCL_CROSS_NIC=0`.
 
 `ib_gid_index` is applied only when every selected HCA port reports an Ethernet link layer, where it
 selects the operator-approved RoCE GID. Native InfiniBand profiles retain explicit HCA and service
@@ -126,18 +132,17 @@ ignores its legacy group-writable `stage_dir` and derives an execution-specific 
 validated compute-visible account home. Backend preparation runs from that staged tree on every node.
 
 Enroot imports the configured image tag into a per-run-scoped squash keyed by image tag and image
-platform, so one run never reuses another run's imported filesystem. Backend source pins and image
-references live in `runtime/common.sh`; the DeepEP V2 build is fetched and verified at the pinned
-commit, checked for `ElasticBuffer`, and cached in a cluster-local build cache keyed by architecture,
-image, and commit. Only the fixed `/cx-cache` mount reaches the container.
+platform, so one run never reuses another run's imported filesystem. The image tag and platform are
+per-SKU registry fields; the DeepEP V2 source pin lives in `runtime/common.sh` and its build is
+fetched and verified at the pinned commit, checked for `ElasticBuffer`, and cached in a
+cluster-local build cache keyed by architecture, image, and commit. Only the fixed `/cx-cache` mount
+reaches the container.
 
 ## Local Checks
 
 ```bash
-uv run --with-requirements experimental/CollectiveX/requirements.txt \
-  python -m unittest discover experimental/CollectiveX/tests -p 'test_*.py'
-uv run --with-requirements experimental/CollectiveX/requirements.txt \
-  python experimental/CollectiveX/sweep_matrix.py --backends all --out /tmp/cx-matrix.json >/dev/null
+python3 -m unittest discover experimental/CollectiveX/tests -p 'test_*.py'
+python3 experimental/CollectiveX/sweep_matrix.py --backend all --out /tmp/cx-matrix.json >/dev/null
 bash -n experimental/CollectiveX/runtime/*.sh experimental/CollectiveX/launchers/*.sh
 ```
 

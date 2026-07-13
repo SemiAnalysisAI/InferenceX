@@ -11,8 +11,18 @@ source runtime/common.sh
 
 collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${COLLX_NODES:-1}"
 
-# Match the CUDA target to the registered SKU before compiling.
-collx_cuda_arch() {
+# Fresh rank tasks source only these backend-created values. Network variables
+# are reapplied by the rank wrapper from the platform profile.
+readonly -a RANK_ENV_VARS=(
+  PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
+  NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
+  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE
+)
+readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
+
+# ---- discovery --------------------------------------------------------------
+
+cuda_arch() {
   local expected detected
   expected="$(python3 - "$COLLX_RUNNER" <<'PY'
 import json, sys
@@ -38,9 +48,9 @@ PY
   printf '%s' "$detected"
 }
 
-collx_nvidia_package_root() {
-  local package="$1" component="$2"
-  python3 - "$package" "$component" <<'PY'
+nvidia_package_root() {
+  local python="$1" package="$2" component="$3"
+  "$python" - "$package" "$component" <<'PY'
 from importlib import metadata
 from pathlib import Path, PurePosixPath
 import sys
@@ -61,7 +71,7 @@ print(root, end="")
 PY
 }
 
-collx_prepare_cuda_cccl() {
+cuda_toolchain_paths() {
   local cccl="" candidate cuda_home nvcc
   nvcc="$(command -v nvcc)" || { collx_log "ERROR: CUDA nvcc is unavailable"; return 1; }
   nvcc="$(readlink -f -- "$nvcc")" || { collx_log "ERROR: CUDA nvcc cannot be resolved"; return 1; }
@@ -78,16 +88,11 @@ collx_prepare_cuda_cccl() {
     fi
   done
   [ -n "$cccl" ] || { collx_log "ERROR: CUDA CCCL headers are unavailable"; return 1; }
-  export CUDA_HOME="$cuda_home"
-  export CPATH="$cccl:${CPATH:-}"
-  export NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}"
+  printf '%s\t%s' "$cuda_home" "$cccl"
 }
 
-collx_prepare_deepep_toolchain() {
-  local packaged overlay path root temporary
-  packaged="$(collx_nvidia_package_root nvidia-nvshmem-cu12 nvshmem)" \
-    || { collx_log "ERROR: nvidia.nvshmem is unavailable"; return 1; }
-  root="$(collx_deepep_v2_root)" || return 1
+deepep_nvshmem_overlay() {
+  local root="$1" packaged="$2" overlay path temporary
   overlay="$root/nvshmem-overlay"
   if ! (
     umask 077
@@ -114,15 +119,11 @@ collx_prepare_deepep_toolchain() {
     collx_log "ERROR: DeepEP V2 NVSHMEM overlay is invalid"
     return 1
   fi
-  NVSHMEM_DIR="$overlay"
-  export NVSHMEM_DIR
-  collx_prepare_cuda_cccl || return 1
-  export LD_LIBRARY_PATH="$NVSHMEM_DIR/lib:${LD_LIBRARY_PATH:-}"
+  printf '%s' "$overlay"
 }
 
-collx_deepep_v2_root() {
-  local arch cpu base image
-  arch="$(collx_cuda_arch)" || return 1
+deepep_cache_root() {
+  local arch="$1" cpu base image
   cpu="$(uname -m)"
   [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
   base="${COLLX_BACKEND_CACHE_ROOT:-}"
@@ -132,66 +133,108 @@ collx_deepep_v2_root() {
     "$base" "$cpu" "${arch/./}" "${image#-}" "${COLLX_DEEPEP_V2_COMMIT:0:12}"
 }
 
-collx_activate_deepep_v2() {
-  local root venv venv_site execution_id
-  root="$(collx_deepep_v2_root)" || return 1
+deepep_activate() {
+  local root="$1" venv venv_site nccl_root nvshmem_package overlay
+  local toolchain cuda_home cccl execution_id
   venv="$root/venv"
   [ -x "$venv/bin/python" ] \
     || { collx_log "ERROR: DeepEP V2 venv interpreter is unavailable"; return 1; }
-  export VIRTUAL_ENV="$venv"
-  export PATH="$venv/bin:${PATH#"$venv/bin:"}"
-  # Ensure the source build wins over any deep_ep wheel bundled in the image.
   for venv_site in "$venv"/lib/python*/site-packages; do break; done
   [ -d "$venv_site" ] \
     || { collx_log "ERROR: DeepEP V2 venv site-packages is unavailable"; return 1; }
-  export PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}"
-  EP_NCCL_ROOT_DIR="$(collx_nvidia_package_root nvidia-nccl-cu13 nccl)" \
+  nccl_root="$(nvidia_package_root "$venv/bin/python" nvidia-nccl-cu13 nccl)" \
     || { collx_log "ERROR: DeepEP V2 NCCL package root is unavailable"; return 1; }
-  EP_NVSHMEM_ROOT_DIR="$(collx_nvidia_package_root nvidia-nvshmem-cu12 nvshmem)" \
+  nvshmem_package="$(nvidia_package_root \
+    "$venv/bin/python" nvidia-nvshmem-cu12 nvshmem)" \
     || { collx_log "ERROR: DeepEP V2 NVSHMEM package root is unavailable"; return 1; }
-  export EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR
-  export LD_LIBRARY_PATH="$EP_NCCL_ROOT_DIR/lib:$EP_NVSHMEM_ROOT_DIR/lib:${LD_LIBRARY_PATH:-}"
+  overlay="$(deepep_nvshmem_overlay "$root" "$nvshmem_package")" || return 1
+  toolchain="$(cuda_toolchain_paths)" || return 1
+  IFS=$'\t' read -r cuda_home cccl <<< "$toolchain"
+  [ -n "$cuda_home" ] && [ -n "$cccl" ] || return 1
   execution_id="${COLLECTIVEX_EXECUTION_ID:-manual}"
   [[ "$execution_id" =~ ^[A-Za-z0-9._-]+$ ]] \
     || { collx_log "ERROR: DeepEP V2 execution identity is invalid"; return 1; }
-  # Shared JIT caches race across nodes; keep this cache node-local.
-  export EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id"
-  export EP_REUSE_NCCL_COMM=1
-  # ElasticBuffer requires NCCL symmetric memory, which needs cuMem. Some
-  # provider image variants bake NCCL_CUMEM_ENABLE=0 (h100-dgxc's does), and
-  # pyxis lets image env override srun-passed env, so a launcher-side export
-  # never reaches the ranks. Exporting it here puts it in the persisted node
-  # environment, which ranks source inside the container after image env.
-  export NCCL_CUMEM_ENABLE=1
+
+  export \
+    VIRTUAL_ENV="$venv" \
+    PATH="$venv/bin:${PATH#"$venv/bin:"}" \
+    PYTHONPATH="$venv_site${PYTHONPATH:+:$PYTHONPATH}" \
+    CUDA_HOME="$cuda_home" \
+    CPATH="$cccl:${CPATH:-}" \
+    NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}" \
+    NVSHMEM_DIR="$overlay" \
+    EP_NCCL_ROOT_DIR="$nccl_root" \
+    EP_NVSHMEM_ROOT_DIR="$overlay" \
+    EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id" \
+    EP_REUSE_NCCL_COMM=1 \
+    NCCL_CUMEM_ENABLE=1 \
+    LD_LIBRARY_PATH="$overlay/lib:$nccl_root/lib:$nvshmem_package/lib:${LD_LIBRARY_PATH:-}"
+  unset "${DEEPEP_RANK_UNSETS[@]}"
+
+  # Shared JIT caches race across nodes; keep this cache node-local. CUMEM is
+  # persisted here too because image environment overrides launcher exports.
   [ ! -L "$EP_JIT_CACHE_DIR" ] \
     || { collx_log "ERROR: DeepEP V2 JIT cache path is unsafe"; return 1; }
   if ! mkdir -p "$EP_JIT_CACHE_DIR" || ! chmod 700 "$EP_JIT_CACHE_DIR"; then
     collx_log "ERROR: DeepEP V2 JIT cache is unavailable"
     return 1
   fi
-  unset EP_SUPPRESS_NCCL_CHECK
 }
 
-# Catch an image-bundled DeepEP shadowing the from-source build: the shadow
-# (deep_ep 1.2.1) lacks ElasticBuffer, so its presence is the capability check.
-collx_probe_deepep_v2() {
-  python3 - <<'PY'
+deepep_probe() {
+  "$VIRTUAL_ENV/bin/python" - <<'PY'
 import inspect
 import deep_ep
 assert inspect.isclass(deep_ep.ElasticBuffer)
 PY
 }
 
-collx_build_deepep_v2() {
-  local root venv source ready lock_path arch cache_ready
-  local revision="$COLLX_DEEPEP_V2_COMMIT"
-  arch="$(collx_cuda_arch)" || return 1
-  root="$(collx_deepep_v2_root)" || return 1
-  venv="$root/venv"; source="$root/source"; ready="$root/.ready"
+deepep_install() {
+  local root="$1" arch="$2" venv="$1/venv" source_dir="$1/source"
+  local -a pip
+  if [ -e "$root" ] || [ -L "$root" ]; then
+    rm -rf "$root" \
+      || { collx_log "ERROR: incomplete DeepEP V2 cache-reset failed"; return 1; }
+  fi
+  mkdir -m 700 "$root" \
+    || { collx_log "ERROR: DeepEP V2 cache-create failed"; return 1; }
+  python3 -m venv "$venv" \
+    || { collx_log "ERROR: DeepEP V2 venv creation failed"; return 1; }
+  pip=("$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input)
+  "${pip[@]}" \
+    "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
+    "numpy==2.2.6" "nvidia-nvshmem-cu12==3.3.9" >&2 2>&1 \
+    || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; return 1; }
+  "${pip[@]}" --index-url https://download.pytorch.org/whl/cu130 \
+    --extra-index-url https://pypi.org/simple "torch==2.10.0" >&2 2>&1 \
+    || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; return 1; }
+  # Torch pins NCCL 2.28.9; ElasticBuffer requires 2.30.4.
+  "${pip[@]}" --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL 2.30.4 installation failed"; return 1; }
+  deepep_activate "$root" \
+    || { collx_log "ERROR: DeepEP V2 environment activation failed"; return 1; }
+  collx_materialize_deepep_source "$source_dir" \
+    || { collx_log "ERROR: DeepEP V2 staged source is invalid"; return 1; }
+  (cd "$source_dir" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+    "$venv/bin/python" -m pip install -q --no-build-isolation --no-deps \
+      --force-reinstall .) >&2 2>&1 \
+    || { collx_log "ERROR: DeepEP V2 build failed"; return 1; }
+  deepep_probe \
+    || { collx_log "ERROR: DeepEP V2 import probe failed"; return 1; }
+  : > "$root/.ready"
+}
+
+# ---- DeepEP lifecycle -------------------------------------------------------
+
+deepep_prepare() {
+  local arch root venv source_dir ready lock_path
+  arch="$(cuda_arch)" || return 1
+  root="$(deepep_cache_root "$arch")" || return 1
+  venv="$root/venv"; source_dir="$root/source"; ready="$root/.ready"
   lock_path="${root}.lock"
   command -v flock >/dev/null || { collx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
-  collx_log "DeepEP V2: preparing PR #605 with upstream PR #630 and #640 fixes ($revision)"
+  collx_log "DeepEP V2: preparing PR #605 with upstream PR #630 and #640 fixes ($COLLX_DEEPEP_V2_COMMIT)"
   if ! (
     [ ! -L "$lock_path" ] \
       || { collx_log "ERROR: DeepEP V2 cache lock is unsafe"; exit 1; }
@@ -201,81 +244,44 @@ collx_build_deepep_v2() {
       || { collx_log "ERROR: DeepEP V2 cache-lock-open failed"; exit 1; }
     flock 9 \
       || { collx_log "ERROR: DeepEP V2 cache-lock-acquire failed"; exit 1; }
-    cache_ready=0
-    [ -f "$ready" ] && [ -x "$venv/bin/python" ] && [ -d "$source" ] && cache_ready=1
-    if [ "$cache_ready" != 1 ]; then
-      if [ -e "$root" ] || [ -L "$root" ]; then
-        rm -rf "$root" \
-          || { collx_log "ERROR: incomplete DeepEP V2 cache-reset failed"; exit 1; }
-      fi
-      mkdir -m 700 "$root" \
-        || { collx_log "ERROR: DeepEP V2 cache-create failed"; exit 1; }
-      python3 -m venv "$venv" \
-        || { collx_log "ERROR: DeepEP V2 venv creation failed"; exit 1; }
-      "$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input \
-        "pip==26.1.2" "setuptools==82.0.1" "wheel==0.47.0" "ninja==1.13.0" \
-        "numpy==2.2.6" "nvidia-nvshmem-cu12==3.3.9" >&2 2>&1 \
-        || { collx_log "ERROR: DeepEP V2 build-tool installation failed"; exit 1; }
-      "$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input \
-        --index-url https://download.pytorch.org/whl/cu130 \
-        --extra-index-url https://pypi.org/simple "torch==2.10.0" >&2 2>&1 \
-        || { collx_log "ERROR: torch 2.10.0+cu130 installation failed"; exit 1; }
-      # Torch pins NCCL 2.28.9; the PR #605 ElasticBuffer implementation requires 2.30.4.
-      "$venv/bin/python" -m pip install -q --disable-pip-version-check --no-input \
-        --force-reinstall --no-deps "nvidia-nccl-cu13==2.30.4" >&2 2>&1 \
-        || { collx_log "ERROR: NCCL 2.30.4 installation failed"; exit 1; }
-      collx_activate_deepep_v2 \
-        || { collx_log "ERROR: DeepEP V2 environment activation failed"; exit 1; }
-      collx_prepare_deepep_toolchain \
-        || { collx_log "ERROR: DeepEP V2 toolchain preparation failed"; exit 1; }
-      EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"
-      export EP_NVSHMEM_ROOT_DIR
-      collx_materialize_deepep_source "$source" \
-        || { collx_log "ERROR: DeepEP V2 staged source is invalid"; exit 1; }
-      (cd "$source" && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
-        python3 -m pip install -q --no-build-isolation --no-deps --force-reinstall .) >&2 2>&1 \
-        || { collx_log "ERROR: DeepEP V2 build failed"; exit 1; }
-      collx_probe_deepep_v2 \
-        || { collx_log "ERROR: DeepEP V2 import probe failed"; exit 1; }
-      : > "$ready"
+    if [ ! -f "$ready" ] || [ ! -x "$venv/bin/python" ] || [ ! -d "$source_dir" ]; then
+      deepep_install "$root" "$arch" || exit 1
     fi
   ); then
     collx_log "ERROR: shared DeepEP V2 environment is incomplete"
     return 1
   fi
-  collx_activate_deepep_v2 || return 1
-  collx_prepare_deepep_toolchain || return 1
-  EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"
-  export EP_NVSHMEM_ROOT_DIR
-  collx_probe_deepep_v2 || { collx_log "ERROR: DeepEP V2 shared runtime probe failed"; return 1; }
+  deepep_activate "$root" || return 1
+  deepep_probe || { collx_log "ERROR: DeepEP V2 shared runtime probe failed"; return 1; }
   collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
-# Rank steps enter fresh container tasks, so persist each node's environment.
-collx_persist_backend_env() {
+# ---- container boundary ----------------------------------------------------
+
+write_rank_env() {
   local root="$PWD/.collx_backend/env" node_id="${SLURM_NODEID:-0}" path temporary name
-  local -a names=(PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
-    NVSHMEM_DIR
-    EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM
-    NCCL_CUMEM_ENABLE)
   [[ "$node_id" =~ ^[0-9]+$ ]] || return 1
   mkdir -p "$root" || return 1
   chmod 700 "$root" || return 1
   temporary="$(mktemp "$root/.node-${node_id}.XXXXXX")" || return 1
   chmod 600 "$temporary" || { rm -f "$temporary"; return 1; }
-  for name in "${names[@]}"; do
+  for name in "${RANK_ENV_VARS[@]}"; do
     if declare -p "$name" >/dev/null 2>&1; then
       printf 'export %s=%q\n' "$name" "${!name}" >> "$temporary" \
         || { rm -f "$temporary"; return 1; }
     fi
   done
+  if [ "$COLLX_BENCH" = deepep-v2 ]; then
+    for name in "${DEEPEP_RANK_UNSETS[@]}"; do
+      printf 'unset %s\n' "$name" >> "$temporary" \
+        || { rm -f "$temporary"; return 1; }
+    done
+  fi
   path="$root/node-${node_id}.sh"
   mv -f -- "$temporary" "$path" || { rm -f "$temporary"; return 1; }
 }
 
-# Validate private scale-out selectors on every allocated compute node before a
-# backend can initialize or build transport code.
-collx_probe_scaleout_network() {
+validate_container_network() {
   local interface device rdma_name
   local -a interfaces devices
   if [ "${COLLX_NODES:-1}" -le 1 ] || [ "${COLLX_TRANSPORT:-}" = mnnvl ]; then
@@ -298,13 +304,11 @@ collx_probe_scaleout_network() {
   done
 }
 
-# Prepare and probe one backend without running a benchmark.
-collx_prepare_backend() {
-  local backend="${1:-}"
-  case "$backend" in
-    deepep-v2)
-      collx_build_deepep_v2 || return 1
-      ;;
+main() {
+  collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
+  validate_container_network || return 1
+  case "$COLLX_BENCH" in
+    deepep-v2) deepep_prepare || return 1 ;;
     mori)
       python3 -c "import mori" \
         || { collx_log "ERROR: MoRI backend import failed"; return 1; }
@@ -314,14 +318,9 @@ collx_prepare_backend() {
       return 1
       ;;
   esac
+  write_rank_env
 }
 
-rc=0
-collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}"
-if collx_probe_scaleout_network && collx_prepare_backend "$COLLX_BENCH"; then
-  collx_persist_backend_env || rc=1
-else
-  rc=1
-fi
+rc=0; main || rc=$?
 collx_log "backend preparation: bench=$COLLX_BENCH rc=$rc"
 exit "$rc"

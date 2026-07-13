@@ -15,7 +15,7 @@ import sweep_matrix  # noqa: E402
 
 
 def matrix(**options):
-    return sweep_matrix.resolve_matrix(max_cases=128, **options)
+    return sweep_matrix.resolve_matrix(**options)
 
 
 class MatrixTests(unittest.TestCase):
@@ -36,12 +36,12 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(outputs[0]["cases"], cell["cases"])
 
     def test_sku_and_ep_filters_only_remove_cases(self):
-        full = matrix(suites="all", backends="all")
+        full = matrix(backend="all")
         for options, keep in (
             ({"exclude_skus": "b300"}, lambda item: item["sku"] != "b300"),
             ({"ep_sizes": "8"}, lambda item: item["case"]["ep"] == 8),
         ):
-            partial = matrix(suites="all", backends="all", **options)
+            partial = matrix(backend="all", **options)
             expected = {
                 item["case"]["case_id"]: item for item in full["requested_cases"] if keep(item)
             }
@@ -49,12 +49,19 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual(actual, expected)
 
     def test_only_real_platform_cells_are_unsupported(self):
-        document = matrix(suites="all", backends="all")
+        document = matrix(backend="all")
         unsupported = {
             (item["sku"], item["case"]["backend"], item["case"]["ep"])
             for item in document["requested_cases"] if item["disposition"] == "unsupported"
         }
-        self.assertEqual(unsupported, set(sweep_matrix.CELL_EXCLUSIONS))
+        expected = {
+            (sku, backend, ep)
+            for sku, platform in sweep_matrix.PLATFORMS.items()
+            for backend, runnable_eps in platform["backends"].items()
+            for ep in sweep_matrix.SWEEP["ep_degrees"]
+            if ep not in runnable_eps
+        }
+        self.assertEqual(unsupported, expected)
         for item in document["requested_cases"]:
             self.assertIn(item["case"]["backend"], sweep_matrix.PLATFORMS[item["sku"]]["backends"])
 
@@ -64,6 +71,7 @@ class MatrixTests(unittest.TestCase):
             {"only_sku": "b300", "exclude_skus": "b300"},
             {"ep_sizes": "0"},
             {"ep_sizes": "eight"},
+            {"backend": "unknown"},
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):
                 sweep_matrix.resolve_matrix(**options)

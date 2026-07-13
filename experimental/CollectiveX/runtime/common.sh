@@ -347,9 +347,8 @@ BASH
   export MASTER_ADDR="$master_addr" MASTER_PORT="$master_port"
 }
 
-# Printed into `bash -c` ahead of the rank wrapper. Sources the per-node
-# loader/import environment persisted by collx_persist_backend_env, refusing
-# a file whose directory shape, ownership, or mode differs from what that step wrote.
+# Printed into `bash -c` ahead of the rank wrapper. Sources the per-node backend
+# environment written during preparation.
 collx_source_backend_env() {
   cat <<'BASH'
 case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac

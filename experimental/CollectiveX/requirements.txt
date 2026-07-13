@@ -1,2 +1,0 @@
-# Host-side matrix generation. GPU libraries are supplied by benchmark images.
-PyYAML==6.0.2

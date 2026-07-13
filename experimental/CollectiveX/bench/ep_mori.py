@@ -41,23 +41,21 @@ class MoRIBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
-        runner = str(getattr(args, "runner", ""))
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
         gpus_per_node = int(args.gpus_per_node)
         scale_out = args.scope == "scale-out"
 
-        # The kernel is a pinned function of the cell, not an operator choice:
-        # scale-out EP16 runs InterNodeV1; scale-up runs the direct intranode
-        # kernel on gfx950 (MI355X) and the split AsyncLL send/receive kernel on
-        # gfx942 (MI300X/MI325X). IntraNode is mori's default (`kernel_type`
-        # kwarg omitted); the named kernels require their enum member — an
-        # image-lineage check.
+        # The kernel is a pinned function of the cell, not an operator choice,
+        # and no cell runs a low-latency-family kernel (mirroring the
+        # normal-mode-only NVIDIA backends): scale-up uses the direct IntraNode
+        # kernel on every CDNA SKU (mori's default; `kernel_type` kwarg
+        # omitted); scale-out EP16 uses InterNodeV1, whose required enum member
+        # is an image-lineage check.
         # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
         kernel_name, self.kernel_generation, blocks = (
             ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
-            else ("IntraNode", "intranode", (80, 0, 16, 8)) if runner == "mi355x"
-            else ("AsyncLL", "async-ll", (64, 0, 8, 8))
+            else ("IntraNode", "intranode", (80, 0, 16, 8))
         )
         self._kernel_type = None
         if kernel_name != "IntraNode":
@@ -68,10 +66,9 @@ class MoRIBackend(EPBackend):
                 )
             self._kernel_type = getattr(kernel_enum, kernel_name)
         self._inter_node = kernel_name == "InterNodeV1"
-        self._async_ll = kernel_name == "AsyncLL"
         self.num_qps = 1
         self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
-        self._external_input = self._async_ll or self._inter_node
+        self._external_input = self._inter_node
         # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
         # input kernels consume the dispatch output directly, so their stage is not applicable.
         self.stage_device_work = not self._external_input
@@ -91,8 +88,8 @@ class MoRIBackend(EPBackend):
                 f"MoRI realized {realized_qps} QPs per PE; {self.num_qps} required"
             )
 
-        self._cap = self.buffer_cap(args)
-        assert spec.max_tokens_per_rank <= self._cap
+        # MoRI preallocates one communicator buffer for the case's entire ladder.
+        self._cap = max(512, spec.max_tokens_per_rank)
         # BF16 communication path: no FP8 dispatch dtype, no scale payload, no combine quantization.
         dispatch_dtype = torch.bfloat16
         config_kwargs = {
@@ -102,12 +99,8 @@ class MoRIBackend(EPBackend):
             "hidden_dim": args.hidden,
             "scale_dim": 0,
             "scale_type_size": 1,
-            "max_token_type_size": (
-                torch.tensor([], dtype=torch.bfloat16).element_size()
-                if self._inter_node
-                else torch.tensor([], dtype=torch.float32).element_size()
-            ),
-            "max_num_inp_token_per_rank": max(512, self._cap),
+            "max_token_type_size": torch.tensor([], dtype=dispatch_dtype).element_size(),
+            "max_num_inp_token_per_rank": self._cap,
             "num_experts_per_rank": self.experts_per_rank,
             "num_experts_per_token": args.topk,
             "use_external_inp_buf": self._external_input,
@@ -115,13 +108,10 @@ class MoRIBackend(EPBackend):
         }
         if self._kernel_type is not None:
             config_kwargs["kernel_type"] = self._kernel_type
-        if self._async_ll:
-            config_kwargs["max_total_recv_tokens"] = 0
-        if self._async_ll or self._inter_node:
-            config_kwargs["block_num"] = self.block_num
-            config_kwargs["warp_num_per_block"] = self.dispatch_warps
         if self._inter_node:
             config_kwargs.update({
+                "block_num": self.block_num,
+                "warp_num_per_block": self.dispatch_warps,
                 "gpu_per_node": gpus_per_node,
                 "rdma_block_num": self.rdma_block_num,
                 "num_qp_per_pe": self.num_qps,
@@ -134,13 +124,10 @@ class MoRIBackend(EPBackend):
             "use_external_inp_buf": self._external_input,
             "quant_type": config_kwargs["quant_type"],
         }
-        if self._async_ll or self._inter_node:
+        if self._inter_node:
             expected_config.update({
                 "block_num": self.block_num,
                 "warp_num_per_block": self.dispatch_warps,
-            })
-        if self._inter_node:
-            expected_config.update({
                 "gpu_per_node": 8,
                 "rdma_block_num": 64,
                 "num_qp_per_pe": 1,
@@ -153,10 +140,6 @@ class MoRIBackend(EPBackend):
         self.op = mori.ops.EpDispatchCombineOp(self.config)
         if getattr(self.op, "launch_config_mode", None) != "MANUAL":
             raise RuntimeError("MoRI explicit launch configuration was not applied")
-
-    def buffer_cap(self, args):
-        # Rows reserved per rank for a uniformly routed dispatch.
-        return 512
 
     def make_problem(self, T, idx, weights, x):
         indices = idx.to(torch.int32)
@@ -184,8 +167,6 @@ class MoRIBackend(EPBackend):
                 warp_per_block=self.dispatch_warps,
             )
         )
-        if self._async_ll:
-            self.op.dispatch_recv(warp_per_block=self.dispatch_warps)
         return types.SimpleNamespace(
             dispatch_output=dispatch_output,
             dispatch_weights=dispatch_weights,
@@ -208,17 +189,14 @@ class MoRIBackend(EPBackend):
         h.combine_input = buffer
 
     def combine(self, p, h):
-        combine_indices = p.indices if self._async_ll else h.dispatch_indices
         combined, _weights = self.op.combine(
             h.combine_input,
             None,
-            combine_indices,
+            h.dispatch_indices,
             block_num=self.block_num,
             rdma_block_num=self.rdma_block_num,
             warp_per_block=self.combine_warps,
         )
-        if self._async_ll:
-            self.op.combine_recv(warp_per_block=self.combine_warps)
         return combined[:p.T]
 
     def inspect_dispatch(self, p, h):
