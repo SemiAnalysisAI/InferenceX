@@ -104,6 +104,7 @@ print(f"_YAML_MEM_FRAC_STATIC='{sh(m.get('mem_frac_static', ''))}'")
 print(f"_YAML_MAX_MODEL_LEN='{sh(m.get('max_model_len', ''))}'")
 print(f"_YAML_MAX_NUM_SEQS='{sh(m.get('max_num_seqs', ''))}'")
 print(f"_YAML_MAX_NUM_BATCHED_TOKENS='{sh(m.get('max_num_batched_tokens', ''))}'")
+print(f"_YAML_SCHEDULER_DELAY_FACTOR='{sh(m.get('scheduler_delay_factor', ''))}'")
 PYEOF
 # shellcheck source=/dev/null
 source "$_yaml_tmp"
@@ -118,7 +119,8 @@ MEM_FRAC_STATIC="${_YAML_MEM_FRAC_STATIC:-${MEM_FRAC_STATIC:-0.85}}"
 MAX_MODEL_LEN="${_YAML_MAX_MODEL_LEN:-${MAX_MODEL_LEN:-}}"
 MAX_NUM_SEQS="${_YAML_MAX_NUM_SEQS:-${MAX_NUM_SEQS:-256}}"
 MAX_NUM_BATCHED_TOKENS="${_YAML_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS:-}}"
-unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS
+SCHEDULER_DELAY_FACTOR="${_YAML_SCHEDULER_DELAY_FACTOR:-${SCHEDULER_DELAY_FACTOR:-}}"
+unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS _YAML_SCHEDULER_DELAY_FACTOR
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -210,6 +212,9 @@ if [[ -n "$MAX_MODEL_LEN" ]]; then
 fi
 if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS}"
+fi
+if [[ -n "$SCHEDULER_DELAY_FACTOR" ]]; then
+    MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --scheduler-delay-factor ${SCHEDULER_DELAY_FACTOR}"
 fi
 
 
