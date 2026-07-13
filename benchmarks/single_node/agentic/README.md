@@ -20,7 +20,7 @@ currently either `none` or `dram`; when it is `dram`, the backend must be set:
 ```yaml
 - dram-utilization: 0.80
   search-space:
-  - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [16, 32] }
+  - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [16, 32] }
   - { tp: 8, kv-offloading: none, conc-list: [16, 32] }
 ```
 
