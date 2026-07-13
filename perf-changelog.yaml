@@ -4748,5 +4748,5 @@
     - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
     - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
-    - "Prune agentic SGLang configs to measured Pareto points and enable prefill-side MTP to match decode"
+    - "Prune agentic SGLang configs to measured Pareto points (decode-side MTP only)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157

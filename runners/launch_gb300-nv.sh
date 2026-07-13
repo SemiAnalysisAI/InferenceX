@@ -134,13 +134,13 @@ SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm@03c0e8c has the nginx
+    # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm v1.0.10 has the nginx
     # client_max_body_size fix (>1 MiB agentic warmup bodies), the
     # session-affinity frontend, and the BenchmarkType.CUSTOM / extra_mount
     # schema these recipes need.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout 03c0e8cbdd522fae378b7e216962afef6abffaeb
+    git checkout v1.0.10
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic

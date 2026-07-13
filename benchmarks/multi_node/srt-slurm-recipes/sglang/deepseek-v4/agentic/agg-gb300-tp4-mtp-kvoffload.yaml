@@ -15,9 +15,8 @@ model:
   precision: "fp4"
 
 dynamo:
-  # 5/14 tot
-  hash: "2d5d7eb603af21926887580fe3a212c7926fbaad"
   install: true
+  wheel: "1.3.0.dev1"
 
 slurm:
   time_limit: "8:00:00"
