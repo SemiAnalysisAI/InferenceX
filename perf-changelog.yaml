@@ -4750,3 +4750,11 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - kimik2.6-fp4-b300-dynamo-vllm
+  description:
+    - "Add Kimi-K2.6 NVFP4 B300 disaggregated multinode vLLM benchmarks via Dynamo"
+    - "Image: vllm/vllm-openai:v0.22.0"
+    - "7 topologies at 8k/1k: 1p1d/3p1d/4p1d dep4-dep8 (4p1d also as FlashInfer-autotune variant at conc 4-4096), 1p8d dep4-tp4, 1p10d dep4-tp4 (FlashInfer autotune), 2p5d dep4-tp8; conc 1-4096; recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6-fp4/8k1k/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
