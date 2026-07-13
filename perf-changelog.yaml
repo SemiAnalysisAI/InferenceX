@@ -4750,3 +4750,10 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache
+    - dsv4-fp4-b300-sglang-agentic-hicache
+  description:
+    - "Rerun after standardizing agentic warmup to the regular trajectory warmup plus a 600-second accelerated cache-pressure warmup."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2179
