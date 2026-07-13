@@ -3,15 +3,16 @@
 
 Reads lm-eval results JSON files and checks that scored metrics meet the
 required minimum.  Thresholds are configured per-task, with optional per-model
-overrides, in a JSON config file (default: utils/evals/thresholds.json):
+overrides, in a YAML config file (default: utils/evals/thresholds.yaml):
 
-    {
-      "default": { "gsm8k": 0.85, "gpqa_diamond_cot_n_shot": 0.30 },
-      "models": {
-        "dsv4": { "gsm8k": 0.90 },
-        "glm5": { "gsm8k": 0.92 }
-      }
-    }
+    default:
+      gsm8k: 0.85
+      gpqa_diamond_cot_n_shot: 0.30
+    models:
+      dsv4:
+        gsm8k: 0.90
+      glm5:
+        gsm8k: 0.92
 
 The model is identified by its `infmax_model_prefix` (e.g. "dsv4", "glm5"),
 read from meta_env.json in the current directory -- written alongside the
@@ -24,11 +25,13 @@ Models without an entry under "models" (or runs where the prefix can't be
 determined) fall back to the global default, then to --min-score.
 
 A legacy flat config ({"gsm8k": 0.85, ...}) is still accepted and treated as
-the global default with no per-model overrides.
+the global default with no per-model overrides.  JSON configs also still load:
+JSON is a YAML subset, and when PyYAML is unavailable the loader falls back to
+the json module (a YAML-only config then fails with a clear error).
 
 Usage:
     python3 utils/evals/validate_scores.py
-    python3 utils/evals/validate_scores.py --thresholds my_thresholds.json
+    python3 utils/evals/validate_scores.py --thresholds my_thresholds.yaml
     python3 utils/evals/validate_scores.py --model-prefix dsv4
     python3 utils/evals/validate_scores.py --min-score 0.90  # flat fallback
 """
@@ -46,14 +49,33 @@ CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 def load_config(path: str) -> dict:
     """Load thresholds config, normalized to {"default": {...}, "models": {...}}.
 
-    Accepts both the per-model format ({"default": {...}, "models": {...}}) and
-    the legacy flat format ({task: min_score}), which is treated as the global
-    default with no per-model overrides.
+    The config is YAML (JSON, being a YAML subset, also loads).  Accepts both
+    the per-model format ({"default": {...}, "models": {...}}) and the legacy
+    flat format ({task: min_score}), which is treated as the global default
+    with no per-model overrides.
     """
     with open(path) as f:
-        cfg = json.load(f)
+        text = f.read()
+    try:
+        import yaml
+    except ModuleNotFoundError:
+        # This runs directly on runner hosts, so PyYAML may be missing there.
+        # JSON configs still load via the stdlib; YAML ones fail loudly.
+        try:
+            cfg = json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError(
+                f"PyYAML is not installed and {path} is not JSON; "
+                "install it with 'pip install pyyaml'"
+            ) from None
+    else:
+        try:
+            cfg = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            # Normalize to ValueError so callers keep a single except list.
+            raise ValueError(f"invalid YAML: {exc}") from exc
     if not isinstance(cfg, dict):
-        raise ValueError("thresholds config must be a JSON object")
+        raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
         # Legacy flat format: the whole object is the per-task default.
         return {"default": cfg, "models": {}}
@@ -211,7 +233,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--thresholds", default=None,
-        help="Path to thresholds JSON config (default: utils/evals/thresholds.json)",
+        help="Path to thresholds config, YAML or JSON (default: utils/evals/thresholds.yaml)",
     )
     parser.add_argument(
         "--meta-env", default="meta_env.json",
@@ -254,7 +276,7 @@ def main() -> int:
     config = {"default": {}, "models": {}}
     thresholds_path = args.thresholds
     if thresholds_path is None:
-        default_path = Path(__file__).parent / "thresholds.json"
+        default_path = Path(__file__).parent / "thresholds.yaml"
         if default_path.exists():
             thresholds_path = str(default_path)
     if thresholds_path:

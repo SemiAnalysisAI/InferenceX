@@ -156,7 +156,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 
@@ -216,7 +216,7 @@ append_lm_eval_summary
   is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
   `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
 - Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
-  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.json` gate is `0.50`, calibrated
+  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.yaml` gate is `0.50`, calibrated
   from full-split runs (54%) with the 50-slice comfortably above (62–76%).
 
 ## Task files

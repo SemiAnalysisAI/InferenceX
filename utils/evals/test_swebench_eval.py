@@ -255,7 +255,7 @@ def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
     assert rows[0]["task"] == "swebench_lite"
     assert rows[0]["score"] == pytest.approx(0.6)
 
-    # validate_scores gates exact_match,resolved against thresholds.json (0.50).
+    # validate_scores gates exact_match,resolved against thresholds.yaml (0.50).
     monkeypatch.chdir(art)
     monkeypatch.setattr(sys, "argv", [
         "validate_scores.py",
