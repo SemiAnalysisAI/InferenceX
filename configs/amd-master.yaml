@@ -2231,7 +2231,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 2,4,8,16,32 ]
+        conc-list: [ 2,4,8,16 ]
         kv-offloading: dram
         kv-offload-backend: hicache
         prefill:
@@ -2253,6 +2253,32 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           tp: 8
           ep: 1
           dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+      - spec-decoding: "none"
+        conc-list: [ 32, 64, 128 ]
+        kv-offloading: dram
+        kv-offload-backend: hicache
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          # Node-0 sibling client: run the aiperf trace-replay in its own sibling
+          # container on node 0 (via the host docker socket) instead of inside the
+          # server container. Reuse the (publicly pullable) server image so
+          # upstream CI can fetch it; aiperf is built on the fly from
+          # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
+          # selects the sibling-container mode.
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
