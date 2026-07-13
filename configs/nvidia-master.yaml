@@ -13163,8 +13163,6 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 8
           dp-attn: false
 
-# MiniMax-M3 NVFP4 B300 disagg EAGLE3 Pareto. These entries reproduce only
-# measured nondominated 8k/1k points from the vLLM nightly campaign.
 minimaxm3-fp4-b300-dynamo-vllm-mtp:
   image: vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2
   model: nvidia/MiniMax-M3-NVFP4
@@ -13181,7 +13179,6 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      # Pure TP4 prefill and decode workers.
       - spec-decoding: "mtp"
         conc-list: [4, 48, 128]
         prefill:
@@ -13239,7 +13236,6 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp:
           ep: 1
           dp-attn: false
 
-      # Pure TP2 prefill and decode workers.
       - spec-decoding: "mtp"
         conc-list: [64, 128]
         prefill:
@@ -13283,7 +13279,6 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp:
           ep: 1
           dp-attn: false
 
-      # Data-parallel expert workers: DEP2 prefill and DEP4 decode.
       - spec-decoding: "mtp"
         conc-list: [64, 128, 256]
         prefill:

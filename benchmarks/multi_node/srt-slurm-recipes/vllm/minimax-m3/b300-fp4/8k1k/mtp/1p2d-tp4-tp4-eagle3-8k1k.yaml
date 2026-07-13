@@ -88,4 +88,3 @@ benchmark:
   random_range_ratio: 0.8
   use_chat_template: true
   concurrencies: "4x64x128"
-
