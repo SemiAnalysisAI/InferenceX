@@ -7,9 +7,9 @@
 #
 # At runtime the recipe swaps the image's FlashInfer for the first pinned
 # nightly containing the upstream SM100 low-M MXFP8 split-K kernel
-# (flashinfer-ai/flashinfer#3847), keeps the upstream #3582 and #3687 changes,
-# then backports the #3918 AutoTuner non-Tensor guard and the #3912 AutoTuner
-# memory-leak follow-up.
+# (flashinfer-ai/flashinfer#3847), keeps the upstream #3687 AutoTuner, backports
+# the #3918 non-Tensor guard and #3912 memory-leak follow-up, and reverses #3582
+# to restore the original trtllm-gen KV counter layout.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -60,6 +60,33 @@ patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_MEMORY_PATCH}" >/dev/nu
     || { echo "FlashInfer PR #3912 patch does not apply" >&2; exit 1; }
 patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_MEMORY_PATCH}" \
     || { echo "FlashInfer PR #3912 patch failed" >&2; exit 1; }
+
+# Reverse flashinfer-ai/flashinfer#3582 so trtllm-gen KV counters use the
+# original shared workspace layout.
+ATTN_REVERT_PATCH="$(dirname "$0")/patches/flashinfer-revert-pr-3582.patch"
+patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${ATTN_REVERT_PATCH}" >/dev/null \
+    || { echo "FlashInfer PR #3582 revert patch does not apply" >&2; exit 1; }
+patch -p1 -d "${SITE_PACKAGES}" < "${ATTN_REVERT_PATCH}" \
+    || { echo "FlashInfer PR #3582 revert patch failed" >&2; exit 1; }
+
+# flashinfer-jit-cache ships an AOT fmha_gen.so built with the post-#3582 ABI.
+# Remove it and any runtime JIT copy so the patched launcher is rebuilt.
+FMHA_GEN_AOT_DIR="$(python3 -c "from flashinfer.jit import env as e; print(e.FLASHINFER_AOT_DIR)")/fmha_gen"
+FMHA_GEN_JIT_DIR="$(python3 -c "from flashinfer.jit import env as e; print(e.FLASHINFER_JIT_DIR)")/fmha_gen"
+if [[ "${FMHA_GEN_AOT_DIR##*/}" != "fmha_gen" || "${FMHA_GEN_JIT_DIR##*/}" != "fmha_gen" ]]; then
+    echo "Refusing to remove unexpected FlashInfer fmha_gen cache paths" >&2
+    exit 1
+fi
+rm -rf "${FMHA_GEN_AOT_DIR}" "${FMHA_GEN_JIT_DIR}"
+
+# CUDA pip packages keep NVRTC outside /usr/local/cuda. Link only nvrtc.h into
+# the active CUDA toolkit so nvcc does not mix the pip CUDA package's full header
+# tree with /usr/local/cuda headers.
+NVIDIA_CU13_ROOT=$(python3 -c 'import pathlib, site; print(next(pathlib.Path(root) / "nvidia" / "cu13" for root in site.getsitepackages() if (pathlib.Path(root) / "nvidia" / "cu13" / "include" / "nvrtc.h").is_file()))') || { echo "Could not locate the pip-installed CUDA 13 NVRTC package" >&2; exit 1; }
+ln -sfn "${NVIDIA_CU13_ROOT}/include/nvrtc.h" /usr/local/cuda/include/nvrtc.h \
+    || { echo "Failed to link nvrtc.h into /usr/local/cuda/include" >&2; exit 1; }
+export LIBRARY_PATH="${NVIDIA_CU13_ROOT}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+export LD_LIBRARY_PATH="${NVIDIA_CU13_ROOT}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 # -----------------------------------------------------------------------------
 
