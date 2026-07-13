@@ -4750,3 +4750,11 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Add MiniMax M3 NVFP4 B300 Dynamo vLLM disaggregated EAGLE3 Pareto configurations for the 8k/1k workload"
+    - "Use the commit-pinned official vLLM nightly image and NVIDIA srt-slurm main"
+    - "Include only measured Pareto points across TP2, TP4, and DEP2/DEP4 worker layouts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

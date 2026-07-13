@@ -76,15 +76,18 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECISION == "fp4" || $PRECISION == "fp8" ) ]]; then
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/vllm/minimax-m3
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    if [[ $PRECISION == "fp8" ]]; then
-        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
-    fi
+    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
     # NVIDIA/srt-slurm#38
     git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
     if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
@@ -181,6 +184,9 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
+if [[ "$MODEL_PREFIX" == "minimaxm3" && "$PRECISION" == "fp4" ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
     SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
