@@ -1306,6 +1306,18 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
+    if [[ -n "${AIPERF_TRACE_SOURCE_FLAG:-}" ]]; then
+        TRACE_SOURCE_FLAG="$AIPERF_TRACE_SOURCE_FLAG"
+        echo "Loading traces via AIPERF_TRACE_SOURCE_FLAG: $TRACE_SOURCE_FLAG"
+        return 0
+    fi
+
+    if [[ -n "${AIPERF_WEKA_TRACE_DIR:-}" ]]; then
+        TRACE_SOURCE_FLAG="--custom-dataset-type weka_trace --input-file $AIPERF_WEKA_TRACE_DIR"
+        echo "Loading traces via local Weka trace dir: $AIPERF_WEKA_TRACE_DIR"
+        return 0
+    fi
+
     # Per-recipe override: set WEKA_LOADER_OVERRIDE to one of the aiperf
     # public-dataset loader names allowed by the inferencex-agentx-mvp
     # scenario. Used by recipes whose servers have non-default context
@@ -1485,8 +1497,9 @@ build_replay_cmd() {
     # Default --num-dataset-entries is 100; the with-subagents Weka corpus
     # has 393. Cap at 393 so all unique traces are loaded (the loader treats
     # this as a ``min(cap, available)`` ceiling, not a target — see
-    # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 393"
+    # semianalysis_cc_traces_weka.py). Smoke tests can override this for a
+    # small local fixture without changing production recipes.
+    REPLAY_CMD+=" --num-dataset-entries ${AIPERF_NUM_DATASET_ENTRIES:-393}"
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
