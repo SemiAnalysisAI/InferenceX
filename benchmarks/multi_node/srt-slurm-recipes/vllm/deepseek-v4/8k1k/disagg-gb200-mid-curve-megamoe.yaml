@@ -8,8 +8,8 @@ name: "svf-vllm-disagg-gb200-mid-curve-megamoe"
 # 256/512/1024 with no CPU/NVMe offload.
 #
 # Local deltas vs upstream:
-#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
-#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
+#   * model.path uses the deepseek-v4-pro-mxfp4 alias from
+#     runners/launch_gb200-nv.sh.
 #   * model.container set to vllm/vllm-openai:v0.20.0-ubuntu2404 to
 #     match nvidia-master.yaml image (which the launch script registers as
 #     the alias key in srtslurm.yaml). Upstream variants ship either the
@@ -17,7 +17,7 @@ name: "svf-vllm-disagg-gb200-mid-curve-megamoe"
 #   * slurm.time_limit + health_check set to 8h / 1440 attempts to
 #     absorb cold-cache /mnt/numa1 model loads.
 model:
-  path: "deepseek-v4-pro"
+  path: "deepseek-v4-pro-mxfp4"
   container: "vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
   precision: "fp4"
 
