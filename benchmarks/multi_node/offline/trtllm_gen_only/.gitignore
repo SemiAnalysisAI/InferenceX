@@ -1,0 +1,12 @@
+# Generated datasets
+dataset/data/
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+
+# Benchmark outputs (submit.py writes here when configs have no log_dir)
+benchmark/scripts/logs/

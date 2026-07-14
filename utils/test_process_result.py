@@ -741,9 +741,50 @@ class TestOfflineResults:
         assert "std_intvty" not in output_data
         assert output_data["std_tpot"] == pytest.approx(0.0)
 
-    def test_offline_multinode_rejected(
+    def test_offline_multinode_preserves_gen_only_metadata(
             self, tmp_path, offline_env_vars, offline_benchmark_result):
         env = {**offline_env_vars, "IS_MULTINODE": "true"}
+        env.update({
+            "PREFILL_GPUS": "4",
+            "DECODE_GPUS": "32",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "4",
+            "PREFILL_EP": "4",
+            "PREFILL_DP_ATTN": "true",
+            "DECODE_NUM_WORKERS": "1",
+            "DECODE_TP": "32",
+            "DECODE_EP": "32",
+            "DECODE_DP_ATTN": "true",
+            "DISAGG": "true",
+        })
+        offline_benchmark_result.update({
+            "measurement_boundary": "gen_iteration",
+            "assumed_tokens_per_step": 2.44,
+            "timed_max_tokens": 623,
+            "retained_iteration_count": 250,
+            "token_equivalent_output_throughput": 8206.0,
+            "token_equivalent_output_throughput_per_gen_gpu": 256.4375,
+            "source_config": "ctx1_gen1_dep32_concurrency64_mtp3.yaml",
+            "iteration_log_source": "full_gen_worker_fallback",
+            "iteration_log_file": "3_output_GEN_0.log",
+        })
+
         result = run_script(tmp_path, env, offline_benchmark_result)
-        assert result.returncode != 0
-        assert "single-node" in result.stderr
+        assert result.returncode == 0, result.stderr
+        output_data = json.loads(result.stdout)
+        assert output_data["is_multinode"] is True
+        assert output_data["mtp"] == 3
+        assert output_data["num_prefill_gpu"] == 4
+        assert output_data["num_decode_gpu"] == 32
+        assert output_data["output_tput_per_gpu"] == pytest.approx(
+            offline_benchmark_result["output_throughput"] / 32
+        )
+        assert output_data["measurement_boundary"] == "gen_iteration"
+        assert output_data["assumed_tokens_per_step"] == pytest.approx(2.44)
+        assert output_data["timed_max_tokens"] == 623
+        assert output_data["retained_iteration_count"] == 250
+        assert output_data["source_config"].endswith("mtp3.yaml")
+        assert output_data["iteration_log_source"] == (
+            "full_gen_worker_fallback"
+        )
+        assert output_data["iteration_log_file"] == "3_output_GEN_0.log"

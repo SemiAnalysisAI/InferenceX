@@ -42,10 +42,10 @@ image = base_env['IMAGE']
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
 
-# Offline in-process runs (utils/bench_offline/run_offline.py) report
-# per-decode-step TPOT and step throughput. Their dispatch value is
-# SPEC_DECODING=offline, but the row should describe the actual run config:
-# spec_decoding reflects whether MTP draft tokens were enabled.
+# Offline runs report per-decode-step TPOT and step throughput. They can be
+# in-process engine runs or disaggregated generation-worker measurements.
+# Their dispatch value is SPEC_DECODING=offline, but the row should describe
+# the actual run config: spec_decoding reflects whether MTP was enabled.
 is_offline = str(bmk_result.get('engine_mode', '')).lower() == 'offline'
 if is_offline:
     spec_decoding = 'mtp' if int(bmk_result.get('mtp', 0) or 0) > 0 else 'none'
@@ -76,11 +76,25 @@ if is_offline:
     if bmk_result.get('spec_tokens_per_step_observed') is not None:
         data['spec_tokens_per_step_observed'] = float(
             bmk_result['spec_tokens_per_step_observed'])
+    offline_passthrough_fields = (
+        'mtp',
+        'measurement_boundary',
+        'assumed_tokens_per_step',
+        'timed_max_tokens',
+        'raw_exact_batch_iteration_count',
+        'retained_iteration_count',
+        'decode_step_throughput_per_gen_gpu',
+        'token_equivalent_output_throughput',
+        'token_equivalent_output_throughput_per_gen_gpu',
+        'source_config',
+        'iteration_log_source',
+        'iteration_log_file',
+    )
+    for field in offline_passthrough_fields:
+        if bmk_result.get(field) is not None:
+            data[field] = bmk_result[field]
 
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
-
-if is_offline and is_multinode:
-    raise ValueError("Offline in-process results are single-node only.")
 
 if is_multinode:
     # TODO: Eventually will have to have a separate condition in here for multinode disagg and
