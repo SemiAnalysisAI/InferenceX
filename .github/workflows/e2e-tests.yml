@@ -65,10 +65,17 @@ jobs:
                 ref: ${{ github.sha }}
 
             - id: get-jobs
+              env:
+                  PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
               run: |
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
+                    "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
+                    --event-name "${{ github.event_name }}" \
+                    --queue-namespace "${{ github.run_id }}" \
+                    --labels-json "$PR_LABELS")
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))")
                   MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))")
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
@@ -97,6 +104,8 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -146,6 +155,8 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -195,6 +206,8 @@ jobs:
         with:
             exp-name: ${{ matrix.config.exp-name }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -239,6 +252,8 @@ jobs:
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -292,6 +307,8 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -327,6 +344,8 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}

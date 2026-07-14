@@ -56,6 +56,11 @@ jobs:
           pip install pydantic
           CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
+            "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
+            --event-name "${{ github.event_name }}" \
+            --queue-namespace "${{ github.run_id }}" \
+            --labels-json '${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}')
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
@@ -99,9 +104,19 @@ jobs:
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     name: >-
-      ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
+      p${{ matrix.config.priority }} | ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
       TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
-    runs-on: ${{ matrix.config.runner }}
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format(
+          '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}"]',
+          matrix.config.runner,
+          matrix.config.priority,
+          matrix.config['queue-token']
+        ) ||
+        format('["{0}"]', matrix.config.runner)
+      ) }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}

@@ -1,0 +1,151 @@
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+from ci_priority_controller import GitHubClient, QueuedJob, Runner, plan_label_updates
+
+
+NOW = datetime(2026, 7, 14, 18, 0, tzinfo=timezone.utc)
+
+
+def job(job_id, priority, hardware, queued_minutes=0):
+    return QueuedJob(
+        id=job_id,
+        run_id=100 + job_id,
+        labels=frozenset({
+            "self-hosted",
+            hardware,
+            f"ci-priority-p{priority}",
+            f"ci-queue-job-{job_id}",
+        }),
+        queued_at=NOW - timedelta(minutes=queued_minutes),
+        name=f"job-{job_id}",
+    )
+
+
+def runner(runner_id, name, *labels, busy=False, status="online"):
+    return Runner(
+        id=runner_id,
+        name=name,
+        labels=frozenset({"self-hosted", "Linux", "X64", name, *labels}),
+        status=status,
+        busy=busy,
+    )
+
+
+def test_assigns_best_compatible_job_to_each_idle_runner():
+    jobs = [
+        job(1, "5.000", "h100", queued_minutes=30),
+        job(2, "0.700", "b200", queued_minutes=1),
+        job(3, "2.500", "h100", queued_minutes=2),
+    ]
+    runners = [
+        runner(10, "b200_00", "b200"),
+        runner(11, "h100_00", "h100"),
+    ]
+
+    updates = plan_label_updates(jobs, runners, now=NOW)
+
+    assert [(update.runner_name, update.assigned_job_id) for update in updates] == [
+        ("b200_00", 2),
+        ("h100_00", 3),
+    ]
+    assert "ci-priority-p0.700" in updates[0].labels
+    assert "ci-priority-p2.500" in updates[1].labels
+    assert "ci-queue-job-2" in updates[0].labels
+    assert "ci-queue-job-3" in updates[1].labels
+
+
+def test_aging_breaks_starvation_between_nearby_priorities():
+    jobs = [
+        job(1, "3.000", "h100", queued_minutes=8 * 60),
+        job(2, "1.500", "h100", queued_minutes=1),
+    ]
+    runners = [runner(11, "h100_00", "h100")]
+
+    updates = plan_label_updates(
+        jobs,
+        runners,
+        now=NOW,
+        aging_per_hour=Decimal("0.25"),
+    )
+
+    assert updates[0].assigned_job_id == 1
+
+
+def test_unused_idle_runner_loses_stale_priority_label():
+    runners = [
+        runner(
+            10,
+            "b200_00",
+            "b200",
+            "ci-priority-p5.000",
+            "ci-queue-old-job",
+        )
+    ]
+
+    updates = plan_label_updates([], runners, now=NOW)
+
+    assert len(updates) == 1
+    assert updates[0].assigned_job_id is None
+    assert all(not label.startswith("ci-priority-p") for label in updates[0].labels)
+    assert all(not label.startswith("ci-queue-") for label in updates[0].labels)
+
+
+def test_busy_and_offline_runners_are_never_relabelled():
+    runners = [
+        runner(10, "b200_00", "b200", "ci-priority-p5.000", busy=True),
+        runner(11, "b200_01", "b200", "ci-priority-p5.000", status="offline"),
+    ]
+
+    assert plan_label_updates([job(1, "0.700", "b200")], runners, now=NOW) == []
+
+
+def test_exact_runner_name_remains_a_compatibility_constraint():
+    jobs = [job(1, "1.000", "h100_01")]
+    runners = [
+        runner(10, "h100_00", "h100"),
+        runner(11, "h100_01", "h100"),
+    ]
+
+    updates = plan_label_updates(jobs, runners, now=NOW)
+
+    assigned = [update for update in updates if update.assigned_job_id is not None]
+    assert len(assigned) == 1
+    assert assigned[0].runner_name == "h100_01"
+
+
+def test_discovers_queued_jobs_inside_in_progress_workflow_runs():
+    class FixtureClient(GitHubClient):
+        def __init__(self):
+            super().__init__("owner/repo", "unused")
+            self.paths = []
+
+        def paged(self, path, key):
+            self.paths.append(path)
+            if "status=queued" in path:
+                return [{"id": 1}]
+            if "status=in_progress" in path:
+                return [{"id": 2}]
+            if "/runs/1/jobs" in path:
+                return [{"id": 11, "status": "completed", "labels": []}]
+            if "/runs/2/jobs" in path:
+                return [{
+                    "id": 22,
+                    "status": "queued",
+                    "created_at": "2026-07-14T18:00:00Z",
+                    "labels": [
+                        "self-hosted",
+                        "b200",
+                        "ci-priority-p1.000",
+                        "ci-queue-job-22",
+                    ],
+                }]
+            raise AssertionError(path)
+
+    client = FixtureClient()
+
+    jobs = client.queued_jobs()
+
+    assert [queued_job.id for queued_job in jobs] == [22]
+    assert any("status=queued" in path for path in client.paths)
+    assert any("status=in_progress" in path for path in client.paths)

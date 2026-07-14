@@ -32,6 +32,10 @@ on:
         description: Max cases per shard cell (chunk larger shards)
         type: string
         default: '14'
+      priority:
+        description: Lower-is-sooner CI priority score
+        type: string
+        default: '5.000'
 
 concurrency:
   group: cx-sweep-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.deepep_v2 }}-${{ inputs.only_sku }}
@@ -76,7 +80,19 @@ jobs:
       max-parallel: 10            # don't saturate the ~20-runner fleet; cells queue as slots free
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     # h200 label spans two clusters; pin to the validated dgxc pool (mirrors collectivex-experimental).
-    runs-on: ${{ matrix.sku == 'h200' && 'h200-dgxc' || matrix.sku }}
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format(
+          '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}-{3}"]',
+          matrix.sku == 'h200' && 'h200-dgxc' || matrix.sku,
+          inputs.priority,
+          github.run_id,
+          matrix.id
+        ) ||
+        format('["{0}"]', matrix.sku == 'h200' && 'h200-dgxc' || matrix.sku)
+      ) }}
+    name: p${{ inputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
     timeout-minutes: 350
     env:
       CX_BENCH: ${{ matrix.backend }}
