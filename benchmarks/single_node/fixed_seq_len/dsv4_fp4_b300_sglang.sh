@@ -53,7 +53,7 @@ start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 # SWA ratio: 1k inputs need more SWA cache headroom than 8k inputs; 0.5 was
 # tuned empirically for the 1k1k recipe, while 0.1 is the cookbook default.
 
-if [ "$CONC" = "1" ] || [ "$CONC" = "32" ]; then
+if [ "$CONC" -le 32 ]; then
     # TP-only, no DP attention
     MEM_FRACTION_STATIC=0.90
     SWA_FULL_TOKENS_RATIO=$([[ "$ISL" == "1024" ]] && echo 0.5 || echo 0.1)
@@ -63,7 +63,7 @@ if [ "$CONC" = "1" ] || [ "$CONC" = "32" ]; then
         --disable-flashinfer-autotune
     )
 
-elif [ "$CONC" = "512" ]; then
+elif [ "$CONC" -ge 64 ] && [ "$CONC" -le 512 ]; then
     # DP attention, flashinfer_mxfp4
     export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     MEM_FRACTION_STATIC=0.94

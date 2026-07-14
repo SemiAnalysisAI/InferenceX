@@ -4750,3 +4750,41 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Bump vLLM image from v0.21.0 to v0.25.0 for DeepSeek-V4-Pro FP8 on H200, matching the B200/B300 dsv4 vLLM bump (#2169)"
+    - "Refresh stale H200 dsv4 submissions (last run 2026-05-21)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2189
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Bump the pinned lmsysorg/sglang:deepseek-v4-hopper digest from the 2026-05-02 push (7f19c6dc) to the current 2026-05-13 push (1bf5d508)"
+    - "Refresh stale H200 dsv4 SGLang submissions (last run 2026-05-04)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2189
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Densify the 1k1k sweep: the previous search space sampled only conc {1, 32, 512, 8192}, leaving the ~50 tok/s/user frontier region unsampled and noisy (933 tok/s/GPU vs B200's 1359 at 50 tok/s/user)"
+    - "Add the DP-attn flashinfer_mxfp4 band conc 64-512 (was a single 512 point) and extend the megamoe band down to conc 2048-8192 (was a single 8192 point), reusing the existing CONC 2048/4096 launch profiles in dsv4_fp4_b300_sglang.sh"
+    - "dsv4_fp4_b300_sglang.sh: select launch profiles by CONC range (<=32 TP-only, 64-512 DP-attn flashinfer) instead of exact match; megamoe profiles unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2189
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Re-run B300 dsv4 TRT-LLM configs (no config change, last run 2026-06-11) so the 1k1k frontier density check around 50 tok/s/user compares same-pass data across frameworks"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2189
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt
+    - dsv4-fp4-gb300-dynamo-trt-mtp
+  description:
+    - "Re-run GB300 dsv4 dynamo-trt configs (no config change): the only GB300 dsv4 1k1k submissions are from a single 2026-06-15 run"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2189
