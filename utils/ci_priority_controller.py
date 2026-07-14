@@ -35,7 +35,8 @@ SKIP_QUEUE_LABEL_RE = re.compile(r"^ci-skip-queue-pr-(?P<number>[1-9][0-9]*)$")
 def parse_timestamp(value: str | None) -> datetime:
     if not value:
         return datetime.now(timezone.utc)
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
 def priority_from_labels(labels: Iterable[str]) -> tuple[str, Decimal] | None:

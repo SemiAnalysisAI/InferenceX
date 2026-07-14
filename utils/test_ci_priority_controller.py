@@ -9,6 +9,7 @@ from ci_priority_controller import (
     QueuedJob,
     Runner,
     authorize_skip_requests,
+    parse_timestamp,
     plan_label_updates,
 )
 
@@ -39,6 +40,19 @@ def runner(runner_id, name, *labels, busy=False, status="online"):
         status=status,
         busy=busy,
     )
+
+
+def test_naive_timestamps_default_to_utc():
+    now = parse_timestamp("2026-07-14T18:00:00")
+
+    updates = plan_label_updates(
+        [job(1, "1.000", "h100")],
+        [runner(11, "h100_00", "h100")],
+        now=now,
+    )
+
+    assert now.tzinfo == timezone.utc
+    assert updates[0].assigned_job_id == 1
 
 
 def test_assigns_best_compatible_job_to_each_idle_runner():

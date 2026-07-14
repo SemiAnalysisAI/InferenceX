@@ -55,7 +55,7 @@ def calculate_priority(
     patch_labels = set(patchwork["names"])
     waiver_labels = set(patchwork.get("waived-by", []))
     if context.labels & patch_labels and not context.labels & waiver_labels:
-        return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM)
+        return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
     adjustments = policy["adjustments"]
     score = _decimal(policy["base-score"])

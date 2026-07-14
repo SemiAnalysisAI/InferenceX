@@ -1,3 +1,4 @@
+from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 
@@ -39,6 +40,18 @@ def test_main_branch_jobs_receive_an_automatic_boost():
         POLICY,
         PriorityContext(event_name="push"),
     ) == Decimal("3.000")
+
+
+def test_patchwork_score_uses_half_up_rounding():
+    policy = deepcopy(POLICY)
+    policy["labels"]["patchwork"]["score"] = 0.7225
+    entry = {"runner": "h100", "framework": "trt"}
+
+    assert calculate_priority(
+        entry,
+        policy,
+        PriorityContext(labels=frozenset({"ci-patchwork"})),
+    ) == Decimal("0.723")
 
 
 def test_skip_queue_request_keeps_numeric_priority():

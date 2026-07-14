@@ -1,4 +1,6 @@
-from authorize_skip_queue import active_label_actor, is_authorized
+from pathlib import Path
+
+from authorize_skip_queue import active_label_actor, is_authorized, load_skip_policy
 
 
 class FakeApi:
@@ -42,6 +44,18 @@ def authorize(api):
         team_slug="core",
         label_name="skip_queue",
     )
+
+
+def test_policy_configures_skip_queue_authorization():
+    policy = load_skip_policy(
+        Path(__file__).parents[1] / "configs" / "ci-priority.yaml"
+    )
+
+    assert policy == {
+        "name": "skip_queue",
+        "organization": "SemiAnalysisAI",
+        "team-slug": "core",
+    }
 
 
 def test_active_label_from_active_core_member_is_authorized():

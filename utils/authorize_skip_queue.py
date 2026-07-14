@@ -9,7 +9,10 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 
 class GitHubApi:
@@ -78,16 +81,31 @@ def is_authorized(
     return membership.get("state") == "active", actor
 
 
+def load_skip_policy(path: str | Path) -> dict[str, Any]:
+    with Path(path).open() as policy_file:
+        policy = yaml.safe_load(policy_file)
+    return policy["labels"]["skip-queue"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True)
     parser.add_argument("--pr-number", required=True, type=int)
-    parser.add_argument("--organization", default="SemiAnalysisAI")
-    parser.add_argument("--team-slug", default="core")
-    parser.add_argument("--label", default="skip_queue")
+    parser.add_argument(
+        "--policy",
+        type=Path,
+        default=Path(__file__).parents[1] / "configs" / "ci-priority.yaml",
+    )
+    parser.add_argument("--organization")
+    parser.add_argument("--team-slug")
+    parser.add_argument("--label")
     parser.add_argument("--token-env", default="REPO_PAT")
     parser.add_argument("--api-url", default="https://api.github.com")
     args = parser.parse_args()
+    skip_policy = load_skip_policy(args.policy)
+    organization = args.organization or skip_policy["organization"]
+    team_slug = args.team_slug or skip_policy["team-slug"]
+    label_name = args.label or skip_policy["name"]
 
     token = os.environ.get(args.token_env)
     if not token:
@@ -100,9 +118,9 @@ def main() -> int:
             GitHubApi(token, args.api_url),
             repository=args.repository,
             pr_number=args.pr_number,
-            organization=args.organization,
-            team_slug=args.team_slug,
-            label_name=args.label,
+            organization=organization,
+            team_slug=team_slug,
+            label_name=label_name,
         )
     except RuntimeError as error:
         print(f"::warning::{error}; refusing skip_queue authorization", file=sys.stderr)
@@ -114,7 +132,7 @@ def main() -> int:
     elif actor:
         print(
             f"::warning::skip_queue was applied by {actor}, who is not an active "
-            f"{args.organization}/{args.team_slug} member",
+            f"{organization}/{team_slug} member",
             file=sys.stderr,
         )
     print("true" if authorized else "false")
