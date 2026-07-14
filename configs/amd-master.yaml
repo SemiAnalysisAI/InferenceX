@@ -169,9 +169,10 @@ dsv4-fp8-mi300x-vllm-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      # 8k1k MTP at conc512 failed (55.8% request failures, KV ~20x oversubscribed);
-      # conc256 passed on both MI300X/MI325X. Cap 8k1k MTP here (1k1k holds at 512).
-      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      # 8k1k MTP KV is tighter than normal (draft model): conc256 failed here
+      # (19.2% req failures) and conc512 was 55.8%; conc128 passed cleanly.
+      # Cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
+      - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
