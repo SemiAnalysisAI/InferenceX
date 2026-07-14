@@ -7,7 +7,14 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+from pydantic import BaseModel, ValidationError
+
+from utils.matrix_logic.validation import (
+    ComponentMetadata,
+    KVOffloadBackendMetadata,
+)
 
 from .aggregation_common import round_floats
 from .request_metrics import compute_request_metrics, load_aggregate, load_records_with_accounting
@@ -36,8 +43,14 @@ def required_env(name: str) -> str:
     return value
 
 
-def optional_component_metadata(env_name: str) -> dict[str, str] | None:
-    """Parse strict optional component metadata from a JSON environment value."""
+MetadataModel = TypeVar("MetadataModel", bound=BaseModel)
+
+
+def optional_metadata(
+    env_name: str,
+    schema: type[MetadataModel],
+) -> dict[str, str] | None:
+    """Parse optional JSON metadata through its source Pydantic schema."""
     raw_value = os.environ.get(env_name)
     if raw_value in (None, "", "null"):
         return None
@@ -47,33 +60,24 @@ def optional_component_metadata(env_name: str) -> dict[str, str] | None:
     except json.JSONDecodeError as exc:
         raise SystemExit(f"{env_name} must contain valid JSON") from exc
 
-    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
-        raise SystemExit(f"{env_name} must contain exactly 'name' and 'version'")
-    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
-        raise SystemExit(f"{env_name} name and version must be non-empty strings")
-    return metadata
+    try:
+        return schema.model_validate(metadata).model_dump(exclude_none=True)
+    except ValidationError as exc:
+        raise SystemExit(
+            f"{env_name} does not match {schema.__name__}: {exc}"
+        ) from exc
+
+
+def optional_component_metadata(env_name: str) -> dict[str, str] | None:
+    """Parse strict optional component metadata from a JSON environment value."""
+    return optional_metadata(env_name, ComponentMetadata)
 
 
 def optional_kv_offload_backend_metadata(
     env_name: str,
 ) -> dict[str, str] | None:
     """Parse KV offload backend metadata with an optional version."""
-    raw_value = os.environ.get(env_name)
-    if raw_value in (None, "", "null"):
-        return None
-
-    try:
-        metadata = json.loads(raw_value)
-    except json.JSONDecodeError as exc:
-        raise SystemExit(f"{env_name} must contain valid JSON") from exc
-
-    if not isinstance(metadata, dict) or not set(metadata) <= {"name", "version"}:
-        raise SystemExit(f"{env_name} may contain only 'name' and 'version'")
-    if set(metadata) not in ({"name"}, {"name", "version"}):
-        raise SystemExit(f"{env_name} must contain 'name' and optional 'version'")
-    if not all(isinstance(value, str) and value for value in metadata.values()):
-        raise SystemExit(f"{env_name} values must be non-empty strings")
-    return metadata
+    return optional_metadata(env_name, KVOffloadBackendMetadata)
 
 
 def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
@@ -86,7 +90,7 @@ def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
         if backend_name or backend_metadata is not None:
             raise SystemExit("KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none")
     else:
-        if not backend_name or backend_name == "none" or backend_metadata is None:
+        if not backend_name or backend_metadata is None:
             raise SystemExit("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled")
         if backend_metadata["name"] != backend_name:
             raise SystemExit(

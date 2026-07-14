@@ -3,6 +3,10 @@ import json
 import os
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from matrix_logic.validation import ComponentMetadata
+
 
 def get_required_env_vars(required_vars):
     """Load and validate required environment variables."""
@@ -33,11 +37,12 @@ def get_optional_component_metadata(env_var):
     except json.JSONDecodeError as exc:
         raise ValueError(f"{env_var} must contain valid JSON") from exc
 
-    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
-        raise ValueError(f"{env_var} must contain exactly 'name' and 'version'")
-    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
-        raise ValueError(f"{env_var} name and version must be non-empty strings")
-    return metadata
+    try:
+        return ComponentMetadata.model_validate(metadata).model_dump()
+    except ValidationError as exc:
+        raise ValueError(
+            f"{env_var} does not match ComponentMetadata: {exc}"
+        ) from exc
 
 
 # Base required env vars

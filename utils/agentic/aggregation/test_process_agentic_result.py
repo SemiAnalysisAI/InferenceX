@@ -26,7 +26,11 @@ from utils.agentic.aggregation.request_metrics import (
     load_aggregate,
     load_records,
 )
-from utils.agentic.aggregation.process_agentic_result import _gpu_shape
+from utils.agentic.aggregation.process_agentic_result import (
+    _gpu_shape,
+    optional_component_metadata,
+    optional_kv_offload_backend_metadata,
+)
 from utils.agentic.aggregation.server_metrics import (
     compute_server_metrics,
     load_server_metrics,
@@ -409,15 +413,23 @@ def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    "metadata",
+    ("metadata", "expected"),
     [
-        {"name": "lmcache"},
-        {"name": "lmcache", "version": "0.5.1"},
+        ({"name": "lmcache"}, {"name": "lmcache"}),
+        (
+            {"name": "lmcache", "version": "0.5.1"},
+            {"name": "lmcache", "version": "0.5.1"},
+        ),
+        (
+            {"name": "vllm-simple", "version": None},
+            {"name": "vllm-simple"},
+        ),
     ],
 )
 def test_processor_emits_kv_offload_backend_metadata(
     tmp_path: Path,
-    metadata: dict[str, str],
+    metadata: dict[str, str | None],
+    expected: dict[str, str],
 ):
     result_dir = _write_fixture(tmp_path)
     agg = _run_processor(
@@ -425,12 +437,49 @@ def test_processor_emits_kv_offload_backend_metadata(
         tmp_path / "out",
         env_overrides={
             "KV_OFFLOADING": "dram",
-            "KV_OFFLOAD_BACKEND": "lmcache",
+            "KV_OFFLOAD_BACKEND": metadata["name"],
             "KV_OFFLOAD_BACKEND_METADATA": json.dumps(metadata),
         },
     )
 
-    assert agg["kv_offload_backend"] == metadata
+    assert agg["kv_offload_backend"] == expected
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"name": "vllm-router"},
+        {"name": "vllm-router", "version": "", "mode": "round-robin"},
+        {"name": "vllm-router", "version": "image:vllm/vllm-openai:latest"},
+    ],
+)
+def test_component_metadata_rejects_values_rejected_by_source_schema(
+    monkeypatch: pytest.MonkeyPatch,
+    metadata: dict[str, str],
+):
+    monkeypatch.setenv("TEST_COMPONENT_METADATA", json.dumps(metadata))
+
+    with pytest.raises(SystemExit, match="does not match ComponentMetadata"):
+        optional_component_metadata("TEST_COMPONENT_METADATA")
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"name": ""},
+        {"name": "lmcache", "version": ""},
+        {"name": "lmcache", "version": "0.5.1", "mode": "cpu"},
+        {"name": "lmcache", "version": "image:vllm/vllm-openai:latest"},
+    ],
+)
+def test_kv_offload_metadata_rejects_values_rejected_by_source_schema(
+    monkeypatch: pytest.MonkeyPatch,
+    metadata: dict[str, str],
+):
+    monkeypatch.setenv("TEST_KV_OFFLOAD_METADATA", json.dumps(metadata))
+
+    with pytest.raises(SystemExit, match="does not match KVOffloadBackendMetadata"):
+        optional_kv_offload_backend_metadata("TEST_KV_OFFLOAD_METADATA")
 
 
 def test_processor_latency_units_are_seconds(tmp_path: Path):
