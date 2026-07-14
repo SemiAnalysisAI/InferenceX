@@ -1,4 +1,11 @@
-from pydantic import BaseModel, Field, ValidationError, ConfigDict, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from typing import List, Optional, Union, Literal, Dict
 from enum import Enum
 
@@ -59,6 +66,8 @@ class Fields(Enum):
     # Agentic coding fields
     KV_OFFLOADING = 'kv-offloading'
     KV_OFFLOAD_BACKEND = 'kv-offload-backend'
+    ROUTER = 'router'
+    KV_P2P_TRANSFER = 'kv-p2p-transfer'
     TOTAL_CPU_DRAM_GB = 'total-cpu-dram-gb'
     AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
     DRAM_UTILIZATION = 'dram-utilization'
@@ -87,6 +96,44 @@ class Fields(Enum):
     are valid. Threfore, there should not be any default values set in these Pydantic models. Any missing value
     should raise a validation error.
 """
+
+
+class ComponentMetadata(BaseModel):
+    """Strict name and version metadata for an optional runtime component."""
+    model_config = ConfigDict(extra='forbid')
+
+    name: str = Field(min_length=1)
+    version: str = Field(min_length=1)
+
+    @field_validator('version')
+    @classmethod
+    def validate_component_version(cls, version: str) -> str:
+        """Require the component's own version rather than its image provenance."""
+        if version.startswith('image:'):
+            raise ValueError(
+                "component version must be a release, package version, or "
+                "source commit, not an image reference"
+            )
+        return version
+
+
+class KVOffloadBackendMetadata(BaseModel):
+    """KV offload backend metadata with an optional independent version."""
+    model_config = ConfigDict(extra='forbid')
+
+    name: str = Field(min_length=1)
+    version: Optional[str] = Field(default=None, min_length=1)
+
+    @field_validator('version')
+    @classmethod
+    def validate_component_version(cls, version: Optional[str]) -> Optional[str]:
+        """Reject image provenance when an independent version is available."""
+        if version is not None and version.startswith('image:'):
+            raise ValueError(
+                "component version must be a release, package version, or "
+                "source commit, not an image reference"
+            )
+        return version
 
 
 def _validate_tp_context_topology(self):
@@ -127,6 +174,7 @@ class SingleNodeMatrixEntry(BaseModel):
     disagg: Literal[False]
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+    router: Optional[ComponentMetadata] = None
 
     @model_validator(mode='after')
     def validate_single_node_topology(self):
@@ -193,10 +241,23 @@ class MultiNodeMatrixEntry(BaseModel):
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
+    router: Optional[ComponentMetadata] = None
+    kv_p2p_transfer: Optional[str] = Field(
+        default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
+    )
 
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
         return _validate_worker_hardware_pair(self)
+
+    @model_validator(mode='after')
+    def validate_disagg_transfer(self):
+        if self.disagg and self.kv_p2p_transfer is None:
+            raise ValueError(
+                f"{Fields.DISAGG.value}=true requires "
+                f"{Fields.KV_P2P_TRANSFER.value}"
+            )
+        return self
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
@@ -215,13 +276,17 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+        default="none", alias=Fields.SPEC_DECODING.value
+    )
     conc: int
     kv_offloading: Literal["none", "dram"] = Field(
         alias=Fields.KV_OFFLOADING.value
     )
-    kv_offload_backend: Optional[str] = Field(
+    kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
+    router: Optional[ComponentMetadata] = None
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
@@ -253,8 +318,12 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     decode: WorkerConfig
     conc: list[int]
     kv_offloading: Literal["none", "dram"] = Field(alias=Fields.KV_OFFLOADING.value)
-    kv_offload_backend: Optional[str] = Field(
+    kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
+    )
+    router: Optional[ComponentMetadata] = None
+    kv_p2p_transfer: Optional[str] = Field(
+        default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
@@ -268,6 +337,15 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     @model_validator(mode='after')
     def validate_kv_offload_fields(self):
         return _validate_kv_offload_fields(self)
+
+    @model_validator(mode='after')
+    def validate_disagg_transfer(self):
+        if self.disagg and self.kv_p2p_transfer is None:
+            raise ValueError(
+                f"{Fields.DISAGG.value}=true requires "
+                f"{Fields.KV_P2P_TRANSFER.value}"
+            )
+        return self
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
@@ -368,20 +446,20 @@ def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
 def _validate_kv_offload_fields(self):
     backend = getattr(self, "kv_offload_backend", None)
     if self.kv_offloading is None:
-        if backend not in (None, ""):
+        if backend is not None:
             raise ValueError(
                 f"{Fields.KV_OFFLOAD_BACKEND.value} requires "
                 f"{Fields.KV_OFFLOADING.value}"
             )
         return self
     if self.kv_offloading == "none":
-        if backend not in (None, ""):
+        if backend is not None:
             raise ValueError(
                 f"{Fields.KV_OFFLOAD_BACKEND.value} can only be set when "
                 f"{Fields.KV_OFFLOADING.value} is not 'none'"
             )
         return self
-    if backend is None or not backend.strip():
+    if backend is None:
         raise ValueError(
             f"{Fields.KV_OFFLOAD_BACKEND.value} is required when "
             f"{Fields.KV_OFFLOADING.value} is '{self.kv_offloading}'"
@@ -404,6 +482,7 @@ class SingleNodeSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     dp_attn: Optional[bool] = Field(
         default=None, alias=Fields.DP_ATTN.value)
+    router: Optional[ComponentMetadata] = None
     conc_start: Optional[int] = Field(
         default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(
@@ -428,6 +507,10 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: WorkerConfig
     decode: WorkerConfig
+    router: Optional[ComponentMetadata] = None
+    kv_p2p_transfer: Optional[str] = Field(
+        default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
+    )
     conc_start: Optional[int] = Field(
         default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(
@@ -483,8 +566,12 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     kv_offloading: Optional[Literal["none", "dram"]] = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
-    kv_offload_backend: Optional[str] = Field(
+    kv_offload_backend: Optional[KVOffloadBackendMetadata] = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
+    )
+    router: Optional[ComponentMetadata] = None
+    kv_p2p_transfer: Optional[str] = Field(
+        default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
@@ -592,6 +679,55 @@ class MultiNodeScenarios(BaseModel):
         return self
 
 
+def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
+    """Require unambiguous component metadata across a master config."""
+    search_space_entries = [
+        entry
+        for scenario_configs in (
+            self.scenarios.fixed_seq_len,
+            self.scenarios.agentic_coding,
+        )
+        for scenario_config in scenario_configs or []
+        for entry in scenario_config.search_space
+    ]
+
+    for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
+        attribute = field.value.replace("-", "_")
+        top_level_value = getattr(self, attribute, None)
+        has_search_space_value = any(
+            getattr(entry, attribute, None) is not None
+            for entry in search_space_entries
+        )
+        if top_level_value is not None and has_search_space_value:
+            raise ValueError(
+                f"{field.value} must be declared either at the top level or "
+                "in search-space entries, not both"
+            )
+
+    has_search_space_transfer = any(
+        getattr(entry, "kv_p2p_transfer", None) is not None
+        for entry in search_space_entries
+    )
+    if not self.multinode and has_search_space_transfer:
+        raise ValueError(
+            f"{Fields.KV_P2P_TRANSFER.value} is only valid when "
+            f"{Fields.MULTINODE.value}=true"
+        )
+
+    top_level_transfer = getattr(self, "kv_p2p_transfer", None)
+    if self.disagg and top_level_transfer is None:
+        if not search_space_entries or any(
+            entry.kv_p2p_transfer is None for entry in search_space_entries
+        ):
+            raise ValueError(
+                f"{Fields.DISAGG.value}=true requires "
+                f"{Fields.KV_P2P_TRANSFER.value} at the top level or in every "
+                "search-space entry"
+            )
+
+    return self
+
+
 class SingleNodeMasterConfigEntry(BaseModel):
     """Top-level single node master configuration entry."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -604,12 +740,17 @@ class SingleNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[False]
     disagg: Literal[False] = Field(default=False)
+    router: Optional[ComponentMetadata] = None
     scenarios: SingleNodeScenarios
 
     @model_validator(mode='after')
     def validate_agentic_runner(self):
         _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
         return self
+
+    @model_validator(mode='after')
+    def validate_component_metadata_scope(self):
+        return _validate_component_metadata_scope(self)
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
@@ -624,12 +765,20 @@ class MultiNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[True]
     disagg: bool = Field(default=False)
+    router: Optional[ComponentMetadata] = None
+    kv_p2p_transfer: Optional[str] = Field(
+        default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
+    )
     scenarios: MultiNodeScenarios
 
     @model_validator(mode='after')
     def validate_agentic_runner(self):
         _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
         return self
+
+    @model_validator(mode='after')
+    def validate_component_metadata_scope(self):
+        return _validate_component_metadata_scope(self)
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:

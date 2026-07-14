@@ -74,8 +74,13 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     # Qwen3.5 sglang recipes (qwen3.5-fp4).
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
+    # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
+    # Qwen3.5 sglang recipes (qwen3.5-fp8).
+    export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -184,10 +189,21 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
     cd "$SRT_REPO_DIR"
     git checkout main
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Overlay our version-controlled Qwen3.5 recipes onto the submission branch.
+    # Overlay our version-controlled Qwen3.5 recipes onto the srt-slurm checkout.
+    # fp8 recipes pin dynamo by commit hash (source install), which needs the
+    # cargo/maturin bootstrap included in the srt-slurm v1.0.25 release — the
+    # sa-submission-q2-2026 sglang install path assumes maturin ships in the
+    # image, and the lmsysorg/sglang nightly-dev-cu13 image doesn't include it.
+    # Same branch the identical gb200-fp8 recipes run on. fp4 recipes pin
+    # dynamo by version (pip install) and stay on the submission branch they
+    # were validated against.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    if [[ $PRECISION == "fp8" ]]; then
+        git checkout v1.0.25
+    else
+        git checkout sa-submission-q2-2026
+    fi
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
@@ -308,9 +324,12 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 # the GHA runner host (im-gb300-login-02, an x86 login node). It's required
 # whenever model.path resolves to the node-local /scratch NVMe that the login
 # node can't see:
-#   - the agentic path (DSv4-Pro checkpoint), and
+#   - the agentic path (DSv4-Pro checkpoint),
 #   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
-#     /scratch/models.
+#     /scratch/models, and
+#   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
+#     and which runs on srt-slurm:v1.0.25 (the release that has the preflight;
+#     qwen3.5 fp4 runs on sa-submission-q2-2026, which has none).
 # The engine still fails loudly at runtime if the path is genuinely missing on
 # the compute node. Other fixed-seq-len recipes resolve model.path to a
 # login-visible location, so keep the precheck enforced for them.
@@ -318,7 +337,7 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" ]]; then
+if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then

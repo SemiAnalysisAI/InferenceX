@@ -129,11 +129,24 @@ def agentic_dram_offload_gb(
     return int(proportional_bytes / BYTES_PER_GB)
 
 
-def agentic_kv_offload_suffix(kv_offloading: str, kv_offload_backend: str | None) -> str:
+def agentic_kv_offload_suffix(
+    kv_offloading: str,
+    kv_offload_backend: dict | None,
+) -> str:
     """Return a compact exp-name suffix for agentic KV offload settings."""
     if kv_offloading == "none":
         return "kvnone"
-    return f"kv{kv_offloading}-{kv_offload_backend}"
+    return f"kv{kv_offloading}-{kv_offload_backend['name']}"
+
+
+def component_metadata(benchmark: dict, config: dict) -> dict:
+    """Resolve optional component metadata from its validated scope."""
+    metadata = {}
+    for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
+        value = benchmark.get(field.value, config.get(field.value))
+        if value is not None:
+            metadata[field.value] = value
+    return metadata
 
 
 def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
@@ -481,6 +494,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
+                        entry.update(component_metadata(bmk, val))
 
                         validate_matrix_entry(entry, is_multinode)
                         matrix_values.append(entry)
@@ -600,6 +614,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             if dp_attn is not None:
                                 entry[Fields.DP_ATTN.value] = dp_attn
 
+                            entry.update(component_metadata(bmk, val))
                             validate_matrix_entry(entry, is_multinode)
                             matrix_values.append(entry)
 
@@ -630,6 +645,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
@@ -699,6 +715,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                            entry.update(component_metadata(bmk, val))
                             validate_agentic_matrix_entry(entry)
                             matrix_values.append(entry)
                 else:
@@ -717,6 +734,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
@@ -724,11 +742,13 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                            entry.update(component_metadata(bmk, val))
                             validate_agentic_matrix_entry(entry)
                             matrix_values.append(entry)
 
@@ -847,6 +867,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,
                         }
+                        entry.update(component_metadata(bmk, val))
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
                 else:
                     # Single-node config
@@ -905,6 +926,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DISAGG.value: disagg,
                                 Fields.RUN_EVAL.value: False,
                             }
+                            entry.update(component_metadata(bmk, val))
                             matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
         # ---- Agentic-coding scenarios ----
@@ -929,6 +951,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
@@ -992,6 +1015,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                            entry.update(component_metadata(bmk, val))
                             matrix_values.append(validate_agentic_matrix_entry(entry))
                 else:
                     for conc in conc_values:
@@ -1009,6 +1033,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
@@ -1016,11 +1041,13 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                            entry.update(component_metadata(bmk, val))
                             matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values
