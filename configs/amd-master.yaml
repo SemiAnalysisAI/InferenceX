@@ -120,15 +120,18 @@ dsr1-fp8-mi325x-sglang:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 # DeepSeek-V4-Pro FP8 single-node on MI300X (gfx942) via SGLang.
-# BRING-UP scaffold (unvalidated on-cluster as of 2026-07): gfx942 has no
-# native FP4, so this runs FP8 (FP8 KV + AITER MoE) rather than the FP4 path
-# used on the MI355X (gfx950) dsv4 entries. TP-only conservative first sweep
-# (conc 4-64), mirroring the sister dsr1-fp8-mi300x-sglang range; the launch
-# script dsv4_fp8_mi300x.sh carries the model-level deepseek_v4 flags. Image
-# reuses the general mi30x sglang build the dsr1 entries use — the debug-runs
-# loop must confirm it carries the DeepseekV4 model class before this merges.
+# EXTRAPOLATED bring-up scaffold (unvalidated on-cluster as of 2026-07).
+# Search-space shape mirrors the same-model MI355X entry (dsv4-fp4-mi355x-sglang):
+# a TP-only low-latency band + a DP-attention + EP throughput band. gfx942 has
+# no native FP4, so this runs FP8 (the ~960GB mixed checkpoint is ~1.05TB in
+# FP8) — which only fits TP8 on 8x192GB, so the MI355X TP4 bands are dropped.
+# Image follows the same-model MI355X's sglang-rocm dated-tag family (mi30x
+# variant); launch script dsv4_fp8_mi300x.sh carries the deepseek_v4 flags +
+# gfx942 AITER infra. debug-runs must confirm the image carries the DeepseekV4
+# class and that --attention-backend dsv4 / --quantization deepseek_v4_fp8
+# work on gfx942 before this merges.
 dsv4-fp8-mi300x-sglang:
-  image: lmsysorg/sglang:v0.5.15-rocm700-mi30x
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi300x
@@ -140,16 +143,22 @@ dsv4-fp8-mi300x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      # Low latency: TP-only (dp-attn off).
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      # Throughput: DP-attention + EP8 (mirrors the MI355X tp8 dp-attn band).
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
 
-# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via SGLang. Same bring-up
-# recipe as dsv4-fp8-mi300x-sglang; 8x256GB gives more KV headroom than MI300X.
+# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via SGLang. Same
+# extrapolated recipe as dsv4-fp8-mi300x-sglang; 8x256GB (2TB) gives far more
+# KV headroom than MI300X (~1TB free after FP8 weights), so the throughput
+# band could later extend past conc 2048 — kept at parity for a first bring-up.
 dsv4-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.15-rocm700-mi30x
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi325x
@@ -161,11 +170,13 @@ dsv4-fp8-mi325x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x

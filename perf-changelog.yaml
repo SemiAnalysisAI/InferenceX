@@ -4755,14 +4755,15 @@
     - dsv4-fp8-mi300x-sglang
   description:
     - "Add DeepSeek-V4-Pro FP8 single-node MI300X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
-    - "gfx942 has no native FP4, so this runs FP8 (FP8 KV + AITER MoE, --attention-backend aiter) rather than the FP4 path used on MI355X/gfx950; model-level deepseek_v4 flags mirror dsv4_fp4_mi355x_sglang.sh, gfx942 infra flags mirror dsr1_fp8_mi300x.sh"
-    - "TP8 conservative first sweep (conc 4-64), matching the sister dsr1-fp8-mi300x-sglang range; image lmsysorg/sglang:v0.5.15-rocm700-mi30x"
+    - "Extrapolated from the same-model MI355X entry (dsv4-fp4-mi355x-sglang) for search-space shape + deepseek_v4 model flags, and from the same-SKU dsr1-fp8-mi300x-sglang for gfx942 AITER infra; FP8 path (--quantization deepseek_v4_fp8) follows the H200 dsv4 recipe since gfx942 has no native FP4"
+    - "Search space mirrors MI355X (TP-only low-latency conc 1-32 + DP-attn/EP8 throughput conc 64-2048) but drops the MI355X TP4 bands: the ~960GB mixed checkpoint is ~1.05TB in FP8 and only fits TP8 on 8x192GB"
+    - "Image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713 (mi30x variant of the MI355X sglang-rocm dated-tag family)"
   pr-link: TBD
 
 - config-keys:
     - dsv4-fp8-mi325x-sglang
   description:
     - "Add DeepSeek-V4-Pro FP8 single-node MI325X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
-    - "Same FP8 bring-up recipe as dsv4-fp8-mi300x-sglang; 8x256GB MI325X gives more KV headroom than MI300X"
-    - "TP8 conservative first sweep (conc 4-64); image lmsysorg/sglang:v0.5.15-rocm700-mi30x"
+    - "Same extrapolated FP8 recipe and search space as dsv4-fp8-mi300x-sglang; 8x256GB (2TB) MI325X leaves ~1TB free after FP8 weights, so the throughput band can later extend past conc 2048 (kept at parity for a first bring-up)"
+    - "Image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713"
   pr-link: TBD
