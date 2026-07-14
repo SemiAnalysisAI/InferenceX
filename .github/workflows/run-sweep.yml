@@ -222,8 +222,10 @@ jobs:
               if: >-
                   github.event_name == 'pull_request' &&
                   contains(github.event.pull_request.labels.*.name, 'skip_queue')
+              # REPO_PAT needs repository Issues: Read.
+              # REPO_PAT needs organization Members: Read.
               env:
-                  CORE_TEAM_READ_TOKEN: ${{ secrets.CORE_TEAM_READ_TOKEN }}
+                  REPO_PAT: ${{ secrets.REPO_PAT }}
               run: |
                   authorized=$(python3 "${GITHUB_WORKSPACE}/utils/authorize_skip_queue.py" \
                     --repository "${{ github.repository }}" \

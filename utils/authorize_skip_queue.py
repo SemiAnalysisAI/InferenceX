@@ -85,7 +85,7 @@ def main() -> int:
     parser.add_argument("--organization", default="SemiAnalysisAI")
     parser.add_argument("--team-slug", default="core")
     parser.add_argument("--label", default="skip_queue")
-    parser.add_argument("--token-env", default="CORE_TEAM_READ_TOKEN")
+    parser.add_argument("--token-env", default="REPO_PAT")
     parser.add_argument("--api-url", default="https://api.github.com")
     args = parser.parse_args()
 
