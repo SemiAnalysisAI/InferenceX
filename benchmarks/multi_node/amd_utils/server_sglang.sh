@@ -439,6 +439,16 @@ if [[ -n "$MODEL_NAME" ]]; then
     echo "Using model-specific configuration for: $MODEL_NAME"
 fi
 
+# sync.py barrier timeout for server-up (port 8000). DSV4 needs more headroom.
+# Override via SYNC_BARRIER_TIMEOUT if needed.
+if [[ -z "${SYNC_BARRIER_TIMEOUT:-}" ]]; then
+    case "${MODEL_NAME}" in
+        *DeepSeek-V4*) SYNC_BARRIER_TIMEOUT=3000 ;;
+        *) SYNC_BARRIER_TIMEOUT=1800 ;;
+    esac
+fi
+echo "SYNC_BARRIER_TIMEOUT=${SYNC_BARRIER_TIMEOUT}s (model=${MODEL_NAME:-unset})"
+
 # =============================================================================
 # Optional KV cache offloading (HiCache) — enabled when
 # KV_OFFLOADING != none AND KV_OFFLOAD_BACKEND == hicache.
@@ -500,7 +510,7 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     }
 
     # HiCache capacity via --hicache-ratio (scales with GPU KV pool).
-    HICACHE_RATIO="${HICACHE_RATIO:-16}"
+    HICACHE_RATIO="${HICACHE_RATIO:-5}"
 
     build_hicache_flags() {
         echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-ratio ${HICACHE_RATIO} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
@@ -709,7 +719,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
-        --timeout 2400"
+        --timeout ${SYNC_BARRIER_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -782,7 +792,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ports 30000 \
             --wait-for-all-health \
             --health-endpoint /readiness \
-            --timeout 3000"
+            --timeout ${SYNC_BARRIER_TIMEOUT}"
 
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
@@ -1091,7 +1101,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
-        --timeout 3000"
+        --timeout ${SYNC_BARRIER_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -1174,7 +1184,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout ${SYNC_BARRIER_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
