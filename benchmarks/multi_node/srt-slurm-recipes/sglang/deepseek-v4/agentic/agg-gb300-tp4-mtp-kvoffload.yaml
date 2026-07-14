@@ -65,6 +65,8 @@ backend:
   type: sglang
 
   aggregated_environment:
+    SGLANG_DEFAULT_THINKING: '1'
+    SGLANG_DSV4_REASONING_EFFORT: high
     SGLANG_SIMULATE_ACC_LEN: '2.49'
     SGLANG_SIMULATE_ACC_METHOD: match-expected
     SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
