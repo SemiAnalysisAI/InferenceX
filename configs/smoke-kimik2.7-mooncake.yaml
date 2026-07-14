@@ -1,0 +1,18 @@
+# Temporary overlay to dispatch ONLY the Mooncake KV-offload cells for the
+# kimik2.7 agentic TP8 smoke, so the in-flight none/lmcache sweep is not
+# rerun. Same config key + settings as configs/amd-master.yaml, mooncake only.
+# Remove once the 3-way none/lmcache/mooncake comparison is complete.
+kimik2.7-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:v0.24.0
+  model: amd/Kimi-K2.7-Code-MXFP4
+  model-prefix: kimik2.7
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      duration: 900
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "source-main" }, conc-list: [16, 32, 48] }

@@ -567,6 +567,7 @@ kimik2.7-fp4-mi355x-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [16, 32, 48] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [16, 32, 48] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "source-main" }, conc-list: [16, 32, 48] }
 
 
 kimik2.5-fp4-mi355x-atom:

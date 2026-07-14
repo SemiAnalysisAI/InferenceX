@@ -5,6 +5,7 @@ set -x
 # Agentic trace replay benchmark for Kimi-K2.7 FP4 on MI355X using vLLM.
 #   KV_OFFLOADING=none                              -> GPU KV only
 #   KV_OFFLOADING=dram KV_OFFLOAD_BACKEND=lmcache   -> LMCache MP server + connector
+#   KV_OFFLOADING=dram KV_OFFLOAD_BACKEND=mooncake  -> Mooncake embedded store + connector
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE
@@ -60,21 +61,27 @@ export VLLM_ALLREDUCE_USE_SYMM_MEM="${VLLM_ALLREDUCE_USE_SYMM_MEM:-0}"
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
 
-# ---- LMCache config ---------------------------------------------------------
+# ---- Offload service cleanup ------------------------------------------------
 LMCACHE_PID=""
+MOONCAKE_MASTER_PID=""
 
-cleanup_lmcache_server() {
+cleanup_offload_services() {
     if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
         kill "$LMCACHE_PID" 2>/dev/null || true
         wait "$LMCACHE_PID" 2>/dev/null || true
     fi
+    if [[ -n "$MOONCAKE_MASTER_PID" ]] && kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+        kill "$MOONCAKE_MASTER_PID" 2>/dev/null || true
+        wait "$MOONCAKE_MASTER_PID" 2>/dev/null || true
+    fi
 }
-trap cleanup_lmcache_server EXIT
+trap cleanup_offload_services EXIT
 
 wait_for_lmcache_ready() {
     { set +x; } 2>/dev/null
@@ -192,8 +199,76 @@ case "$OFFLOAD_MODE" in
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
         )
         ;;
+    mooncake)
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+
+        # Mooncake embedded mode contributes one global segment per GPU rank to
+        # a shared distributed store, so pre-divide the aggregate host-memory
+        # budget across TP ranks. Mirrors the MI355X DSv4 vLLM recipe.
+        MOONCAKE_PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+
+        # No prebuilt ROCm wheel: build the Mooncake transfer engine from source
+        # if the store module isn't importable. Clone to a container-local dir
+        # (NOT bind-mounted /workspace) so the next job's checkout `clean: true`
+        # won't trip over root-owned build artifacts.
+        if ! python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null 2>&1; then
+            MOONCAKE_SRC_DIR="${MOONCAKE_SRC_DIR:-/opt/mooncake-src}"
+            MOONCAKE_GIT_REF="${MOONCAKE_GIT_REF:-main}"
+            rm -rf "$MOONCAKE_SRC_DIR"
+            git clone https://github.com/kvcache-ai/Mooncake.git "$MOONCAKE_SRC_DIR"
+            ( cd "$MOONCAKE_SRC_DIR"
+              git checkout "$MOONCAKE_GIT_REF"
+              bash dependencies.sh
+              mkdir -p build && cd build
+              cmake ..
+              make -j
+              make install )
+            python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+        fi
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${MOONCAKE_PER_RANK_GB}GB",
+  "local_buffer_size": "2GB",
+  "protocol": "tcp",
+  "device_name": "",
+  "enable_offload": false
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+        export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+        export MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX=8
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --eviction_high_watermark_ratio=0.80 \
+            --eviction_ratio=0.10 \
+            --default_kv_lease_ttl=60s \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        echo "Mooncake master PID: $MOONCAKE_MASTER_PID"
+        sleep 10
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup. Log follows:" >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2 || true
+            exit 1
+        fi
+
+        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+        )
+        ;;
     *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND '$OFFLOAD_MODE' (expected: lmcache)" >&2
+        echo "Error: unsupported KV_OFFLOAD_BACKEND '$OFFLOAD_MODE' (expected: lmcache, mooncake)" >&2
         exit 1
         ;;
 esac
