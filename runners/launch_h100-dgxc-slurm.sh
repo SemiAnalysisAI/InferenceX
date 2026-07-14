@@ -79,8 +79,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
         cp \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/dsv4-h100-vllm-deps.sh" \
-            configs/patches/dsv4-h100-vllm-deps.sh
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/vllm-container-deps.sh" \
+            configs/patches/vllm-container-deps.sh
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"

@@ -13,7 +13,7 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260426"
 
-setup_script: dsv4-h100-vllm-deps.sh
+setup_script: vllm-container-deps.sh
 
 slurm:
   time_limit: "8:00:00"
