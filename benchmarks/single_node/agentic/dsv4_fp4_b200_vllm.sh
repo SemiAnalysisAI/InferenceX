@@ -276,6 +276,7 @@ EOF
             --eviction-ratio 0.10 \
             --eviction-policy LRU \
             --supported-transfer-mode lmcache_driven \
+            --no-separate-object-groups \
             > "$LMCACHE_SERVER_LOG" 2>&1 &
         LMCACHE_SERVER_PID=$!
         LMCACHE_READY=0
