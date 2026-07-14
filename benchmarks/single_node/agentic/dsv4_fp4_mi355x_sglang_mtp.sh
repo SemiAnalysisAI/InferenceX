@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using SGLang.
@@ -16,16 +16,16 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+    echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 # ROCR/HIP visibility under slurm cgroups.
-if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
+if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-if [[ -n "${MODEL_PATH:-}" ]]; then
+if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
@@ -50,7 +50,7 @@ export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     # HiCache config — https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4
-    case "${KV_OFFLOAD_BACKEND:-}" in
+    case "$KV_OFFLOAD_BACKEND" in
         hicache)
             HICACHE_RATIO=4
             HICACHE_WRITE_POLICY="write_through"
@@ -66,7 +66,7 @@ if agentic_kv_offload_enabled; then
             echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: hicache)" >&2
+            echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: hicache)" >&2
             exit 1
             ;;
     esac
@@ -101,7 +101,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
 fi
 
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
+if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
 
