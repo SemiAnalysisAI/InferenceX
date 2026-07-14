@@ -1771,7 +1771,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-515d6e9
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
@@ -3215,7 +3215,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-vllm-agentic:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-515d6e9
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv
