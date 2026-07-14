@@ -27,6 +27,13 @@ labels:
     - h100-dgxc-slurm_17
     - h100-dgxc-slurm_18
     - h100-dgxc-slurm_19
+  # Disaggregated-H100 pool. Unlike h100-multinode (whose key is not a label
+  # any runner carries, so jobs requesting it queue forever), these three
+  # runners carry the h100-disagg label, so runs-on: h100-disagg matches.
+  h100-disagg:
+    - h100-dgxc-slurm_17
+    - h100-dgxc-slurm_18
+    - h100-dgxc-slurm_19
   h200:
     - h200-cw_00
     - h200-cw_01

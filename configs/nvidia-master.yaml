@@ -4604,7 +4604,12 @@ dsv4-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:deepseek-v4-hopper@sha256:1bf5d508ab110cc0fe1659a5f21d1be02a7f0d7ca8f58cea7e7f4e11f6ae208f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: h100-multinode
+  # Runs-on label = this string verbatim. Must be a label a live runner
+  # carries: h100-disagg has 3 online runners (h100-dgxc-slurm_17-19) and is
+  # the disaggregated-H100 pool. NOT h100-multinode — no runner carries that
+  # label, so jobs requesting it queue forever (the dsr1-fp8-h100-dynamo-*
+  # reference configs above still use it and are non-functional for this).
+  runner: h100-disagg
   precision: fp8
   framework: dynamo-sglang
   router: { name: dynamo-router, version: "0.8.0" }
