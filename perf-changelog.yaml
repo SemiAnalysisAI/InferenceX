@@ -4750,3 +4750,11 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Restore the GB200 dsv4 1k1k sweep: the day-0 1k1k recipes (#1129) were dropped by the deepseek-v4-pro-sa curation (only 8k/1k kept), freezing the site's GB200 dsv4 1k1k submissions at the 2026-04-25 day-0 run (217 out tok/s/GPU at 30 tok/s/user vs GB300's 9050 — not representative)"
+    - "Re-add the three day-0 1k1k topologies with unchanged engine tuning: 1p1d-dep8-tep8 (conc 1-64), 1p1d-dep8-dep16 (conc 128-4096), 3p1d-dep8-dep16 (conc 4096, 8192)"
+    - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/1k1k/ re-based on the current 8k1k -sa layout: container vllm/vllm-openai:v0.20.0-ubuntu2404 (matches the config image/alias key), dynamo wheel 1.2.0.dev20260426, dedicated NATS/etcd infra node"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2190
