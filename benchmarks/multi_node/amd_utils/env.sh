@@ -325,7 +325,7 @@ else
 
         # DSv4 model kernel routing (mirrors the single-node / manual PD recipe)
         export SGLANG_DEFAULT_THINKING=1
-        export SGLANG_DSV4_REASONING_EFFORT=max
+        export SGLANG_DSV4_REASONING_EFFORT=high
         export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
         export SGLANG_USE_AITER=1
         export SGLANG_USE_ROCM700A=0
