@@ -235,8 +235,16 @@ case "$OFFLOAD_MODE" in
               cd ..
               # Produces a self-contained wheel under mooncake-wheel/dist/.
               bash scripts/build_wheel.sh "$MOONCAKE_PYVER"
-              pip install --force-reinstall mooncake-wheel/dist/*.whl )
+              pip install --force-reinstall mooncake-wheel/dist/*.whl
+
+              # CMake installs the Python package into the user site, which
+              # shadows the wheel installed by pip. Ensure the CLI wrapper can
+              # find the native master binary in the package it imports.
+              MOONCAKE_PACKAGE_DIR=$(python3 -c 'import pathlib, mooncake; print(pathlib.Path(mooncake.__file__).parent)')
+              install -m 0755 build/mooncake-store/src/mooncake_master \
+                  "$MOONCAKE_PACKAGE_DIR/mooncake_master" )
             python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+            test -x "$(python3 -c 'import pathlib, mooncake; print(pathlib.Path(mooncake.__file__).parent / "mooncake_master")')"
         fi
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
