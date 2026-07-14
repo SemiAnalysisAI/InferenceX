@@ -1,11 +1,11 @@
-name: "disagg-h100-1p1d-tp16-tp16"
+name: "disagg-h100-1p1d-tp16-dep16"
 
-# DeepSeek-V4-Pro FP8 H100 disaggregated SGLang, low-latency (TP16 prefill + TP16 decode).
+# DeepSeek-V4-Pro FP8 H100 disaggregated SGLang, throughput (TP16 prefill + DEP16 decode).
 #
 # EXTRAPOLATED bring-up scaffold (unvalidated on-cluster as of 2026-07),
 # derived per https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro plus:
 #   * same SKU, different model: dsr1-fp8-h100-dynamo-sglang (TP16 2-node
-#     disagg topology, NIXL transfer, prefill+decode TP16)
+#     disagg topology, NIXL transfer, DEP decode tp16/ep16/dp-attn)
 #   * same model, adjacent Hopper SKU: the H200 dsv4 sglang recipe (FP8
 #     marlin MoE, deepseek_v4 serving) — H100 (sm90) has no FP4 path, so the
 #     ~960GB mixed checkpoint is run in FP8.
@@ -15,7 +15,7 @@ name: "disagg-h100-1p1d-tp16-tp16"
 # H100 nodes), unlike the GB200 mooncake/MNNVL recipes.
 #
 # Debug-runs must confirm before this leaves bring-up: NIXL prefill/decode
-# handshake on h100-multinode, TP16 FP8 mem headroom.
+# handshake on h100-multinode, TP16 FP8 mem headroom and DeepEP cross-node dispatch on IB.
 
 model:
   path: "deepseek-v4-pro"
@@ -83,7 +83,7 @@ backend:
       kv-cache-dtype: "fp8_e4m3"
 
       mem-fraction-static: 0.85
-      max-running-requests: 128
+      max-running-requests: 512
       cuda-graph-max-bs: 128
       chunked-prefill-size: 4096
 
@@ -97,16 +97,16 @@ backend:
       disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 16
-      data-parallel-size:   1
-      expert-parallel-size: 1
+      data-parallel-size:   16
+      expert-parallel-size: 16
+      enable-dp-attention: true
 
-      moe-runner-backend: "marlin"
-      disable-flashinfer-autotune: true
+      moe-a2a-backend: "deepep"
       kv-cache-dtype: "fp8_e4m3"
 
       mem-fraction-static: 0.85
-      max-running-requests: 128
-      cuda-graph-max-bs: 128
+      max-running-requests: 8192
+      cuda-graph-max-bs: 512
       swa-full-tokens-ratio: 0.5
       context-length: 2304
 
@@ -114,6 +114,6 @@ benchmark:
   type: "sa-bench"
   isl: 1024
   osl: 1024
-  concurrencies: "1x2x4x8x16x32x64"
+  concurrencies: "64x128x256x512"
   req_rate: "inf"
   use_chat_template: false

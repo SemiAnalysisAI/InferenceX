@@ -1,4 +1,4 @@
-name: "disagg-h100-1p1d-tp16-tp16"
+name: "disagg-h100-1p1d-tp16-tp16-8k"
 
 # DeepSeek-V4-Pro FP8 H100 disaggregated SGLang, low-latency (TP16 prefill + TP16 decode).
 #
@@ -85,7 +85,7 @@ backend:
       mem-fraction-static: 0.85
       max-running-requests: 128
       cuda-graph-max-bs: 128
-      chunked-prefill-size: 4096
+      chunked-prefill-size: 8192
 
     decode:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
@@ -107,12 +107,12 @@ backend:
       mem-fraction-static: 0.85
       max-running-requests: 128
       cuda-graph-max-bs: 128
-      swa-full-tokens-ratio: 0.5
-      context-length: 2304
+      swa-full-tokens-ratio: 0.1
+      context-length: 9472
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
   concurrencies: "1x2x4x8x16x32x64"
   req_rate: "inf"
