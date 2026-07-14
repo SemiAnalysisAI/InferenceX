@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+results/
+unsupported/
+.shards/
+.collx_workloads/
+.collx_backend/
+/matrix_full.json
+gpucore.*
+
+# Local plans and infrastructure inventory.
+goal.md
+notes.md
+private-infra.md
