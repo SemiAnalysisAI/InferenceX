@@ -120,7 +120,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
+        # Pin srt-slurm: newer commits stopped honoring the hash-pinned dynamo
+        # build and fall back to a dynamo release that is incompatible with this
+        # sglang image (worker fails at import). This is the last commit before
+        # that change. Do not float on main -- the srtctl + dynamo-install
+        # toolchain is unpinned there.
+        git checkout a98738de9b2233459b5456e9ed71af09ce893f92
         mkdir -p recipes/sglang/dsr1/b200-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
     else
@@ -419,27 +424,11 @@ else
     # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
     # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
     # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
-    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
-    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
-    # DSv4 is also staged on the compute nodes' local RAID. Loading the 806 GB
-    # checkpoint independently from Lustre on every TP rank leaves the loader
-    # threads blocked in Lustre I/O for hours. Select the local copy only after
-    # Slurm assigns a node, and retain the shared-Lustre path as a fallback for
-    # nodes whose local staging is incomplete.
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "sglang" ]]; then
-        LOCAL_MODEL_PATH=/raid/models/DeepSeek-V4-Pro-NVFP4
-        if srun --jobid="$JOB_ID" bash -c \
-            'test -f "$1/config.json" && test -f "$1/model.safetensors.index.json" && test "$(find "$1" -maxdepth 1 -name "model-*.safetensors" | wc -l)" -eq 64' \
-            _ "$LOCAL_MODEL_PATH"; then
-            export MODEL_PATH="$LOCAL_MODEL_PATH"
-            export MODEL="$MODEL_PATH"
-            echo "Using node-local DSv4 checkpoint: $MODEL_PATH"
-        else
-            echo "Node-local DSv4 checkpoint unavailable; using shared checkpoint: $MODEL_PATH"
-        fi
-    fi
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
