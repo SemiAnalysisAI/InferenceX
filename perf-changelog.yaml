@@ -4771,9 +4771,9 @@
   description:
     - "Add DeepSeek-V4-Pro FP8 H100 disaggregated multinode vLLM benchmark via Dynamo (new SKU, previously no dsv4 data on H100)"
     - "Follow recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro: vLLM 0.20.0+, native mixed FP4+FP8 checkpoint, FP8 KV cache, block size 256, expert parallelism, Hopper memory settings, and NIXL P/D transfer"
-    - "The checkpoint requires about 960GB VRAM and does not fit 8xH100 (640GB); each prefill/decode worker spans 2 nodes as TEP16 (TP16 with expert parallelism), so 1P1D uses 4 H100 nodes total"
-    - "One TEP16/TEP16 topology per seq-len (1k1k + 8k1k), conc 1-512; DEP16 is intentionally omitted because its replicated dense layers cannot fit H100 memory"
-    - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/disagg-h100-1p1d-tep16-tep16.yaml; H100 remains an unverified upstream bring-up target"
+    - "The checkpoint requires about 960GB VRAM and does not fit 8xH100 (640GB); each prefill/decode worker spans 2 nodes as TP8 x PP2 with EP8, so 1P1D uses 4 H100 nodes total"
+    - "One TP8/PP2/EP8 topology per seq-len (1k1k + 8k1k), conc 1-512; PP2 supplies the extra memory while TP8 preserves the checkpoint's 128-column FP8 quantization-block divisibility"
+    - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/disagg-h100-1p1d-tep8pp2-tep8pp2.yaml; H100 remains an unverified upstream bring-up target"
     - "Runner pool: h100-disagg (3 online runners), not the h100-multinode label used by the dsr1-fp8-h100-dynamo-* references — no runner carries that label, so jobs requesting it queue indefinitely"
     - "Use the existing /mnt/nfs/lustre/models/dsv4-fp8 checkpoint and exclude H100 nodes without healthy pod-network RDMA plus hpc-gpu-1-16, whose mlx5 device numbering differs from the fleet"
     - "Use NVIDIA srt-slurm's standard vllm-container-deps.sh setup instead of a custom DeepGEMM bootstrap"

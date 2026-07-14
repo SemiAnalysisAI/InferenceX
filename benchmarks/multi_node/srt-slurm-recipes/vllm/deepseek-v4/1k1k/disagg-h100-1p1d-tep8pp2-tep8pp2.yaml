@@ -1,8 +1,8 @@
-name: "dsv4-vllm-disagg-h100-1p1d-tep16-tep16-8k1k"
+name: "dsv4-vllm-disagg-h100-1p1d-tep8pp2-tep8pp2-1k1k"
 
 # H100 adaptation of the upstream vLLM DeepSeek-V4-Pro recipe. The native
 # mixed FP4+FP8 checkpoint needs about 960GB, so every prefill/decode replica
-# spans two 8xH100 nodes (1280GB) as TP16 with expert parallelism. The 1P1D
+# spans two 8xH100 nodes (1280GB) as TP8 x PP2 with expert parallelism. The 1P1D
 # deployment therefore uses four GPU nodes total.
 model:
   path: "deepseek-v4-pro"
@@ -77,10 +77,10 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       no-enable-flashinfer-autotune: true
       no-enable-prefix-caching: true
-      pipeline-parallel-size: 1
+      pipeline-parallel-size: 2
       reasoning-parser: deepseek_v4
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      tensor-parallel-size: 16
+      tensor-parallel-size: 8
       tokenizer-mode: deepseek_v4
       trust-remote-code: true
     decode:
@@ -97,16 +97,16 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       no-enable-flashinfer-autotune: true
       no-enable-prefix-caching: true
-      pipeline-parallel-size: 1
+      pipeline-parallel-size: 2
       reasoning-parser: deepseek_v4
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
-      tensor-parallel-size: 16
+      tensor-parallel-size: 8
       tokenizer-mode: deepseek_v4
       trust-remote-code: true
 
 benchmark:
   type: "sa-bench"
-  isl: 8192
+  isl: 1024
   osl: 1024
   concurrencies: "1x2x4x8x16x32x64x128x256x512"
   req_rate: "inf"
