@@ -2454,8 +2454,6 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
-  precision: fp4
-  framework: sglang
   multinode: false
   scenarios:
     agentic-coding:
@@ -2464,6 +2462,22 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8] }
       - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
       - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
+
+dsv4-fp4-mi355x-sglang-agentic-hicache-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64], spec-decoding: mtp }
+      - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [80, 96], spec-decoding: mtp }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5

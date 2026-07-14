@@ -4827,7 +4827,7 @@
     - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
     - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
-  
+
 - config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1
     - minimaxm3-fp4-b300-dynamo-vllm-8k1k-legacy-max-tput
@@ -4846,7 +4846,7 @@
     - "Recipes ported from NVIDIA/srt-slurm tag v1.0.26 (recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/{ISL1K_OSL1K,ISL8K_OSL1K}/STP; 13 ISL1K + 10 ISL8K), checked into benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5/... and overlaid onto the srt-slurm checkout at runtime. Prefill tp=4/ep=4 (dep4)."
     - "launch_gb200-nv.sh: added glm5-fp4 case to dynamo-trt branch (MODEL_PATH=/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4, SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4), pinned srt-slurm clone to v1.0.26 with cp -rT overlay of the local recipes/trtllm/glm5 recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1803
-  
+
 - config-keys:
     - glm5-fp8-gb200-dynamo-sglang-mtp
   description:
@@ -4878,14 +4878,14 @@
   description:
     - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
-  
+
 - config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"
     - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic
@@ -4918,3 +4918,12 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B300: GPU-resident TP4/TP8 at conc [1,2,4,6,8,12,16,20,24,28,32] and DEP8 at conc [32,64,96,128,160,192,196,224,228] (max-num-batched-tokens 16384, long-prefill-token-threshold 4096, gpu-memory-utilization 0.92); TP4 SimpleCPU lazy-offload at conc [28,32,36,40]; DEP4 at conc [8,16,24,32,40,48,56,64,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2241
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Add DSv4 FP4 MI355X SGLang agentic MTP recipe with HiCache support"
+    - "Image: lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
+    - "EAGLE speculative decoding: 3 steps, topk 1, 4 draft tokens"
+    - "Sweep TP8 +/- DPA +/- HiCache with MTP across conc 1-96"
+    - "Exclude mia1-p01-g12 from agentic salloc"
