@@ -4752,6 +4752,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
+<<<<<<< dsv4-mi325x-fp8-bringup
     - dsv4-fp8-mi325x-sglang
   description:
     - "Add DeepSeek-V4-Pro FP8 single-node MI325X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
@@ -4759,3 +4760,18 @@
     - "Search space mirrors MI355X (TP-only low-latency conc 1-32 + DP-attn/EP8 throughput conc 64-2048) but drops the MI355X TP4 bands: the ~960GB mixed checkpoint is ~1.05TB in FP8 and only fits TP8; 8x256GB (2TB) leaves ~1TB free after FP8 weights so the throughput band could later extend past conc 2048 (kept at parity for a first bring-up)"
     - "Image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713 (mi30x variant of the MI355X sglang-rocm dated-tag family)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2195
+=======
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2197
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+>>>>>>> main
