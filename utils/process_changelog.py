@@ -270,7 +270,7 @@ def main():
 
     # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)
-    print(validated.model_dump_json(by_alias=True))
+    print(validated.model_dump_json(by_alias=True, exclude_none=True))
 
 
 if __name__ == "__main__":
