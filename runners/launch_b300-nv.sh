@@ -187,6 +187,14 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
+# The TP1 8k1k recipes use a newer srt-slurm revision whose preflight checks
+# model.path on this GHA login host. MiniMax-M3 NVFP4 is intentionally staged
+# under compute-node-local /scratch (as in the original B300 submission), so
+# the login host cannot stat it even though workers can. Keep this bypass
+# scoped to the new recipe set; runtime model loading still validates the path.
+if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
     SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
