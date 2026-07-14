@@ -23,6 +23,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                 SELECTED_MODEL_PATH="$MODEL_PATH"
             else
                 for candidate in \
+                    /mnt/nfs/lustre/models/dsv4-fp8 \
                     /mnt/nfs/lustre/models/deepseek-v4-pro \
                     /mnt/nfs/lustre/models/dsv4-pro \
                     /mnt/nfs/lustre/models/DeepSeek-V4-Pro; do
@@ -32,7 +33,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                     fi
                 done
             fi
-            export MODEL_PATH="${SELECTED_MODEL_PATH:-/mnt/nfs/lustre/models/deepseek-v4-pro}"
+            export MODEL_PATH="${SELECTED_MODEL_PATH:-/mnt/nfs/lustre/models/dsv4-fp8}"
             export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
         else
             echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"

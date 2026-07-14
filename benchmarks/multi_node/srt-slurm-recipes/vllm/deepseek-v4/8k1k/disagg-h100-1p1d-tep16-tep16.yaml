@@ -25,6 +25,7 @@ health_check:
 sbatch_directives:
   cpus-per-task: "144"
   mem: "0"
+  exclude: "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
 
 resources:
   gpu_type: "h100"
