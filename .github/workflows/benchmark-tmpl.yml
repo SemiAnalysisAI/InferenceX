@@ -94,6 +94,18 @@ on:
         description: "KV offload backend for agentic scenarios when kv-offloading is not none"
         required: false
         type: string
+      kv-offload-backend-metadata:
+        description: "Optional KV offload backend name and version metadata as JSON"
+        required: false
+        type: string
+      router:
+        description: "Optional router name and version metadata as JSON"
+        required: false
+        type: string
+      kv-p2p-transfer:
+        description: "Optional multinode peer-to-peer KV transfer engine name"
+        required: false
+        type: string
       total-cpu-dram-gb:
         description: "Configured CPU DRAM capacity in GB for KV offloading"
         required: false
@@ -134,6 +146,9 @@ env:
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   KV_OFFLOADING: ${{ inputs.kv-offloading }}
   KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
+  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
+  ROUTER_METADATA: ${{ inputs.router }}
+  KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'

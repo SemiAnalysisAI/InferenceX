@@ -1,6 +1,9 @@
 """Comprehensive tests for validation.py"""
+import copy
+
 import pytest
 from validation import (
+    ComponentMetadata,
     Fields,
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
@@ -95,6 +98,7 @@ def valid_multinode_matrix_entry():
         "max-model-len": 2248,
         "exp-name": "dsr1_1k1k",
         "disagg": True,
+        "kv-p2p-transfer": "nixl",
         "run-eval": False,
     }
 
@@ -137,6 +141,7 @@ def valid_multinode_master_config():
         "runner": "gb200",
         "multinode": True,
         "disagg": True,
+        "kv-p2p-transfer": "nixl",
         "scenarios": {
             "fixed-seq-len": [
 
@@ -390,31 +395,108 @@ class TestAgenticMatrixEntries:
             "dp-attn": False,
             "conc": 1,
             "kv-offloading": "dram",
-            "kv-offload-backend": "future-backend",
+            "kv-offload-backend": {"name": "future-backend"},
             "total-cpu-dram-gb": 2949,
             "duration": 3600,
             "exp-name": "dsv4_tp8_conc1_kvdram-future-backend",
             "scenario-type": "agentic-coding",
         })
         assert entry.kv_offloading == "dram"
-        assert entry.kv_offload_backend == "future-backend"
+        assert entry.kv_offload_backend.name == "future-backend"
+        assert entry.kv_offload_backend.version is None
 
     def test_arbitrary_backend_is_valid_for_agentic_search_space(self):
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
             "kv-offloading": "dram",
-            "kv-offload-backend": "future-backend",
+            "kv-offload-backend": {"name": "future-backend"},
+            "router": {"name": "vllm-router", "version": "0.1.14"},
+            "kv-p2p-transfer": "mooncake",
             "conc-list": [1, 2],
         })
         assert entry.kv_offloading == "dram"
-        assert entry.kv_offload_backend == "future-backend"
+        assert entry.kv_offload_backend.name == "future-backend"
+        assert entry.kv_offload_backend.version is None
+        assert entry.router.name == "vllm-router"
+        assert entry.router.version == "0.1.14"
+        assert entry.kv_p2p_transfer == "mooncake"
+
+    def test_router_metadata_is_optional_for_fixed_sequence_search_space(self):
+        entry = SingleNodeSearchSpaceEntry(**{
+            "tp": 8,
+            "router": {"name": "vllm-router", "version": "0.1.14"},
+            "conc-list": [1, 2],
+        })
+        assert entry.router.name == "vllm-router"
+
+    @pytest.mark.parametrize("metadata", [
+        {"name": "vllm-router"},
+        {"version": "0.1.14"},
+        {"name": "vllm-router", "version": "0.1.14", "mode": "round-robin"},
+        {"name": "", "version": "0.1.14"},
+        {"name": "vllm-router", "version": ""},
+    ])
+    def test_component_metadata_requires_exact_non_empty_fields(self, metadata):
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "none",
+                "router": metadata,
+                "conc-list": [1, 2],
+            })
+
+    @pytest.mark.parametrize("value", ["", {"name": "nixl"}])
+    def test_kv_p2p_transfer_requires_a_non_empty_name(self, value):
+        with pytest.raises(Exception):
+            MultiNodeSearchSpaceEntry(**{
+                "prefill": {
+                    "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False,
+                },
+                "kv-p2p-transfer": value,
+                "conc-list": [1],
+            })
+
+    def test_kv_offload_backend_accepts_optional_version(self):
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "kv-offloading": "dram",
+            "kv-offload-backend": {"name": "lmcache", "version": "0.5.1"},
+            "conc-list": [1],
+        })
+
+        assert entry.kv_offload_backend.name == "lmcache"
+        assert entry.kv_offload_backend.version == "0.5.1"
+
+    def test_kv_offload_backend_rejects_unknown_metadata(self):
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "dram",
+                "kv-offload-backend": {"name": "lmcache", "mode": "cpu"},
+                "conc-list": [1],
+            })
+
+    def test_kv_offload_backend_rejects_image_as_version(self):
+        with pytest.raises(Exception, match="not an image reference"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "dram",
+                "kv-offload-backend": {
+                    "name": "lmcache",
+                    "version": "image:vllm/vllm-openai:v0.23.0",
+                },
+                "conc-list": [1],
+            })
 
     def test_kv_offload_backend_requires_dram_mode(self):
         with pytest.raises(Exception, match="kv-offload-backend"):
             AgenticCodingSearchSpaceEntry(**{
                 "tp": 8,
                 "kv-offloading": "none",
-                "kv-offload-backend": "lmcache",
+                "kv-offload-backend": {"name": "lmcache"},
                 "conc-list": [1, 2],
             })
 
@@ -439,7 +521,7 @@ class TestAgenticMatrixEntries:
                 "search-space": [{
                     "tp": 4,
                     "kv-offloading": "dram",
-                    "kv-offload-backend": "native",
+                    "kv-offload-backend": {"name": "native"},
                     "conc-list": [16],
                 }],
             })
@@ -449,7 +531,7 @@ class TestAgenticMatrixEntries:
             AgenticCodingSearchSpaceEntry(**{
                 "tp": 8,
                 "kv-offloading": "dram",
-                "kv-offload-backend": "native",
+                "kv-offload-backend": {"name": "native"},
                 "total-cpu-dram-gb": 1000,
                 "conc-list": [1, 2],
             })
@@ -460,7 +542,7 @@ class TestAgenticMatrixEntries:
             "search-space": [{
                 "tp": 4,
                 "kv-offloading": "dram",
-                "kv-offload-backend": "native",
+                "kv-offload-backend": {"name": "native"},
                 "conc-list": [16],
             }],
         })
@@ -474,7 +556,7 @@ class TestAgenticMatrixEntries:
                 "search-space": [{
                     "tp": 4,
                     "kv-offloading": "dram",
-                    "kv-offload-backend": "native",
+                    "kv-offload-backend": {"name": "native"},
                     "conc-list": [16],
                 }],
             })
@@ -487,7 +569,7 @@ class TestAgenticMatrixEntries:
                 "search-space": [{
                     "tp": 4,
                     "kv-offloading": "dram",
-                    "kv-offload-backend": "native",
+                    "kv-offload-backend": {"name": "native"},
                     "conc-list": [16],
                 }],
             })
@@ -949,6 +1031,137 @@ class TestMasterConfigEntries:
         config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
         assert config.disagg is False
 
+    def test_single_node_rejects_kv_p2p_transfer(
+        self,
+        valid_single_node_master_config,
+    ):
+        """P2P KV transfer is reserved for multinode configurations."""
+        valid_single_node_master_config["kv-p2p-transfer"] = "nixl"
+
+        with pytest.raises(Exception, match="kv-p2p-transfer"):
+            SingleNodeMasterConfigEntry(**valid_single_node_master_config)
+
+    def test_aggregated_multinode_allows_kv_p2p_transfer(
+        self,
+        valid_multinode_master_config,
+    ):
+        """P2P transfer is not restricted to disaggregated multinode serving."""
+        valid_multinode_master_config["disagg"] = False
+
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+        assert config.kv_p2p_transfer == "nixl"
+
+    def test_component_metadata_rejects_image_as_version(self):
+        """Component versions identify the component, not its container."""
+        with pytest.raises(Exception, match="not an image reference"):
+            ComponentMetadata(
+                name="nixl",
+                version="image:vllm/vllm-openai:v0.23.0",
+            )
+
+    @pytest.mark.parametrize(("field", "value"), [
+        ("router", {"name": "component", "version": "1.0.0"}),
+        ("kv-p2p-transfer", "nixl"),
+    ])
+    def test_component_metadata_rejects_mixed_scopes(
+        self,
+        valid_multinode_master_config,
+        field,
+        value,
+    ):
+        """One metadata field cannot be declared at both supported scopes."""
+        valid_multinode_master_config[field] = value
+        search_space = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"]
+        search_space[0][field] = value
+
+        with pytest.raises(Exception, match=f"{field} must be declared either"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+    def test_component_metadata_allows_different_field_scopes(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Router and KV transfer may independently choose their scope."""
+        valid_multinode_master_config.pop("kv-p2p-transfer")
+        valid_multinode_master_config["router"] = {
+            "name": "dynamo-router",
+            "version": "1.0.0",
+        }
+        search_space = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"]
+        search_space[0]["kv-p2p-transfer"] = "nixl"
+
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+        assert config.router.name == "dynamo-router"
+        kv_p2p_transfer = config.scenarios.fixed_seq_len[0].search_space[0].kv_p2p_transfer
+        assert kv_p2p_transfer == "nixl"
+
+    def test_component_metadata_allows_different_search_space_values(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Different search-space entries may use different components."""
+        valid_multinode_master_config.pop("kv-p2p-transfer")
+        search_space = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"]
+        search_space.append(copy.deepcopy(search_space[0]))
+        search_space[0]["kv-p2p-transfer"] = "nixl"
+        search_space[1]["kv-p2p-transfer"] = "mooncake"
+
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+        values = config.scenarios.fixed_seq_len[0].search_space
+        assert values[0].kv_p2p_transfer == "nixl"
+        assert values[1].kv_p2p_transfer == "mooncake"
+
+    def test_disagg_requires_kv_p2p_transfer(self, valid_multinode_master_config):
+        """A disaggregated config cannot omit KV transfer metadata."""
+        valid_multinode_master_config.pop("kv-p2p-transfer")
+
+        with pytest.raises(Exception, match="disagg=true requires kv-p2p-transfer"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+    def test_disagg_accepts_kv_p2p_transfer_on_every_search_space_entry(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Per-entry KV transfer metadata is valid when every entry has it."""
+        valid_multinode_master_config.pop("kv-p2p-transfer")
+        search_space = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"]
+        search_space.append(copy.deepcopy(search_space[0]))
+        for entry in search_space:
+            entry["kv-p2p-transfer"] = "nixl"
+
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
+        assert all(
+            entry.kv_p2p_transfer == "nixl"
+            for entry in config.scenarios.fixed_seq_len[0].search_space
+        )
+
+    def test_disagg_rejects_partial_search_space_kv_p2p_transfer(
+        self,
+        valid_multinode_master_config,
+    ):
+        """Per-entry KV transfer metadata cannot leave any entry unspecified."""
+        valid_multinode_master_config.pop("kv-p2p-transfer")
+        search_space = valid_multinode_master_config[
+            "scenarios"
+        ]["fixed-seq-len"][0]["search-space"]
+        search_space.append(copy.deepcopy(search_space[0]))
+        search_space[0]["kv-p2p-transfer"] = "nixl"
+
+        with pytest.raises(Exception, match="disagg=true requires kv-p2p-transfer"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+
     def test_disagg_requires_multinode(self, valid_single_node_master_config):
         """Single-node master configs cannot enable disaggregation."""
         valid_single_node_master_config["disagg"] = True
@@ -993,6 +1206,7 @@ class TestMasterConfigEntries:
             "runner": "b200-multinode",
             "multinode": True,
             "disagg": True,
+            "kv-p2p-transfer": "nixl",
             "scenarios": {
                 "agentic-coding": [
                     {
