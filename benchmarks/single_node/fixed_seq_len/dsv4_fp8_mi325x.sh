@@ -17,6 +17,11 @@ set -eo pipefail
 #
 # The FP4->FP8 dequant roughly doubles the MoE footprint (~1.05 TB total),
 # which fits 8x256 GB comfortably at TP8, so the sweep is TP8-only.
+#
+# MoE backend is left at auto (NOT --moe-backend aiter) — see dsv4_fp8_mi300x.sh:
+# on gfx942, forcing aiter selects AITER_MXFP4_MXFP4 (W4A4 native-mxfp4) which
+# the gfx942 kernel rejects; auto's ROCm+DeepseekV4 path prefers
+# AITER_MXFP4_BF16 (W4A16, dequant) with a TRITON_UNFUSED fallback.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -75,7 +80,6 @@ vllm serve $MODEL --port $PORT \
     --max-model-len "$MAX_MODEL_LEN" \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --moe-backend aiter \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' > $SERVER_LOG 2>&1 &
