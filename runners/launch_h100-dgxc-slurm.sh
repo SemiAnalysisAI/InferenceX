@@ -176,6 +176,22 @@ EOF
     echo "Generated srtslurm.yaml:"
     cat srtslurm.yaml
 
+    # The other srt-slurm launchers rely on GNU make being provided by their
+    # runner image. The H100 login-runner image currently omits it, so install
+    # that same prerequisite before invoking the standard upstream target.
+    if ! command -v make >/dev/null 2>&1; then
+        if [[ "$(id -u)" -eq 0 ]]; then
+            apt-get update
+            apt-get install -y --no-install-recommends make
+        elif command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends make
+        else
+            echo "Error: GNU make is required by srt-slurm, but this runner cannot install it" >&2
+            exit 1
+        fi
+    fi
+
     echo "Running make setup..."
     make setup ARCH=x86_64
 
