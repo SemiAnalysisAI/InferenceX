@@ -211,18 +211,31 @@ case "$OFFLOAD_MODE" in
         # if the store module isn't importable. Clone to a container-local dir
         # (NOT bind-mounted /workspace) so the next job's checkout `clean: true`
         # won't trip over root-owned build artifacts.
+        #
+        # A bare `make install` only lays down the C++ libs, so the launcher can
+        # import `mooncake` but the vLLM worker SUBPROCESSES cannot (fresh
+        # site-packages) -> "Please install mooncake ..." at KV-cache init. Build
+        # the wheel via Mooncake's own scripts/build_wheel.sh (auditwheel bundles
+        # every .so into a self-contained package) and pip install it so the
+        # `mooncake` package lands in site-packages and is importable everywhere.
         if ! python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null 2>&1; then
             MOONCAKE_SRC_DIR="${MOONCAKE_SRC_DIR:-/opt/mooncake-src}"
             MOONCAKE_GIT_REF="${MOONCAKE_GIT_REF:-main}"
+            MOONCAKE_PYVER="$(python3 -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+            pip install --quiet build auditwheel patchelf
             rm -rf "$MOONCAKE_SRC_DIR"
             git clone https://github.com/kvcache-ai/Mooncake.git "$MOONCAKE_SRC_DIR"
             ( cd "$MOONCAKE_SRC_DIR"
               git checkout "$MOONCAKE_GIT_REF"
               bash dependencies.sh
               mkdir -p build && cd build
-              cmake ..
+              cmake .. -DWITH_STORE=ON
               make -j
-              make install )
+              make install
+              cd ..
+              # Produces a self-contained wheel under mooncake-wheel/dist/.
+              bash scripts/build_wheel.sh "$MOONCAKE_PYVER"
+              pip install --force-reinstall mooncake-wheel/dist/*.whl )
             python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         fi
 

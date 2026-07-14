@@ -558,14 +558,15 @@ kimik2.7-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    # TP8 900s smoke to break the TP4 GPU-KV-capacity wall at higher concurrency.
-    # At TP4 the ~121 GiB KV pool held only ~12 resident ~90k-token contexts, so
-    # throughput plateaued (~160 tok/s) and preemption thrashed from conc16 up.
-    # TP8 doubles GPUs -> ~2x KV pool + faster per-token decode.
+    # TP8, 3600s. Compares three KV tiers on the agentic trace. At TP8 the
+    # GPU-only (none) path collapses under load (KV-capacity thrash), so it is
+    # only swept at low conc [4,8] where it is viable; the dram offload backends
+    # (LMCache, Mooncake) carry the high-conc [16,32,48] range where they hold
+    # throughput by keeping the GPU KV pool from thrashing.
     - dram-utilization: 0.80
-      duration: 900
+      duration: 3600
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [16, 32, 48] }
+      - { tp: 8, kv-offloading: none, conc-list: [4, 8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [16, 32, 48] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "source-main" }, conc-list: [16, 32, 48] }
 
