@@ -1,12 +1,17 @@
-name: "dsv4-vllm-agg-h100-dep32-1k1k"
+name: "dsv4-vllm-agg-h100-tep8pp2-1k1k"
 
-# DeepSeek-V4-Pro FP8 H100 aggregated multi_node_dep (throughput) recipe.
-# The ~1.1TB FP8 model + tight 80GB H100s: pure DP16 on 2 nodes OOMs (dense
-# weights replicate per DP rank ~16GB + experts EP16 ~62GB > 80GB), and PP
-# across nodes stalls the disagg prefill. Aggregated DP32 + EP32 across 4
-# nodes (32 GPUs) shards experts enough (~31GB/GPU) that the replicated dense
-# (~16GB) leaves headroom (~47GB weights/GPU). TP=1 so nothing is TP-split,
-# avoiding the FP8 128-column block-divisibility limit that blocks TP16.
+# DeepSeek-V4-Pro FP8 H100 AGGREGATED TP8 x PP2 recipe (2 nodes / 16 GPUs).
+# The ~1TB FP8 checkpoint does not fit one 8xH100 node (640GB). TP8 x PP2
+# shards attention/dense (/8) and layers (/2) across 16 GPUs -- the original
+# memory-correct sizing that loaded the model and reached prefill. That
+# topology's ONLY failure was the disaggregated NIXL KV-transfer stall between
+# the prefill and decode workers; running AGGREGATED (single worker, decode
+# num-worker 0) removes the P/D split entirely, so there is no NIXL transfer to
+# stall on. TP8 (not TP16) preserves the FP8 128-column block divisibility
+# (moe_intermediate 3072 / 8 = 384, divisible by 128; / 16 = 192 is not).
+# Node allocation for this framework is tp*pp/gpus_per_node = 8*2/8 = 2 nodes;
+# EP and DP-attention do NOT contribute GPUs, which is why the earlier DP32
+# aggregated attempt collapsed onto a single node.
 model:
   path: "deepseek-v4-pro"
   container: "vllm/vllm-openai:v0.21.0"
@@ -33,9 +38,9 @@ sbatch_directives:
 resources:
   gpu_type: "h100"
   gpus_per_node: 8
-  agg_nodes: 4
+  agg_nodes: 2
   agg_workers: 1
-  gpus_per_agg: 32
+  gpus_per_agg: 16
 
 frontend:
   type: dynamo
@@ -56,9 +61,8 @@ backend:
     aggregated:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       block-size: 256
-      tensor-parallel-size: 1
-      data-parallel-size: 32
-      pipeline-parallel-size: 1
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 2
       enable-expert-parallel: true
       kv-cache-dtype: "fp8"
       gpu-memory-utilization: 0.90

@@ -4588,15 +4588,16 @@ dsr1-fp8-h100-dynamo-sglang:
           ep: 16
           dp-attn: true
 
-# DeepSeek-V4-Pro FP8 H100 aggregated vLLM via Dynamo (multi_node_dep).
+# DeepSeek-V4-Pro FP8 H100 aggregated vLLM via Dynamo (TP8 x PP2, 2 nodes).
 # The native checkpoint is mixed FP4+FP8 (~1TB), too large for one 8xH100 node
-# (640GB). Prior bring-up attempts: TP8xPP2 disagg (prefill NIXL stall) and
-# pure DP16 on 2 nodes (dense replicates ~16GB + experts EP16 ~62GB -> 80GB
-# OOM). The working topology is Data-Expert-Parallel across 4 nodes (32 GPUs):
-# DP32 + EP32 at TP1 shards experts to ~31GB/GPU, so dense (~16GB) fits with
-# headroom (~47GB weights/GPU). TP1 also sidesteps the FP8 128-column
-# block-divisibility limit that blocks TP16.
-# Recipes: benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/agg-h100-dep32.yaml.
+# (640GB). Prior attempts: TP8xPP2 *disagg* loaded the model and reached prefill
+# but hung on the NIXL P/D KV-transfer; DP16/2-node OOM'd; DP32 "aggregated"
+# collapsed onto ONE node because this framework sizes nodes as tp*pp/gpus_per_node
+# (EP and DP-attention add no GPUs), so tp1 => 1 node and vLLM could not place 32
+# DP ranks on 8 GPUs. The working topology is the memory-proven TP8xPP2 run made
+# AGGREGATED (single worker, no P/D split => no NIXL transfer to stall on): tp8*pp2
+# = 16 GPUs = 2 nodes. TP8 (not TP16) keeps FP8 128-column block divisibility.
+# Recipes: benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/agg-h100-tep8pp2.yaml.
 dsv4-fp8-h100-dynamo-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -4613,48 +4614,50 @@ dsv4-fp8-h100-dynamo-vllm:
   kv-p2p-transfer: nixl
   multinode: true
   # Aggregated (not P/D-disaggregated): prefill num-worker 1 + decode
-  # num-worker 0 is how srtslurm signals AGG mode (see RECIPES.md §5). DSv4-Pro
-  # (~1TB FP8) does not fit 80GB H100s under TP8xPP2 disagg (prefill stalls) nor
-  # pure DP16/2-node (dense replicates ~16GB + experts EP16 ~62GB > 80GB OOM).
-  # The throughput/multi_node_dep answer is Data-Expert-Parallel across 4 nodes:
-  # tp:1, dp-attn (DP32), ep:32 shards experts to ~31GB/GPU, leaving headroom.
+  # num-worker 0 is how srtslurm signals AGG mode (see RECIPES.md §5). Node
+  # count = tp*pp/gpus_per_node = 8*2/8 = 2. tp:8 pp:2 with expert-parallel;
+  # dp-attn false (TP8 attention). Aggregated => no NIXL transfer to stall on.
   disagg: true
   scenarios:
     fixed-seq-len:
     - isl: 1024
       osl: 1024
       search-space:
-      # Aggregated DEP32 over 4 H100 nodes (32 GPUs): DP32 + EP32, TP1.
+      # Aggregated TP8 x PP2 over 2 H100 nodes (16 GPUs), EP8.
       - conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         prefill:
           num-worker: 1
-          tp: 1
-          ep: 32
-          dp-attn: true
+          tp: 8
+          pp: 2
+          ep: 8
+          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/agg-h100-dep32.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/1k1k/agg-h100-tep8pp2.yaml"
         decode:
           num-worker: 0
-          tp: 1
-          ep: 32
-          dp-attn: true
+          tp: 8
+          pp: 2
+          ep: 8
+          dp-attn: false
     - isl: 8192
       osl: 1024
       search-space:
-      # Aggregated DEP32 over 4 H100 nodes (32 GPUs): DP32 + EP32, TP1.
+      # Aggregated TP8 x PP2 over 2 H100 nodes (16 GPUs), EP8.
       - conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         prefill:
           num-worker: 1
-          tp: 1
-          ep: 32
-          dp-attn: true
+          tp: 8
+          pp: 2
+          ep: 8
+          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-h100-dep32.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-h100-tep8pp2.yaml"
         decode:
           num-worker: 0
-          tp: 1
-          ep: 32
-          dp-attn: true
+          tp: 8
+          pp: 2
+          ep: 8
+          dp-attn: false
 
 minimaxm3-fp8-h200-vllm:
   image: vllm/vllm-openai:minimax-m3
