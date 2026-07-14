@@ -108,6 +108,18 @@ export EVAL_ONLY="${EVAL_ONLY:-false}"
 export ISL="$ISL"
 export OSL="$OSL"
 
+# Native TRT-LLM disaggregated generation-worker benchmark. The end-to-end
+# workflow exports CONFIG_FILE from the selected master-config row.
+# The wrapper renders cluster-local paths and invokes the bundled generation-only harness.
+if [[ "$IS_MULTINODE" == "true" &&
+      "$SPEC_DECODING" == "offline" &&
+      "$FRAMEWORK" == "trt" &&
+      "$MODEL_PREFIX" == "dsv4" ]]; then
+    export TRT_GEN_ONLY_SQUASH_FILE="$SQUASH_FILE"
+    bash "benchmarks/multi_node/offline/dsv4_fp4_gb300_trt.sh"
+    exit $?
+fi
+
 # ---------------------------------------------------------------------------
 # Single-node path (multinode: false configs, e.g. the offline decode-step DSV4
 # offline bench). Mirrors the launch_gb200-nv.sh single-node branch:
