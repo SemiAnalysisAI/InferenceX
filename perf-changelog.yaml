@@ -4752,9 +4752,39 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Bump vLLM image from v0.21.0 to v0.25.0 for DeepSeek-V4-Pro FP8 on H200, matching the B200/B300 dsv4 vLLM bump (#2169)"
+    - "Refresh stale H200 dsv4 submissions (last run 2026-05-21)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Bump the pinned lmsysorg/sglang:deepseek-v4-hopper digest from the 2026-05-02 push (7f19c6dc) to the current 2026-05-13 push (1bf5d508)"
+    - "Refresh stale H200 dsv4 SGLang submissions (last run 2026-05-04)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2197
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+- config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1
   description:
     - "Replace the MiniMax-M3 NVFP4 B300 8k1k Dynamo-vLLM disaggregated DEP2-prefill sweep with TP1-prefill recipes; retain the existing 1k1k sweep unchanged."
-    - "Use vllm/vllm-openai:nightly-2dfaae752b4db0d43cfc0715c780e33be030d0f1 and pin NVIDIA/srt-slurm at c1fb6989fc5aca803b4ca0f2d17d8be85fad9732."
+    - "Use vllm/vllm-openai:nightly-2dfaae752b4db0d43cfc0715c780e33be030d0f1 with Dynamo 1.3.0.dev20260713, and pin NVIDIA/srt-slurm at c1fb6989fc5aca803b4ca0f2d17d8be85fad9732."
     - "Sweep TP4, TP8, and DEP8 decode topologies from concurrency 1 through 1024, with one-node prefill/decode colocation where the worker GPUs fit."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2184
