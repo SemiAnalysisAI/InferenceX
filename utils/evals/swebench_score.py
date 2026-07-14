@@ -348,7 +348,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         )
         report_path = find_report(out_dir, args.model_name, run_id)
         report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
-        # Workflow artifact collection requires a stable report name.
+        # Artifact collection requires a stable name.
         staged = out_dir / f"swebench_report_{args.task_name}.json"
         if report_path.resolve() != staged.resolve():
             staged.write_text(json.dumps(report, indent=2), encoding="utf-8")

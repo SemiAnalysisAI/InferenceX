@@ -1,4 +1,3 @@
-"""Behavioral tests for eval dispatch and shell integration."""
 
 from __future__ import annotations
 
@@ -9,7 +8,6 @@ from pathlib import Path
 
 BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
 
-# Replace external runners so dispatch can be observed without a model server.
 _SCRIPT = r'''
 source "$BENCHMARK_LIB"
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
@@ -21,7 +19,6 @@ run_eval ${CLI_FW:+--framework "$CLI_FW"} --port 8888
 
 
 def _dispatch(*, is_agentic: str = "0", cli_fw=None, env_fw=None) -> str:
-    # Agentic scenarios require an explicit KV-offload setting at source time.
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
@@ -41,7 +38,6 @@ def _dispatch(*, is_agentic: str = "0", cli_fw=None, env_fw=None) -> str:
     return res.stdout
 
 
-# --- scenario default ------------------------------------------------------
 
 def test_agentic_scenario_defaults_to_swebench():
     assert "DISPATCH=swebench" in _dispatch(is_agentic="1")
@@ -51,10 +47,8 @@ def test_fixed_seqlen_scenario_defaults_to_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0")
 
 
-# --- explicit overrides win over the scenario default ----------------------
 
 def test_explicit_framework_arg_overrides_scenario():
-    # agentic, but recipe passed --framework lm-eval -> lm-eval.
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", cli_fw="lm-eval")
 
 
@@ -67,7 +61,6 @@ def test_env_can_force_swebench_on_fixed_seqlen():
 
 
 def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
-    # The existing fixed-seq-len recipes call `run_eval --framework lm-eval`.
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0", cli_fw="lm-eval")
 
 
@@ -114,7 +107,6 @@ cmp "$(_eval_patches_dir)/lm_eval_sitecustomize.py" "$patch_dir/sitecustomize.py
     subprocess.run(["bash", "-c", script], env=env, check=True)
 
 
-# A python shim exposes the generated lm-eval command without a model server.
 
 _EVAL_LIMIT_SCRIPT = r'''
 set -e
@@ -169,9 +161,6 @@ def test_eval_limit_absent_when_unset():
     assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
 
 
-# --- Modal credential HOME hardening tests ---------------------------------
-#
-# Tests for _ensure_modal_credentials HOME-remap logic (Change B).
 
 _MODAL_CREDS_SCRIPT = r'''
 source "$BENCHMARK_LIB"
@@ -206,7 +195,6 @@ def _run_modal_creds(tmp_path: Path, *, home: str, token_id="tok-id", token_secr
 
 
 def test_modal_creds_no_remap_when_home_writable(tmp_path):
-    """When HOME is a writable directory, no remap happens and .modal.toml is written there."""
     home = str(tmp_path / "writable_home")
     Path(home).mkdir()
     out = _run_modal_creds(tmp_path, home=home)
@@ -214,14 +202,11 @@ def test_modal_creds_no_remap_when_home_writable(tmp_path):
     assert "TOML_EXISTS=true" in out
     toml_path = Path(home) / ".modal.toml"
     assert toml_path.exists()
-    # Check mode 600
     mode = oct(stat.S_IMODE(toml_path.stat().st_mode))
     assert mode == "0o600", f"Expected 0o600 got {mode}"
 
 
 def test_modal_creds_remaps_home_when_not_writable_parent(tmp_path):
-    """When HOME is nested under a read-only dir (mkdir -p fails), HOME is remapped."""
-    # Create a read-only parent so mkdir -p "$HOME" inside the function will fail.
     readonly_parent = tmp_path / "readonly_parent"
     readonly_parent.mkdir(mode=0o555)
     nested_home = str(readonly_parent / "nested_home")
@@ -239,7 +224,6 @@ def test_modal_creds_remaps_home_when_not_writable_parent(tmp_path):
 
 
 def test_modal_creds_remaps_home_when_not_writable(tmp_path):
-    """When HOME exists but is not writable, HOME is remapped."""
     readonly_home = tmp_path / "readonly_home"
     readonly_home.mkdir(mode=0o555)
     try:
@@ -247,12 +231,10 @@ def test_modal_creds_remaps_home_when_not_writable(tmp_path):
         assert "HOME_AFTER=/tmp/inferencex-modal-home" in out, f"Expected HOME remap:\n{out}"
         assert "TOML_EXISTS=true" in out
     finally:
-        # Restore write permission so tmp_path cleanup can remove it
         readonly_home.chmod(0o755)
 
 
 def test_modal_creds_no_remap_when_disabled(tmp_path):
-    """When SWEBENCH_USE_MODAL != true, _ensure_modal_credentials is a no-op."""
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
@@ -275,7 +257,6 @@ def test_modal_creds_no_remap_when_disabled(tmp_path):
 
 
 
-# lm-eval requires external task YAMLs to be registered through --include_path.
 _INCLUDE_PATH_SCRIPT = r'''
 set -e
 SHIM_DIR=$(mktemp -d)
@@ -383,8 +364,6 @@ run_swebench_eval
 
 
 def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):
-    """CI secrets pasted with a trailing newline must be stripped before use
-    (a contaminated token fails Modal validation: 'Token validation failed')."""
     home = tmp_path / "home"
     home.mkdir()
     script = r"""
@@ -404,8 +383,6 @@ echo SANITIZED_OK
 
 
 def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
-    """SWEBENCH_GEN_MODE=agentic: mini-extra called with slice/workers/config;
-    preds.json produced; config carries the local endpoint + model."""
     shim = tmp_path / "shim"
     shim.mkdir()
     (shim / "mini-extra").write_text(
@@ -421,8 +398,6 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
     default_yaml.write_text("agent: {}\n")
     (shim / "python3").write_text(
         "#!/bin/bash\n"
-        # emulate mini's import-time version banner (regression: the banner must
-        # not end up in the captured config path)
         f'if [[ "$*" == *minisweagent* ]]; then echo "This is mini-swe-agent version 2.4.5."; echo "Check the v2 migration guide"; echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
     )
     (shim / "python3").chmod(0o755)
@@ -457,8 +432,6 @@ echo AGENTIC_GEN_OK
 
 
 def _agentic_shim(tmp_path, mini_body):
-    """Shared scaffolding for watchdog/salvage tests: shim dir with a scripted
-    mini-extra, a python3 that answers mini's config-path probe, and a gen dir."""
     shim = tmp_path / "shim"
     shim.mkdir()
     (shim / "mini-extra").write_text("#!/bin/bash\n" + mini_body)
@@ -495,15 +468,11 @@ echo "GEN_RC=$?"
 
 
 def test_agentic_watchdog_kills_hung_mini(tmp_path):
-    """mini-extra hangs after writing all expected preds (observed at
-    workers=144): the watchdog must kill it and count generation as success."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'out=""; prev=""\n'
         'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
         'mkdir -p "$out"\n'
         "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
-        # hang-on-exit emulation; exec + detached stdio so the pytest capture
-        # pipe isn't held open by an orphan after the watchdog kills us
         "exec sleep 600 </dev/null >/dev/null 2>&1\n"
     )
     res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "1", "SWEBENCH_AGENT_EXIT_GRACE": "2"})
@@ -512,14 +481,12 @@ def test_agentic_watchdog_kills_hung_mini(tmp_path):
 
 
 def test_agentic_salvage_partial_preds_on_failure(tmp_path):
-    """Generation dies mid-run with some preds written: salvage and proceed
-    (rc 0) instead of discarding real work."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'out=""; prev=""\n'
         'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
         'mkdir -p "$out"\n'
         "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
-        "exit 7\n"  # crash after 1 of 2 expected instances
+        "exit 7\n"
     )
     res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
@@ -527,14 +494,12 @@ def test_agentic_salvage_partial_preds_on_failure(tmp_path):
 
 
 def test_agentic_no_preds_still_fails(tmp_path):
-    """Generation fails with zero preds: must still fail (nothing to salvage)."""
     shim, gen_dir = _agentic_shim(tmp_path, "exit 7\n")
     res = _run_agentic(shim, gen_dir, {"EVAL_LIMIT": "2"})
     assert "GEN_RC=7" in res.stdout, res.stdout + res.stderr
 
 
 def test_agentic_eval_limit_defaults_to_50_slice(tmp_path):
-    """Empty EVAL_LIMIT: agentic generation runs the 50-instance CI slice."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
         'out=""; prev=""\n'
@@ -544,7 +509,6 @@ def test_agentic_eval_limit_defaults_to_50_slice(tmp_path):
     )
     body = (shim / "mini-extra").read_text().replace("ARGVLOG", str(shim / "argv.log"))
     (shim / "mini-extra").write_text(body)
-    # expected=50 but only 1 pred: crash-free exit + salvage keeps rc 0
     res = _run_agentic(shim, gen_dir)
     argv = (shim / "argv.log").read_text()
     assert "--slice 0:50" in argv, argv
@@ -552,7 +516,6 @@ def test_agentic_eval_limit_defaults_to_50_slice(tmp_path):
 
 
 def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
-    """EVAL_LIMIT=full: no --slice arg (whole split)."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
         'out=""; prev=""\n'
@@ -568,11 +531,6 @@ def test_agentic_eval_limit_full_runs_whole_split(tmp_path):
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
 
 
-# --- scenario-implied swebench gen-mode -------------------------------------
-#
-# swebench generation is agentic-only: unset SWEBENCH_GEN_MODE means the agent
-# loop everywhere (single-shot scores ~10% and would trip the 0.50 gate);
-# single-shot exists only as an explicit debugging escape hatch.
 
 _GENMODE_SCRIPT = r'''
 source "$BENCHMARK_LIB" 2>/dev/null
@@ -598,7 +556,7 @@ def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
     res = subprocess.run(["bash", "-c", _GENMODE_SCRIPT], env=env,
                          text=True, capture_output=True,
                          cwd=BENCHMARK_LIB.parents[1])
-    assert "RC=42" in res.stdout, res.stdout + res.stderr  # stub rc propagated
+    assert "RC=42" in res.stdout, res.stdout + res.stderr
     return res.stdout
 
 
@@ -607,8 +565,6 @@ def test_gen_mode_defaults_to_agentic(tmp_path):
 
 
 def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
-    # swebench is agentic-only (decision 2026-07-09); a forced swebench run on
-    # any scenario still gets the agent loop unless explicitly overridden.
     assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="0")
 
 
@@ -617,8 +573,6 @@ def test_explicit_single_shot_escape_hatch(tmp_path):
 
 
 def test_agent_sandbox_cpu_knob(tmp_path):
-    """SWEBENCH_AGENT_SANDBOX_CPU flows into modal_sandbox_kwargs; unset leaves
-    the Modal default (no modal_sandbox_kwargs key at all)."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'out=""; prev=""\n'
         'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
@@ -639,8 +593,6 @@ def test_agent_sandbox_cpu_knob(tmp_path):
 
 
 def test_eval_limit_rejects_non_positive_integer(tmp_path):
-    """EVAL_LIMIT must be a positive int, 'full', or 0; garbage/negative fails fast
-    (a negative value would otherwise make the completion watchdog fire at once)."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'out=""; prev=""\n'
         'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
@@ -656,7 +608,6 @@ def test_eval_limit_rejects_non_positive_integer(tmp_path):
 
 
 def test_eval_limit_full_and_zero_accepted(tmp_path):
-    """'full' and '0' are whole-split sentinels, not rejected as non-integers."""
     shim, gen_dir = _agentic_shim(tmp_path,
         'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
         'out=""; prev=""\n'
@@ -672,4 +623,4 @@ def test_eval_limit_full_and_zero_accepted(tmp_path):
         res = _run_agentic(shim, gd, {"EVAL_LIMIT": sentinel})
         assert "GEN_RC=0" in res.stdout, f"EVAL_LIMIT={sentinel!r}: {res.stdout}{res.stderr}"
     argv = (shim / "argv.log").read_text()
-    assert "--slice" not in argv  # neither sentinel produces a slice bound
+    assert "--slice" not in argv

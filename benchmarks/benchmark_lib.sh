@@ -802,7 +802,7 @@ run_lm_eval() {
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
     local eval_limit="${EVAL_LIMIT:-}"
-    # lm-eval 0.4.9.2 requires --include_path to register external task YAMLs.
+    # External task YAMLs require --include_path.
     local include_path="${EVAL_INCLUDE_PATH:-}"
 
     while [[ $# -gt 0 ]]; do
@@ -829,7 +829,7 @@ run_lm_eval() {
         esac
     done
 
-    # Resolve task YAMLs from the repo when the serving image uses another WORKDIR.
+    # Serving images may use a different WORKDIR.
     local _repo_root
     _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
@@ -1119,7 +1119,7 @@ _patch_swebench_agent() {
 }
 
 _install_swebench_deps() {
-    # Runtime patch anchors require SWE-bench 4.1.0.
+    # Patch anchors depend on SWE-bench 4.1.0.
     python3 -m pip install -q --no-cache-dir --break-system-packages 'swebench==4.1.0' || true
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then
         python3 -m pip install -q --no-cache-dir --break-system-packages modal || true
@@ -1132,10 +1132,10 @@ _patch_swebench_scoring() {
     python3 "$(_eval_patches_dir)/patch_swebench_scoring.py"
 }
 
-# The SWE-bench harness requires ~/.modal.toml even when Modal reads env credentials.
+# SWE-bench requires ~/.modal.toml despite env credentials.
 _ensure_modal_credentials() {
     if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
-    # CI secrets may contain surrounding whitespace or quotes.
+    # CI secrets may include whitespace or quotes.
     if [ -n "${MODAL_TOKEN_ID:-}" ]; then
         MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
         export MODAL_TOKEN_ID
@@ -1146,7 +1146,7 @@ _ensure_modal_credentials() {
     fi
     if [ -f "${HOME:-}/.modal.toml" ]; then return 0; fi
     if [ -n "${MODAL_TOKEN_ID:-}" ] && [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
-        # Slurm may propagate a host HOME path that is unwritable in the container.
+        # Slurm may provide an unwritable HOME.
         if [ -z "${HOME:-}" ] || ! mkdir -p "$HOME" 2>/dev/null || [ ! -w "$HOME" ]; then
             export HOME=/tmp/inferencex-modal-home
             mkdir -p "$HOME"
@@ -1164,7 +1164,7 @@ _ensure_modal_credentials() {
 maybe_run_eval() {
     local port="${1:-${PORT:-8888}}"
     if [ "${RUN_EVAL}" = "true" ]; then
-        # Preserve partial artifacts when generation or scoring fails.
+        # Failed evals can still produce useful artifacts.
         local eval_rc=0
         run_eval --port "$port" || eval_rc=$?
         append_lm_eval_summary || true
@@ -1185,7 +1185,7 @@ _run_swebench_agentic_generation() {
     _install_swebench_agent_deps
     _ensure_modal_credentials
 
-    # minisweagent logs before printing its config path.
+    # minisweagent logs before its config path.
     local default_cfg
     default_cfg=$(python3 -c 'import minisweagent, os; print(os.path.join(os.path.dirname(minisweagent.__file__), "config/benchmarks/swebench.yaml"))' 2>/dev/null | tail -n 1)
     if [ ! -f "$default_cfg" ]; then
@@ -1216,10 +1216,10 @@ d["agent"]["cost_limit"] = 0.0
 env = d.get("environment") or {}
 env.update({
     "environment_class": "swerex_modal",
-    # Image cold starts exceed mini-swe-agent's 60-second default.
+    # Modal cold starts exceed the default timeout.
     "startup_timeout": float(os.environ.get("SWEBENCH_AGENT_STARTUP_TIMEOUT", "900")),
     "timeout": int(os.environ.get("SWEBENCH_AGENT_CMD_TIMEOUT", "300")),
-    # runtime_timeout caps billing if cleanup misses a sandbox.
+    # Limit billing if cleanup misses a sandbox.
     "runtime_timeout": float(os.environ.get("SWEBENCH_AGENT_RUNTIME_TIMEOUT", "3600")),
 })
 agent_cpu = os.environ.get("SWEBENCH_AGENT_SANDBOX_CPU", "")
@@ -1265,7 +1265,7 @@ PYGEN
         -w "${SWEBENCH_AGENT_WORKERS:-${CONC:-64}}" \
         -o "$gen_dir/agent_out" &
     local mini_pid=$!
-    # preds.json exposes completion when mini-extra hangs during process teardown.
+    # preds.json detects completion despite teardown hangs.
     local preds_file="$gen_dir/agent_out/preds.json"
     local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-14400} ))
     local grace_until=0
@@ -1299,7 +1299,7 @@ PYGEN
     elif [ "$agen_rc" -eq 0 ] && [ "$wait_rc" -ne 0 ]; then
         agen_rc=$wait_rc
     fi
-    # App-scoped sweeps avoid unrelated sandboxes but require unique concurrent app names.
+    # Isolate sweeps to avoid killing unrelated sandboxes.
     [ "${SWEBENCH_SANDBOX_SWEEP:-1}" = "1" ] && python3 - <<'PYSWEEP' || true
 try:
     import os
@@ -1318,7 +1318,7 @@ except Exception as e:
     print(f"[swebench-agentic] sandbox sweep skipped: {e}")
 PYSWEEP
     if [ "$agen_rc" -ne 0 ]; then
-        # Preserve scoreable predictions from partial runs.
+        # Partial runs may still be scoreable.
         local salvage_count
         salvage_count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$gen_dir/agent_out/preds.json" 2>/dev/null || echo 0)
         if [ "${salvage_count:-0}" -gt 0 ]; then
@@ -1340,7 +1340,7 @@ run_swebench_eval() {
     local gen_dir
     gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
 
-    # Generation and scoring must use the same dataset.
+    # Generation and scoring must share a dataset.
     local yaml_path="${EVAL_TASKS_DIR:-utils/evals/${task_name}.yaml}"
     local dataset
     dataset=$(awk '/^dataset_path:[[:space:]]/{print $2; exit}' "$yaml_path" 2>/dev/null)
@@ -1359,7 +1359,7 @@ run_swebench_eval() {
     local gen_mode="${SWEBENCH_GEN_MODE:-agentic}"
     local score_input=()
     if [ "$gen_mode" = "agentic" ]; then
-        # mini-extra's lite subset cannot generate other datasets.
+        # mini-extra supports only SWE-bench Lite.
         case "$dataset" in
             *SWE-bench_Lite|*SWE-bench_Lite/*) ;;
             *)
@@ -1424,7 +1424,7 @@ run_swebench_eval() {
     local modal_args=()
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then modal_args=(--modal); fi
     local itimeout_args=(--instance-timeout "${SWEBENCH_EVAL_TIMEOUT:-900}")
-    # Prevent a stalled backend from holding the GPU allocation indefinitely.
+    # Avoid holding the GPU on scoring stalls.
     timeout "${SWEBENCH_SCORE_TIMEOUT:-7200}" \
     python3 utils/evals/swebench_score.py \
         "${score_input[@]}" \

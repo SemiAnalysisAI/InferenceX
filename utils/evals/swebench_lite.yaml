@@ -1,4 +1,4 @@
-# lm-eval only generates patches here; the official harness computes resolved rate.
+# Official scoring replaces lm-eval's placeholder metric.
 task: swebench_lite
 dataset_path: princeton-nlp/SWE-bench_Lite
 output_type: generate_until
@@ -22,7 +22,7 @@ doc_to_text: |
   +++ b/path/to/file.py
   @@ ... @@
   ```
-# lm-eval requires a target even though the official harness replaces this metric.
+# lm-eval requires a target even though scoring ignores it.
 doc_to_target: "{{patch}}"
 
 generation_kwargs:

@@ -14,20 +14,13 @@ CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def load_config(path: str) -> dict:
-    """Load thresholds config, normalized to {"default": {...}, "models": {...}}.
-
-    The config is YAML (JSON, being a YAML subset, also loads).  Accepts both
-    the per-model format ({"default": {...}, "models": {...}}) and the legacy
-    flat format ({task: min_score}), which is treated as the global default
-    with no per-model overrides.
-    """
+    """Load YAML or JSON thresholds, including legacy flat configs."""
     with open(path) as f:
         text = f.read()
     try:
         import yaml
     except ModuleNotFoundError:
-        # This runs directly on runner hosts, so PyYAML may be missing there.
-        # JSON configs still load via the stdlib; YAML ones fail loudly.
+        # Runner hosts may lack PyYAML.
         try:
             cfg = json.loads(text)
         except json.JSONDecodeError:
@@ -39,7 +32,6 @@ def load_config(path: str) -> dict:
         try:
             cfg = yaml.safe_load(text)
         except yaml.YAMLError as exc:
-            # Normalize to ValueError so callers keep a single except list.
             raise ValueError(f"invalid YAML: {exc}") from exc
     if not isinstance(cfg, dict):
         raise ValueError("thresholds config must be a mapping")
@@ -180,7 +172,7 @@ def validate_batch_manifest(
 
 
 def main() -> int:
-    # Preserve stdout/stderr ordering in merged CI logs.
+    # Keep merged CI logs ordered.
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(line_buffering=True)

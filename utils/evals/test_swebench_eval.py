@@ -1,4 +1,3 @@
-"""Behavioral tests for SWE-bench prediction generation and scoring."""
 
 import json
 import sys
@@ -6,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))          # utils/evals
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))      # utils
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import swebench_score as sbs
 
@@ -34,7 +33,6 @@ def test_extract_patch_bare_diff_git():
 
 
 def test_extract_patch_bare_diff_strips_trailing_prose():
-    # Trailing prose would make git apply reject the patch.
     text = (
         "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"
         "\nNotes:\nThis fixes #123.\n"
@@ -102,7 +100,6 @@ def test_parse_resolved_classic_counts():
 
 
 def test_parse_resolved_prefers_submitted_over_dataset_total():
-    # Limited runs use submitted predictions, not the full dataset, as the denominator.
     assert sbs.parse_resolved(
         {"resolved_instances": 32, "submitted_instances": 50, "total_instances": 300}
     ) == (32, 50)
@@ -152,7 +149,7 @@ def test_run_harness_modal_uses_modal_flag(monkeypatch, tmp_path):
     assert "--modal" in cmd
     assert "--max_workers" in cmd
     assert "--parallelism" not in cmd
-    assert "--namespace" not in cmd  # Docker-only
+    assert "--namespace" not in cmd
 
 
 def test_run_harness_docker_uses_max_workers_and_namespace(monkeypatch, tmp_path):
@@ -167,7 +164,7 @@ def test_build_results_json_is_lm_eval_shaped():
     res = sbs.build_results_json(
         "swebench_lite", 49, 196, "m", "0.4.12", {"resolved_instances": 49}
     )
-    assert "lm_eval_version" in res  # detection key for collect_eval_results
+    assert "lm_eval_version" in res
     task = res["results"]["swebench_lite"]
     assert task["exact_match,resolved"] == pytest.approx(0.25)
     cfg = res["configs"]["swebench_lite"]
@@ -176,7 +173,6 @@ def test_build_results_json_is_lm_eval_shaped():
 
 
 def test_score_offline_end_to_end(tmp_path):
-    """--report path: samples -> predictions + results JSON, no Docker."""
     samples = tmp_path / "gen"
     samples.mkdir()
     _write_samples(samples, [
@@ -196,7 +192,6 @@ def test_score_offline_end_to_end(tmp_path):
 
 
 def test_predictions_only_writes_predictions_no_results(tmp_path):
-    """SWEBENCH_SKIP_SCORE path: predictions only, no Docker, no results JSON."""
     samples = tmp_path / "gen"
     samples.mkdir()
     _write_samples(samples, [
@@ -244,7 +239,6 @@ def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
 
 
 def test_predictions_file_mode_skips_samples_and_scores(tmp_path):
-    """Agentic mode: pre-built predictions.jsonl + offline report -> results."""
     preds = tmp_path / "agent_preds.jsonl"
     preds.write_text(json.dumps({
         "instance_id": "r__p-1", "model_name_or_path": "m",

@@ -152,11 +152,11 @@ env:
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
-  # GPU runners use Modal instead of local Docker for SWE-bench scoring.
+  # GPU runners lack Docker for SWE-bench scoring.
   SWEBENCH_USE_MODAL: 'true'
   MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
   MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-  # Exclude broken b300 nodes until infrastructure repairs them.
+  # These b300 nodes are currently broken.
   SALLOC_EXCLUDE: 'b300-005,b300-006'
 
 permissions:
