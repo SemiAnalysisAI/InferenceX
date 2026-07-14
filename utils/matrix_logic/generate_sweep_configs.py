@@ -700,7 +700,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
         for agentic_config in agentic_configs:
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
-            duration = DEFAULT_AGENTIC_DURATION_SECONDS
+            duration = agentic_config.get(Fields.DURATION.value) or DEFAULT_AGENTIC_DURATION_SECONDS
 
             for bmk in bmk_space:
                 if is_multinode:
@@ -1003,7 +1003,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         # ---- Agentic-coding scenarios ----
         agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
         for agentic_config in agentic_configs:
-            duration = DEFAULT_AGENTIC_DURATION_SECONDS
+            duration = agentic_config.get(Fields.DURATION.value) or DEFAULT_AGENTIC_DURATION_SECONDS
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
 
             for bmk in bmk_space:
