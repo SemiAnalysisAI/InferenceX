@@ -88,6 +88,19 @@ def test_patchwork_label_forces_bottom_priority_without_waiver():
         POLICY,
         PriorityContext(labels=frozenset({"ci-patchwork", "ci-patchwork-waived"})),
     ) > Decimal("0.000")
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(patchwork_detected=True),
+    ) == Decimal("0.000")
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(
+            labels=frozenset({"ci-patchwork-waived"}),
+            patchwork_detected=True,
+        ),
+    ) > Decimal("0.000")
 
 
 def test_priority_labels_do_not_override_automatic_score():

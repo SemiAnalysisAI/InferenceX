@@ -23,6 +23,7 @@ class PriorityContext:
     labels: frozenset[str] = frozenset()
     queue_namespace: str = "local"
     pr_number: int | None = None
+    patchwork_detected: bool = False
 
 
 def _decimal(value: Any) -> Decimal:
@@ -54,7 +55,10 @@ def calculate_priority(
     patchwork = policy["labels"]["patchwork"]
     patch_labels = set(patchwork["names"])
     waiver_labels = set(patchwork.get("waived-by", []))
-    if context.labels & patch_labels and not context.labels & waiver_labels:
+    if (
+        (context.patchwork_detected or context.labels & patch_labels)
+        and not context.labels & waiver_labels
+    ):
         return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
     adjustments = policy["adjustments"]
@@ -145,6 +149,7 @@ def main() -> int:
     parser.add_argument("--labels-json", default="[]")
     parser.add_argument("--queue-namespace", default="local")
     parser.add_argument("--pr-number", type=int)
+    parser.add_argument("--patchwork-detected", action="store_true")
     parser.add_argument(
         "--input",
         type=Path,
@@ -158,6 +163,7 @@ def main() -> int:
         labels=_labels_from_json(args.labels_json),
         queue_namespace=args.queue_namespace,
         pr_number=args.pr_number,
+        patchwork_detected=args.patchwork_detected,
     )
     source = args.input.read_text() if args.input else sys.stdin.read()
     payload = json.loads(source)

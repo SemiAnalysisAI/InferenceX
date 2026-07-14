@@ -154,8 +154,73 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
+    classify-patchwork:
+        needs: check-changelog
+        runs-on: ubuntu-latest
+        if: >-
+            always() &&
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              needs.check-changelog.result == 'success' ||
+              needs.check-changelog.result == 'skipped'
+            )
+        permissions:
+            contents: read
+            pull-requests: read
+        outputs:
+            patchwork: ${{ steps.result.outputs.patchwork }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                  fetch-depth: 0
+
+            - name: Classify patchwork with Fable
+              id: fable
+              continue-on-error: true
+              uses: anthropics/claude-code-action@v1
+              with:
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  track_progress: false
+                  settings: |
+                      {"fastMode": true}
+                  claude_args: |
+                      --model 'claude-fable-5'
+                      --max-turns 8
+                      --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
+                      --json-schema '{"type":"object","properties":{"patchwork":{"type":"boolean"},"reason":{"type":"string"}},"required":["patchwork","reason"]}'
+                  prompt: |
+                      Inspect this PR's diff against its base branch.
+
+                      Return patchwork=true only when the benchmark uses modified
+                      upstream inference-engine or runtime source. This includes
+                      patch files, git apply, source mutation, monkey-patching,
+                      local engine builds, forks, or images containing unmerged
+                      engine changes.
+
+                      Configuration and recipe changes using released or upstream
+                      software are not patchwork.
+
+                      Return a concise reason grounded in the diff.
+
+            - name: Normalize classification
+              id: result
+              if: always()
+              env:
+                  OUTPUT: ${{ steps.fable.outputs.structured_output || '{}' }}
+              run: |
+                  if jq -e 'type == "object" and (.patchwork | type == "boolean")' \
+                    >/dev/null <<<"$OUTPUT"; then
+                      patchwork=$(jq -r '.patchwork' <<<"$OUTPUT")
+                  else
+                      patchwork=true
+                  fi
+                  echo "patchwork=$patchwork" >> "$GITHUB_OUTPUT"
+                  echo "Fable patchwork classification: $patchwork"
+
     setup:
-        needs: [check-changelog, reuse-sweep-gate]
+        needs: [check-changelog, reuse-sweep-gate, classify-patchwork]
         runs-on: ubuntu-latest
         permissions:
             actions: read
@@ -174,6 +239,10 @@ jobs:
                 needs.reuse-sweep-gate.result == 'success' &&
                 needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
               )
+            ) &&
+            (
+              needs.classify-patchwork.result == 'success' ||
+              needs.classify-patchwork.result == 'skipped'
             ) &&
             (
               (
@@ -221,6 +290,7 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  PATCHWORK_DETECTED: ${{ needs.classify-patchwork.outputs.patchwork == 'true' }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -263,14 +333,18 @@ jobs:
                       CMD+=(--evals-only)
                   fi
 
-
+                  PRIORITY_ARGS=()
+                  if [ "$PATCHWORK_DETECTED" = "true" ]; then
+                      PRIORITY_ARGS+=(--patchwork-detected)
+                  fi
                   CONFIG_JSON=$("${CMD[@]}")
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}" \
                     --labels-json "$PR_LABELS" \
-                    --pr-number "${{ github.event.pull_request.number || 0 }}")
+                    --pr-number "${{ github.event.pull_request.number || 0 }}" \
+                    "${PRIORITY_ARGS[@]}")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
