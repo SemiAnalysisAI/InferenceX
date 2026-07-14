@@ -4775,3 +4775,11 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - dsv4-fp8-mi325x-vllm-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 MI325X vLLM MTP (speculative-decoding) variant, mirroring dsv4-fp8-mi325x-vllm plus --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":2} (DeepSeek-V4 built-in MTP)"
+    - "run_benchmark_serving uses --dsv4 chat-template encoding, required for meaningful MTP acceptance rate; routes to dsv4_fp8_mi325x_mtp.sh via the launcher's spec-decoding=mtp suffix"
+    - "256GB MI325X keeps the default eval concurrency (no KV cap needed)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2195
