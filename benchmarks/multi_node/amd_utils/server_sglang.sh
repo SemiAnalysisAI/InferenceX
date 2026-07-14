@@ -325,6 +325,22 @@ echo "Server flush endpoints:       ${SERVER_FLUSH_URLS[@]}"
 # Configuration Builder Functions
 # =============================================================================
 
+# KV_P2P_TRANSFER (from amd-master.yaml kv-p2p-transfer) overrides the
+# --disaggregation-transfer-backend baked into models.yaml base_flags.
+apply_kv_p2p_transfer_override() {
+    local flags="$1"
+    if [[ -z "${KV_P2P_TRANSFER:-}" ]]; then
+        printf '%s' "$flags"
+        return 0
+    fi
+    local stripped
+    stripped="$(echo "$flags" | sed -E 's/--disaggregation-transfer-backend[[:space:]]+[^[:space:]]+//g')"
+    stripped="${stripped#"${stripped%%[![:space:]]*}"}"
+    stripped="${stripped%"${stripped##*[![:space:]]}"}"
+    echo "[KV_P2P] Using disaggregation-transfer-backend=${KV_P2P_TRANSFER} (KV_P2P_TRANSFER env)" >&2
+    printf '%s --disaggregation-transfer-backend %s' "$stripped" "$KV_P2P_TRANSFER"
+}
+
 build_server_config() {
     local mode="$1"
     local model_name="$2"
@@ -357,7 +373,8 @@ build_server_config() {
     fi
 
     # Get model-specific configuration from YAML-loaded variables
-    local base_config="$MODEL_BASE_FLAGS"
+    local base_config
+    base_config="$(apply_kv_p2p_transfer_override "$MODEL_BASE_FLAGS")"
     local mtp_config=""
     local dp_config=""
     local ep_config=""
@@ -858,7 +875,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
                       PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
                       DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
-                      KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB \
+                      KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB KV_P2P_TRANSFER \
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
                       AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
                       AIPERF_TRAJECTORY_START_MIN_RATIO AIPERF_TRAJECTORY_START_MAX_RATIO \
