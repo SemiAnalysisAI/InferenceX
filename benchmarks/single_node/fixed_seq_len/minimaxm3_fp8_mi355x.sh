@@ -80,6 +80,21 @@ export VLLM_ROCM_USE_AITER=1
 # concurrency. Overridable via env.
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
+# Concurrency-gated dense-linear backend. On this nightly the native Triton
+# MXFP8 linear GEMM wins in the memory-bound low-concurrency regime, while
+# --linear-backend emulation (bf16 hipBLASLT) wins in the compute-bound
+# high-concurrency regime. Measured crossover on gfx950 MXFP8 sparse-PA: native
+# is faster up to conc 32, emulation is ~+3-5% from conc 64 up. Gate emulation
+# to the 8k1k high-concurrency tail (isl>=8192 && conc>=64); everything else
+# (all 1k1k, and 8k1k conc<64) uses the native linear path. Overridable via
+# LINEAR_BACKEND (set to a backend name to force it, or "native" to disable).
+LINEAR_ARGS=()
+if [ -n "${LINEAR_BACKEND:-}" ]; then
+    [ "$LINEAR_BACKEND" != "native" ] && LINEAR_ARGS=(--linear-backend "$LINEAR_BACKEND")
+elif [ "$ISL" -ge 8192 ] && [ "$CONC" -ge 64 ]; then
+    LINEAR_ARGS=(--linear-backend emulation)
+fi
+
 start_gpu_monitor
 
 set -x
@@ -93,6 +108,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
+    "${LINEAR_ARGS[@]}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
