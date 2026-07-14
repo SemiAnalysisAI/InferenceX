@@ -1,0 +1,123 @@
+name: "dsv4-vllm-disagg-h100-1p1d-tep16-tep16-1k1k"
+
+# H100 adaptation of the upstream vLLM DeepSeek-V4-Pro recipe. The native
+# mixed FP4+FP8 checkpoint needs about 960GB, so every prefill/decode replica
+# spans two 8xH100 nodes (1280GB) as TP16 with expert parallelism. The 1P1D
+# deployment therefore uses four GPU nodes total.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: dsv4-h100-vllm-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  prefill_nodes: 2
+  prefill_workers: 1
+  gpus_per_prefill: 16
+  decode_nodes: 2
+  decode_workers: 1
+  gpus_per_decode: 16
+
+infra:
+  etcd_nats_dedicated_node: false
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  prefill_environment:
+    NCCL_CUMEM_ENABLE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  decode_environment:
+    NCCL_CUMEM_ENABLE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  vllm_config:
+    prefill:
+      block-size: 256
+      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","pass_config":{"fuse_allreduce_rms":false}}'
+      enable-expert-parallel: true
+      enable-sleep-mode: true
+      enforce-eager: true
+      gpu-memory-utilization: 0.95
+      kv-cache-dtype: "fp8"
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      max-model-len: 200000
+      max-num-batched-tokens: 16384
+      max-num-seqs: 16
+      no-disable-hybrid-kv-cache-manager: true
+      no-enable-flashinfer-autotune: true
+      no-enable-prefix-caching: true
+      pipeline-parallel-size: 1
+      reasoning-parser: deepseek_v4
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      tensor-parallel-size: 16
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+    decode:
+      block-size: 256
+      compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","pass_config":{"fuse_allreduce_rms":false}}'
+      enable-expert-parallel: true
+      enable-sleep-mode: true
+      gpu-memory-utilization: 0.95
+      kv-cache-dtype: "fp8"
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      max-model-len: 200000
+      max-num-batched-tokens: 16384
+      max-num-seqs: 16
+      no-disable-hybrid-kv-cache-manager: true
+      no-enable-flashinfer-autotune: true
+      no-enable-prefix-caching: true
+      pipeline-parallel-size: 1
+      reasoning-parser: deepseek_v4
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      tensor-parallel-size: 16
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "1x2x4x8x16x32x64x128x256x512"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:v0.21.0"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.21.0"
