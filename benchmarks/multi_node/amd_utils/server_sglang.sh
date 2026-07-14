@@ -1091,7 +1091,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout 3000"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
