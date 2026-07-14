@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM.
@@ -27,8 +27,12 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-DCP_SIZE="${DCP_SIZE:-1}"
-PCP_SIZE="${PCP_SIZE:-1}"
+if [ -z "$DCP_SIZE" ]; then
+    DCP_SIZE=1
+fi
+if [ -z "$PCP_SIZE" ]; then
+    PCP_SIZE=1
+fi
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
@@ -44,14 +48,14 @@ if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
 fi
 export GPU_COUNT
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+    echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 # `hf download` creates the target dir if missing and is itself idempotent.
 # When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
 # Either way, MODEL_PATH is what the server is launched with.
-if [[ -n "${MODEL_PATH:-}" ]]; then
+if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
@@ -104,7 +108,7 @@ ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
 OFFLOAD_ARGS=()
-case "${KV_OFFLOAD_BACKEND:-}" in
+case "$KV_OFFLOAD_BACKEND" in
     "")
         require_agentic_kv_offload_none
         ;;
@@ -191,7 +195,7 @@ EOF
         )
         ;;
     *)
-        echo "Error: unsupported B200 KV_OFFLOAD_BACKEND='${KV_OFFLOAD_BACKEND:-}'" >&2
+        echo "Error: unsupported B200 KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
         exit 1
         ;;
 esac
