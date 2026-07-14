@@ -4927,3 +4927,4 @@
     - "EAGLE speculative decoding: 3 steps, topk 1, 4 draft tokens"
     - "Sweep TP8 +/- DPA +/- HiCache with MTP across conc 1-96"
     - "Exclude mia1-p01-g12 from agentic salloc"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
