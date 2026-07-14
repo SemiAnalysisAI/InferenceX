@@ -50,10 +50,29 @@ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
 # keep the bf16 accumulation and only quantize all-reduces above 256 KB.
 export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
-# Enable the AITER page-16 sparse-PA fast path (vllm-project/vllm#47287): the
-# shuffled KV-cache layout lets AITER derive page-16 K/V views from the page-128
-# allocation and route decode/prefill through AITER Gluon paged attention.
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+
+# AITER page-16 sparse PA (vllm-project/vllm#47287) is a long-context,
+# high-concurrency optimization: it maps MiniMax-M3's top-k 128-token sparse
+# blocks onto AITER page-16 block tables. Measured on gfx950 MXFP8, it only wins
+# in the 8k1k high-concurrency tail and adds overhead at short context (1k1k) or
+# low batch. So enable the "high-conc fast path" (shuffled KV-cache layout for
+# sparse PA + the emulation dense-linear backend, see below) only for
+# isl>=8192 && conc>=64; everywhere else fall back to the #2003 path
+# (non-shuffled Triton attention + native linear). Overridable via
+# MM3_HIGH_CONC_FASTPATH=0/1.
+if [ -z "${MM3_HIGH_CONC_FASTPATH:-}" ]; then
+    if [ "$ISL" -ge 8192 ] && [ "$CONC" -ge 64 ]; then
+        MM3_HIGH_CONC_FASTPATH=1
+    else
+        MM3_HIGH_CONC_FASTPATH=0
+    fi
+fi
+
+if [ "$MM3_HIGH_CONC_FASTPATH" = "1" ]; then
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
+else
+    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
+fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -80,18 +99,15 @@ export VLLM_ROCM_USE_AITER=1
 # concurrency. Overridable via env.
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
-# Concurrency-gated dense-linear backend. On this nightly the native Triton
-# MXFP8 linear GEMM wins in the memory-bound low-concurrency regime, while
-# --linear-backend emulation (bf16 hipBLASLT) wins in the compute-bound
-# high-concurrency regime. Measured crossover on gfx950 MXFP8 sparse-PA: native
-# is faster up to conc 32, emulation is ~+3-5% from conc 64 up. Gate emulation
-# to the 8k1k high-concurrency tail (isl>=8192 && conc>=64); everything else
-# (all 1k1k, and 8k1k conc<64) uses the native linear path. Overridable via
-# LINEAR_BACKEND (set to a backend name to force it, or "native" to disable).
+# Dense-linear backend, gated on the same high-conc fast path as sparse PA. On
+# this nightly the native Triton MXFP8 linear GEMM wins in the memory-bound
+# low-concurrency regime, while --linear-backend emulation (bf16 hipBLASLT) wins
+# in the compute-bound high-concurrency regime (~+3-5% at 8k1k conc>=64).
+# LINEAR_BACKEND overrides (a backend name to force it, or "native" to disable).
 LINEAR_ARGS=()
 if [ -n "${LINEAR_BACKEND:-}" ]; then
     [ "$LINEAR_BACKEND" != "native" ] && LINEAR_ARGS=(--linear-backend "$LINEAR_BACKEND")
-elif [ "$ISL" -ge 8192 ] && [ "$CONC" -ge 64 ]; then
+elif [ "$MM3_HIGH_CONC_FASTPATH" = "1" ]; then
     LINEAR_ARGS=(--linear-backend emulation)
 fi
 
