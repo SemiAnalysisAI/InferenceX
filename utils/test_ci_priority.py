@@ -29,7 +29,7 @@ def test_combined_high_value_signals_outrank_baseline_job():
         "decode": {"hardware": "b200"},
     }
 
-    assert calculate_priority(high_value, POLICY) == Decimal("0.000")
+    assert calculate_priority(high_value, POLICY) == Decimal("0.100")
     assert calculate_priority(baseline, POLICY) == Decimal("5.000")
 
 
@@ -41,6 +41,29 @@ def test_main_branch_jobs_receive_an_automatic_boost():
         POLICY,
         PriorityContext(event_name="push"),
     ) == Decimal("3.000")
+
+
+def test_p0_requires_both_skip_queue_label_and_core_authorization():
+    entry = {"runner": "h100", "framework": "trt"}
+
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(labels=frozenset({"skip_queue"})),
+    ) == Decimal("5.000")
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(skip_queue_authorized=True),
+    ) == Decimal("5.000")
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(
+            labels=frozenset({"skip_queue"}),
+            skip_queue_authorized=True,
+        ),
+    ) == Decimal("0.000")
 
 
 def test_patchwork_label_forces_bottom_priority_without_waiver():
@@ -66,6 +89,11 @@ def test_maintainer_override_wins_and_conflicts_are_rejected():
         POLICY,
         PriorityContext(labels=frozenset({"ci-priority:p0.7"})),
     ) == Decimal("0.700")
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(labels=frozenset({"ci-priority:p0"})),
+    ) == Decimal("0.100")
     with pytest.raises(ValueError, match="Multiple ci-priority override"):
         calculate_priority(
             entry,

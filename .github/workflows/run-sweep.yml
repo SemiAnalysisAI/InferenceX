@@ -13,6 +13,7 @@ concurrency:
           github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
+          github.event.label.name != 'skip_queue' &&
           github.run_id ||
           'active'
         }}
@@ -49,7 +50,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
-              github.event.label.name == 'evals-only'
+              github.event.label.name == 'evals-only' ||
+              github.event.label.name == 'skip_queue'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -155,6 +157,11 @@ jobs:
     setup:
         needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest
+        permissions:
+            actions: read
+            contents: read
+            issues: read
+            pull-requests: read
         if: >-
             always() &&
             (
@@ -188,7 +195,8 @@ jobs:
                   github.event.label.name == 'full-sweep-fail-fast' ||
                   github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
                   github.event.label.name == 'all-evals' ||
-                  github.event.label.name == 'evals-only'
+                  github.event.label.name == 'evals-only' ||
+                  github.event.label.name == 'skip_queue'
                 )
               ) ||
               (
@@ -209,10 +217,24 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Authorize skip_queue
+              id: authorize_skip_queue
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'skip_queue')
+              env:
+                  CORE_TEAM_READ_TOKEN: ${{ secrets.CORE_TEAM_READ_TOKEN }}
+              run: |
+                  authorized=$(python3 "${GITHUB_WORKSPACE}/utils/authorize_skip_queue.py" \
+                    --repository "${{ github.repository }}" \
+                    --pr-number "${{ github.event.pull_request.number }}")
+                  echo "authorized=$authorized" >> "$GITHUB_OUTPUT"
+
             - id: setup
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  SKIP_QUEUE_AUTHORIZED: ${{ steps.authorize_skip_queue.outputs.authorized == 'true' }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -255,12 +277,18 @@ jobs:
                       CMD+=(--evals-only)
                   fi
 
+                  PRIORITY_ARGS=()
+                  if [ "$SKIP_QUEUE_AUTHORIZED" = "true" ]; then
+                      PRIORITY_ARGS+=(--skip-queue-authorized)
+                  fi
+
                   CONFIG_JSON=$("${CMD[@]}")
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}" \
-                    --labels-json "$PR_LABELS")
+                    --labels-json "$PR_LABELS" \
+                    "${PRIORITY_ARGS[@]}")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \

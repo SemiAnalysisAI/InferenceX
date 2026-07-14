@@ -23,6 +23,7 @@ class PriorityContext:
     event_name: str = ""
     labels: frozenset[str] = frozenset()
     queue_namespace: str = "local"
+    skip_queue_authorized: bool = False
 
 
 def _decimal(value: Any) -> Decimal:
@@ -65,6 +66,12 @@ def calculate_priority(
     override = _label_override(context.labels, policy)
     minimum = _decimal(policy["minimum-score"])
     maximum = _decimal(policy["maximum-score"])
+    skip_queue = policy["labels"]["skip-queue"]
+    if (
+        context.skip_queue_authorized
+        and skip_queue["name"] in context.labels
+    ):
+        return _decimal(skip_queue["score"]).quantize(SCORE_QUANTUM)
     if override is not None:
         return min(max(override, minimum), maximum).quantize(SCORE_QUANTUM)
 
@@ -156,6 +163,7 @@ def main() -> int:
     parser.add_argument("--event-name", default="")
     parser.add_argument("--labels-json", default="[]")
     parser.add_argument("--queue-namespace", default="local")
+    parser.add_argument("--skip-queue-authorized", action="store_true")
     parser.add_argument(
         "--input",
         type=Path,
@@ -168,6 +176,7 @@ def main() -> int:
         event_name=args.event_name,
         labels=_labels_from_json(args.labels_json),
         queue_namespace=args.queue_namespace,
+        skip_queue_authorized=args.skip_queue_authorized,
     )
     source = args.input.read_text() if args.input else sys.stdin.read()
     payload = json.loads(source)

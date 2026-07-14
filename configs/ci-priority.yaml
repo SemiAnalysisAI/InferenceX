@@ -3,7 +3,7 @@ version: 1
 # Lower scores run first. Scores remain human-readable in workflow job labels
 # (for example, ci-priority-p0.750).
 base-score: 5.0
-minimum-score: 0.0
+minimum-score: 0.1
 maximum-score: 999.0
 
 adjustments:
@@ -36,6 +36,13 @@ labels:
   # Repository labels are maintainer-controlled. A matching override wins over
   # every automatic adjustment.
   override-pattern: '^ci-priority:p(?P<score>[0-9]+(?:\.[0-9]+)?)$'
+  # p0 is reserved for an active skip_queue label whose latest labeling actor
+  # is verified as an active SemiAnalysisAI/Core team member.
+  skip-queue:
+    name: skip_queue
+    score: 0.0
+    organization: SemiAnalysisAI
+    team-slug: core
   checklist-complete:
     names: [ci-checklist-complete]
     adjustment: -0.25
