@@ -119,6 +119,40 @@ dsr1-fp8-mi325x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via SGLang.
+# EXTRAPOLATED bring-up scaffold (unvalidated on-cluster as of 2026-07).
+# Search-space shape mirrors the same-model MI355X entry (dsv4-fp4-mi355x-sglang):
+# a TP-only low-latency band + a DP-attention + EP throughput band. gfx942 has
+# no native FP4, so this runs FP8 (the ~960GB mixed checkpoint is ~1.05TB in
+# FP8) — which only fits TP8, so the MI355X TP4 bands are dropped. 8x256GB (2TB)
+# leaves ~1TB free after FP8 weights, so the throughput band could later extend
+# past conc 2048 — kept at parity with the sister MI300X entry for a first
+# bring-up. Image follows the same-model MI355X's sglang-rocm dated-tag family
+# (mi30x variant); launch script dsv4_fp8_mi325x.sh carries the deepseek_v4
+# flags + gfx942 AITER infra. debug-runs must confirm the image carries the
+# DeepseekV4 class and that --attention-backend dsv4 / --quantization
+# deepseek_v4_fp8 work on gfx942 before this merges.
+dsv4-fp8-mi325x-sglang:
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
+
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528
