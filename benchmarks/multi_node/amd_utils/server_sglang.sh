@@ -483,7 +483,7 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     }
 
     # HiCache capacity via --hicache-ratio (scales with GPU KV pool).
-    HICACHE_RATIO="${HICACHE_RATIO:-5}"
+    HICACHE_RATIO="${HICACHE_RATIO:-16}"
 
     build_hicache_flags() {
         echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-ratio ${HICACHE_RATIO} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
