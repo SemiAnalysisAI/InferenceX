@@ -58,9 +58,11 @@ MiniMax-M3-MXFP4:
   max_num_batched_tokens: "32768"
 
 Kimi-K2.5-MXFP4:
-  env: "ATOM_DISABLE_MMAP=true AITER_QUICK_REDUCE_QUANTIZATION=INT4 AITER_MXFP4_INTERMEDIATE=1 OMP_NUM_THREADS=1"
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 AITER_MXFP4_INTERMEDIATE=1"
   kv_cache_flags: "--kv_cache_dtype fp8"
-  scheduler_delay_factor: "1"
+  mem_frac_static: "0.9"
+  max_model_len: "32768"
+  max_num_batched_tokens: "32768"
 
 MiniMax-M3-MXFP8:
   env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
