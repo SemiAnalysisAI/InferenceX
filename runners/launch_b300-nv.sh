@@ -361,6 +361,7 @@ else
         Qwen3.5-397B-A17B
         Qwen3.5-397B-A17B-FP8
         Qwen3.5-397B-A17B-NVFP4
+        Qwen3.5-397B-A17B-NVFP4-V2
         gpt-oss-120b
     )
 

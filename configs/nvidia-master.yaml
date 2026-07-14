@@ -2131,7 +2131,7 @@ qwen3.5-fp8-b200-sglang-agentic:
 
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b200
   precision: fp4
@@ -2152,7 +2152,7 @@ qwen3.5-fp4-b200-sglang:
 
 qwen3.5-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b200
   precision: fp4
@@ -2702,7 +2702,7 @@ qwen3.5-fp8-b300-sglang:
 
 qwen3.5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b300
   precision: fp4
@@ -2723,7 +2723,7 @@ qwen3.5-fp4-b300-sglang:
 
 qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: b300
   precision: fp4
