@@ -42,10 +42,12 @@ fi
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
-# MI355X mxfp8 recipe (vllm-project/recipes#581): INT6 quick all-reduce plus
-# the router-append shared-experts MoE fusion (vllm-project/vllm#46545). 
+# MI355X mxfp8 recipe (vllm-project/recipes#581): INT4 quick all-reduce plus
+# the router-append shared-experts MoE fusion (vllm-project/vllm#46545). INT4
+# quick all-reduce is applied at all concurrencies (accuracy is guarded by the
+# 8k1k evals); #2003 used INT6.
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 # AITER page-16 sparse PA (vllm-project/vllm#47287) is a long-context,
 # high-concurrency optimization: it maps MiniMax-M3's top-k 128-token sparse
@@ -66,14 +68,12 @@ fi
 
 if [ "$MM3_HIGH_CONC_FASTPATH" = "1" ]; then
     export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-    export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
     # Quick all-reduce tuning from the MiniMax-M3 AITER recipe (vllm-project/vllm#47287):
     # keep the bf16 accumulation and only quantize all-reduces above 256 KB.
     export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
     export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
 else
     export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-    export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
