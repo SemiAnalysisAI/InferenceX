@@ -4750,3 +4750,19 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Bump vLLM image from v0.21.0 to v0.25.0 for DeepSeek-V4-Pro FP8 on H200, matching the B200/B300 dsv4 vLLM bump (#2169)"
+    - "Refresh stale H200 dsv4 submissions (last run 2026-05-21)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Bump the pinned lmsysorg/sglang:deepseek-v4-hopper digest from the 2026-05-02 push (7f19c6dc) to the current 2026-05-13 push (1bf5d508)"
+    - "Refresh stale H200 dsv4 SGLang submissions (last run 2026-05-04)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
