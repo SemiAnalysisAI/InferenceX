@@ -890,7 +890,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
                       AIPERF_TRAJECTORY_START_MIN_RATIO AIPERF_TRAJECTORY_START_MAX_RATIO \
                       AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES ROUTER_PORT TQDM_MININTERVAL; do
-                if [[ -n "${!_v+x}" ]]; then printf '%s=%s\n' "$_v" "${!_v}"; fi
+                if [[ -n "${!_v+x}" ]]; then
+                    _val="${!_v}"
+                    # docker --env-file requires one KEY=VALUE per line with no
+                    # embedded newlines; KV_OFFLOAD_BACKEND_METADATA carries
+                    # pretty-printed multi-line JSON, which otherwise splits
+                    # into unparseable lines (e.g. '"name": "hicache",') and
+                    # aborts the client container launch. Flattening newlines
+                    # keeps the JSON valid (whitespace between tokens is
+                    # insignificant) while collapsing it to a single line.
+                    printf '%s=%s\n' "$_v" "${_val//$'\n'/}"
+                fi
             done
             echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
             # Do NOT pin AGENTIC_OUTPUT_DIR: it must default to /workspace (the
