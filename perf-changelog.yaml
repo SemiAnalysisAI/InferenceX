@@ -4785,12 +4785,9 @@
 - config-keys:
     - qwen3.5-fp4-b200-sglang
     - qwen3.5-fp4-b200-sglang-mtp
-    - qwen3.5-fp4-b200-trt
-    - qwen3.5-fp4-b200-trt-mtp
     - qwen3.5-fp4-b300-sglang
     - qwen3.5-fp4-b300-sglang-mtp
-    - qwen3.5-fp4-gb300-dynamo-sglang
   description:
-    - "Switch all Qwen3.5 FP4 configs to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint"
+    - "Switch Qwen3.5 FP4 SGLang configs to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint"
     - "Model pre-staged on all clusters as Qwen3.5-397B-A17B-NVFP4-V2"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2205
