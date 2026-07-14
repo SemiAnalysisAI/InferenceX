@@ -2342,7 +2342,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 dsv4-fp4-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -2355,7 +2355,7 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8] }
       - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
-      - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [80, 96] }
+      - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [80, 96] }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
@@ -3088,9 +3088,9 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80] }
-      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
@@ -3101,6 +3101,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
   framework: sglang-disagg
   multinode: true
   disagg: true
+  kv-p2p-transfer: mori
   scenarios:
     agentic-coding:
     - dram-utilization: 0.80
@@ -3108,7 +3109,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
       - spec-decoding: "none"
         conc-list: [ 2,4,8,16,32 ]
         kv-offloading: dram
-        kv-offload-backend: hicache
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 8
