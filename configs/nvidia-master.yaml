@@ -11495,6 +11495,7 @@ qwen3.5-fp4-gb300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  kv-p2p-transfer: nixl
   scenarios:
     fixed-seq-len:
     - isl: 1024
