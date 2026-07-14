@@ -146,6 +146,29 @@ dsv4-fp8-mi300x-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 512 }
 
+# MTP variant of dsv4-fp8-mi300x-vllm. Mirrors the base recipe and adds
+# DeepSeek-V4 built-in MTP via --speculative-config (num_speculative_tokens=2),
+# routing to dsv4_fp8_mi300x_mtp.sh; benchmark uses --dsv4 chat-template
+# encoding (required for meaningful MTP acceptance).
+dsv4-fp8-mi300x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528

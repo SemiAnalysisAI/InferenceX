@@ -4776,3 +4776,11 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - dsv4-fp8-mi300x-vllm-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 MI300X vLLM MTP (speculative-decoding) variant, mirroring dsv4-fp8-mi300x-vllm plus --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":2} (DeepSeek-V4 built-in MTP)"
+    - "run_benchmark_serving uses --dsv4 chat-template encoding, required for meaningful MTP acceptance rate (EAGLE/MTP is trained on chat-formatted inputs)"
+    - "Same gfx942 auto-MoE (AITER_MXFP4_BF16) + EVAL_CONCURRENT_REQUESTS=8 KV cap as the base recipe; routes to dsv4_fp8_mi300x_mtp.sh via the launcher's spec-decoding=mtp suffix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2194
