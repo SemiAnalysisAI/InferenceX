@@ -4781,3 +4781,13 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM EAGLE3 (MTP) image to nightly-94c0ef300180f8fd1071d9cbe7270a8348155f94, which carries AITER page-16 sparse PA spec-decode support (vllm-project/vllm#47984, on top of #47287)"
+    - "Enable AITER sparse PA for spec decode via the same high-conc fast path as the non-MTP recipe: VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1 + --linear-backend emulation only for isl>=8192 && conc>=64 (native Triton attention + native linear everywhere else, including all 1k1k and 8k1k conc<64). Sparse PA is a long-context/high-batch optimization and adds overhead at short context / low batch"
+    - "Switch quick all-reduce quantization to INT4 for all concurrencies (was INT6); accuracy guarded by the 8k1k evals. In the high-conc fast path also apply VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256"
+    - "Set VLLM_ROCM_USE_AITER=1 unconditionally (configs are TP4-only; the old EP-gated AITER-off branch is dropped) and remove the in-place SupportsEagle3 model patch, which the nightly now implements natively"
+    - "EAGLE3 drafter (Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens) pinned to TRITON_ATTN; TP4 conc 1-512 sweep at 1k1k and 8k1k unchanged; benchmark client keeps --use-chat-template"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
