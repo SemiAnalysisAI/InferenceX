@@ -54,7 +54,14 @@ if [[ "$DCP_SIZE" -gt 1 ]]; then
     DCP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
 fi
 
-SPEC_ARGS=(--speculative-config "{\"method\":\"eagle3\",\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":4,\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":3.24}")
+if [[ "$DCP_SIZE" -gt 1 ]]; then
+    NUM_SPEC_TOKENS=3
+    SYNTHETIC_ACCEPT_LEN=2.88
+else
+    NUM_SPEC_TOKENS=4
+    SYNTHETIC_ACCEPT_LEN=3.24
+fi
+SPEC_ARGS=(--speculative-config "{\"method\":\"eagle3\",\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SYNTHETIC_ACCEPT_LEN}")
 ATTN_BACKEND_ARGS=(--attention-backend TOKENSPEED_MLA)
 
 OFFLOAD_ARGS=()
