@@ -20,7 +20,8 @@
 #
 # Debug-runs must confirm before this leaves bring-up:
 #   1. The mi30x image carries the DeepseekV4 model class.
-#   2. --attention-backend dsv4 exists on gfx942 (else fall back to aiter).
+#   2. The unified-KV triton FlashMLA path captures CUDA graphs cleanly on
+#      gfx942 (the TileLang FP8 MLA kernel does not — see the env note below).
 #   3. The modelopt FP4-MoE checkpoint loads + runs in FP8 via AITER on gfx942
 #      (else pass an explicit valid sglang quant, e.g. --quantization fp8).
 
@@ -51,9 +52,17 @@ if [[ "$version" == "" || $version -lt 177 ]]; then
   export HSA_NO_SCRATCH_RECLAIM=1
 fi
 
-# gfx942 AITER infra (dsr1_fp8_mi300x.sh) + deepseek_v4 model env (mi355x).
+# gfx942 AITER infra (dsr1_fp8_mi300x.sh, for the MoE GEMMs) + deepseek_v4
+# model env (dsv4_fp4_mi355x_sglang.sh). SGLANG_HACK_FLASHMLA_BACKEND=
+# unified_kv_triton is load-bearing: without it the dsv4 attention backend
+# compiles its FP8 MLA kernel via TileLang, whose InjectSoftwarePipeline pass
+# fails on gfx942 ("buffer access dependency ... cannot be reordered") and
+# kills the server at CUDA-graph capture. The unified-KV triton FlashMLA path
+# avoids that kernel. (SGLANG_AITER_MLA_PERSIST dropped: MLA no longer runs
+# through aiter.)
 export SGLANG_USE_AITER=1
-export SGLANG_AITER_MLA_PERSIST=1
+export SGLANG_USE_ROCM700A=0
+export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=max
 export AITER_BF16_FP8_MOE_BOUND=0
