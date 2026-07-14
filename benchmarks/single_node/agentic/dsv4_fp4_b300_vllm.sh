@@ -19,7 +19,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-GPU_COUNT="${GPU_COUNT:-$TP}"
+GPU_COUNT=$TP
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
     exit 1
@@ -101,8 +101,21 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
-        OFFLOAD_CONFIG="{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":${CPU_BYTES_PER_RANK},\"enable_cross_layers_blocks\":\"true\"}}"
-        OFFLOAD_ARGS=(--kv-transfer-config "$OFFLOAD_CONFIG")
+        OFFLOAD_CONFIG=$(cat <<EOF
+{
+  "kv_connector": "SimpleCPUOffloadConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
+    "enable_cross_layers_blocks": "true"
+  }
+}
+EOF
+)
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "$OFFLOAD_CONFIG"
+        )
         ;;
     mooncake)
         require_agentic_kv_offload_backend mooncake

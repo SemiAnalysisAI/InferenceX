@@ -37,7 +37,7 @@ if [ "$PCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--prefill-context-parallel-size "$PCP_SIZE")
 fi
 
-GPU_COUNT="${GPU_COUNT:-$((TP * PCP_SIZE))}"
+GPU_COUNT=$TP
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
     exit 1
@@ -113,9 +113,21 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
+        OFFLOAD_CONFIG=$(cat <<EOF
+{
+  "kv_connector": "SimpleCPUOffloadConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
+    "lazy_offload": false,
+    "enable_cross_layers_blocks": "true"
+  }
+}
+EOF
+)
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false,\"enable_cross_layers_blocks\":\"true\"}}"
+            "$OFFLOAD_CONFIG"
         )
         ;;
     mooncake)
