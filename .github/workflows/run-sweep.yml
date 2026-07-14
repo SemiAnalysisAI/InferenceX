@@ -154,7 +154,7 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-    classify-patchwork:
+    classify-priority:
         needs: check-changelog
         runs-on: ubuntu-latest
         if: >-
@@ -169,14 +169,14 @@ jobs:
             contents: read
             pull-requests: read
         outputs:
-            patchwork: ${{ steps.result.outputs.patchwork }}
+            criteria: ${{ steps.result.outputs.criteria }}
         steps:
             - name: Checkout code
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   fetch-depth: 0
 
-            - name: Classify patchwork with Fable
+            - name: Classify priority criteria with Fable
               id: fable
               continue-on-error: true
               uses: anthropics/claude-code-action@v1
@@ -189,18 +189,25 @@ jobs:
                       --model 'claude-fable-5'
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"patchwork":{"type":"boolean"},"reason":{"type":"string"}},"required":["patchwork","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-vllm","glm5","glm5.1","kimik2.5","kimik2.6","kimik2.7","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this PR's diff against its base branch.
 
-                      Return patchwork=true only when the benchmark uses modified
-                      upstream inference-engine or runtime source. This includes
-                      patch files, git apply, source mutation, monkey-patching,
-                      local engine builds, forks, or images containing unmerged
-                      engine changes.
+                      Return every matching priority criterion:
 
-                      Configuration and recipe changes using released or upstream
-                      software are not patchwork.
+                      - multi-node: separate prefill and decode workers
+                      - agentic: agentic-coding or AgentX workload
+                      - eval-only: evaluation without throughput measurement
+                      - fp4: FP4 precision
+                      - mtp, eagle, eagle3: speculative decoding method
+                      - sglang, vllm, dynamo-vllm: runtime framework
+                      - model criterion: matching configured model family
+                      - checklist-complete: PR checklist is satisfied
+                      - patchwork: modified upstream engine or runtime source
+
+                      Patchwork includes patch files, git apply, source mutation,
+                      monkey-patching, local engine builds, forks, or images
+                      containing unmerged engine changes.
 
                       Return a concise reason grounded in the diff.
 
@@ -210,17 +217,17 @@ jobs:
               env:
                   OUTPUT: ${{ steps.fable.outputs.structured_output || '{}' }}
               run: |
-                  if jq -e 'type == "object" and (.patchwork | type == "boolean")' \
+                  if jq -e 'type == "object" and (.criteria | type == "array")' \
                     >/dev/null <<<"$OUTPUT"; then
-                      patchwork=$(jq -r '.patchwork' <<<"$OUTPUT")
+                      criteria=$(jq -c '.criteria' <<<"$OUTPUT")
                   else
-                      patchwork=true
+                      criteria='["patchwork"]'
                   fi
-                  echo "patchwork=$patchwork" >> "$GITHUB_OUTPUT"
-                  echo "Fable patchwork classification: $patchwork"
+                  echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
+                  echo "Fable priority criteria: $criteria"
 
     setup:
-        needs: [check-changelog, reuse-sweep-gate, classify-patchwork]
+        needs: [check-changelog, reuse-sweep-gate, classify-priority]
         runs-on: ubuntu-latest
         permissions:
             actions: read
@@ -241,8 +248,8 @@ jobs:
               )
             ) &&
             (
-              needs.classify-patchwork.result == 'success' ||
-              needs.classify-patchwork.result == 'skipped'
+              needs.classify-priority.result == 'success' ||
+              needs.classify-priority.result == 'skipped'
             ) &&
             (
               (
@@ -290,7 +297,7 @@ jobs:
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  PATCHWORK_DETECTED: ${{ needs.classify-patchwork.outputs.patchwork == 'true' }}
+                  FABLE_CRITERIA: ${{ needs.classify-priority.outputs.criteria }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -333,10 +340,6 @@ jobs:
                       CMD+=(--evals-only)
                   fi
 
-                  PRIORITY_ARGS=()
-                  if [ "$PATCHWORK_DETECTED" = "true" ]; then
-                      PRIORITY_ARGS+=(--patchwork-detected)
-                  fi
                   CONFIG_JSON=$("${CMD[@]}")
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
@@ -344,7 +347,7 @@ jobs:
                     --queue-namespace "${{ github.run_id }}" \
                     --labels-json "$PR_LABELS" \
                     --pr-number "${{ github.event.pull_request.number || 0 }}" \
-                    "${PRIORITY_ARGS[@]}")
+                    --criteria-json "$FABLE_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \

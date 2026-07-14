@@ -23,7 +23,7 @@ class PriorityContext:
     labels: frozenset[str] = frozenset()
     queue_namespace: str = "local"
     pr_number: int | None = None
-    patchwork_detected: bool = False
+    criteria: frozenset[str] | None = None
 
 
 def _decimal(value: Any) -> Decimal:
@@ -46,6 +46,52 @@ def _first_prefix_adjustment(value: str, adjustments: dict[str, Any]) -> Decimal
 
 
 
+def _criterion_value(criteria: frozenset[str], choices: tuple[str, ...]) -> str:
+    matches = criteria.intersection(choices)
+    if len(matches) > 1:
+        raise ValueError(f"Conflicting CI priority criteria: {sorted(matches)}")
+    return next(iter(matches), "")
+
+
+def _entry_from_criteria(
+    criteria: frozenset[str],
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    fixed = {
+        "multi-node",
+        "agentic",
+        "eval-only",
+        "fp4",
+        "mtp",
+        "eagle",
+        "eagle3",
+        "sglang",
+        "vllm",
+        "dynamo-vllm",
+        "checklist-complete",
+        "patchwork",
+    }
+    allowed = fixed | set(policy["adjustments"].get("model-prefix", {}))
+    unknown = criteria - allowed
+    if unknown:
+        raise ValueError(f"Unknown CI priority criteria: {sorted(unknown)}")
+    return {
+        "prefill": {} if "multi-node" in criteria else None,
+        "scenario-type": "agentic-coding" if "agentic" in criteria else "",
+        "eval-only": "eval-only" in criteria,
+        "precision": "fp4" if "fp4" in criteria else "",
+        "spec-decoding": _criterion_value(criteria, ("mtp", "eagle", "eagle3")),
+        "framework": _criterion_value(
+            criteria,
+            ("sglang", "vllm", "dynamo-vllm"),
+        ),
+        "model-prefix": _criterion_value(
+            criteria,
+            tuple(policy["adjustments"].get("model-prefix", {})),
+        ),
+    }
+
+
 def calculate_priority(
     entry: dict[str, Any],
     policy: dict[str, Any],
@@ -55,12 +101,18 @@ def calculate_priority(
     patchwork = policy["labels"]["patchwork"]
     patch_labels = set(patchwork["names"])
     waiver_labels = set(patchwork.get("waived-by", []))
+    criteria = context.criteria
     if (
-        (context.patchwork_detected or context.labels & patch_labels)
+        (
+            (criteria is not None and "patchwork" in criteria)
+            or context.labels & patch_labels
+        )
         and not context.labels & waiver_labels
     ):
         return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
+    if criteria is not None:
+        entry = _entry_from_criteria(criteria, policy)
     adjustments = policy["adjustments"]
     score = _decimal(policy["base-score"])
     score += _decimal(adjustments.get("event", {}).get(context.event_name, 0))
@@ -84,7 +136,10 @@ def calculate_priority(
     )
 
     checklist = policy["labels"].get("checklist-complete", {})
-    if context.labels & set(checklist.get("names", [])):
+    if (
+        (criteria is not None and "checklist-complete" in criteria)
+        or (criteria is None and context.labels & set(checklist.get("names", [])))
+    ):
         score += _decimal(checklist.get("adjustment", 0))
 
     return score.quantize(SCORE_QUANTUM, ROUND_HALF_UP)
@@ -142,6 +197,17 @@ def _labels_from_json(raw_labels: str) -> frozenset[str]:
     return frozenset(value)
 
 
+def _criteria_from_json(raw_criteria: str) -> frozenset[str] | None:
+    if not raw_criteria:
+        return None
+    value = json.loads(raw_criteria)
+    if value is None:
+        return None
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("--criteria-json must be a JSON array of strings")
+    return frozenset(value)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--policy", default="configs/ci-priority.yaml")
@@ -149,7 +215,7 @@ def main() -> int:
     parser.add_argument("--labels-json", default="[]")
     parser.add_argument("--queue-namespace", default="local")
     parser.add_argument("--pr-number", type=int)
-    parser.add_argument("--patchwork-detected", action="store_true")
+    parser.add_argument("--criteria-json", default="")
     parser.add_argument(
         "--input",
         type=Path,
@@ -163,7 +229,7 @@ def main() -> int:
         labels=_labels_from_json(args.labels_json),
         queue_namespace=args.queue_namespace,
         pr_number=args.pr_number,
-        patchwork_detected=args.patchwork_detected,
+        criteria=_criteria_from_json(args.criteria_json),
     )
     source = args.input.read_text() if args.input else sys.stdin.read()
     payload = json.loads(source)

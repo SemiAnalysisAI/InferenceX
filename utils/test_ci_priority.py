@@ -2,6 +2,8 @@ from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from ci_priority import PriorityContext, annotate_jobs, calculate_priority, load_policy
 
 
@@ -91,16 +93,52 @@ def test_patchwork_label_forces_bottom_priority_without_waiver():
     assert calculate_priority(
         entry,
         POLICY,
-        PriorityContext(patchwork_detected=True),
+        PriorityContext(criteria=frozenset({"patchwork"})),
     ) == Decimal("0.000")
     assert calculate_priority(
         entry,
         POLICY,
         PriorityContext(
             labels=frozenset({"ci-patchwork-waived"}),
-            patchwork_detected=True,
+            criteria=frozenset({"patchwork"}),
         ),
     ) > Decimal("0.000")
+
+
+def test_fable_criteria_drive_all_configured_adjustments():
+    entry = {"runner": "h100", "framework": "trt"}
+    criteria = frozenset({"multi-node", "agentic", "fp4", "mtp", "vllm", "dsr1"})
+    equivalent_entry = {
+        "prefill": {},
+        "scenario-type": "agentic-coding",
+        "precision": "fp4",
+        "spec-decoding": "mtp",
+        "framework": "vllm",
+        "model-prefix": "dsr1",
+    }
+
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(criteria=criteria),
+    ) == calculate_priority(equivalent_entry, POLICY)
+
+
+def test_fable_criteria_reject_unknown_or_conflicting_values():
+    entry = {"runner": "h100", "framework": "trt"}
+
+    with pytest.raises(ValueError, match="Unknown CI priority criteria"):
+        calculate_priority(
+            entry,
+            POLICY,
+            PriorityContext(criteria=frozenset({"unknown"})),
+        )
+    with pytest.raises(ValueError, match="Conflicting CI priority criteria"):
+        calculate_priority(
+            entry,
+            POLICY,
+            PriorityContext(criteria=frozenset({"vllm", "sglang"})),
+        )
 
 
 def test_priority_labels_do_not_override_automatic_score():
