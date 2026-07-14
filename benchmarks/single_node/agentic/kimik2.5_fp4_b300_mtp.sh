@@ -51,17 +51,19 @@ trap 'exit 143' TERM
 DCP_SIZE="${DCP_SIZE:-1}"
 DCP_ARGS=()
 if [[ "$DCP_SIZE" -gt 1 ]]; then
-    DCP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
-fi
-
-if [[ "$DCP_SIZE" -gt 1 ]]; then
+    DCP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE" --dcp-comm-backend a2a)
     NUM_SPEC_TOKENS=3
     SYNTHETIC_ACCEPT_LEN=2.88
+    SPEC_ARGS=(--speculative-config "{\"method\":\"eagle3\",\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SYNTHETIC_ACCEPT_LEN,\"attention_backend\":\"TOKENSPEED_MLA\"}")
+    ATTN_CONFIG='{"mla_prefill_backend":"TOKENSPEED_MLA"}'
+    COMPILATION_CONFIG='{"pass_config":{"fuse_allreduce_rms":false}}'
 else
     NUM_SPEC_TOKENS=4
     SYNTHETIC_ACCEPT_LEN=3.24
+    SPEC_ARGS=(--speculative-config "{\"method\":\"eagle3\",\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SYNTHETIC_ACCEPT_LEN}")
+    ATTN_CONFIG='{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+    COMPILATION_CONFIG='{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
 fi
-SPEC_ARGS=(--speculative-config "{\"method\":\"eagle3\",\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SYNTHETIC_ACCEPT_LEN}")
 ATTN_BACKEND_ARGS=(--attention-backend TOKENSPEED_MLA)
 
 OFFLOAD_ARGS=()
@@ -99,8 +101,8 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.90
     --max-num-seqs "$CONC"
     "${ATTN_BACKEND_ARGS[@]}"
-    --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --attention-config "$ATTN_CONFIG"
+    --compilation-config "$COMPILATION_CONFIG"
     --max-cudagraph-capture-size 2048
     --max-num-batched-tokens 16384
     --stream-interval 10
