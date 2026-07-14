@@ -330,7 +330,12 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -365,19 +370,29 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-pp: ${{ matrix.config.prefill.pp }}
+            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
+            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
             prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
             prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
 
             decode-num-worker: ${{ matrix.config.decode.num-worker }}
             decode-tp: ${{ matrix.config.decode.tp }}
+            decode-pp: ${{ matrix.config.decode.pp }}
+            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
+            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
@@ -431,7 +446,12 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -484,18 +504,24 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
@@ -528,22 +554,33 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: '[${{ matrix.config.conc }}]'
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-pp: ${{ matrix.config.prefill.pp }}
+            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
+            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
             prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
             prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
             decode-num-worker: ${{ matrix.config.decode.num-worker }}
             decode-tp: ${{ matrix.config.decode.tp }}
+            decode-pp: ${{ matrix.config.decode.pp }}
+            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
+            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -577,7 +614,12 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -615,16 +657,26 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
+            prefill-pp: ${{ matrix.config.prefill.pp }}
+            prefill-dcp-size: ${{ matrix.config.prefill.dcp-size }}
+            prefill-pcp-size: ${{ matrix.config.prefill.pcp-size }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
             prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
             prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
             decode-num-worker: ${{ matrix.config.decode.num-worker }}
             decode-tp: ${{ matrix.config.decode.tp }}
+            decode-pp: ${{ matrix.config.decode.pp }}
+            decode-dcp-size: ${{ matrix.config.decode.dcp-size }}
+            decode-pcp-size: ${{ matrix.config.decode.pcp-size }}
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
@@ -680,7 +732,7 @@ jobs:
             always() &&
             needs.setup.result == 'success' &&
             needs.setup.outputs.reuse-enabled == 'true'
-        runs-on: ubuntu-latest
+        runs-on: blacksmith-4vcpu-ubuntu-2404
         steps:
             - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -827,6 +879,7 @@ jobs:
                 collect-results,
                 collect-evals,
                 calc-success-rate,
+                setup,
                 upload-changelog-metadata,
                 reuse-ingest-artifacts,
             ]
@@ -834,6 +887,17 @@ jobs:
             always() &&
             github.event_name == 'push' &&
             github.ref == 'refs/heads/main' &&
+            needs.setup.result == 'success' &&
+            (
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) == '[]'
+              ) &&
+              (
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == 'null' ||
+                toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) == '[]'
+              )
+            ) &&
             (
               needs.collect-results.result != 'skipped' ||
               needs.collect-evals.result != 'skipped' ||
@@ -908,7 +972,7 @@ jobs:
                     -H "Accept: application/vnd.github+v3+json" \
                     https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
                     -d '{
-                      "ref": "feat/agentx",
+                      "ref": "master",
                       "inputs": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",

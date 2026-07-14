@@ -38,7 +38,7 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
-if require_agentic_kv_offload_backend native; then
+if require_agentic_kv_offload_backend vllm-simple; then
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
 fi

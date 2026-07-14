@@ -26,6 +26,7 @@ from utils.agentic.aggregation.request_metrics import (
     load_aggregate,
     load_records,
 )
+from utils.agentic.aggregation.process_agentic_result import _gpu_shape
 from utils.agentic.aggregation.server_metrics import (
     compute_server_metrics,
     load_server_metrics,
@@ -44,6 +45,9 @@ AGG_TOP_LEVEL_KEYS = {
     "scenario_type",
     "is_multinode",
     "tp",
+    "pp",
+    "dcp_size",
+    "pcp_size",
     "ep",
     "dp_attention",
     "kv_offloading",
@@ -54,6 +58,7 @@ AGG_TOP_LEVEL_KEYS = {
     "request_accounting",
     "request_metrics",
     "server_metrics",
+    "kv_cache_pool_tokens",
 }
 REQUEST_ACCOUNTING_KEYS = {
     "records_total",
@@ -308,6 +313,8 @@ def _run_processor(
     env_overrides: dict[str, str] | None = None,
 ) -> dict:
     env = os.environ.copy()
+    env.pop("PREFILL_HARDWARE", None)
+    env.pop("DECODE_HARDWARE", None)
     env.update(
         {
             "RESULT_DIR": str(result_dir),
@@ -318,6 +325,9 @@ def _run_processor(
             "FRAMEWORK": "vllm",
             "PRECISION": "fp4",
             "TP": "4",
+            "PP_SIZE": "1",
+            "DCP_SIZE": "1",
+            "PCP_SIZE": "1",
             "EP_SIZE": "1",
             "DP_ATTENTION": "false",
             "CONC": "8",
@@ -373,6 +383,54 @@ def test_processor_preserves_dataset_provenance(tmp_path: Path):
         "hf_split": "train",
         "num_dataset_entries": 393,
     }
+
+
+def test_processor_emits_component_metadata_when_present(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "ROUTER_METADATA": json.dumps({"name": "vllm-router", "version": "0.1.14"}),
+            "KV_P2P_TRANSFER": "mooncake",
+        },
+    )
+
+    assert agg["router"] == {"name": "vllm-router", "version": "0.1.14"}
+    assert agg["kv_p2p_transfer"] == "mooncake"
+
+
+def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(result_dir, tmp_path / "out")
+
+    assert "router" not in agg
+    assert "kv_p2p_transfer" not in agg
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"name": "lmcache"},
+        {"name": "lmcache", "version": "0.5.1"},
+    ],
+)
+def test_processor_emits_kv_offload_backend_metadata(
+    tmp_path: Path,
+    metadata: dict[str, str],
+):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "KV_OFFLOADING": "dram",
+            "KV_OFFLOAD_BACKEND": "lmcache",
+            "KV_OFFLOAD_BACKEND_METADATA": json.dumps(metadata),
+        },
+    )
+
+    assert agg["kv_offload_backend"] == metadata
 
 
 def test_processor_latency_units_are_seconds(tmp_path: Path):
@@ -431,14 +489,25 @@ def test_processor_derives_interactivity_from_matching_itl_percentile(
 def test_processor_throughput_per_gpu(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir)
-    per_gpu = agg["request_metrics"]["throughput"]["per_gpu"]
-    assert per_gpu["total_tput_tps"] > 0
-    assert per_gpu["input_tput_tps"] > 0
-    assert per_gpu["output_tput_tps"] > 0
-    assert "tput_per_gpu" not in agg
-    assert "input_tput_per_gpu" not in agg
-    assert "output_tput_per_gpu" not in agg
+    agg = _run_processor(
+        result_dir,
+        output_dir,
+        env_overrides={"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"},
+    )
+    throughput = agg["request_metrics"]["throughput"]
+    per_gpu = throughput["per_gpu"]
+    assert agg["pp"] == 2
+    assert agg["dcp_size"] == 2
+    assert agg["pcp_size"] == 2
+    assert per_gpu["total_tput_tps"] == pytest.approx(
+        throughput["total"]["tokens_per_second"] / 16
+    )
+    assert per_gpu["input_tput_tps"] == pytest.approx(
+        throughput["input"]["tokens_per_second"] / 16
+    )
+    assert per_gpu["output_tput_tps"] == pytest.approx(
+        throughput["output"]["tokens_per_second"] / 16
+    )
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
@@ -451,6 +520,88 @@ def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
     )
 
     assert agg["allocated_cpu_dram_gb"] == 2400
+
+
+def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "PREFILL_PP_SIZE": "2",
+            "PREFILL_DCP_SIZE": "2",
+            "PREFILL_PCP_SIZE": "2",
+            "PREFILL_EP": "8",
+            "PREFILL_DP_ATTN": "false",
+            "PREFILL_HARDWARE": "b200",
+            "DECODE_NUM_WORKERS": "2",
+            "DECODE_TP": "8",
+            "DECODE_PP_SIZE": "2",
+            "DECODE_DCP_SIZE": "4",
+            "DECODE_PCP_SIZE": "1",
+            "DECODE_EP": "8",
+            "DECODE_DP_ATTN": "false",
+            "DECODE_HARDWARE": "h100",
+        },
+    )
+
+    assert agg["prefill_hw"] == "b200"
+    assert agg["decode_hw"] == "h100"
+    assert (
+        agg["prefill_pp"],
+        agg["prefill_dcp_size"],
+        agg["prefill_pcp_size"],
+        agg["num_prefill_gpu"],
+    ) == (2, 2, 2, 32)
+    assert (
+        agg["decode_pp"],
+        agg["decode_dcp_size"],
+        agg["decode_pcp_size"],
+        agg["num_decode_gpu"],
+    ) == (2, 4, 1, 32)
+
+
+def test_multinode_processor_omits_homogeneous_hardware(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "DECODE_NUM_WORKERS": "2",
+            "DECODE_TP": "8",
+        },
+    )
+
+    assert "prefill_hw" not in agg
+    assert "decode_hw" not in agg
+
+
+@pytest.mark.parametrize(
+    ("present_var", "missing_var"),
+    [
+        ("PREFILL_HARDWARE", "DECODE_HARDWARE"),
+        ("DECODE_HARDWARE", "PREFILL_HARDWARE"),
+    ],
+)
+def test_multinode_processor_rejects_one_sided_hardware(
+    monkeypatch: pytest.MonkeyPatch,
+    present_var: str,
+    missing_var: str,
+):
+    monkeypatch.setenv("IS_MULTINODE", "true")
+    monkeypatch.setenv(present_var, "b200")
+    monkeypatch.delenv(missing_var, raising=False)
+
+    with pytest.raises(SystemExit, match="must be specified together"):
+        _gpu_shape()
 
 
 def test_processor_surfaces_request_accounting(tmp_path: Path):
@@ -523,6 +674,7 @@ def test_processor_handles_missing_server_metrics(tmp_path: Path):
     server_metrics = agg["server_metrics"]
     assert server_metrics["cache"]["gpu_cache_hit_rate"] is None
     assert server_metrics["kv_cache"]["gpu_total_tokens"] is None
+    assert agg["kv_cache_pool_tokens"] is None
     assert agg["request_metrics"]["cache"]["theoretical_cache_hit_rate"] is None
     # Non-server-derived totals fall back to per-record sums.
     assert server_metrics["tokens"]["prompt_total"] == 100 + 180 + 120 + 200 + 240
@@ -547,6 +699,30 @@ def test_processor_reads_gpu_kv_cache_capacity_from_server_log(tmp_path: Path):
     agg = _run_processor(result_dir, tmp_path / "out")
 
     assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 11_500_000
+    assert agg["kv_cache_pool_tokens"] == 11_500_000
+    _assert_stable_server_metrics_schema(agg)
+
+
+def test_processor_emits_sglang_kv_pool_from_server_log(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    (result_dir / "server.log").write_text(
+        "\n".join(
+            [
+                "[2026-07-08 16:43:35] server_args=ServerArgs(tp_size=4, dp_size=4)",
+                "[2026-07-08 16:49:59 DP0 TP0 EP0] "
+                "max_total_num_tokens=4602880, chunked_prefill_size=4096",
+            ]
+        )
+    )
+
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={"FRAMEWORK": "sglang"},
+    )
+
+    assert agg["server_metrics"]["kv_cache"]["gpu_total_tokens"] == 18_411_520
+    assert agg["kv_cache_pool_tokens"] == 18_411_520
     _assert_stable_server_metrics_schema(agg)
 
 
