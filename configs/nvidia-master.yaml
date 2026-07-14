@@ -6,6 +6,8 @@ kimik2.5-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -377,6 +379,8 @@ kimik2.5-fp4-gb300-dynamo-trt:
   runner: gb300
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -720,6 +724,8 @@ kimik2.5-fp4-gb200-dynamo-vllm:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -842,6 +848,8 @@ kimik2.5-fp4-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260601" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:

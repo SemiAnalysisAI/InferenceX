@@ -1,11 +1,13 @@
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  image: vllm/vllm-openai-rocm:v0.24.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
   precision: fp4
   framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
   multinode: true
   disagg: true
   scenarios:
@@ -23,7 +25,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -44,7 +45,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
