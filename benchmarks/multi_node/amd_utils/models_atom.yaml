@@ -62,6 +62,7 @@ Kimi-K2.5-MXFP4:
   kv_cache_flags: "--kv_cache_dtype fp8"
   mem_frac_static: "0.9"
   max_model_len: "32768"
+  max_num_seqs: "256"
   max_num_batched_tokens: "32768"
 
 MiniMax-M3-MXFP8:
