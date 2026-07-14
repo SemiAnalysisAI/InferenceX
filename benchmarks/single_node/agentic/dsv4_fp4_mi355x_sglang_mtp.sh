@@ -170,16 +170,6 @@ echo "Starting SGLang server for MI355X..."
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-capture_cache_metrics() {
-    {
-        echo "=== SGLang cache metrics snapshot $(date --iso-8601=seconds) ==="
-        curl -fsS "http://localhost:$SGLANG_BACKEND_PORT/metrics" 2>/dev/null \
-            | grep -E '^(sglang:(cache_hit_rate|cached_tokens_total|prompt_tokens_total|hicache_host_used_tokens|hicache_host_total_tokens|token_usage|num_requests_running|num_requests_waiting))' \
-            || true
-        echo "============================================================"
-    } >> "$SERVER_LOG"
-}
-
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
@@ -200,11 +190,6 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
-fi
-
-if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
-    capture_cache_metrics
-    trap capture_cache_metrics EXIT
 fi
 
 # ---- Run benchmark ----------------------------------------------------------
