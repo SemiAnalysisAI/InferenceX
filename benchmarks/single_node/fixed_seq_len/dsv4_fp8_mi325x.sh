@@ -1,36 +1,22 @@
 #!/usr/bin/env bash
+set -eo pipefail
 
-# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via SGLang.
+# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
 #
-# EXTRAPOLATED bring-up recipe (unvalidated on-cluster as of 2026-07),
-# derived per https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro plus:
-#   * same model, adjacent SKU: dsv4_fp4_mi355x_sglang.sh (search-space
-#     shape, DP-attention + EP path, deepseek_v4 model flags, SWA/page-size)
-#   * same SKU, different model: dsr1_fp8_mi325x.sh (gfx942 infra: AITER,
-#     MEC-firmware scratch-reclaim guard)
-#   * same model + framework: dsv4_fp8_h200_sglang.sh — gfx942 has no native
-#     FP4, so the FP4-MoE checkpoint is run in FP8. Like the H200 sglang
-#     recipe (and the MI355X dsv4 sglang recipe), NO --quantization flag is
-#     passed: sglang reads the modelopt quant config from the checkpoint and
-#     the AITER MoE path (SGLANG_USE_AITER=1) executes it. (--quantization
-#     deepseek_v4_fp8 is a vLLM-only method; sglang argparse rejects it.)
+# EXTRAPOLATED bring-up recipe. The sglang path was abandoned: on gfx942
+# (no native FP4) the dsv4 sglang backend's nvfp4 MoE / TileLang-MLA kernels
+# have no gfx942 equivalents (they exist only for gfx950/MI355X). vLLM instead
+# runs the checkpoint in FP8 via --quantization deepseek_v4_fp8, which
+# dequantizes the FP4 MoE experts to FP8 — the same path the H200 dsv4 vLLM
+# recipe uses (H200 is also a no-FP4 SKU). Derived from:
+#   * same model + framework + AMD family: dsv4_fp4_mi355x_vllm.sh (ROCm vLLM
+#     dsv4 structure: AITER MoE, deepseek_v4 tokenizer/parser, mp executor,
+#     FULL_AND_PIECEWISE compile)
+#   * same model, FP8 path: dsv4_fp8_h200.sh (--quantization deepseek_v4_fp8)
+#   * same SKU, different model: minimaxm3_fp8_mi325x.sh (gfx942 vLLM/AITER)
 #
-# Sizing: the ~960GB mixed checkpoint is ~1.05TB in FP8, so only TP8 fits
-# 8x256GB comfortably (TP4 = 1024GB is too tight for ~1.05TB). The config restricts to TP8 accordingly.
-#
-# MoE runner: triton, not the default AITER Composable-Kernel path. The CK
-# fused-MoE kernel (ck_moe_stage1) has no tuned config for DeepSeek-V4's FP8
-# MoE shapes on gfx942 and aborts CUDA-graph capture with "Unsupported kernel
-# config for moe heuristic dispatch"; triton JIT-generates per-shape so it
-# needs no pretuned table. (The MI355X/gfx950 recipe uses the CK default,
-# which does have gfx950 configs.)
-#
-# Debug-runs must confirm before this leaves bring-up:
-#   1. The mi30x image carries the DeepseekV4 model class.
-#   2. The unified-KV triton FlashMLA path captures CUDA graphs cleanly on
-#      gfx942 (the TileLang FP8 MLA kernel does not — see the env note below).
-#   3. The triton MoE runner supports the dsv4 FP8 MoE shapes on gfx942 (the
-#      AITER CK path does not); confirm throughput is acceptable vs CK.
+# The FP4->FP8 dequant roughly doubles the MoE footprint (~1.05 TB total),
+# which fits 8x256 GB comfortably at TP8, so the sweep is TP8-only.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -38,13 +24,12 @@ check_env_vars \
     MODEL \
     TP \
     DP_ATTENTION \
-    EP_SIZE \
     CONC \
     ISL \
     OSL \
+    MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
-    RESULT_FILENAME \
-    MAX_MODEL_LEN
+    RESULT_FILENAME
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -52,89 +37,51 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# If the machine runs a MEC FW older than 177, RCCL cannot reclaim some
-# memory; disable that feature to avoid crashes (see dsr1_fp8_mi325x.sh).
-version=`rocm-smi --showfw | grep MEC | head -n 1 | awk '{print $NF}'`
-if [[ "$version" == "" || $version -lt 177 ]]; then
-  export HSA_NO_SCRATCH_RECLAIM=1
+if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
+    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# gfx942 AITER infra (dsr1_fp8_mi325x.sh, for the MoE GEMMs) + deepseek_v4
-# model env (dsv4_fp4_mi355x_sglang.sh). SGLANG_HACK_FLASHMLA_BACKEND=
-# unified_kv_triton is load-bearing: without it the dsv4 attention backend
-# compiles its FP8 MLA kernel via TileLang, whose InjectSoftwarePipeline pass
-# fails on gfx942 ("buffer access dependency ... cannot be reordered") and
-# kills the server at CUDA-graph capture. The unified-KV triton FlashMLA path
-# avoids that kernel. (SGLANG_AITER_MLA_PERSIST dropped: MLA no longer runs
-# through aiter.)
-export SGLANG_USE_AITER=1
-export SGLANG_USE_ROCM700A=0
-export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
-export SGLANG_DEFAULT_THINKING=1
-export SGLANG_DSV4_REASONING_EFFORT=max
-export AITER_BF16_FP8_MOE_BOUND=0
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
 
 SERVER_LOG=/workspace/server.log
 
-EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-# DP_ATTENTION=true runs DP-attention with expert parallel (dp-size = TP),
-# mirroring dsv4_fp4_mi355x_sglang.sh; false runs pure tensor parallel for
-# the low-latency band.
-PARALLEL_ARGS=(--tensor-parallel-size "$TP")
-CHUNKED_PREFILL_SIZE=$ISL
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "${DP_ATTENTION}" = "true" ]; then
-    export SGLANG_SHARED_EXPERT_TP1=1
-    export SGLANG_DP_SHARED_EXPERT_LOCAL=1
-    export SGLANG_DP_USE_GATHERV=1
-    export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES=5
-
-    CHUNKED_PREFILL_SIZE=$((ISL * TP))
-    PARALLEL_ARGS+=(
-        --dp "$TP"
-        --enable-dp-attention
-        --enable-prefill-delayer
-        --enable-two-batch-overlap
-    )
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
+
+EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
-    PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
+    EP_ARGS=(--enable-expert-parallel)
 fi
 
 set -x
-sglang serve \
-    --model-path $MODEL --served-model-name $MODEL \
-    --host=0.0.0.0 --port $PORT \
+vllm serve $MODEL --port $PORT \
     "${PARALLEL_ARGS[@]}" \
+    "${EP_ARGS[@]}" \
+    --quantization deepseek_v4_fp8 \
+    --async-scheduling \
+    --no-enable-prefix-caching \
+    --distributed-executor-backend mp \
+    --gpu-memory-utilization 0.9 \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --kv-cache-dtype fp8_e4m3 \
-    --attention-backend dsv4 \
-    --moe-runner-backend triton \
-    --disable-radix-cache \
-    --disable-shared-experts-fusion \
-    --page-size 256 \
-    --mem-fraction-static 0.90 \
-    --swa-full-tokens-ratio 0.15 \
-    --cuda-graph-max-bs ${CONC} \
-    --max-running-requests ${CONC} \
-    --context-length $MAX_MODEL_LEN \
-    --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
-    --tool-call-parser deepseekv4 \
-    --reasoning-parser deepseek-v4 \
-    --chat-template "$(dirname "$0")/../chat_templates/deepseek_v4_thinking.jinja" \
-    --watchdog-timeout 1800 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+    --moe-backend aiter \
+    --tokenizer-mode deepseek_v4 \
+    --reasoning-parser deepseek_v4 \
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -147,14 +94,13 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/
+    --result-dir /workspace/ \
+    --trust-remote-code
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x
