@@ -49,6 +49,7 @@ backend:
   connector: null
   prefill_environment:
     NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
@@ -56,6 +57,7 @@ backend:
     VLLM_SERVER_DEV_MODE: "1"
   decode_environment:
     NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
@@ -68,10 +70,10 @@ backend:
       enable-expert-parallel: true
       enable-sleep-mode: true
       enforce-eager: true
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.90
       kv-cache-dtype: "fp8"
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-      max-model-len: 200000
+      max-model-len: 3072
       max-num-batched-tokens: 16384
       max-num-seqs: 16
       no-disable-hybrid-kv-cache-manager: true
@@ -88,10 +90,10 @@ backend:
       compilation-config: '{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","pass_config":{"fuse_allreduce_rms":false}}'
       enable-expert-parallel: true
       enable-sleep-mode: true
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.90
       kv-cache-dtype: "fp8"
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
-      max-model-len: 200000
+      max-model-len: 3072
       max-num-batched-tokens: 16384
       max-num-seqs: 16
       no-disable-hybrid-kv-cache-manager: true
