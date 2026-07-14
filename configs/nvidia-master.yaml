@@ -11486,6 +11486,277 @@ qwen3.5-fp4-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+qwen3.5-fp4-gb300-dynamo-trt:
+  image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: gb300
+  precision: fp4
+  framework: dynamo-trt
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1P1D-DEP2: 1 prefill (TP2/EP2/dp-attn), 17 decode (TP4/EP4/no-dp-attn), conc=68
+      - conc-list: [68]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx1dep2_gen17dep4_mtp0_c68.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 4
+          dp-attn: false
+      # 1P1D-DEP2: 1 prefill (TP2/EP2/dp-attn), 17 decode (TP4/EP1/no-dp-attn), conc=136
+      - conc-list: [136]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx1dep2_gen17dep4_mtp0_c136.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1P1D-DEP2: 1 prefill (TP2/EP2/dp-attn), 17 decode (TP4/EP1/no-dp-attn), conc=272
+      - conc-list: [272]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx1dep2_gen17dep4_mtp0_c272.yaml"
+        decode:
+          num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1P1D: 1 prefill (TP2/EP2/dp-attn), 4 decode (TP16/EP16/no-dp-attn), conc=16
+      - conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx1dep2_gen4dep16_mtp0_c16.yaml"
+        decode:
+          num-worker: 4
+          tp: 16
+          ep: 16
+          dp-attn: false
+      # 1P5D: 1 prefill (TP2/EP2/dp-attn), 5 decode (TP8/EP8/no-dp-attn), conc=640
+      - conc-list: [640]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx1dep2_gen5dep8_mtp0_c640.yaml"
+        decode:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: false
+      # 1P1D: 1 prefill (TP2/EP2/dp-attn), 1 decode (TP16/EP16/dp-attn), conc=1280
+      - conc-list: [1280]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx1dep2_gen1dep16_mtp0_c1280.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 2P3D: 2 prefill (TP2/EP2/dp-attn), 3 decode (TP16/EP16/dp-attn), conc=1536
+      - conc-list: [1536]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx2dep2_gen3dep16_mtp0_c1536.yaml"
+        decode:
+          num-worker: 3
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 5P3D: 5 prefill (TP2/EP2/dp-attn), 3 decode (TP16/EP16/dp-attn), conc=7680
+      - conc-list: [7680]
+        prefill:
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx5dep2_gen3dep16_mtp0_c7680.yaml"
+        decode:
+          num-worker: 3
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 5P7D: 5 prefill (TP2/EP2/dp-attn), 7 decode (TP4/EP4/dp-attn), conc=17920
+      - conc-list: [17920]
+        prefill:
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/1k1k/stp/ctx5dep2_gen7dep4_mtp0_c17920.yaml"
+        decode:
+          num-worker: 7
+          tp: 4
+          ep: 4
+          dp-attn: true
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1P13D: 1 prefill (TP2/EP2/dp-attn), 13 decode (TP4/EP1/no-dp-attn), conc=78
+      - conc-list: [78]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx1dep2_gen13tp4_mtp0_c78.yaml"
+        decode:
+          num-worker: 13
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1P4D: 1 prefill (TP2/EP2/dp-attn), 4 decode (TP16/EP16/no-dp-attn), conc=24
+      - conc-list: [24]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx1dep2_gen4tep16_mtp0_c24.yaml"
+        decode:
+          num-worker: 4
+          tp: 16
+          ep: 16
+          dp-attn: false
+      # 1P8D: 1 prefill (TP2/EP2/dp-attn), 8 decode (TP8/EP8/no-dp-attn), conc=48
+      - conc-list: [48]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx1dep2_gen8tep8_mtp0_c48.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 8
+          dp-attn: false
+      # 2P15D: 2 prefill (TP2/EP2/dp-attn), 15 decode (TP4/EP1/no-dp-attn), conc=180
+      - conc-list: [180]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx2dep2_gen15tp4_mtp0_c180.yaml"
+        decode:
+          num-worker: 15
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 2P9D: 2 prefill (TP2/EP2/dp-attn), 9 decode (TP4/EP1/no-dp-attn), conc=216
+      - conc-list: [216]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx2dep2_gen9tp4_mtp0_c216.yaml"
+        decode:
+          num-worker: 9
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 3P1D: 3 prefill (TP2/EP2/dp-attn), 1 decode (TP4/EP4/dp-attn), conc=1536
+      - conc-list: [1536]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx3dep2_gen1dep4_mtp0_c1536.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+      # 7P12D: 7 prefill (TP2/EP2/dp-attn), 12 decode (TP4/EP4/no-dp-attn), conc=1152
+      - conc-list: [1152]
+        prefill:
+          num-worker: 7
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx7dep2_gen12tep4_mtp0_c1152.yaml"
+        decode:
+          num-worker: 12
+          tp: 4
+          ep: 4
+          dp-attn: false
+      # 8P9D: 8 prefill (TP2/EP2/dp-attn), 9 decode (TP4/EP4/no-dp-attn), conc=1728
+      - conc-list: [1728]
+        prefill:
+          num-worker: 8
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx8dep2_gen9tep4_mtp0_c1728.yaml"
+        decode:
+          num-worker: 9
+          tp: 4
+          ep: 4
+          dp-attn: false
+      # 10P3D: 10 prefill (TP2/EP2/dp-attn), 3 decode (TP8/EP8/dp-attn), conc=4608
+      - conc-list: [4608]
+        prefill:
+          num-worker: 10
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/trtllm/qwen3.5/gb300-fp4/disagg/8k1k/stp/ctx10dep2_gen3dep8_mtp0_c4608.yaml"
+        decode:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 glm5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5.1-NVFP4
