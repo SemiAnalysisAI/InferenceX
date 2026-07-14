@@ -4775,5 +4775,4 @@
     - "One TEP16/TEP16 topology per seq-len (1k1k + 8k1k), conc 1-512; DEP16 is intentionally omitted because its replicated dense layers cannot fit H100 memory"
     - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/disagg-h100-1p1d-tep16-tep16.yaml; H100 remains an unverified upstream bring-up target"
     - "Runner pool: h100-disagg (3 online runners), not the h100-multinode label used by the dsr1-fp8-h100-dynamo-* references — no runner carries that label, so jobs requesting it queue indefinitely"
-    - "Install GNU make when absent from the H100 login-runner image, then use the same upstream make setup ARCH=x86_64 flow as the other srt-slurm launchers"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2196
