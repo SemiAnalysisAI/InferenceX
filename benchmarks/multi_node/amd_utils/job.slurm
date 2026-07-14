@@ -57,30 +57,6 @@ echo "Runfile set: $RUN_FILE"
 # $(pwd) is amd_utils/ (the sbatch submit dir); go up 3 levels to reach the repo root.
 export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
 
-# ── In-tree sglang patches: auto-apply for known-affected images ──────
-# sglang v0.5.12.post1 ships a known-broken MoRI PD-disaggregation
-# backend that crashes hybrid-attention models (GLM-5, Qwen3.5-MoE,
-# anything with state_types: List[StateType]) at startup. We carry an
-# in-tree overlay of mori/conn.py that fixes the wire format + the
-# legacy state_type fallback (see patches/README.md for the bug
-# analysis and patch detail).
-#
-# Auto-applied when the image tag contains "v0.5.12.post1", unless the
-# caller sets MORI_CONN_PATCH=skip. The overlay is appended to
-# ${EXTRA_DOCKER_MOUNTS:-} so callers can still inject other mounts.
-# Dedup guard avoids double-mounting if EXTRA_DOCKER_MOUNTS already
-# contains the target path (docker rejects duplicate destinations).
-_MORI_PATCH_FILE="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/mori_conn.py"
-_MORI_PATCH_TARGET="/sgl-workspace/sglang/python/sglang/srt/disaggregation/mori/conn.py"
-if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
-   && [[ -f "$_MORI_PATCH_FILE" ]] \
-   && [[ "${DOCKER_IMAGE_NAME:-}" == *"v0.5.12.post1"* ]] \
-   && [[ "${EXTRA_DOCKER_MOUNTS:-}" != *"$_MORI_PATCH_TARGET"* ]]; then
-    EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v ${_MORI_PATCH_FILE}:${_MORI_PATCH_TARGET}:ro"
-    export EXTRA_DOCKER_MOUNTS
-    echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
-fi
-
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -338,15 +314,24 @@ export LMCACHE_MP_MQ_TIMEOUT="${LMCACHE_MP_MQ_TIMEOUT:-1200}"
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
-# vLLM external router container
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260511-e667ebb}"
+# vLLM external router container.
+# NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
+# dated tags are garbage-collected (manifest unknown)
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260629-e667ebb}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
 cleanup() {
-  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up..."
+  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
+  # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
+  # client is killed before --rm can fire, so the container (and its GPU/ports/
+  # :30000) leaks and the step never returns. Force-remove THIS job's container
+  # on every allocated node. Scoped to $DOCKER_CONT_NAME so it never touches
+  # other users' containers. (Ported from InferenceY 51ebfa88.)
+  srun --nodelist="$SELECTED_NODELIST_SRUN" \
+    bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }
@@ -386,6 +371,7 @@ DOCKER_ENV_COMMON=(
     -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO
     -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
+    -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
     -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
@@ -446,7 +432,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e UCX_LOG_LEVEL=warn
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
-        -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
@@ -456,10 +441,12 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e DECODE_PORT=${DECODE_PORT:-8020}
         -e ROUTER_PORT=${ROUTER_PORT:-30000}
         -e HANDSHAKE_PORT=${HANDSHAKE_PORT:-6301}
-        -e MEM_FRACTION=${MEM_FRACTION:-0.85}
+        -e MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.85}
         -e KV_CACHE_DTYPE=${KV_CACHE_DTYPE:-fp8}
         -e BLOCK_SIZE=${BLOCK_SIZE:-16}
         -e MAX_NUM_SEQS=${MAX_NUM_SEQS:-256}
+        -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
+        -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
         -e IBDEVICES=${IBDEVICES:-}
     )
@@ -574,6 +561,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
+        --ulimit nofile=1048576:1048576 \
         -v /tmp:/run_logs \
         \"$VLLM_ROUTER_IMAGE\" \
         bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
@@ -614,6 +602,7 @@ fi
     --device=/dev/infiniband/uverbs7 \
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
+    --ulimit nofile=1048576:1048576 \
     --network host \
     --ipc host \
     --group-add video \

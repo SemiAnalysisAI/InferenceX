@@ -14,7 +14,7 @@ set -x
 # NOTE: per-node /raid/models/* would be faster but is only populated on a
 # subset of dgxc nodes today, so we use Lustre for reliability.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-nvfp4-v2"
+    export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
@@ -68,6 +68,10 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+    # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
+    export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"
@@ -109,28 +113,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-        mkdir -p recipes/vllm/minimax-m2.5-b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b200-fp4" recipes/vllm/minimax-m2.5-b200-fp4
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-        mkdir -p recipes/vllm/minimax-m2.5-b200-fp8
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b200-fp8" recipes/vllm/minimax-m2.5-b200-fp8
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
-        git checkout sa-submission-q2-2026
-        mkdir -p recipes/sglang/glm5/b200-fp8
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/b200-fp8" recipes/sglang/glm5/b200-fp8
+        git checkout main
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
+        # Pin srt-slurm: newer commits stopped honoring the hash-pinned dynamo
+        # build and fall back to a dynamo release that is incompatible with this
+        # sglang image (worker fails at import). This is the last commit before
+        # that change. Do not float on main -- the srtctl + dynamo-install
+        # toolchain is unpinned there.
+        git checkout a98738de9b2233459b5456e9ed71af09ce893f92
         mkdir -p recipes/sglang/dsr1/b200-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
     else
@@ -229,6 +224,7 @@ containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   dynamo-vllm: "${SQUASH_FILE}"
+  sglang-v0.5.11-cu130: "${SQUASH_FILE}"
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
@@ -428,7 +424,10 @@ else
     # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
     # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
     # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # Use flock to serialize concurrent imports to the same squash file

@@ -46,6 +46,72 @@ set +x
 export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 
 # =============================================================================
+# MoRI-specific environment
+# =============================================================================
+# Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
+
+export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+export MORI_IO_QP_MAX_SEND_WR=16384
+export MORI_IO_QP_MAX_CQE=32768
+export MORI_IO_QP_MAX_SGE=2
+export MORI_IO_TC_DISABLE=0
+
+# QoS/DSCP configuration
+# Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
+if [[ -n "$MORI_RDMA_TC" ]]; then
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
+elif command -v nicctl &> /dev/null; then
+    ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
+    ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
+$1 == "DSCP" && $2 == ":" && $NF == p {
+    print $3; exit
+}')
+    # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
+    # arithmetic can't choke and unparseable output falls back to hostname detection.
+    ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
+    ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
+
+    if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
+        TC=$(( 4 * ND_DSCP ))
+        export MORI_RDMA_SL=$ND_PRIO
+        export MORI_IO_SL=$ND_PRIO
+        export MORI_RDMA_TC=$TC
+        export MORI_IO_TC=$TC
+        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
+    else
+        echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
+        # Fall back to hostname-based detection
+        NODENAME=$(hostname -s)
+        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+            export MORI_RDMA_TC=96
+            export MORI_IO_TC=96
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        elif [[ $NODENAME == mia1* ]]; then
+            export MORI_RDMA_TC=104
+            export MORI_IO_TC=104
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        else
+            echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
+        fi
+    fi
+else
+    # nicctl not available, try hostname-based detection
+    NODENAME=$(hostname -s)
+    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+        export MORI_RDMA_TC=96
+        export MORI_IO_TC=96
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    elif [[ $NODENAME == mia1* ]]; then
+        export MORI_RDMA_TC=104
+        export MORI_IO_TC=104
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    else
+        echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
+        echo "       This is normal for clusters without QoS or outside Docker containers."
+    fi
+fi
+
+# =============================================================================
 # Engine-specific environment
 # =============================================================================
 
@@ -87,7 +153,11 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 $1 == "DSCP" && $2 == ":" && $NF == p {
     print $3; exit
 }')
-        if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
+        # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
+        # arithmetic can't choke and unparseable output falls back to hostname detection.
+        ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
+        ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
+        if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
             export UCX_IB_TRAFFIC_CLASS=$(( 4 * ND_DSCP ))
             export UCX_IB_SL=$ND_PRIO
             echo "[INFO] Detected QoS from nicctl: UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS, UCX_IB_SL=$UCX_IB_SL"
@@ -120,7 +190,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
 
 else
     # =========================================================================
-    # SGLang/MoRI-specific environment
+    # SGLang-specific environment
     # =========================================================================
 
     export SGLANG_USE_AITER=1
@@ -131,13 +201,6 @@ else
     export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
-    export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
-
-    export MORI_IO_QP_MAX_SEND_WR=16384
-    export MORI_IO_QP_MAX_CQE=32768
-    export MORI_IO_QP_MAX_SGE=4
-
-    export MORI_IO_TC_DISABLE=0
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
@@ -179,55 +242,59 @@ else
     # 1 mirrors router logs to stdout via tee (useful for live debugging).
     export SGLANG_ROUTER_STDOUT_LOGS="${SGLANG_ROUTER_STDOUT_LOGS:-0}"
 
-    # QoS/DSCP configuration
-    # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
-    if [[ -n "$MORI_RDMA_TC" ]]; then
-        echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
-    elif command -v nicctl &> /dev/null; then
-        ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
-        ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
-$1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
-}')
+    # =========================================================================
+    # DeepSeek-V4-Pro PD recipe overrides
+    # Placed at the end of the SGLang env block so it wins over the global
+    # MoRI/SGLang defaults set above. Mirrors the validated DSv4 manual PD
+    # commands (see dsv4_mi355x_sglang_disagg_plan.md §2). Only the SGLang/MoRI
+    # env knobs are pinned here; CLI flags live in models.yaml and the cluster
+    # NIC/socket vars (NCCL_IB_HCA, *_SOCKET_IFNAME, IBDEVICES) stay runner-derived.
+    # =========================================================================
+    if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+        # MoRI dispatch/combine dtypes: auto for both roles (not the fp8 split default)
+        export SGLANG_MORI_DISPATCH_DTYPE=auto
+        export MORI_COMBINE_DTYPE_PREFILL=auto
+        export MORI_COMBINE_DTYPE_DECODE=auto
 
-        if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
-            TC=$(( 4 * ND_DSCP ))
-            export MORI_RDMA_SL=$ND_PRIO
-            export MORI_IO_SL=$ND_PRIO
-            export MORI_RDMA_TC=$TC
-            export MORI_IO_TC=$TC
-            echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
-        else
-            echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
-            # Fall back to hostname-based detection
-            NODENAME=$(hostname -s)
-            if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-                export MORI_RDMA_TC=96
-                export MORI_IO_TC=96
-                echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-            elif [[ $NODENAME == mia1* ]]; then
-                export MORI_RDMA_TC=104
-                export MORI_IO_TC=104
-                echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-            else
-                echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
-            fi
-        fi
-    else
-        # nicctl not available, try hostname-based detection
-        NODENAME=$(hostname -s)
-        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-            export MORI_RDMA_TC=96
-            export MORI_IO_TC=96
-            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
-            export MORI_RDMA_TC=104
-            export MORI_IO_TC=104
-            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        else
-            echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
-            echo "       This is normal for clusters without QoS or outside Docker containers."
-        fi
+        # Per-role MoRI dispatch sizing (used by the harness chunked/MoE math)
+        export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
+        export MORI_MAX_DISPATCH_TOKENS_DECODE=64
+        unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
+        unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
+
+        # PER_RANK dispatch tokens are pinned independently of the sizing above
+        # (16384 prefill / 128 decode in the reference recipe). server_sglang.sh
+        # prefers these over the MORI_MAX_DISPATCH_TOKENS_* coupling when set.
+        export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL=16384
+        export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE=128
+
+        # Fixed inter-kernel switch threshold (not derived). NOTE: the DP+EP path in
+        # server_sglang.sh recomputes this dynamically for the DEP topology.
+        export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=4096
+
+        # Overlap plan stream on for DSv4 (global default is 0)
+        export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
+
+        # DSv4 model kernel routing (mirrors the single-node / manual PD recipe)
+        export SGLANG_DEFAULT_THINKING=1
+        export SGLANG_DSV4_REASONING_EFFORT=max
+        export SGLANG_USE_ROCM700A=0
+        export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
+        export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+        export SGLANG_OPT_USE_FUSED_COMPRESS=true
+        export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
+        export SGLANG_OPT_FP8_WO_A_GEMM=false
+        export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
+        export SGLANG_OPT_USE_TOPK_V2=false
+        export SGLANG_OPT_USE_AITER_INDEXER=true
+        export SGLANG_OPT_USE_TILELANG_INDEXER=false
+        export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
+        export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+        export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
+        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+        export SGLANG_ROCM_USE_MULTI_STREAM=false
+        export AITER_BF16_FP8_MOE_BOUND=0
+        export SGLANG_EAGER_INPUT_NO_COPY=true
     fi
 
     # FIXME: WA for latest upstream 0305 image

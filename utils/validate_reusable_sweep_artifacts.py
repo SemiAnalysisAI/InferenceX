@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
+import re
+import shutil
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 
 def as_bool(value: Any) -> bool:
@@ -57,10 +58,16 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
             as_int(row.get("isl")),
             as_int(row.get("osl")),
             as_int(row.get("prefill_tp")),
+            as_int(row.get("prefill_pp", 1), 1),
+            as_int(row.get("prefill_dcp_size", 1), 1),
+            as_int(row.get("prefill_pcp_size", 1), 1),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),
             as_int(row.get("decode_tp")),
+            as_int(row.get("decode_pp", 1), 1),
+            as_int(row.get("decode_dcp_size", 1), 1),
+            as_int(row.get("decode_pcp_size", 1), 1),
             as_int(row.get("decode_ep", 1)),
             as_bool(row.get("decode_dp_attention", False)),
             as_int(row.get("decode_num_workers", 0)),
@@ -77,6 +84,9 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("isl")),
         as_int(row.get("osl")),
         as_int(row.get("tp")),
+        as_int(row.get("pp", 1), 1),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
@@ -102,8 +112,19 @@ def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
 
 def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build an agentic identity from one point result."""
+    if "kv_offloading" in row:
+        kv_offloading = row.get("kv_offloading") or "none"
+        offload_key: Any = (
+            kv_offloading,
+            (row.get("kv_offload_backend") or "")
+            if kv_offloading != "none"
+            else "",
+        )
+    else:
+        offload_key = row.get("offloading", "none")
+
     if as_bool(row.get("is_multinode", False)):
-        return (
+        key = (
             "multi",
             row.get("hw"),
             row.get("infmax_model_prefix"),
@@ -112,15 +133,24 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
             row.get("spec_decoding", "none"),
             as_bool(row.get("disagg", False)),
             as_int(row.get("prefill_tp")),
+            as_int(row.get("prefill_pp", 1), 1),
+            as_int(row.get("prefill_dcp_size", 1), 1),
+            as_int(row.get("prefill_pcp_size", 1), 1),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),
             as_int(row.get("decode_tp")),
+            as_int(row.get("decode_pp", 1), 1),
+            as_int(row.get("decode_dcp_size", 1), 1),
+            as_int(row.get("decode_pcp_size", 1), 1),
             as_int(row.get("decode_ep", 1)),
             as_bool(row.get("decode_dp_attention", False)),
             as_int(row.get("decode_num_workers", 0)),
             as_int(row.get("conc")),
         )
+        if "kv_offloading" in row or "offloading" in row:
+            return (*key, offload_key)
+        return key
     return (
         "single",
         row.get("hw"),
@@ -128,10 +158,13 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("framework"),
         row.get("precision"),
         as_int(row.get("tp")),
+        as_int(row.get("pp", 1), 1),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
-        row.get("offloading", "none"),
+        offload_key,
     )
 
 
@@ -248,9 +281,7 @@ def validate_agentic_artifacts(
     raw_names = {
         path.name
         for path in artifacts_dir.iterdir()
-        if path.is_dir()
-        and path.name.startswith("agentic_")
-        and path.name != "agentic_aggregated"
+        if path.is_dir() and path.name.startswith("agentic_")
     }
     if point_names != raw_names:
         missing_raw = point_names - raw_names
@@ -259,36 +290,6 @@ def validate_agentic_artifacts(
             errors.append(f"missing raw agentic artifact dir: {name}")
         for name in sorted(extra_raw):
             errors.append(f"unexpected raw agentic artifact dir: {name}")
-
-    aggregate_dir = artifacts_dir / "agentic_aggregated"
-    summary_path = aggregate_dir / "summary.csv"
-    if aggregate_dir.exists():
-        if not summary_path.is_file():
-            errors.append("missing agentic_aggregated/summary.csv")
-        else:
-            with open(summary_path, newline="") as handle:
-                summary_rows = [
-                    str(row.get("exp_name") or "")
-                    for row in csv.DictReader(handle)
-                    if row.get("exp_name")
-                ]
-            duplicate_names = [
-                name
-                for name, count in Counter(summary_rows).items()
-                if count > 1
-            ]
-            for name in sorted(duplicate_names):
-                errors.append(
-                    f"agentic aggregate has duplicate experiment: {name}"
-                )
-            summary_names = set(summary_rows)
-            if summary_names != raw_names:
-                for name in sorted(raw_names - summary_names):
-                    errors.append(f"agentic aggregate is missing experiment: {name}")
-                for name in sorted(summary_names - raw_names):
-                    errors.append(
-                        f"agentic aggregate has unexpected experiment: {name}"
-                    )
 
     return errors
 
@@ -311,10 +312,16 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
             as_int(row.get("isl", 8192), 8192),
             as_int(row.get("osl", 1024), 1024),
             as_int(row.get("prefill_tp")),
+            as_int(row.get("prefill_pp", 1), 1),
+            as_int(row.get("prefill_dcp_size", 1), 1),
+            as_int(row.get("prefill_pcp_size", 1), 1),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),
             as_int(row.get("decode_tp")),
+            as_int(row.get("decode_pp", 1), 1),
+            as_int(row.get("decode_dcp_size", 1), 1),
+            as_int(row.get("decode_pcp_size", 1), 1),
             as_int(row.get("decode_ep", 1)),
             as_bool(row.get("decode_dp_attention", False)),
             as_int(row.get("decode_num_workers", 0)),
@@ -330,6 +337,9 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("isl", 8192), 8192),
         as_int(row.get("osl", 1024), 1024),
         as_int(row.get("tp")),
+        as_int(row.get("pp", 1), 1),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
@@ -445,6 +455,197 @@ def validate_run_stats(artifacts_dir: Path, required: bool) -> list[str]:
     return ["missing run-stats artifact for fixed-sequence benchmarks"]
 
 
+# ── Dedupe reran eval artifacts ───────────────────────────────────────────────
+#
+# A flaky eval retried several times leaves multiple raw ``eval_*`` dirs and
+# multiple ``eval_results_all`` rows for one logical eval identity, which the
+# checks above would otherwise reject. ``dedupe_reran_evals`` collapses those to
+# the latest result per identity (by lm-eval result timestamp) so a legitimate
+# rerun does not fail validation. It only acts on identities that have a clear
+# latest result; genuinely ambiguous duplicates (no result timestamp to order
+# them by) are left in place for validation to reject. Eval-only; fixed-sequence
+# and agentic artifacts are untouched.
+
+# lm-eval result files are ``results_<ISO>.json`` (optionally a ``_concN`` /
+# staging suffix). The timestamp uses dashes throughout, so it is fixed-width
+# and lexicographically sortable.
+_TIMESTAMP_RE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:\.\d+)?")
+
+# Batched result files carry their concurrency as a ``_concN`` suffix (kept in
+# sync with ``collect_eval_results.CONC_SUFFIX_RE``).
+_CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
+
+
+def _result_concurrency(name: str) -> Optional[int]:
+    """Extract a batched eval concurrency from a staged result file name."""
+    match = _CONC_SUFFIX_RE.search(name)
+    return int(match.group(1)) if match else None
+
+
+def _result_timestamp(name: str) -> Optional[str]:
+    """Extract the sortable lm-eval timestamp from a result file name."""
+    match = _TIMESTAMP_RE.search(name)
+    return match.group(0) if match else None
+
+
+def _raw_dir_contributions(
+    artifact_dir: Path,
+) -> tuple[list[tuple[tuple[Any, ...], Optional[int]]], dict[str, Any], bool]:
+    """Return (identity, conc) pairs a raw dir contributes, plus its meta.
+
+    Mirrors ``raw_eval_key_rows``: a batched artifact contributes one identity
+    per ``completed_eval_concs`` entry; a legacy artifact contributes one from
+    its meta. ``conc`` is the batched concurrency (``None`` for legacy).
+    """
+    meta = load_json(artifact_dir / "meta_env.json")
+    if not isinstance(meta, dict):
+        return [], {}, False
+    batched = isinstance(meta.get("eval_concs"), list)
+    if batched:
+        concs = meta.get("completed_eval_concs")
+        if not isinstance(concs, list):
+            return [], meta, True
+        return (
+            [(eval_key({**meta, "conc": conc}), as_int(conc)) for conc in concs],
+            meta,
+            True,
+        )
+    return [(eval_key(meta), None)], meta, False
+
+
+def _eval_winners(artifacts_dir: Path) -> dict[tuple[Any, ...], str]:
+    """Pick the raw dir holding the latest result for each eval identity.
+
+    Ranks only by the lm-eval result timestamp, so an identity appears here
+    only when at least one of its raw dirs carries a real result. Identities
+    with no timestamped result get no winner and are left untouched.
+    """
+    best: dict[tuple[Any, ...], tuple[str, str]] = {}
+    for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
+        contributions, _, batched = _raw_dir_contributions(artifact_dir)
+        if not contributions:
+            continue
+        for path in artifact_dir.glob("results*.json"):
+            stamp = _result_timestamp(path.name)
+            if stamp is None:
+                continue
+            conc = _result_concurrency(path.name)
+            for key, key_conc in contributions:
+                # A batched result file is tagged with its conc; only let it
+                # compete for the matching identity.
+                if batched and conc is not None and key_conc != conc:
+                    continue
+                candidate = (stamp, artifact_dir.name)
+                if best.get(key) is None or candidate > best[key]:
+                    best[key] = candidate
+    return {key: name for key, (_, name) in best.items()}
+
+
+def _dedupe_eval_aggregate(
+    artifacts_dir: Path, winners: dict[tuple[Any, ...], str]
+) -> list[str]:
+    """Keep one aggregate row per winning identity (its winner dir's row)."""
+    eval_dir = artifacts_dir / "eval_results_all"
+    if not eval_dir.is_dir():
+        return []
+    messages: list[str] = []
+    for agg_path in sorted(eval_dir.glob("*.json")):
+        data = load_json(agg_path)
+        if not isinstance(data, list):
+            continue
+        groups: dict[tuple[Any, ...], list[int]] = {}
+        keep: set[int] = set()
+        for idx, row in enumerate(data):
+            if not isinstance(row, dict):
+                keep.add(idx)
+                continue
+            groups.setdefault(eval_key(row), []).append(idx)
+        for key, indices in groups.items():
+            winner = winners.get(key)
+            # Only collapse identities with a clear latest result; leave
+            # ambiguous duplicates for validation to reject.
+            if winner is None or len(indices) == 1:
+                keep.update(indices)
+                continue
+            keep.add(
+                next(
+                    (
+                        idx
+                        for idx in indices
+                        if winner in str(data[idx].get("source") or "")
+                    ),
+                    max(
+                        indices,
+                        key=lambda idx: _result_timestamp(
+                            str(data[idx].get("source") or "")
+                        )
+                        or "",
+                    ),
+                )
+            )
+        if len(keep) != len(data):
+            kept = [row for idx, row in enumerate(data) if idx in keep]
+            agg_path.write_text(json.dumps(kept, indent=2))
+            messages.append(
+                f"{agg_path.name}: kept {len(kept)} of {len(data)} eval row(s)"
+            )
+    return messages
+
+
+def _prune_raw_eval_dir(
+    artifact_dir: Path, winners: dict[tuple[Any, ...], str]
+) -> Optional[str]:
+    """Drop a raw dir's identities that a newer dir supersedes."""
+    contributions, meta, batched = _raw_dir_contributions(artifact_dir)
+    if not contributions:
+        return None
+    name = artifact_dir.name
+
+    def superseded(key: tuple[Any, ...]) -> bool:
+        winner = winners.get(key)
+        return winner is not None and winner != name
+
+    if not batched:
+        if superseded(contributions[0][0]):
+            shutil.rmtree(artifact_dir)
+            return f"removed superseded raw eval dir {name!r}"
+        return None
+
+    losing = {
+        conc for key, conc in contributions if conc is not None and superseded(key)
+    }
+    if not losing:
+        return None
+    for path in artifact_dir.glob("results*.json"):
+        if _result_concurrency(path.name) in losing:
+            path.unlink()
+    remaining = [
+        conc
+        for conc in meta.get("completed_eval_concs", [])
+        if as_int(conc) not in losing
+    ]
+    if not remaining:
+        shutil.rmtree(artifact_dir)
+        return f"removed superseded batched raw eval dir {name!r}"
+    meta["completed_eval_concs"] = remaining
+    (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
+    dropped = ",".join(str(conc) for conc in sorted(losing))
+    return (
+        f"pruned superseded conc(s) {dropped} from batched raw eval dir {name!r}"
+    )
+
+
+def dedupe_reran_evals(artifacts_dir: Path) -> list[str]:
+    """Collapse reran eval duplicates in place; return a change log."""
+    winners = _eval_winners(artifacts_dir)
+    messages = _dedupe_eval_aggregate(artifacts_dir, winners)
+    for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
+        message = _prune_raw_eval_dir(artifact_dir, winners)
+        if message:
+            messages.append(message)
+    return messages
+
+
 def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser()
@@ -455,6 +656,14 @@ def main() -> int:
         raise ValueError(
             f"artifacts directory does not exist: {args.artifacts_dir}"
         )
+
+    # Collapse reran (flaky) eval duplicates to the latest result before
+    # validating, so a legitimate rerun does not fail the consistency checks.
+    dedupe_messages = dedupe_reran_evals(args.artifacts_dir)
+    if dedupe_messages:
+        print("Collapsed reran eval duplicates (kept latest result per identity):")
+        for message in dedupe_messages:
+            print(f"  {message}")
 
     fixed_rows = actual_benchmark_key_rows(args.artifacts_dir)
     agentic_rows = agentic_keys_from_paths(
