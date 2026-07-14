@@ -58,10 +58,16 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
             as_int(row.get("isl")),
             as_int(row.get("osl")),
             as_int(row.get("prefill_tp")),
+            as_int(row.get("prefill_pp", 1), 1),
+            as_int(row.get("prefill_dcp_size", 1), 1),
+            as_int(row.get("prefill_pcp_size", 1), 1),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),
             as_int(row.get("decode_tp")),
+            as_int(row.get("decode_pp", 1), 1),
+            as_int(row.get("decode_dcp_size", 1), 1),
+            as_int(row.get("decode_pcp_size", 1), 1),
             as_int(row.get("decode_ep", 1)),
             as_bool(row.get("decode_dp_attention", False)),
             as_int(row.get("decode_num_workers", 0)),
@@ -78,6 +84,9 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("isl")),
         as_int(row.get("osl")),
         as_int(row.get("tp")),
+        as_int(row.get("pp", 1), 1),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
@@ -103,8 +112,19 @@ def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
 
 def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build an agentic identity from one point result."""
+    if "kv_offloading" in row:
+        kv_offloading = row.get("kv_offloading") or "none"
+        offload_key: Any = (
+            kv_offloading,
+            (row.get("kv_offload_backend") or "")
+            if kv_offloading != "none"
+            else "",
+        )
+    else:
+        offload_key = row.get("offloading", "none")
+
     if as_bool(row.get("is_multinode", False)):
-        return (
+        key = (
             "multi",
             row.get("hw"),
             row.get("infmax_model_prefix"),
@@ -113,15 +133,24 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
             row.get("spec_decoding", "none"),
             as_bool(row.get("disagg", False)),
             as_int(row.get("prefill_tp")),
+            as_int(row.get("prefill_pp", 1), 1),
+            as_int(row.get("prefill_dcp_size", 1), 1),
+            as_int(row.get("prefill_pcp_size", 1), 1),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),
             as_int(row.get("decode_tp")),
+            as_int(row.get("decode_pp", 1), 1),
+            as_int(row.get("decode_dcp_size", 1), 1),
+            as_int(row.get("decode_pcp_size", 1), 1),
             as_int(row.get("decode_ep", 1)),
             as_bool(row.get("decode_dp_attention", False)),
             as_int(row.get("decode_num_workers", 0)),
             as_int(row.get("conc")),
         )
+        if "kv_offloading" in row or "offloading" in row:
+            return (*key, offload_key)
+        return key
     return (
         "single",
         row.get("hw"),
@@ -129,10 +158,13 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("framework"),
         row.get("precision"),
         as_int(row.get("tp")),
+        as_int(row.get("pp", 1), 1),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
-        row.get("offloading", "none"),
+        offload_key,
     )
 
 
@@ -280,10 +312,16 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
             as_int(row.get("isl", 8192), 8192),
             as_int(row.get("osl", 1024), 1024),
             as_int(row.get("prefill_tp")),
+            as_int(row.get("prefill_pp", 1), 1),
+            as_int(row.get("prefill_dcp_size", 1), 1),
+            as_int(row.get("prefill_pcp_size", 1), 1),
             as_int(row.get("prefill_ep", 1)),
             as_bool(row.get("prefill_dp_attention", False)),
             as_int(row.get("prefill_num_workers", 0)),
             as_int(row.get("decode_tp")),
+            as_int(row.get("decode_pp", 1), 1),
+            as_int(row.get("decode_dcp_size", 1), 1),
+            as_int(row.get("decode_pcp_size", 1), 1),
             as_int(row.get("decode_ep", 1)),
             as_bool(row.get("decode_dp_attention", False)),
             as_int(row.get("decode_num_workers", 0)),
@@ -299,6 +337,9 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("isl", 8192), 8192),
         as_int(row.get("osl", 1024), 1024),
         as_int(row.get("tp")),
+        as_int(row.get("pp", 1), 1),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
