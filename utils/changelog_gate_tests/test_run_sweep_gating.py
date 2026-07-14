@@ -2,10 +2,10 @@
 
 The simulation jobs in `.github/workflows/test-changelog-gate.yml` hand-copy
 two of the gating `if` conditions and exercise two scenarios. This test parses
-the real `check-changelog` -> `reuse-sweep-gate` -> `setup` conditions out of
-`run-sweep.yml` and evaluates them with a minimal GitHub Actions expression
-engine, so it cannot drift from production and it covers every distinct
-skip/run decision.
+the real `check-changelog` -> `reuse-sweep-gate` / `classify-priority` ->
+`setup` conditions out of `run-sweep.yml` and evaluates them with a minimal
+GitHub Actions expression engine, so it cannot drift from production and covers
+every distinct skip/run decision.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ _WF = yaml.load(
 )
 CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
+CLASSIFY_IF = _WF["jobs"]["classify-priority"]["if"]
 SETUP_IF = _WF["jobs"]["setup"]["if"]
 PR_TYPES = set(_WF["on"]["pull_request"]["types"])
 
@@ -187,7 +188,7 @@ def _eval(expr: str, ctx: dict) -> bool:
 
 
 # --------------------------------------------------------------------------
-# DAG evaluation: check-changelog -> reuse-sweep-gate -> setup
+# DAG evaluation: check-changelog -> reuse-sweep-gate / classify-priority -> setup
 # --------------------------------------------------------------------------
 def _ctx(sc: dict) -> dict:
     return {
@@ -222,6 +223,9 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
         skip = "true" if sc.get("reuse_auth") else ""
     ctx["needs.reuse-sweep-gate.result"] = gate_result
     ctx["needs.reuse-sweep-gate.outputs.skip-pr-sweep"] = skip
+
+    classify_result = "success" if _eval(CLASSIFY_IF, ctx) else "skipped"
+    ctx["needs.classify-priority.result"] = classify_result
 
     setup = "RUN" if _eval(SETUP_IF, ctx) else "SKIP"
     return check_result, gate_result, setup
