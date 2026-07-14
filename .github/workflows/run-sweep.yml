@@ -338,7 +338,7 @@ jobs:
             pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc[0] }}
+            conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: false
@@ -577,7 +577,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            conc: ${{ matrix.config.conc }}
+            conc: ${{ matrix.config.conc[0] }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
