@@ -4781,3 +4781,16 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-lmcache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add LMCache 0.5.1 DRAM KV-offload config (kv-offload-backend: lmcache) as a standalone section alongside the Mooncake parent (B300 section deferred)"
+    - "Image inferactinc/public:sprint-agentx-fast-x86_64-cu13.0.1-6a1e7bf for the LMCache section (parent stays on v0.23.0)"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB after full-budget pinned pools OOM-killed nodes in bring-up"
+    - "Adopt a tuned DeepSeek-V4 serving recipe for the LMCache arm (AMXF4 Mega-MoE, FULL_DECODE_ONLY cudagraphs, sparse MLA with prefill query quantization, NUMA binding, v2 model runner + rust frontend; fastsafetensors on EP points only — non-EP ranks OOM staging full expert weights; no cumem allocator — cuMem/VMM memory cannot be CUDA-IPC-shared with the LMCache server)"
+    - "The image ships the vLLM PR #45406 scheduler fix for async KV loads, so no engine patch is applied"
+    - "LMCache points mirror the Mooncake offload points: B200 TP8 conc 8-16, TP8-DEP8 conc 16-68"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2153

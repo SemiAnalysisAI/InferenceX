@@ -1791,6 +1791,26 @@ dsv4-fp4-b200-vllm-agentic:
       # Retain the external-cache transition and peak-throughput region.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 38, 44, 56, 64, 66, 68], router: { name: vllm-router, version: "0.1.14" } }
 
+# LMCache CPU-offload arm of dsv4-fp4-b200-vllm-agentic, split into its own
+# config so it can be triggered/tested independently of the Mooncake curve.
+# Points mirror the Mooncake offload points; the GPU-cache (kv-offloading:
+# none) baselines live in the parent config only. Runs a tuned vLLM build
+# while the parent stays on the stock v0.23.0 image.
+dsv4-fp4-b200-vllm-agentic-lmcache:
+  image: inferactinc/public:sprint-agentx-fast-x86_64-cu13.0.1-6a1e7bf
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [16, 38, 44, 56, 64, 66, 68] }
+
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
