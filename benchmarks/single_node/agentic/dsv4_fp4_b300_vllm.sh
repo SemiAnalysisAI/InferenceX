@@ -70,7 +70,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
 fi
 
 # Match the environment used by v4pro-b300.yaml.
-export PYTORCH_ALLOC_CONF=expandable_segments:True
 export VLLM_USE_V2_MODEL_RUNNER=1
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
@@ -183,6 +182,15 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
 
+TP_ARGS=()
+if [ "$DP_ATTENTION" = "true" ]; then
+    export PYTORCH_ALLOC_CONF=expandable_segments:True
+else
+    export VLLM_ALLREDUCE_USE_FLASHINFER=1
+    export VLLM_FLASHINFER_ALLREDUCE_BACKEND=auto
+    TP_ARGS+=(--disable-custom-all-reduce)
+fi
+
 MODE_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     MODE_ARGS+=(
@@ -240,6 +248,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4
     --compilation-config "$COMPILATION_CONFIG"
     "${PARALLEL_ARGS[@]}"
+    "${TP_ARGS[@]}"
     "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )

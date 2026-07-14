@@ -1738,7 +1738,7 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
-  
+
 
 - config-keys:
     - dsv4-fp8-h200-vllm
@@ -1860,7 +1860,7 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
     - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
-  
+
 
 - config-keys:
     - dsv4-fp4-b200-sglang
@@ -1882,7 +1882,7 @@
   description:
     - "Update GPTOSS-120B FP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1195
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-vllm
@@ -1990,7 +1990,7 @@
     - "Add conc=8192 recipe for 1k1k: deepep mega_moe backend with cuda-graph-max-bs 1088, max-running-requests 8192, mem-fraction-static 0.80, swa-full-tokens-ratio 0.3, tokenizer-worker-num 16"
     - "conc=8192 enables SGLANG_OPT_USE_ONLINE_COMPRESS=1 and --stream-interval 30"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1209
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-vllm
@@ -2033,7 +2033,7 @@
 - config-keys:
     - qwen3.5-fp8-b200-sglang
   description:
-    - updated sglang container image 
+    - updated sglang container image
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1027
 
 - config-keys:
@@ -2480,7 +2480,7 @@
     - dsv4-fp4-mi355x-atom
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM benchmark config; bump image to rocm/atom-dev:nightly_202605101539, expand concurrency range (conc 4–1024), and simplify runtime script"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311  
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1311
 
 - config-keys:
     - glm5-fp8-mi355x-sglang
@@ -2515,7 +2515,7 @@
     - "Improves tput/GPU by up to +31% at low concurrency (tp=4, isl=1024, c=4-16)"
     - "Ref ATOM upstream benchmark run https://github.com/ROCm/ATOM/actions/runs/25686894636"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1387
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-vllm-mtp
@@ -3223,7 +3223,7 @@
     - "Remove --deepep-config and SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK (unused by megamoe/StandardDispatcher)"
     - "Fix CONC=512 yaml ep from 4 to 1 (flashinfer_mxfp4 does not set ep=tp)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1506
-  
+
 
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
@@ -3562,7 +3562,7 @@
     - "Add models_atom.yaml: per-model configs for ATOM engine"
     - "Add atom-disagg sweep: 2P1D DPA+TP8 (conc 256-2048) and 1P1D TP8 (conc 4-256) at isl=8192/osl=1024"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-trt
@@ -3593,7 +3593,7 @@
     - "Refresh the script's env vars. The main branch introduced several env var renames and new default settings, so we refreshed the env vars in the script accordingly."
     - "Enable the unified KV attention kernel. Set export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton for better performance."
     - "Specify the prefill delay explicitly. Set --prefill-delayer-max-delay-ms 5000 to define a concrete prefill delay, allowing DP to batch more requests together per execution."
-  pr-link: 
+  pr-link:
     https://github.com/SemiAnalysisAI/InferenceX/pull/1701
 
 - config-keys:
@@ -3627,7 +3627,7 @@
     - "Fix the intermediate_pad setting in the MoE computation in sglang PR#27858. This avoids the unnecessary overhead of computing useless padding."
     - "Correct the chunk prefill setting size under tp8/dp8 config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1715
-  
+
 
 - config-keys:
     - dsv4-fp4-gb200-dynamo-sglang
@@ -3837,7 +3837,7 @@
     - "Switch fixed-seq-len search space from TP8 to TP4 for both isl=1024 and isl=8192 scenarios"
     - "Expand isl=8192 coverage: add TP4 dp-attn sweep (conc 32–2048) and TP4 TP-only sweep (conc 1–32)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
-  
+
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-trt
@@ -3909,7 +3909,7 @@
   description:
     - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
-  
+
 - config-keys:
     - dsr1-fp8-gb300-dynamo-trt
   description:
@@ -3925,7 +3925,7 @@
     - "Add day-zero MiniMax-M3 MXFP4 (amd/MiniMax-M3-MXFP4) single-node atom benchmark on MI355X, following the ROCm/ATOM MiniMax-M3 recipe (TP4, block size 128 for MSA, default KV cache dtype)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1813
 
-  
+
 - config-keys:
     - glm5-fp4-gb300-dynamo-trt
   description:
@@ -3934,7 +3934,7 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026 (gb300_nvfp4 STP recipes)"
     - "Runner script launch_gb300-nv.sh: added dynamo-trt-specific glm5-fp4 case with SERVED_MODEL_NAME and SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1798
-  
+
 - config-keys:
     - dsv4-fp4-mi355x-atom
   description:
@@ -3942,7 +3942,7 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
-  
+
 - config-keys:
     - dsv4-fp4-mi355x-atom
   description:
@@ -4195,7 +4195,7 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85"
     - "8 topologies: low-latency 1p1d-tp8-tp8 + 1p6d-dep8-tp8; mid-curve 1p1d through 6p1d-dep8-dep16."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1676
-  
+
 - config-keys:
     - minimaxm3-fp8-b300-dynamo-vllm
   description:
@@ -4217,7 +4217,7 @@
     - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
     - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1865
-  
+
 - config-keys:
     - minimaxm3-fp8-mi355x-vllm-disagg
   description:
@@ -4238,7 +4238,7 @@
     - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
     - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1927
-  
+
 - config-keys:
     - dsv4-fp4-b200-dynamo-vllm
   description:
@@ -4697,7 +4697,7 @@
     - "Update SGLang image from lmsysorg/sglang:v0.5.13-cu130 to lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
     - "Enable SGLANG_ENABLE_UNIFIED_RADIX_TREE=1 unconditionally (previously hicache-only) and SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1 to free out-of-window SWA KV slots during chunked prefill, relieving SWA pool pressure and restoring prefix-cache hit rate on multi-turn agentic workloads"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2112
-  
+
 - config-keys:
     - dsv4-fp4-gb200-llmd-vllm
   description:
@@ -4716,7 +4716,7 @@
     - "Image: lmsysorg/sglang:v0.5.11-cu130"
     - "11 topologies across 1k/1k and 8k/1k (prefill TP4 + decode wide-EP: 8k/1k DEP16/24/32/40, 1k/1k DEP48/56; per-node TP4 low-latency); MTP flags: speculative-algorithm EAGLE, num-steps 2, eagle-topk 1, num-draft-tokens 3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1907
-  
+
 - config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
@@ -4790,4 +4790,4 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B200: GPU-resident TP8 at conc [1,2,4,6,8] and SimpleCPU-offload TP8 at conc [8,12,16]; DEP8 at conc [8,16,24,32,40,48,56,64,68,72] with both SimpleCPU and Mooncake 0.3.11.post1."
     - "B300: GPU-resident TP4 at conc [1,2,4,6,8,16]; DEP4 at conc [8,16,24,32,40,48,56,64,72] with both SimpleCPU and Mooncake 0.3.11.post1."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2188
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2202
