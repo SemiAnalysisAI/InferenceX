@@ -1,0 +1,121 @@
+name: "disagg-h100-1p1d-tp16-tp16"
+
+# DeepSeek-V4-Pro FP8 H100 disaggregated SGLang, low-latency topology.
+#
+# BRING-UP scaffold (unvalidated on-cluster as of 2026-07). H100 (sm90) has
+# no FP4 path, so this runs FP8 on the same deepseek-v4-hopper image the H200
+# single-node dsv4 sglang recipe uses. DeepSeek-V4-Pro FP8 weights (~671B)
+# do not fit 8xH100 (640GB), so both prefill and decode workers span 2 nodes
+# at TP16 (1280GB), matching the dsr1-fp8-h100-dynamo-sglang topology. Cross-
+# node KV uses NIXL (no NVLink fabric across H100 nodes), unlike the GB200
+# mooncake/MNNVL recipes.
+#
+# Topology: 1 prefill (TP16, 2 nodes) + 1 decode (TP16, 2 nodes) = 4 nodes.
+# STP only; a conservative low-concurrency first sweep. Server flags mirror
+# the H200 dsv4 sglang recipe (marlin FP8 MoE, TP-only, radix cache off).
+#
+# Open questions for the debug-runs cluster loop before this leaves bring-up:
+#   1. FP8 KV + marlin MoE headroom for TP16 on H100 (mem-fraction-static).
+#   2. NIXL prefill/decode handshake on the h100-multinode pool.
+#   3. Whether higher-throughput DEP topologies fit once low-latency is green.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:deepseek-v4-hopper@sha256:1bf5d508ab110cc0fe1659a5f21d1be02a7f0d7ca8f58cea7e7f4e11f6ae208f"
+  precision: "fp8"
+
+dynamo:
+  install: true
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  prefill_nodes: 2
+  prefill_workers: 1
+  gpus_per_prefill: 16
+  decode_nodes: 2
+  decode_workers: 1
+  gpus_per_decode: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+
+  decode_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      disable-radix-cache: true
+
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: nixl
+
+      tensor-parallel-size: 16
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "marlin"
+      disable-flashinfer-autotune: true
+      kv-cache-dtype: "fp8_e4m3"
+
+      mem-fraction-static: 0.85
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+      chunked-prefill-size: 4096
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      disable-radix-cache: true
+
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: nixl
+
+      tensor-parallel-size: 16
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "marlin"
+      disable-flashinfer-autotune: true
+      kv-cache-dtype: "fp8_e4m3"
+
+      mem-fraction-static: 0.85
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+      swa-full-tokens-ratio: 0.5
+      context-length: 3072
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "1x2x4x8x16x32x64"
+  req_rate: "inf"
+  use_chat_template: false

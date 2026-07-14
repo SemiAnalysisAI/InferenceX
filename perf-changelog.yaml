@@ -4750,3 +4750,11 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - dsv4-fp8-h100-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP8 H100 disaggregated multinode SGLang benchmark via Dynamo (new SKU, previously no dsv4 data on H100)"
+    - "H100 (sm90) has no FP4 path, so this runs FP8 on the deepseek-v4-hopper image (shared with the H200 single-node dsv4 sglang recipe); ~671B FP8 weights don't fit 8xH100 (640GB) so prefill and decode workers each span 2 nodes at TP16 (matches dsr1-fp8-h100-dynamo-sglang), cross-node KV via NIXL"
+    - "Conservative low-latency 1p1d STP topology (conc 1-64); recipe under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/1k1k/disagg-h100-1p1d-tp16-tp16.yaml"
+  pr-link: TBD
