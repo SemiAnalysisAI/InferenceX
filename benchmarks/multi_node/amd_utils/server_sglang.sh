@@ -896,10 +896,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
                     # embedded newlines; KV_OFFLOAD_BACKEND_METADATA carries
                     # pretty-printed multi-line JSON, which otherwise splits
                     # into unparseable lines (e.g. '"name": "hicache",') and
-                    # aborts the client container launch. Flattening newlines
-                    # keeps the JSON valid (whitespace between tokens is
-                    # insignificant) while collapsing it to a single line.
-                    printf '%s=%s\n' "$_v" "${_val//$'\n'/}"
+                    # aborts the client container launch. Re-serialize it to
+                    # compact single-line JSON (round-tripping through
+                    # json.loads/json.dumps) instead of naively stripping
+                    # newlines, so this stays correct even if a value ever
+                    # contained a literal newline inside a string.
+                    if [[ "$_v" == "KV_OFFLOAD_BACKEND_METADATA" ]]; then
+                        _val="$(python3 -c 'import json, sys
+print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
+                            echo "KV_OFFLOAD_BACKEND_METADATA must contain valid JSON" >&2
+                            exit 1
+                        }
+                    fi
+                    printf '%s=%s\n' "$_v" "$_val"
                 fi
             done
             echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
