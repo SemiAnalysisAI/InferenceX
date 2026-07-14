@@ -13,8 +13,8 @@
 # AITER page-16 sparse PA now supports speculative decode (vllm-project/vllm#47984,
 # on top of #47287) — this recipe mirrors the non-MTP minimaxm3_fp8_mi355x.sh
 # and enables the same high-concurrency fast path (shuffled KV-cache layout for
-# sparse PA + emulation dense-linear) only for 8k1k conc>=64, falling back to the
-# native Triton path elsewhere. The pinned nightly natively implements
+# sparse PA + emulation dense-linear) only for 8k1k conc>=128, falling back to
+# the native Triton path elsewhere. The pinned nightly natively implements
 # SupportsEagle3, so no in-place model patch is needed.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -83,10 +83,12 @@ export VLLM_ROCM_USE_AITER=1
 # concurrency and adds overhead at short context (1k1k) or low batch. Enable the
 # high-conc fast path (shuffled KV-cache layout for sparse PA + emulation
 # dense-linear + the quick all-reduce tuning knobs) only for isl>=8192 &&
-# conc>=64; everywhere else fall back to the native Triton path. Overridable via
-# MM3_HIGH_CONC_FASTPATH=0/1.
+# conc>=128; everywhere else fall back to the native Triton path. The MTP
+# crossover is one step higher than the non-MTP recipe's conc>=64: an on-box A/B
+# on gfx950 measured sparse PA at -1.5% at MTP conc64 but +3.4% / +3.4% / +6.4%
+# at conc 128/256/512. Overridable via MM3_HIGH_CONC_FASTPATH=0/1.
 if [ -z "${MM3_HIGH_CONC_FASTPATH:-}" ]; then
-    if [ "$ISL" -ge 8192 ] && [ "$CONC" -ge 64 ]; then
+    if [ "$ISL" -ge 8192 ] && [ "$CONC" -ge 128 ]; then
         MM3_HIGH_CONC_FASTPATH=1
     else
         MM3_HIGH_CONC_FASTPATH=0
