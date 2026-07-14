@@ -18,12 +18,19 @@
 # Sizing: the ~960GB mixed checkpoint is ~1.05TB in FP8, so only TP8 fits
 # 8x192GB (TP4 = 768GB does not). The config restricts to TP8 accordingly.
 #
+# MoE runner: triton, not the default AITER Composable-Kernel path. The CK
+# fused-MoE kernel (ck_moe_stage1) has no tuned config for DeepSeek-V4's FP8
+# MoE shapes on gfx942 and aborts CUDA-graph capture with "Unsupported kernel
+# config for moe heuristic dispatch"; triton JIT-generates per-shape so it
+# needs no pretuned table. (The MI355X/gfx950 recipe uses the CK default,
+# which does have gfx950 configs.)
+#
 # Debug-runs must confirm before this leaves bring-up:
 #   1. The mi30x image carries the DeepseekV4 model class.
 #   2. The unified-KV triton FlashMLA path captures CUDA graphs cleanly on
 #      gfx942 (the TileLang FP8 MLA kernel does not — see the env note below).
-#   3. The modelopt FP4-MoE checkpoint loads + runs in FP8 via AITER on gfx942
-#      (else pass an explicit valid sglang quant, e.g. --quantization fp8).
+#   3. The triton MoE runner supports the dsv4 FP8 MoE shapes on gfx942 (the
+#      AITER CK path does not); confirm throughput is acceptable vs CK.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -110,6 +117,7 @@ sglang serve \
     --trust-remote-code \
     --kv-cache-dtype fp8_e4m3 \
     --attention-backend dsv4 \
+    --moe-runner-backend triton \
     --disable-radix-cache \
     --disable-shared-experts-fusion \
     --page-size 256 \
