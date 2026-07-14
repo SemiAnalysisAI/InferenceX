@@ -900,8 +900,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
                     # compact single-line JSON (round-tripping through
                     # json.loads/json.dumps) instead of naively stripping
                     # newlines, so this stays correct even if a value ever
-                    # contained a literal newline inside a string.
-                    if [[ "$_v" == "KV_OFFLOAD_BACKEND_METADATA" ]]; then
+                    # contained a literal newline inside a string. Empty/
+                    # "none"/"null" is the normal case when KV offloading is
+                    # disabled (job.slurm always sets this var, even to ""),
+                    # and must pass through untouched -- matching how
+                    # optional_kv_offload_backend_metadata() in
+                    # process_agentic_result.py treats those as "no metadata"
+                    # rather than invalid JSON.
+                    if [[ "$_v" == "KV_OFFLOAD_BACKEND_METADATA" && -n "$_val" && "$_val" != "null" ]]; then
                         _val="$(python3 -c 'import json, sys
 print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                             echo "KV_OFFLOAD_BACKEND_METADATA must contain valid JSON" >&2
