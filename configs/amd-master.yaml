@@ -2224,6 +2224,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
   runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
+  kv-p2p-transfer: mori
   multinode: true
   disagg: true
   scenarios:
@@ -2233,7 +2234,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
       - spec-decoding: "none"
         conc-list: [ 2,4,8,16,32 ]
         kv-offloading: dram
-        kv-offload-backend: hicache
+        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 8
@@ -2259,7 +2260,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
       # - spec-decoding: "none"
       #   conc-list: [ 64, 128 ]
       #   kv-offloading: dram
-      #   kv-offload-backend: hicache
+      #   kv-offload-backend: { name: hicache }
       #   prefill:
       #     num-worker: 1
       #     tp: 8
