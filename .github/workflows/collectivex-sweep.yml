@@ -24,9 +24,9 @@ on:
         type: string
         default: ''
       priority:
-        description: Lower-is-sooner CI priority score
+        description: Higher-is-sooner CI priority score
         type: string
-        default: '5.000'
+        default: '0.000'
 concurrency:
   group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false

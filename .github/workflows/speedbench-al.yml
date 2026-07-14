@@ -15,10 +15,10 @@ on:
         type: string
         default: 'b300'
       priority:
-        description: "Lower-is-sooner CI priority score"
+        description: "Higher-is-sooner CI priority score"
         required: false
         type: string
-        default: '2.250'
+        default: '2.750'
       model:
         description: "HF model id (basename must be in launcher STAGED_MODELS for pre-staged local weights)"
         required: false

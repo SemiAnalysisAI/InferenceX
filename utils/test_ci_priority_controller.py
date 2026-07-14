@@ -47,18 +47,18 @@ def test_assigns_best_compatible_job_to_each_idle_runner():
 
     assert [(update.runner_name, update.assigned_job_id) for update in updates] == [
         ("b200_00", 2),
-        ("h100_00", 3),
+        ("h100_00", 1),
     ]
     assert "ci-priority-p0.700" in updates[0].labels
-    assert "ci-priority-p2.500" in updates[1].labels
+    assert "ci-priority-p5.000" in updates[1].labels
     assert "ci-queue-job-2" in updates[0].labels
-    assert "ci-queue-job-3" in updates[1].labels
+    assert "ci-queue-job-1" in updates[1].labels
 
 
 def test_aging_breaks_starvation_between_nearby_priorities():
     jobs = [
-        job(1, "3.000", "h100", queued_minutes=8 * 60),
-        job(2, "1.500", "h100", queued_minutes=1),
+        job(1, "1.000", "h100", queued_minutes=8 * 60),
+        job(2, "2.500", "h100", queued_minutes=1),
     ]
     runners = [runner(11, "h100_00", "h100")]
 
@@ -70,6 +70,19 @@ def test_aging_breaks_starvation_between_nearby_priorities():
     )
 
     assert updates[0].assigned_job_id == 1
+
+
+def test_core_skip_queue_outranks_any_numeric_priority():
+    jobs = [
+        job(1, "1000000.000", "h100"),
+        job(2, "skip", "h100"),
+    ]
+    runners = [runner(11, "h100_00", "h100")]
+
+    updates = plan_label_updates(jobs, runners, now=NOW)
+
+    assert updates[0].assigned_job_id == 2
+    assert "ci-priority-pskip" in updates[0].labels
 
 
 def test_unused_idle_runner_loses_stale_priority_label():

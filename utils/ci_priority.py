@@ -62,18 +62,18 @@ def calculate_priority(
     policy: dict[str, Any],
     context: PriorityContext = PriorityContext(),
 ) -> Decimal:
-    """Return a lower-is-sooner priority score for one benchmark matrix entry."""
+    """Return a higher-is-sooner priority score for one benchmark matrix entry."""
     override = _label_override(context.labels, policy)
-    minimum = _decimal(policy["minimum-score"])
-    maximum = _decimal(policy["maximum-score"])
     skip_queue = policy["labels"]["skip-queue"]
     if (
         context.skip_queue_authorized
         and skip_queue["name"] in context.labels
     ):
-        return _decimal(skip_queue["score"]).quantize(SCORE_QUANTUM)
+        if skip_queue["score"] != "skip":
+            raise ValueError("Authorized skip_queue priority must use the 'skip' sentinel")
+        return Decimal("Infinity")
     if override is not None:
-        return min(max(override, minimum), maximum).quantize(SCORE_QUANTUM)
+        return override.quantize(SCORE_QUANTUM)
 
     patchwork = policy["labels"]["patchwork"]
     patch_labels = set(patchwork["names"])
@@ -107,11 +107,11 @@ def calculate_priority(
     if context.labels & set(checklist.get("names", [])):
         score += _decimal(checklist.get("adjustment", 0))
 
-    return min(max(score, minimum), maximum).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
+    return score.quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
 
 def format_priority(score: Decimal) -> str:
-    return f"{score:.3f}"
+    return "skip" if score.is_infinite() else f"{score:.3f}"
 
 
 def queue_token(value: dict[str, Any], namespace: str, path: tuple[str, ...]) -> str:

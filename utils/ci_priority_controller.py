@@ -20,7 +20,9 @@ from typing import Any, Iterable
 
 import yaml
 
-PRIORITY_LABEL_RE = re.compile(r"^ci-priority-p(?P<score>[0-9]+(?:\.[0-9]+)?)$")
+PRIORITY_LABEL_RE = re.compile(
+    r"^ci-priority-p(?P<score>skip|-?[0-9]+(?:\.[0-9]+)?)$"
+)
 QUEUE_LABEL_RE = re.compile(r"^ci-queue-(?P<token>[a-zA-Z0-9._-]+)$")
 
 
@@ -35,7 +37,9 @@ def priority_from_labels(labels: Iterable[str]) -> tuple[str, Decimal] | None:
     for label in labels:
         match = PRIORITY_LABEL_RE.fullmatch(label)
         if match:
-            matches.append((label, Decimal(match.group("score"))))
+            raw_score = match.group("score")
+            score = Decimal("Infinity") if raw_score == "skip" else Decimal(raw_score)
+            matches.append((label, score))
     if len(matches) > 1:
         raise ValueError(f"Job has multiple CI priority labels: {[label for label, _ in matches]}")
     return matches[0] if matches else None
@@ -123,7 +127,7 @@ def effective_priority(
         raise ValueError(f"Job {job.id} has no CI priority label")
     _, score = priority
     waited_hours = Decimal(str(max(0.0, (now - job.queued_at).total_seconds()) / 3600))
-    return max(Decimal(0), score - waited_hours * aging_per_hour)
+    return score + waited_hours * aging_per_hour
 
 
 def plan_label_updates(
@@ -149,7 +153,7 @@ def plan_label_updates(
     ]
     eligible_jobs.sort(
         key=lambda job: (
-            effective_priority(job, now=now, aging_per_hour=aging_per_hour),
+            -effective_priority(job, now=now, aging_per_hour=aging_per_hour),
             job.queued_at,
             job.id,
         )

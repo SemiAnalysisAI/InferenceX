@@ -1,54 +1,52 @@
 version: 1
 
-# Lower scores run first. Scores remain human-readable in workflow job labels
-# (for example, ci-priority-p0.750).
-base-score: 5.0
-minimum-score: 0.1
-maximum-score: 999.0
+# Higher scores run first. Scores are uncapped and remain human-readable in
+# workflow job labels (for example, ci-priority-p2.750).
+base-score: 0.0
 
 adjustments:
   event:
-    push: -2.0
-  multi-node: -1.25
-  agentic: -1.0
-  eval-only: 0.5
+    push: 2.0
+  multi-node: 1.25
+  agentic: 1.0
+  eval-only: -0.5
   precision:
-    fp4: -0.75
+    fp4: 0.75
   spec-decoding:
-    mtp: -0.75
-    eagle: -0.75
-    eagle3: -0.75
+    mtp: 0.75
+    eagle: 0.75
+    eagle3: 0.75
   framework-prefix:
-    sglang: -0.5
-    vllm: -0.5
-    dynamo-sglang: -0.5
-    dynamo-vllm: -0.5
+    sglang: 0.5
+    vllm: 0.5
+    dynamo-sglang: 0.5
+    dynamo-vllm: 0.5
   model-prefix:
-    glm5: -0.75
-    glm5.1: -0.75
-    kimik2.5: -0.75
-    dsv4: -0.75
-    minimaxm3: -0.75
-    qwen3.5: -0.75
-    dsr1: -0.75
+    glm5: 0.75
+    glm5.1: 0.75
+    kimik2.5: 0.75
+    dsv4: 0.75
+    minimaxm3: 0.75
+    qwen3.5: 0.75
+    dsr1: 0.75
 
 labels:
   # Repository labels are maintainer-controlled. A matching override wins over
   # every automatic adjustment.
-  override-pattern: '^ci-priority:p(?P<score>[0-9]+(?:\.[0-9]+)?)$'
-  # p0 is reserved for an active skip_queue label whose latest labeling actor
-  # is verified as an active SemiAnalysisAI/Core team member.
+  override-pattern: '^ci-priority:p(?P<score>-?[0-9]+(?:\.[0-9]+)?)$'
+  # pskip is reserved for an active skip_queue label whose latest labeling
+  # actor is verified as an active SemiAnalysisAI/Core team member.
   skip-queue:
     name: skip_queue
-    score: 0.0
+    score: skip
     organization: SemiAnalysisAI
     team-slug: core
   checklist-complete:
     names: [ci-checklist-complete]
-    adjustment: -0.25
+    adjustment: 0.25
   patchwork:
     names: [ci-patchwork, engine-patch]
-    score: 999.0
+    score: -999.0
     waived-by: [ci-patchwork-waived]
 
 scheduler:
