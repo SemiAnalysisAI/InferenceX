@@ -4752,18 +4752,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-agentic-hicache
-  description:
-    - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
-    - "Align launcher env vars and server args with fixed-seq-len sibling (dsv4 attention backend, fp8_e4m3 kv-cache, disable-radix-cache, cuda-graph-max-bs, DP-attention exports, two-batch-overlap)"
-    - "Add SGLang router for DP-attention configs (consistent-hashing, dp-aware, correlation-id routing)"
-    - "Add HiCache KV offloading support"
-    - "Add SGLANG_CMD array pattern with command logging and env-var dump"
-    - "Add capture_cache_metrics for pre/post-benchmark cache stats"
-    - "Sweep conc=48 across TP8 +/- DPA +/- HiCache"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2146
-
-- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
@@ -4777,3 +4765,15 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
+    - "Align launcher env vars and server args with fixed-seq-len sibling (dsv4 attention backend, fp8_e4m3 kv-cache, disable-radix-cache, cuda-graph-max-bs, DP-attention exports, two-batch-overlap)"
+    - "Add SGLang router for DP-attention configs (consistent-hashing, dp-aware, correlation-id routing)"
+    - "Add HiCache KV offloading support"
+    - "Add SGLANG_CMD array pattern with command logging and env-var dump"
+    - "Add capture_cache_metrics for pre/post-benchmark cache stats"
+    - "Sweep conc=48 across TP8 +/- DPA +/- HiCache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2146
