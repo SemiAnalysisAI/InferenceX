@@ -119,6 +119,54 @@ dsr1-fp8-mi325x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# DeepSeek-V4-Pro FP8 single-node on MI300X (gfx942) via SGLang.
+# BRING-UP scaffold (unvalidated on-cluster as of 2026-07): gfx942 has no
+# native FP4, so this runs FP8 (FP8 KV + AITER MoE) rather than the FP4 path
+# used on the MI355X (gfx950) dsv4 entries. TP-only conservative first sweep
+# (conc 4-64), mirroring the sister dsr1-fp8-mi300x-sglang range; the launch
+# script dsv4_fp8_mi300x.sh carries the model-level deepseek_v4 flags. Image
+# reuses the general mi30x sglang build the dsr1 entries use — the debug-runs
+# loop must confirm it carries the DeepseekV4 model class before this merges.
+dsv4-fp8-mi300x-sglang:
+  image: lmsysorg/sglang:v0.5.15-rocm700-mi30x
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi300x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+
+# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via SGLang. Same bring-up
+# recipe as dsv4-fp8-mi300x-sglang; 8x256GB gives more KV headroom than MI300X.
+dsv4-fp8-mi325x-sglang:
+  image: lmsysorg/sglang:v0.5.15-rocm700-mi30x
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi325x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528

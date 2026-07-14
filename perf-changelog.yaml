@@ -4750,3 +4750,19 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
+
+- config-keys:
+    - dsv4-fp8-mi300x-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP8 single-node MI300X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
+    - "gfx942 has no native FP4, so this runs FP8 (FP8 KV + AITER MoE, --attention-backend aiter) rather than the FP4 path used on MI355X/gfx950; model-level deepseek_v4 flags mirror dsv4_fp4_mi355x_sglang.sh, gfx942 infra flags mirror dsr1_fp8_mi300x.sh"
+    - "TP8 conservative first sweep (conc 4-64), matching the sister dsr1-fp8-mi300x-sglang range; image lmsysorg/sglang:v0.5.15-rocm700-mi30x"
+  pr-link: TBD
+
+- config-keys:
+    - dsv4-fp8-mi325x-sglang
+  description:
+    - "Add DeepSeek-V4-Pro FP8 single-node MI325X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
+    - "Same FP8 bring-up recipe as dsv4-fp8-mi300x-sglang; 8x256GB MI325X gives more KV headroom than MI300X"
+    - "TP8 conservative first sweep (conc 4-64); image lmsysorg/sglang:v0.5.15-rocm700-mi30x"
+  pr-link: TBD
