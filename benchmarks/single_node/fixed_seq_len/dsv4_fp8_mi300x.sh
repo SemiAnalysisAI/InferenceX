@@ -54,6 +54,14 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 
+# Cap eval concurrency for gfx942's tight KV. FP8 weights (~131GB/GPU) leave
+# only ~71k tokens of KV on the 192GB MI300X ("Maximum concurrency ... 7.52x"
+# for a 9472-token request). The eval defaults to CONC (128) concurrent
+# requests, which OOM-kills the server mid-gsm8k. Cap to the KV budget; this
+# only affects run_eval (throughput jobs use CONC directly). MI325X (256GB)
+# has the headroom and keeps the default.
+export EVAL_CONCURRENT_REQUESTS=8
+
 SERVER_LOG=/workspace/server.log
 
 if [ "${EVAL_ONLY}" = "true" ]; then
