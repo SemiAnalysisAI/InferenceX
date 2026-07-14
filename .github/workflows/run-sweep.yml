@@ -338,7 +338,7 @@ jobs:
             pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
+            conc: ${{ matrix.config.conc[0] }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: false
