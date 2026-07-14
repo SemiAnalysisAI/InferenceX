@@ -386,7 +386,6 @@ DeepSeek-V4-Pro-AgentX:
       # (32*256) stays a page-size multiple well under that cap.
       chunked_prefill_size: 8192
       context_length: 1048576
-      max_total_tokens: 1048576
   decode:
     mem_fraction_static: 0.85
     prefill_round_robin_balance: true
