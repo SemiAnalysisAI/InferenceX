@@ -29,8 +29,8 @@ def test_combined_high_value_signals_outrank_baseline_job():
         "decode": {"hardware": "b200"},
     }
 
-    assert calculate_priority(high_value, POLICY) == Decimal("5.000")
-    assert calculate_priority(baseline, POLICY) == Decimal("0.000")
+    assert calculate_priority(high_value, POLICY) == Decimal("6.000")
+    assert calculate_priority(baseline, POLICY) == Decimal("1.000")
 
 
 def test_main_branch_jobs_receive_an_automatic_boost():
@@ -40,7 +40,7 @@ def test_main_branch_jobs_receive_an_automatic_boost():
         entry,
         POLICY,
         PriorityContext(event_name="push"),
-    ) == Decimal("2.000")
+    ) == Decimal("3.000")
 
 
 def test_skip_queue_requires_both_label_and_core_authorization():
@@ -50,12 +50,12 @@ def test_skip_queue_requires_both_label_and_core_authorization():
         entry,
         POLICY,
         PriorityContext(labels=frozenset({"skip_queue"})),
-    ) == Decimal("1.250")
+    ) == Decimal("2.250")
     assert calculate_priority(
         entry,
         POLICY,
         PriorityContext(skip_queue_authorized=True),
-    ) == Decimal("1.250")
+    ) == Decimal("2.250")
     assert calculate_priority(
         entry,
         POLICY,
@@ -64,6 +64,7 @@ def test_skip_queue_requires_both_label_and_core_authorization():
             skip_queue_authorized=True,
         ),
     ) == Decimal("Infinity")
+
     annotated = annotate_jobs(
         [entry],
         POLICY,
@@ -82,12 +83,12 @@ def test_patchwork_label_forces_bottom_priority_without_waiver():
         entry,
         POLICY,
         PriorityContext(labels=frozenset({"ci-patchwork"})),
-    ) == Decimal("-999.000")
+    ) == Decimal("0.000")
     assert calculate_priority(
         entry,
         POLICY,
         PriorityContext(labels=frozenset({"ci-patchwork", "ci-patchwork-waived"})),
-    ) > Decimal("-999.000")
+    ) > Decimal("0.000")
 
 
 def test_maintainer_override_wins_and_conflicts_are_rejected():
@@ -108,6 +109,11 @@ def test_maintainer_override_wins_and_conflicts_are_rejected():
         POLICY,
         PriorityContext(labels=frozenset({"ci-priority:p1000000"})),
     ) == Decimal("1000000.000")
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(labels=frozenset({"ci-priority:p-1"})),
+    ) == Decimal("1.000")
     with pytest.raises(ValueError, match="Multiple ci-priority override"):
         calculate_priority(
             entry,
@@ -134,7 +140,7 @@ def test_annotation_only_touches_runnable_matrix_entries():
 
     annotated = annotate_jobs(payload, POLICY)
 
-    assert annotated["single_node"]["1k1k"][0]["priority"] == "2.750"
+    assert annotated["single_node"]["1k1k"][0]["priority"] == "3.750"
     assert len(annotated["single_node"]["1k1k"][0]["queue-token"]) == 20
     assert "priority" not in annotated["changelog_metadata"]
     assert "priority" not in payload["single_node"]["1k1k"][0]

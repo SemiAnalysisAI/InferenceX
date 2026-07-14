@@ -10,7 +10,7 @@ on:
         description: "Higher-is-sooner CI priority score"
         required: false
         type: string
-        default: '0.000'
+        default: '1.000'
       queue-token:
         description: "One-shot queue token generated for this job"
         required: false

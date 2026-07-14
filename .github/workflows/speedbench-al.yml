@@ -18,7 +18,7 @@ on:
         description: "Higher-is-sooner CI priority score"
         required: false
         type: string
-        default: '2.750'
+        default: '3.750'
       model:
         description: "HF model id (basename must be in launcher STAGED_MODELS for pre-staged local weights)"
         required: false

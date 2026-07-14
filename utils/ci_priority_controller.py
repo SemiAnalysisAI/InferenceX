@@ -21,7 +21,7 @@ from typing import Any, Iterable
 import yaml
 
 PRIORITY_LABEL_RE = re.compile(
-    r"^ci-priority-p(?P<score>skip|-?[0-9]+(?:\.[0-9]+)?)$"
+    r"^ci-priority-p(?P<score>skip|[0-9]+(?:\.[0-9]+)?)$"
 )
 QUEUE_LABEL_RE = re.compile(r"^ci-queue-(?P<token>[a-zA-Z0-9._-]+)$")
 
