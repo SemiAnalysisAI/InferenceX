@@ -13151,16 +13151,16 @@ minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1:
           ep: 8
           dp-attn: true
 
-# The TEP4 max-throughput point requires the newer vLLM nightly that fixes this
-# topology, so keep it in a separate config from the curve above.
-minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1-tep4:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-515d6e9
+# Preserve the previously proven max-throughput point exactly, while keeping
+# it separate from the legacy mixed 1k1k/8k1k entry so 1k1k is not rerun.
+minimaxm3-fp4-b300-dynamo-vllm-8k1k-legacy-max-tput:
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260713" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260614" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -13169,14 +13169,14 @@ minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1-tep4:
     - isl: 8192
       osl: 1024
       search-space:
-      - conc-list: [2048]
+      - conc-list: [4096]
         prefill:
-          num-worker: 8
-          tp: 1
-          ep: 1
-          dp-attn: false
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/8k1k/8p2d-tp1-tep4-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp4/8k1k/4p2d-dep2-tep4-8k1k.yaml"
         decode:
           num-worker: 2
           tp: 4
