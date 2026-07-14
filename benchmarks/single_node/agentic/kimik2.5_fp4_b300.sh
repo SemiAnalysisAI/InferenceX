@@ -7,7 +7,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native or KV_OFFLOAD_BACKEND=mooncake.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -59,11 +59,12 @@ OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
     case "$KV_OFFLOAD_BACKEND" in
-    native)
+    vllm-simple)
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
             --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --disable-hybrid-kv-cache-manager
         )
         ;;
     mooncake)
@@ -109,7 +110,7 @@ EOF
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}'
         )
         ;;
-    *) echo "Error: unsupported KV_OFFLOAD_BACKEND value '$KV_OFFLOAD_BACKEND' (expected one of: native, mooncake)" >&2; exit 1 ;;
+    *) echo "Error: unsupported KV_OFFLOAD_BACKEND value '$KV_OFFLOAD_BACKEND' (expected one of: vllm-simple, mooncake)" >&2; exit 1 ;;
     esac
 fi
 
