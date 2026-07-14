@@ -4760,4 +4760,4 @@
     - "Also add the AITER quick all-reduce tuning knobs VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256 (INT6 quick all-reduce unchanged)"
     - "Deliberately do NOT pass the #47269 --hf-overrides use_index_cache/index_topk_freq cross-layer indexer-skip override: it reduces model-architecture FLOPs, which is disallowed by docs/PR_REVIEW_CHECKLIST.md"
     - "Serving flags are otherwise unchanged (--block-size 128, --language-model-only, --moe-backend aiter, --kv-cache-dtype fp8, --attention-backend TRITON_ATTN, minimax_m3 parsers); TP4 conc 1-512 sweep at 1k1k and 8k1k unchanged"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2187
