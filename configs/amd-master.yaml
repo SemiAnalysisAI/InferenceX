@@ -144,7 +144,9 @@ dsv4-fp8-mi300x-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512 }
+      # 8k1k KV fits only ~20x concurrency (9472-token requests), so conc512 is
+      # ~25x oversubscribed -> request timeouts. conc256 is proven green; cap here.
+      - { tp: 8, conc-start: 4, conc-end: 256 }
 
 # MTP variant of dsv4-fp8-mi300x-vllm. Mirrors the base recipe and adds
 # DeepSeek-V4 built-in MTP via --speculative-config (num_speculative_tokens=2),
@@ -167,7 +169,9 @@ dsv4-fp8-mi300x-vllm-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      # 8k1k MTP at conc512 failed (55.8% request failures, KV ~20x oversubscribed);
+      # conc256 passed on both MI300X/MI325X. Cap 8k1k MTP here (1k1k holds at 512).
+      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
