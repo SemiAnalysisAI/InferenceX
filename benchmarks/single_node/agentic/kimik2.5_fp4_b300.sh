@@ -7,7 +7,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-simple.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -42,7 +42,7 @@ mkdir -p "$RESULT_DIR"
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
 
-if require_agentic_kv_offload_backend native; then
+if require_agentic_kv_offload_backend vllm-simple; then
     export VLLM_USE_SIMPLE_KV_OFFLOAD=1
     OFFLOAD_ARGS=(
         --kv_offloading_backend native
