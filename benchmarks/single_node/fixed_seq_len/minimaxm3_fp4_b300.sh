@@ -5,11 +5,9 @@
 # checkpoint. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm PR #46380) is
 # baked into the perf container image.
 #
-# At runtime the recipe swaps the image's FlashInfer for the first pinned
-# nightly containing the upstream SM100 low-M MXFP8 split-K kernel
-# (flashinfer-ai/flashinfer#3847), keeps the upstream #3687 AutoTuner, backports
-# the #3918 non-Tensor guard and #3912 memory-leak follow-up, and reverses #3582
-# to restore the original trtllm-gen KV counter layout.
+# At runtime the recipe swaps the image's FlashInfer for the pinned nightly
+# release and applies the CuTeDSL split-K gemm patch on top, mirroring vLLM
+# commits 82a00090a (nightly install) and 0a16bea6b (patch).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -25,69 +23,40 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# --- FlashInfer nightly + targeted runtime patches --------------------------
-FLASHINFER_VERSION=0.6.15.dev20260710
-FLASHINFER_NIGHTLY_TAG=nightly-v0.6.15-20260710
+# --- FlashInfer nightly + CuTeDSL split-K gemm patch -------------------------
+# Pinned to nightly release nightly-v0.6.14-20260708. The wheels are not yet on
+# the flashinfer.ai/whl/nightly flat index, so install by direct release URL.
+FLASHINFER_VERSION=0.6.14.dev20260708
+FLASHINFER_NIGHTLY_TAG=nightly-v0.6.14-20260708
 FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
+
+# The flashinfer-jit-cache wheel is CUDA-version-specific; derive cuXYZ from
+# the torch build inside the container (e.g. 13.0 -> cu130).
+CUDA_MAJOR_MINOR="cu$(python3 -c 'import torch; print(torch.version.cuda.replace(".", ""))')" \
+    || { echo "Failed to determine CUDA version from torch" >&2; exit 1; }
 
 python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
 
-python3 -m pip install \
+python3 -m pip install --pre \
     "${FLASHINFER_RELEASE_URL}/flashinfer_python-${FLASHINFER_VERSION}-py3-none-any.whl" \
     "${FLASHINFER_RELEASE_URL}/flashinfer_cubin-${FLASHINFER_VERSION}-py3-none-any.whl" \
-    "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+cu130-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
+    "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+${CUDA_MAJOR_MINOR}-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
     || { echo "FlashInfer nightly install failed" >&2; exit 1; }
 
-# The pinned nightly predates flashinfer-ai/flashinfer#3918. Apply only its
-# runtime non-Tensor guard; the upstream test change is not needed here.
-AUTOTUNER_PATCH="$(dirname "$0")/patches/flashinfer-autotuner-non-tensor-guard.patch"
+python -m pip install "nvidia-cutlass-dsl[cu13]>=4.5.2"
+
+# Apply CuTeDSL split-K gemm patch (jiahanc/flashinfer branch cutedsl-splitK,
+# flashinfer/gemm changes only) on top of the pinned nightly. The reinstall
+# above guarantees pristine files, so the patch always applies cleanly.
+FLASHINFER_PATCH="$(dirname "$0")/patches/flashinfer-cutedsl-splitk-gemm.patch"
 if ! command -v patch >/dev/null 2>&1; then
     apt-get update -y && apt-get install -y --no-install-recommends patch \
         || { echo "Failed to install patch(1)" >&2; exit 1; }
 fi
 SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
     || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
-patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_PATCH}" >/dev/null \
-    || { echo "FlashInfer AutoTuner non-Tensor guard patch does not apply" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_PATCH}" \
-    || { echo "FlashInfer AutoTuner non-Tensor guard patch failed" >&2; exit 1; }
-
-# Backport the runtime portion of flashinfer-ai/flashinfer#3912. Caching the
-# packed top-k initializer preserves its identity across tuning calls and avoids
-# retaining a fresh closure in the AutoTuner cache for every invocation.
-AUTOTUNER_MEMORY_PATCH="$(dirname "$0")/patches/flashinfer-pr-3912.patch"
-patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_MEMORY_PATCH}" >/dev/null \
-    || { echo "FlashInfer PR #3912 patch does not apply" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_MEMORY_PATCH}" \
-    || { echo "FlashInfer PR #3912 patch failed" >&2; exit 1; }
-
-# Reverse flashinfer-ai/flashinfer#3582 so trtllm-gen KV counters use the
-# original shared workspace layout.
-ATTN_REVERT_PATCH="$(dirname "$0")/patches/flashinfer-revert-pr-3582.patch"
-patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${ATTN_REVERT_PATCH}" >/dev/null \
-    || { echo "FlashInfer PR #3582 revert patch does not apply" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "${ATTN_REVERT_PATCH}" \
-    || { echo "FlashInfer PR #3582 revert patch failed" >&2; exit 1; }
-
-# flashinfer-jit-cache ships an AOT fmha_gen.so built with the post-#3582 ABI.
-# Remove it and any runtime JIT copy so the patched launcher is rebuilt.
-FMHA_GEN_AOT_DIR="$(python3 -c "from flashinfer.jit import env as e; print(e.FLASHINFER_AOT_DIR)")/fmha_gen"
-FMHA_GEN_JIT_DIR="$(python3 -c "from flashinfer.jit import env as e; print(e.FLASHINFER_JIT_DIR)")/fmha_gen"
-if [[ "${FMHA_GEN_AOT_DIR##*/}" != "fmha_gen" || "${FMHA_GEN_JIT_DIR##*/}" != "fmha_gen" ]]; then
-    echo "Refusing to remove unexpected FlashInfer fmha_gen cache paths" >&2
-    exit 1
-fi
-rm -rf "${FMHA_GEN_AOT_DIR}" "${FMHA_GEN_JIT_DIR}"
-
-# CUDA pip packages keep NVRTC outside /usr/local/cuda. Link only nvrtc.h into
-# the active CUDA toolkit so nvcc does not mix the pip CUDA package's full header
-# tree with /usr/local/cuda headers.
-NVIDIA_CU13_ROOT=$(python3 -c 'import pathlib, site; print(next(pathlib.Path(root) / "nvidia" / "cu13" for root in site.getsitepackages() if (pathlib.Path(root) / "nvidia" / "cu13" / "include" / "nvrtc.h").is_file()))') || { echo "Could not locate the pip-installed CUDA 13 NVRTC package" >&2; exit 1; }
-ln -sfn "${NVIDIA_CU13_ROOT}/include/nvrtc.h" /usr/local/cuda/include/nvrtc.h \
-    || { echo "Failed to link nvrtc.h into /usr/local/cuda/include" >&2; exit 1; }
-export LIBRARY_PATH="${NVIDIA_CU13_ROOT}/lib${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-export LD_LIBRARY_PATH="${NVIDIA_CU13_ROOT}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-
+patch -p1 -d "${SITE_PACKAGES}" < "$FLASHINFER_PATCH" \
+    || { echo "FlashInfer CuTeDSL split-K gemm patch failed" >&2; exit 1; }
 # -----------------------------------------------------------------------------
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
@@ -110,7 +79,7 @@ SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=300
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"

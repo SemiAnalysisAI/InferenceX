@@ -4755,12 +4755,9 @@
     - minimaxm3-fp4-b300-vllm
   description:
     - "Update the vLLM image to nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
-    - "Install FlashInfer 0.6.15.dev20260710"
-    - "Use the upstream SM100 low-M MXFP8 split-K implementation included in FlashInfer 0.6.15"
-    - "Apply the FlashInfer AutoTuner non-Tensor guard fix from PR #3918"
-    - "Apply the FlashInfer PR #3912 AutoTuner memory-leak follow-up via a local runtime patch"
-    - "Revert the FlashInfer PR #3582 trtllm-gen KV counter separation via a local runtime patch"
-    - "Keep the upstream FlashInfer PR #3687 and PR #3745 runtime changes"
+    - "Install FlashInfer 0.6.14.dev20260708"
+    - "Apply the local SM100 low-M MXFP8 split-K patch"
+    - "Set VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=300 to fail GPU hangs faster"
     - "Use the explicit FlashInfer TRT-LLM all-reduce backend override"
     - "Remove MiniMax 1k1k and 8k1k DEP2 points from this performance bisect"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
