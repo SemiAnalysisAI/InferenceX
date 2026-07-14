@@ -4785,14 +4785,12 @@
 - config-keys:
     - dsv4-fp8-h100-dynamo-vllm
   description:
-    - "Add DeepSeek-V4-Pro FP8 H100 disaggregated multinode vLLM benchmark via Dynamo (new SKU, previously no dsv4 data on H100)"
-    - "Follow recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro: vLLM 0.20.0+, native mixed FP4+FP8 checkpoint, FP8 KV cache, block size 256, expert parallelism, Hopper memory settings, and NIXL P/D transfer"
-    - "The checkpoint requires about 960GB VRAM and does not fit 8xH100 (640GB); each prefill/decode worker spans 2 nodes as TP8 x PP2 with EP8, so 1P1D uses 4 H100 nodes total"
-    - "One TP8/PP2/EP8 topology per seq-len (1k1k + 8k1k), conc 1-512; PP2 supplies the extra memory while TP8 preserves the checkpoint's 128-column FP8 quantization-block divisibility"
-    - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/disagg-h100-1p1d-tep8pp2-tep8pp2.yaml; H100 remains an unverified upstream bring-up target"
+    - "Add DeepSeek-V4-Pro FP8 H100 aggregated multinode vLLM benchmark via Dynamo (new SKU, previously no dsv4 data on H100)"
+    - "Native checkpoint is mixed FP4+FP8 (~1TB) and does not fit one 8xH100 node (640GB); vLLM auto-resolves the DSv4 quant config to a Hopper-compatible path (no explicit --quantization), so the only real blocker on H100 is memory, not FP4 support"
+    - "Aggregated Data-Expert-Parallel across 4 H100 nodes (32 GPUs), the recipe's multi_node_dep strategy: tensor-parallel-size 1, data-parallel-size 32, enable-expert-parallel (EP32). Experts shard to ~31GB/GPU and the replicated dense weights (~16GB) leave headroom (~47GB weights/GPU at gpu-memory-utilization 0.90). TP1 also sidesteps the FP8 128-column quantization-block divisibility that blocks TP16"
+    - "Supersedes two failed bring-up topologies: TP8xPP2 disaggregated prefill hung ~300s then EngineCore died (dynamo-disagg + pipeline-parallel + NIXL KV-transfer stall); pure DP16 on 2 nodes OOM'd during model load (dense replicates ~16GB + experts EP16 ~62GB > 80GB). Doubling to DP32/EP32 on 4 nodes is the memory-fitting fix"
+    - "Aggregated mode is signalled by prefill num-worker 1 + decode num-worker 0 (RECIPES.md section 5); the full vLLM serve config lives under backend.vllm_config.aggregated in the recipe. First green shot uses enforce-eager to isolate the memory-fit variable; cudagraphs (FULL_AND_PIECEWISE, custom_ops all) can be enabled once green"
+    - "One DEP32 topology per seq-len (1k1k + 8k1k), conc 1-512; FP8 KV cache, block size 256, max-model-len 2304/9472, PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True"
+    - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/{1k1k,8k1k}/agg-h100-dep32.yaml; setup via NVIDIA srt-slurm's standard vllm-container-deps.sh"
     - "Runner pool: h100-disagg (3 online runners), not the h100-multinode label used by the dsr1-fp8-h100-dynamo-* references — no runner carries that label, so jobs requesting it queue indefinitely"
-    - "Use the existing /mnt/nfs/lustre/models/dsv4-fp8 checkpoint and exclude H100 nodes without healthy pod-network RDMA plus hpc-gpu-1-16, whose mlx5 device numbering differs from the fleet"
-    - "Use NVIDIA srt-slurm's standard vllm-container-deps.sh setup instead of a custom DeepGEMM bootstrap"
-    - "Fix CUDA OOM during model load: at gpu-memory-utilization 0.95 each TP8/PP2 worker hit ~74.6/80GB and failed to allocate the last ~1GB during decode CUDA-graph capture. Lower gpu-memory-utilization to 0.90, add PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True (per the allocator's own fragmentation hint), and set benchmark-appropriate max-model-len (3072 for 1k1k, 9472 for 8k1k) instead of 200000"
-    - "Replace PP2 with pure DP16 + EP16 (the recipe's multi_node_dep strategy): TP8xPP2 disaggregated prefill hung ~300s on the 8k1k prefill then EngineCore died (dynamo-disagg + pipeline-parallel + NIXL KV-transfer stall). Use tensor-parallel-size=1, data-parallel-size=16, expert-parallel across the 2 nodes (16 GPUs) — dynamo assigns a data_parallel_rank per GPU so DP size must equal the GPU count (TP8xDP2 fails 'data_parallel_rank must be in [0,2)'). tp1 also removes the FP8 128-column TP-divisibility issue that pushed the original recipe to PP; matches the GB200 dsv4 dynamo-vLLM DEP pattern (data-parallel-size=gpus, tp1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2196

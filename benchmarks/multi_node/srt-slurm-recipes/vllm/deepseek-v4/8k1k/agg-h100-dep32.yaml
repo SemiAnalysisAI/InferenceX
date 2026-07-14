@@ -1,0 +1,95 @@
+name: "dsv4-vllm-agg-h100-dep32-8k1k"
+
+# DeepSeek-V4-Pro FP8 H100 aggregated multi_node_dep (throughput) recipe.
+# The ~1.1TB FP8 model + tight 80GB H100s: pure DP16 on 2 nodes OOMs (dense
+# weights replicate per DP rank ~16GB + experts EP16 ~62GB > 80GB), and PP
+# across nodes stalls the disagg prefill. Aggregated DP32 + EP32 across 4
+# nodes (32 GPUs) shards experts enough (~31GB/GPU) that the replicated dense
+# (~16GB) leaves headroom (~47GB weights/GPU). TP=1 so nothing is TP-split,
+# avoiding the FP8 128-column block-divisibility limit that blocks TP16.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+  exclude: "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  agg_nodes: 4
+  agg_workers: 1
+  gpus_per_agg: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      block-size: 256
+      tensor-parallel-size: 1
+      data-parallel-size: 32
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      kv-cache-dtype: "fp8"
+      gpu-memory-utilization: 0.90
+      max-model-len: 9472
+      max-num-seqs: 16
+      max-num-batched-tokens: 16384
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      # First green shot: eager to isolate the memory-fit variable (no
+      # graph-capture allocation). Once green, swap for the GB200-proven
+      # compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'.
+      enforce-eager: true
+      reasoning-parser: deepseek_v4
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "1x2x4x8x16x32x64x128x256x512"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:v0.21.0"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.21.0"
