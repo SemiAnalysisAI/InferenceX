@@ -74,7 +74,7 @@ PYEOF
 #   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter and apply
 #                                    the swiglu_limit clamp in the triton
 #                                    MoE fallback path.
-export SGLANG_REASONING_EFFORT=max
+export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_OPT_USE_FUSED_COMPRESS=true
 export SGLANG_OPT_USE_OLD_COMPRESSOR=true
 export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
@@ -85,7 +85,7 @@ export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
 export SGLANG_OPT_USE_AITER_MHC_PRE=true
 export SGLANG_OPT_USE_AITER_MHC_POST=true
-export SGLANG_ENABLE_THINKING=1
+export SGLANG_DEFAULT_THINKING=1
 export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=1
 export SGLANG_TOPK_TRANSFORM_512_TORCH=0
