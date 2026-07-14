@@ -4790,4 +4790,4 @@
     - "1k1k: 9 STP configs spanning 1P1D DEP2+17D TP4 (conc 68/136/272), 1P4D DEP2+4D TEP16 (conc 16), 1P5D DEP2+5D TEP8 (conc 640), 1P1D DEP2+1D DEP16 (conc 1280), 2P3D DEP2+3D DEP16 (conc 1536), 5P3D DEP2+3D DEP16 (conc 7680), 5P7D DEP2+7D DEP4 (conc 17920)."
     - "8k1k: 9 STP configs spanning 1P13D DEP2+13D TP4 (conc 78), 1P4D DEP2+4D TEP16 (conc 24), 1P8D DEP2+8D TEP8 (conc 48), 2P15D DEP2+15D TP4 (conc 180/216), 3P1D DEP2+1D DEP4 (conc 1536), 7P12D DEP2+12D TEP4 (conc 1152), 8P9D DEP2+9D TEP4 (conc 1728), 10P3D DEP2+3D DEP8 (conc 4608)."
     - "Runner: launch_gb300-nv.sh updated to clone NVIDIA/srt-slurm@sa-submission-q2-2026 and overlay local recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/ for the dynamo-trt+qwen3.5+fp4 path."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2206
