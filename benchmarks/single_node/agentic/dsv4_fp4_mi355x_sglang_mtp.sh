@@ -112,7 +112,7 @@ CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 export SGLANG_DEFAULT_THINKING=1
-export SGLANG_DSV4_REASONING_EFFORT=max
+export SGLANG_DSV4_REASONING_EFFORT=high
 # DeepSeek-V4-Pro thinking-on golden AL for three speculative tokens.
 export SGLANG_SIMULATE_ACC_LEN=2.49
 export SGLANG_SIMULATE_ACC_METHOD=match-expected
