@@ -90,6 +90,7 @@ fi
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
+MODEL_PATHS_EXTRA=""
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
     if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
@@ -156,6 +157,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         # NVFP4 path explicit here.
         export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4/"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        MODEL_PATHS_EXTRA='  "deepseek-v4-pro-mxfp4": "/mnt/lustre01/models/DeepSeek-V4-Pro"'
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -434,6 +436,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
+${MODEL_PATHS_EXTRA}
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}

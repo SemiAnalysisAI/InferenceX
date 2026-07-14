@@ -4725,4 +4725,5 @@
     - "Use MessagePack encoding for the Dynamo request plane on frontends and workers"
     - "Reduce the 1P4D TP8 decode GPU memory utilization from 0.9 to 0.85"
     - "Update the vLLM image from v0.20.0-ubuntu2404 to dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
+    - "Use the DeepSeek-V4-Pro MXFP4 checkpoint for the five GB200 STP recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2139
