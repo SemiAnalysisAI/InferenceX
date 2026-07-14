@@ -2002,8 +2002,8 @@ dsv4-fp4-b300-sglang:
   multinode: false
   # Recipes are selected inside benchmarks/single_node/dsv4_fp4_b300_sglang.sh
   # by CONC:
-  #   CONC 1|32:         TP-only, flashinfer_mxfp4
-  #   CONC 512:          DP-attn, flashinfer_mxfp4
+  #   CONC <=32:         TP-only, flashinfer_mxfp4
+  #   CONC 64-512:       DP-attn, flashinfer_mxfp4
   #   CONC 2048-8192:    DP-attn, megamoe
   # ep is implicit in sglang: --moe-a2a-backend megamoe forces ep_size=tp_size,
   # while low-latency leaves ep_size at the default of 1.
@@ -2014,8 +2014,12 @@ dsv4-fp4-b300-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 1, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
+      # Densified mid band: the previous single conc-512 point left the
+      # ~50 tok/s/user frontier region (conc 64-256) unsampled at 1k1k.
+      - { tp: 4, ep: 1, dp-attn: true, conc-start: 64, conc-end: 512 }
+      # Megamoe band extended down to the script's existing 2048/4096 profiles
+      # (previously only 8192 at 1k1k).
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 8192 }
     - isl: 8192
       osl: 1024
       search-space:
