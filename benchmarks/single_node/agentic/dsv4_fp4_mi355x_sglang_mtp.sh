@@ -111,12 +111,13 @@ MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
+# Simulated acceptance-length (AL) settings.
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=high
-# DeepSeek-V4-Pro thinking-on golden AL for three speculative tokens.
 export SGLANG_SIMULATE_ACC_LEN=2.49
 export SGLANG_SIMULATE_ACC_METHOD=match-expected
 export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
