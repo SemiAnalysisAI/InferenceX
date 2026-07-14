@@ -68,6 +68,7 @@ def sample_multinode_config():
             "runner": "gb200",
             "multinode": True,
             "disagg": True,
+            "kv-p2p-transfer": "nixl",
             "scenarios": {
                 "fixed-seq-len": [
 
@@ -1999,7 +2000,7 @@ class TestGenerateTestConfigSweep:
                                     "tp": 8,
                                     "ep": 1,
                                     "kv-offloading": "dram",
-                                    "kv-offload-backend": "hicache",
+                                    "kv-offload-backend": {"name": "hicache"},
                                     "conc-list": [64],
                                 }
                             ],
@@ -2041,7 +2042,7 @@ class TestGenerateTestConfigSweep:
                             {
                                 "tp": 4,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                             {
@@ -2049,7 +2050,7 @@ class TestGenerateTestConfigSweep:
                                 "dcp-size": 2,
                                 "pcp-size": 1,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                             {
@@ -2057,14 +2058,14 @@ class TestGenerateTestConfigSweep:
                                 "dcp-size": 1,
                                 "pcp-size": 2,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                             {
                                 "tp": 4,
                                 "pp": 2,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                         ],
@@ -2111,7 +2112,7 @@ class TestGenerateTestConfigSweep:
                             {
                                 "tp": 4,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                         ],
@@ -2144,6 +2145,7 @@ class TestGenerateTestConfigSweep:
                 "runner": "gb200",
                 "multinode": True,
                 "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "agentic-coding": [
                         {
@@ -2196,12 +2198,13 @@ class TestGenerateTestConfigSweep:
                 "runner": "cluster:mi355x-amds",
                 "multinode": True,
                 "disagg": True,
+                "kv-p2p-transfer": "mori",
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [{
                             "conc-list": [16],
                             "kv-offloading": "dram",
-                            "kv-offload-backend": "hicache",
+                            "kv-offload-backend": {"name": "hicache"},
                             "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                             "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                         }],
@@ -2221,7 +2224,7 @@ class TestGenerateTestConfigSweep:
 
         assert len(result) == 1
         assert result[0]["kv-offloading"] == "dram"
-        assert result[0]["kv-offload-backend"] == "hicache"
+        assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
 
 
@@ -2341,6 +2344,7 @@ class TestGenerateFullSweepMixed:
                 "runner": "cluster:gb200-nv",
                 "multinode": True,
                 "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [
