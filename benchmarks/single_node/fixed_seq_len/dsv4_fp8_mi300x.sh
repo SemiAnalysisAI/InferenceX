@@ -17,6 +17,16 @@ set -eo pipefail
 #
 # The FP4->FP8 dequant roughly doubles the MoE footprint (~1.05 TB total),
 # which fits 8x192 GB only at TP8, so the sweep is TP8-only.
+#
+# MoE backend is left at auto (NOT --moe-backend aiter). --quantization
+# deepseek_v4_fp8 only handles the dense/attention weights; the MoE experts
+# stay mxfp4 and go through vLLM's mxfp4 MoE selector. On gfx942, forcing
+# aiter selects AITER_MXFP4_MXFP4 (W4A4, native mxfp4) which the gfx942 kernel
+# rejects ("Mxfp4 MoE backend 'AITER_MXFP4_MXFP4' does not support ... QuantKey
+# (u8 ... col=32)"). With auto, vLLM's select_deepseek_v4_mxfp4_moe_backend
+# takes its ROCm+DeepseekV4 branch and prefers AITER_MXFP4_BF16 (W4A16 CK,
+# dequantizes weights — no native FP4), falling back to TRITON_UNFUSED. MI355X
+# keeps --moe-backend aiter because gfx950 supports the W4A4 kernel.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -75,7 +85,6 @@ vllm serve $MODEL --port $PORT \
     --max-model-len "$MAX_MODEL_LEN" \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --moe-backend aiter \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' > $SERVER_LOG 2>&1 &
