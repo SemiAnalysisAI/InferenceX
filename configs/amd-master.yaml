@@ -840,6 +840,7 @@ kimik2.5-fp4-mi355x-atom-disagg:
   runner: mi355x-disagg
   precision: fp4
   framework: atom-disagg
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
