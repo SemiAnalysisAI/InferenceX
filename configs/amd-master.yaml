@@ -1256,7 +1256,8 @@ kimik2.7-code-fp4-mi355x-vllm-disagg-dep-lmcache-nixl-p2poff:
   disagg: true
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.80
+      search-space:
       - spec-decoding: "none"
         conc-list: [ 16 ]
         kv-offloading: dram
