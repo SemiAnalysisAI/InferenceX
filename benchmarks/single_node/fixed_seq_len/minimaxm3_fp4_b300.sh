@@ -5,11 +5,11 @@
 # checkpoint. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm PR #46380) is
 # baked into the perf container image.
 #
-# At runtime the recipe swaps the image's FlashInfer for the first pinned
-# nightly containing the upstream SM100 low-M MXFP8 split-K kernel
-# (flashinfer-ai/flashinfer#3847), keeps the upstream #3582 and #3687 changes,
-# then backports the #3918 AutoTuner non-Tensor guard and the #3912 AutoTuner
-# memory-leak follow-up.
+# At runtime the recipe swaps the image's FlashInfer for a pinned nightly with
+# the upstream SM100 low-M MXFP8 split-K kernel (flashinfer-ai/flashinfer#3847),
+# the distributed AutoTuner synchronization API (#3187), and the non-Tensor
+# guard (#3918). It backports the still-unmerged #3912 memory fix and patches
+# vLLM to opt in to synchronized distributed tuning.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -26,8 +26,8 @@ check_env_vars \
     RESULT_FILENAME
 
 # --- FlashInfer nightly + targeted runtime patches --------------------------
-FLASHINFER_VERSION=0.6.15.dev20260710
-FLASHINFER_NIGHTLY_TAG=nightly-v0.6.15-20260710
+FLASHINFER_VERSION=0.6.15.dev20260712
+FLASHINFER_NIGHTLY_TAG=nightly-v0.6.15-20260712
 FLASHINFER_RELEASE_URL="https://github.com/flashinfer-ai/flashinfer/releases/download/${FLASHINFER_NIGHTLY_TAG}"
 
 python3 -m pip uninstall -y flashinfer-python flashinfer-cubin flashinfer-jit-cache
@@ -38,19 +38,12 @@ python3 -m pip install \
     "${FLASHINFER_RELEASE_URL}/flashinfer_jit_cache-${FLASHINFER_VERSION}+cu130-cp39-abi3-manylinux_2_28_$(uname -m).whl" \
     || { echo "FlashInfer nightly install failed" >&2; exit 1; }
 
-# The pinned nightly predates flashinfer-ai/flashinfer#3918. Apply only its
-# runtime non-Tensor guard; the upstream test change is not needed here.
-AUTOTUNER_PATCH="$(dirname "$0")/patches/flashinfer-autotuner-non-tensor-guard.patch"
 if ! command -v patch >/dev/null 2>&1; then
     apt-get update -y && apt-get install -y --no-install-recommends patch \
         || { echo "Failed to install patch(1)" >&2; exit 1; }
 fi
 SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.util.find_spec('flashinfer').submodule_search_locations[0])")") \
     || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
-patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_PATCH}" >/dev/null \
-    || { echo "FlashInfer AutoTuner non-Tensor guard patch does not apply" >&2; exit 1; }
-patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_PATCH}" \
-    || { echo "FlashInfer AutoTuner non-Tensor guard patch failed" >&2; exit 1; }
 
 # Backport the runtime portion of flashinfer-ai/flashinfer#3912. Caching the
 # packed top-k initializer preserves its identity across tuning calls and avoids
@@ -60,6 +53,15 @@ patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_MEMORY_PATCH}" >/dev/nu
     || { echo "FlashInfer PR #3912 patch does not apply" >&2; exit 1; }
 patch -p1 -d "${SITE_PACKAGES}" < "${AUTOTUNER_MEMORY_PATCH}" \
     || { echo "FlashInfer PR #3912 patch failed" >&2; exit 1; }
+
+# FlashInfer #3187 exposes distributed tactic synchronization as an opt-in API.
+# Wire vLLM's multi-rank warmup to the existing gloo world group so every rank
+# reduces the same profile timings before selecting a tactic.
+VLLM_AUTOTUNER_GROUP_PATCH="$(dirname "$0")/patches/vllm-flashinfer-autotune-process-group.patch"
+patch --dry-run -p1 -d "${SITE_PACKAGES}" < "${VLLM_AUTOTUNER_GROUP_PATCH}" >/dev/null \
+    || { echo "vLLM FlashInfer AutoTuner process-group patch does not apply" >&2; exit 1; }
+patch -p1 -d "${SITE_PACKAGES}" < "${VLLM_AUTOTUNER_GROUP_PATCH}" \
+    || { echo "vLLM FlashInfer AutoTuner process-group patch failed" >&2; exit 1; }
 
 # -----------------------------------------------------------------------------
 
@@ -111,7 +113,7 @@ $PARALLEL_ARGS \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --stream-interval 20 --no-enable-prefix-caching \
---no-enable-flashinfer-autotune \
+--enable-flashinfer-autotune \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
