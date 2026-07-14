@@ -4753,9 +4753,8 @@
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-hicache
-    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache
   description:
-    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
     - "Align launcher env vars and server args with fixed-seq-len sibling (dsv4 attention backend, fp8_e4m3 kv-cache, disable-radix-cache, cuda-graph-max-bs, DP-attention exports, two-batch-overlap)"
     - "Add SGLang router for DP-attention configs (consistent-hashing, dp-aware, correlation-id routing)"
     - "Add HiCache KV offloading support"
