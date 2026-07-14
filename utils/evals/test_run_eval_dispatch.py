@@ -12,17 +12,19 @@ _SCRIPT = r'''
 source "$BENCHMARK_LIB"
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
 run_swebench_eval() { echo "DISPATCH=swebench"; }
+append_lm_eval_summary() { echo "STAGED=summary"; }
 export EVAL_MAX_MODEL_LEN=16384
 unset EVAL_CONCURRENT_REQUESTS
 run_eval ${CLI_FW:+--framework "$CLI_FW"} --port 8888
 '''
 
 
-def _dispatch(*, is_agentic: str = "0", cli_fw=None, env_fw=None) -> str:
+def _dispatch(*, is_agentic: str = "0", eval_only: str = "false", cli_fw=None, env_fw=None) -> str:
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "IS_AGENTIC": is_agentic,
+        "EVAL_ONLY": eval_only,
         "KV_OFFLOADING": "none",
     }
     env.pop("EVAL_FRAMEWORK", None)
@@ -45,6 +47,13 @@ def test_agentic_scenario_defaults_to_swebench():
 
 def test_fixed_seqlen_scenario_defaults_to_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0")
+
+def test_agentic_eval_only_stages_summary():
+    assert "STAGED=summary" in _dispatch(is_agentic="1", eval_only="true")
+
+
+def test_fixed_seqlen_eval_only_leaves_staging_to_recipe():
+    assert "STAGED=summary" not in _dispatch(is_agentic="0", eval_only="true")
 
 
 

@@ -1161,16 +1161,6 @@ _ensure_modal_credentials() {
     fi
 }
 
-maybe_run_eval() {
-    local port="${1:-${PORT:-8888}}"
-    if [ "${RUN_EVAL}" = "true" ]; then
-        # Failed evals can still produce useful artifacts.
-        local eval_rc=0
-        run_eval --port "$port" || eval_rc=$?
-        append_lm_eval_summary || true
-        return "$eval_rc"
-    fi
-}
 
 _run_swebench_agentic_generation() {
     local gen_dir="$1"; shift
@@ -1471,9 +1461,12 @@ run_eval() {
     done
 
     local scenario_default="lm-eval"
+    local scenario_is_agentic=0
     if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
         scenario_default="swebench"
+        scenario_is_agentic=1
     fi
+
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
 
     # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
@@ -1550,6 +1543,11 @@ run_eval() {
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
+
+    # Agentic eval-only recipes have no separate staging step.
+    if [ "${EVAL_ONLY:-false}" = "true" ] && [ "$scenario_is_agentic" = "1" ]; then
+        append_lm_eval_summary || true
+    fi
 
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2

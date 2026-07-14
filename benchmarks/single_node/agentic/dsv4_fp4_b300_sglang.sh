@@ -238,7 +238,7 @@ if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    maybe_run_eval "$PORT"
+    run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
     REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"

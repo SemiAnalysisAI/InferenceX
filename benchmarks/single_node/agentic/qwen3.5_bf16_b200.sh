@@ -72,7 +72,7 @@ echo "Server PID: $SERVER_PID"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    maybe_run_eval "$PORT"
+    run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
