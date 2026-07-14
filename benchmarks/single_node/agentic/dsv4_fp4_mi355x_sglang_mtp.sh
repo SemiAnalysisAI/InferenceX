@@ -78,6 +78,7 @@ SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MEM_FRACTION_STATIC=0.95
 CHUNKED_PREFILL_SIZE=16384
+PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -116,7 +117,6 @@ export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 
-PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 METRICS_ARGS=(--enable-metrics)
 SPEC_ARGS=(
     --speculative-algorithm EAGLE
