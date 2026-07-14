@@ -276,6 +276,9 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     pcp_size: int = Field(alias=Fields.PCP_SIZE.value, gt=0, strict=True)
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
+    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+        default="none", alias=Fields.SPEC_DECODING.value
+    )
     conc: int
     kv_offloading: Literal["none", "dram"] = Field(
         alias=Fields.KV_OFFLOADING.value
