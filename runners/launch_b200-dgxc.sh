@@ -40,7 +40,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4-V2"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
