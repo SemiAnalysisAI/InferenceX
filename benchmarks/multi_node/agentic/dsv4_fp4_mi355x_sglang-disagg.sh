@@ -70,30 +70,12 @@ export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 
 # ── KV cache offloading (HiCache) ──
 # KV_OFFLOADING=none | dram (passed from YAML; default none for disagg).
-# KV_OFFLOAD_BACKEND selects the backend when offloading is on. CI supplies
-# KV_OFFLOAD_BACKEND_METADATA (e.g. {"name":"hicache"}); derive the backend
-# name from it when KV_OFFLOAD_BACKEND is unset. This recipe only implements
-# HiCache, so local runs without metadata still default to "hicache".
+# KV_OFFLOAD_BACKEND selects the backend when offloading is on; this recipe
+# only implements HiCache, so "hicache" is the only supported value.
+# HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
 export KV_OFFLOADING="${KV_OFFLOADING:-none}"
 if [[ "$KV_OFFLOADING" != "none" ]]; then
-  if [[ -z "${KV_OFFLOAD_BACKEND:-}" ]]; then
-    if [[ -n "${KV_OFFLOAD_BACKEND_METADATA:-}" ]]; then
-      KV_OFFLOAD_BACKEND=$(KV_OFFLOAD_BACKEND_METADATA="$KV_OFFLOAD_BACKEND_METADATA" python3 -c "
-import json, os, sys
-try:
-    meta = json.loads(os.environ['KV_OFFLOAD_BACKEND_METADATA'])
-except json.JSONDecodeError as exc:
-    sys.exit(f'KV_OFFLOAD_BACKEND_METADATA must be valid JSON: {exc}')
-name = meta.get('name')
-if not isinstance(name, str) or not name:
-    sys.exit(\"KV_OFFLOAD_BACKEND_METADATA must contain a non-empty 'name'\")
-print(name)
-") || exit 1
-    else
-      KV_OFFLOAD_BACKEND=hicache
-    fi
-  fi
-  export KV_OFFLOAD_BACKEND
+  export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-hicache}"
 fi
 # HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; then
