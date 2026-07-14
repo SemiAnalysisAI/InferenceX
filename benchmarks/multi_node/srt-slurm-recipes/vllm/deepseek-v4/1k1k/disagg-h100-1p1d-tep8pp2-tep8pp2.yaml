@@ -79,7 +79,7 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       no-enable-flashinfer-autotune: true
       no-enable-prefix-caching: true
-      pipeline-parallel-size: 2
+      data-parallel-size: 2
       reasoning-parser: deepseek_v4
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       tensor-parallel-size: 8
@@ -99,7 +99,7 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       no-enable-flashinfer-autotune: true
       no-enable-prefix-caching: true
-      pipeline-parallel-size: 2
+      data-parallel-size: 2
       reasoning-parser: deepseek_v4
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       tensor-parallel-size: 8
