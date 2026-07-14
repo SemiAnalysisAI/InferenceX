@@ -24,6 +24,7 @@ frontend:
 backend:
   type: vllm
   connector: null
+  set_cuda_visible_devices: true
   prefill_environment:
     VLLM_USE_FLASHINFER_MOE_FP4: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
