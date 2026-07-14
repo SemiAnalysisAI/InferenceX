@@ -53,6 +53,13 @@ fi
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 
+# gsm8k eval at high concurrency (8k1k) OOM-kills the server: hundreds of
+# concurrent 9472-token requests exceed the ~20x KV budget even on 256GB MI325X
+# (c128 fit, so this was originally left at the default, but c512 crashed the
+# EngineCore mid-eval). Cap the eval to a safe in-flight count; only run_eval is
+# affected (throughput jobs use CONC directly). Matches the MI300X script.
+export EVAL_CONCURRENT_REQUESTS=8
+
 SERVER_LOG=/workspace/server.log
 
 if [ "${EVAL_ONLY}" = "true" ]; then
