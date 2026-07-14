@@ -65,8 +65,6 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
-export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
-
 # vLLM v0.22.1 can ship CUTLASS DSL 4.5.2 with stale native MLIR bindings,
 # which fails DSV4 indexer compilation with mlir_global_dtors(..., data).
 # Reinstall the matching native wheel until NVIDIA/cutlass#3259 is resolved.

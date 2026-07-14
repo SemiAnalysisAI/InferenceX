@@ -243,6 +243,36 @@ class TestProcessResultScript:
         assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)  # decode gpus
         assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)  # prefill gpus
 
+    def test_component_metadata_is_emitted_when_present(
+        self, tmp_path, sample_benchmark_result, multinode_env_vars
+    ):
+        env = {
+            **multinode_env_vars,
+            "ROUTER_METADATA": json.dumps({"name": "vllm-router", "version": "0.1.14"}),
+            "KV_P2P_TRANSFER": "mooncake",
+        }
+
+        result = run_script(tmp_path, env, sample_benchmark_result)
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        output_data = json.loads(result.stdout)
+        assert output_data["router"] == {"name": "vllm-router", "version": "0.1.14"}
+        assert output_data["kv_p2p_transfer"] == "mooncake"
+
+    @pytest.mark.parametrize("metadata", [
+        {"name": "vllm-router"},
+        {"name": "vllm-router", "version": "0.1.14", "mode": "round-robin"},
+    ])
+    def test_component_metadata_rejects_partial_or_extra_fields(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars, metadata
+    ):
+        env = {**single_node_env_vars, "ROUTER_METADATA": json.dumps(metadata)}
+
+        result = run_script(tmp_path, env, sample_benchmark_result)
+
+        assert result.returncode != 0
+        assert "must contain exactly 'name' and 'version'" in result.stderr
+
     def test_homogeneous_multinode_omits_hardware_fields(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
     ):
@@ -373,7 +403,7 @@ class TestCalculations:
         assert output_data["intvty_p99"] == pytest.approx(20.0)
 
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
-        """PCP expands the GPU denominator while DCP remains metadata."""
+        """PP and PCP expand the GPU denominator while DCP remains metadata."""
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 8,
@@ -382,17 +412,18 @@ class TestCalculations:
         }
 
         env = single_node_env_vars.copy()
-        env.update({"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"})
+        env.update({"TP": "4", "PP_SIZE": "2", "DCP_SIZE": "2", "PCP_SIZE": "2"})
 
         result = run_script(tmp_path, env, benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
+        assert output_data["pp"] == 2
         assert output_data["dcp_size"] == 2
         assert output_data["pcp_size"] == 2
-        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 8)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 8)
-        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 8)
+        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 16)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 16)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 16)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""
@@ -406,11 +437,29 @@ class TestCalculations:
         env = multinode_env_vars.copy()
         env["PREFILL_GPUS"] = "20"
         env["DECODE_GPUS"] = "8"
+        env.update({
+            "PREFILL_PP_SIZE": "2",
+            "PREFILL_DCP_SIZE": "2",
+            "PREFILL_PCP_SIZE": "2",
+            "DECODE_PP_SIZE": "2",
+            "DECODE_DCP_SIZE": "4",
+            "DECODE_PCP_SIZE": "1",
+        })
 
         result = run_script(tmp_path, env, benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
+        assert (
+            output_data["prefill_pp"],
+            output_data["prefill_dcp_size"],
+            output_data["prefill_pcp_size"],
+        ) == (2, 2, 2)
+        assert (
+            output_data["decode_pp"],
+            output_data["decode_dcp_size"],
+            output_data["decode_pcp_size"],
+        ) == (2, 4, 1)
         assert output_data["tput_per_gpu"] == pytest.approx(1000.0)  # 28000 / 28
         assert output_data["output_tput_per_gpu"] == pytest.approx(2000.0)  # 16000 / 8
         assert output_data["input_tput_per_gpu"] == pytest.approx(600.0)  # (28000 - 16000) / 20
