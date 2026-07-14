@@ -250,14 +250,14 @@ jobs:
         (
           inputs.skip-queue-pr != '' &&
           format(
-            '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}","ci-skip-queue-pr-{3}"]',
+            '["self-hosted","{0}","ci-priority-{1}","ci-queue-{2}","ci-skip-queue-pr-{3}"]',
             inputs.runner,
             inputs.priority,
             inputs.queue-token,
             inputs.skip-queue-pr
           ) ||
           format(
-            '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}"]',
+            '["self-hosted","{0}","ci-priority-{1}","ci-queue-{2}"]',
             inputs.runner,
             inputs.priority,
             inputs.queue-token

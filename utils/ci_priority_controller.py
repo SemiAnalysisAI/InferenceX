@@ -26,7 +26,7 @@ PRIORITY_LABEL_PREFIX = "ci-priority-"
 QUEUE_LABEL_PREFIX = "ci-queue-"
 SKIP_QUEUE_LABEL_PREFIX = "ci-skip-queue-pr-"
 PRIORITY_LABEL_RE = re.compile(
-    r"^ci-priority-p(?P<score>[0-9]+(?:\.[0-9]+)?)$"
+    r"^ci-priority-(?P<score>[0-9]+(?:\.[0-9]+)?)$"
 )
 QUEUE_LABEL_RE = re.compile(r"^ci-queue-(?P<token>[a-zA-Z0-9._-]+)$")
 SKIP_QUEUE_LABEL_RE = re.compile(r"^ci-skip-queue-pr-(?P<number>[1-9][0-9]*)$")

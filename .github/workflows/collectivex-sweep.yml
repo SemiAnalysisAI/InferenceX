@@ -93,7 +93,7 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
-          '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}-{3}"]',
+          '["self-hosted","{0}","ci-priority-{1}","ci-queue-{2}-{3}"]',
           matrix.sku,
           needs.setup.outputs.priority,
           github.run_id,

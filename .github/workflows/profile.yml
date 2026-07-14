@@ -110,7 +110,7 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
-          '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}"]',
+          '["self-hosted","{0}","ci-priority-{1}","ci-queue-{2}"]',
           matrix.config.runner,
           matrix.config.priority,
           matrix.config['queue-token']
