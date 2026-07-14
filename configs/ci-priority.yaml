@@ -31,14 +31,9 @@ adjustments:
     dsr1: 0.75
 
 labels:
-  # Repository labels are maintainer-controlled. A matching override wins over
-  # every automatic adjustment.
-  override-pattern: '^ci-priority:p(?P<score>[0-9]+(?:\.[0-9]+)?)$'
-  # pskip is reserved for an active skip_queue label whose latest labeling
-  # actor is verified as an active SemiAnalysisAI/Core team member.
+  # Controller verifies skip_queue labeling actor membership.
   skip-queue:
     name: skip_queue
-    score: skip
     organization: SemiAnalysisAI
     team-slug: core
   checklist-complete:

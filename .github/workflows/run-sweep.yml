@@ -217,26 +217,10 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Authorize skip_queue
-              id: authorize_skip_queue
-              if: >-
-                  github.event_name == 'pull_request' &&
-                  contains(github.event.pull_request.labels.*.name, 'skip_queue')
-              # REPO_PAT needs repository Issues: Read.
-              # REPO_PAT needs organization Members: Read.
-              env:
-                  REPO_PAT: ${{ secrets.REPO_PAT }}
-              run: |
-                  authorized=$(python3 "${GITHUB_WORKSPACE}/utils/authorize_skip_queue.py" \
-                    --repository "${{ github.repository }}" \
-                    --pr-number "${{ github.event.pull_request.number }}")
-                  echo "authorized=$authorized" >> "$GITHUB_OUTPUT"
-
             - id: setup
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  SKIP_QUEUE_AUTHORIZED: ${{ steps.authorize_skip_queue.outputs.authorized == 'true' }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -279,10 +263,6 @@ jobs:
                       CMD+=(--evals-only)
                   fi
 
-                  PRIORITY_ARGS=()
-                  if [ "$SKIP_QUEUE_AUTHORIZED" = "true" ]; then
-                      PRIORITY_ARGS+=(--skip-queue-authorized)
-                  fi
 
                   CONFIG_JSON=$("${CMD[@]}")
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
@@ -290,7 +270,7 @@ jobs:
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}" \
                     --labels-json "$PR_LABELS" \
-                    "${PRIORITY_ARGS[@]}")
+                    --pr-number "${{ github.event.pull_request.number || 0 }}")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
@@ -363,6 +343,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -405,6 +386,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -483,6 +465,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -543,6 +526,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -595,6 +579,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -657,6 +642,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -702,6 +688,7 @@ jobs:
             runner: ${{ matrix.config.runner }}
             priority: ${{ matrix.config.priority }}
             queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}

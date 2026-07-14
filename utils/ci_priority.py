@@ -6,12 +6,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 
@@ -23,7 +22,7 @@ class PriorityContext:
     event_name: str = ""
     labels: frozenset[str] = frozenset()
     queue_namespace: str = "local"
-    skip_queue_authorized: bool = False
+    pr_number: int | None = None
 
 
 def _decimal(value: Any) -> Decimal:
@@ -45,17 +44,6 @@ def _first_prefix_adjustment(value: str, adjustments: dict[str, Any]) -> Decimal
     return Decimal(0)
 
 
-def _label_override(labels: Iterable[str], policy: dict[str, Any]) -> Decimal | None:
-    pattern = re.compile(policy["labels"]["override-pattern"])
-    matches = []
-    for label in labels:
-        match = pattern.fullmatch(label)
-        if match:
-            matches.append(_decimal(match.group("score")))
-    if len(matches) > 1:
-        raise ValueError("Multiple ci-priority override labels are not allowed")
-    return matches[0] if matches else None
-
 
 def calculate_priority(
     entry: dict[str, Any],
@@ -63,18 +51,6 @@ def calculate_priority(
     context: PriorityContext = PriorityContext(),
 ) -> Decimal:
     """Return a higher-is-sooner priority score for one benchmark matrix entry."""
-    override = _label_override(context.labels, policy)
-    skip_queue = policy["labels"]["skip-queue"]
-    if (
-        context.skip_queue_authorized
-        and skip_queue["name"] in context.labels
-    ):
-        if skip_queue["score"] != "skip":
-            raise ValueError("Authorized skip_queue priority must use the 'skip' sentinel")
-        return Decimal("Infinity")
-    if override is not None:
-        return override.quantize(SCORE_QUANTUM)
-
     patchwork = policy["labels"]["patchwork"]
     patch_labels = set(patchwork["names"])
     waiver_labels = set(patchwork.get("waived-by", []))
@@ -111,7 +87,7 @@ def calculate_priority(
 
 
 def format_priority(score: Decimal) -> str:
-    return "skip" if score.is_infinite() else f"{score:.3f}"
+    return f"{score:.3f}"
 
 
 def queue_token(value: dict[str, Any], namespace: str, path: tuple[str, ...]) -> str:
@@ -143,6 +119,11 @@ def annotate_jobs(
     if "runner" in value and "framework" in value:
         annotated["priority"] = format_priority(calculate_priority(value, policy, context))
         annotated["queue-token"] = queue_token(value, context.queue_namespace, _path)
+        if (
+            context.pr_number is not None
+            and policy["labels"]["skip-queue"]["name"] in context.labels
+        ):
+            annotated["skip-queue-pr"] = context.pr_number
     return annotated
 
 
@@ -163,7 +144,7 @@ def main() -> int:
     parser.add_argument("--event-name", default="")
     parser.add_argument("--labels-json", default="[]")
     parser.add_argument("--queue-namespace", default="local")
-    parser.add_argument("--skip-queue-authorized", action="store_true")
+    parser.add_argument("--pr-number", type=int)
     parser.add_argument(
         "--input",
         type=Path,
@@ -176,7 +157,7 @@ def main() -> int:
         event_name=args.event_name,
         labels=_labels_from_json(args.labels_json),
         queue_namespace=args.queue_namespace,
-        skip_queue_authorized=args.skip_queue_authorized,
+        pr_number=args.pr_number,
     )
     source = args.input.read_text() if args.input else sys.stdin.read()
     payload = json.loads(source)

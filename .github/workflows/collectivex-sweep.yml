@@ -23,10 +23,6 @@ on:
         description: Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
         type: string
         default: ''
-      priority:
-        description: Higher-is-sooner CI priority score
-        type: string
-        default: '1.000'
 concurrency:
   group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
@@ -38,9 +34,15 @@ jobs:
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       n: ${{ steps.gen.outputs.n }}
+      priority: ${{ steps.score.outputs.priority }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
+      - id: score
+        run: |
+          scored=$(printf '%s' '[{"runner":"collectivex","framework":"collectivex"}]' |
+            python3 utils/ci_priority.py)
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
       - id: gen
         working-directory: experimental/CollectiveX
         env:
@@ -93,13 +95,13 @@ jobs:
         format(
           '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}-{3}"]',
           matrix.sku,
-          inputs.priority,
+          needs.setup.outputs.priority,
           github.run_id,
           matrix.id
         ) ||
         format('["{0}"]', matrix.sku)
       ) }}
-    name: p${{ inputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
+    name: p${{ needs.setup.outputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}

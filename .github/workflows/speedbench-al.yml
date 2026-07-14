@@ -14,11 +14,6 @@ on:
         required: false
         type: string
         default: 'b300'
-      priority:
-        description: "Higher-is-sooner CI priority score"
-        required: false
-        type: string
-        default: '3.750'
       model:
         description: "HF model id (basename must be in launcher STAGED_MODELS for pre-staged local weights)"
         required: false
@@ -108,20 +103,46 @@ env:
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      priority: ${{ steps.score.outputs.priority }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with: { clean: true, persist-credentials: false }
+      - id: score
+        env:
+          RUNNER: ${{ inputs.runner }}
+          MODEL_PREFIX: ${{ inputs.model-prefix }}
+        run: |
+          entry=$(jq -cn \
+            --arg runner "$RUNNER" \
+            --arg model_prefix "$MODEL_PREFIX" \
+            '[{
+              runner: $runner,
+              framework: "vllm",
+              "model-prefix": $model_prefix,
+              precision: "fp4",
+              "spec-decoding": "mtp"
+            }]')
+          scored=$(printf '%s' "$entry" | python3 utils/ci_priority.py)
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+
   collect-al:
+    needs: setup
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
           '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}"]',
           inputs.runner,
-          inputs.priority,
+          needs.setup.outputs.priority,
           github.run_id
         ) ||
         format('["{0}"]', inputs.runner)
       ) }}
     timeout-minutes: 600
-    name: "p${{ inputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |

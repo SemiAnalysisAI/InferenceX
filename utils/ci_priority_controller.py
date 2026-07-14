@@ -20,10 +20,16 @@ from typing import Any, Iterable
 
 import yaml
 
+from authorize_skip_queue import is_authorized
+
+PRIORITY_LABEL_PREFIX = "ci-priority-"
+QUEUE_LABEL_PREFIX = "ci-queue-"
+SKIP_QUEUE_LABEL_PREFIX = "ci-skip-queue-pr-"
 PRIORITY_LABEL_RE = re.compile(
-    r"^ci-priority-p(?P<score>skip|[0-9]+(?:\.[0-9]+)?)$"
+    r"^ci-priority-p(?P<score>[0-9]+(?:\.[0-9]+)?)$"
 )
 QUEUE_LABEL_RE = re.compile(r"^ci-queue-(?P<token>[a-zA-Z0-9._-]+)$")
+SKIP_QUEUE_LABEL_RE = re.compile(r"^ci-skip-queue-pr-(?P<number>[1-9][0-9]*)$")
 
 
 def parse_timestamp(value: str | None) -> datetime:
@@ -33,30 +39,49 @@ def parse_timestamp(value: str | None) -> datetime:
 
 
 def priority_from_labels(labels: Iterable[str]) -> tuple[str, Decimal] | None:
-    matches = []
-    for label in labels:
-        match = PRIORITY_LABEL_RE.fullmatch(label)
-        if match:
-            raw_score = match.group("score")
-            score = Decimal("Infinity") if raw_score == "skip" else Decimal(raw_score)
-            matches.append((label, score))
-    if len(matches) > 1:
-        raise ValueError(f"Job has multiple CI priority labels: {[label for label, _ in matches]}")
-    return matches[0] if matches else None
+    candidates = [label for label in labels if label.startswith(PRIORITY_LABEL_PREFIX)]
+    invalid = [label for label in candidates if not PRIORITY_LABEL_RE.fullmatch(label)]
+    if invalid:
+        raise ValueError(f"Job has invalid CI priority labels: {invalid}")
+    if len(candidates) > 1:
+        raise ValueError(f"Job has multiple CI priority labels: {candidates}")
+    if not candidates:
+        return None
+    label = candidates[0]
+    match = PRIORITY_LABEL_RE.fullmatch(label)
+    return label, Decimal(match.group("score"))
 
 
 def queue_label_from_labels(labels: Iterable[str]) -> str | None:
-    matches = [label for label in labels if QUEUE_LABEL_RE.fullmatch(label)]
-    if len(matches) > 1:
-        raise ValueError(f"Job has multiple CI queue labels: {matches}")
-    return matches[0] if matches else None
+    candidates = [label for label in labels if label.startswith(QUEUE_LABEL_PREFIX)]
+    invalid = [label for label in candidates if not QUEUE_LABEL_RE.fullmatch(label)]
+    if invalid:
+        raise ValueError(f"Job has invalid CI queue labels: {invalid}")
+    if len(candidates) > 1:
+        raise ValueError(f"Job has multiple CI queue labels: {candidates}")
+    return candidates[0] if candidates else None
+
+def skip_queue_from_labels(labels: Iterable[str]) -> tuple[str, int] | None:
+    candidates = [label for label in labels if label.startswith(SKIP_QUEUE_LABEL_PREFIX)]
+    invalid = [label for label in candidates if not SKIP_QUEUE_LABEL_RE.fullmatch(label)]
+    if invalid:
+        raise ValueError(f"Job has invalid skip_queue labels: {invalid}")
+    if len(candidates) > 1:
+        raise ValueError(f"Job has multiple skip_queue labels: {candidates}")
+    if not candidates:
+        return None
+    label = candidates[0]
+    match = SKIP_QUEUE_LABEL_RE.fullmatch(label)
+    return label, int(match.group("number"))
 
 
 def without_scheduling_labels(labels: Iterable[str]) -> frozenset[str]:
     return frozenset(
         label
         for label in labels
-        if not PRIORITY_LABEL_RE.fullmatch(label) and not QUEUE_LABEL_RE.fullmatch(label)
+        if not label.startswith(
+            (PRIORITY_LABEL_PREFIX, QUEUE_LABEL_PREFIX, SKIP_QUEUE_LABEL_PREFIX)
+        )
     )
 
 
@@ -121,13 +146,23 @@ def effective_priority(
     *,
     now: datetime,
     aging_per_hour: Decimal,
+    authorized_skip_prs: frozenset[int] = frozenset(),
 ) -> Decimal:
     priority = priority_from_labels(job.labels)
     if priority is None:
         raise ValueError(f"Job {job.id} has no CI priority label")
+    skip_request = skip_queue_from_labels(job.labels)
+    if skip_request is not None and skip_request[1] in authorized_skip_prs:
+        return Decimal("Infinity")
     _, score = priority
     waited_hours = Decimal(str(max(0.0, (now - job.queued_at).total_seconds()) / 3600))
     return score + waited_hours * aging_per_hour
+
+
+def is_compatible(job: QueuedJob, runner: Runner) -> bool:
+    required = without_scheduling_labels(job.labels)
+    available = without_scheduling_labels(runner.labels)
+    return required.issubset(available)
 
 
 def plan_label_updates(
@@ -135,6 +170,7 @@ def plan_label_updates(
     runners: Iterable[Runner],
     *,
     aging_per_hour: Decimal = Decimal("0.25"),
+    authorized_skip_prs: frozenset[int] = frozenset(),
     now: datetime | None = None,
 ) -> list[LabelUpdate]:
     """Assign each idle runner to the best compatible queued job.
@@ -144,16 +180,21 @@ def plan_label_updates(
     second job before the controller has considered newly queued higher
     priorities.
     """
-    now = now or datetime.now(timezone.utc)
-    eligible_jobs = [
-        job
-        for job in jobs
-        if priority_from_labels(job.labels) is not None
-        and queue_label_from_labels(job.labels) is not None
-    ]
+    eligible_jobs = []
+    for job in jobs:
+        priority = priority_from_labels(job.labels)
+        queue_label = queue_label_from_labels(job.labels)
+        skip_queue_from_labels(job.labels)
+        if priority is not None and queue_label is not None:
+            eligible_jobs.append(job)
     eligible_jobs.sort(
         key=lambda job: (
-            -effective_priority(job, now=now, aging_per_hour=aging_per_hour),
+            -effective_priority(
+                job,
+                now=now,
+                aging_per_hour=aging_per_hour,
+                authorized_skip_prs=authorized_skip_prs,
+            ),
             job.queued_at,
             job.id,
         )
@@ -166,23 +207,31 @@ def plan_label_updates(
         for runner in idle_runners
     }
 
-    for job in eligible_jobs:
+    for index, job in enumerate(eligible_jobs):
         priority = priority_from_labels(job.labels)
         queue_label = queue_label_from_labels(job.labels)
+        skip_request = skip_queue_from_labels(job.labels)
         if priority is None or queue_label is None:
             continue
         priority_label, _ = priority
-        required = without_scheduling_labels(job.labels)
         candidates = [
-            runner
-            for runner in remaining.values()
-            if required.issubset(without_scheduling_labels(runner.labels))
+            runner for runner in remaining.values() if is_compatible(job, runner)
         ]
         if not candidates:
             continue
-        runner = min(candidates, key=lambda candidate: (candidate.name, candidate.id))
+        later_jobs = eligible_jobs[index + 1:]
+        runner = min(
+            candidates,
+            key=lambda candidate: (
+                sum(is_compatible(later, candidate) for later in later_jobs),
+                candidate.name,
+                candidate.id,
+            ),
+        )
         desired[runner.id] = (
-            without_scheduling_labels(runner.labels) | {priority_label, queue_label},
+            without_scheduling_labels(runner.labels)
+            | {priority_label, queue_label}
+            | ({skip_request[0]} if skip_request is not None else set()),
             job.id,
         )
         del remaining[runner.id]
@@ -229,15 +278,21 @@ class GitHubClient:
         except urllib.error.HTTPError as error:
             detail = error.read().decode(errors="replace")
             raise RuntimeError(f"GitHub API {method} {path} failed: {error.code} {detail}") from error
+        except urllib.error.URLError as error:
+            raise RuntimeError(f"GitHub API {method} {path} failed: {error}") from error
         return json.loads(raw) if raw else None
 
-    def paged(self, path: str, key: str) -> list[dict[str, Any]]:
+    def paged(
+        self,
+        path: str,
+        key: str | None,
+    ) -> list[dict[str, Any]]:
         separator = "&" if "?" in path else "?"
         values = []
         page = 1
         while True:
             payload = self.request("GET", f"{path}{separator}per_page=100&page={page}")
-            batch = payload[key]
+            batch = payload if key is None else payload[key]
             values.extend(batch)
             if len(batch) < 100:
                 return values
@@ -278,17 +333,69 @@ class GitHubClient:
         )
 
 
-def load_aging_rate(policy_path: str | Path) -> Decimal:
+class AuthorizationApi:
+    def __init__(self, client: GitHubClient):
+        self.client = client
+
+    def paged(self, path: str) -> list[dict[str, Any]]:
+        return self.client.paged(path, None)
+
+    def request(self, path: str) -> Any:
+        return self.client.request("GET", path)
+
+
+def load_policy(policy_path: str | Path) -> dict[str, Any]:
     with Path(policy_path).open() as policy_file:
-        policy = yaml.safe_load(policy_file)
+        return yaml.safe_load(policy_file)
+
+
+def authorize_skip_requests(
+    client: GitHubClient,
+    jobs: Iterable[QueuedJob],
+    policy: dict[str, Any],
+) -> frozenset[int]:
+    requests = {
+        request[1]
+        for job in jobs
+        if (request := skip_queue_from_labels(job.labels)) is not None
+    }
+    skip_policy = policy["labels"]["skip-queue"]
+    api = AuthorizationApi(client)
+    authorized = set()
+    for pr_number in sorted(requests):
+        try:
+            allowed, actor = is_authorized(
+                api,
+                repository=client.repository,
+                pr_number=pr_number,
+                organization=skip_policy["organization"],
+                team_slug=skip_policy["team-slug"],
+                label_name=skip_policy["name"],
+            )
+        except RuntimeError as error:
+            print(f"::warning::{error}; refusing skip_queue authorization", file=sys.stderr)
+            continue
+        if allowed:
+            print(f"::notice::skip_queue authorized by {actor}", file=sys.stderr)
+            authorized.add(pr_number)
+    return frozenset(authorized)
+
+
+def load_aging_rate(policy: dict[str, Any]) -> Decimal:
     return Decimal(str(policy["scheduler"]["aging-per-hour"]))
 
 
-def reconcile(client: GitHubClient, aging_per_hour: Decimal, apply: bool) -> list[LabelUpdate]:
+def reconcile(
+    client: GitHubClient,
+    policy: dict[str, Any],
+    apply: bool,
+) -> list[LabelUpdate]:
+    jobs = client.queued_jobs()
     updates = plan_label_updates(
-        client.queued_jobs(),
+        jobs,
         client.runners(),
-        aging_per_hour=aging_per_hour,
+        aging_per_hour=load_aging_rate(policy),
+        authorized_skip_prs=authorize_skip_requests(client, jobs, policy),
     )
     if apply:
         for update in updates:
@@ -310,16 +417,19 @@ def main() -> int:
     plan_parser.add_argument("--jobs", type=Path, required=True)
     plan_parser.add_argument("--runners", type=Path, required=True)
     plan_parser.add_argument("--now", help="ISO-8601 clock for deterministic simulations")
+    plan_parser.add_argument("--authorized-skip-pr", action="append", type=int, default=[])
 
     reconcile_parser = subparsers.add_parser("reconcile", help="Poll GitHub and reconcile runner labels")
     reconcile_parser.add_argument("--repository", required=True)
     reconcile_parser.add_argument("--api-url", default="https://api.github.com")
-    reconcile_parser.add_argument("--token-env", default="GITHUB_TOKEN")
+    # REPO_PAT needs Actions and Issues read.
+    # REPO_PAT needs Administration write and Members read.
+    reconcile_parser.add_argument("--token-env", default="REPO_PAT")
     reconcile_parser.add_argument("--apply", action="store_true")
     reconcile_parser.add_argument("--watch", type=float, default=0, metavar="SECONDS")
 
     args = parser.parse_args()
-    aging_per_hour = load_aging_rate(args.policy)
+    policy = load_policy(args.policy)
 
     if args.command == "plan":
         raw_jobs = _load_json(args.jobs)
@@ -327,7 +437,13 @@ def main() -> int:
         jobs = [QueuedJob.from_payload(job) for job in raw_jobs]
         runners = [Runner.from_payload(runner) for runner in raw_runners]
         now = parse_timestamp(args.now) if args.now else None
-        updates = plan_label_updates(jobs, runners, aging_per_hour=aging_per_hour, now=now)
+        updates = plan_label_updates(
+            jobs,
+            runners,
+            aging_per_hour=load_aging_rate(policy),
+            authorized_skip_prs=frozenset(args.authorized_skip_pr),
+            now=now,
+        )
         json.dump([update.as_dict() for update in updates], sys.stdout, indent=2)
         sys.stdout.write("\n")
         return 0
@@ -337,7 +453,14 @@ def main() -> int:
         parser.error(f"{args.token_env} must contain a GitHub token")
     client = GitHubClient(args.repository, token, args.api_url)
     while True:
-        updates = reconcile(client, aging_per_hour, args.apply)
+        try:
+            updates = reconcile(client, policy, args.apply)
+        except RuntimeError as error:
+            if args.watch <= 0:
+                raise
+            print(f"::warning::{error}; retrying", file=sys.stderr)
+            time.sleep(args.watch)
+            continue
         print(json.dumps([update.as_dict() for update in updates], separators=(",", ":")))
         if args.watch <= 0:
             return 0

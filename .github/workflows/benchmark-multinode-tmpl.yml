@@ -8,14 +8,17 @@ on:
         type: string
       priority:
         description: "Higher-is-sooner CI priority score"
-        required: false
+        required: true
         type: string
-        default: '1.000'
       queue-token:
         description: "One-shot queue token generated for this job"
+        required: true
+        type: string
+      skip-queue-pr:
+        description: "Requested skip_queue PR number"
         required: false
         type: string
-        default: 'legacy'
+        default: ''
       image:
         required: true
         type: string
@@ -244,11 +247,21 @@ jobs:
     runs-on: >-
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-        format(
-          '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}"]',
-          inputs.runner,
-          inputs.priority,
-          inputs.queue-token
+        (
+          inputs.skip-queue-pr != '' &&
+          format(
+            '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}","ci-skip-queue-pr-{3}"]',
+            inputs.runner,
+            inputs.priority,
+            inputs.queue-token,
+            inputs.skip-queue-pr
+          ) ||
+          format(
+            '["self-hosted","{0}","ci-priority-p{1}","ci-queue-{2}"]',
+            inputs.runner,
+            inputs.priority,
+            inputs.queue-token
+          )
         ) ||
         format('["{0}"]', inputs.runner)
       ) }}

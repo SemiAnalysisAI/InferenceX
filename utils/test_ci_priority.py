@@ -1,8 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
 
-import pytest
-
 from ci_priority import PriorityContext, annotate_jobs, calculate_priority, load_policy
 
 
@@ -43,37 +41,25 @@ def test_main_branch_jobs_receive_an_automatic_boost():
     ) == Decimal("3.000")
 
 
-def test_skip_queue_requires_both_label_and_core_authorization():
+def test_skip_queue_request_keeps_numeric_priority():
     entry = {"runner": "h100", "framework": "sglang", "precision": "fp4"}
-
-    assert calculate_priority(
-        entry,
-        POLICY,
-        PriorityContext(labels=frozenset({"skip_queue"})),
-    ) == Decimal("2.250")
-    assert calculate_priority(
-        entry,
-        POLICY,
-        PriorityContext(skip_queue_authorized=True),
-    ) == Decimal("2.250")
-    assert calculate_priority(
-        entry,
-        POLICY,
-        PriorityContext(
-            labels=frozenset({"skip_queue"}),
-            skip_queue_authorized=True,
-        ),
-    ) == Decimal("Infinity")
 
     annotated = annotate_jobs(
         [entry],
         POLICY,
         PriorityContext(
             labels=frozenset({"skip_queue"}),
-            skip_queue_authorized=True,
+            pr_number=2124,
         ),
     )
-    assert annotated[0]["priority"] == "skip"
+
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(labels=frozenset({"skip_queue"})),
+    ) == Decimal("2.250")
+    assert annotated[0]["priority"] == "2.250"
+    assert annotated[0]["skip-queue-pr"] == 2124
 
 
 def test_patchwork_label_forces_bottom_priority_without_waiver():
@@ -91,35 +77,17 @@ def test_patchwork_label_forces_bottom_priority_without_waiver():
     ) > Decimal("0.000")
 
 
-def test_maintainer_override_wins_and_conflicts_are_rejected():
+def test_priority_labels_do_not_override_automatic_score():
     entry = {"runner": "h100", "framework": "trt"}
+    labels = frozenset(
+        {"ci-priority:p0", "ci-priority:p4.5", "ci-priority:p1000000"}
+    )
 
     assert calculate_priority(
         entry,
         POLICY,
-        PriorityContext(labels=frozenset({"ci-priority:p0.7"})),
-    ) == Decimal("0.700")
-    assert calculate_priority(
-        entry,
-        POLICY,
-        PriorityContext(labels=frozenset({"ci-priority:p0"})),
-    ) == Decimal("0.000")
-    assert calculate_priority(
-        entry,
-        POLICY,
-        PriorityContext(labels=frozenset({"ci-priority:p1000000"})),
-    ) == Decimal("1000000.000")
-    assert calculate_priority(
-        entry,
-        POLICY,
-        PriorityContext(labels=frozenset({"ci-priority:p-1"})),
+        PriorityContext(labels=labels),
     ) == Decimal("1.000")
-    with pytest.raises(ValueError, match="Multiple ci-priority override"):
-        calculate_priority(
-            entry,
-            POLICY,
-            PriorityContext(labels=frozenset({"ci-priority:p0.7", "ci-priority:p2.5"})),
-        )
 
 
 def test_annotation_only_touches_runnable_matrix_entries():

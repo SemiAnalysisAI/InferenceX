@@ -1,7 +1,16 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from ci_priority_controller import GitHubClient, QueuedJob, Runner, plan_label_updates
+import pytest
+
+from ci_priority_controller import (
+    GitHubClient,
+    QueuedJob,
+    Runner,
+    authorize_skip_requests,
+    plan_label_updates,
+)
 
 
 NOW = datetime(2026, 7, 14, 18, 0, tzinfo=timezone.utc)
@@ -68,21 +77,88 @@ def test_aging_breaks_starvation_between_nearby_priorities():
         now=NOW,
         aging_per_hour=Decimal("0.25"),
     )
+    assert updates[0].assigned_job_id == 1
+
+def test_authorized_skip_queue_outranks_numeric_priority():
+    skip_job = job(2, "1.000", "h100")
+    skip_job = replace(
+        skip_job,
+        labels=skip_job.labels | {"ci-skip-queue-pr-2124"},
+    )
+    jobs = [
+        job(1, "1000000.000", "h100"),
+        skip_job,
+    ]
+    runners = [runner(11, "h100_00", "h100")]
+
+    updates = plan_label_updates(
+        jobs,
+        runners,
+        authorized_skip_prs=frozenset({2124}),
+        now=NOW,
+    )
+
+    assert updates[0].assigned_job_id == 2
+    assert "ci-priority-p1.000" in updates[0].labels
+    assert "ci-skip-queue-pr-2124" in updates[0].labels
+
+
+def test_unauthorized_skip_queue_remains_numeric():
+    skip_job = job(2, "1.000", "h100")
+    skip_job = replace(
+        skip_job,
+        labels=skip_job.labels | {"ci-skip-queue-pr-2124"},
+    )
+
+    updates = plan_label_updates(
+        [job(1, "2.000", "h100"), skip_job],
+        [runner(11, "h100_00", "h100")],
+        now=NOW,
+    )
 
     assert updates[0].assigned_job_id == 1
 
 
-def test_core_skip_queue_outranks_any_numeric_priority():
-    jobs = [
-        job(1, "1000000.000", "h100"),
-        job(2, "skip", "h100"),
-    ]
-    runners = [runner(11, "h100_00", "h100")]
 
-    updates = plan_label_updates(jobs, runners, now=NOW)
+def test_controller_verifies_skip_queue_actor():
+    class FixtureClient(GitHubClient):
+        def __init__(self):
+            super().__init__("owner/repo", "unused")
 
-    assert updates[0].assigned_job_id == 2
-    assert "ci-priority-pskip" in updates[0].labels
+        def paged(self, path, key):
+            assert key is None
+            assert path == "/repos/owner/repo/issues/2124/timeline"
+            return [{
+                "event": "labeled",
+                "label": {"name": "skip_queue"},
+                "actor": {"login": "alice"},
+            }]
+
+        def request(self, method, path, body=None):
+            assert method == "GET"
+            assert path == "/orgs/SemiAnalysisAI/teams/core/memberships/alice"
+            return {"state": "active"}
+
+    skip_job = job(2, "1.000", "h100")
+    skip_job = replace(
+        skip_job,
+        labels=skip_job.labels | {"ci-skip-queue-pr-2124"},
+    )
+    policy = {
+        "labels": {
+            "skip-queue": {
+                "name": "skip_queue",
+                "organization": "SemiAnalysisAI",
+                "team-slug": "core",
+            }
+        }
+    }
+
+    assert authorize_skip_requests(
+        FixtureClient(),
+        [skip_job],
+        policy,
+    ) == frozenset({2124})
 
 
 def test_unused_idle_runner_loses_stale_priority_label():
@@ -125,6 +201,47 @@ def test_exact_runner_name_remains_a_compatibility_constraint():
     assigned = [update for update in updates if update.assigned_job_id is not None]
     assert len(assigned) == 1
     assert assigned[0].runner_name == "h100_01"
+
+
+def test_preserves_scarce_runner_for_exact_job():
+    jobs = [
+        job(1, "5.000", "h100"),
+        job(2, "4.000", "h100_00"),
+    ]
+    runners = [
+        runner(10, "h100_00", "h100"),
+        runner(11, "h100_01", "h100"),
+    ]
+
+    updates = plan_label_updates(jobs, runners, now=NOW)
+
+    assert [(update.runner_name, update.assigned_job_id) for update in updates] == [
+        ("h100_00", 2),
+        ("h100_01", 1),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("valid", "invalid", "message"),
+    [
+        ("ci-priority-p1.000", "ci-priority-p-1", "invalid CI priority"),
+        ("ci-queue-job-1", "ci-queue-", "invalid CI queue"),
+        ("ci-skip-queue-pr-2124", "ci-skip-queue-pr-zero", "invalid skip_queue"),
+    ],
+)
+def test_rejects_malformed_scheduling_labels(valid, invalid, message):
+    queued_job = job(1, "1.000", "h100")
+    queued_job = replace(
+        queued_job,
+        labels=(queued_job.labels - {valid}) | {invalid},
+    )
+
+    with pytest.raises(ValueError, match=message):
+        plan_label_updates(
+            [queued_job],
+            [runner(11, "h100_00", "h100")],
+            now=NOW,
+        )
 
 
 def test_discovers_queued_jobs_inside_in_progress_workflow_runs():
