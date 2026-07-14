@@ -4752,15 +4752,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
-    - dsv4-fp8-mi300x-sglang
+    - dsv4-fp8-mi300x-vllm
   description:
-    - "Add DeepSeek-V4-Pro FP8 single-node MI300X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
-    - "Extrapolated from the same-model MI355X entry (dsv4-fp4-mi355x-sglang) for search-space shape + deepseek_v4 model flags, and from the same-SKU dsr1-fp8-mi300x-sglang for gfx942 AITER infra; gfx942 has no native FP4 so the FP4-MoE checkpoint runs in FP8"
-    - "No --quantization flag: sglang reads the modelopt quant config from the checkpoint and the AITER MoE path executes it, matching the H200 and MI355X dsv4 sglang recipes (--quantization deepseek_v4_fp8 is vLLM-only and rejected by sglang argparse)"
-    - "SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton (+ SGLANG_USE_ROCM700A=0), mirroring dsv4-fp4-mi355x-sglang: the dsv4 attention backend's TileLang FP8 MLA kernel fails to compile on gfx942 (InjectSoftwarePipeline reorder check) and kills the server at CUDA-graph capture; the unified-KV triton FlashMLA path avoids it"
-    - "--moe-runner-backend triton: the default AITER Composable-Kernel fused-MoE (ck_moe_stage1) has no tuned config for dsv4's FP8 MoE shapes on gfx942 and aborts CUDA-graph capture ('Unsupported kernel config for moe heuristic dispatch'); triton JIT-generates per-shape so it needs no pretuned table (MI355X/gfx950 keeps the CK default, which has gfx950 configs)"
-    - "Search space mirrors MI355X (TP-only low-latency conc 1-32 + DP-attn/EP8 throughput conc 64-2048) but drops the MI355X TP4 bands: the ~960GB mixed checkpoint is ~1.05TB in FP8 and only fits TP8 on 8x192GB"
-    - "Image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713 (mi30x variant of the MI355X sglang-rocm dated-tag family)"
+    - "Add DeepSeek-V4-Pro FP8 single-node MI300X vLLM benchmark (new SKU, previously no dsv4 data on gfx942)"
+    - "vLLM, not sglang: on gfx942 (no native FP4) the dsv4 sglang backend's nvfp4 MoE and TileLang-MLA kernels have no gfx942 build (gfx950/MI355X only). vLLM runs the checkpoint in FP8 via --quantization deepseek_v4_fp8 (dequant FP4 MoE -> FP8), the same path the no-FP4 H200 dsv4 vLLM recipe uses"
+    - "Recipe mirrors the same-model dsv4-fp4-mi355x-vllm (ROCm vLLM dsv4: AITER MoE, deepseek_v4 tokenizer/reasoning-parser, mp executor, FULL_AND_PIECEWISE compile) plus gfx942 AITER infra from minimaxm3-fp8-mi300x-vllm; TP8 conc 4-512 (the FP4->FP8 dequant ~1.05TB fits 8x192GB only at TP8)"
+    - "Image vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa (the DSv4-validated ROCm vLLM build)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2194
 
 - config-keys:
