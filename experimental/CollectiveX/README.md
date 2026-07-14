@@ -93,7 +93,9 @@ present.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
 architecture/product, container image and platform, fixed placement, launcher, runnable backend/EP
-pairs, tracked operator defaults, and scale-out RDMA selectors. Operator documents can override the defaults. Launchers
+pairs, the scale-out `fabric` identity (NIC and switch — so same-GPU clusters on different fabrics
+are distinct entries, e.g. a second b200 cluster), tracked operator defaults, and scale-out RDMA
+selectors. Operator documents can override the defaults. Launchers
 declare and check the fields they actually require. `sweep_matrix.py` derives EP topology from the
 placement fields; the sweep includes every registered SKU by default.
 

@@ -57,6 +57,13 @@ class PlatformRegistryTests(unittest.TestCase):
                 self.assertLessEqual(
                     set(entry.get("network", {})), self.NETWORK_FIELDS
                 )
+                # Fabric provenance: each cluster records its scale-out NIC and
+                # switch so same-GPU clusters on different fabrics stay distinct.
+                fabric = entry["fabric"]
+                self.assertEqual(set(fabric), {"nic", "switch"})
+                for value in fabric.values():
+                    self.assertIsInstance(value, str)
+                    self.assertTrue(value)
                 self.assertRegex(entry["arch"], r"^(sm|gfx)\d+$")
                 self.assertRegex(entry["image"], r"^[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$")
                 self.assertIn(entry["image_platform"], {"linux/amd64", "linux/arm64"})
