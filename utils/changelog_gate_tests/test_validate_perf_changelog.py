@@ -320,9 +320,11 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         == "${{ steps.sweep_policy.outputs.skip-pr-sweep }}"
     )
     assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
+    assert jobs["classify-priority"]["needs"] == "check-changelog"
     assert jobs["setup"]["needs"] == [
         "check-changelog",
         "reuse-sweep-gate",
+        "classify-priority",
     ]
     assert (
         "needs.check-changelog.result == 'success'"
