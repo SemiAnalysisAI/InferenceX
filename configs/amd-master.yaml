@@ -834,7 +834,7 @@ kimik2.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
 kimik2.5-fp4-mi355x-atom-disagg:
-  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539
+  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atomesh_202607121715
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -865,6 +865,26 @@ kimik2.5-fp4-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+      # 1P2D
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
