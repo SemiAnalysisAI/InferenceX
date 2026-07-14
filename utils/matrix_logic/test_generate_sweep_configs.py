@@ -68,6 +68,7 @@ def sample_multinode_config():
             "runner": "gb200",
             "multinode": True,
             "disagg": True,
+            "kv-p2p-transfer": "nixl",
             "scenarios": {
                 "fixed-seq-len": [
 
@@ -128,6 +129,39 @@ def sample_runner_config():
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
             "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        },
+    }
+
+
+@pytest.fixture
+def sample_single_node_agentic_config():
+    """Single-node agentic config with explicit and default spec decoding."""
+    return {
+        "kimik2.6-fp4-b300-trt-agentic": {
+            "image": "nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc5",
+            "model": "moonshotai/Kimi-K2.5",
+            "model-prefix": "kimik2.6",
+            "precision": "fp4",
+            "framework": "trt",
+            "runner": "cluster:b300-nv",
+            "multinode": False,
+            "scenarios": {
+                "agentic-coding": [{
+                    "search-space": [
+                        {
+                            "tp": 8,
+                            "spec-decoding": "mtp",
+                            "kv-offloading": "none",
+                            "conc-list": [16],
+                        },
+                        {
+                            "tp": 8,
+                            "kv-offloading": "none",
+                            "conc-list": [32],
+                        },
+                    ],
+                }],
+            },
         },
     }
 
@@ -687,6 +721,22 @@ class TestGenerateFullSweepSingleNode:
             (row["pp"], row["dcp-size"], row["pcp-size"])
             for row in explicit_result
         } == {(2, 2, 2)}
+
+    def test_agentic_spec_decoding_is_propagated(
+        self,
+        sample_single_node_agentic_config,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            sample_single_node_agentic_config,
+            sample_runner_config,
+        )
+
+        assert [entry["spec-decoding"] for entry in result] == ["mtp", "none"]
+        assert result[0]["exp-name"].endswith("_kvnone_spec-mtp")
+        assert result[1]["exp-name"].endswith("_kvnone")
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Filter by model prefix should work."""
@@ -1913,6 +1963,29 @@ class TestGenerateTestConfigSweep:
             for row in explicit_result
         ] == [(2, 2, 2)]
 
+    def test_single_node_agentic_spec_decoding_is_propagated(
+        self,
+        sample_single_node_agentic_config,
+        sample_runner_config,
+    ):
+        args = argparse.Namespace(
+            config_keys=["kimik2.6-fp4-b300-trt-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(
+            args,
+            sample_single_node_agentic_config,
+            sample_runner_config,
+        )
+
+        assert [entry["spec-decoding"] for entry in result] == ["mtp", "none"]
+        assert result[0]["exp-name"].endswith("_kvnone_spec-mtp")
+        assert result[1]["exp-name"].endswith("_kvnone")
+
     def test_multinode_parallelism_fields_are_generated(
         self,
         sample_multinode_config,
@@ -1946,6 +2019,9 @@ class TestGenerateTestConfigSweep:
 
     def test_runner_node_filter_expands_config_runner(self, sample_multinode_config, sample_runner_config):
         """test-config should allow targeting one concrete runner node."""
+        master_entry = sample_multinode_config["dsr1-fp4-gb200-dynamo-trt"]
+        master_entry["router"] = {"name": "trt-router", "version": "0.20.0"}
+        master_entry["kv-p2p-transfer"] = "nixl"
         args = argparse.Namespace(
             config_keys=["dsr1-fp4-gb200-dynamo-trt"],
             seq_lens=None,
@@ -1961,6 +2037,8 @@ class TestGenerateTestConfigSweep:
 
         assert len(result) == 1
         assert result[0]["runner"] == "gb200-nv_0"
+        assert result[0]["router"] == {"name": "trt-router", "version": "0.20.0"}
+        assert result[0]["kv-p2p-transfer"] == "nixl"
 
     def test_runner_node_filter_no_match_skips_config(self, sample_multinode_config, sample_runner_config):
         """Unmatched node filters should produce no entries."""
@@ -1990,6 +2068,7 @@ class TestGenerateTestConfigSweep:
                 "framework": "sglang",
                 "runner": "cluster:b300-nv",
                 "multinode": False,
+                "router": {"name": "default-router", "version": "1.0.0"},
                 "scenarios": {
                     "agentic-coding": [
                         {
@@ -1999,7 +2078,7 @@ class TestGenerateTestConfigSweep:
                                     "tp": 8,
                                     "ep": 1,
                                     "kv-offloading": "dram",
-                                    "kv-offload-backend": "hicache",
+                                    "kv-offload-backend": {"name": "hicache"},
                                     "conc-list": [64],
                                 }
                             ],
@@ -2023,6 +2102,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["scenario-type"] == "agentic-coding"
         assert result[0]["total-cpu-dram-gb"] == 2399
         assert result[0]["duration"] == 3600
+        assert result[0]["router"] == {"name": "default-router", "version": "1.0.0"}
 
     def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
         config = {
@@ -2041,7 +2121,7 @@ class TestGenerateTestConfigSweep:
                             {
                                 "tp": 4,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                             {
@@ -2049,7 +2129,7 @@ class TestGenerateTestConfigSweep:
                                 "dcp-size": 2,
                                 "pcp-size": 1,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                             {
@@ -2057,14 +2137,14 @@ class TestGenerateTestConfigSweep:
                                 "dcp-size": 1,
                                 "pcp-size": 2,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                             {
                                 "tp": 4,
                                 "pp": 2,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                         ],
@@ -2111,7 +2191,7 @@ class TestGenerateTestConfigSweep:
                             {
                                 "tp": 4,
                                 "kv-offloading": "dram",
-                                "kv-offload-backend": "native",
+                                "kv-offload-backend": {"name": "native"},
                                 "conc-list": [32],
                             },
                         ],
@@ -2150,6 +2230,8 @@ class TestGenerateTestConfigSweep:
                             "search-space": [
                                 {
                                     "conc-list": [16, 32, 64, 128, 256],
+                                    "router": {"name": "dynamo-router", "version": "1.3.0"},
+                                    "kv-p2p-transfer": "nixl",
                                     "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 2, "ep": 4, "dp-attn": False},
                                     "decode": {"hardware": "h100", "num-worker": 1, "tp": 4, "pp": 2, "dcp-size": 2, "pcp-size": 1, "ep": 1, "dp-attn": False},
                                 }
@@ -2180,6 +2262,8 @@ class TestGenerateTestConfigSweep:
         assert result[0]["decode"]["pcp-size"] == 1
         assert result[1]["conc"] == [256]
         assert result[1]["exp-name"] == "dsv4_p2x4_d1x4_conc256"
+        assert all(entry["router"] == {"name": "dynamo-router", "version": "1.3.0"} for entry in result)
+        assert all(entry["kv-p2p-transfer"] == "nixl" for entry in result)
 
     def test_multinode_agentic_preserves_kv_offload_fields(self):
         config = {
@@ -2192,12 +2276,13 @@ class TestGenerateTestConfigSweep:
                 "runner": "cluster:mi355x-amds",
                 "multinode": True,
                 "disagg": True,
+                "kv-p2p-transfer": "mori",
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [{
                             "conc-list": [16],
                             "kv-offloading": "dram",
-                            "kv-offload-backend": "hicache",
+                            "kv-offload-backend": {"name": "hicache"},
                             "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                             "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                         }],
@@ -2217,7 +2302,7 @@ class TestGenerateTestConfigSweep:
 
         assert len(result) == 1
         assert result[0]["kv-offloading"] == "dram"
-        assert result[0]["kv-offload-backend"] == "hicache"
+        assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
 
 
@@ -2337,6 +2422,7 @@ class TestGenerateFullSweepMixed:
                 "runner": "cluster:gb200-nv",
                 "multinode": True,
                 "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [
