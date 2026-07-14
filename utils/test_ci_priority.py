@@ -106,7 +106,6 @@ def test_patchwork_label_forces_bottom_priority_without_waiver():
 
 
 def test_fable_criteria_drive_all_configured_adjustments():
-    entry = {"runner": "h100", "framework": "trt"}
     criteria = frozenset({"multi-node", "agentic", "fp4", "mtp", "vllm", "dsr1"})
     equivalent_entry = {
         "prefill": {},
@@ -116,16 +115,23 @@ def test_fable_criteria_drive_all_configured_adjustments():
         "framework": "vllm",
         "model-prefix": "dsr1",
     }
+    entry = dict(equivalent_entry)
 
     assert calculate_priority(
         entry,
         POLICY,
         PriorityContext(criteria=criteria),
     ) == calculate_priority(equivalent_entry, POLICY)
+    unrelated_entry = {"runner": "h100", "framework": "trt"}
+    assert calculate_priority(
+        unrelated_entry,
+        POLICY,
+        PriorityContext(criteria=criteria),
+    ) == Decimal("1.000")
 
 
-def test_fable_criteria_reject_unknown_or_conflicting_values():
-    entry = {"runner": "h100", "framework": "trt"}
+def test_fable_criteria_reject_unknown_values_and_allow_mixed_jobs():
+    entry = {"runner": "h100", "framework": "vllm"}
 
     with pytest.raises(ValueError, match="Unknown CI priority criteria"):
         calculate_priority(
@@ -133,12 +139,11 @@ def test_fable_criteria_reject_unknown_or_conflicting_values():
             POLICY,
             PriorityContext(criteria=frozenset({"unknown"})),
         )
-    with pytest.raises(ValueError, match="Conflicting CI priority criteria"):
-        calculate_priority(
-            entry,
-            POLICY,
-            PriorityContext(criteria=frozenset({"vllm", "sglang"})),
-        )
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(criteria=frozenset({"vllm", "sglang"})),
+    ) == Decimal("1.500")
 
 
 def test_priority_labels_do_not_override_automatic_score():

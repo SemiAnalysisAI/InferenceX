@@ -45,17 +45,10 @@ def _first_prefix_adjustment(value: str, adjustments: dict[str, Any]) -> Decimal
     return Decimal(0)
 
 
-
-def _criterion_value(criteria: frozenset[str], choices: tuple[str, ...]) -> str:
-    matches = criteria.intersection(choices)
-    if len(matches) > 1:
-        raise ValueError(f"Conflicting CI priority criteria: {sorted(matches)}")
-    return next(iter(matches), "")
-
-
 def _entry_from_criteria(
     criteria: frozenset[str],
     policy: dict[str, Any],
+    entry: dict[str, Any],
 ) -> dict[str, Any]:
     fixed = {
         "multi-node",
@@ -75,19 +68,48 @@ def _entry_from_criteria(
     unknown = criteria - allowed
     if unknown:
         raise ValueError(f"Unknown CI priority criteria: {sorted(unknown)}")
+    spec_decoding = str(entry.get("spec-decoding", ""))
+    framework = str(entry.get("framework", ""))
+    model_prefix = str(entry.get("model-prefix", ""))
+    framework_criteria = ("sglang", "vllm", "dynamo-vllm")
+    model_criteria = tuple(policy["adjustments"].get("model-prefix", {}))
     return {
-        "prefill": {} if "multi-node" in criteria else None,
-        "scenario-type": "agentic-coding" if "agentic" in criteria else "",
-        "eval-only": "eval-only" in criteria,
-        "precision": "fp4" if "fp4" in criteria else "",
-        "spec-decoding": _criterion_value(criteria, ("mtp", "eagle", "eagle3")),
-        "framework": _criterion_value(
-            criteria,
-            ("sglang", "vllm", "dynamo-vllm"),
+        "prefill": (
+            {} if "multi-node" in criteria and entry.get("prefill") is not None else None
         ),
-        "model-prefix": _criterion_value(
-            criteria,
-            tuple(policy["adjustments"].get("model-prefix", {})),
+        "scenario-type": (
+            "agentic-coding"
+            if "agentic" in criteria and entry.get("scenario-type") == "agentic-coding"
+            else ""
+        ),
+        "eval-only": "eval-only" in criteria and entry.get("eval-only") is True,
+        "precision": (
+            "fp4" if "fp4" in criteria and entry.get("precision") == "fp4" else ""
+        ),
+        "spec-decoding": spec_decoding if spec_decoding in criteria else "",
+        "framework": (
+            framework
+            if any(
+                criterion in criteria
+                and (
+                    framework == criterion
+                    or framework.startswith(f"{criterion}-")
+                )
+                for criterion in framework_criteria
+            )
+            else ""
+        ),
+        "model-prefix": (
+            model_prefix
+            if any(
+                criterion in criteria
+                and (
+                    model_prefix == criterion
+                    or model_prefix.startswith(f"{criterion}-")
+                )
+                for criterion in model_criteria
+            )
+            else ""
         ),
     }
 
@@ -112,7 +134,7 @@ def calculate_priority(
         return _decimal(patchwork["score"]).quantize(SCORE_QUANTUM, ROUND_HALF_UP)
 
     if criteria is not None:
-        entry = _entry_from_criteria(criteria, policy)
+        entry = _entry_from_criteria(criteria, policy, entry)
     adjustments = policy["adjustments"]
     score = _decimal(policy["base-score"])
     score += _decimal(adjustments.get("event", {}).get(context.event_name, 0))
