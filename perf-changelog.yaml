@@ -4773,4 +4773,4 @@
     - "Fix disagg SLURM exclude list: add mia1-p01-g09 (broken pyxis) to submit.sh — was missing from multi-node path, causing prefill worker 503 failures."
     - "Expand mi355x-disagg runner pool from 3 to 9 nodes."
     - "Concurrency sweep: 1K1K and 8K1K both [ 8, 16, 32, 64, 128 ]."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/209
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2094
