@@ -4759,3 +4759,18 @@
     - "H100 (sm90) has no FP4 path, so the ~960GB mixed checkpoint runs in FP8 (~1.05TB), which doesn't fit 8xH100 (640GB); each worker spans 2 nodes at TP16, cross-node KV via NIXL"
     - "Two topologies per seq-len (1k1k + 8k1k): low-latency 1p1d TP16/TP16 (conc 1-64) and throughput 1p1d TP16 prefill / DEP16 decode (tp16/ep16/dp-attn, DeepEP dispatch, conc 64-512); recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/{1k1k,8k1k}/disagg-h100-*.yaml"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2196
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2197
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
