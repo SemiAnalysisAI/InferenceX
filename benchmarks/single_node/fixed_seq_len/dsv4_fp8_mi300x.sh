@@ -8,9 +8,12 @@
 #     shape, DP-attention + EP path, deepseek_v4 model flags, SWA/page-size)
 #   * same SKU, different model: dsr1_fp8_mi300x.sh (gfx942 infra: AITER,
 #     MEC-firmware scratch-reclaim guard)
-#   * same model, FP8 path: the H200 dsv4 recipe (--quantization
-#     deepseek_v4_fp8) — gfx942 has no native FP4, so the FP4-MoE checkpoint
-#     is run in FP8.
+#   * same model + framework: dsv4_fp8_h200_sglang.sh — gfx942 has no native
+#     FP4, so the FP4-MoE checkpoint is run in FP8. Like the H200 sglang
+#     recipe (and the MI355X dsv4 sglang recipe), NO --quantization flag is
+#     passed: sglang reads the modelopt quant config from the checkpoint and
+#     the AITER MoE path (SGLANG_USE_AITER=1) executes it. (--quantization
+#     deepseek_v4_fp8 is a vLLM-only method; sglang argparse rejects it.)
 #
 # Sizing: the ~960GB mixed checkpoint is ~1.05TB in FP8, so only TP8 fits
 # 8x192GB (TP4 = 768GB does not). The config restricts to TP8 accordingly.
@@ -18,8 +21,8 @@
 # Debug-runs must confirm before this leaves bring-up:
 #   1. The mi30x image carries the DeepseekV4 model class.
 #   2. --attention-backend dsv4 exists on gfx942 (else fall back to aiter).
-#   3. --quantization deepseek_v4_fp8 loads on ROCm (else use the AITER FP8
-#      MoE path without an explicit quant flag).
+#   3. The modelopt FP4-MoE checkpoint loads + runs in FP8 via AITER on gfx942
+#      (else pass an explicit valid sglang quant, e.g. --quantization fp8).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -96,7 +99,6 @@ sglang serve \
     --host=0.0.0.0 --port $PORT \
     "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
-    --quantization deepseek_v4_fp8 \
     --kv-cache-dtype fp8_e4m3 \
     --attention-backend dsv4 \
     --disable-radix-cache \

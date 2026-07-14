@@ -4755,7 +4755,8 @@
     - dsv4-fp8-mi300x-sglang
   description:
     - "Add DeepSeek-V4-Pro FP8 single-node MI300X SGLang benchmark (new SKU, previously no dsv4 data on gfx942)"
-    - "Extrapolated from the same-model MI355X entry (dsv4-fp4-mi355x-sglang) for search-space shape + deepseek_v4 model flags, and from the same-SKU dsr1-fp8-mi300x-sglang for gfx942 AITER infra; FP8 path (--quantization deepseek_v4_fp8) follows the H200 dsv4 recipe since gfx942 has no native FP4"
+    - "Extrapolated from the same-model MI355X entry (dsv4-fp4-mi355x-sglang) for search-space shape + deepseek_v4 model flags, and from the same-SKU dsr1-fp8-mi300x-sglang for gfx942 AITER infra; gfx942 has no native FP4 so the FP4-MoE checkpoint runs in FP8"
+    - "No --quantization flag: sglang reads the modelopt quant config from the checkpoint and the AITER MoE path executes it, matching the H200 and MI355X dsv4 sglang recipes (--quantization deepseek_v4_fp8 is vLLM-only and rejected by sglang argparse)"
     - "Search space mirrors MI355X (TP-only low-latency conc 1-32 + DP-attn/EP8 throughput conc 64-2048) but drops the MI355X TP4 bands: the ~960GB mixed checkpoint is ~1.05TB in FP8 and only fits TP8 on 8x192GB"
     - "Image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi30x-20260713 (mi30x variant of the MI355X sglang-rocm dated-tag family)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2194
