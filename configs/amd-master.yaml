@@ -833,7 +833,7 @@ kimik2.5-fp4-mi355x-atom:
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
-kimik2.5-fp4-mi355x-atom-disagg:
+kimik2.5-fp4-mi355x-atom-disagg-singlenode:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atomesh_202607121715
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
@@ -845,7 +845,7 @@ kimik2.5-fp4-mi355x-atom-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-      # 1P1D
+      # 1P1D single-node (GPUs 0-3 prefill, 4-7 decode)
     - isl: 8192
       osl: 1024
       search-space:
@@ -858,6 +858,7 @@ kimik2.5-fp4-mi355x-atom-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
+          - "SINGLE_NODE_PD=1"
         decode:
           num-worker: 1
           tp: 4

@@ -4752,14 +4752,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
-    - kimik2.5-fp4-mi355x-atom-disagg
-  description:
-    - "Add Kimi-K2.5-MXFP4 entry to models_atom.yaml for ATOM disaggregated inference"
-    - "Set env: ATOM_DISABLE_MMAP=true, AITER_QUICK_REDUCE_QUANTIZATION=INT4, AITER_MXFP4_INTERMEDIATE=1, OMP_NUM_THREADS=1"
-    - "Add scheduler_delay_factor support to models_atom.yaml schema and server_atom.sh; set to 1 for Kimi-K2.5"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2172
-
-- config-keys:
     - dsv4-fp8-h200-vllm
     - dsv4-fp8-h200-vllm-mtp
   description:

@@ -95,6 +95,14 @@ RANDOM_RANGE_RATIO=${15:-0.8}
 NODE_LIST=${16}
 
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
+
+# Single-node PD: both prefill and decode share one node via GPU partitioning
+# (HIP_VISIBLE_DEVICES). SINGLE_NODE_PD=1 overrides the 2-node default.
+if [[ "${SINGLE_NODE_PD:-0}" == "1" ]]; then
+    NUM_NODES=1
+    export SINGLE_NODE_PD=1
+fi
+
 profiler_args="${ISL} ${OSL} ${CONCURRENCIES} ${REQUEST_RATE}"
 
 # Export variables for the SLURM job
