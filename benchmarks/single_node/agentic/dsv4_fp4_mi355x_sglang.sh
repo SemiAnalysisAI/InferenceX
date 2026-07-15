@@ -44,9 +44,6 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
-export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
-export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
-
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     # HiCache config — https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4
@@ -71,6 +68,8 @@ if agentic_kv_offload_enabled; then
             ;;
     esac
 fi
+# ---- Client config ----------------------------------------------------------
+export AIPERF_HTTP_TCP_USER_TIMEOUT=1200000
 
 # ---- LLM server config ----------------------------------------------------------
 USE_SGLANG_ROUTER=false
@@ -116,6 +115,10 @@ export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
+
+# sglang kv cache
+export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
 METRICS_ARGS=(--enable-metrics)
 SPEC_ARGS=()
