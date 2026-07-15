@@ -17,6 +17,17 @@ export ENROOT_ROOTFS_WRITABLE=1
 # write to it.
 export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
 
+# Persistent dynamo source-build cache. srtctl's hash-pinned dynamo install
+# (_hash_cached_source_install) caches the built wheel + src tarball at
+# /configs/dynamo-wheels/<hash> with a .complete sentinel; on a warm cache the
+# install is just `pip install` from the cache (no apt, no root). In CI /configs
+# is the per-job srt-slurm checkout (cold every job → cold build needs apt +
+# root, which the non-root server containers can't do), so persist and share
+# the cache across jobs by bind-mounting this host dir at /configs/dynamo-wheels.
+# Seed it once with a --container-remap-root build. 777 for multi-user runners.
+export DYNAMO_WHEELS_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/dynamo-wheels"
+mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+
 export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
@@ -128,38 +139,57 @@ SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
-    # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
-    # (`srtctl apply --no-preflight`) — needed because:
-    #
-    #   - We want MODEL_PATH=/scratch/models/DeepSeek-V4-Pro (node-local
-    #     NVMe, fast) instead of the NFS path under /data/home/sa-shared.
-    #   - /scratch only exists on GB300 compute nodes; it is NOT mounted
-    #     on the GHA runner pod that invokes srtctl.
-    #   - srtctl's pre-submit model check (_preflight_model in
-    #     src/srtctl/core/validation.py) does a Path.is_dir() in-process
-    #     on the invoking node — so it fails before sbatch is ever
-    #     called with "Model alias 'X' resolved to '/scratch/...',
-    #     but that path is unavailable".
-    #   - --no-preflight skips just the optional Python-level FS check.
-    #     vLLM still fails loudly at runtime if the path is genuinely
-    #     missing on the compute node.
-    #
-    # All other upstream schema features we need are inherited from
-    # NVIDIA HEAD:
-    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
-    #     (hook that hands off to benchmarks/multi_node/agentic_srt.sh)
-    #   - DynamoConfig.wheel (so vllm recipes can pin the ai-dynamo wheel)
-    #   - sbatch_directives / srun_options (top-level recipe fields)
-    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    # 854b3fd = --no-preflight flag
-    # 6e34b8b = benchmark_stage propagates srun_options (needed for
-    #           container-remap-root to reach the agentic_srt.sh srun)
-    git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
-    mkdir -p recipes/vllm/deepseek-v4/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-        recipes/vllm/deepseek-v4/agentic
+    if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+        # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.22: the two features the
+        # cquil11 fork was pinned for are merged upstream (present in v1.0.22) —
+        #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
+        #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
+        #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
+        #     the Path.is_dir() preflight would fail before sbatch is ever
+        #     called. The engine still fails loudly at runtime if the path is
+        #     genuinely missing on the compute node.
+        #   - benchmark_stage propagates srun_options (container-remap-root must
+        #     reach the agentic_srt.sh srun).
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout v1.0.22
+        mkdir -p recipes/sglang/qwen3.5
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
+            recipes/sglang/qwen3.5
+    else
+        # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
+        # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
+        # (`srtctl apply --no-preflight`) — needed because:
+        #
+        #   - We want MODEL_PATH=/scratch/models/DeepSeek-V4-Pro (node-local
+        #     NVMe, fast) instead of the NFS path under /data/home/sa-shared.
+        #   - /scratch only exists on GB300 compute nodes; it is NOT mounted
+        #     on the GHA runner pod that invokes srtctl.
+        #   - srtctl's pre-submit model check (_preflight_model in
+        #     src/srtctl/core/validation.py) does a Path.is_dir() in-process
+        #     on the invoking node — so it fails before sbatch is ever
+        #     called with "Model alias 'X' resolved to '/scratch/...',
+        #     but that path is unavailable".
+        #   - --no-preflight skips just the optional Python-level FS check.
+        #     vLLM still fails loudly at runtime if the path is genuinely
+        #     missing on the compute node.
+        #
+        # All other upstream schema features we need are inherited from
+        # NVIDIA HEAD:
+        #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+        #     (hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+        #   - DynamoConfig.wheel (so vllm recipes can pin the ai-dynamo wheel)
+        #   - sbatch_directives / srun_options (top-level recipe fields)
+        git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        # 854b3fd = --no-preflight flag
+        # 6e34b8b = benchmark_stage propagates srun_options (needed for
+        #           container-remap-root to reach the agentic_srt.sh srun)
+        git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
+        mkdir -p recipes/vllm/deepseek-v4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+            recipes/vllm/deepseek-v4/agentic
+    fi
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -281,6 +311,9 @@ srtctl_root: "${SRTCTL_ROOT}"
 # re-tokenized + re-written every job.
 default_mounts:
   "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  # Warm dynamo source-build cache (nested over the auto /configs mount) so the
+  # hash-pinned install is a cache hit (pip-only, no apt/root) on every job.
+  "${DYNAMO_WHEELS_CACHE_HOST_PATH}": "/configs/dynamo-wheels"
   "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
 
 # Model path aliases
