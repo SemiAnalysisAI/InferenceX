@@ -1479,9 +1479,9 @@ build_replay_cmd() {
     # with one-token outputs and no idle delays for 10 minutes. Profiling begins
     # only after those requests drain and resumes from the resulting live state.
     REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
-    # Long-context warmup requests can take more than AIPerf's default 300s
-    # grace period to drain. Wait for every warmup request before profiling.
-    REPLAY_CMD+=" --warmup-grace-period inf"
+    # Give long-context warmup requests up to 10 minutes to drain before
+    # cancelling any remaining requests and starting profiling.
+    REPLAY_CMD+=" --warmup-grace-period 600"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the
