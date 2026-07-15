@@ -13,7 +13,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -76,8 +76,13 @@ PREFIX_CACHE_ARGS=()
 # ---- Offload service cleanup ------------------------------------------------
 LMCACHE_PID=""
 MOONCAKE_MASTER_PID=""
+ROUTER_PID=""
 
 cleanup_offload_services() {
+    if [[ -n "$ROUTER_PID" ]] && kill -0 "$ROUTER_PID" 2>/dev/null; then
+        kill "$ROUTER_PID" 2>/dev/null || true
+        wait "$ROUTER_PID" 2>/dev/null || true
+    fi
     if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
         kill "$LMCACHE_PID" 2>/dev/null || true
         wait "$LMCACHE_PID" 2>/dev/null || true
@@ -305,6 +310,28 @@ if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+# Parallelism layout:
+#   DP_ATTENTION=false -> pure TP: attention TP-sharded across all $TP GPUs in a
+#       single engine (low TPOT, capacity-capped at high CONC).
+#   DP_ATTENTION=true  -> DEP: per-DP-rank attention (TP1 x DP=$TP) with experts
+#       EP-sharded across the DP ranks (requires EP_SIZE>1). Grows KV capacity +
+#       decode width with concurrency. Mirrors dsv4_fp4_b300_vllm.sh.
+PARALLEL_ARGS=(--tensor-parallel-size="$TP")
+USE_VLLM_ROUTER=false
+VLLM_BACKEND_PORT="$PORT"
+if [ "$DP_ATTENTION" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size=1 --data-parallel-size="$TP")
+    USE_VLLM_ROUTER=true
+    VLLM_BACKEND_PORT=$((PORT + 1))
+    VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
+    # vllm-router expands the one HTTP backend into one logical worker per DP
+    # rank and sends X-data-parallel-rank per request; consistent_hash pins each
+    # conversation to a rank so its prefix cache stays warm. aiperf's stable
+    # X-Correlation-ID is aliased to the router's X-Session-ID for that affinity.
+    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
+    pip install --quiet "vllm-router==0.1.14"
+fi
+
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
@@ -312,8 +339,8 @@ export PYTHONNOUSERSITE=1
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
-    --port "$PORT"
-    --tensor-parallel-size="$TP"
+    --port "$VLLM_BACKEND_PORT"
+    "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.90
     --block-size=1
@@ -329,7 +356,28 @@ printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+# In DEP mode, front the DP engine with vllm-router on $PORT so the agentic
+# client (which targets $PORT) load-balances across DP ranks with prefix
+# affinity. Pure-TP serves the client directly on $PORT.
+if [ "$USE_VLLM_ROUTER" = "true" ]; then
+    ROUTER_LOG="$RESULT_DIR/router.log"
+    echo "Starting vLLM router on port $PORT for $TP DP ranks..."
+    vllm-router \
+        --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
+        --policy consistent_hash \
+        --intra-node-data-parallel-size "$TP" \
+        --host 0.0.0.0 \
+        --port "$PORT" \
+        --prometheus-host 127.0.0.1 \
+        --prometheus-port "$VLLM_ROUTER_METRICS_PORT" \
+        --request-timeout-secs 14400 \
+        --disable-retries > "$ROUTER_LOG" 2>&1 &
+    ROUTER_PID=$!
+    echo "Router PID: $ROUTER_PID"
+    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
+fi
 
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
