@@ -352,7 +352,6 @@ else
         Kimi-K2.5
         Kimi-K2.5-NVFP4
         Kimi-K2.6
-        Kimi-K2.6-NVFP4
         MiniMax-M2.5
         MiniMax-M2.5-NVFP4
         MiniMax-M2.7

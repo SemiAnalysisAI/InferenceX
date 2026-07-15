@@ -2989,24 +2989,6 @@ kimik2.5-fp4-b300-vllm-agentic:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
-kimik2.5-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-94c0ef300180f8fd1071d9cbe7270a8348155f94
-  model: Kimi-K2.6-NVFP4
-  model-prefix: kimik2.5
-  runner: cluster:b300-nv
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8] }
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 16, 32] }
-      - { tp: 4, ep: 1, spec-decoding: mtp, dcp-size: 4, kv-offloading: none, conc-list: [32, 64, 80, 96, 112, 128] }
-      - { tp: 4, ep: 1, spec-decoding: mtp, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [64, 80, 96, 112, 128, 144, 160] }
-
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
