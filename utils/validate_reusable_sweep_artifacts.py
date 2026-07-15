@@ -110,13 +110,27 @@ def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
     return set(actual_benchmark_key_rows(artifacts_dir))
 
 
+def freeze_identity_value(value: Any) -> Any:
+    """Convert nested JSON values into deterministic, hashable identities."""
+    if isinstance(value, dict):
+        return tuple(
+            sorted(
+                (key, freeze_identity_value(item))
+                for key, item in value.items()
+            )
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(freeze_identity_value(item) for item in value)
+    return value
+
+
 def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build an agentic identity from one point result."""
     if "kv_offloading" in row:
         kv_offloading = row.get("kv_offloading") or "none"
         offload_key: Any = (
             kv_offloading,
-            (row.get("kv_offload_backend") or "")
+            freeze_identity_value(row.get("kv_offload_backend") or "")
             if kv_offloading != "none"
             else "",
         )
