@@ -50,6 +50,7 @@ jobs:
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           args=(--backend "$INPUT_BACKEND")
@@ -58,12 +59,18 @@ jobs:
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
           python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           python3 - "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
           import json
+          import os
           import pathlib
           import sys
 
           matrix = json.loads(pathlib.Path("matrix_full.json").read_text())
           cells = matrix["include"]
+          for index, cell in enumerate(cells):
+              canonical = json.dumps(cell, sort_keys=True, separators=(",", ":"))
+              material = f"{os.environ['RUN_ID']}:{index}:{canonical}".encode()
+              cell["queue-token"] = hashlib.sha256(material).hexdigest()[:32]
           slim = {"include": cells}
           with open(sys.argv[1], "a", encoding="utf-8") as output:
               output.write(f"matrix={json.dumps(slim, separators=(',', ':'))}\n")
@@ -93,11 +100,10 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
-          '["self-hosted","{0}","ci-priority-{1}","ci-queue-{2}-{3}"]',
+          '["self-hosted","{0}","ci-job-{1}-{2}"]',
           matrix.sku,
           needs.setup.outputs.priority,
-          github.run_id,
-          matrix.id
+          matrix.queue-token
         ) ||
         format('["{0}"]', matrix.sku)
       ) }}

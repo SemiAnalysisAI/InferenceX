@@ -22,13 +22,11 @@ import yaml
 
 from authorize_skip_queue import is_authorized
 
-PRIORITY_LABEL_PREFIX = "ci-priority-"
-QUEUE_LABEL_PREFIX = "ci-queue-"
+JOB_LABEL_PREFIX = "ci-job-"
 SKIP_QUEUE_LABEL_PREFIX = "ci-skip-queue-pr-"
-PRIORITY_LABEL_RE = re.compile(
-    r"^ci-priority-(?P<score>[0-9]+(?:\.[0-9]+)?)$"
+JOB_LABEL_RE = re.compile(
+    r"^ci-job-(?P<score>[0-9]+(?:\.[0-9]+)?)-(?P<token>[0-9a-f]{32})$"
 )
-QUEUE_LABEL_RE = re.compile(r"^ci-queue-(?P<token>[a-zA-Z0-9._-]+)$")
 SKIP_QUEUE_LABEL_RE = re.compile(r"^ci-skip-queue-pr-(?P<number>[1-9][0-9]*)$")
 
 
@@ -39,28 +37,20 @@ def parse_timestamp(value: str | None) -> datetime:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
 
 
-def priority_from_labels(labels: Iterable[str]) -> tuple[str, Decimal] | None:
-    candidates = [label for label in labels if label.startswith(PRIORITY_LABEL_PREFIX)]
-    invalid = [label for label in candidates if not PRIORITY_LABEL_RE.fullmatch(label)]
+def job_label_from_labels(
+    labels: Iterable[str],
+) -> tuple[str, Decimal, str] | None:
+    candidates = [label for label in labels if label.startswith(JOB_LABEL_PREFIX)]
+    invalid = [label for label in candidates if not JOB_LABEL_RE.fullmatch(label)]
     if invalid:
-        raise ValueError(f"Job has invalid CI priority labels: {invalid}")
+        raise ValueError(f"Job has invalid CI job labels: {invalid}")
     if len(candidates) > 1:
-        raise ValueError(f"Job has multiple CI priority labels: {candidates}")
+        raise ValueError(f"Job has multiple CI job labels: {candidates}")
     if not candidates:
         return None
     label = candidates[0]
-    match = PRIORITY_LABEL_RE.fullmatch(label)
-    return label, Decimal(match.group("score"))
-
-
-def queue_label_from_labels(labels: Iterable[str]) -> str | None:
-    candidates = [label for label in labels if label.startswith(QUEUE_LABEL_PREFIX)]
-    invalid = [label for label in candidates if not QUEUE_LABEL_RE.fullmatch(label)]
-    if invalid:
-        raise ValueError(f"Job has invalid CI queue labels: {invalid}")
-    if len(candidates) > 1:
-        raise ValueError(f"Job has multiple CI queue labels: {candidates}")
-    return candidates[0] if candidates else None
+    match = JOB_LABEL_RE.fullmatch(label)
+    return label, Decimal(match.group("score")), match.group("token")
 
 def skip_queue_from_labels(labels: Iterable[str]) -> tuple[str, int] | None:
     candidates = [label for label in labels if label.startswith(SKIP_QUEUE_LABEL_PREFIX)]
@@ -80,9 +70,7 @@ def without_scheduling_labels(labels: Iterable[str]) -> frozenset[str]:
     return frozenset(
         label
         for label in labels
-        if not label.startswith(
-            (PRIORITY_LABEL_PREFIX, QUEUE_LABEL_PREFIX, SKIP_QUEUE_LABEL_PREFIX)
-        )
+        if not label.startswith((JOB_LABEL_PREFIX, SKIP_QUEUE_LABEL_PREFIX))
     )
 
 
@@ -149,13 +137,13 @@ def effective_priority(
     aging_per_hour: Decimal,
     authorized_skip_prs: frozenset[int] = frozenset(),
 ) -> Decimal:
-    priority = priority_from_labels(job.labels)
-    if priority is None:
-        raise ValueError(f"Job {job.id} has no CI priority label")
+    job_label = job_label_from_labels(job.labels)
+    if job_label is None:
+        raise ValueError(f"Job {job.id} has no CI job label")
     skip_request = skip_queue_from_labels(job.labels)
     if skip_request is not None and skip_request[1] in authorized_skip_prs:
         return Decimal("Infinity")
-    _, score = priority
+    _, score, _ = job_label
     waited_hours = Decimal(str(max(0.0, (now - job.queued_at).total_seconds()) / 3600))
     return score + waited_hours * aging_per_hour
 
@@ -176,17 +164,16 @@ def plan_label_updates(
 ) -> list[LabelUpdate]:
     """Assign each idle runner to the best compatible queued job.
 
-    Busy and offline runners are never relabeled. Priority and one-shot queue
-    labels are removed from unassigned idle runners, so a runner cannot take a
+    Busy and offline runners are never relabeled. One-shot job labels are
+    removed from unassigned idle runners, so a runner cannot take a
     second job before the controller has considered newly queued higher
     priorities.
     """
     eligible_jobs = []
     for job in jobs:
-        priority = priority_from_labels(job.labels)
-        queue_label = queue_label_from_labels(job.labels)
+        job_label = job_label_from_labels(job.labels)
         skip_queue_from_labels(job.labels)
-        if priority is not None and queue_label is not None:
+        if job_label is not None:
             eligible_jobs.append(job)
     eligible_jobs.sort(
         key=lambda job: (
@@ -209,12 +196,11 @@ def plan_label_updates(
     }
 
     for index, job in enumerate(eligible_jobs):
-        priority = priority_from_labels(job.labels)
-        queue_label = queue_label_from_labels(job.labels)
+        job_label = job_label_from_labels(job.labels)
         skip_request = skip_queue_from_labels(job.labels)
-        if priority is None or queue_label is None:
+        if job_label is None:
             continue
-        priority_label, _ = priority
+        scheduling_label, _, _ = job_label
         candidates = [
             runner for runner in remaining.values() if is_compatible(job, runner)
         ]
@@ -231,7 +217,7 @@ def plan_label_updates(
         )
         desired[runner.id] = (
             without_scheduling_labels(runner.labels)
-            | {priority_label, queue_label}
+            | {scheduling_label}
             | ({skip_request[0]} if skip_request is not None else set()),
             job.id,
         )

@@ -174,7 +174,7 @@ def format_priority(score: Decimal) -> str:
 def queue_token(value: dict[str, Any], namespace: str, path: tuple[str, ...]) -> str:
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
     material = f"{namespace}:{'/'.join(path)}:{canonical}".encode()
-    return hashlib.sha256(material).hexdigest()[:20]
+    return hashlib.sha256(material).hexdigest()[:32]
 
 
 def annotate_jobs(

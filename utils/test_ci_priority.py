@@ -178,7 +178,7 @@ def test_annotation_only_touches_runnable_matrix_entries():
     annotated = annotate_jobs(payload, POLICY)
 
     assert annotated["single_node"]["1k1k"][0]["priority"] == "3.750"
-    assert len(annotated["single_node"]["1k1k"][0]["queue-token"]) == 20
+    assert len(annotated["single_node"]["1k1k"][0]["queue-token"]) == 32
     assert "priority" not in annotated["changelog_metadata"]
     assert "priority" not in payload["single_node"]["1k1k"][0]
     assert "queue-token" not in payload["single_node"]["1k1k"][0]

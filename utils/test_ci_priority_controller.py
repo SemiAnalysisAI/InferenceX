@@ -17,6 +17,10 @@ from ci_priority_controller import (
 NOW = datetime(2026, 7, 14, 18, 0, tzinfo=timezone.utc)
 
 
+def job_label(job_id, priority):
+    return f"ci-job-{priority}-{job_id:032x}"
+
+
 def job(job_id, priority, hardware, queued_minutes=0):
     return QueuedJob(
         id=job_id,
@@ -24,8 +28,7 @@ def job(job_id, priority, hardware, queued_minutes=0):
         labels=frozenset({
             "self-hosted",
             hardware,
-            f"ci-priority-{priority}",
-            f"ci-queue-job-{job_id}",
+            job_label(job_id, priority),
         }),
         queued_at=NOW - timedelta(minutes=queued_minutes),
         name=f"job-{job_id}",
@@ -72,10 +75,8 @@ def test_assigns_best_compatible_job_to_each_idle_runner():
         ("b200_00", 2),
         ("h100_00", 1),
     ]
-    assert "ci-priority-0.700" in updates[0].labels
-    assert "ci-priority-5.000" in updates[1].labels
-    assert "ci-queue-job-2" in updates[0].labels
-    assert "ci-queue-job-1" in updates[1].labels
+    assert job_label(2, "0.700") in updates[0].labels
+    assert job_label(1, "5.000") in updates[1].labels
 
 
 def test_aging_breaks_starvation_between_nearby_priorities():
@@ -113,7 +114,7 @@ def test_authorized_skip_queue_outranks_numeric_priority():
     )
 
     assert updates[0].assigned_job_id == 2
-    assert "ci-priority-1.000" in updates[0].labels
+    assert job_label(2, "1.000") in updates[0].labels
     assert "ci-skip-queue-pr-2124" in updates[0].labels
 
 
@@ -181,8 +182,7 @@ def test_unused_idle_runner_loses_stale_priority_label():
             10,
             "b200_00",
             "b200",
-            "ci-priority-5.000",
-            "ci-queue-old-job",
+            job_label(99, "5.000"),
         )
     ]
 
@@ -190,14 +190,13 @@ def test_unused_idle_runner_loses_stale_priority_label():
 
     assert len(updates) == 1
     assert updates[0].assigned_job_id is None
-    assert all(not label.startswith("ci-priority-") for label in updates[0].labels)
-    assert all(not label.startswith("ci-queue-") for label in updates[0].labels)
+    assert all(not label.startswith("ci-job-") for label in updates[0].labels)
 
 
 def test_busy_and_offline_runners_are_never_relabelled():
     runners = [
-        runner(10, "b200_00", "b200", "ci-priority-5.000", busy=True),
-        runner(11, "b200_01", "b200", "ci-priority-5.000", status="offline"),
+        runner(10, "b200_00", "b200", job_label(98, "5.000"), busy=True),
+        runner(11, "b200_01", "b200", job_label(99, "5.000"), status="offline"),
     ]
 
     assert plan_label_updates([job(1, "0.700", "b200")], runners, now=NOW) == []
@@ -238,8 +237,16 @@ def test_preserves_scarce_runner_for_exact_job():
 @pytest.mark.parametrize(
     ("valid", "invalid", "message"),
     [
-        ("ci-priority-1.000", "ci-priority--1", "invalid CI priority"),
-        ("ci-queue-job-1", "ci-queue-", "invalid CI queue"),
+        (
+            job_label(1, "1.000"),
+            "ci-job--1-00000000000000000000000000000001",
+            "invalid CI job",
+        ),
+        (
+            job_label(1, "1.000"),
+            "ci-job-1.000-not-a-hash",
+            "invalid CI job",
+        ),
         ("ci-skip-queue-pr-2124", "ci-skip-queue-pr-zero", "invalid skip_queue"),
     ],
 )
@@ -280,8 +287,7 @@ def test_discovers_queued_jobs_inside_in_progress_workflow_runs():
                     "labels": [
                         "self-hosted",
                         "b200",
-                        "ci-priority-1.000",
-                        "ci-queue-job-22",
+                        job_label(22, "1.000"),
                     ],
                 }]
             raise AssertionError(path)

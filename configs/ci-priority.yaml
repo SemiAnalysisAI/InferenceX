@@ -1,7 +1,7 @@
 version: 1
 
 # Higher scores run first. Scores are uncapped and remain human-readable in
-# workflow job labels (for example, ci-priority-2.750).
+# workflow job labels (for example, ci-job-2.750-<hash>).
 base-score: 1.0
 
 adjustments:
