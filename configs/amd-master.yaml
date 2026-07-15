@@ -845,7 +845,7 @@ kimik2.5-fp4-mi355x-atom-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-      # 1P1D
+      # 1P(tp4)2D(tp8)
     - isl: 8192
       osl: 1024
       search-space:
@@ -859,12 +859,12 @@ kimik2.5-fp4-mi355x-atom-disagg:
           additional-settings:
           - "PREFILL_NODES=1"
         decode:
-          num-worker: 1
-          tp: 4
+          num-worker: 2
+          tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
+          - "DECODE_NODES=2"
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
