@@ -1,0 +1,79 @@
+name: Priority Scheduler Canary
+run-name: Priority Scheduler Canary - ${{ inputs.runner }} at p${{ inputs.score }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Runner label to test"
+        required: true
+        type: choice
+        default: b200
+        options:
+          - b200
+          - b300
+          - h100
+          - h200
+          - mi355x
+      score:
+        description: "Numeric priority score"
+        required: true
+        type: string
+        default: "1.000"
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare one-shot scheduling label
+    runs-on: ubuntu-latest
+    outputs:
+      runs-on: ${{ steps.labels.outputs.runs-on }}
+      job-label: ${{ steps.labels.outputs.job-label }}
+    steps:
+      - id: labels
+        name: Generate unique canary label
+        shell: python
+        env:
+          RUNNER_LABEL: ${{ inputs.runner }}
+          PRIORITY_SCORE: ${{ inputs.score }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          import hashlib
+          import json
+          import os
+          import re
+
+          score = os.environ["PRIORITY_SCORE"]
+          if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", score) is None:
+              raise SystemExit(f"Invalid numeric priority: {score}")
+
+          material = f"{os.environ['RUN_ID']}:{os.environ['RUN_ATTEMPT']}:canary"
+          token = hashlib.sha256(material.encode()).hexdigest()[:32]
+          job_label = f"ci-job-{score}-{token}"
+          runs_on = ["self-hosted", os.environ["RUNNER_LABEL"], job_label]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"job-label={job_label}\n")
+              output.write(f"runs-on={json.dumps(runs_on, separators=(',', ':'))}\n")
+
+  canary:
+    name: Verify priority dispatch
+    needs: prepare
+    runs-on: ${{ fromJSON(needs.prepare.outputs.runs-on) }}
+    timeout-minutes: 10
+    steps:
+      - name: Confirm assignment
+        env:
+          JOB_LABEL: ${{ needs.prepare.outputs.job-label }}
+          RUNNER_LABEL: ${{ inputs.runner }}
+        run: |
+          echo "Controller dispatched $JOB_LABEL to $RUNNER_LABEL runner $RUNNER_NAME"
+          {
+            echo "### Priority scheduler canary passed"
+            echo "- Job label: \`$JOB_LABEL\`"
+            echo "- Runner class: \`$RUNNER_LABEL\`"
+            echo "- Runner: \`$RUNNER_NAME\`"
+          } >> "$GITHUB_STEP_SUMMARY"
