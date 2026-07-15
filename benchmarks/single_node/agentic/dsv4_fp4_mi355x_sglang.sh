@@ -108,7 +108,7 @@ fi
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
-[ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
+[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=high
