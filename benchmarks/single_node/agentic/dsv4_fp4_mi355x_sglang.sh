@@ -69,7 +69,7 @@ if agentic_kv_offload_enabled; then
     esac
 fi
 # ---- Client config ----------------------------------------------------------
-export AIPERF_HTTP_TCP_USER_TIMEOUT=1200000
+export AIPERF_HTTP_TCP_USER_TIMEOUT=1000000 
 
 # ---- LLM server config ----------------------------------------------------------
 USE_SGLANG_ROUTER=false
