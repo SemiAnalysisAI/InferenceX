@@ -144,7 +144,7 @@ SGLANG_CMD=(
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.10
-    --page-size 1
+    --page-size 256
     --kv-cache-dtype fp8_e4m3
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --disable-shared-experts-fusion
