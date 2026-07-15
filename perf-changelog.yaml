@@ -4818,3 +4818,9 @@
     - "Keep max-running-requests global for SGLang DP attention and scale only per-scheduler CUDA graph capture"
     - "Reserve DPA MTP runtime headroom with mem-fraction-static 0.80"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Increase DPA MTP runtime headroom to mem-fraction-static 0.75 after c64 exhausted VRAM at 0.80 during regular warmup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
