@@ -1784,9 +1784,9 @@ dsv4-fp4-b200-vllm-agentic:
       search-space:
       # Pure TP is GPU-resident (cache fits) at low concurrency.
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 12, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 12, 16] }
       # DEP compares SimpleCPUOffloadConnector and MooncakeStoreConnector.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b200-trt:
@@ -3227,8 +3227,9 @@ dsv4-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Preserve the previous GPU-resident TP4 search space on the new image.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b300-trt:

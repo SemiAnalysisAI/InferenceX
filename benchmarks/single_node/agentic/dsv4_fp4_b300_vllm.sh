@@ -232,7 +232,7 @@ VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$VLLM_BACKEND_PORT"
-    --gpu-memory-utilization 0.95
+    --gpu-memory-utilization 0.96
     --trust-remote-code
     --no-enable-flashinfer-autotune
     --no-disable-hybrid-kv-cache-manager
