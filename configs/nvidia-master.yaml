@@ -1782,12 +1782,12 @@ dsv4-fp4-b200-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Pure TP is GPU-resident (cache fits) at low concurrency.
+      # Pure TP at low concurrency.
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 12, 16] }
-      # DEP compares SimpleCPUOffloadConnector and MooncakeStoreConnector.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
+      # DEP
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72, 80], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12, 20, 28, 36, 44, 52, 60, 68, 76], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -3001,7 +3001,7 @@ dsr1-fp8-b200-trt:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 64, conc-end: 128 }
-      - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 } 
+      - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
     - isl: 8192
       osl: 1024
