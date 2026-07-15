@@ -31,11 +31,9 @@ adjustments:
     dsr1: 0.75
 
 labels:
-  # Controller verifies skip_queue labeling actor membership.
+  # inferencex-ci-tracker verifies the active actor with INFX_CI_SCHEDULER_PAT.
   skip-queue:
     name: skip_queue
-    organization: SemiAnalysisAI
-    team-slug: core
   checklist-complete:
     names: [ci-checklist-complete]
     adjustment: 0.25
@@ -44,8 +42,3 @@ labels:
     score: 0.0
     waived-by: [ci-patchwork-waived]
 
-scheduler:
-  # Waiting jobs improve by this many score points per hour. This prevents
-  # ordinary work from starving without allowing patchwork jobs to jump the
-  # queue in a realistic time window.
-  aging-per-hour: 0.25
