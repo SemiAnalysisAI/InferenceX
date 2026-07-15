@@ -54,10 +54,11 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 # amd/Kimi-K2.7-Code-MXFP4 has 64 KV heads; the ROCm AITER-MLA kernel only
-# supports 16 or 128 heads, so it MUST be disabled for this model. Previously
-# left unset (inherited master=1) and only worked via vLLM's implicit backend
-# fallback -- make it explicit so a fallback/backend-selection change (or the
-# --block-size=1 AITER-MLA forcing path) can't turn this into a hard crash.
+# supports 16 or 128 heads, so it MUST be disabled for this model. With AITER-MLA
+# off, ROCm serves MLA via TRITON_MLA, which does NOT support block_size=1 -- so
+# this recipe passes no --block-size and lets vLLM pick a TRITON_MLA-valid
+# default (matches AMD's reference serve command for this model). The old
+# --block-size=1 only existed to force the (now-disabled) AITER-MLA path.
 export VLLM_ROCM_USE_AITER_MLA=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 # Avoid intermittent symm_mem all-reduce rendezvous hang at engine init on
@@ -343,7 +344,6 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.90
-    --block-size=1
     --trust-remote-code
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
