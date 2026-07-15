@@ -9,7 +9,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires one of these. 
+# KV_OFFLOADING=dram requires one of these.
 #   KV_OFFLOAD_BACKEND=hicache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -69,7 +69,7 @@ if agentic_kv_offload_enabled; then
     esac
 fi
 # ---- Client config ----------------------------------------------------------
-export AIPERF_HTTP_TCP_USER_TIMEOUT=1000000 
+export AIPERF_HTTP_TCP_USER_TIMEOUT=1000000
 
 # ---- LLM server config ----------------------------------------------------------
 USE_SGLANG_ROUTER=false
