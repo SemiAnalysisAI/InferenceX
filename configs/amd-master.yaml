@@ -1807,7 +1807,7 @@ dsv4-fp4-mi355x-sglang-disagg:
 
 
 dsv4-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1836,7 +1836,7 @@ dsv4-fp4-mi355x-sglang:
 # fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
 # #20404) and validates GSM8K 0.950 with MTP on.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
