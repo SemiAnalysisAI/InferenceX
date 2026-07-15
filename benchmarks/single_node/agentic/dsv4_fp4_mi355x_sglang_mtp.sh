@@ -118,10 +118,10 @@ export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 
-# sglang kv cache
+# sglang kv cache, when hicache is disabled
 # https://github.com/sgl-project/sglang/pull/30339
 #export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
-export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
+#export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
 METRICS_ARGS=(--enable-metrics)
 SPEC_ARGS=(
