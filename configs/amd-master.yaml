@@ -131,7 +131,8 @@ dsv4-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi325x
+  # mi325x (mi325x-amds pool) runners are down; use the mi325x-tw cluster.
+  runner: cluster:mi325x-tw
   precision: fp8
   framework: vllm
   multinode: false
@@ -156,7 +157,8 @@ dsv4-fp8-mi325x-vllm-mtp:
   image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi325x
+  # mi325x (mi325x-amds pool) runners are down; use the mi325x-tw cluster.
+  runner: cluster:mi325x-tw
   precision: fp8
   framework: vllm
   multinode: false
