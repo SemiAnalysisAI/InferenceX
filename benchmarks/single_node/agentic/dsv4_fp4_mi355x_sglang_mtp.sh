@@ -44,9 +44,6 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
-export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
-export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
-
 CACHE_ARGS=()
 if agentic_kv_offload_enabled; then
     # HiCache config — https://lmsysorg.mintlify.app/cookbook/autoregressive/DeepSeek/DeepSeek-V4
@@ -92,7 +89,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES=5
 
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
@@ -108,7 +104,6 @@ fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
-MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
@@ -122,6 +117,11 @@ export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
 export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
+
+# sglang kv cache
+# https://github.com/sgl-project/sglang/pull/30339
+#export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
 METRICS_ARGS=(--enable-metrics)
 SPEC_ARGS=(
@@ -141,7 +141,7 @@ SGLANG_CMD=(
     "${PARALLEL_ARGS[@]}"
     --attention-backend compressed
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
-    --max-running-requests "$MAX_RUNNING_REQUESTS"
+    --max-running-requests "$CUDA_GRAPH_MAX_BS"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.10
     --page-size 256
