@@ -36,16 +36,63 @@ def required_env(name: str) -> str:
     return value
 
 
-def _validate_kv_offload_env() -> tuple[str, str]:
+def optional_component_metadata(env_name: str) -> dict[str, str] | None:
+    """Parse strict optional component metadata from a JSON environment value."""
+    raw_value = os.environ.get(env_name)
+    if raw_value in (None, "", "null"):
+        return None
+
+    try:
+        metadata = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{env_name} must contain valid JSON") from exc
+
+    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
+        raise SystemExit(f"{env_name} must contain exactly 'name' and 'version'")
+    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
+        raise SystemExit(f"{env_name} name and version must be non-empty strings")
+    return metadata
+
+
+def optional_kv_offload_backend_metadata(
+    env_name: str,
+) -> dict[str, str] | None:
+    """Parse KV offload backend metadata with an optional version."""
+    raw_value = os.environ.get(env_name)
+    if raw_value in (None, "", "null"):
+        return None
+
+    try:
+        metadata = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{env_name} must contain valid JSON") from exc
+
+    if not isinstance(metadata, dict) or not set(metadata) <= {"name", "version"}:
+        raise SystemExit(f"{env_name} may contain only 'name' and 'version'")
+    if set(metadata) not in ({"name"}, {"name", "version"}):
+        raise SystemExit(f"{env_name} must contain 'name' and optional 'version'")
+    if not all(isinstance(value, str) and value for value in metadata.values()):
+        raise SystemExit(f"{env_name} values must be non-empty strings")
+    return metadata
+
+
+def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
     kv_offloading = required_env("KV_OFFLOADING")
-    kv_offload_backend = os.environ.get("KV_OFFLOAD_BACKEND", "")
+    backend_name = os.environ.get("KV_OFFLOAD_BACKEND", "")
+    backend_metadata = optional_kv_offload_backend_metadata(
+        "KV_OFFLOAD_BACKEND_METADATA"
+    )
     if kv_offloading == "none":
-        if kv_offload_backend:
+        if backend_name or backend_metadata is not None:
             raise SystemExit("KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none")
     else:
-        if not kv_offload_backend or kv_offload_backend == "none":
+        if not backend_name or backend_name == "none" or backend_metadata is None:
             raise SystemExit("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled")
-    return kv_offloading, kv_offload_backend
+        if backend_metadata["name"] != backend_name:
+            raise SystemExit(
+                "KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name"
+            )
+    return kv_offloading, backend_metadata
 
 
 def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
@@ -178,6 +225,14 @@ def build_agg(
         "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
+
+    router = optional_component_metadata("ROUTER_METADATA")
+    if router is not None:
+        agg["router"] = router
+
+    kv_p2p_transfer = os.environ.get("KV_P2P_TRANSFER")
+    if kv_p2p_transfer:
+        agg["kv_p2p_transfer"] = kv_p2p_transfer
 
     metadata = aggregate.get("metadata")
     if isinstance(metadata, dict):

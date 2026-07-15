@@ -4752,6 +4752,44 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Bump vLLM image from v0.21.0 to v0.25.0 for DeepSeek-V4-Pro FP8 on H200, matching the B200/B300 dsv4 vLLM bump (#2169)"
+    - "Refresh stale H200 dsv4 submissions (last run 2026-05-21)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Bump the pinned lmsysorg/sglang:deepseek-v4-hopper digest from the 2026-05-02 push (7f19c6dc) to the current 2026-05-13 push (1bf5d508)"
+    - "Refresh stale H200 dsv4 SGLang submissions (last run 2026-05-04)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2197
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
+    - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
+
+- config-keys:
     - glm5-fp4-gb200-dynamo-trt
   description:
     - "Add GLM-5 NVFP4 GB200 disaggregated TRT-LLM (STP, non-MTP) benchmarks via Dynamo"
@@ -4759,3 +4797,4 @@
     - "Recipes ported from NVIDIA/srt-slurm tag v1.0.26 (recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/{ISL1K_OSL1K,ISL8K_OSL1K}/STP; 13 ISL1K + 10 ISL8K), checked into benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5/... and overlaid onto the srt-slurm checkout at runtime. Prefill tp=4/ep=4 (dep4)."
     - "launch_gb200-nv.sh: added glm5-fp4 case to dynamo-trt branch (MODEL_PATH=/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4, SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4), pinned srt-slurm clone to v1.0.26 with cp -rT overlay of the local recipes/trtllm/glm5 recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1803
+ 

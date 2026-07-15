@@ -22,7 +22,7 @@ set -x
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
 # KV_OFFLOADING=dram requires one of these. 
-#   KV_OFFLOAD_BACKEND=native.
+#   KV_OFFLOAD_BACKEND=vllm-native.
 #   KV_OFFLOAD_BACKEND=mooncake.
 #   KV_OFFLOAD_BACKEND=lmcache.
 #   KV_OFFLOAD_BACKEND=hicache.
@@ -102,8 +102,8 @@ OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
-  native)
-    require_agentic_kv_offload_backend native
+  vllm-native)
+    require_agentic_kv_offload_backend vllm-native
     # ---- vLLM native config ----------------------------------------------------------
     unset VLLM_USE_SIMPLE_KV_OFFLOAD
     # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
@@ -111,7 +111,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # worker RSS / page cache / slurm cgroup).
     TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
     # Use vLLM's regular native KV-offload path (OffloadingConnector),
-    # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
+    # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
     # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
     # would switch it to SimpleCPUOffloadConnector. We intentionally leave
     # that env var UNSET here so the regular OffloadingConnector path is
@@ -277,7 +277,7 @@ EOF
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
         # https://github.com/LMCache/LMCache/pull/3853
-        git checkout dev
+        git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
         pip install -r requirements/build.txt
         pip install grpcio==1.78.0
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
@@ -345,7 +345,7 @@ EOF
         )
     ;;
   *)
-    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: native, mooncake, lmcache)" >&2
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-native, mooncake, lmcache)" >&2
     exit 1
     ;;
 esac

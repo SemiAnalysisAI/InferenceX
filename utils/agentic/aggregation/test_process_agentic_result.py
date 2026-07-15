@@ -385,6 +385,54 @@ def test_processor_preserves_dataset_provenance(tmp_path: Path):
     }
 
 
+def test_processor_emits_component_metadata_when_present(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "ROUTER_METADATA": json.dumps({"name": "vllm-router", "version": "0.1.14"}),
+            "KV_P2P_TRANSFER": "mooncake",
+        },
+    )
+
+    assert agg["router"] == {"name": "vllm-router", "version": "0.1.14"}
+    assert agg["kv_p2p_transfer"] == "mooncake"
+
+
+def test_processor_omits_component_metadata_when_absent(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(result_dir, tmp_path / "out")
+
+    assert "router" not in agg
+    assert "kv_p2p_transfer" not in agg
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"name": "lmcache"},
+        {"name": "lmcache", "version": "0.5.1"},
+    ],
+)
+def test_processor_emits_kv_offload_backend_metadata(
+    tmp_path: Path,
+    metadata: dict[str, str],
+):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "KV_OFFLOADING": "dram",
+            "KV_OFFLOAD_BACKEND": "lmcache",
+            "KV_OFFLOAD_BACKEND_METADATA": json.dumps(metadata),
+        },
+    )
+
+    assert agg["kv_offload_backend"] == metadata
+
+
 def test_processor_latency_units_are_seconds(tmp_path: Path):
     """aiperf reports ms; legacy schema is seconds. Verify conversion."""
     result_dir = _write_fixture(tmp_path)

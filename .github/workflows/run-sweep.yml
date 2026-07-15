@@ -330,6 +330,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -368,6 +370,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
@@ -442,6 +446,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -498,6 +504,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -506,13 +514,14 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
@@ -545,6 +554,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: '[${{ matrix.config.conc }}]'
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -568,7 +579,8 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -602,6 +614,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -643,6 +657,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}

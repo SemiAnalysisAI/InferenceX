@@ -79,8 +79,8 @@ jobs:
                 .map((label) => (typeof label === 'string' ? label : label.name))
                 .filter(Boolean),
             );
-            const fullSweepLabel = fullSweepLabels.find((label) => pullLabels.has(label));
-            if (!fullSweepLabel) {
+            const hasFullSweepLabel = fullSweepLabels.some((label) => pullLabels.has(label));
+            if (!hasFullSweepLabel) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -100,18 +100,30 @@ jobs:
                 per_page: 100,
               },
             );
-            const fullSweepLabelAppliedAt = timelineEvents
+            const fullSweepLabelEvents = timelineEvents
               .filter(
-                (event) => event.event === 'labeled' && event.label?.name === fullSweepLabel,
+                (event) =>
+                  ['labeled', 'unlabeled'].includes(event.event) &&
+                  fullSweepLabels.includes(event.label?.name),
               )
-              .reduce(
-                (latest, event) => Math.max(latest, Date.parse(event.created_at ?? '')),
-                Number.NEGATIVE_INFINITY,
+              .toSorted(
+                (left, right) =>
+                  Date.parse(left.created_at ?? '') - Date.parse(right.created_at ?? ''),
               );
-            if (!Number.isFinite(fullSweepLabelAppliedAt)) {
-              core.setFailed(`Could not verify when ${fullSweepLabel} was applied to the PR`);
-              return;
-            }
+            const fullSweepLabelsAt = (createdAt) => {
+              const candidateCreatedAt = Date.parse(createdAt);
+              if (!Number.isFinite(candidateCreatedAt)) return [];
+
+              const activeLabels = new Set();
+              for (const event of fullSweepLabelEvents) {
+                const eventCreatedAt = Date.parse(event.created_at ?? '');
+                if (!Number.isFinite(eventCreatedAt)) continue;
+                if (eventCreatedAt > candidateCreatedAt) break;
+                if (event.event === 'labeled') activeLabels.add(event.label.name);
+                else activeLabels.delete(event.label.name);
+              }
+              return [...activeLabels];
+            };
 
             const pullCommits = await github.paginate(github.rest.pulls.listCommits, {
               owner: context.repo.owner,
@@ -151,8 +163,11 @@ jobs:
               if (!pullCommitShas.has(candidate.head_sha)) {
                 return { valid: false, reason: 'its head commit is not in the PR commit list' };
               }
-              if (Date.parse(candidate.created_at) < fullSweepLabelAppliedAt) {
-                return { valid: false, reason: `it predates the current ${fullSweepLabel} label` };
+              if (fullSweepLabelsAt(candidate.created_at).length === 0) {
+                return {
+                  valid: false,
+                  reason: 'it was not created while a full-sweep label was applied',
+                };
               }
               if (candidate.status !== 'completed' || candidate.conclusion !== 'success') {
                 return {

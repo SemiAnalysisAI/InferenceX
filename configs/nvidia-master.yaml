@@ -5,6 +5,8 @@ dsr1-fp4-b200-dynamo-trt:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -391,6 +393,8 @@ dsr1-fp8-b200-dynamo-trt:
   runner: b200-multinode
   precision: fp8
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post2" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -841,6 +845,8 @@ dsr1-fp4-b300-dynamo-trt:
   runner: b300
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -1254,6 +1260,8 @@ dsr1-fp8-b300-dynamo-trt:
   runner: b300
   precision: fp8
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -1778,10 +1786,10 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
       # Sample the useful MooncakeStore range without repeating its collapsed
       # high-concurrency tail.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 32, 38, 44, 50] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 32, 38, 44, 50], router: { name: vllm-router, version: "0.1.14" } }
       # Retain the external-cache transition and peak-throughput region.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 38, 44, 56, 64, 66, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 38, 44, 56, 64, 66, 68], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -2337,6 +2345,8 @@ glm5-fp4-gb300-dynamo-trt:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -2457,6 +2467,7 @@ glm5-fp4-gb300-dynamo-trt:
           tp: 16
           ep: 16
           dp-attn: true
+
       - conc-list: [ 2253 ]
         prefill:
           num-worker: 3
@@ -3151,7 +3162,7 @@ kimik2.5-int4-b200-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 64, 96, 128] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 64, 96, 128] }
 
 kimik2.5-int4-b300-vllm:
   image: vllm/vllm-openai:v0.24.0
@@ -3206,7 +3217,7 @@ kimik2.5-int4-h200-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -3318,7 +3329,7 @@ kimik2.5-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -3409,7 +3420,7 @@ dsr1-fp8-h200-sglang-mtp:
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsv4-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.25.1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -3429,11 +3440,10 @@ dsv4-fp8-h200-vllm:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
 
-# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
-# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
+# MTP variant of dsv4-fp8-h200-vllm. Mirrors the non-MTP image and adds
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.25.1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200
@@ -3474,7 +3484,7 @@ dsv4-fp8-h200-vllm-agentic:
 # runner pool, search space) and adds EAGLE speculative decoding via
 # --speculative-algorithm EAGLE with the (3,1,4) chain matching dsv4-fp4-b300-sglang-mtp.
 dsv4-fp8-h200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:1bf5d508ab110cc0fe1659a5f21d1be02a7f0d7ca8f58cea7e7f4e11f6ae208f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200-dgxc
@@ -3498,7 +3508,7 @@ dsv4-fp8-h200-sglang:
 # runner pool, search space) and adds EAGLE speculative decoding via
 # --speculative-algorithm EAGLE with the (3,1,4) chain matching dsv4-fp4-b300-sglang-mtp.
 dsv4-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:1bf5d508ab110cc0fe1659a5f21d1be02a7f0d7ca8f58cea7e7f4e11f6ae208f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: h200-dgxc
@@ -3562,14 +3572,14 @@ dsv4-fp4-b300-vllm-agentic:
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
       - { tp: 4, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [16, 18, 20, 24] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 18, 20, 24] }
       # TP8 remains cache-resident through conc 52.
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 4, 6, 8, 16, 32, 40, 48, 52] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [52] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [8, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [32] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [52] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none,  conc-list: [8, 16], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [32], router: { name: vllm-router, version: "0.1.14" } }
       # TP8 DEP retains representative low, peak, and transition points.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [52, 72, 100, 128, 144], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -3771,6 +3781,8 @@ dsr1-fp8-h200-dynamo-trt:
   runner: h200-multinode
   precision: fp8
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -4315,6 +4327,8 @@ dsr1-fp8-h100-dynamo-trt:
   runner: h100-multinode
   precision: fp8
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post3" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -4786,6 +4800,8 @@ dsr1-fp8-h100-dynamo-sglang:
   runner: h100-multinode
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -4947,6 +4963,8 @@ dsr1-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post2" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5304,6 +5322,8 @@ dsr1-fp8-gb200-dynamo-trt:
   runner: gb200
   precision: fp8
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post2" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5732,6 +5752,8 @@ dsr1-fp8-gb200-dynamo-sglang:
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5861,6 +5883,8 @@ dsr1-fp8-gb300-dynamo-sglang:
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -5974,6 +5998,8 @@ dsr1-fp4-gb200-dynamo-sglang:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6089,6 +6115,8 @@ dsr1-fp4-gb300-dynamo-trt:
   runner: gb300
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "0.8.1.post2" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6516,6 +6544,8 @@ dsr1-fp4-gb300-dynamo-sglang:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -6631,6 +6661,8 @@ dsr1-fp8-gb300-dynamo-trt:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7043,6 +7075,8 @@ dsr1-fp8-h200-dynamo-sglang:
   runner: h200-multinode
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7300,6 +7334,8 @@ dsr1-fp4-b200-dynamo-sglang:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7436,6 +7472,7 @@ dsr1-fp8-b200-dynamo-sglang:
   runner: b200-multinode
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7452,6 +7489,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_lowlat[0]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 8
@@ -7465,6 +7503,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_lowlat[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 3
           tp: 8
@@ -7478,6 +7517,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_maxtpt[0]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 5
           tp: 8
@@ -7491,6 +7531,7 @@ dsr1-fp8-b200-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_stp_maxtpt[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 5
           tp: 8
@@ -7509,6 +7550,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_0.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_lowlat_0.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 3
           tp: 8
@@ -7523,6 +7565,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_1.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_lowlat_1.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 4
           tp: 8
@@ -7537,6 +7580,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_lowlat_2.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_lowlat_2.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 6
           tp: 8
@@ -7552,6 +7596,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_0.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_0.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 2
           tp: 8
@@ -7566,6 +7611,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_1.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_1.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -7580,6 +7626,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_2.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_2.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -7594,6 +7641,7 @@ dsr1-fp8-b200-dynamo-sglang:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_stp_maxtpt_3.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_stp_maxtpt_3.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -7607,6 +7655,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
   runner: b200-multinode
   precision: fp8
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -7624,6 +7673,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_lowlat[0]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 8
@@ -7639,6 +7689,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           dp-attn: false
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_lowlat[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 3
           tp: 8
@@ -7654,6 +7705,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_maxtpt[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 5
           tp: 8
@@ -7669,6 +7721,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:zip_override_mtp_maxtpt[2]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 5
           tp: 8
@@ -7684,6 +7737,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/b200-fp8/1k1k.yaml:override_mtp_maxtpt_1p2d"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 2
           tp: 8
@@ -7703,6 +7757,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_0.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_lowlat_0.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 3
           tp: 8
@@ -7718,6 +7773,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_1.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_lowlat_1.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 4
           tp: 8
@@ -7733,6 +7789,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_lowlat_2.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_lowlat_2.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 6
           tp: 8
@@ -7749,6 +7806,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_0.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_0.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 2
           tp: 8
@@ -7764,6 +7822,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_1.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_1.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -7779,6 +7838,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_2.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_2.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -7794,6 +7854,7 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/b200-fp8/8k1k_mtp_maxtpt_3.yaml
           - "CONFIG_FILE=recipes/b200-fp8/8k1k_mtp_maxtpt_3.yaml"
+        router: { name: dynamo-router, version: "0.9.1" }
         decode:
           num-worker: 1
           tp: 8
@@ -7807,6 +7868,8 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "5b4bc1dd70965017a737c71b19db5a0aeaa88727" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8017,6 +8080,8 @@ kimik2.5-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8388,6 +8453,8 @@ kimik2.5-fp4-gb300-dynamo-trt:
   runner: gb300
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8731,6 +8798,8 @@ kimik2.5-fp4-gb200-dynamo-vllm:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8853,6 +8922,8 @@ dsv4-fp4-b200-dynamo-vllm:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -8935,6 +9006,8 @@ dsv4-fp4-gb200-dynamo-vllm:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9035,6 +9108,8 @@ dsv4-fp4-gb200-llmd-vllm:
   runner: gb200
   precision: fp4
   framework: llmd-vllm
+  router: { name: llm-d-router, version: "0.9.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9159,6 +9234,8 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
   runner: gb200
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9239,6 +9316,8 @@ dsv4-fp4-gb200-dynamo-sglang:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "92f5b3b8d7dd5ab9179d4b1034bd2c1c0803693e" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -9366,6 +9445,8 @@ qwen3.5-fp8-gb200-dynamo-sglang:
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -9475,6 +9556,8 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "92f5b3b8d7dd5ab9179d4b1034bd2c1c0803693e" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -9611,6 +9694,8 @@ glm5-fp4-gb200-dynamo-sglang-mtp:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.2.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9894,6 +9979,8 @@ dsv4-fp4-b300-dynamo-vllm:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -9950,6 +10037,8 @@ dsv4-fp4-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -10043,6 +10132,8 @@ dsv4-fp4-gb300-dynamo-trt:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-deepseek-v4-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -10439,6 +10530,8 @@ dsv4-fp4-gb300-dynamo-trt-mtp:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-deepseek-v4-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -10862,6 +10955,8 @@ dsv4-fp4-gb300-dynamo-sglang:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "81d0555ee23519cea80a42b4fe824e30368b7300" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -10976,6 +11071,8 @@ glm5-fp8-b200-dynamo-sglang:
   runner: b200-dgxc
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -11190,6 +11287,8 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "81d0555ee23519cea80a42b4fe824e30368b7300" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
@@ -11334,7 +11433,7 @@ kimik2.5-int4-h100-vllm:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 12, 16, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 12, 16, 20] }
 
 qwen3.5-fp8-h100-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
@@ -11383,6 +11482,8 @@ glm5-fp4-gb200-dynamo-sglang:
   runner: gb200
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.2.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -11649,6 +11750,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
   runner: gb300
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.1.0" }
   multinode: true
   disagg: true
   scenarios:
@@ -11660,6 +11762,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # Pure tensor parallel (STP), 8k1k baseline-low-latency sweep.
       # Total: 8 GB300 GPUs.
       - spec-decoding: "none"
+        kv-p2p-transfer: mooncake
         conc-list: [1, 4, 8, 16, 32, 64, 256]
         prefill:
           num-worker: 1
@@ -11676,6 +11779,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # 5P1D wide-EP: 5 prefill workers @ DEP4 + 1 decode worker @ DEP16.
       # NIXL transfer. Total: 36 GB300 GPUs (5*4 + 4*4).
       - spec-decoding: "none"
+        kv-p2p-transfer: nixl
         conc-list: [2048]
         prefill:
           num-worker: 5
@@ -11692,6 +11796,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # 6P1D wide-EP: 6 prefill workers @ DEP4 + 1 decode worker @ DEP16.
       # Mooncake transfer. Total: 40 GB300 GPUs (6*4 + 4*4).
       - spec-decoding: "none"
+        kv-p2p-transfer: mooncake
         conc-list: [5120]
         prefill:
           num-worker: 6
@@ -11708,6 +11813,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
       # 7P1D wide-EP: 7 prefill workers @ DEP4 + 1 decode worker @ DEP16.
       # Mooncake transfer. Total: 44 GB300 GPUs (7*4 + 4*4).
       - spec-decoding: "none"
+        kv-p2p-transfer: mooncake
         conc-list: [5120]
         prefill:
           num-worker: 7
@@ -11729,6 +11835,7 @@ glm5-fp4-gb300-dynamo-sglang:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-sglang
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -11746,6 +11853,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_8k1k_hightpt[0]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 32
@@ -11760,6 +11868,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_8k1k_hightpt[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 32
@@ -11774,6 +11883,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_8k1k_hightpt[2]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 32
@@ -11792,6 +11902,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        router: { name: dynamo-router, version: "1.1.0" }
         decode:
           num-worker: 3
           tp: 4
@@ -11806,6 +11917,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        router: { name: dynamo-router, version: "1.1.0" }
         decode:
           num-worker: 5
           tp: 4
@@ -11820,6 +11932,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        router: { name: dynamo-router, version: "1.1.0" }
         decode:
           num-worker: 9
           tp: 4
@@ -11834,6 +11947,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+        router: { name: dynamo-router, version: "1.1.0" }
         decode:
           num-worker: 15
           tp: 4
@@ -11848,6 +11962,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/glm5/gb300-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_4.yaml"
+        router: { name: dynamo-router, version: "1.1.0" }
         decode:
           num-worker: 17
           tp: 4
@@ -11866,6 +11981,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_hightpt[0]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 32
@@ -11880,6 +11996,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_hightpt[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 32
@@ -11894,6 +12011,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_hightpt[2]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 1
           tp: 32
@@ -11912,6 +12030,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_lowlat[0]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 17
           tp: 4
@@ -11926,6 +12045,7 @@ glm5-fp4-gb300-dynamo-sglang:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_lowlat[1]"
+        router: { name: dynamo-router, version: "0.8.0" }
         decode:
           num-worker: 17
           tp: 4
@@ -11939,6 +12059,8 @@ glm5-fp8-gb200-dynamo-sglang:
   runner: gb200
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.2.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12163,6 +12285,8 @@ glm5-fp4-gb300-dynamo-sglang-mtp:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12431,6 +12555,8 @@ glm5-fp8-gb300-dynamo-sglang:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "0.8.0" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12641,6 +12767,8 @@ glm5-fp8-gb300-dynamo-sglang-mtp:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.2.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12836,7 +12964,7 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.22.0
@@ -12851,9 +12979,9 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 24, 32, 36] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [16, 24, 32, 36] }
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
 
 # CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
 # subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
@@ -12866,6 +12994,8 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -12936,7 +13066,7 @@ qwen3.5-fp8-h100-sglang-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
 # MiniMax-M3 NVFP4 disagg sweep on the same B300 topology matrix as the MXFP8
 # baseline above. The image includes vLLM PR #46380, so no runtime patch is
@@ -12948,6 +13078,8 @@ minimaxm3-fp8-b300-dynamo-vllm:
   runner: b300
   precision: fp8
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260614" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -13164,6 +13296,8 @@ minimaxm3-fp4-b300-dynamo-vllm:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260614" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -13380,6 +13514,8 @@ minimaxm3-fp8-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260614" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -13653,6 +13789,8 @@ minimaxm3-fp8-gb200-dynamo-vllm:
   runner: gb200
   precision: fp8
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260614" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14219,6 +14357,8 @@ kimik2.5-fp4-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260601" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14391,8 +14531,8 @@ minimaxm3-fp8-h100-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
 
 minimaxm3-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
@@ -14412,7 +14552,7 @@ minimaxm3-fp8-h200-vllm-agentic:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
 dsv4-fp4-b200-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
@@ -14427,11 +14567,11 @@ dsv4-fp4-b200-sglang-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none,     conc-list: [1, 2, 3, 4, 5] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [8, 10, 16, 32, 40, 44] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 10, 16, 32, 40, 44] }
       # DEP without HiCache is already degraded at conc 52 (2,098 tok/s/GPU),
       # so resolve its pre-52 cliff instead of repeating the collapsed tail.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,    conc-list: [16, 24, 32, 38, 44, 48, 50, 52] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,    conc-list: [16, 24, 32, 38, 44, 48, 50, 52], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68], router: { name: sglang-router, version: "0.3.2" } }
 
 # GB200 DeepSeek-V4 disaggregated AgentX frontier. The 3P/2D TEP8/TP8 curve
 # covers the middle/high-interactivity range omitted by the one-decode DEP
@@ -14450,9 +14590,9 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 20, 24, 32] }
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [8, 16, 24, 32, 40, 64] }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [52, 72, 100, 128, 144, 196, 512] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [8, 16, 24, 32, 40, 64], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [52, 72, 100, 128, 144, 196, 512], router: { name: sglang-router, version: "0.3.2" } }
 
 # DEP8 prefill uses an 8K batch because 16K OOMs in the FP4 MoE intermediate;
 # decode uses FULL_DECODE_ONLY after the controlled graph test restored decode
@@ -14465,6 +14605,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d-tep8-tp8:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260618" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14521,6 +14663,8 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260618" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14577,6 +14721,8 @@ glm5-fp4-gb300-dynamo-trt-mtp:
   runner: gb300-nv
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
@@ -14905,7 +15051,6 @@ glm5-fp4-gb300-dynamo-trt-mtp:
           ep: 16
           dp-attn: true
 
-
 qwen3.5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -14913,6 +15058,8 @@ qwen3.5-fp8-gb300-dynamo-sglang:
   runner: gb300
   precision: fp8
   framework: dynamo-sglang
+  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
