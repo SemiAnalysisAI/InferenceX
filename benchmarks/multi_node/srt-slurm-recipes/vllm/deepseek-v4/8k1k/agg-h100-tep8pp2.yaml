@@ -65,16 +65,18 @@ backend:
       pipeline-parallel-size: 2
       enable-expert-parallel: true
       kv-cache-dtype: "fp8"
-      gpu-memory-utilization: 0.90
+      gpu-memory-utilization: 0.92
       max-model-len: 9472
       max-num-seqs: 16
       max-num-batched-tokens: 16384
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
-      # First green shot: eager to isolate the memory-fit variable (no
-      # graph-capture allocation). Once green, swap for the GB200-proven
-      # compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'.
-      enforce-eager: true
+      # CUDA graphs (not eager): the eager run served correctly but decode ran
+      # at ~144ms/token (Python dispatch-bound, flat vs concurrency), so the
+      # conc sweep could not finish in 8h. On-cluster prototype (job 11256)
+      # confirmed FULL_AND_PIECEWISE graphs FIT this 2-node TP8xPP2 layout at
+      # gpu-mem-util 0.92 and drop TPOT to ~15ms (~9.4x). No extra nodes needed.
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
       reasoning-parser: deepseek_v4
       tokenizer-mode: deepseek_v4
       trust-remote-code: true
