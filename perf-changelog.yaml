@@ -4758,3 +4758,34 @@
     - "Re-add the three day-0 1k1k topologies with unchanged engine tuning: 1p1d-dep8-tep8 (conc 1-64), 1p1d-dep8-dep16 (conc 128-4096), 3p1d-dep8-dep16 (conc 4096, 8192)"
     - "Recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/1k1k/ re-based on the current 8k1k -sa layout: container vllm/vllm-openai:v0.20.0-ubuntu2404 (matches the config image/alias key), dynamo wheel 1.2.0.dev20260426, dedicated NATS/etcd infra node"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2190
+
+- config-keys:
+    - dsv4-fp8-h200-vllm
+    - dsv4-fp8-h200-vllm-mtp
+  description:
+    - "Bump vLLM image from v0.21.0 to v0.25.0 for DeepSeek-V4-Pro FP8 on H200, matching the B200/B300 dsv4 vLLM bump (#2169)"
+    - "Refresh stale H200 dsv4 submissions (last run 2026-05-21)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp8-h200-sglang
+    - dsv4-fp8-h200-sglang-mtp
+  description:
+    - "Bump the pinned lmsysorg/sglang:deepseek-v4-hopper digest from the 2026-05-02 push (7f19c6dc) to the current 2026-05-13 push (1bf5d508)"
+    - "Refresh stale H200 dsv4 SGLang submissions (last run 2026-05-04)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2191
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2197
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
+    - "Clean the export envs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
