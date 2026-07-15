@@ -80,6 +80,9 @@ CHUNKED_PREFILL_SIZE=8192
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
+    # DPA + MTP needs additional runtime headroom for speculative decode and
+    # communication buffers beyond SGLang's static KV pool.
+    MEM_FRACTION_STATIC=0.80
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
@@ -102,14 +105,12 @@ if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
 
-# AgentX concurrency counts live session trees, not individual requests, so
-# retain 2x aggregate request headroom for subagent fan-out. SGLang applies
-# both limits per engine; with DP attention, divide the aggregate limits over
-# the DP ranks instead of granting the full global limit to every rank.
-MAX_RUNNING_REQUESTS=$((2 * CONC))
+# SGLang treats max-running-requests as a global DPA limit and partitions it
+# internally. CUDA graph capture is per scheduler, so only its batch size is
+# divided across DP ranks.
+MAX_RUNNING_REQUESTS=$CONC
 CUDA_GRAPH_MAX_BS=$CONC
 if [ "$DP_ATTENTION" = "true" ]; then
-    MAX_RUNNING_REQUESTS=$(( (MAX_RUNNING_REQUESTS + TP - 1) / TP ))
     CUDA_GRAPH_MAX_BS=$(( (CUDA_GRAPH_MAX_BS + TP - 1) / TP ))
 fi
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128

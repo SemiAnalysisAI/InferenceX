@@ -4811,3 +4811,10 @@
     - "Scale SGLang request and CUDA-graph limits per DP-attention engine while preserving aggregate AgentX fan-out headroom"
     - "Prevent per-rank HSA out-of-resources crashes during accelerated warmup"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Keep max-running-requests global for SGLang DP attention and scale only per-scheduler CUDA graph capture"
+    - "Reserve DPA MTP runtime headroom with mem-fraction-static 0.80"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
