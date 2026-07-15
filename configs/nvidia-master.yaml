@@ -2648,6 +2648,8 @@ glm5-fp4-gb200-dynamo-trt-mtp:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  router: { name: dynamo-router, version: "v1.3.0-dev.1" }
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
