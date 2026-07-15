@@ -4786,7 +4786,7 @@
     - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
   description:
     - "Add DSv4 FP4 MI355X SGLang agentic MTP recipe with HiCache support"
-    - "Image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714"
+    - "Image: lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
     - "EAGLE speculative decoding: 3 steps, topk 1, 4 draft tokens"
     - "Sweep TP8 +/- DPA +/- HiCache with MTP across conc 1-96"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
@@ -4804,3 +4804,10 @@
     - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
     - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714"
+    - "Fix HSA out-of-resources crashes during DPA agentic MTP warmup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
