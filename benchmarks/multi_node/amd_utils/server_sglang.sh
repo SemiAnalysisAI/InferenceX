@@ -154,6 +154,7 @@ no_dp = decode.get('no_dp', {})
 # Decode DP config
 print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 4096)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(dp.get('cuda_graph_bs_range', '1-160'), 1, 160)
 print(f'DECODE_CUDA_GRAPH_BS_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_DP_END=\"{e}\"')
@@ -161,6 +162,7 @@ print(f'DECODE_CUDA_GRAPH_BS_DP_END=\"{e}\"')
 # Decode EP-only config (EP enabled but DP disabled)
 print(f'DECODE_MAX_RUNNING_REQUESTS_EP_ONLY=\"{ep_only.get(\"max_running_requests\", 256)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_EP_ONLY=\"{eval_formula(ep_only.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_EP_ONLY=\"{ep_only.get(\"context_length\", \"\")}\"')
 s, e = parse_range(ep_only.get('cuda_graph_bs_range', '1-256'), 1, 256)
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
@@ -168,6 +170,7 @@ print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
 # Decode no-DP config
 print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
@@ -205,12 +208,23 @@ fi
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
     decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    decode_context_length=$DECODE_CONTEXT_LENGTH_DP
 elif [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_EP_ONLY_START $DECODE_CUDA_GRAPH_BS_EP_ONLY_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_EP_ONLY
+    decode_context_length=$DECODE_CONTEXT_LENGTH_EP_ONLY
 else
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_NO_DP_START $DECODE_CUDA_GRAPH_BS_NO_DP_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
+    decode_context_length=$DECODE_CONTEXT_LENGTH_NO_DP
+fi
+# In PD-disaggregation the decode must admit requests against the SAME context
+# length as prefill; otherwise decode accepts over-length requests that prefill
+# rejects, and those requests hang forever waiting for a KV transfer that never
+# comes (the 8k1k conc-500 straggler). Fall back to the prefill value if the
+# decode context_length is not set in the model config, so the two always agree.
+if [[ -z "$decode_context_length" ]]; then
+    decode_context_length=$prefill_context_length
 fi
 
 # When both DP and EP are enabled, override max-running-requests and dispatch tokens
@@ -250,6 +264,9 @@ DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-run
 
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
+fi
+if [[ -n "$decode_context_length" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --context-length ${decode_context_length}"
 fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
