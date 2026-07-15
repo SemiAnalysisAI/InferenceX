@@ -85,7 +85,9 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1x2x4x8x16x32x64x128x256x512"
+  # Capped at 256: conc512 (5120 x 8k-token requests) needs ~3.6h for that one
+  # level and exceeds the 8h SLURM limit; conc256 completes (~71min) and fits.
+  concurrencies: "1x2x4x8x16x32x64x128x256"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
