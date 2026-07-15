@@ -103,8 +103,10 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 
 GPU_MEMORY_UTILIZATION=0.95
+TP1_EXTRA_ARGS=""
 if [ "$TP" -eq 1 ]; then
     GPU_MEMORY_UTILIZATION=0.97
+    TP1_EXTRA_ARGS="--max-num-seqs 16 --compilation_config.cudagraph_mode FULL_DECODE_ONLY"
 fi
 
 start_gpu_monitor
@@ -112,6 +114,7 @@ start_gpu_monitor
 set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $PORT \
 $PARALLEL_ARGS \
+$TP1_EXTRA_ARGS \
 --attention_config.indexer_kv_dtype fp8 \
 --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
 --max-model-len $MAX_MODEL_LEN \

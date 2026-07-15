@@ -4810,3 +4810,9 @@
     - "Add an 8k1k TP1 diagnostic sweep at concurrency 1-16"
     - "Use vLLM GPU memory utilization 0.97 for TP1 while retaining 0.95 for all other TP sizes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Set --max-num-seqs 16 and FULL_DECODE_ONLY CUDA Graph mode for TP1 only"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
