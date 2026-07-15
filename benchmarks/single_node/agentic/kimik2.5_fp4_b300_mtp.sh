@@ -11,7 +11,7 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-DRAFT_MODEL="lightseekorg/kimi-k2.6-eagle3-mla"
+DRAFT_MODEL="lightseekorg/kimi-k2.6-eagle3.1-mla"
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
