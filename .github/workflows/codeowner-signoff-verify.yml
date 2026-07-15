@@ -33,19 +33,27 @@ name: CODEOWNER Sign-off Verify
 #  10. Agentic spec-decode configs simulate acceptance at the committed golden
 #      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
 #      vLLM synthetic rejection sampling in --speculative-config).
-# If any of those are not to standard, Claude posts a single comment that
-# @-mentions the reviewer who signed off and explains exactly what is wrong.
+# Claude returns a structured verdict that is rendered in a GitHub Check Run.
+# PASS verdicts do not post PR comments; failures are explained in the check
+# output, so reruns do not spam the conversation timeline.
 #
-# The verdict is also published as a `codeowner-signoff-verify` commit status
-# on the PR head SHA (success only on "Verdict: PASS"). That status context is
-# a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
-# (without org-admin bypass) until a sign-off has been posted AND independently
-# verified as passing on the current head commit.
+# A `codeowner-signoff-verify` Check Run is created on the PR head before the
+# expensive verification starts, then completed with success, failure, or
+# action_required. That context is a REQUIRED check in the "Protect main"
+# ruleset, so GitHub always shows an actionable state instead of an indefinitely
+# missing "Expected" status.
 #
-# It can also be run manually via workflow_dispatch by passing the URL of the
-# sign-off comment/review to verify.
+# pull_request_target synchronize events automatically reverify a previously
+# seen sign-off only when the effective PR diff fingerprint is unchanged. A real
+# content change requires a fresh CODEOWNER sign-off. The workflow always checks
+# out the trusted default branch and reads PR content through the API.
+#
+# It can also be run manually via workflow_dispatch by passing the PR number
+# and, optionally, the URL of a specific sign-off comment/review.
 
 on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
   issue_comment:
     types: [created, edited]
   pull_request_review:
@@ -54,28 +62,33 @@ on:
     types: [created, edited]
   workflow_dispatch:
     inputs:
+      pr_number:
+        description: Pull request number to verify.
+        required: true
+        type: number
       comment_url:
         description: >-
-          URL of the sign-off comment/review to verify, e.g.
+          Optional URL of the sign-off comment/review to verify, e.g.
           https://github.com/OWNER/REPO/pull/123#issuecomment-456 (also accepts
-          #pullrequestreview-<id> and #discussion_r<id> review URLs).
-        required: true
+          #pullrequestreview-<id> and #discussion_r<id> review URLs). When
+          omitted, the latest sign-off on the PR is used.
+        required: false
         type: string
 
 concurrency:
-  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: false
+  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Gate: only proceed for the sign-off checklist on an OPEN, non-draft PR.
-  # Normalizes the three event shapes (issue_comment / pull_request_review /
-  # pull_request_review_comment) into a single set of outputs, resolves an
-  # immutable head SHA (TOCTOU-safe), and hands the verifier a ready-to-run
-  # command for fetching the exact sign-off body.
+  # Gate: normalize the event, resolve a sign-off, fingerprint the effective PR
+  # diff, and immediately create a Check Run on the immutable head SHA. On PR
+  # synchronization, only a previously verified sign-off for the same diff may
+  # be reused; otherwise the check completes as action_required.
   # ---------------------------------------------------------------------------
   gate:
     if: |
+      github.event_name == 'pull_request_target' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
@@ -87,10 +100,13 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      checks: write
     outputs:
       proceed: ${{ steps.resolve.outputs.proceed }}
       pr-number: ${{ steps.resolve.outputs.pr-number }}
       head-sha: ${{ steps.resolve.outputs.head-sha }}
+      check-run-id: ${{ steps.resolve.outputs.check-run-id }}
+      diff-fingerprint: ${{ steps.resolve.outputs.diff-fingerprint }}
       signoff-author: ${{ steps.resolve.outputs.signoff-author }}
       signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
       signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
@@ -100,67 +116,172 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const crypto = require('crypto');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const repoFull = `${owner}/${repo}`;
             const eventName = context.eventName;
+            const phrase = 'As a PR reviewer and CODEOWNER';
+            const checkName = 'codeowner-signoff-verify';
+            const runUrl = `https://github.com/${repoFull}/actions/runs/${context.runId}`;
 
-            // Normalize the event payloads (3 comment events + manual dispatch).
-            let prNumber, author, refId, kind, fetchCmd;
+            function signoffFrom(kind, item, prNumber) {
+              const id = String(item.id);
+              let fetchCmd;
+              let url;
+              if (kind === 'conversation comment') {
+                fetchCmd = `gh api repos/${repoFull}/issues/comments/${id} --jq .body`;
+                url = item.html_url || `https://github.com/${repoFull}/pull/${prNumber}#issuecomment-${id}`;
+              } else if (kind === 'review summary') {
+                fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${id} --jq .body`;
+                url = item.html_url || `https://github.com/${repoFull}/pull/${prNumber}#pullrequestreview-${id}`;
+              } else {
+                fetchCmd = `gh api repos/${repoFull}/pulls/comments/${id} --jq .body`;
+                url = item.html_url || `https://github.com/${repoFull}/pull/${prNumber}#discussion_r${id}`;
+              }
+              return {
+                author: item.user.login,
+                body: item.body || '',
+                fetchCmd,
+                id,
+                key: `${kind}:${id}`,
+                kind,
+                updatedAt: item.updated_at || item.submitted_at || item.created_at || '',
+                url,
+              };
+            }
+
+            async function latestSignoff(prNumber) {
+              const [issueComments, reviews, reviewComments] = await Promise.all([
+                github.paginate(github.rest.issues.listComments, {
+                  owner, repo, issue_number: prNumber, per_page: 100,
+                }),
+                github.paginate(github.rest.pulls.listReviews, {
+                  owner, repo, pull_number: prNumber, per_page: 100,
+                }),
+                github.paginate(github.rest.pulls.listReviewComments, {
+                  owner, repo, pull_number: prNumber, per_page: 100,
+                }),
+              ]);
+              const candidates = [
+                ...issueComments.map(item => signoffFrom('conversation comment', item, prNumber)),
+                ...reviews.map(item => signoffFrom('review summary', item, prNumber)),
+                ...reviewComments.map(item => signoffFrom('inline review comment', item, prNumber)),
+              ].filter(item => item.body.includes(phrase));
+              candidates.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+              return candidates[candidates.length - 1] || null;
+            }
+
+            async function signoffFromUrl(url, prNumber) {
+              let match;
+              if ((match = url.match(/#issuecomment-(\d+)/))) {
+                const response = await github.rest.issues.getComment({
+                  owner, repo, comment_id: Number(match[1]),
+                });
+                return signoffFrom('conversation comment', response.data, prNumber);
+              }
+              if ((match = url.match(/#pullrequestreview-(\d+)/))) {
+                const response = await github.rest.pulls.getReview({
+                  owner, repo, pull_number: prNumber, review_id: Number(match[1]),
+                });
+                return signoffFrom('review summary', response.data, prNumber);
+              }
+              if ((match = url.match(/#discussion_r(\d+)/))) {
+                const response = await github.rest.pulls.getReviewComment({
+                  owner, repo, comment_id: Number(match[1]),
+                });
+                return signoffFrom('inline review comment', response.data, prNumber);
+              }
+              throw new Error('comment_url must end with #issuecomment-<id>, #pullrequestreview-<id>, or #discussion_r<id>');
+            }
+
+            async function fingerprintDiff(prNumber) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: prNumber, per_page: 100,
+              });
+              const normalized = files.map(file => ({
+                additions: file.additions,
+                changes: file.changes,
+                deletions: file.deletions,
+                filename: file.filename,
+                patch: file.patch || null,
+                previous_filename: file.previous_filename || null,
+                sha: file.sha,
+                status: file.status,
+              })).sort((a, b) => a.filename.localeCompare(b.filename));
+              return crypto.createHash('sha256')
+                .update(JSON.stringify(normalized))
+                .digest('hex');
+            }
+
+            function parseState(checkRun) {
+              try {
+                const state = JSON.parse(checkRun.external_id || '{}');
+                return state.v === 1 ? state : null;
+              } catch (error) {
+                return null;
+              }
+            }
+
+            async function priorVerification(prNumber, signoffKey) {
+              const commits = await github.paginate(github.rest.pulls.listCommits, {
+                owner, repo, pull_number: prNumber, per_page: 100,
+              });
+              for (const commit of commits.reverse()) {
+                const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                  owner, repo, ref: commit.sha, per_page: 100,
+                });
+                const matches = checkRuns
+                  .filter(run => run.name === checkName && ['success', 'failure'].includes(run.conclusion))
+                  .map(run => ({ run, state: parseState(run) }))
+                  .filter(item => item.state && item.state.pr === prNumber && item.state.signoff === signoffKey)
+                  .sort((a, b) => (a.run.started_at || '').localeCompare(b.run.started_at || ''));
+                if (matches.length) {
+                  return matches[matches.length - 1];
+                }
+              }
+              return null;
+            }
+
+            async function createCheck(headSha, externalId, status, conclusion, title, summary) {
+              const params = {
+                owner, repo, name: checkName, head_sha: headSha,
+                details_url: runUrl,
+                external_id: externalId,
+                status,
+                output: { title, summary },
+              };
+              if (status === 'completed') {
+                params.conclusion = conclusion;
+                params.completed_at = new Date().toISOString();
+              } else {
+                params.started_at = new Date().toISOString();
+              }
+              const response = await github.rest.checks.create(params);
+              return response.data.id;
+            }
+
+            // Normalize the event payloads into a PR number and sign-off record.
+            let prNumber;
+            let signoff = null;
+            let requestedSignoffUrl = '';
+            const automaticSync = eventName === 'pull_request_target';
             if (eventName === 'issue_comment') {
               prNumber = context.payload.issue.number;
-              author = context.payload.comment.user.login;
-              refId = context.payload.comment.id;
-              kind = 'conversation comment';
-              fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
+              signoff = signoffFrom('conversation comment', context.payload.comment, prNumber);
             } else if (eventName === 'pull_request_review') {
               prNumber = context.payload.pull_request.number;
-              author = context.payload.review.user.login;
-              refId = context.payload.review.id;
-              kind = 'review summary';
-              fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
+              signoff = signoffFrom('review summary', context.payload.review, prNumber);
             } else if (eventName === 'pull_request_review_comment') {
               prNumber = context.payload.pull_request.number;
-              author = context.payload.comment.user.login;
-              refId = context.payload.comment.id;
-              kind = 'inline review comment';
-              fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+              signoff = signoffFrom('inline review comment', context.payload.comment, prNumber);
+            } else if (eventName === 'pull_request_target') {
+              prNumber = context.payload.pull_request.number;
             } else if (eventName === 'workflow_dispatch') {
-              // Parse a sign-off URL like
-              //   https://github.com/OWNER/REPO/pull/123#issuecomment-456
-              //   .../pull/123#pullrequestreview-456
-              //   .../pull/123#discussion_r456
-              const url = (context.payload.inputs && context.payload.inputs.comment_url) || '';
-              const prMatch = url.match(/\/pull\/(\d+)/);
-              if (!prMatch) {
-                core.setOutput('proceed', 'false');
-                core.setFailed(`comment_url must contain /pull/<number>: ${url}`);
-                return;
-              }
-              prNumber = parseInt(prMatch[1], 10);
-              let m;
-              if ((m = url.match(/#issuecomment-(\d+)/))) {
-                refId = m[1];
-                kind = 'conversation comment';
-                fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
-                const c = await github.rest.issues.getComment({ owner, repo, comment_id: parseInt(refId, 10) });
-                author = c.data.user.login;
-              } else if ((m = url.match(/#pullrequestreview-(\d+)/))) {
-                refId = m[1];
-                kind = 'review summary';
-                fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
-                const r = await github.rest.pulls.getReview({ owner, repo, pull_number: prNumber, review_id: parseInt(refId, 10) });
-                author = r.data.user.login;
-              } else if ((m = url.match(/#discussion_r(\d+)/))) {
-                refId = m[1];
-                kind = 'inline review comment';
-                fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
-                const rc = await github.rest.pulls.getReviewComment({ owner, repo, comment_id: parseInt(refId, 10) });
-                author = rc.data.user.login;
-              } else {
-                core.setOutput('proceed', 'false');
-                core.setFailed(`comment_url must end with #issuecomment-<id>, #pullrequestreview-<id>, or #discussion_r<id>: ${url}`);
-                return;
+              prNumber = Number(context.payload.inputs.pr_number);
+              requestedSignoffUrl = (context.payload.inputs && context.payload.inputs.comment_url) || '';
+              if (requestedSignoffUrl && !requestedSignoffUrl.includes(`/pull/${prNumber}#`)) {
+                throw new Error(`comment_url does not belong to PR #${prNumber}`);
               }
             } else {
               core.setOutput('proceed', 'false');
@@ -171,21 +292,88 @@ jobs:
               owner, repo, pull_number: prNumber,
             });
 
-            // Event-triggered: only act on open, non-draft ("ready") PRs.
-            // Manual dispatch is an explicit override, so allow any PR state.
-            const ready = eventName === 'workflow_dispatch'
-              ? true
-              : (pr.state === 'open' && pr.draft === false);
+            const ready = pr.state === 'open' && pr.draft === false;
             if (!ready) {
               core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
+              core.setOutput('proceed', 'false');
+              return;
             }
 
-            core.setOutput('proceed', ready ? 'true' : 'false');
+            const headSha = pr.head.sha;
+            const initialState = JSON.stringify({
+              v: 1, fp: null, pr: prNumber, run: context.runId, signoff: null,
+            });
+            const checkRunId = await createCheck(
+              headSha, initialState, 'in_progress', null,
+              'Verifying CODEOWNER sign-off',
+              `Resolving verification state for PR #${prNumber} at ${headSha.slice(0, 8)}.`,
+            );
+
+            if (eventName === 'pull_request_target') {
+              signoff = await latestSignoff(prNumber);
+            } else if (eventName === 'workflow_dispatch') {
+              signoff = requestedSignoffUrl
+                ? await signoffFromUrl(requestedSignoffUrl, prNumber)
+                : await latestSignoff(prNumber);
+            }
+            if (signoff && !signoff.body.includes(phrase)) {
+              signoff = null;
+            }
+
+            const fingerprint = await fingerprintDiff(prNumber);
+            let proceed = Boolean(signoff);
+            let blockedReason = signoff ? '' : 'A CODEOWNER sign-off is required before verification can run.';
+
+            if (automaticSync && signoff) {
+              const prior = await priorVerification(prNumber, signoff.key);
+              if (!prior) {
+                proceed = false;
+                blockedReason = 'The latest sign-off has not been verified yet; a fresh CODEOWNER sign-off is required.';
+              } else if (prior.state.fp !== fingerprint) {
+                proceed = false;
+                blockedReason = 'The effective PR diff changed after CODEOWNER sign-off; a fresh sign-off is required.';
+              }
+            }
+
+            const state = {
+              v: 1,
+              fp: fingerprint,
+              pr: prNumber,
+              run: context.runId,
+              signoff: signoff ? signoff.key : null,
+            };
+            const externalId = JSON.stringify(state);
+            if (proceed) {
+              await github.rest.checks.update({
+                owner, repo, check_run_id: checkRunId,
+                external_id: externalId,
+                status: 'in_progress',
+                details_url: runUrl,
+                output: {
+                  title: 'Verifying CODEOWNER sign-off',
+                  summary: `Verification is running for PR #${prNumber} at ${headSha.slice(0, 8)}.`,
+                },
+              });
+            } else {
+              await github.rest.checks.update({
+                owner, repo, check_run_id: checkRunId,
+                external_id: externalId,
+                status: 'completed',
+                conclusion: 'action_required',
+                completed_at: new Date().toISOString(),
+                details_url: runUrl,
+                output: { title: 'CODEOWNER action required', summary: blockedReason },
+              });
+            }
+
+            core.setOutput('proceed', proceed ? 'true' : 'false');
             core.setOutput('pr-number', String(prNumber));
-            core.setOutput('head-sha', pr.head.sha);
-            core.setOutput('signoff-author', author);
-            core.setOutput('signoff-kind', kind);
-            core.setOutput('signoff-fetch-cmd', fetchCmd);
+            core.setOutput('head-sha', headSha);
+            core.setOutput('check-run-id', String(checkRunId));
+            core.setOutput('diff-fingerprint', fingerprint);
+            core.setOutput('signoff-author', signoff ? signoff.author : '');
+            core.setOutput('signoff-kind', signoff ? signoff.kind : '');
+            core.setOutput('signoff-fetch-cmd', signoff ? signoff.fetchCmd : '');
 
   verify:
     needs: gate
@@ -193,10 +381,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
+      pull-requests: read
+      issues: read
       actions: read
-      statuses: write
+      checks: write
     steps:
       # SECURITY: this is a privileged job (write perms + secrets) triggered by
       # comment events, so it must NOT check out untrusted PR head code — the
@@ -229,8 +417,10 @@ jobs:
           SIGNOFF_AUTHOR: ${{ needs.gate.outputs.signoff-author }}
           SIGNOFF_KIND: ${{ needs.gate.outputs.signoff-kind }}
           SIGNOFF_FETCH_CMD: ${{ needs.gate.outputs.signoff-fetch-cmd }}
+          VERDICT_FILE: /tmp/codeowner-signoff-verdict.json
         run: |
-          envsubst '${REPO} ${PR_NUMBER} ${HEAD_SHA} ${SIGNOFF_AUTHOR} ${SIGNOFF_KIND} ${SIGNOFF_FETCH_CMD}' \
+          # shellcheck disable=SC2016
+          envsubst '${REPO} ${PR_NUMBER} ${HEAD_SHA} ${SIGNOFF_AUTHOR} ${SIGNOFF_KIND} ${SIGNOFF_FETCH_CMD} ${VERDICT_FILE}' \
             < .github/codeowner-signoff-verify-prompt.md \
             > /tmp/codeowner-signoff-verify-prompt.md
           grep -q "PR #${PR_NUMBER}" /tmp/codeowner-signoff-verify-prompt.md
@@ -242,6 +432,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
           GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
           INFERENCEMAX_ROOT: ${{ github.workspace }}
+          VERDICT_FILE: /tmp/codeowner-signoff-verdict.json
           BASH_DEFAULT_TIMEOUT_MS: "1800000"
           BASH_MAX_TIMEOUT_MS: "3600000"
         with:
@@ -264,49 +455,59 @@ jobs:
             already rendered with this run's PR number, head SHA, and sign-off
             metadata.
 
-      # Publish the verdict as a commit status on the PR head SHA so it can act
-      # as a required check. Deterministic: reads the verdict comment posted
-      # above (matched by the sha-pinned marker) and maps "Verdict: PASS" to
-      # success, anything else — including a missing verdict — to failure.
-      # Runs on always() so a crashed verify step still reports failure rather
-      # than leaving the status stuck at "expected".
-      - name: Publish verdict as commit status on PR head
+      # Complete the Check Run from Claude's structured JSON. Runs on always()
+      # so a crashed verifier produces an explicit failure instead of leaving
+      # the required check in progress forever.
+      - name: Complete CODEOWNER verification check
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          CHECK_RUN_ID: ${{ needs.gate.outputs.check-run-id }}
           HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
           PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          VERDICT_FILE: /tmp/codeowner-signoff-verdict.json
         with:
           script: |
+            const fs = require('fs');
             const owner = context.repo.owner;
             const repo = context.repo.repo;
+            const checkRunId = Number(process.env.CHECK_RUN_ID);
             const headSha = process.env.HEAD_SHA;
-            const prNumber = parseInt(process.env.PR_NUMBER, 10);
-            const marker = `<!-- codeowner-signoff-verify sha=${headSha} -->`;
+            const verdictFile = process.env.VERDICT_FILE;
+            let conclusion = 'failure';
+            let title = 'CODEOWNER verification failed';
+            let summary = `The verifier did not produce a valid verdict for ${headSha.slice(0, 8)}.`;
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner, repo, issue_number: prNumber, per_page: 100,
-            });
-            const verdicts = comments.filter(c => c.body && c.body.includes(marker));
-            const latest = verdicts[verdicts.length - 1];
+            try {
+              const verdict = JSON.parse(fs.readFileSync(verdictFile, 'utf8'));
+              const checks = Array.isArray(verdict.checks) ? verdict.checks : [];
+              const numbers = checks.map(item => item.number).sort((a, b) => a - b);
+              const validNumbers = numbers.length === 11 && numbers.every((number, index) => number === index);
+              const validStatuses = checks.every(item => ['PASS', 'FAIL', 'N/A'].includes(item.status));
+              const allPassing = validNumbers && validStatuses && checks.every(item => item.status !== 'FAIL');
+              const validVerdict = ['PASS', 'REJECTED'].includes(verdict.verdict);
+              if (!validNumbers || !validStatuses || !validVerdict || (verdict.verdict === 'PASS' && !allPassing)) {
+                throw new Error('verdict JSON failed schema or consistency validation');
+              }
 
-            let state, description, target_url;
-            if (!latest) {
-              state = 'failure';
-              description = 'No verification verdict was posted for this commit';
-              target_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
-            } else if (latest.body.includes('**Verdict: PASS**')) {
-              state = 'success';
-              description = 'CODEOWNER sign-off independently verified';
-              target_url = latest.html_url;
-            } else {
-              state = 'failure';
-              description = 'Sign-off verification rejected - see verdict comment';
-              target_url = latest.html_url;
+              conclusion = verdict.verdict === 'PASS' && allPassing ? 'success' : 'failure';
+              title = conclusion === 'success'
+                ? 'CODEOWNER sign-off verified'
+                : 'CODEOWNER sign-off rejected';
+              const rows = checks
+                .sort((a, b) => a.number - b.number)
+                .map(item => `- **Check ${item.number} (${item.name}) — ${item.status}:** ${item.reason}`);
+              summary = [`**${verdict.verdict}** — ${verdict.summary}`, '', ...rows].join('\n');
+            } catch (error) {
+              summary += `\n\n${error.message}`;
+              core.warning(error);
             }
 
-            await github.rest.repos.createCommitStatus({
-              owner, repo, sha: headSha, state, description,
-              context: 'codeowner-signoff-verify', target_url,
+            await github.rest.checks.update({
+              owner, repo, check_run_id: checkRunId,
+              status: 'completed', conclusion,
+              completed_at: new Date().toISOString(),
+              details_url: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`,
+              output: { title, summary },
             });
-            core.info(`codeowner-signoff-verify=${state} on ${headSha}`);
+            core.info(`codeowner-signoff-verify=${conclusion} on ${headSha}`);

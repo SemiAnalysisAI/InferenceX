@@ -31,7 +31,7 @@ CODEOWNER 批准 PR 时，必须在批准评论中填写最新的 [PR_REVIEW_CHE
 - 签署可以以普通会话评论、review 总结或行内 review 评论的形式发布 — 三种方式都会触发验证。
 - 请在 "Additional detail section" 中填写清单要求的链接（验证/评测工作流运行、对应的 [vLLM recipe](https://github.com/vllm-project/recipes) / [SGLang cookbook](https://github.com/sgl-project/sglang/tree/main/docs_new) PR，以及任何例外理由）。
 
-签署发布后，CI 会独立复核决定合并的各项声明 — CODEOWNER 身份、PR 内 commit 上的全绿 sweep + evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template — 并在 PR 上发布裁定评论。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
+签署发布后，CI 会立即在当前 PR head 上创建必需的 `codeowner-signoff-verify` Check Run，并独立复核决定合并的各项声明 — CODEOWNER 身份、PR 内 commit 上的全绿 sweep + evals、所链接的 recipe、`/reuse-sweep-run` 命令、是否使用最新清单模板、上游 [vLLM](https://hub.docker.com/u/vllm)/[SGLang](https://hub.docker.com/u/lmsysorg) 镜像、没有更改模型架构的基准测试 hack，以及投机解码是否使用 chat template。详细结果会显示在 Check Run 中，不再自动发布 PASS/FAIL 评论。如果 PR head 发生变化，仅当 PR 的实际 diff 未改变时，CI 才会自动复核已有签署；若内容发生变化，则必须由 CODEOWNER 重新签署。勾选项不会被无条件信任，请只勾选你确实核实过的条目。
 
 ## `/reuse-sweep-run` — 在合并时复用 PR 的全绿 sweep
 

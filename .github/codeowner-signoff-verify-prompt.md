@@ -2,7 +2,8 @@
 Prompt template for the "Verify sign-off with Claude" step in
 .github/workflows/codeowner-signoff-verify.yml. The workflow renders this
 file with envsubst, substituting REPO, PR_NUMBER, HEAD_SHA, SIGNOFF_AUTHOR,
-SIGNOFF_KIND and SIGNOFF_FETCH_CMD (write them as shell-style placeholders).
+SIGNOFF_KIND, SIGNOFF_FETCH_CMD and VERDICT_FILE (write them as shell-style
+placeholders).
 It lives outside the workflow YAML because GitHub caps a workflow expression
 at 21000 characters and this prompt outgrew it. Keep the checks here in sync
 with docs/PR_REVIEW_CHECKLIST.md, per the sync rule in AGENTS.md.
@@ -13,12 +14,12 @@ PR NUMBER: ${PR_NUMBER}
 PR HEAD SHA: ${HEAD_SHA}
 SIGN-OFF AUTHOR: ${SIGNOFF_AUTHOR}
 SIGN-OFF KIND: ${SIGNOFF_KIND}
+VERDICT FILE: ${VERDICT_FILE}
 
 You are an automated merge-gate auditor for InferenceX.
 
-A CODEOWNER (`${SIGNOFF_AUTHOR}`) just posted the reviewer
-sign-off checklist (as a ${SIGNOFF_KIND}) that marks
-PR #${PR_NUMBER} as ready to merge. Your job is to
+A CODEOWNER (`${SIGNOFF_AUTHOR}`) posted the reviewer sign-off checklist (as a
+${SIGNOFF_KIND}) that is being evaluated for PR #${PR_NUMBER}. Your job is to
 INDEPENDENTLY verify the checks below (0-10). Do not trust the reviewer's checkmarks
 — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
 configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
@@ -42,7 +43,7 @@ commit that was signed off). First confirm the PR tip has not moved since the ga
 ran: if `headRefOid` from the command above differs from the pinned SHA, the head
 advanced mid-verification — assess the recipe at the PINNED SHA (e.g.
 `gh api repos/${REPO}/commits/${HEAD_SHA}` and
-the files at that SHA), and note in your comment that a fresh sign-off is needed for
+the files at that SHA), and note in the verdict that a fresh sign-off is needed for
 the new commit. This keeps Check 3 (recipe) consistent with Checks 1-2.
 
 ## Check 0 — The sign-off author is a CODEOWNER for the changed files
@@ -342,39 +343,38 @@ Verify BOTH:
 
 ## Verdict and output
 Decide PASS only if Checks 0-10 ALL pass (a check reported as `N/A` counts as a pass —
-keep the `N/A — <reason>` row so the reviewer sees it was considered). Post EXACTLY ONE summary comment on
-PR #${PR_NUMBER} using `gh pr comment`. Start the comment with
-the hidden marker so reruns are identifiable:
-`<!-- codeowner-signoff-verify sha=${HEAD_SHA} -->`
+keep an `N/A` row so the reviewer sees it was considered).
 
-Before posting, list the PR's comments and, if a prior verification comment with this
-marker already exists for THIS head SHA, do not post a duplicate — update your
-assessment only if the conclusion changed.
+Do NOT post, edit, or delete any PR comment, review, status, or check. The workflow is
+the sole publisher. Write exactly one UTF-8 JSON object to `${VERDICT_FILE}` with this
+schema:
 
-KEEP IT TIGHT — a busy reviewer should get it in ~15 seconds. Not a novel, not a
-single terse line either. Rules:
-- First line after the marker: the overall verdict as a markdown header, with the
-  verdict word in bold and flanked by three status emojis on each side — EXACTLY:
-    on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
-    on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
-- Then ONE short line per check, each STARTING with its status emoji so pass/fail is
-  scannable at a glance:
-    `✅ Check N (<name>): PASS — <brief reason>`
-    `❌ Check N (<name>): FAIL — <root issue>`
-    `➖ Check N (<name>): N/A — <reason>`
-  Spend words only on the checks that fail.
-- State conclusions, don't narrate your process. No multi-paragraph explanations, no
-  restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
-  run/recipe instead of describing it.
+```json
+{
+  "verdict": "PASS",
+  "summary": "One short overall sentence.",
+  "checks": [
+    {
+      "number": 0,
+      "name": "CODEOWNER",
+      "status": "PASS",
+      "reason": "One concise, evidence-backed sentence."
+    }
+  ]
+}
+```
 
-- If everything is to standard: post the verdict header + the eleven one-line rows
-  (with the green run URL). Do NOT @-mention anyone on a pass.
-- If anything is NOT to standard: the verdict header must be immediately followed by a
-  line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}`
-  with the blocking summary. Then the per-check lines, each failing one led by its root
-  issue (e.g. "No passing sweep/eval on any commit in this PR") with the supporting
-  link after.
+Output requirements:
+- `verdict` is exactly `PASS` or `REJECTED`.
+- `checks` contains exactly eleven objects numbered 0 through 10, once each.
+- Every `status` is exactly `PASS`, `FAIL`, or `N/A`.
+- `verdict` may be `PASS` only when every status is `PASS` or `N/A`.
+- Keep `summary`, `name`, and `reason` concise Markdown without status emojis.
+- State conclusions rather than narrating the process. Include useful run or recipe
+  links directly in `reason`.
+- If a required artifact or run is inaccessible, report `FAIL` rather than assuming
+  it passed.
 
-Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ status emojis
-specified above. Use only facts you verified. If a required artifact or run is
-inaccessible, say so explicitly rather than assuming pass.
+Use a local shell or Python command to write the JSON file, then read it back and
+confirm that it parses before finishing. Print no alternative verdict format that the
+workflow could confuse with the authoritative JSON file.
