@@ -101,13 +101,19 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
+
+GPU_MEMORY_UTILIZATION=0.95
+if [ "$TP" -eq 1 ]; then
+    GPU_MEMORY_UTILIZATION=0.97
+fi
+
 start_gpu_monitor
 
 set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $PORT \
 $PARALLEL_ARGS \
 --attention_config.indexer_kv_dtype fp8 \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
 --block-size 128 \
