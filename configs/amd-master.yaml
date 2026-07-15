@@ -2466,7 +2466,7 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
 
 dsv4-fp4-mi355x-sglang-agentic-hicache-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
