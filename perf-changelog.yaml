@@ -4788,3 +4788,11 @@
     - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
     - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+  description:
+    - "Update B200 AgentX: KV offload, sparse DSV4 attention, mega-MoE, and FULL_DECODE_ONLY CUDA graphs."
+    - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
+    - "B200: GPU-resident TP8 at conc [1,2,4,6,8] and SimpleCPU-offload TP8 at conc [8,12,16]; DEP8 at conc [8,16,24,32,40,48,56,64,68,72] with both SimpleCPU and Mooncake 0.3.11.post1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2202

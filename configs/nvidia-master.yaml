@@ -1771,7 +1771,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.23.0
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
@@ -1782,14 +1782,12 @@ dsv4-fp4-b200-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Pure TP is only competitive at very low concurrency.
-      - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
-      # Sample the useful MooncakeStore range without repeating its collapsed
-      # high-concurrency tail.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 32, 38, 44, 50], router: { name: vllm-router, version: "0.1.14" } }
-      # Retain the external-cache transition and peak-throughput region.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 38, 44, 56, 64, 66, 68], router: { name: vllm-router, version: "0.1.14" } }
+      # Pure TP is GPU-resident (cache fits) at low concurrency.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 12, 16] }
+      # DEP compares SimpleCPUOffloadConnector and MooncakeStoreConnector.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
