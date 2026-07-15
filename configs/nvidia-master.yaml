@@ -3003,7 +3003,7 @@ dsr1-fp8-b200-trt:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 64, conc-end: 128 }
-      - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 } 
+      - { tp: 4, ep: 1, conc-start: 8, conc-end: 16 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
     - isl: 8192
       osl: 1024
@@ -3229,10 +3229,12 @@ dsv4-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Preserve the previous GPU-resident TP4 search space on the new image.
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 16] }
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 16] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12, 20, 28, 36, 44, 52, 60, 68, 76], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [32, 64, 96, 128, 160, 192, 224, 228], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [40, 72, 104, 136, 168, 200], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
