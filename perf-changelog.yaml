@@ -4785,14 +4785,7 @@
 - config-keys:
     - kimik2.5-fp4-b300-vllm-agentic-mtp
   description:
-    - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3.1-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
-    - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2158
-
-- config-keys:
-    - kimik2.5-fp4-b300-vllm-agentic-mtp
-  description:
-    - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3.1-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
+    - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
     - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
   
@@ -4821,4 +4814,10 @@
     - "Add GLM-5.1 FP8 GB200 disaggregated dynamo-sglang MTP config covering 8k1k, high-throughput and low-latency topologies"
     - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2123
-  
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3.1-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
+    - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2228
