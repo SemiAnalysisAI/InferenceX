@@ -14,6 +14,10 @@ concurrency:
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
           github.event.label.name != 'skip_queue' &&
+          github.event.label.name != 'ci-patchwork' &&
+          github.event.label.name != 'engine-patch' &&
+          github.event.label.name != 'ci-patchwork-waived' &&
+          github.event.label.name != 'ci-checklist-complete' &&
           github.run_id ||
           'active'
         }}
@@ -51,7 +55,11 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
               github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'skip_queue'
+              github.event.label.name == 'skip_queue' ||
+              github.event.label.name == 'ci-patchwork' ||
+              github.event.label.name == 'engine-patch' ||
+              github.event.label.name == 'ci-patchwork-waived' ||
+              github.event.label.name == 'ci-checklist-complete'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -160,6 +168,7 @@ jobs:
         if: >-
             always() &&
             github.event_name == 'pull_request' &&
+            vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
             !github.event.pull_request.draft &&
             (
               needs.check-changelog.result == 'success' ||
@@ -179,7 +188,7 @@ jobs:
             - name: Classify priority criteria with Fable
               id: fable
               continue-on-error: true
-              uses: anthropics/claude-code-action@v1
+              uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
               with:
                   anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
                   track_progress: false
@@ -189,7 +198,7 @@ jobs:
                       --model 'claude-fable-5'
                       --max-turns 8
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-vllm","glm5","glm5.1","kimik2.5","kimik2.6","kimik2.7","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
                       Inspect this PR's diff against its base branch.
 
@@ -272,7 +281,11 @@ jobs:
                   github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
                   github.event.label.name == 'all-evals' ||
                   github.event.label.name == 'evals-only' ||
-                  github.event.label.name == 'skip_queue'
+                  github.event.label.name == 'skip_queue' ||
+                  github.event.label.name == 'ci-patchwork' ||
+                  github.event.label.name == 'engine-patch' ||
+                  github.event.label.name == 'ci-patchwork-waived' ||
+                  github.event.label.name == 'ci-checklist-complete'
                 )
               ) ||
               (
@@ -344,7 +357,7 @@ jobs:
                   CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
                     --event-name "${{ github.event_name }}" \
-                    --queue-namespace "${{ github.run_id }}" \
+                    --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
                     --labels-json "$PR_LABELS" \
                     --pr-number "${{ github.event.pull_request.number || 0 }}" \
                     --criteria-json "$FABLE_CRITERIA")

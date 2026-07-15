@@ -51,6 +51,7 @@ jobs:
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           args=(--backend "$INPUT_BACKEND")
@@ -69,7 +70,7 @@ jobs:
           cells = matrix["include"]
           for index, cell in enumerate(cells):
               canonical = json.dumps(cell, sort_keys=True, separators=(",", ":"))
-              material = f"{os.environ['RUN_ID']}:{index}:{canonical}".encode()
+              material = f"{os.environ['RUN_ID']}:{os.environ['RUN_ATTEMPT']}:{index}:{canonical}".encode()
               cell["queue-token"] = hashlib.sha256(material).hexdigest()[:32]
           slim = {"include": cells}
           with open(sys.argv[1], "a", encoding="utf-8") as output:
@@ -100,12 +101,16 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
-          '["self-hosted","{0}","ci-job-{1}-{2}"]',
-          matrix.sku,
-          needs.setup.outputs.priority,
-          matrix.queue-token
+          '["self-hosted",{0},{1},{2}]',
+          toJSON(matrix.sku),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            needs.setup.outputs.priority,
+            matrix.queue-token
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
-        format('["{0}"]', matrix.sku)
+        format('[{0}]', toJSON(matrix.sku))
       ) }}
     name: p${{ needs.setup.outputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
     timeout-minutes: 350

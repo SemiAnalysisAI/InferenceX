@@ -49,6 +49,14 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
+      - name: Checkout priority scheduler tooling
+        if: ${{ inputs.ref && inputs.ref != '' }}
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-priority
+          persist-credentials: false
+
 
       - id: gen
         name: Generate matrix via script
@@ -56,10 +64,15 @@ jobs:
           pip install pydantic
           CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          PRIORITY_ROOT="${GITHUB_WORKSPACE}"
+          if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
+            PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
+          fi
           CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
-            "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
+            "${PRIORITY_ROOT}/utils/ci_priority.py" \
+            --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${{ github.event_name }}" \
-            --queue-namespace "${{ github.run_id }}" \
+            --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
             --labels-json '${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}')
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
@@ -110,12 +123,16 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
-          '["self-hosted","{0}","ci-job-{1}-{2}"]',
-          matrix.config.runner,
-          matrix.config.priority,
-          matrix.config['queue-token']
+          '["self-hosted",{0},{1},{2}]',
+          toJSON(matrix.config.runner),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            matrix.config.priority,
+            matrix.config['queue-token']
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
-        format('["{0}"]', matrix.config.runner)
+        format('[{0}]', toJSON(matrix.config.runner))
       ) }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}

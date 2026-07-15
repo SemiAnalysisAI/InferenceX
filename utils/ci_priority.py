@@ -45,33 +45,37 @@ def _first_prefix_adjustment(value: str, adjustments: dict[str, Any]) -> Decimal
     return Decimal(0)
 
 
+def supported_criteria(policy: dict[str, Any]) -> frozenset[str]:
+    """Return every classifier fact understood by the configured policy."""
+    adjustments = policy["adjustments"]
+    return frozenset(
+        {
+            "multi-node",
+            "agentic",
+            "eval-only",
+            "checklist-complete",
+            "patchwork",
+        }
+        | set(adjustments.get("precision", {}))
+        | set(adjustments.get("spec-decoding", {}))
+        | set(adjustments.get("framework-prefix", {}))
+        | set(adjustments.get("model-prefix", {}))
+    )
+
+
 def _entry_from_criteria(
     criteria: frozenset[str],
     policy: dict[str, Any],
     entry: dict[str, Any],
 ) -> dict[str, Any]:
-    fixed = {
-        "multi-node",
-        "agentic",
-        "eval-only",
-        "fp4",
-        "mtp",
-        "eagle",
-        "eagle3",
-        "sglang",
-        "vllm",
-        "dynamo-vllm",
-        "checklist-complete",
-        "patchwork",
-    }
-    allowed = fixed | set(policy["adjustments"].get("model-prefix", {}))
-    unknown = criteria - allowed
+    unknown = criteria - supported_criteria(policy)
     if unknown:
         raise ValueError(f"Unknown CI priority criteria: {sorted(unknown)}")
+    precision = str(entry.get("precision", ""))
     spec_decoding = str(entry.get("spec-decoding", ""))
     framework = str(entry.get("framework", ""))
     model_prefix = str(entry.get("model-prefix", ""))
-    framework_criteria = ("sglang", "vllm", "dynamo-vllm")
+    framework_criteria = tuple(policy["adjustments"].get("framework-prefix", {}))
     model_criteria = tuple(policy["adjustments"].get("model-prefix", {}))
     return {
         "prefill": (
@@ -83,9 +87,7 @@ def _entry_from_criteria(
             else ""
         ),
         "eval-only": "eval-only" in criteria and entry.get("eval-only") is True,
-        "precision": (
-            "fp4" if "fp4" in criteria and entry.get("precision") == "fp4" else ""
-        ),
+        "precision": precision if precision in criteria else "",
         "spec-decoding": spec_decoding if spec_decoding in criteria else "",
         "framework": (
             framework
@@ -160,7 +162,7 @@ def calculate_priority(
     checklist = policy["labels"].get("checklist-complete", {})
     if (
         (criteria is not None and "checklist-complete" in criteria)
-        or (criteria is None and context.labels & set(checklist.get("names", [])))
+        or context.labels & set(checklist.get("names", []))
     ):
         score += _decimal(checklist.get("adjustment", 0))
 

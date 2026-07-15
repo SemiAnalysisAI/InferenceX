@@ -1,10 +1,20 @@
+import json
+import shlex
 from copy import deepcopy
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+import yaml
 
-from ci_priority import PriorityContext, annotate_jobs, calculate_priority, load_policy
+from ci_priority import (
+    PriorityContext,
+    annotate_jobs,
+    calculate_priority,
+    load_policy,
+    queue_token,
+    supported_criteria,
+)
 
 
 POLICY = load_policy(Path(__file__).parents[1] / "configs" / "ci-priority.yaml")
@@ -130,6 +140,19 @@ def test_fable_criteria_drive_all_configured_adjustments():
     ) == Decimal("1.000")
 
 
+def test_checklist_label_applies_alongside_classifier_criteria():
+    entry = {"runner": "h100", "framework": "trt"}
+
+    assert calculate_priority(
+        entry,
+        POLICY,
+        PriorityContext(
+            labels=frozenset({"ci-checklist-complete"}),
+            criteria=frozenset(),
+        ),
+    ) == Decimal("1.250")
+
+
 def test_fable_criteria_reject_unknown_values_and_allow_mixed_jobs():
     entry = {"runner": "h100", "framework": "vllm"}
 
@@ -182,3 +205,27 @@ def test_annotation_only_touches_runnable_matrix_entries():
     assert "priority" not in annotated["changelog_metadata"]
     assert "priority" not in payload["single_node"]["1k1k"][0]
     assert "queue-token" not in payload["single_node"]["1k1k"][0]
+
+
+def test_classifier_schema_matches_the_policy_vocabulary():
+    workflow = yaml.safe_load(
+        (
+            Path(__file__).parents[1] / ".github" / "workflows" / "run-sweep.yml"
+        ).read_text()
+    )
+    classifier = workflow["jobs"]["classify-priority"]["steps"][1]
+    arguments = shlex.split(classifier["with"]["claude_args"])
+    schema = json.loads(arguments[arguments.index("--json-schema") + 1])
+    schema_criteria = schema["properties"]["criteria"]["items"]["enum"]
+
+    assert set(schema_criteria) == set(supported_criteria(POLICY))
+
+
+def test_queue_tokens_change_between_run_attempts():
+    entry = {"runner": "b200", "framework": "sglang"}
+
+    assert queue_token(entry, "123:1", ("0",)) != queue_token(
+        entry,
+        "123:2",
+        ("0",),
+    )

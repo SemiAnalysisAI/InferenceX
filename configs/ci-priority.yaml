@@ -1,7 +1,8 @@
 version: 1
 
 # Higher scores run first. Scores are uncapped and remain human-readable in
-# workflow job labels (for example, ci-job-2.750-<hash>).
+# `ci-job-<score>-<hash>` workflow labels; `ci-attempt-<run-attempt>` prevents
+# stale runner labels from matching partial reruns.
 base-score: 1.0
 
 adjustments:

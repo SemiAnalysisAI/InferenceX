@@ -39,8 +39,14 @@ SWEEP_LABELS = {
     "full-sweep-fail-fast",
     "full-sweep-fail-fast-no-canary",
 }
-MODIFIER_LABELS = {"all-evals", "evals-only"}
-RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS
+MODIFIER_LABELS = {"all-evals", "evals-only", "skip_queue"}
+POLICY_LABELS = {
+    "ci-patchwork",
+    "engine-patch",
+    "ci-patchwork-waived",
+    "ci-checklist-complete",
+}
+RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS | POLICY_LABELS
 REUSE_ELIGIBLE_LABELS = SWEEP_LABELS - {"sweep-enabled"}
 REUSE_INCOMPATIBLE_LABELS = {"evals-only"}
 
@@ -197,6 +203,7 @@ def _ctx(sc: dict) -> dict:
         "github.event.pull_request.draft": sc.get("draft", False),
         "github.event.pull_request.labels.*.name": sc.get("labels", []),
         "github.event.label.name": sc.get("label_name"),
+        "vars.PRIORITY_SCHEDULER_ENABLED": sc.get("scheduler_enabled", "true"),
         "github.event.head_commit.message": sc.get("msg", ""),
     }
 
@@ -289,6 +296,22 @@ CASES = [
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["full-sweep-enabled", "evals-only"]},
      ("success", "skipped", "RUN")),
+    ("PR-labeled-skip-queue-restarts-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "skip_queue",
+      "labels": ["full-sweep-enabled", "skip_queue"]},
+     ("success", "skipped", "RUN")),
+    ("PR-unlabeled-skip-queue-restarts-numeric-sweep",
+     {**_PR, "action": "unlabeled", "label_name": "skip_queue",
+      "labels": ["full-sweep-enabled"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-patchwork-restarts-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "ci-patchwork",
+      "labels": ["full-sweep-enabled", "ci-patchwork"]},
+     ("success", "skipped", "RUN")),
+    ("PR-unlabeled-patchwork-restarts-full-sweep",
+     {**_PR, "action": "unlabeled", "label_name": "ci-patchwork",
+      "labels": ["full-sweep-enabled"]},
+     ("success", "skipped", "RUN")),
     ("PR-labeled-with-unrelated-label",
      {**_PR, "action": "labeled", "label_name": "documentation",
       "labels": ["full-sweep-enabled"]}, ("skipped", "skipped", "SKIP")),
@@ -348,6 +371,21 @@ def test_trigger_types_enable_gated_events() -> None:
     # opened/reopened are intentionally excluded so opening or reopening a PR
     # that already carries a sweep label does not start a sweep.
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
+
+
+def test_priority_classifier_only_runs_when_scheduler_is_enabled() -> None:
+    scenario = {
+        **_PR,
+        "action": "synchronize",
+        "labels": ["full-sweep-enabled"],
+    }
+    disabled = _ctx({**scenario, "scheduler_enabled": "false"})
+    enabled = _ctx({**scenario, "scheduler_enabled": "true"})
+    disabled["needs.check-changelog.result"] = "success"
+    enabled["needs.check-changelog.result"] = "success"
+
+    assert not _eval(CLASSIFY_IF, disabled)
+    assert _eval(CLASSIFY_IF, enabled)
 
 
 # --------------------------------------------------------------------------
@@ -428,6 +466,8 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-enabled", "evals-only"],
         ["sweep-enabled", "all-evals", "evals-only"],
         ["full-sweep-enabled", "all-evals", "evals-only"],
+        ["skip_queue"],
+        ["full-sweep-enabled", "skip_queue"],
     ]
     pr_axes = itertools.product(
         ["ready_for_review", "synchronize", "labeled", "unlabeled"],  # action
@@ -438,6 +478,11 @@ def _all_scenarios() -> list[dict]:
             "sweep-enabled",
             "all-evals",
             "evals-only",
+            "skip_queue",
+            "ci-patchwork",
+            "engine-patch",
+            "ci-patchwork-waived",
+            "ci-checklist-complete",
             "documentation",
             None,
         ],                                  # label.name
@@ -466,9 +511,9 @@ def test_exhaustive_cross_product() -> None:
     ]
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
-    # (4 actions x 2 draft x 18 label-configs x 6 label-names x 2 reuse x
-    # 2 changelog outcomes x 2 messages = 6912 PR cases, plus 2 push cases).
-    assert len(scenarios) == 6914
+    # (4 actions x 2 draft x 20 label-configs x 11 label-names x 2 reuse x
+    # 2 changelog outcomes x 2 messages = 14080 PR cases, plus 2 push cases).
+    assert len(scenarios) == 14082
 
 
 def test_named_cases_match_reference_spec() -> None:

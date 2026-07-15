@@ -127,7 +127,8 @@ jobs:
               "spec-decoding": "mtp"
             }]')
           scored=$(printf '%s' "$entry" |
-            python3 utils/ci_priority.py --queue-namespace "${{ github.run_id }}")
+            python3 utils/ci_priority.py \
+              --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           echo "queue-token=$(jq -r '.[0][\"queue-token\"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
 
@@ -137,12 +138,16 @@ jobs:
       ${{ fromJSON(
         vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
         format(
-          '["self-hosted","{0}","ci-job-{1}-{2}"]',
-          inputs.runner,
-          needs.setup.outputs.priority,
-          needs.setup.outputs.queue-token
+          '["self-hosted",{0},{1},{2}]',
+          toJSON(inputs.runner),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            needs.setup.outputs.priority,
+            needs.setup.outputs.queue-token
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
         ) ||
-        format('["{0}"]', inputs.runner)
+        format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 600
     name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"

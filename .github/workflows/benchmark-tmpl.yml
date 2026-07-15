@@ -180,20 +180,20 @@ jobs:
         (
           inputs.skip-queue-pr != '' &&
           format(
-            '["self-hosted","{0}","ci-job-{1}-{2}","ci-skip-queue-pr-{3}"]',
-            inputs.runner,
-            inputs.priority,
-            inputs.queue-token,
-            inputs.skip-queue-pr
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt)),
+            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
           ) ||
           format(
-            '["self-hosted","{0}","ci-job-{1}-{2}"]',
-            inputs.runner,
-            inputs.priority,
-            inputs.queue-token
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
           )
         ) ||
-        format('["{0}"]', inputs.runner)
+        format('[{0}]', toJSON(inputs.runner))
       ) }}
     timeout-minutes: 500
     name: >-

@@ -63,6 +63,14 @@ jobs:
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                 ref: ${{ github.sha }}
+            - name: Checkout priority scheduler tooling
+              if: ${{ inputs.ref && inputs.ref != '' }}
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+              with:
+                ref: ${{ github.workflow_sha }}
+                path: .ci-priority
+                persist-credentials: false
+
 
             - id: get-jobs
               env:
@@ -71,17 +79,24 @@ jobs:
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
-                    "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
-                    --event-name "${{ github.event_name }}" \
-                    --queue-namespace "${{ github.run_id }}" \
-                    --labels-json "$PR_LABELS")
-                  AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))")
-                  MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))")
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
-                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
-                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))")
-                  MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))")
+                  PRIORITY_ROOT="${GITHUB_WORKSPACE}"
+                  if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
+                    PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
+                  fi
+                  score_matrix() {
+                    local family="$1"
+                    python3 "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                      --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
+                      --event-name "${{ github.event_name }}" \
+                      --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \
+                      --labels-json "$PR_LABELS"
+                  }
+                  AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))" | score_matrix agentic)
+                  MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))" | score_matrix multi-agentic)
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix single)
+                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
+                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix eval)
+                  MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-eval)
                   echo "agentic-config=$AGENTIC" >> $GITHUB_OUTPUT
                   echo "multi-node-agentic-config=$MULTI_AGENTIC" >> $GITHUB_OUTPUT
                   echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
