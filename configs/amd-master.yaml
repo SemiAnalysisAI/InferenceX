@@ -845,12 +845,32 @@ kimik2.5-fp4-mi355x-atom-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
+      # 1P(tp4)1D(tp4)
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 32, 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
       # 1P(tp4)2D(tp8)
     - isl: 8192
       osl: 1024
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32 ]
         prefill:
           num-worker: 1
           tp: 4
