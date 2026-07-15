@@ -149,7 +149,7 @@ benchmark:
 
 identity:
   container:
-    image: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+    image: "vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
   frameworks:
-    dynamo: "1.2.0.dev20260426"
-    vllm: "0.20.0"
+    dynamo: "1.3.0.dev1"
+    vllm: "0.1.dev18219+g4ba0a72a4"
