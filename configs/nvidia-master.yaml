@@ -2648,6 +2648,7 @@ glm5-fp4-gb200-dynamo-trt:
   runner: gb200
   precision: fp4
   framework: dynamo-trt
+  kv-p2p-transfer: nixl
   multinode: true
   disagg: true
   scenarios:
