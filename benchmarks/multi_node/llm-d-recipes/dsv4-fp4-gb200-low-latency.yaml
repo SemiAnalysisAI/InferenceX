@@ -51,7 +51,9 @@ plugins:
   - type: prefix-cache-scorer
   - type: queue-scorer
   - type: active-request-scorer
-  - type: max-score-picker
+  - type: weighted-random-picker
+    parameters:
+      threshold: "0.1"
 
 schedulingProfiles:
   - name: prefill
@@ -63,12 +65,13 @@ schedulingProfiles:
         weight: 2
       - pluginRef: active-request-scorer
         weight: 2
-      - pluginRef: max-score-picker
+      - pluginRef: weighted-random-picker
   - name: decode
     plugins:
       - pluginRef: decode-filter
       - pluginRef: active-request-scorer
-      - pluginRef: max-score-picker
+        weight: 2
+      - pluginRef: weighted-random-picker
 
 dataLayer:
   discovery:
@@ -89,7 +92,10 @@ prefill:
   extra-args: >-
     --kv-cache-dtype fp8
     --enforce-eager
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization 0.95
+    --max-model-len 9280
+    --max-num-seqs 16
+    --max-num-batched-tokens 32768
     --enable-cumem-allocator
     --no-enable-prefix-caching
     --no-async-scheduling
@@ -98,6 +104,7 @@ prefill:
     --moe-backend deep_gemm_mega_moe
     --enable-ep-weight-filter
     --no-disable-hybrid-kv-cache-manager
+    --no-enable-flashinfer-autotune
     --numa-bind
   env:
     NCCL_CUMEM_ENABLE: "1"
@@ -123,14 +130,16 @@ prefill:
     NVSHMEM_REMOTE_TRANSPORT: "none"
     NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
     NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    TORCH_SYMMMEM: "NVSHMEM"
+    NVSHMEM_CUMEM_HANDLE_TYPE: "FABRIC"
+    NVSHMEM_DISABLE_CUDA_VMM: "0"
     VLLM_SKIP_P2P_CHECK: "1"
-    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_USE_DEEP_GEMM: "1"
+    VLLM_USE_RUST_FRONTEND: "1"
     NVIDIA_GDRCOPY: "enabled"
     VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
     # Harden distributed coordination against transient gloo/NCCL resets under
@@ -171,9 +180,13 @@ decode:
     # rc added so KV falls back to InfiniBand, not TCP (see prefill note).
     UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
     TILELANG_CLEANUP_TEMP_FILES: "1"
+    NVSHMEM_CUMEM_HANDLE_TYPE: "FABRIC"
+    NVSHMEM_DISABLE_CUDA_VMM: "0"
     VLLM_SKIP_P2P_CHECK: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_USE_RUST_FRONTEND: "1"
     NVIDIA_GDRCOPY: "enabled"
     TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
 

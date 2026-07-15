@@ -4788,3 +4788,13 @@
     - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
     - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
+
+- config-keys:
+    - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
+    - dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe
+  description:
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, max-num-seqs 512->1024, disable NCCL symmetric memory, add no-enable-flashinfer-autotune"
+    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
+    - "EPP: switch from max-score-picker to weighted-random-picker (threshold=0.1) for better load distribution under high concurrency"
+    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
