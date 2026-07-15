@@ -148,6 +148,10 @@ backend:
       hicache-io-backend: kernel
       hicache-mem-layout: page_first_direct
       hicache-ratio: 1.01
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
     decode:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       model-path: /model/
