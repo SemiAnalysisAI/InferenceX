@@ -4781,3 +4781,38 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update the vLLM image to nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
+    - "Install FlashInfer 0.6.15.dev20260712"
+    - "Use the upstream SM100 low-M MXFP8 split-K implementation included in FlashInfer 0.6.15"
+    - "Use the upstream FlashInfer PR #3187 distributed AutoTuner synchronization API and PR #3918 non-Tensor guard included in the 0712 nightly"
+    - "Apply the FlashInfer PR #3912 AutoTuner cache and memory fix via a local runtime patch"
+    - "Keep the upstream FlashInfer PR #3582, PR #3687, and PR #3745 runtime changes"
+    - "Patch vLLM to synchronize distributed FlashInfer tactic selection over its gloo world group and re-enable AutoTuner"
+    - "Set VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=300 to fail GPU hangs faster"
+    - "Use the explicit FlashInfer TRT-LLM all-reduce backend override"
+    - "Remove MiniMax 1k1k and 8k1k DEP2 points from this performance bisect"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update the vLLM image to nightly-3d99b0499aff7ce3b91942b0385558dab4eecf76, the earliest nightly containing vLLM PR #48268"
+    - "Skip FlashInfer AutoTuner profiling for flashinfer::trtllm_fp4_block_scale_moe while retaining synchronized tuning for the remaining operations"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Add an 8k1k TP1 diagnostic sweep at concurrency 1-16"
+    - "Use vLLM GPU memory utilization 0.97 for TP1 while retaining 0.95 for all other TP sizes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Set --max-num-seqs 16 and FULL_DECODE_ONLY CUDA Graph mode for TP1 only"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
