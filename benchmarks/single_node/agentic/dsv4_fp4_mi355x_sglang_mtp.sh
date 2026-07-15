@@ -140,7 +140,7 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --attention-backend compressed
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.10
