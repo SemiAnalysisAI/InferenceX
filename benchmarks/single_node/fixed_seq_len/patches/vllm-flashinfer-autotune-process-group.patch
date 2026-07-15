@@ -1,9 +1,9 @@
 diff --git a/vllm/model_executor/warmup/kernel_warmup.py b/vllm/model_executor/warmup/kernel_warmup.py
 --- a/vllm/model_executor/warmup/kernel_warmup.py
 +++ b/vllm/model_executor/warmup/kernel_warmup.py
-@@ -155,9 +155,16 @@ def flashinfer_autotune(runner: "GPUModelRunner") -> None:
+@@ -178,9 +178,16 @@ def flashinfer_autotune(runner: "GPUModelRunner") -> None:
      if not use_persistent_cache:
--        with torch.inference_mode(), fi_utils.autotune():
+-        with torch.inference_mode(), fi_utils.autotune(**autotune_kwargs):
 -            runner._dummy_run(
 -                num_tokens=runner.scheduler_config.max_num_batched_tokens,
 -                skip_eplb=True,
@@ -15,7 +15,7 @@ diff --git a/vllm/model_executor/warmup/kernel_warmup.py b/vllm/model_executor/w
 +        world = get_world_group()
 +        set_autotune_process_group(world.cpu_group)
 +        try:
-+            with torch.inference_mode(), fi_utils.autotune():
++            with torch.inference_mode(), fi_utils.autotune(**autotune_kwargs):
 +                runner._dummy_run(
 +                    num_tokens=runner.scheduler_config.max_num_batched_tokens,
 +                    skip_eplb=True,

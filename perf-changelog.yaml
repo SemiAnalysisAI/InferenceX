@@ -4765,3 +4765,10 @@
     - "Use the explicit FlashInfer TRT-LLM all-reduce backend override"
     - "Remove MiniMax 1k1k and 8k1k DEP2 points from this performance bisect"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update the vLLM image to nightly-3d99b0499aff7ce3b91942b0385558dab4eecf76, the earliest nightly containing vLLM PR #48268"
+    - "Skip FlashInfer AutoTuner profiling for flashinfer::trtllm_fp4_block_scale_moe while retaining synchronized tuning for the remaining operations"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2124

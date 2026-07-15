@@ -9,7 +9,8 @@
 # the upstream SM100 low-M MXFP8 split-K kernel (flashinfer-ai/flashinfer#3847),
 # the distributed AutoTuner synchronization API (#3187), and the non-Tensor
 # guard (#3918). It backports the still-unmerged #3912 memory fix and patches
-# vLLM to opt in to synchronized distributed tuning.
+# vLLM to opt in to synchronized distributed tuning. vLLM PR #48268 supplies
+# the per-op AutoTuner skip control used below.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -85,6 +86,7 @@ SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
+export VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS='flashinfer::trtllm_fp4_block_scale_moe'
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=300
 
 if [ "${DP_ATTENTION}" = "true" ]; then
