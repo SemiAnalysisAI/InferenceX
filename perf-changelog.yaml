@@ -4804,3 +4804,10 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714"
     - "Fix HSA out-of-resources crashes during DPA agentic MTP warmup"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Scale SGLang request and CUDA-graph limits per DP-attention engine while preserving aggregate AgentX fan-out headroom"
+    - "Prevent per-rank HSA out-of-resources crashes during accelerated warmup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200

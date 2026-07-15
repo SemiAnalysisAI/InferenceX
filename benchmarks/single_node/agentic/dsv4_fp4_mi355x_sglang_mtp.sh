@@ -102,9 +102,16 @@ if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
 
-# AgentX concurrency counts live session trees, not individual requests.
-# Allow subagent fan-out to exceed CONC without clipping request bursts.
+# AgentX concurrency counts live session trees, not individual requests, so
+# retain 2x aggregate request headroom for subagent fan-out. SGLang applies
+# both limits per engine; with DP attention, divide the aggregate limits over
+# the DP ranks instead of granting the full global limit to every rank.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_RUNNING_REQUESTS=$(( (MAX_RUNNING_REQUESTS + TP - 1) / TP ))
+    CUDA_GRAPH_MAX_BS=$(( (CUDA_GRAPH_MAX_BS + TP - 1) / TP ))
+fi
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 # Simulated acceptance-length (AL) settings.
@@ -141,7 +148,7 @@ SGLANG_CMD=(
     "${PARALLEL_ARGS[@]}"
     --attention-backend compressed
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
-    --max-running-requests "$CUDA_GRAPH_MAX_BS"
+    --max-running-requests "$MAX_RUNNING_REQUESTS"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.10
     --page-size 256
