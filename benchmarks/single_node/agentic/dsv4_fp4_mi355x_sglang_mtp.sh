@@ -110,11 +110,11 @@ fi
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+[ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 # Simulated acceptance-length (AL) settings.
 export SGLANG_DEFAULT_THINKING=1
-export SGLANG_DSV4_REASONING_EFFORT=max
+export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_SIMULATE_ACC_LEN=2.49
 export SGLANG_SIMULATE_ACC_METHOD=match-expected
 export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
