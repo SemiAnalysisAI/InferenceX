@@ -1856,6 +1856,33 @@ dsv4-fp4-mi355x-sglang-mtp:
       - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048, spec-decoding: mtp }
       - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32, spec-decoding: mtp }
 
+# DSv4-Pro FP8 on MI355X via SGLang. Re-introduced after removal in #1501.
+# The DSV4-Pro-FP8 checkpoint keeps some bf16 layers (shared-expert /
+# embedding), so generic lmsysorg/sglang-rocm releases fail at server boot
+# with a strict FP8 downcast check (ValueError: Downcasting not allowed:
+# target.dtype=torch.float8_e4m3fn, loaded_weight.dtype=torch.bfloat16).
+# Only the DSv4-specific rocm/sgl-dev custom builds tolerate this -- keep this
+# recipe pinned to a `...-DSv4` custom tag; do NOT bump it to a plain
+# sglang-rocm release (that is exactly what broke it and caused the removal).
+dsv4-fp8-mi355x-sglang:
+  image: rocm/sgl-dev:rocm720-mi35x-da28108-20260610-DSv4
+  model: sgl-project/DeepSeek-V4-Pro-FP8
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
 # nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
 # on 2026-05-05, so any nightly built after that includes the

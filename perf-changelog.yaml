@@ -4781,3 +4781,9 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - dsv4-fp8-mi355x-sglang
+  description:
+    - "Re-introduce dsv4-fp8-mi355x-sglang benchmark (removed in #1501). Pins to DSv4-specific image rocm/sgl-dev:rocm720-mi35x-da28108-20260610-DSv4, which tolerates the DSV4-Pro-FP8 bf16 shared-expert/embedding layers; generic lmsysorg/sglang-rocm releases fail server boot with a strict FP8 downcast check. Restores launch script at benchmarks/single_node/fixed_seq_len/dsv4_fp8_mi355x_sglang.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2220
