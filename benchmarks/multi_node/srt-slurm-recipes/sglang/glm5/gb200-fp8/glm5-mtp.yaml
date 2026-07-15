@@ -142,7 +142,7 @@ zip_override_mtp_8k1k_hightpt:
     prefill_nodes: [2, 4, 8]
     prefill_workers: [1, 2, 4]
 zip_override_mtp_8k1k_lowlat:
-  name: [8k1k-1p4d_tp8, 8k1k-1p4d_tp8-conc16, 8k1k-1p8d_tp8, 8k1k-1p8d_tp8-conc1, 8k1k-1p8d_tp8-conc4]
+  name: [8k1k-1p4d_tp8, 8k1k-1p4d_tp8-conc56, 8k1k-1p8d_tp8, 8k1k-1p8d_tp8-conc12, 8k1k-1p8d_tp8-conc31]
   backend:
     sglang_config:
       decode:

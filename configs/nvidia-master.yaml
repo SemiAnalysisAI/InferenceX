@@ -12018,7 +12018,7 @@ glm5-fp8-gb200-dynamo-sglang-mtp:
           tp: 8
           ep: 1
           dp-attn: false
-      # 1p4d tp8, conc16. 10 nodes.
+      # 1p4d tp8, conc56. 10 nodes.
       - spec-decoding: "mtp"
         conc-list: [56]
         prefill:
@@ -12048,7 +12048,7 @@ glm5-fp8-gb200-dynamo-sglang-mtp:
           tp: 8
           ep: 1
           dp-attn: false
-      # 1p8d tp8, conc1. 18 nodes.
+      # 1p8d tp8, conc12. 18 nodes.
       - spec-decoding: "mtp"
         conc-list: [12]
         prefill:
@@ -12063,7 +12063,7 @@ glm5-fp8-gb200-dynamo-sglang-mtp:
           tp: 8
           ep: 1
           dp-attn: false
-      # 1p8d tp8, conc4. 18 nodes.
+      # 1p8d tp8, conc31. 18 nodes.
       - spec-decoding: "mtp"
         conc-list: [31]
         prefill:
