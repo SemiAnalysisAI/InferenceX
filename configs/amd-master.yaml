@@ -571,6 +571,27 @@ kimik2.7-fp4-mi355x-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "source-main" }, conc-list: [16, 32, 48] }
 
 
+# Perf-tuning experiment key (same recipe as the record sweep above, via
+# model-prefix kimik2.7). Wave 1: does expert parallelism help? Compares EP1
+# (current) vs EP8 at TP8+LMCache. Dispatched at 900s via e2e-tests duration
+# override to verify the perf delta before committing a full 3600s run.
+kimik2.7-fp4-mi355x-vllm-agentic-tune:
+  image: vllm/vllm-openai-rocm:v0.24.0
+  model: amd/Kimi-K2.7-Code-MXFP4
+  model-prefix: kimik2.7
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      duration: 900
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [16, 32] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [16, 32] }
+
+
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539
   model: amd/Kimi-K2.5-MXFP4
