@@ -4815,3 +4815,14 @@
     - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2123
   
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-lmcache
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add LMCache 0.5.1 DRAM KV-offload arm on the tuned B300 AgentX recipe from PR #2225 (sparse DSV4 FlashInfer attention, AMXF4 mega-MoE, FULL_DECODE_ONLY CUDA graphs) with image vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153/#2231; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; PYTORCH_ALLOC_CONF=expandable_segments:True dropped on the lmcache arm only (VMM allocations cannot be CUDA-IPC-exported to the LMCache server, same failure mode as cuMem on B200)"
+    - "Points mirror the vllm-simple ladders: TP4-DEP4 conc [8, 16, 24, 32, 40, 48, 56, 64, 72]; TP8-DEP8 conc [32, 64, 96, 128, 160, 192, 224, 228]"
+    - "Parent dsv4-fp4-b300-vllm-agentic updated in the same change to the PR #2225 recipe and search space (image bump, vllm-simple + Mooncake arms) so the shared script stays consistent; the parent points are benchmarked by PR #2225 and not re-triggered here"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+
