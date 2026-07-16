@@ -4794,6 +4794,7 @@
   description:
     - "Bump image to vllm/vllm-openai-rocm:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
     - "Sync per-worker vLLM serve flags/env with the single-node kimik2.5-fp4-mi355x-vllm recipe (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, HSA_NO_SCRATCH_RECLAIM=1, AITER defaults, --max-model-len 9472) in benchmarks/multi_node/amd_utils/models_vllm.yaml"
-    - "Retune P/D search space to all-TP4 prefill/decode, tuning the prefill:decode worker ratio (1P1D TP4 for all concs except 16; 1P(TP4)/2D(TP8) only at conc 16, the measured TP8 crossover); all layouts keep prefill+decode nodes <= 3"
+    - "Retune P/D search space to all-TP4 prefill/decode (dropped TP8 — a real-weight sweep showed TP8 decode is no better than TP4 on tok/s/GPU): 1P(TP4)/1D(TP4) covers the full curve; 1P(TP4)/2D(TP4) adds decode KV headroom for the KV-bound 8k/1k tail (conc 256/512). All layouts keep prefill+decode nodes <= 3"
     - "Turn expert parallelism off (ep:1): single-node TP8 real-weight sweep showed EP -14% to -27% slower than dense"
+    - "~2-3x tok/s/GPU vs the prior 1P2D TP8/EP8 baseline (PR #1585) across most concurrencies (8 GPU vs 24 GPU)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
