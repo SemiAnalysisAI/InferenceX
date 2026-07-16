@@ -186,12 +186,13 @@ Remove and re-add the sweep label to force one.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 
-The main run verifies the source, validates and uploads its ingest artifacts,
-then ingests them with merge-run changelog metadata. Source coverage is
-authoritative, so later matrix/eval policy changes do not invalidate reuse.
-Validation rejects duplicate fixed rows, missing run stats, inconsistent
-agentic artifacts, malformed eval metadata, and raw/aggregate eval mismatches.
-Batched evals use only `completed_eval_concs`.
+The main run passes the selected source run ID and its own merge run ID directly
+to InferenceX-app. The app downloads source artifacts, keeps the newest valid
+artifact family for each logical benchmark point, validates the selected set,
+and ingests it with changelog metadata from the merge run. Benchmark rows and
+public links retain source-run provenance. Source coverage is authoritative, so
+later matrix/eval policy changes do not invalidate reuse. Batched evals use only
+`completed_eval_concs`.
 
 Reuse fails closed when authorized but ineligible or invalid; without
 authorization, `main` runs the normal full sweep.
