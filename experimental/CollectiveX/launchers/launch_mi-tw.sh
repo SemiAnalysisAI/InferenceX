@@ -74,9 +74,15 @@ ncases="$(python3 "$COLLX_RUNTIME_DIR/config.py" case-count "$COLLX_SHARD_FILE")
   || collx_die "cannot count cases in $COLLX_SHARD_FILE"
 [ "$ncases" -gt 0 ] || collx_die "shard $COLLX_SHARD_FILE declares no cases"
 
+# MoRI's SDMA "anvil" transport (hsaKmtCreateQueueExt with HSA_QUEUE_SDMA_BY_ENG_ID)
+# fails at init on the mi300x-tw nodes' kernel thunk (anvil.cpp:193, both nodes), so
+# disable it there and let MoRI fall back to the hipIpc/P2P intra-node path (correct
+# results, normal latency). mi325x-tw's thunk accepts the SDMA queue, so keep it on.
+mori_sdma_default=1
+[ "$RUNNER" = mi300x-tw ] && mori_sdma_default=0
 docker_env=(
   -e MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
-  -e MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
+  -e MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-$mori_sdma_default}"
   -e MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
   -e HSA_NO_SCRATCH_RECLAIM=1
   -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
