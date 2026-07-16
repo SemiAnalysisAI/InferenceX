@@ -330,6 +330,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -368,6 +370,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             exp-name: ${{ matrix.config.exp-name }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
@@ -442,6 +446,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -498,6 +504,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -506,13 +514,14 @@ jobs:
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
@@ -545,7 +554,9 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            conc-list: '[${{ matrix.config.conc }}]'
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
+            conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
@@ -566,9 +577,10 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            conc: ${{ matrix.config.conc }}
+            conc: ${{ matrix.config.conc[0] }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
-            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -602,6 +614,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             tp: ${{ matrix.config.tp }}
             pp: ${{ matrix.config.pp }}
             dcp-size: ${{ matrix.config.dcp-size }}
@@ -643,6 +657,8 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
@@ -702,78 +718,6 @@ jobs:
         if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped') }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
-
-    reuse-ingest-artifacts:
-        needs: setup
-        # `setup` runs via always() and depends on `check-changelog` and
-        # `reuse-sweep-gate`, which are skipped on every push-to-main. Without
-        # always() here, those skipped jobs poison this job's implicit
-        # success() check and it is skipped even when setup succeeded with
-        # reuse-enabled=true — silently breaking the merge-time ingest. Guard
-        # explicitly on setup success instead (same pattern as
-        # comment-unofficial-run-visualizer).
-        if: >-
-            always() &&
-            needs.setup.result == 'success' &&
-            needs.setup.outputs.reuse-enabled == 'true'
-        runs-on: blacksmith-4vcpu-ubuntu-2404
-        steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-            - name: Download reusable source artifacts
-              env:
-                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
-                  SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-source-run-id }}
-              run: |
-                  gh run download "$SOURCE_RUN_ID" \
-                    --repo "${{ github.repository }}" \
-                    -D source-artifacts
-
-                  # Keep only artifacts consumed by the official ingest path.
-                  # The merge run uploads its own changelog metadata; reusable
-                  # benchmark/eval rows are attributed to the source PR sweep.
-                  rm -rf source-artifacts/changelog-metadata
-                  for artifact_dir in source-artifacts/*; do
-                      [ -e "$artifact_dir" ] || continue
-                      name=$(basename "$artifact_dir")
-                      case "$name" in
-                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|agentic_*|server_logs_*|multinode_server_logs_*)
-                              ;;
-                          *)
-                              rm -rf "$artifact_dir"
-                              ;;
-                      esac
-                  done
-
-                  mkdir -p source-artifacts/reused-ingest-metadata
-                  cat > source-artifacts/reused-ingest-metadata/reuse_source_run.json <<'JSON'
-                  {
-                    "source_run_id": "${{ needs.setup.outputs.reuse-source-run-id }}",
-                    "source_run_attempt": "${{ needs.setup.outputs.reuse-source-run-attempt }}",
-                    "source_run_url": "${{ needs.setup.outputs.reuse-source-run-url }}",
-                    "source_pr_number": "${{ needs.setup.outputs.reuse-source-pr-number }}",
-                    "source_head_sha": "${{ needs.setup.outputs.reuse-source-head-sha }}",
-                    "ingest_run_id": "${{ github.run_id }}",
-                    "ingest_run_attempt": "${{ github.run_attempt }}",
-                    "ingest_run_url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                  }
-                  JSON
-
-                  echo "Reusing artifacts from $SOURCE_RUN_ID:"
-                  find source-artifacts -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort
-
-            - name: Validate reusable artifacts
-              # Collapses reran (flaky) eval duplicates to the latest result
-              # per identity, then validates consistency for ingest.
-              run: |
-                  python3 utils/validate_reusable_sweep_artifacts.py \
-                    --artifacts-dir source-artifacts
-
-            - name: Upload reusable ingest artifacts
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: reused-ingest-artifacts
-                  path: source-artifacts/*
 
     upload-changelog-metadata:
         needs: [setup, collect-results]
@@ -865,7 +809,6 @@ jobs:
                 calc-success-rate,
                 setup,
                 upload-changelog-metadata,
-                reuse-ingest-artifacts,
             ]
         if: >-
             always() &&
@@ -885,7 +828,7 @@ jobs:
             (
               needs.collect-results.result != 'skipped' ||
               needs.collect-evals.result != 'skipped' ||
-              needs.reuse-ingest-artifacts.result == 'success'
+              needs.setup.outputs.reuse-enabled == 'true'
             )
         runs-on: ubuntu-latest
         steps:
@@ -898,8 +841,8 @@ jobs:
                     -d '{
                       "event_type": "ingest-results",
                       "client_payload": {
-                        "run-id": "${{ github.run_id }}",
-                        "run-attempt": "${{ github.run_attempt }}"
+                        "source-run-id": "${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}",
+                        "merge-run-id": "${{ github.run_id }}"
                       }
                     }'
 
@@ -910,7 +853,6 @@ jobs:
                 sweep-agentic,
                 sweep-multi-node-agentic,
                 upload-changelog-metadata,
-                reuse-ingest-artifacts,
             ]
         if: >-
             always() &&
@@ -920,7 +862,7 @@ jobs:
             needs.upload-changelog-metadata.result == 'success' &&
             (
               (
-                needs.reuse-ingest-artifacts.result == 'success' &&
+                needs.setup.outputs.reuse-enabled == 'true' &&
                 (
                   (
                     toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
@@ -954,12 +896,12 @@ jobs:
                   curl -sSf -X POST \
                     -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
                     -H "Accept: application/vnd.github+v3+json" \
-                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
                     -d '{
-                      "ref": "master",
-                      "inputs": {
-                        "run-id": "${{ github.run_id }}",
-                        "run-attempt": "${{ github.run_attempt }}",
+                      "event_type": "ingest-agentic-results",
+                      "client_payload": {
+                        "source-run-id": "${{ needs.setup.outputs.reuse-enabled == 'true' && needs.setup.outputs.reuse-source-run-id || github.run_id }}",
+                        "merge-run-id": "${{ github.run_id }}",
                         "database-target": "production"
                       }
                     }'
