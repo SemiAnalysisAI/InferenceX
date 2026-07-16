@@ -4925,4 +4925,4 @@
     - "Add DSV4 NVFP4 B200 disaggregated dynamo-sglang MTP configuration for 8k1k"
     - "Register five recipe-backed topologies and B200 launcher support"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2252
