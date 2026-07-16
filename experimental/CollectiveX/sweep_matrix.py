@@ -29,6 +29,13 @@ PLATFORMS = _load_config("platform_config.json")["platforms"]
 SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
+# Dispatch precisions each backend realizes. BF16 is the universal control; FP8 is a
+# caller-prequantized dispatch (DeepEP blockwise e4m3fn; MoRI per-SKU e4m3 tensor cast).
+# A precision the backend does not list is gated out at generation (no case emitted).
+BACKEND_PRECISIONS = {
+    "deepep-v2": ("bf16", "fp8"),
+    "mori": ("bf16", "fp8"),
+}
 
 
 def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
@@ -70,6 +77,7 @@ def resolve_matrix(
     only_sku: str = "",
     exclude_skus: str = "",
     ep_sizes: str = "",
+    precisions: str = "",
 ) -> dict[str, Any]:
     """Resolve the fixed sweep into allocation-sized workflow shards."""
     selected_eps: set[int] = set()
@@ -77,6 +85,13 @@ def resolve_matrix(
         if not value.isdigit() or int(value) <= 0:
             raise SystemExit(f"invalid --ep-sizes {ep_sizes!r}; expected positive integers")
         selected_eps.add(int(value))
+    known_precisions = set(SWEEP["precisions"])
+    selected_precisions = {value.strip() for value in precisions.split(",") if value.strip()}
+    unknown_precisions = sorted(selected_precisions - known_precisions)
+    if unknown_precisions:
+        raise SystemExit(
+            f"unknown --precisions {unknown_precisions}; have {sorted(known_precisions)}"
+        )
 
     if only_sku and only_sku not in PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
@@ -94,7 +109,7 @@ def resolve_matrix(
     workload = SWEEP["workload"]
     targets = _selected_backends(backend)
     requested_cases: list[dict[str, Any]] = []
-    shards: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+    shards: dict[tuple[str, str, int, str], list[dict[str, Any]]] = {}
 
     for sku in sorted(PLATFORMS):
         if (only_sku and sku != only_sku) or sku in excluded:
@@ -110,38 +125,62 @@ def resolve_matrix(
                     if runnable_eps is None:
                         continue
                     runnable = ep in runnable_eps
-                    case = {
-                        "suite": SWEEP["suite"],
-                        "workload": workload["name"],
-                        "backend": target,
-                        "routing": SWEEP["routing"],
-                        "phase": phase,
-                        "ep": ep,
-                        "hidden": workload["hidden"],
-                        "topk": workload["topk"],
-                        "experts": workload["routed_experts"],
-                        "seed": workload["seed"],
-                        "ladder": " ".join(map(str, ladder)),
-                        "mode": SWEEP["mode"],
-                        "timing": timing_profile,
-                        **{field: topology[field] for field in TOPOLOGY_FIELDS},
-                    }
-                    case["case_id"] = ep_harness.case_id(sku, case)
-                    requested_cases.append({
-                        "sku": sku,
-                        "case": case,
-                        "disposition": "runnable" if runnable else "unsupported",
-                        "reason": None if runnable else "backend-platform-unsupported",
-                        "detail": None,
-                    })
+                    backend_precisions = BACKEND_PRECISIONS.get(target, ("bf16",))
+                    supported = [
+                        precision for precision in SWEEP["precisions"]
+                        if precision in backend_precisions
+                    ]
                     if runnable:
-                        shards.setdefault((sku, target, topology["nodes"]), []).append(case)
+                        # A runnable cell fans out one case per selected precision.
+                        emit_precisions = [
+                            precision for precision in supported
+                            if not selected_precisions or precision in selected_precisions
+                        ]
+                    else:
+                        # An ep-unsupported cell records once with a placeholder
+                        # precision (never dispatched). It must be independent of BOTH
+                        # the --precisions filter (so a subset stays a strict subset of
+                        # the full matrix) and of the sweep.json precision ORDER (so
+                        # reordering the config never silently renames unsupported
+                        # case_ids): sorted() pins it deterministically to the supported
+                        # control (bf16 sorts first).
+                        emit_precisions = sorted(supported)[:1]
+                    for precision in emit_precisions:
+                        case = {
+                            "suite": SWEEP["suite"],
+                            "workload": workload["name"],
+                            "backend": target,
+                            "routing": SWEEP["routing"],
+                            "precision": precision,
+                            "phase": phase,
+                            "ep": ep,
+                            "hidden": workload["hidden"],
+                            "topk": workload["topk"],
+                            "experts": workload["routed_experts"],
+                            "seed": workload["seed"],
+                            "ladder": " ".join(map(str, ladder)),
+                            "mode": SWEEP["mode"],
+                            "timing": timing_profile,
+                            **{field: topology[field] for field in TOPOLOGY_FIELDS},
+                        }
+                        case["case_id"] = ep_harness.case_id(sku, case)
+                        requested_cases.append({
+                            "sku": sku,
+                            "case": case,
+                            "disposition": "runnable" if runnable else "unsupported",
+                            "reason": None if runnable else "backend-platform-unsupported",
+                            "detail": None,
+                        })
+                        if runnable:
+                            shards.setdefault(
+                                (sku, target, topology["nodes"], precision), []
+                            ).append(case)
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
-    for (sku, target, nodes), cases in sorted(shards.items()):
+    for (sku, target, nodes, precision), cases in sorted(shards.items()):
         first = cases[0]
         shards_by_sku.setdefault(sku, []).append({
-            "id": f"{sku}-{target}-n{nodes}",
+            "id": f"{sku}-{target}-{precision}-n{nodes}",
             "sku": sku,
             "backend": target,
             "launcher": PLATFORMS[sku]["launcher"],
@@ -184,6 +223,8 @@ def main() -> int:
     parser.add_argument("--only-sku", default="")
     parser.add_argument("--exclude-skus", default="")
     parser.add_argument("--ep-sizes", default="")
+    parser.add_argument("--precisions", default="",
+                        help="comma-separated subset of configs/sweep.json precisions")
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
@@ -202,6 +243,7 @@ def main() -> int:
         only_sku=args.only_sku,
         exclude_skus=args.exclude_skus,
         ep_sizes=args.ep_sizes,
+        precisions=args.precisions,
     )
     if args.out:
         Path(args.out).write_text(

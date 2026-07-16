@@ -18,7 +18,7 @@ from ep_backend import EPBackend, RankInputs  # noqa: E402
 def args(**updates):
     values = dict(
         experts=8, phase="decode", tokens_ladder="", routing="uniform", seed=0,
-        hidden=16, topk=2, mode="normal",
+        hidden=16, topk=2, mode="normal", precision="bf16",
     )
     values.update(updates)
     return types.SimpleNamespace(**values)
@@ -137,6 +137,22 @@ class BackendTests(unittest.TestCase):
     def test_mode_is_fail_closed(self):
         with self.assertRaises(ValueError):
             FakeBackend(args(mode="unsupported"))
+
+    def test_precision_is_fail_closed(self):
+        # The base SUPPORTED_PRECISIONS is BF16-only; an adapter that has not opted
+        # into a precision must reject it rather than silently run the wrong codec.
+        with self.assertRaises(ValueError):
+            FakeBackend(args(precision="fp8"))
+
+    def test_base_dispatch_encoding_is_identity(self):
+        # BF16 default: semantic_payload is identity and make_problem attaches no
+        # oracle_x, so the combine oracle falls back to problem.x (unchanged behavior).
+        backend = FakeBackend(args())
+        payload = object()
+        self.assertIs(backend.semantic_payload(payload), payload)
+        self.assertEqual(backend._encode_dispatch(payload), (payload, None))
+        self.assertEqual(backend.dispatch_dtype, "bf16")
+        self.assertEqual(backend.combine_dtype, "bf16")
 
 
 if __name__ == "__main__":

@@ -27,17 +27,29 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # deep_ep exposes ElasticBuffer (the from-source PR #605 capability).
 
 
+def _fp8_cast_helpers():
+    """The pinned per-token FP8 cast pair (blockwise e4m3fn, per-128-block FP32 scale).
+
+    Imported lazily so a BF16-only run never depends on deep_ep.utils.math, and so
+    the quantization the oracle models is byte-identical to what dispatch transports.
+    """
+    from deep_ep.utils.math import per_token_cast_to_fp8, per_token_cast_back
+    return per_token_cast_to_fp8, per_token_cast_back
+
+
 def _jit_cache_directory(
     args,
     world_size: int,
     max_tokens: int,
     allow_hybrid_mode: bool,
     realized: dict[str, int | bool],
+    use_fp8: bool,
 ) -> str:
     values = (
         args.runner, world_size, args.hidden, args.topk, args.experts,
         getattr(args, "num_logical_experts", args.experts), max_tokens,
         int(allow_hybrid_mode), realized["allocated_qps"], realized["num_sms"],
+        int(use_fp8),
     )
     return "jit-" + "-".join(str(value) for value in values)
 
@@ -83,6 +95,7 @@ class DeepEPV2Backend(EPBackend):
     # Invariant by identity contract: this backend IS the PR #605 ElasticBuffer
     # implementation; LSA vs hybrid GIN are transport paths, not kernel families.
     kernel_generation = "v2-elastic-buffer"
+    SUPPORTED_PRECISIONS = ("bf16", "fp8")
     stage_device_work = False
     combine_needs_redispatch = False
     combine_weight_semantics = "unweighted-rank-sum"
@@ -91,6 +104,20 @@ class DeepEPV2Backend(EPBackend):
         # deepep-v2 is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
         super().__init__(args, rank, world_size, local_rank, device)
         self.group = dist.group.WORLD
+        self._fp8 = self.precision == "fp8"
+        # FP8 dispatch sends a caller-prequantized (e4m3fn, per-128-block FP32 scale)
+        # tuple; stage dequantizes it back to the BF16 combine sends, which is real
+        # device work and so a separately-timed component.
+        self.stage_device_work = self._fp8
+        self._to_fp8 = self._cast_back = None
+        if self._fp8:
+            self.dispatch_dtype = "fp8-e4m3fn"
+            self.dispatch_value_bytes = 1
+            self.dispatch_scale_bytes_per_copy = ((args.hidden + 127) // 128) * 4
+            # Resolve the pinned cast pair once (lazily, so a BF16-only run never imports
+            # deep_ep.utils.math) so the timed stage() does no module lookup in the
+            # measured region.
+            self._to_fp8, self._cast_back = _fp8_cast_helpers()
 
     def create_buffer(self, spec):
         # max_tokens is the measured-ladder maximum; the historical values (which
@@ -106,7 +133,7 @@ class DeepEPV2Backend(EPBackend):
             num_max_tokens_per_rank=self.max_tokens,
             hidden=args.hidden,
             num_topk=args.topk,
-            use_fp8_dispatch=False,  # BF16 communication path.
+            use_fp8_dispatch=self._fp8,  # FP8 sizes the buffer for the (e4m3fn, scale) tuple.
             deterministic=False,
             allow_hybrid_mode=allow_hybrid_mode,
             allow_multiple_reduction=True,
@@ -134,12 +161,24 @@ class DeepEPV2Backend(EPBackend):
             self.max_tokens,
             allow_hybrid_mode,
             realized,
+            self._fp8,
         )
         os.environ["EP_JIT_CACHE_DIR"] = str(jit_root / jit_cache_directory)
 
     def _topk_idx_dtype(self):
         # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.
         return deep_ep.topk_idx_t
+
+    def semantic_payload(self, x):
+        if not self._fp8:
+            return x
+        return self._cast_back(*self._to_fp8(x))
+
+    def _encode_dispatch(self, x):
+        if not self._fp8:
+            return x, None
+        quantized = self._to_fp8(x)
+        return quantized, self._cast_back(*quantized)
 
     def dispatch(self, p):
         recv_x, recv_topk_idx, recv_topk_weights, handle, _ = self.buffer.dispatch(
@@ -164,8 +203,12 @@ class DeepEPV2Backend(EPBackend):
         )
 
     def stage(self, p, h):
-        # BF16: the received buffer is already the semantic payload to combine.
-        h.combine_input = h.recv_x
+        if self._fp8:
+            # Dequantize the received (fp8, scale) tuple to the BF16 combine sends.
+            h.combine_input = self._cast_back(h.recv_x[0], h.recv_x[1])
+        else:
+            # BF16: the received buffer is already the semantic payload to combine.
+            h.combine_input = h.recv_x
 
     def combine(self, p, h):
         combined_x, _, _ = self.buffer.combine(
@@ -187,8 +230,14 @@ class DeepEPV2Backend(EPBackend):
             local_idx,
         )
         local = local_idx[valid].to(torch.int64)
+        if self._fp8:
+            # Dequantize the sliced (fp8, scale) recv tuple so the payload the oracle
+            # inspects is BF16 [count, hidden] (source-ID decode + bit-exact compare).
+            payload = self._cast_back(h.recv_x[0][:count], h.recv_x[1][:count])
+        else:
+            payload = h.recv_x[:count]
         return types.SimpleNamespace(
-            payload=h.recv_x[:count],
+            payload=payload,
             expert_ids=expert_ids,
             weights=h.recv_topk_weights[:count].masked_fill(~valid, 0),
             local_expert_counts=torch.bincount(
@@ -197,7 +246,12 @@ class DeepEPV2Backend(EPBackend):
         )
 
     def combine_transformed(self, p, h, transformed):
-        combine_input = torch.zeros_like(h.recv_x)
+        # Combine always sends BF16. Under FP8, recv_x is an (fp8, scale) tuple, so the
+        # BF16 combine buffer is shaped from the fp8 payload rather than zeros_like it.
+        if self._fp8:
+            combine_input = torch.zeros_like(h.recv_x[0], dtype=torch.bfloat16)
+        else:
+            combine_input = torch.zeros_like(h.recv_x)
         combine_input[: transformed.shape[0]].copy_(transformed.to(combine_input.dtype))
         combined, _, _ = self.buffer.combine(
             combine_input,

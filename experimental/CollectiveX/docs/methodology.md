@@ -20,18 +20,19 @@ It does not predict serving throughput without a separate correlation study.
 ## Matrix
 
 The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
-placement, and one pinned fixed resource profile per backend/topology. Dispatch and combine are
-fixed BF16 on every backend; precision is not a swept dimension. Every case uses the normal
-`layout-and-dispatch-v1` semantics.
+placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16;
+dispatch precision is a swept dimension — a BF16 control and a caller-prequantized FP8 dispatch
+(`bf16`, `fp8`). Every case uses the normal `layout-and-dispatch-v1` semantics.
 
 - `ep-core`: uniform routing over the workload's token ladders — for `deepseek-v3`, decode
   T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
   live with the workload in `configs/sweep.json`.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
-matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`, and
-`--ep-sizes` select a subset; a subset produces a smaller matrix, not a different contract. The
-matrix is generated per dispatch; there is no frozen matrix digest or locked case count.
+matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
+`--ep-sizes`, and `--precisions` select a subset; a subset produces a smaller matrix, not a
+different contract. The matrix is generated per dispatch; there is no frozen matrix digest or locked
+case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -100,9 +101,12 @@ Logical payload bandwidth is:
 
 `logical_payload_bytes / measured_latency_seconds`
 
-Normal-mode payload bytes use rank-deduplicated token-rank BF16 activations (2 bytes per value, no
-scale payload) and exclude expert metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire
-utilization, and physical-link utilization are not emitted without a defined primitive model or
+Normal-mode payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
+padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale payload; an FP8
+dispatch moves 1 byte per value, plus per-128-block FP32 scales for DeepEP's blockwise codec (none
+for MoRI's plain e4m3 cast), while combine stays BF16 — so the dispatch and combine directions can carry
+different byte counts and the roundtrip is their per-field sum. Algorithm bandwidth, bus bandwidth,
+wire utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
 rates are named `rate_at_latency_percentile`: bytes or tokens divided by the matching latency
 percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted
@@ -129,8 +133,11 @@ scale_up_domain` — every EP8 case and the MNNVL EP16 cases) has a single domai
 rounding; a multi-node RoCE EP16 group carries one BF16 partial per node. Modelling that per-domain
 cast is what lets the gate stay tight — max elementwise relative error (denominator clamped at 0.02)
 below `8 * 2^-8`, the residual accumulation-order ambiguity — across scale-up and scale-out topologies
-alike (omitting it left multi-node EP16 ~0.048 off, above the gate). It is a correctness gate, not an
-estimate of transport error. Any failed rank or point makes the case ineligible in the result it writes.
+alike (omitting it left multi-node EP16 ~0.048 off, above the gate). Under FP8 dispatch the oracle
+applies the backend's exact per-token cast round-trip to its semantic payload before both the
+dispatched-payload compare and this combine expectation, so the payload match stays bit-exact and the
+same tight gate holds — the quantization is modeled, not absorbed into a wider tolerance. It is a
+correctness gate, not an estimate of transport error. Any failed rank or point makes the case ineligible in the result it writes.
 Pre/post dispatch behavior is checked against canonical source-token metadata and expected output.
 Native receive slots may be assigned nondeterministically, so physical receive order is not treated
 as a correctness property.
@@ -140,10 +147,11 @@ as a correctness property.
 One raw case document carries `record_type: "case-attempt"` and the single `version`, and contains:
 
 - `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and the scheduled case — backend,
-  EP size, mode, phase, suite, workload, and the topology coordinate), and `allocation_factors`
-  (run id, run attempt, source SHA);
+  EP size, mode, precision, phase, suite, workload, and the topology coordinate), and
+  `allocation_factors` (run id, run attempt, source SHA);
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks;
-- `measurement`: dispatch/combine dtype and semantics, `sampling`, and the per-point `rows`;
+- `measurement`: dispatch/combine dtype (the realized wire formats — combine always BF16, dispatch
+  BF16 or the SKU's FP8 format) and semantics, `sampling`, and the per-point `rows`;
 - `implementation`: backend name and kernel generation;
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
@@ -158,7 +166,7 @@ synthetic record.
 
 Identifiers are readable factor strings:
 
-- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}`, each factor
+- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}-{precision}`, each factor
   slug-normalized; and
 - `attempt_ordinal`: a positive integer distinguishing repeat executions of one `case_id`.
 

@@ -4,6 +4,7 @@
   "mode": "normal",
   "routing": "uniform",
   "ep_degrees": [8, 16],
+  "precisions": ["bf16", "fp8"],
   "timing": {
     "iters_per_trial": 8,
     "trials_per_point": 256,

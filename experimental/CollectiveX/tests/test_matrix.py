@@ -40,6 +40,12 @@ class MatrixTests(unittest.TestCase):
         for options, keep in (
             ({"exclude_skus": "b300"}, lambda item: item["sku"] != "b300"),
             ({"ep_sizes": "8"}, lambda item: item["case"]["ep"] == 8),
+            # A precision subset removes only the runnable cases of the other
+            # precision; ep-unsupported cells keep their stable bf16 placeholder.
+            ({"precisions": "bf16"}, lambda item: item["case"]["precision"] == "bf16"),
+            ({"precisions": "fp8"},
+             lambda item: item["case"]["precision"] == "fp8"
+             or item["disposition"] == "unsupported"),
         ):
             partial = matrix(backend="all", **options)
             expected = {
@@ -65,12 +71,52 @@ class MatrixTests(unittest.TestCase):
         for item in document["requested_cases"]:
             self.assertIn(item["case"]["backend"], sweep_matrix.PLATFORMS[item["sku"]]["backends"])
 
+    def test_runnable_cases_fan_out_over_backend_precisions(self):
+        document = matrix(backend="all")
+        runnable = [
+            item for item in document["requested_cases"]
+            if item["disposition"] == "runnable"
+        ]
+        # Every runnable case carries a precision its backend supports, and each
+        # (sku, backend, ep, phase) cell is realized once per supported precision.
+        by_cell: dict[tuple, set[str]] = {}
+        for item in runnable:
+            case = item["case"]
+            self.assertIn(
+                case["precision"], sweep_matrix.BACKEND_PRECISIONS[case["backend"]]
+            )
+            cell = (item["sku"], case["backend"], case["ep"], case["phase"])
+            by_cell.setdefault(cell, set()).add(case["precision"])
+        for cell, precisions in by_cell.items():
+            expected = {
+                precision for precision in sweep_matrix.SWEEP["precisions"]
+                if precision in sweep_matrix.BACKEND_PRECISIONS[cell[1]]
+            }
+            self.assertEqual(precisions, expected, cell)
+        # Both current backends realize BF16 and FP8.
+        self.assertEqual(
+            {precision for precisions in by_cell.values() for precision in precisions},
+            {"bf16", "fp8"},
+        )
+
+    def test_case_ids_are_unique_across_the_matrix(self):
+        # precision is part of case_id, so a cell's bf16 and fp8 attempts are distinct
+        # identities. Without precision in the id the two would collide; assert the full
+        # matrix carries no duplicate case_id so that identity property stays testable.
+        document = matrix(backend="all")
+        ids = [item["case"]["case_id"] for item in document["requested_cases"]]
+        self.assertEqual(len(ids), len(set(ids)))
+        # And every id ends in its own precision factor.
+        for item in document["requested_cases"]:
+            self.assertTrue(item["case"]["case_id"].endswith(item["case"]["precision"]))
+
     def test_invalid_filters_fail_closed(self):
         for options in (
             {"exclude_skus": "unknown"},
             {"only_sku": "b300", "exclude_skus": "b300"},
             {"ep_sizes": "0"},
             {"ep_sizes": "eight"},
+            {"precisions": "fp4"},
             {"backend": "unknown"},
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):

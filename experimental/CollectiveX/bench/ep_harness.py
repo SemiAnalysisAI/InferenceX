@@ -27,6 +27,7 @@ def case_id(sku: str, case: dict) -> str:
         case["phase"],
         f"ep{int(case['ep'])}",
         case["routing"],
+        case["precision"],
     )
     values = [_NON_SLUG.sub("-", str(part).lower()).strip("-") for part in parts]
     if not all(values):
@@ -36,7 +37,9 @@ def case_id(sku: str, case: dict) -> str:
 
 # Workload and timing values arrive from configs/sweep.json through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
-# Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
+# Combine is always BF16, and an FP8 dispatch is modeled exactly (the same quant->
+# dequant round-trip is applied to the oracle's semantic payload), so the combine
+# oracle keeps one frozen gate regardless of dispatch precision.
 # _expected_transformed_combine reproduces the two-level (intra-domain FP32,
 # per-domain BF16 scale-out partial) reduction, so a correct backend's only
 # residual is the accumulation-order ambiguity the model cannot pin down: at most
@@ -45,19 +48,31 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 COMBINE_REL_TOL = 8 * 2.0 ** -8
 COMBINE_MAG_FLOOR = 2e-2
 
-def logical_byte_provenance(logical_copies: int, hidden: int) -> dict[str, int]:
-    """Return comparable logical BF16 activation bytes for one direction.
+def logical_byte_provenance(
+    logical_copies: int,
+    hidden: int,
+    value_bytes: int = 2,
+    scale_bytes_per_copy: int = 0,
+) -> dict[str, int]:
+    """Return comparable logical activation bytes for one direction.
 
-    Dispatch and combine both move BF16 (2 bytes/value) with no separate scale
-    payload, so ``scale_bytes`` is always zero.
+    BF16 moves 2 bytes/value with no scale payload (``scale_bytes`` zero). An FP8
+    dispatch moves 1 byte/value; a blockwise codec (DeepEP) also carries per-block
+    FP32 scales (``scale_bytes_per_copy`` > 0), while a plain e4m3 tensor cast (MoRI)
+    carries none. Combine is always BF16.
     """
     if logical_copies < 0 or hidden < 0:
         raise ValueError("logical byte dimensions must be non-negative")
-    activation_data_bytes = logical_copies * hidden * 2
+    # Every realized dispatch moves at least one byte per value; scale bytes may be zero
+    # (BF16, and MoRI's scale-free e4m3 cast).
+    if value_bytes <= 0 or scale_bytes_per_copy < 0:
+        raise ValueError("value_bytes must be positive and scale bytes non-negative")
+    activation_data_bytes = logical_copies * hidden * value_bytes
+    scale_bytes = logical_copies * scale_bytes_per_copy
     return {
         "activation_data_bytes": activation_data_bytes,
-        "scale_bytes": 0,
-        "total_logical_bytes": activation_data_bytes,
+        "scale_bytes": scale_bytes,
+        "total_logical_bytes": activation_data_bytes + scale_bytes,
     }
 
 def format_collective_version(raw) -> str:
@@ -74,6 +89,8 @@ def format_collective_version(raw) -> str:
 def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
     ap.add_argument("--mode", required=True, choices=["normal"])
+    ap.add_argument("--precision", required=True, choices=["bf16", "fp8"],
+                    help="dispatch payload precision; combine is always BF16")
     ap.add_argument("--phase", required=True, choices=["decode", "prefill"],
                     help="token-size regime label: decode (small T) / prefill (large T)")
     ap.add_argument("--tokens-ladder", required=True,
@@ -430,8 +447,10 @@ def _run_expert_oracle(
         local = (expected_idx // experts_per_rank) == rank
         expected_ids = torch.where(local, expected_idx, torch.full_like(expected_idx, -1))
         expected_weights = expected_weights.masked_fill(~local, 0)
-        expected_payload = routing.activations_for_source_ids(
-            source_ids, problem.x.shape[1], seed, problem.x.dtype
+        expected_payload = backend.semantic_payload(
+            routing.activations_for_source_ids(
+                source_ids, problem.x.shape[1], seed, problem.x.dtype
+            )
         )
     else:
         expected_ids = torch.full_like(view.expert_ids, -1)
@@ -548,6 +567,17 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         if rank == 0:
             print(
                 f"ERROR: {mode} requires combine semantics {expected_weight_semantics}"
+            )
+        return 2
+    # A non-control precision must realize a non-BF16 dispatch wire format. Otherwise a
+    # backend that lists the precision in SUPPORTED_PRECISIONS but never overrode its
+    # encode hooks would run the case in BF16 and emit an artifact mislabeled with the
+    # scheduled precision — fail closed rather than publish a mislabeled measurement.
+    if args.precision != "bf16" and backend.dispatch_dtype == "bf16":
+        if rank == 0:
+            print(
+                f"ERROR: precision {args.precision!r} did not realize a non-BF16 dispatch "
+                f"dtype (backend reports {backend.dispatch_dtype!r})"
             )
         return 2
 
@@ -695,11 +725,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             for percentile_name, latency_us in rtp.items()
         }
         # Canonical LOGICAL payload bytes come from the routing trace (NOT backend recv
-        # tensors): one copy per unique (token, dest-rank) pair. Dispatch and combine
-        # move the same logical payload; the roundtrip is their sum and stage moves nothing.
-        one_way_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
-        roundtrip_bytes = {field: 2 * value for field, value in one_way_bytes.items()}
-        stage_bytes = dict.fromkeys(one_way_bytes, 0)
+        # tensors): one copy per unique (token, dest-rank) pair. Dispatch carries the
+        # backend's realized precision (BF16, or 1-byte FP8 + optional scales); combine
+        # is always BF16. The roundtrip is their per-field sum and stage moves nothing.
+        dispatch_bytes = logical_byte_provenance(
+            rstats["routed_copies"], args.hidden,
+            backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy,
+        )
+        combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
+        roundtrip_bytes = {
+            field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
+        }
+        stage_bytes = dict.fromkeys(dispatch_bytes, 0)
         rows.append({
             "components": {
                 "combine": _component(cp, len(c)),
@@ -716,8 +753,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             },
             "global_tokens": gt,
             "byte_provenance": {
-                "combine": one_way_bytes,
-                "dispatch": one_way_bytes,
+                "combine": combine_bytes,
+                "dispatch": dispatch_bytes,
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
             },
@@ -755,6 +792,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "mode": mode,
             "nodes": nodes,
             "phase": args.phase,
+            "precision": args.precision,
             "routing": args.routing,
             "scale_up_domain": scale_up_domain,
             "scale_up_transport": args.scale_up_transport,
@@ -798,9 +836,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "cross_rank_consistent": routing_consistent,
         },
         "measurement": {
-            "combine_dtype": "bf16",
+            "combine_dtype": backend.combine_dtype,
             "combine_semantics": "activation-only",
-            "dispatch_dtype": "bf16",
+            "dispatch_dtype": backend.dispatch_dtype,
             "payload_unit": "token-rank",
             "rows": rows,
             "sampling": {

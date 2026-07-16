@@ -12,8 +12,9 @@ responsibility. The full measurement methodology is in [docs/methodology.md](doc
 ## Execution Profile
 
 The workload uses packed placement and one pinned `fixed-profile` resource configuration per
-backend/topology; there is no tuning sweep. Dispatch and combine are fixed BF16 on every backend;
-precision is not a swept dimension. Every case runs the single normal-mode contract:
+backend/topology; there is no tuning sweep. Combine is always BF16; dispatch precision is a swept
+dimension — a BF16 control plus a caller-prequantized FP8 dispatch on every backend. Every case runs
+the single normal-mode contract:
 
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Coverage is uniform routing only.
@@ -29,13 +30,16 @@ Correctness is checked against an implementation-independent oracle that reprodu
 two-level reduction — intra-scale-up-domain FP32, then a BF16 cast of each domain's partial for the
 scale-out send. The combine gate is a tight max elementwise relative error below `8 * 2^-8`
 (denominator clamped at 0.02), which holds across scale-up and multi-node scale-out topologies
-alike. Any failed rank or point makes the case ineligible in the result it writes.
+alike. Under FP8 dispatch the oracle applies the same per-token cast round-trip to its semantic
+payload, so the dispatched-payload compare stays bit-exact and the combine gate is unchanged — the
+quantization is modeled, not tolerated. Any failed rank or point makes the case ineligible in the
+result it writes.
 
 The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
-and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`, and
-`--ep-sizes` select a subset; the matrix is generated per dispatch, with no frozen digest or locked
-case count.
+and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`,
+`--ep-sizes`, and `--precisions` select a subset; the matrix is generated per dispatch, with no
+frozen digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -48,8 +52,8 @@ scale-up domain.
 
 | Backend | Current scope |
 |---|---|
-| DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out |
-| MoRI | AMD EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X/MI325X asyncLL); EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
+| DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out. FP8 dispatch via `use_fp8_dispatch` (blockwise e4m3fn) alongside BF16 |
+| MoRI | AMD EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X/MI325X asyncLL); EP16 pins InterNodeV1 over 2x8 XGMI + RDMA. FP8 dispatch is caller-prequantized (per-SKU e4m3fnuz on gfx942, e4m3fn on gfx950); combine stays BF16 (`quant_type=none`) alongside BF16 dispatch |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.

@@ -322,14 +322,15 @@ class StageContract(unittest.TestCase):
 # here instead of on a GPU allocation.
 class CaseArgvContract(unittest.TestCase):
     CASE = {
-        "backend": "deepep-v2", "mode": "normal", "phase": "decode",
+        "backend": "deepep-v2", "mode": "normal", "precision": "bf16",
+        "phase": "decode",
         "routing": "uniform", "ep": 16, "nodes": 2, "gpus_per_node": 8,
         "scale_up_domain": 8, "scope": "scale-out",
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
         "ladder": "1 2 4", "timing": "8:256:32",
-        "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
+        "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform-bf16",
         "suite": "ep-core", "workload": "deepseek-v3",
     }
 
@@ -366,6 +367,7 @@ class CaseArgvContract(unittest.TestCase):
             (args.backend, args.mode, args.phase, args.routing, args.scope),
             ("deepep-v2", "normal", "decode", "uniform", "scale-out"),
         )
+        self.assertEqual(args.precision, "bf16")
         self.assertEqual((args.hidden, args.topk, args.experts), (7168, 8, 256))
         self.assertEqual((args.gpus_per_node, args.scale_up_domain), (8, 8))
         self.assertEqual(args.tokens_ladder, "1 2 4")
@@ -374,11 +376,64 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.version, 1)
         self.assertEqual(args.seed, self.CASE["seed"])
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
-        self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_decode_TS-c000.json")
+        self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_bf16_decode_TS-c000.json")
 
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
+
+
+# logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
+# per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
+class LogicalByteProvenanceTests(unittest.TestCase):
+    def test_bf16_default_is_two_bytes_per_value_no_scales(self) -> None:
+        got = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
+        self.assertEqual(got["activation_data_bytes"], 10 * 7168 * 2)
+        self.assertEqual(got["scale_bytes"], 0)
+        self.assertEqual(got["total_logical_bytes"], 10 * 7168 * 2)
+
+    def test_fp8_blockwise_dispatch_is_one_byte_plus_per_copy_scales(self) -> None:
+        # DeepEP FP8 dispatch: 1 byte/value + ceil(hidden/128)*4 FP32 scale bytes/copy.
+        scale_per_copy = ((7168 + 127) // 128) * 4  # 224
+        got = ep_harness.logical_byte_provenance(
+            logical_copies=10, hidden=7168, value_bytes=1,
+            scale_bytes_per_copy=scale_per_copy,
+        )
+        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
+        self.assertEqual(got["scale_bytes"], 10 * scale_per_copy)
+        self.assertEqual(got["total_logical_bytes"], 10 * 7168 + 10 * scale_per_copy)
+
+    def test_fp8_direct_cast_dispatch_is_one_byte_no_scales(self) -> None:
+        # MoRI's scale-free e4m3 cast: 1 byte/value, no scale payload.
+        got = ep_harness.logical_byte_provenance(
+            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=0,
+        )
+        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
+        self.assertEqual(got["scale_bytes"], 0)
+
+    def test_roundtrip_is_the_per_field_sum_of_dispatch_and_combine(self) -> None:
+        # run_sweep assembles the roundtrip as the per-field sum of an FP8 dispatch and a
+        # BF16 combine; the direction bytes differ, so it is not 2x a single direction.
+        dispatch = ep_harness.logical_byte_provenance(
+            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=224,
+        )
+        combine = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
+        roundtrip = {field: dispatch[field] + combine[field] for field in dispatch}
+        self.assertEqual(roundtrip["activation_data_bytes"], 10 * 7168 * (1 + 2))
+        self.assertEqual(roundtrip["scale_bytes"], 10 * 224)
+        self.assertNotEqual(roundtrip["total_logical_bytes"], 2 * combine["total_logical_bytes"])
+
+    def test_guards_fail_closed(self) -> None:
+        for kwargs in (
+            {"logical_copies": -1, "hidden": 8},
+            {"logical_copies": 1, "hidden": -1},
+            {"logical_copies": 1, "hidden": 8, "value_bytes": 0},
+            {"logical_copies": 1, "hidden": 8, "value_bytes": -1},
+            {"logical_copies": 1, "hidden": 8, "scale_bytes_per_copy": -1},
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                ep_harness.logical_byte_provenance(**kwargs)
+
 
 if __name__ == "__main__":
     unittest.main()
