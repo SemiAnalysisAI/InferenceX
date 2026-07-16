@@ -119,6 +119,61 @@ dsr1-fp8-mi325x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# DeepSeek-V4-Pro FP8 single-node on MI300X (gfx942) via vLLM.
+# EXTRAPOLATED bring-up. sglang was abandoned: on gfx942 (no native FP4) the
+# dsv4 sglang backend's nvfp4 MoE / TileLang-MLA kernels have no gfx942 build
+# (gfx950/MI355X only). vLLM runs the checkpoint in FP8 via --quantization
+# deepseek_v4_fp8 (dequant FP4 MoE -> FP8), the same path the H200 dsv4 vLLM
+# recipe uses. Config mirrors the same-model dsv4-fp4-mi355x-vllm (TP8, conc
+# 4-512); the FP4->FP8 dequant (~1.05TB) fits 8x192GB only at TP8. Launch
+# script dsv4_fp8_mi300x.sh carries the deepseek_v4 + gfx942 AITER flags.
+dsv4-fp8-mi300x-vllm:
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 8k1k KV fits only ~20x concurrency (9472-token requests), so conc512 is
+      # ~25x oversubscribed -> request timeouts. conc256 is proven green; cap here.
+      - { tp: 8, conc-start: 4, conc-end: 256 }
+
+# MTP variant of dsv4-fp8-mi300x-vllm. Mirrors the base recipe and adds
+# DeepSeek-V4 built-in MTP via --speculative-config (num_speculative_tokens=2),
+# routing to dsv4_fp8_mi300x_mtp.sh; benchmark uses --dsv4 chat-template
+# encoding (required for meaningful MTP acceptance).
+dsv4-fp8-mi300x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 8k1k MTP KV is tighter than normal (draft model): conc256 failed here
+      # (19.2% req failures) and conc512 was 55.8%; conc128 passed cleanly.
+      # Cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
+      - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
 dsr1-fp8-mi355x-sglang:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
   model: deepseek-ai/DeepSeek-R1-0528
@@ -415,7 +470,7 @@ qwen3.5-fp8-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 qwen3.5-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: mi355x
@@ -457,7 +512,7 @@ qwen3.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 16 }
 
 qwen3.5-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: mi355x
@@ -3086,3 +3141,61 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96], router: { name: vllm-router, version: "0.1.14" } }
+
+# DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
+# EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no
+# gfx942 build of the dsv4 nvfp4 MoE / TileLang-MLA kernels, so vLLM runs the
+# checkpoint in FP8 via --quantization deepseek_v4_fp8 (dequant FP4 MoE -> FP8),
+# the H200 dsv4 vLLM path. Config mirrors the same-model dsv4-fp4-mi355x-vllm
+# (TP8, conc 4-512); 8x256GB (2TB) has ample headroom for the ~1.05TB FP8
+# footprint. Launch script dsv4_fp8_mi325x.sh carries the deepseek_v4 + gfx942
+# AITER flags.
+dsv4-fp8-mi325x-vllm:
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  # mi325x (mi325x-amds pool) runners are down; use the mi325x-tw cluster.
+  runner: cluster:mi325x-tw
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 8k1k KV fits only ~20x concurrency (9472-token requests), so conc512 is
+      # ~25x oversubscribed -> request timeouts. conc256 is proven green; cap here.
+      - { tp: 8, conc-start: 4, conc-end: 256 }
+
+# MTP variant of dsv4-fp8-mi325x-vllm. Mirrors the base recipe and adds
+# DeepSeek-V4 built-in MTP via --speculative-config (num_speculative_tokens=2),
+# routing to dsv4_fp8_mi325x_mtp.sh; benchmark uses --dsv4 chat-template
+# encoding (required for meaningful MTP acceptance).
+dsv4-fp8-mi325x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  # mi325x (mi325x-amds pool) runners are down; use the mi325x-tw cluster.
+  runner: cluster:mi325x-tw
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 8k1k MTP KV is tighter than normal (draft model): conc256 is borderline
+      # (MI300X 19.2% req failures, flaked pass->fail across runs) and conc512
+      # is 55.8%. conc128 passed cleanly on the memory-tightest SKU (MI300X);
+      # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
+      - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
