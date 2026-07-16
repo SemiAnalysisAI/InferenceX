@@ -1197,23 +1197,16 @@ kimik2.5-fp4-mi355x-vllm-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    # P/D topology (based on PR #2172 + single-node TP8-vs-TP4 decode sweep):
-    #   * 1P(TP4)/1D(TP4) is the default for every concurrency EXCEPT 16.
-    #     A real-weight sweep showed TP4 decode beats TP8 at conc 1-8 (+5-7%
-    #     tok/s, ~7% lower TPOT) and matches it elsewhere, using 1/4 the decode
-    #     GPUs of the 2D(TP8) layout.
-    #   * 1P(TP4)/2D(TP8) is used ONLY at conc 16, the measured crossover where
-    #     TP8 decode pulls ahead (+6% tok/s, lower TPOT).
-    # Both layouts keep prefill+decode nodes <= 3 for the 3-node mi355x-disagg
-    # pool. Expert parallelism is OFF (ep:1, matching PR #2172): a single-node
-    # TP8 sweep showed EP -14% to -27% slower than dense.
+    # P/D topology: all workers TP4. A real-weight sweep showed TP8 decode does
+    # not help over TP4 (TP4 wins at conc 1-8, matches elsewhere, using far fewer
+    # GPUs), so both prefill and decode run TP4.
     - isl: 1024
       osl: 1024
       search-space:
-      # 1P(TP4) 1D(TP4) = 2 nodes. Owns all concs except 16. conc 512 fits KV
+      # 1P(TP4) 1D(TP4) = 2 nodes. conc 512 fits KV
       # (~663 resident cap at 2k tokens/req, verified single-node TP4).
       - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 32, 64, 128, 256, 512 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -1228,30 +1221,13 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P(TP4) 2D(TP8) = 3 nodes. Only conc 16 (measured TP8 crossover).
-      - spec-decoding: "none"
-        conc-list: [ 16 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
 
     - isl: 8192
       osl: 1024
       search-space:
-      # 1P(TP4) 1D(TP4) = 2 nodes. Owns all concs except 16.
+      # 1P(TP4) 1D(TP4) = 2 nodes.
       - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 32, 64, 128, 256 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -1266,9 +1242,10 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P(TP4) 2D(TP8) = 3 nodes. Only conc 16 (measured TP8 crossover).
+      # 1P(TP4) 2D(TP4) = 3 nodes. High-conc KV relief: doubles decode KV so the
+      # 8k/1k tail isn't KV-capped like 1D.
       - spec-decoding: "none"
-        conc-list: [ 16 ]
+        conc-list: [ 256, 512 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -1278,7 +1255,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           - "PREFILL_NODES=1"
         decode:
           num-worker: 2
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
