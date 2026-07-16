@@ -556,7 +556,7 @@ jobs:
             precision: ${{ matrix.config.precision }}
             router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
             kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
-            conc-list: '[${{ matrix.config.conc }}]'
+            conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-hardware: ${{ matrix.config.prefill.hardware }}
@@ -577,7 +577,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            conc: ${{ matrix.config.conc }}
+            conc: ${{ matrix.config.conc[0] }}
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
@@ -970,10 +970,10 @@ jobs:
                   curl -sSf -X POST \
                     -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
                     -H "Accept: application/vnd.github+v3+json" \
-                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
                     -d '{
-                      "ref": "master",
-                      "inputs": {
+                      "event_type": "ingest-agentic-results",
+                      "client_payload": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
                         "database-target": "production"
