@@ -3572,8 +3572,10 @@ dsv4-fp4-b300-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Preserve the previous GPU-resident TP4 search space on the new image.
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 16] }
-      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 16] }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32] }
+      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32] }
+      # TP4 SimpleCPU lazy-offload ladder (extends the GPU-resident TP4 arm).
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [28, 32, 36, 40] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12, 20, 28, 36, 44, 52, 60, 68, 76], router: { name: vllm-router, version: "0.1.14" } }
       # DEP8 is GPU-resident (no KV offload) with a DEP8-tuned server config.

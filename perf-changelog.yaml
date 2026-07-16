@@ -4872,5 +4872,5 @@
   description:
     - "Update B300 AgentX: KV offload, sparse DSV4 attention, mega-MoE, and FULL_DECODE_ONLY CUDA graphs."
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
-    - "B300: GPU-resident TP4 at conc [1,2,4,6,8,16] and DEP8 at conc [32,64,96,128,160,192,196,224,228] (max-num-batched-tokens 16384, long-prefill-token-threshold 4096, gpu-memory-utilization 0.95); DEP4 at conc [8,16,24,32,40,48,56,64,72] with both SimpleCPU and Mooncake 0.3.11.post1."
+    - "B300: GPU-resident TP4/TP8 at conc [1,2,4,6,8,12,16,20,24,28,32] and DEP8 at conc [32,64,96,128,160,192,196,224,228] (max-num-batched-tokens 16384, long-prefill-token-threshold 4096, gpu-memory-utilization 0.95); TP4 SimpleCPU lazy-offload at conc [28,32,36,40]; DEP4 at conc [8,16,24,32,40,48,56,64,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2225
