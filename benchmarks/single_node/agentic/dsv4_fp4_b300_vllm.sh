@@ -108,13 +108,20 @@ case "$KV_OFFLOAD_BACKEND" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
+        # The plain-TP (non-DP-attention) offload ladder uses lazy offload;
+        # DEP keeps eager offload for cross-rank block-hash stability.
+        SIMPLE_LAZY_OFFLOAD=false
+        if [ "$DP_ATTENTION" != "true" ]; then
+            SIMPLE_LAZY_OFFLOAD=true
+        fi
         OFFLOAD_CONFIG=$(cat <<EOF
 {
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
     "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
-    "enable_cross_layers_blocks": "true"
+    "enable_cross_layers_blocks": "true",
+    "lazy_offload": ${SIMPLE_LAZY_OFFLOAD}
   }
 }
 EOF
