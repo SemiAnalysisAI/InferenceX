@@ -4895,7 +4895,7 @@
     - "B200: GPU-resident TP8 at conc [1,2,4,6,8] and SimpleCPU-offload TP8 at conc [8,12,16]; DEP8 at conc [8,16,24,32,40,48,56,64,68,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2224
  
- - config-keys:
+- config-keys:
     - dsv4-fp4-b300-vllm-agentic
   description:
     - "Update B300 AgentX: KV offload, sparse DSV4 attention, mega-MoE, and FULL_DECODE_ONLY CUDA graphs."
