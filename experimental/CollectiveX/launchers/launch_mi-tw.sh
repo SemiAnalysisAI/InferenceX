@@ -97,20 +97,29 @@ for ((ci = 0; ci < ncases; ci++)); do
     collx_log "case $ci: argv generation failed"
     final_rc=1; rm -f "$argv_file"; continue
   fi
-  collx_log "case $ci/$ncases: docker torchrun --nproc-per-node=$NGPUS"
-  if ! "${DOCKER[@]}" run --rm \
-      --device /dev/kfd --device /dev/dri \
-      --group-add video --group-add render \
-      --ipc host --shm-size 32g \
-      --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
-      --network host \
-      "${docker_env[@]}" \
-      -v "$COLLX_DIR:/cx" -v "$argv_file:/cx-argv:ro" -w /cx \
-      "$IMAGE" \
-      bash -c 'xargs -0 torchrun --standalone --nproc-per-node='"$NGPUS"' bench/run_ep.py < /cx-argv'; then
-    collx_log "case $ci: benchmark returned nonzero"
-    final_rc=1
-  fi
+  # A cold first torchrun on a freshly-imported image occasionally dies at worker
+  # launch before run_ep.py even starts (no output, ~5s), while the same case runs
+  # fine immediately after (verified: 3/3 standalone successes vs 1 first-invocation
+  # flake). Retry once so a transient launch flake does not red an otherwise-good leg;
+  # a real failure fails both attempts. The successful attempt overwrites --out.
+  case_ok=0
+  for attempt in 1 2; do
+    collx_log "case $ci/$ncases attempt $attempt: docker torchrun --nproc-per-node=$NGPUS"
+    if "${DOCKER[@]}" run --rm \
+        --device /dev/kfd --device /dev/dri \
+        --group-add video --group-add render \
+        --ipc host --shm-size 32g \
+        --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
+        --network host \
+        "${docker_env[@]}" \
+        -v "$COLLX_DIR:/cx" -v "$argv_file:/cx-argv:ro" -w /cx \
+        "$IMAGE" \
+        bash -c 'xargs -0 torchrun --standalone --nproc-per-node='"$NGPUS"' bench/run_ep.py < /cx-argv'; then
+      case_ok=1; break
+    fi
+    collx_log "case $ci attempt $attempt returned nonzero"
+  done
+  [ "$case_ok" = 1 ] || { collx_log "case $ci failed after 2 attempts"; final_rc=1; }
   rm -f "$argv_file"
 done
 
