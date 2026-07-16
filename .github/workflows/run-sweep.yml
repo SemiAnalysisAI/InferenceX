@@ -741,25 +741,31 @@ jobs:
                   GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
                   SOURCE_RUN_ID: ${{ needs.setup.outputs.reuse-source-run-id }}
               run: |
-                  gh run download "$SOURCE_RUN_ID" \
-                    --repo "${{ github.repository }}" \
-                    -D source-artifacts
+                  mkdir -p source-artifacts
 
-                  # Keep only artifacts consumed by the official ingest path.
-                  # The merge run uploads its own changelog metadata; reusable
-                  # benchmark/eval rows are attributed to the source PR sweep.
-                  rm -rf source-artifacts/changelog-metadata
-                  for artifact_dir in source-artifacts/*; do
-                      [ -e "$artifact_dir" ] || continue
-                      name=$(basename "$artifact_dir")
-                      case "$name" in
-                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|agentic_*|server_logs_*|multinode_server_logs_*)
-                              ;;
-                          *)
-                              rm -rf "$artifact_dir"
-                              ;;
-                      esac
-                  done
+                  # Reruns share one run ID. Keep the newest upload for each
+                  # runner-independent artifact name, matching normal ingest.
+                  while IFS=$'\t' read -r name url; do
+                      mkdir -p "source-artifacts/$name"
+                      gh api "$url" > artifact.zip
+                      unzip -q artifact.zip -d "source-artifacts/$name"
+                  done < <(
+                      gh api \
+                        "repos/${{ github.repository }}/actions/runs/$SOURCE_RUN_ID/artifacts" \
+                        --paginate |
+                      jq -rs '
+                        [
+                          .[].artifacts[]
+                          | select(.expired | not)
+                          | select(.name | test("^(results_bmk$|eval_results_all$|run-stats$|bmk_|eval_|agentic_|server_logs_|multinode_server_logs_)"))
+                        ]
+                        | group_by(.name | sub("_[A-Za-z][A-Za-z0-9.-]*_[0-9]+$"; ""))
+                        | map(max_by(.created_at))[]
+                        | [.name, .archive_download_url]
+                        | @tsv
+                      '
+                  )
+                  rm -f artifact.zip
 
                   mkdir -p source-artifacts/reused-ingest-metadata
                   cat > source-artifacts/reused-ingest-metadata/reuse_source_run.json <<'JSON'
