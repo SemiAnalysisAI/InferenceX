@@ -4605,12 +4605,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
 
 - config-keys:
-    - minimaxm3-fp4-mi355x-vllm
-  description:
-    - "Close the high-concurrency gap vs the ATOM recipe on MiniMax-M3 MXFP4 MI355X single-node vLLM STP. Bump image to latest nightly vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1."
-    - "Add INT4 quantized all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0, VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256) and fp8 KV cache (--kv-cache-dtype fp8). No --hf-overrides indexer-skipping knobs (disallowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)."
-    - "Simplify search space to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8, TP4/EP4, TP2/EP2, and dp-attn variants), matching minimaxm3-fp8-mi355x-vllm (#2003)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2104
     - kimik2.5-fp4-mi355x-atom
   description:
     - "Update ATOM image from rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511 to rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539"
@@ -4873,3 +4867,10 @@
     - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
 
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Close the high-concurrency gap vs the ATOM recipe on MiniMax-M3 MXFP4 MI355X single-node vLLM STP. Bump image to latest nightly vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1."
+    - "Add INT4 quantized all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0, VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256) and fp8 KV cache (--kv-cache-dtype fp8). No --hf-overrides indexer-skipping knobs (disallowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)."
+    - "Simplify search space to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8, TP4/EP4, TP2/EP2, and dp-attn variants), matching minimaxm3-fp8-mi355x-vllm (#2003)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2104
