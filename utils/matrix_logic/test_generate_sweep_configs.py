@@ -128,6 +128,7 @@ def sample_runner_config():
             "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
             "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
             "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:mi355x-amds": {"available-cpu-dram-mib": 3095781, "gpus-per-node": 8},
             "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
     }
@@ -2187,7 +2188,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
 
-    def test_multinode_agentic_preserves_kv_offload_fields(self):
+    def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config):
         config = {
             "dsv4-agentic-hicache": {
                 "image": "sglang-rocm",
@@ -2201,6 +2202,7 @@ class TestGenerateTestConfigSweep:
                 "kv-p2p-transfer": "mori",
                 "scenarios": {
                     "agentic-coding": [{
+                        "dram-utilization": 0.80,
                         "search-space": [{
                             "conc-list": [16],
                             "kv-offloading": "dram",
@@ -2220,12 +2222,101 @@ class TestGenerateTestConfigSweep:
             runner_node_filter=None,
         )
 
-        result = generate_test_config_sweep(args, config)
+        result = generate_test_config_sweep(args, config, sample_runner_config)
 
         assert len(result) == 1
         assert result[0]["kv-offloading"] == "dram"
         assert result[0]["kv-offload-backend"] == {"name": "hicache"}
         assert result[0]["exp-name"] == "dsv4_p1x8_d1x8_conc16_kvdram-hicache"
+        # Budget tracks the prefill worker (the only KV-offloader): tp=8 fills
+        # the 8-GPU node -> full utilization share of the (MAX-capped) available
+        # DRAM: 2861022 MiB * 0.80.
+        assert result[0]["total-cpu-dram-gb"] == 2399
+
+    def test_multinode_agentic_budget_ignores_decode_topology(
+        self, sample_runner_config
+    ):
+        """Only prefill offloads today, so decode's topology does not shrink it."""
+        config = {
+            "dsv4-agentic-hicache-asym": {
+                "image": "sglang-rocm",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "sglang-disagg",
+                "runner": "cluster:mi355x-amds",
+                "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "mori",
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [{
+                            "conc-list": [16],
+                            "kv-offloading": "dram",
+                            "kv-offload-backend": {"name": "hicache"},
+                            # prefill fills the node (8 GPUs); decode uses half.
+                            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                            "decode": {"num-worker": 1, "tp": 4, "ep": 1, "dp-attn": False},
+                        }],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-agentic-hicache-asym"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        assert len(result) == 1
+        # prefill 8/8 -> full budget, regardless of decode tp=4.
+        assert result[0]["total-cpu-dram-gb"] == 2399
+
+    def test_multinode_agentic_rejects_node_misaligned_prefill(
+        self, sample_runner_config
+    ):
+        """A prefill worker whose GPU footprint does not tile the node is rejected."""
+        config = {
+            "dsv4-agentic-hicache-misaligned": {
+                "image": "sglang-rocm",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "sglang-disagg",
+                "runner": "cluster:mi355x-amds",
+                "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "mori",
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [{
+                            "conc-list": [16],
+                            "kv-offloading": "dram",
+                            "kv-offload-backend": {"name": "hicache"},
+                            # tp=6 does not divide an 8-GPU node evenly.
+                            "prefill": {"num-worker": 1, "tp": 6, "ep": 1, "dp-attn": False},
+                            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                        }],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-agentic-hicache-misaligned"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        with pytest.raises(ValueError, match="does not divide"):
+            generate_test_config_sweep(args, config, sample_runner_config)
 
 
 # =============================================================================
