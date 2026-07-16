@@ -24,7 +24,7 @@ dynamo:
   install: true
   wheel: "1.3.0.dev1"
 
-setup_script: vllm-container-deps.sh
+setup_script: vllm-container-deps-deepgemm-timeout.sh
 
 slurm:
   time_limit: "8:00:00"
@@ -146,6 +146,9 @@ benchmark:
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
 
 identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "b5968e9190ef611bbf34a7229255be88a0e937c1"
   container:
     image: "vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
   frameworks:
