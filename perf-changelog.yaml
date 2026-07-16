@@ -4752,6 +4752,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-atom-disagg
+  description:
+    - "Add Kimi-K2.5-MXFP4 entry to models_atom.yaml for ATOM disaggregated inference"
+    - "Set env: ATOM_DISABLE_MMAP=true, AITER_QUICK_REDUCE_QUANTIZATION=INT4, AITER_MXFP4_INTERMEDIATE=1, OMP_NUM_THREADS=1"
+    - "Add scheduler_delay_factor support to models_atom.yaml schema and server_atom.sh; set to 1 for Kimi-K2.5"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2172
+
+- config-keys:
     - dsv4-fp8-h200-vllm
     - dsv4-fp8-h200-vllm-mtp
   description:
@@ -4781,6 +4789,18 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+    - "Align launcher env vars and server args with fixed-seq-len sibling (dsv4 attention backend, fp8_e4m3 kv-cache, disable-radix-cache, cuda-graph-max-bs, DP-attention exports, two-batch-overlap)"
+    - "Add SGLang router for DP-attention configs (consistent-hashing, dp-aware, correlation-id routing)"
+    - "Add HiCache KV offloading support"
+    - "Add SGLANG_CMD array pattern with command logging and env-var dump"
+    - "Add capture_cache_metrics for pre/post-benchmark cache stats"
+    - "Sweep conc=48 across TP8 +/- DPA +/- HiCache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2146
 
 - config-keys:
     - dsv4-fp8-mi300x-vllm
