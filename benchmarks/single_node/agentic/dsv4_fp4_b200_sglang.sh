@@ -56,6 +56,8 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+export SGLANG_DEFAULT_THINKING=1
+export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
@@ -99,13 +101,20 @@ fi
 PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics)
 CHUNKED_PREFILL_SIZE=8192
+# DEP recipe splits by concurrency. The high-throughput tail (conc >= 54) uses
+# the SGLang cookbook recipe (chunked 65536 + prefill delayer + tighter mem/SWA
+# + cuda-graph-max-bs-decode 544, plus the 8192 tokens/rank cap that chunked
+# 65536 needs to stay on the DeepGEMM MoE path). conc < 54 keeps the
+# conservative recipe (chunked 32768) that avoids the pre-54 throughput cliff.
+DEP_HIGH_CONC=false
+[ "$DP_ATTENTION" = "true" ] && [ "$CONC" -ge 54 ] && DEP_HIGH_CONC=true
+DEP_EXTRA_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
     DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
     export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
     export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     PARALLEL_ARGS+=(
@@ -120,7 +129,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --moe-a2a-backend deepep
         --deepep-config "$DEEPEP_CONFIG"
     )
-    CHUNKED_PREFILL_SIZE=32768
+    if [ "$DEP_HIGH_CONC" = "true" ]; then
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8192
+        CHUNKED_PREFILL_SIZE=65536
+        DEP_EXTRA_ARGS=(--enable-prefill-delayer)
+    else
+        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+        CHUNKED_PREFILL_SIZE=32768
+    fi
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -134,13 +150,32 @@ MODEL_ARGS=()
 # DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
 # contexts. Leave the same HBM headroom used by the B300 recipe so a nearly
 # full GPU KV cache does not OOM while HiCache is spilling to host memory.
-MEM_FRACTION_STATIC=0.88
+# The low-latency TP-only path (conc <= 16) runs GPU-only with no HiCache
+# spill, so it can take a larger static fraction for more KV headroom.
+if [ "$DP_ATTENTION" = "true" ]; then
+    if [ "$DEP_HIGH_CONC" = "true" ]; then
+        MEM_FRACTION_STATIC=0.85
+    else
+        MEM_FRACTION_STATIC=0.88
+    fi
+else
+    MEM_FRACTION_STATIC=0.90
+fi
 
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$CONC
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+# The cookbook DEP tail captures a large decode graph (batch 544); other paths
+# scale the unified cuda-graph batch with CONC (capped at 64).
+if [ "$DEP_HIGH_CONC" = "true" ]; then
+    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 544)
+else
+    CUDA_GRAPH_MAX_BS=$CONC
+    [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
+fi
+SWA_FULL_TOKENS_RATIO=0.1
+[ "$DEP_HIGH_CONC" = "true" ] && SWA_FULL_TOKENS_RATIO=0.075
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -175,10 +210,11 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio 0.1
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    "${CUDA_GRAPH_ARGS[@]}"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
+    "${DEP_EXTRA_ARGS[@]}"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
     --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"

@@ -56,6 +56,8 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+export SGLANG_DEFAULT_THINKING=1
+export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
@@ -105,7 +107,28 @@ PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics)
 MEM_FRACTION_STATIC=0.88
 CHUNKED_PREFILL_SIZE=8192
+SWA_FULL_TOKENS_RATIO=0.1
+# Default (non-DP) attention path: compressed attention, shared-expert fusion off.
+MODEL_ARGS=(
+    --attention-backend compressed
+    --page-size 256
+    --disable-shared-experts-fusion
+)
+CUDA_GRAPH_ARGS=()
+EXTRA_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
+    # DP-attention high-throughput agentic recipe (SGLang cookbook: DSV4-Pro FP4
+    # B300, high-throughput, single-node): MegaMoE DeepGEMM MoE (DeepEP dispatch +
+    # fused shared experts + kernel autotune), tuned for conc128.
+    # Measured DEP8 conc128 vs the previous flashinfer_mxfp4 path:
+    # 24,466 -> 33,220 tok/s/gpu (surpasses the vLLM reference of 28,962).
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     PARALLEL_ARGS+=(
         --dp "$TP"
         --tokenizer-worker-num "$TP"
@@ -115,11 +138,43 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
+        --moe-a2a-backend megamoe
+    )
+    MEM_FRACTION_STATIC=0.85
+    SWA_FULL_TOKENS_RATIO=0.075
+    # MegaMoE requires the default (non-compressed) attention path and fused shared experts.
+    MODEL_ARGS=()
+    EXTRA_ARGS=(--enable-prefill-delayer)
+    # chunked-prefill is divided by dp_size (=TP) under DP-attention; keep the
+    # effective chunk at 8192. Size the decode graph to served concurrency:
+    # DEP8 (dp 8) serves conc up to 512, DEP4 (dp 4) tops out near 128.
+    if [ "$TP" = "8" ]; then
+        CHUNKED_PREFILL_SIZE=65536
+        CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 544)
+    else
+        # DEP4 (TP4/EP4) shards the model across only 4 GPUs, so per-GPU weights
+        # are ~2x DEP8 (233 GB loaded, ~32 GB free). At the DEP8-tuned 0.835 the
+        # KV pool cannot allocate (profiler floor ~0.879). Set 0.93: ~12 GB KV
+        # for the no-offload conc points, while keeping ~18 GB of activation/
+        # CUDA-graph headroom for the MegaMoE workspace (DEP4's footprint is
+        # lighter than DEP8's: decode graph 128 vs 544, same 8192 eff chunk).
+        MEM_FRACTION_STATIC=0.93
+        CHUNKED_PREFILL_SIZE=32768
+        CUDA_GRAPH_ARGS=(--cuda-graph-max-bs-decode 128)
+    fi
+elif { [ "$TP" = "8" ] || [ "$TP" = "4" ]; } && [ "${CONC:-999}" -le 16 ]; then
+    # TP-only low-latency (TP4 or TP8, non-DP, conc <= 16): SGLang cookbook
+    # DSV4-Pro FP4 B300 low-latency single-node recipe (mirrors the fixed_seq_len
+    # MTP TP-only path) with speculative decoding (EAGLE) removed. Default
+    # attention + fused shared experts + DSV4 FP4 sparse-attention indexer;
+    # mem-fraction 0.90.
+    PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
+        --enable-deepseek-v4-fp4-indexer
     )
-    MEM_FRACTION_STATIC=0.95
-    CHUNKED_PREFILL_SIZE=16384
+    MEM_FRACTION_STATIC=0.90
+    MODEL_ARGS=(--page-size 256)
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
@@ -127,17 +182,13 @@ else
     )
 fi
 
-MODEL_ARGS=(
-    --attention-backend compressed
-    --page-size 256
-    --disable-shared-experts-fusion
-)
-
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
+# Non-DP path keeps the concurrency-scaled decode graph; DP path set 544 above.
+[ ${#CUDA_GRAPH_ARGS[@]} -eq 0 ] && CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
@@ -172,9 +223,9 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
-    --swa-full-tokens-ratio 0.1
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    "${CUDA_GRAPH_ARGS[@]}"
     --allow-auto-truncate
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
@@ -183,6 +234,7 @@ SGLANG_CMD=(
     --watchdog-timeout 1800
     "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
+    "${EXTRA_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
 

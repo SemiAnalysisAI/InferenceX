@@ -4887,3 +4887,15 @@
     - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
 
+- config-keys:
+    - dsv4-fp4-b200-sglang-agentic-hicache
+    - dsv4-fp4-b300-sglang-agentic-hicache
+  description:
+    - "B300: rework dsv4_fp4_b300_sglang.sh into three regimes selected at launch — DP-attention -> MegaMoE DeepGEMM; pure-TP (TP8/TP4) at conc<=16 -> low-latency; otherwise flashinfer_mxfp4 baseline"
+    - "B300 MegaMoE (DP-attention path): switch --moe-a2a-backend to megamoe with the DeepGEMM MegaMoE env stack (SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1, FIX_HASH_MEGA_MOE=1, USE_FAST_MASK_EP=1, FIX_MEGA_MOE_MEMORY=1, DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320, FIX_NEXTN_MEGA_MOE=1, SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0); add --enable-prefill-delayer, mem-fraction-static 0.85 (DEP8) / 0.93 (DEP4, whose heavier per-GPU weights need a higher floor to fit the KV pool), swa-full-tokens-ratio 0.075"
+    - "B300 MegaMoE rank-aware sizing: DEP8 uses chunked-prefill-size 65536 + cuda-graph-max-bs-decode 544; DEP4 uses chunked-prefill-size 32768 + cuda-graph-max-bs-decode 128 (effective per-DP chunk held at 8192)"
+    - "B300 low-latency (pure TP, conc<=16): --moe-runner-backend flashinfer_mxfp4 --disable-flashinfer-autotune --enable-deepseek-v4-fp4-indexer, mem-fraction-static 0.90, page-size 256 (SGLang DSV4 cookbook low-latency recipe; EAGLE speculative decoding intentionally omitted since it is unavailable here)"
+    - "B200: split mem-fraction-static (0.88 under DP-attention, 0.90 otherwise)"
+    - "nvidia-master.yaml: refine B200/B300 agentic-hicache conc-list search spaces"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2145
+  
