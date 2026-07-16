@@ -38,7 +38,7 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
-if require_agentic_kv_offload_backend native; then
+if require_agentic_kv_offload_backend vllm-simple; then
     # Kimi K2.5 is pure TP (no DP-attn): single engine, world_size=TP.
     # SimpleCPUOffloadConnector internally divides cpu_bytes_to_use by
     # world_size, so pass the full TOTAL_CPU_DRAM_GB; TP-shared mmap

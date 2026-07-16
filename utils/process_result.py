@@ -22,6 +22,24 @@ def get_required_env_vars(required_vars):
     return env_values
 
 
+def get_optional_component_metadata(env_var):
+    """Parse strict optional component metadata from a JSON environment value."""
+    raw_value = os.environ.get(env_var)
+    if raw_value in (None, "", "null"):
+        return None
+
+    try:
+        metadata = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{env_var} must contain valid JSON") from exc
+
+    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
+        raise ValueError(f"{env_var} must contain exactly 'name' and 'version'")
+    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
+        raise ValueError(f"{env_var} name and version must be non-empty strings")
+    return metadata
+
+
 # Base required env vars
 base_env = get_required_env_vars([
     'RUNNER_TYPE', 'FRAMEWORK', 'PRECISION', 'SPEC_DECODING',
@@ -55,6 +73,14 @@ data = {
     'isl': int(isl),
     'osl': int(osl),
 }
+
+router = get_optional_component_metadata('ROUTER_METADATA')
+if router is not None:
+    data['router'] = router
+
+kv_p2p_transfer = os.environ.get('KV_P2P_TRANSFER')
+if kv_p2p_transfer:
+    data['kv_p2p_transfer'] = kv_p2p_transfer
 
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
 
