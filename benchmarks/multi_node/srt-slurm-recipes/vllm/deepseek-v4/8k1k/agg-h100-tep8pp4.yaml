@@ -1,0 +1,102 @@
+name: "dsv4-vllm-agg-h100-tep8pp4-8k1k"
+
+# DeepSeek-V4-Pro FP8 H100 AGGREGATED TP8 x PP4 recipe (4 nodes / 32 GPUs).
+# PARETO POINT (interactivity end), 8k1k. Same rationale as the 1k1k
+# agg-h100-tep8pp4 recipe: PP4 spreads the model over 2x the GPUs of the
+# TP8xPP2 baseline, halving per-GPU layer/expert memory. It is throughput-
+# dominated on tok/s/GPU, but the site frontier is tok/s/GPU-vs-interactivity,
+# so PP4 is run to measure whether it holds non-dominated points at the low-
+# latency corner -- the extra KV headroom lets it sustain a tok/s/user target
+# at concurrencies the 2-node layout cannot. TP8 preserves FP8 128-column block
+# divisibility. Node allocation = tp*pp/gpus_per_node = 8*4/8 = 4. Aggregated
+# (decode num-worker 0) => no NIXL P/D transfer to stall on.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+  exclude: "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  agg_nodes: 4
+  agg_workers: 1
+  gpus_per_agg: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      block-size: 256
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 4
+      enable-expert-parallel: true
+      kv-cache-dtype: "fp8"
+      gpu-memory-utilization: 0.92
+      max-model-len: 9472
+      # max-num-seqs 128 = 2x the TP8xPP2 8k1k cap (64). PP4 halves per-GPU
+      # weight memory vs PP2, so ~2x KV headroom at the same 9472 context; the
+      # 8k1k KV footprint of batch-128 here is ~= batch-64 at PP2. This lets PP4
+      # actually exercise the higher-concurrency end its extra nodes buy.
+      max-num-seqs: 128
+      max-num-batched-tokens: 16384
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      reasoning-parser: deepseek_v4
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  # conc 1-128: maps the interactivity curve at 8k context. With max-num-seqs
+  # 128 the whole list runs unqueued (no oversubscription), so every point is a
+  # clean latency/throughput sample. Kept to 128 to stay within the 8h SLURM
+  # limit (each 8k1k conc level is thousands of 8k-token requests).
+  concurrencies: "1x2x4x8x16x32x64x128"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:v0.21.0"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.21.0"
