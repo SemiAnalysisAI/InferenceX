@@ -4925,4 +4925,4 @@
     - "Add DSV4 NVFP4 B200 disaggregated Dynamo SGLang STP configuration for 8k/1k"
     - "Add checked-in srt-slurm recipes for the configured prefill and decode topologies"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2251
