@@ -4783,6 +4783,25 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
 
 - config-keys:
+    - dsv4-fp8-mi300x-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP8 single-node MI300X vLLM benchmark (new SKU, previously no dsv4 data on gfx942)"
+    - "vLLM, not sglang: on gfx942 (no native FP4) the dsv4 sglang backend's nvfp4 MoE and TileLang-MLA kernels have no gfx942 build (gfx950/MI355X only). vLLM runs the checkpoint in FP8 via --quantization deepseek_v4_fp8 (dequant FP4 MoE -> FP8), the same path the no-FP4 H200 dsv4 vLLM recipe uses"
+    - "Recipe mirrors the same-model dsv4-fp4-mi355x-vllm (ROCm vLLM dsv4: deepseek_v4 tokenizer/reasoning-parser, mp executor, FULL_AND_PIECEWISE compile) plus gfx942 AITER infra from minimaxm3-fp8-mi300x-vllm; TP8 conc 4-512 (the FP4->FP8 dequant ~1.05TB fits 8x192GB only at TP8)"
+    - "MoE backend left at auto (unlike MI355X's --moe-backend aiter): deepseek_v4_fp8 only dequantizes dense/attention, the MoE experts stay mxfp4; forcing aiter on gfx942 selects AITER_MXFP4_MXFP4 (W4A4 native-mxfp4) which the gfx942 kernel rejects, while auto's ROCm+DeepseekV4 path prefers AITER_MXFP4_BF16 (W4A16, dequant) with TRITON_UNFUSED fallback"
+    - "EVAL_CONCURRENT_REQUESTS=8: FP8 weights (~131GB/GPU) leave only ~71k tokens of KV on 8x192GB (max 7.52x concurrency for a 9472-token request); the eval default of CONC (128) concurrent requests OOM-kills the server mid-gsm8k, so eval concurrency is capped to the KV budget (throughput unaffected; MI325X's 256GB keeps the default)"
+    - "Image vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa (the DSv4-validated ROCm vLLM build)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2194
+
+- config-keys:
+    - dsv4-fp8-mi300x-vllm-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 MI300X vLLM MTP (speculative-decoding) variant, mirroring dsv4-fp8-mi300x-vllm plus --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":2} (DeepSeek-V4 built-in MTP)"
+    - "run_benchmark_serving uses --dsv4 chat-template encoding, required for meaningful MTP acceptance rate (EAGLE/MTP is trained on chat-formatted inputs)"
+    - "Same gfx942 auto-MoE (AITER_MXFP4_BF16) + EVAL_CONCURRENT_REQUESTS=8 KV cap as the base recipe; routes to dsv4_fp8_mi300x_mtp.sh via the launcher's spec-decoding=mtp suffix"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2194
+
+- config-keys:
     - kimik2.5-fp4-b300-vllm-agentic-mtp
   description:
     - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
@@ -4814,6 +4833,32 @@
     - "Add GLM-5.1 FP8 GB200 disaggregated dynamo-sglang MTP config covering 8k1k, high-throughput and low-latency topologies"
     - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2123
+
+
+- config-keys:
+    - dsv4-fp8-mi325x-vllm
+  description:
+    - "Add DeepSeek-V4-Pro FP8 single-node MI325X vLLM benchmark (new SKU, previously no dsv4 data on gfx942)"
+    - "vLLM, not sglang: same rationale as dsv4-fp8-mi300x-vllm — sglang has no gfx942 build of the dsv4 nvfp4 MoE / TileLang-MLA kernels (gfx950/MI355X only). vLLM runs the checkpoint in FP8 via --quantization deepseek_v4_fp8 (dequant FP4 MoE -> FP8), the no-FP4 H200 dsv4 vLLM path"
+    - "Recipe mirrors the same-model dsv4-fp4-mi355x-vllm (ROCm vLLM dsv4: deepseek_v4 tokenizer/reasoning-parser, mp executor, FULL_AND_PIECEWISE compile) plus gfx942 AITER infra from minimaxm3-fp8-mi325x-vllm; TP8 conc 4-512, ample headroom on 8x256GB"
+    - "MoE backend left at auto (unlike MI355X's --moe-backend aiter): forcing aiter on gfx942 selects AITER_MXFP4_MXFP4 (W4A4 native-mxfp4) which the gfx942 kernel rejects; auto's ROCm+DeepseekV4 path prefers AITER_MXFP4_BF16 (W4A16, dequant) with TRITON_UNFUSED fallback (see dsv4-fp8-mi300x-vllm)"
+    - "Image vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa (the DSv4-validated ROCm vLLM build)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2195
+
+- config-keys:
+    - dsv4-fp8-mi325x-vllm-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP8 MI325X vLLM MTP (speculative-decoding) variant, mirroring dsv4-fp8-mi325x-vllm plus --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":2} (DeepSeek-V4 built-in MTP)"
+    - "run_benchmark_serving uses --dsv4 chat-template encoding, required for meaningful MTP acceptance rate; routes to dsv4_fp8_mi325x_mtp.sh via the launcher's spec-decoding=mtp suffix"
+    - "256GB MI325X keeps the default eval concurrency (no KV cap needed)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2195
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
 
 - config-keys:
     - kimik2.5-fp4-b300-vllm-agentic-mtp
