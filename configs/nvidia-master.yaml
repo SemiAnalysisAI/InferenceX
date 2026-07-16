@@ -3595,6 +3595,11 @@ dsv4-fp4-b300-vllm-agentic-lmcache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
+      # Pure-TP LMCache arms: upper end of the parent's GPU-resident TP
+      # ladders, matching the B200 lmcache TP8 conc ladder, for a direct
+      # GPU-cache vs LMCache-offload comparison at the same points.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8, 12, 16] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8, 12, 16] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 72], router: { name: vllm-router, version: "0.1.14" } }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [32, 64, 96, 128, 160, 192, 224, 228], router: { name: vllm-router, version: "0.1.14" } }
 

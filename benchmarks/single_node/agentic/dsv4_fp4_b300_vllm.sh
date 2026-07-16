@@ -13,7 +13,8 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=none is used by TP4. DEP4 uses KV_OFFLOADING=dram with
+# KV_OFFLOADING=none is used by the GPU-resident TP arms. DRAM offload arms
+# (DEP, and pure-TP on the lmcache config) use KV_OFFLOADING=dram with
 # KV_OFFLOAD_BACKEND=vllm-simple, mooncake, or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -94,6 +95,8 @@ LMCACHE_SERVER_PID=""
 # On cluster:b300-nv, dram-utilization=0.80 and DEP4 resolve to roughly the
 # source recipe's 280 GiB per DP rank. TP4 remains GPU-resident.
 OFFLOAD_ARGS=()
+# Recipe default; the lmcache arm derates it (see the lmcache case below).
+GPU_MEM_UTIL=0.96
 case "$KV_OFFLOAD_BACKEND" in
     "")
         require_agentic_kv_offload_none
@@ -209,6 +212,23 @@ EOF
         # Per-engine scheduler stats every 5s, to diagnose per-DP-rank KV
         # cache imbalance under the session-sticky router.
         export VLLM_LOG_STATS_INTERVAL=5
+        # The LMCache MP server keeps a GPU worker (~0.8 GiB CUDA context +
+        # staging buffers) on every GPU, and this arm cannot run expandable
+        # segments (the KV cache must be legacy-CUDA-IPC-exportable), so the
+        # recipe's 0.96 leaves <1 GiB free after vLLM sizes its pool. In the
+        # PR #2232 bring-up sweep every DEP8 point OOMed deterministically
+        # growing the torch pool for a 1 GiB DeepGEMM workspace, so DEP8
+        # gets the B200 lmcache arm's proven 0.92. DEP4 was only marginal
+        # (7/9 passed; the failures were a DeepGEMM JIT module load hitting
+        # driver CUDA_ERROR_OUT_OF_MEMORY at startup and a cuBLAS workspace
+        # failure mid-run), so DEP4 and the pure-TP arms take a lighter 0.94
+        # to keep more GPU KV capacity. KV overflows to the DRAM pool by
+        # design, so the derate costs little.
+        if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
+            GPU_MEM_UTIL=0.92
+        else
+            GPU_MEM_UTIL=0.94
+        fi
 
         echo "Starting LMCache MP server on port $LMCACHE_PORT..."
         # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
@@ -326,7 +346,7 @@ VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$VLLM_BACKEND_PORT"
-    --gpu-memory-utilization 0.96
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
     --trust-remote-code
     --no-enable-flashinfer-autotune
     --no-disable-hybrid-kv-cache-manager
