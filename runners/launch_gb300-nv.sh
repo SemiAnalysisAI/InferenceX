@@ -20,6 +20,17 @@ export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cach
 export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
+# Persistent dynamo source-build cache. srtctl's hash-pinned dynamo install
+# (_hash_cached_source_install) caches the built wheel + src tarball at
+# /configs/dynamo-wheels/<hash> with a .complete sentinel; on a warm cache the
+# install is just `pip install` from the cache (no apt, no root). In CI /configs
+# is the per-job srt-slurm checkout (cold every job → cold build needs apt +
+# root, which the non-root server containers can't do), so persist and share
+# the cache across jobs by bind-mounting this host dir at /configs/dynamo-wheels.
+# Seed it once with a --container-remap-root build. 777 for multi-user runners.
+export DYNAMO_WHEELS_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/dynamo-wheels"
+mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
+
 export MODEL_PATH=$MODEL
 
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -127,7 +138,18 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm v1.0.10 has the nginx
+    # client_max_body_size fix (>1 MiB agentic warmup bodies), the
+    # session-affinity frontend, and the BenchmarkType.CUSTOM / extra_mount
+    # schema these recipes need.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.10
+    mkdir -p recipes/sglang/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
+        recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
     # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
     # (`srtctl apply --no-preflight`) — needed because:
@@ -282,6 +304,9 @@ srtctl_root: "${SRTCTL_ROOT}"
 default_mounts:
   "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
   "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
+  # Warm dynamo source-build cache (nested over the auto /configs mount) so the
+  # hash-pinned install is a cache hit (pip-only, no apt/root) on every job.
+  "${DYNAMO_WHEELS_CACHE_HOST_PATH}": "/configs/dynamo-wheels"
 
 # Model path aliases
 model_paths:
