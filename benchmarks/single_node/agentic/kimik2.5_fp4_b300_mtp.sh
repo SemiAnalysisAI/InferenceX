@@ -84,6 +84,11 @@ if agentic_kv_offload_enabled; then
 fi
 
 
+GMU=0.90
+if [[ "$DCP_SIZE" -gt 1 && "$KV_OFFLOADING" == "none" ]]; then
+    GMU=0.85
+fi
+
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
@@ -98,7 +103,7 @@ VLLM_CMD=(
     --trust-remote-code
     --block-size 64
     --language-model-only
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization "$GMU"
     --max-num-seqs "$CONC"
     "${ATTN_BACKEND_ARGS[@]}"
     --attention-config "$ATTN_CONFIG"
