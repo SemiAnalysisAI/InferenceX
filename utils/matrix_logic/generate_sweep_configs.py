@@ -645,6 +645,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
@@ -733,6 +734,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
@@ -740,6 +742,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
@@ -948,6 +951,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
@@ -1029,6 +1033,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
@@ -1036,6 +1041,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }

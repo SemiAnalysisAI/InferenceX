@@ -134,6 +134,39 @@ def sample_runner_config():
 
 
 @pytest.fixture
+def sample_single_node_agentic_config():
+    """Single-node agentic config with explicit and default spec decoding."""
+    return {
+        "kimik2.6-fp4-b300-trt-agentic": {
+            "image": "nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc5",
+            "model": "moonshotai/Kimi-K2.5",
+            "model-prefix": "kimik2.6",
+            "precision": "fp4",
+            "framework": "trt",
+            "runner": "cluster:b300-nv",
+            "multinode": False,
+            "scenarios": {
+                "agentic-coding": [{
+                    "search-space": [
+                        {
+                            "tp": 8,
+                            "spec-decoding": "mtp",
+                            "kv-offloading": "none",
+                            "conc-list": [16],
+                        },
+                        {
+                            "tp": 8,
+                            "kv-offloading": "none",
+                            "conc-list": [32],
+                        },
+                    ],
+                }],
+            },
+        },
+    }
+
+
+@pytest.fixture
 def full_sweep_args_single_node():
     """Args for full-sweep single-node command."""
     args = argparse.Namespace()
@@ -688,6 +721,22 @@ class TestGenerateFullSweepSingleNode:
             (row["pp"], row["dcp-size"], row["pcp-size"])
             for row in explicit_result
         } == {(2, 2, 2)}
+
+    def test_agentic_spec_decoding_is_propagated(
+        self,
+        sample_single_node_agentic_config,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            sample_single_node_agentic_config,
+            sample_runner_config,
+        )
+
+        assert [entry["spec-decoding"] for entry in result] == ["mtp", "none"]
+        assert result[0]["exp-name"].endswith("_kvnone_spec-mtp")
+        assert result[1]["exp-name"].endswith("_kvnone")
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Filter by model prefix should work."""
@@ -1913,6 +1962,29 @@ class TestGenerateTestConfigSweep:
             (row["pp"], row["dcp-size"], row["pcp-size"])
             for row in explicit_result
         ] == [(2, 2, 2)]
+
+    def test_single_node_agentic_spec_decoding_is_propagated(
+        self,
+        sample_single_node_agentic_config,
+        sample_runner_config,
+    ):
+        args = argparse.Namespace(
+            config_keys=["kimik2.6-fp4-b300-trt-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(
+            args,
+            sample_single_node_agentic_config,
+            sample_runner_config,
+        )
+
+        assert [entry["spec-decoding"] for entry in result] == ["mtp", "none"]
+        assert result[0]["exp-name"].endswith("_kvnone_spec-mtp")
+        assert result[1]["exp-name"].endswith("_kvnone")
 
     def test_multinode_parallelism_fields_are_generated(
         self,
