@@ -801,9 +801,9 @@ run_lm_eval() {
     local temperature=0
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
-    # Earlier evals used built-in lm-eval task names and always ran the full
-    # dataset. SWE-bench adds a repo-local task YAML and supports CI slices, so
-    # pass its task directory via --include_path and its slice via --limit.
+    # SWE-bench adds a repo-local task YAML, so pass its task directory via
+    # --include_path. Full-dataset runs remain the default; --limit is passed
+    # only when EVAL_LIMIT explicitly requests a smaller smoke-test slice.
     local eval_limit="${EVAL_LIMIT:-}"
     local include_path="${EVAL_INCLUDE_PATH:-}"
 
@@ -1233,8 +1233,7 @@ yaml.safe_dump(d, open(out_path, "w"), default_flow_style=False, sort_keys=False
 PYGEN
 
     case "${EVAL_LIMIT:-}" in
-        "")           EVAL_LIMIT="${SWEBENCH_DEFAULT_EVAL_LIMIT:-50}" ;;
-        full|FULL|0)  EVAL_LIMIT="" ;;
+        full|FULL|0) EVAL_LIMIT="" ;;
     esac
     if [ -n "${EVAL_LIMIT:-}" ] && [[ ! "$EVAL_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
         echo "ERROR: EVAL_LIMIT='${EVAL_LIMIT}' must be a positive integer, 'full', or 0" >&2

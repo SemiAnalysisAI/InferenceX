@@ -202,8 +202,8 @@ append_lm_eval_summary
   (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (75), `SWEBENCH_AGENT_TIMEOUT`
   (4h), `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), `SWEBENCH_MODAL_APP_NAME`
   (`infx-evals-swe`).
-- Run size: `EVAL_LIMIT` empty runs the 50-instance CI slice; `EVAL_LIMIT=full` (or `0`) runs the
-  whole ~300-instance split; a positive integer runs the first N.
+- Run size: `EVAL_LIMIT` empty runs the full ~300-instance split; a positive integer runs the
+  first N as an explicit smoke-test slice. `EVAL_LIMIT=full` (or `0`) also selects the full split.
 - Scoring knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
   `SWEBENCH_EVAL_SANDBOX_CPU` (cores per scoring sandbox, default 2), `SWEBENCH_EVAL_TIMEOUT`
   (per-instance test timeout, default 900s), `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac),
@@ -215,7 +215,7 @@ append_lm_eval_summary
   `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
 - Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
   nodes); local Docker scoring needs ~120 GB disk. The `thresholds.yaml` gate is `0.50`, calibrated
-  from full-split runs (54%) with the 50-slice comfortably above (62–76%).
+  from full-split runs (54%); historical 50-instance slices scored 62–76%.
 
 ## Task files
 The following files are task definitions from lm-eval; more information on changes lives within the files:

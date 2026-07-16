@@ -22,7 +22,7 @@ on:
                 type: string
                 default: ""
             eval-limit:
-                description: "Eval instance count: empty = 50-slice CI default (swebench); N = first-N; full = whole split"
+                description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
                 type: string
                 default: ""
@@ -51,7 +51,7 @@ on:
                 type: string
                 default: ""
             eval-limit:
-                description: "Eval instance count: empty = 50-slice CI default (swebench); N = first-N; full = whole split"
+                description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
                 type: string
                 default: ""

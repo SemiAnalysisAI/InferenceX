@@ -508,7 +508,7 @@ def test_agentic_no_preds_still_fails(tmp_path):
     assert "GEN_RC=7" in res.stdout, res.stdout + res.stderr
 
 
-def test_agentic_eval_limit_defaults_to_50_slice(tmp_path):
+def test_agentic_eval_limit_defaults_to_full_split(tmp_path):
     shim, gen_dir = _agentic_shim(tmp_path,
         'echo "MINI_ARGV: $*" >> ' + "ARGVLOG" + '\n'
         'out=""; prev=""\n'
@@ -520,7 +520,7 @@ def test_agentic_eval_limit_defaults_to_50_slice(tmp_path):
     (shim / "mini-extra").write_text(body)
     res = _run_agentic(shim, gen_dir)
     argv = (shim / "argv.log").read_text()
-    assert "--slice 0:50" in argv, argv
+    assert "--slice" not in argv, argv
     assert "GEN_RC=0" in res.stdout, res.stdout + res.stderr
 
 
