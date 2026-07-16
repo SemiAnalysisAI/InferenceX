@@ -41,13 +41,25 @@ export COLLX_TRANSPORT=xgmi
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
-command -v docker >/dev/null 2>&1 || collx_die "docker not found on the mi325x-tw runner"
+command -v docker >/dev/null 2>&1 || collx_die "docker not found on the $RUNNER runner"
+# -tw runner accounts differ: some are in the docker group (direct socket access,
+# e.g. mi325x-tw), others only have passwordless sudo (e.g. mi300x-tw's `cam`).
+# Pick whichever works so the launcher is portable across the -tw clusters.
+DOCKER=(docker)
+if ! docker ps >/dev/null 2>&1; then
+  if sudo -n docker ps >/dev/null 2>&1; then
+    DOCKER=(sudo docker)
+  else
+    collx_die "docker present but unusable by $(id -un): not in the docker group and no passwordless sudo"
+  fi
+fi
+
 # The image is imported once per node and reused; pull only when absent.
-docker image inspect "$IMAGE" >/dev/null 2>&1 \
-  || docker pull "$IMAGE" >&2 \
+"${DOCKER[@]}" image inspect "$IMAGE" >/dev/null 2>&1 \
+  || "${DOCKER[@]}" pull "$IMAGE" >&2 \
   || collx_die "docker pull failed for $IMAGE"
 
-collx_log "runner=$RUNNER nodes=1 x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH image=$IMAGE (docker/torchrun)"
+collx_log "runner=$RUNNER nodes=1 x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH image=$IMAGE (${DOCKER[*]}/torchrun)"
 
 # ---- execute: one Docker+torchrun invocation per case -----------------------
 # The shard control and results dir live under the CX source tree the workflow
@@ -80,7 +92,7 @@ for ((ci = 0; ci < ncases; ci++)); do
     final_rc=1; rm -f "$argv_file"; continue
   fi
   collx_log "case $ci/$ncases: docker torchrun --nproc-per-node=$NGPUS"
-  if ! docker run --rm \
+  if ! "${DOCKER[@]}" run --rm \
       --device /dev/kfd --device /dev/dri \
       --group-add video --group-add render \
       --ipc host --shm-size 32g \
