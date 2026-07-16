@@ -13,6 +13,7 @@ set -x
 # launches.
 # NOTE: per-node /raid/models/* would be faster but is only populated on a
 # subset of dgxc nodes today, so we use Lustre for reliability.
+PREFLIGHT_ARGS=()
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -20,18 +21,8 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
+    export MODEL_PATH="/scratch/fsw/models/DeepSeek-V4-Pro-NVFP4"
+    PREFLIGHT_ARGS=(--no-preflight)
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
@@ -88,9 +79,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    # Multinode dsv4 currently only ships with the dynamo-vllm recipe
-    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]]; then
-        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm)"
+    # Multinode dsv4 ships dynamo-vllm and dynamo-sglang recipes.
+    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" && $FRAMEWORK != "dynamo-sglang" ]]; then
+        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm, dynamo-sglang)"
         exit 1
     fi
 
@@ -113,6 +104,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout main
+        mkdir -p recipes/sglang/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -255,7 +252,7 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
