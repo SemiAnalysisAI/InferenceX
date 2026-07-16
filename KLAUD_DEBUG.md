@@ -206,10 +206,12 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 ### 7.1 Reuse after matrix-generation policy changes
 
 Reusable source artifacts are authoritative. The merge-time
-`reuse-ingest-artifacts` job validates that downloaded artifacts are readable,
-non-duplicated, and internally consistent, but it does not require them to
-match a matrix regenerated from the merge commit. A generator-policy change
-between the PR sweep and merge therefore does not require another GPU sweep.
+dispatch passes the source and merge run IDs directly to InferenceX-app. The app
+selects the newest valid artifact family for each logical point and validates
+that the prepared artifacts are readable, non-duplicated, and internally
+consistent, but it does not require them to match a matrix regenerated from the
+merge commit. A generator-policy change between the PR sweep and merge therefore
+does not require another GPU sweep.
 
 Raw and aggregate eval identities must still match, as must agentic point/raw
 artifacts and summaries. Batched eval identities come from

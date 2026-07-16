@@ -111,10 +111,10 @@ TARGET_RUN_ID=<matching-run-id>
 Require event `push`, workflow path `.github/workflows/run-sweep.yml`, and branch
 `main`; confirm the target is no longer running before recovering. The
 disqualifying state is broader than `failure`/`skipped`: when `/reuse-sweep-run`
-was forgotten before merge, `reuse-ingest-artifacts` is skipped, the GPU jobs run
-(often `cancelled` to save cost), and because `collect-results`/`collect-evals`
-are not skipped, `trigger-ingest` still fires `always()` and lands a *bogus*
-ingest under the target's own `run_id`. So a target showing
+was forgotten before merge, setup leaves reuse disabled, the GPU jobs run (often
+`cancelled` to save cost), and because `collect-results`/`collect-evals` are not
+skipped, `trigger-ingest` still fires `always()` and lands a *bogus* ingest under
+the target's own `run_id`. So a target showing
 `trigger-ingest=success` (and concluding `success` or `cancelled`) can still hold
 no valid benchmark data — recovery is required. That bogus row is keyed on the
 target `run_id` and is superseded by the recovery ingest under a new `run_id`;
@@ -324,6 +324,9 @@ python3 utils/validate_reusable_sweep_artifacts.py \
   --artifacts-dir /tmp/source-artifacts
 ```
 
+This local preflight uses the same validator that InferenceX-app runs after it
+selects and downloads the reusable artifact set.
+
 The validator first collapses reran (flaky) eval duplicates in place — keeping
 the latest result per eval identity when a retried eval left duplicate raw dirs
 / aggregate rows — so a legitimate rerun does not fail validation. It only
@@ -449,15 +452,15 @@ The push-to-main `Run Sweep` must:
 - run `setup` even if the merge message contains `[skip-sweep]`;
 - resolve the recovery PR and pinned source run;
 - set `reuse-enabled=true`;
-- pass `reuse-ingest-artifacts` consistency validation;
 - upload recovery changelog metadata;
-- run `trigger-ingest`.
+- dispatch `source-run-id` and `merge-run-id` from `trigger-ingest`.
 
 Then locate the resulting `repository_dispatch` run in
 `SemiAnalysisAI/InferenceX-app`. In the forgotten-`/reuse` case the target's
 bogus ingest is also a recent successful `ingest-results` run, so do not pick by
-recency — pick the run whose `Download artifacts from InferenceX run` step logs
-`RUN_ID: <RECOVERY_RUN_ID>`:
+recency — pick the run whose `Prepare artifacts from InferenceX` step logs both
+the expected source run and recovery merge run. That app workflow must prepare
+the artifact family, pass reusable-artifact validation, and complete ingestion:
 
 ```bash
 gh run list --repo SemiAnalysisAI/InferenceX-app \
@@ -467,7 +470,10 @@ gh run list --repo SemiAnalysisAI/InferenceX-app \
 
 INGEST_RUN_ID=<candidate-run-id>
 gh run view "$INGEST_RUN_ID" --repo SemiAnalysisAI/InferenceX-app --log \
-  | grep -m1 "RUN_ID: $RECOVERY_RUN_ID"   # must match before you trust this run
+  | grep -m1 "Source run: $SOURCE_RUN_ID" # must match before you trust this run
+
+gh run view "$INGEST_RUN_ID" --repo SemiAnalysisAI/InferenceX-app --log \
+  | grep -m1 "Merge run:  $RECOVERY_RUN_ID" # must also match
 
 gh run watch "$INGEST_RUN_ID" \
   --repo SemiAnalysisAI/InferenceX-app --exit-status
