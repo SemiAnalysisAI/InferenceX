@@ -162,6 +162,18 @@
       "backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
     },
+    "mi300x-tw": {
+      "arch": "gfx942",
+      "product": "mi300x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-tw",
+      "backends": {"mori": [8]},
+      "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
+    },
     "mi355x": {
       "arch": "gfx950",
       "product": "mi355x",

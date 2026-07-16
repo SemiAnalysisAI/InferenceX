@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# CollectiveX Docker launcher for the mi325x-tw cluster (single-node scale-up).
+# CollectiveX Docker launcher for the Slurm-less "-tw" AMD clusters (mi325x-tw,
+# mi300x-tw), single-node scale-up.
 #
-# The mi325x-tw GHA runners run as `gharunner` directly on an 8x MI325X (gfx942)
-# node that has Docker (gharunner is in the docker/video/render groups) but NO
-# Slurm and NO enroot. So unlike the Slurm+enroot mi-amds launcher, this launcher
-# runs each case in a Docker container driven by torchrun. It is EP8 scale-up only:
-# there is no scheduler or RDMA fabric on this cluster to build EP16 scale-out on.
+# Their GHA runners run as `gharunner` directly on an 8x CDNA (gfx942) node that has
+# Docker (gharunner is in the docker/video/render groups) but NO Slurm and NO enroot.
+# So unlike the Slurm+enroot mi-amds launcher, this launcher runs each case in a
+# Docker container driven by torchrun. It is EP8 scale-up only: there is no scheduler
+# or RDMA fabric on these clusters to build EP16 scale-out on.
 set -euo pipefail
 
 HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -15,7 +16,10 @@ source "$HERE/../runtime/common.sh"
 
 # ---- identity ---------------------------------------------------------------
 RUNNER="${COLLX_SHARD_SKU:-}"
-[ "$RUNNER" = mi325x-tw ] || collx_die "launch_mi-tw expects COLLX_SHARD_SKU=mi325x-tw, got '${RUNNER}'"
+case "$RUNNER" in
+  mi325x-tw | mi300x-tw) ;;
+  *) collx_die "launch_mi-tw expects a Slurm-less -tw AMD SKU (mi325x-tw|mi300x-tw), got '${RUNNER}'" ;;
+esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}" COLLX_VENDOR=amd
 [ "$COLLX_BENCH" = mori ] || collx_die "mi325x-tw supports only the mori backend, got '$COLLX_BENCH'"
 
