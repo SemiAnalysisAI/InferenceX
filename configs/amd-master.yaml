@@ -2449,13 +2449,8 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
-# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
-# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
-# image tag, so bumping sglang is just an image tag bump here. Sweeps
-# DP-attention on/off and EP=8.
-
-dsv4-fp4-mi355x-sglang-agentic:
-  image: rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4
+dsv4-fp4-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -2464,9 +2459,11 @@ dsv4-fp4-mi355x-sglang-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [16, 32, 64] }
-      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [64, 128, 256] }
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8] }
+      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
+      - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
 
 dsv4-fp4-mi355x-sglang-agentic-hicache-mtp:
   image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714

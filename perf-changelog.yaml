@@ -4791,6 +4791,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+    - "Align launcher env vars and server args with fixed-seq-len sibling (dsv4 attention backend, fp8_e4m3 kv-cache, disable-radix-cache, cuda-graph-max-bs, DP-attention exports, two-batch-overlap)"
+    - "Add SGLang router for DP-attention configs (consistent-hashing, dp-aware, correlation-id routing)"
+    - "Add HiCache KV offloading support"
+    - "Add SGLANG_CMD array pattern with command logging and env-var dump"
+    - "Add capture_cache_metrics for pre/post-benchmark cache stats"
+    - "Sweep conc=48 across TP8 +/- DPA +/- HiCache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2146
+
+- config-keys:
     - dsv4-fp8-mi300x-vllm
   description:
     - "Add DeepSeek-V4-Pro FP8 single-node MI300X vLLM benchmark (new SKU, previously no dsv4 data on gfx942)"
@@ -4874,6 +4886,14 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"
     - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+  description:
+    - "Update B200 AgentX: KV offload, sparse DSV4 attention, mega-MoE, and FULL_DECODE_ONLY CUDA graphs."
+    - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
+    - "B200: GPU-resident TP8 at conc [1,2,4,6,8] and SimpleCPU-offload TP8 at conc [8,12,16]; DEP8 at conc [8,16,24,32,40,48,56,64,68,72] with both SimpleCPU and Mooncake 0.3.11.post1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2224
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
