@@ -1771,7 +1771,7 @@ dsv4-fp4-b200-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.23.0
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b200-dgxc
@@ -1782,14 +1782,12 @@ dsv4-fp4-b200-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # Pure TP is only competitive at very low concurrency.
-      - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
-      # Sample the useful MooncakeStore range without repeating its collapsed
-      # high-concurrency tail.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [8, 10, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none,  conc-list: [16, 32, 38, 44, 50], router: { name: vllm-router, version: "0.1.14" } }
-      # Retain the external-cache transition and peak-throughput region.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [16, 38, 44, 56, 64, 66, 68], router: { name: vllm-router, version: "0.1.14" } }
+      # Pure TP at low concurrency.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 12, 16] }
+      # DEP
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, conc-list: [8, 16, 24, 32, 40, 48, 56, 64, 68, 72, 80], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [12, 20, 28, 36, 44, 52, 60, 68, 76], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -15236,6 +15234,135 @@ glm5-fp4-gb300-dynamo-trt-mtp:
           ep: 16
           dp-attn: true
 
+dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [1, 4, 8, 16]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/agg-gb300-tp4-mtp-kvoffload.yaml"
+        # Aggregated worker: prefill's GPUs also serve decode, so decode has no
+        # separate allocation (num-worker: 0). Deployment is recipe-driven
+        # (agg_workers: 1); this only makes GPU accounting count 4, not 4+4.
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [8]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-2p1d-dep8-tp4-c8-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-2p4d-dep8-dep16-c256-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-4p4d-dep8-dep16-c256-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [512]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-6p4d-dep8-dep16-c512-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [1024]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 6
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/agentic/disagg-gb300-12p4d-dep8-dep16-c1024-mtp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
 qwen3.5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
   model: Qwen/Qwen3.5-397B-A17B-FP8
