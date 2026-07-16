@@ -4902,3 +4902,4 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B300: GPU-resident TP4 at conc [1,2,4,6,8,16]; DEP4 at conc [8,16,24,32,40,48,56,64,72]; DEP8 at conc [32,64,96,128,160,192,224,228]; with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2225
+  
