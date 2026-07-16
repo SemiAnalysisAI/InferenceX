@@ -9692,8 +9692,6 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           dp-attn: true
 
 # DSV4 NVFP4 B200 disaggregated Dynamo SGLang STP configuration.
-# Each search-space entry maps one-to-one to a checked-in srt-slurm recipe under
-# recipes/sglang/deepseek-v4/8k1k/.
 dsv4-fp4-b200-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494
   model: deepseek-ai/DeepSeek-V4-Pro
