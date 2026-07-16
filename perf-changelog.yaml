@@ -4859,4 +4859,10 @@
   description:
     - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
-  
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump SGLang image to v0.5.14-cu130 for the Qwen3.5 FP4 GB300 disaggregated dynamo-sglang config"
+    - "Switch to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint (model pre-staged on cluster as Qwen3.5-397B-A17B-NVFP4-V2)"
+  pr-link: XXX

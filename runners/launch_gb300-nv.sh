@@ -83,7 +83,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
     # Qwen3.5 sglang recipes (qwen3.5-fp4).
-    export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
+    export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4-V2
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
