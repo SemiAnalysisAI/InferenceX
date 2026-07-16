@@ -4846,7 +4846,7 @@
     - "Recipes ported from NVIDIA/srt-slurm tag v1.0.26 (recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/{ISL1K_OSL1K,ISL8K_OSL1K}/STP; 13 ISL1K + 10 ISL8K), checked into benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5/... and overlaid onto the srt-slurm checkout at runtime. Prefill tp=4/ep=4 (dep4)."
     - "launch_gb200-nv.sh: added glm5-fp4 case to dynamo-trt branch (MODEL_PATH=/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4, SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4), pinned srt-slurm clone to v1.0.26 with cp -rT overlay of the local recipes/trtllm/glm5 recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1803
-
+  
 - config-keys:
     - glm5-fp8-gb200-dynamo-sglang-mtp
   description:
@@ -4878,14 +4878,14 @@
   description:
     - "Add GB300 DeepSeek-V4 dynamo-sglang agentic recipes (agg-tp4 + dep8 disagg pareto)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
-
+  
 - config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"
     - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic
