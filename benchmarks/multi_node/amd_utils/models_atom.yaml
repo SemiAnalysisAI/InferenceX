@@ -25,6 +25,7 @@
 #     max_model_len: str  # --max-model-len value (overrides default of unset)
 #     max_num_seqs:  str  # --max-num-seqs value (overrides default of 256)
 #     max_num_batched_tokens: str  # --max-num-batched-tokens value (overrides default of unset)
+#     scheduler_delay_factor: str  # --scheduler-delay-factor value (overrides default of unset)
 
 DeepSeek-V4-Pro:
   env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0"
@@ -52,6 +53,14 @@ MiniMax-M3-MXFP4:
   online_quant_dpa_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
   block_size: "128"
   mem_frac_static: "0.8"
+  max_model_len: "32768"
+  max_num_seqs: "256"
+  max_num_batched_tokens: "32768"
+
+Kimi-K2.5-MXFP4:
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 AITER_MXFP4_INTERMEDIATE=1"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  mem_frac_static: "0.9"
   max_model_len: "32768"
   max_num_seqs: "256"
   max_num_batched_tokens: "32768"

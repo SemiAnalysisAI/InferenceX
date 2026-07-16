@@ -20,6 +20,7 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export AITER_FLYDSL_FORCE=1
+export SGLANG_MAMBA_SSM_DTYPE=bfloat16
 
 SERVER_LOG=/workspace/server.log
 MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}

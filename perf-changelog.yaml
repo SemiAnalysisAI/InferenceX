@@ -4752,6 +4752,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-atom-disagg
+  description:
+    - "Add Kimi-K2.5-MXFP4 entry to models_atom.yaml for ATOM disaggregated inference"
+    - "Set env: ATOM_DISABLE_MMAP=true, AITER_QUICK_REDUCE_QUANTIZATION=INT4, AITER_MXFP4_INTERMEDIATE=1, OMP_NUM_THREADS=1"
+    - "Add scheduler_delay_factor support to models_atom.yaml schema and server_atom.sh; set to 1 for Kimi-K2.5"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2172
+
+- config-keys:
     - dsv4-fp8-h200-vllm
     - dsv4-fp8-h200-vllm-mtp
   description:
@@ -4833,7 +4841,6 @@
     - "Add GLM-5.1 FP8 GB200 disaggregated dynamo-sglang MTP config covering 8k1k, high-throughput and low-latency topologies"
     - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2123
-  
 
 - config-keys:
     - dsv4-fp8-mi325x-vllm
@@ -4861,8 +4868,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2157
   
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"
+    - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
+
+- config-keys:
     - kimik2.5-fp4-b300-vllm-agentic-mtp
   description:
     - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3.1-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
     - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2228
+  
