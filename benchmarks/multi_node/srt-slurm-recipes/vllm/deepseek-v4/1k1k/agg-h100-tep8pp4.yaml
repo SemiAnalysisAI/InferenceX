@@ -1,0 +1,112 @@
+name: "dsv4-vllm-agg-h100-tep8pp4-1k1k"
+
+# DeepSeek-V4-Pro FP8 H100 AGGREGATED TP8 x PP4 recipe (4 nodes / 32 GPUs).
+# PARETO POINT (interactivity end). This is the same aggregated engine as the
+# 2-node TP8xPP2 baseline, but spread over 4 nodes: PP4 puts 1/4 of the layers
+# on each GPU (vs 1/2 at PP2), roughly halving per-GPU weight+expert memory and
+# leaving far more KV headroom. It is deliberately NOT throughput-optimal --
+# an on-cluster prototype measured ~43 tok/s/GPU at conc256 vs ~130 for
+# TP8xPP2, i.e. it is DOMINATED on the tok/s/GPU axis. We keep it because the
+# site plots a tok/s/GPU-vs-interactivity Pareto frontier: PP4's value (if any)
+# is on the INTERACTIVITY axis, and that has to be measured across the conc
+# range, not assumed. Spreading the model over 2x the GPUs can sustain a given
+# tok/s/user target at concurrencies the 2-node layout cannot hold, so PP4 may
+# contribute non-dominated points at the low-latency / high-tok-s-user corner
+# even though its peak throughput/GPU is lower. The frontier construction drops
+# it automatically wherever PP2 dominates; the point of running it is to get the
+# data. TP8 (not TP16) preserves FP8 128-column block divisibility
+# (moe_intermediate 3072 / 8 = 384, divisible by 128). Node allocation is
+# tp*pp/gpus_per_node = 8*4/8 = 4 nodes; EP and DP-attention add no GPUs.
+# Aggregated (decode num-worker 0) => no NIXL P/D transfer to stall on.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+  exclude: "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  agg_nodes: 4
+  agg_workers: 1
+  gpus_per_agg: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      block-size: 256
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 4
+      enable-expert-parallel: true
+      kv-cache-dtype: "fp8"
+      gpu-memory-utilization: 0.92
+      max-model-len: 2304
+      # max-num-seqs 256, matched to the TP8xPP2 baseline so the interactivity
+      # comparison is at equal running-batch. PP4 has ~2x the KV headroom of PP2
+      # (half the layers per GPU) so it could take a larger cap, but the conc
+      # sweep tops out at 256 here, so 256 is the useful ceiling.
+      max-num-seqs: 256
+      max-num-batched-tokens: 16384
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      # CUDA graphs (not eager): confirmed on-cluster that FULL_AND_PIECEWISE
+      # graphs fit this 4-node TP8xPP4 layout at gpu-mem-util 0.92.
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      reasoning-parser: deepseek_v4
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  # Weighted toward the low/mid-interactivity band (the reason PP4 is here). We
+  # stop at conc256 rather than 512: PP4 is already throughput-dominated by that
+  # point, so higher conc only adds cost in a region PP2 owns. conc 1-256 maps
+  # the interactivity curve where PP4 could hold a non-dominated corner.
+  concurrencies: "1x2x4x8x16x32x64x128x256"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:v0.21.0"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.21.0"

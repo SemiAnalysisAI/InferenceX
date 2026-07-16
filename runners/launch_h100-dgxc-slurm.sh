@@ -16,7 +16,30 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # MODEL_PATH: Override with pre-downloaded paths on H100 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H100 cluster.
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+            SELECTED_MODEL_PATH=""
+            if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+                SELECTED_MODEL_PATH="$MODEL_PATH"
+            else
+                for candidate in \
+                    /mnt/nfs/lustre/models/dsv4-fp8 \
+                    /mnt/nfs/lustre/models/deepseek-v4-pro \
+                    /mnt/nfs/lustre/models/dsv4-pro \
+                    /mnt/nfs/lustre/models/DeepSeek-V4-Pro; do
+                    if [[ -d "$candidate" ]]; then
+                        SELECTED_MODEL_PATH="$candidate"
+                        break
+                    fi
+                done
+            fi
+            export MODEL_PATH="${SELECTED_MODEL_PATH:-/mnt/nfs/lustre/models/dsv4-fp8}"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        else
+            echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
+    elif [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
@@ -34,7 +57,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             exit 1
         fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
     fi
 
@@ -49,6 +72,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout aflowers/vllm-gb200-v0.20.0
+        mkdir -p recipes/vllm/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+        cp \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/vllm-container-deps.sh" \
+            configs/patches/vllm-container-deps.sh
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
@@ -84,6 +116,23 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # SGLang container mapping
         SQUASH_FILE="/mnt/nfs/lustre/containers/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
         CONTAINER_KEY="lmsysorg/sglang:v0.5.8-cu130"
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        # vLLM container mapping. Import the recipe image once into the shared
+        # squash directory so every Slurm node uses the exact configured tag.
+        CONTAINER_KEY="$IMAGE"
+        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        mkdir -p "$(dirname "$SQUASH_FILE")"
+        (
+            exec 9>"${SQUASH_FILE}.lock"
+            flock -w 1800 9 || { echo "Failed to acquire lock for $SQUASH_FILE" >&2; exit 1; }
+            if unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+                echo "Squash file already exists and is valid: $SQUASH_FILE"
+            else
+                rm -f "$SQUASH_FILE" "${SQUASH_FILE}.tmp."*
+                enroot import -o "${SQUASH_FILE}.tmp.$$" "docker://$IMAGE"
+                mv -f "${SQUASH_FILE}.tmp.$$" "$SQUASH_FILE"
+            fi
+        )
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
@@ -115,6 +164,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
@@ -143,8 +193,10 @@ EOF
 
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
-    sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
+    # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default.
+    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+        sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
+    fi
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 

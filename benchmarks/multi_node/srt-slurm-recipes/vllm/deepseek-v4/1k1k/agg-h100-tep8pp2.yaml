@@ -1,0 +1,109 @@
+name: "dsv4-vllm-agg-h100-tep8pp2-1k1k"
+
+# DeepSeek-V4-Pro FP8 H100 AGGREGATED TP8 x PP2 recipe (2 nodes / 16 GPUs).
+# The ~1TB FP8 checkpoint does not fit one 8xH100 node (640GB). TP8 x PP2
+# shards attention/dense (/8) and layers (/2) across 16 GPUs -- the original
+# memory-correct sizing that loaded the model and reached prefill. That
+# topology's ONLY failure was the disaggregated NIXL KV-transfer stall between
+# the prefill and decode workers; running AGGREGATED (single worker, decode
+# num-worker 0) removes the P/D split entirely, so there is no NIXL transfer to
+# stall on. TP8 (not TP16) preserves the FP8 128-column block divisibility
+# (moe_intermediate 3072 / 8 = 384, divisible by 128; / 16 = 192 is not).
+# Node allocation for this framework is tp*pp/gpus_per_node = 8*2/8 = 2 nodes;
+# EP and DP-attention do NOT contribute GPUs, which is why the earlier DP32
+# aggregated attempt collapsed onto a single node.
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+  exclude: "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      block-size: 256
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 2
+      enable-expert-parallel: true
+      kv-cache-dtype: "fp8"
+      gpu-memory-utilization: 0.92
+      max-model-len: 2304
+      # max-num-seqs 256 (not 16): the running-batch cap. At 16 the engine served
+      # at most 16 sequences at once, so every concurrency >=16 queued behind a
+      # batch-16 engine -- decode throughput plateaued and the whole conc sweep
+      # collapsed to a narrow interactivity band (this was the "range too small").
+      # On-cluster prototype (job 11364) at 256: throughput scales 56->2079 tok/s
+      # from conc 1->256 (interactivity 65->8 tok/s/user) on the same 2 nodes, and
+      # high-conc levels finish far faster (batch-256 vs batch-16). Fits at 1k1k
+      # KV (256 x 2304 tokens) within the 2-node headroom at gpu-mem-util 0.92.
+      max-num-seqs: 256
+      max-num-batched-tokens: 16384
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      # CUDA graphs (not eager): the eager run served correctly but decode ran
+      # at ~144ms/token (Python dispatch-bound, flat vs concurrency), so the
+      # conc sweep could not finish in 8h. On-cluster prototype (job 11256)
+      # confirmed FULL_AND_PIECEWISE graphs FIT this 2-node TP8xPP2 layout at
+      # gpu-mem-util 0.92 and drop TPOT to ~15ms (~9.4x). No extra nodes needed.
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      reasoning-parser: deepseek_v4
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "1x2x4x8x16x32x64x128x256x512"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:v0.21.0"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.21.0"

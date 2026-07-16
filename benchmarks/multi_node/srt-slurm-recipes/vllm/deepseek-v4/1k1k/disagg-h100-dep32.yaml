@@ -1,0 +1,153 @@
+name: "dsv4-vllm-disagg-h100-dep32-1k1k"
+
+# DeepSeek-V4-Pro FP8 H100 DISAGGREGATED DP32 x EP32 recipe (multi_node_dep).
+# PARETO POINT (throughput end). 1 prefill worker + 1 decode worker, each
+# data-parallel-32 x expert-parallel-32 (tp1) => 4 nodes/worker => 8 GPU nodes
+# + 1 dedicated etcd/NATS infra node = 9 nodes. Data-parallel attention + full
+# expert parallelism is the throughput-optimal MoE shape (no per-token TP all-
+# reduce), and disaggregation lets prefill and decode scale independently -- the
+# recipes.vllm.ai multi_node_dep strategy for the high-concurrency corner.
+#
+# DP MUST be 32 on H100: EP must divide the 256 routed experts, and the model
+# only fits with enough ranks -- DP16 OOMs at model load (~78 GiB/GPU), DP24
+# gives EP24 which does not divide 256, DP32 gives EP32 = 8 experts/rank
+# (~52 GiB/GPU weights) and fits at gpu-mem-util 0.90. An on-cluster prototype
+# confirmed both workers load (51.98 GiB/GPU) and complete the NIXL P/D
+# handshake at DP scale. This is the fragile / expensive point of the frontier
+# (2 x ~805 GiB checkpoint from NFS => >13 min bring-up, DP32-rank shared-memory
+# sync can stall); it is included so the throughput end is measured, and it is
+# acceptable for it to fail without blocking the rest of the sweep (the PR runs
+# with fail-fast OFF).
+#
+# NixlConnector + PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True REQUIRES
+# enable-sleep-mode: true on both workers, or vLLM rejects the config at
+# startup (VllmConfig validation error).
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+  exclude: "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+
+resources:
+  gpu_type: "h100"
+  gpus_per_node: 8
+  prefill_nodes: 4
+  decode_nodes: 4
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 32
+  gpus_per_decode: 32
+
+infra:
+  etcd_nats_dedicated_node: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  prefill_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  decode_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "all"
+    VLLM_SERVER_DEV_MODE: "1"
+  vllm_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      block-size: 256
+      kv-cache-dtype: "fp8"
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 32
+      data-parallel-hybrid-lb: true
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-sleep-mode: true
+      gpu-memory-utilization: 0.90
+      max-model-len: 2304
+      max-num-seqs: 16
+      max-num-batched-tokens: 16384
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      reasoning-parser: deepseek_v4
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      block-size: 256
+      kv-cache-dtype: "fp8"
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 32
+      data-parallel-hybrid-lb: true
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-sleep-mode: true
+      gpu-memory-utilization: 0.90
+      max-model-len: 2304
+      max-num-seqs: 256
+      max-num-batched-tokens: 512
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      compilation-config: '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+      reasoning-parser: deepseek_v4
+      tokenizer-mode: deepseek_v4
+      trust-remote-code: true
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  # High-conc only: DEP saturates late because concurrency is split across 32 DP
+  # ranks (conc512 => 16/rank, conc2048 => 64/rank). This is the throughput
+  # anchor of the frontier -- the low/mid-interactivity band is owned by the
+  # aggregated topologies, so DP32 is only run where it can win (peak tok/s/GPU).
+  concurrencies: "512x1024x2048"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+  container:
+    image: "vllm/vllm-openai:v0.21.0"
+  frameworks:
+    dynamo: "1.2.0.dev20260426"
+    vllm: "0.21.0"
