@@ -459,7 +459,6 @@ echo "SYNC_BARRIER_TIMEOUT=${SYNC_BARRIER_TIMEOUT}s (model=${MODEL_NAME:-unset})
 KV_OFFLOADING="${KV_OFFLOADING:-none}"
 KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
 if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
-    HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-2000}"
     HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
     HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-1}"
     HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-wait_complete}"
@@ -509,11 +508,29 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
         echo "--hicache-storage-backend mooncake --hicache-storage-backend-extra-config '${extra}' --enable-metrics --enable-cache-report"
     }
 
-    # HiCache capacity via --hicache-ratio (scales with GPU KV pool).
+    # HiCache capacity. Prefer an absolute per-rank pool derived from the
+    # per-node DRAM budget computed by the sweep generator (enforcement); fall
+    # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
+    # provided, keeping configs that predate the budget unchanged.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
+    HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
+    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 ]]; then
+        # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
+        # offloads KV to CPU DRAM today); --hicache-size is per rank per host
+        # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
+        # ranks), so divide by the ranks that land on one node.
+        prefill_ranks_per_node=$(( PREFILL_TP_SIZE < GPUS_PER_NODE ? PREFILL_TP_SIZE : GPUS_PER_NODE ))
+        prefill_hicache_size_gb=$(( TOTAL_CPU_DRAM_GB / prefill_ranks_per_node / HICACHE_HOST_POOL_COUNT ))
+        if (( prefill_hicache_size_gb < 1 )); then
+            echo "Error: TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB} / ranks_per_node=${prefill_ranks_per_node} / host_pools=${HICACHE_HOST_POOL_COUNT} rounds below 1 GB" >&2
+            exit 1
+        fi
+        HICACHE_SIZING_FLAGS="--hicache-size ${prefill_hicache_size_gb}"
+        echo "[HiCache] prefill CPU pool capped at ${prefill_hicache_size_gb} GB/rank (budget ${TOTAL_CPU_DRAM_GB} GB / ranks_per_node ${prefill_ranks_per_node} / host_pools ${HICACHE_HOST_POOL_COUNT})"
+    fi
 
     build_hicache_flags() {
-        echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-ratio ${HICACHE_RATIO} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
+        echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache ${HICACHE_SIZING_FLAGS} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
     }
 
     # HiCache requires RadixAttention; strip any --disable-radix-cache.
