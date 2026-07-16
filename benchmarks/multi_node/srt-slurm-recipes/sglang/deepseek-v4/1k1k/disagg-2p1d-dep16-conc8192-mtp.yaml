@@ -5,8 +5,7 @@ sbatch_directives:
   mem: '0'
 
 dynamo:
-  hash: "34d55a596fb8d3d44daefe425ec1e303131f4d2c"
-  install: true
+  version: 1.2.1
 
 frontend:
   type: dynamo

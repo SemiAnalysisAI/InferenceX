@@ -6,8 +6,7 @@ frontend:
   num_additional_frontends: 8
 
 dynamo:
-  hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
-  install: true
+  version: 1.2.1
 
 model:
   path: "deepseek-v4-pro"
