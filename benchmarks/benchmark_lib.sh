@@ -801,8 +801,10 @@ run_lm_eval() {
     local temperature=0
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    # Earlier evals used built-in lm-eval task names and always ran the full
+    # dataset. SWE-bench adds a repo-local task YAML and supports CI slices, so
+    # pass its task directory via --include_path and its slice via --limit.
     local eval_limit="${EVAL_LIMIT:-}"
-    # External task YAMLs require --include_path.
     local include_path="${EVAL_INCLUDE_PATH:-}"
 
     while [[ $# -gt 0 ]]; do
