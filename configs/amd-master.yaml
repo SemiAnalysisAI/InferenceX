@@ -470,7 +470,7 @@ qwen3.5-fp8-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 qwen3.5-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: mi355x
@@ -512,7 +512,7 @@ qwen3.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 16 }
 
 qwen3.5-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
+  image: lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713
   model: amd/Qwen3.5-397B-A17B-MXFP4
   model-prefix: qwen3.5
   runner: mi355x
