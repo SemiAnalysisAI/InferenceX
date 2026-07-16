@@ -4894,3 +4894,45 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B200: GPU-resident TP8 at conc [1,2,4,6,8] and SimpleCPU-offload TP8 at conc [8,12,16]; DEP8 at conc [8,16,24,32,40,48,56,64,68,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2224
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Add DSv4 FP4 MI355X SGLang agentic MTP recipe with HiCache support"
+    - "Image: lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
+    - "EAGLE speculative decoding: 3 steps, topk 1, 4 draft tokens"
+    - "Sweep TP8 +/- DPA +/- HiCache with MTP across conc 1-96"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714"
+    - "Fix HSA out-of-resources crashes during DPA agentic MTP warmup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Scale SGLang request and CUDA-graph limits per DP-attention engine while preserving aggregate AgentX fan-out headroom"
+    - "Prevent per-rank HSA out-of-resources crashes during accelerated warmup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Keep max-running-requests global for SGLang DP attention and scale only per-scheduler CUDA graph capture"
+    - "Reserve DPA MTP runtime headroom with mem-fraction-static 0.80"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Increase DPA MTP runtime headroom to mem-fraction-static 0.75 after c64 exhausted VRAM at 0.80 during regular warmup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
+  description:
+    - "Increase DPA per-scheduler chunked prefill from 8K to 16K so long agentic prefill tails drain within the standard 600-second warmup grace period"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
