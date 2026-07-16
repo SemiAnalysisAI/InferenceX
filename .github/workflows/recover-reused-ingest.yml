@@ -163,10 +163,10 @@ jobs:
                   curl -sSf -X POST \
                     -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
                     -H "Accept: application/vnd.github+v3+json" \
-                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
                     -d '{
-                      "ref": "master",
-                      "inputs": {
+                      "event_type": "ingest-agentic-results",
+                      "client_payload": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}",
                         "database-target": "production"
