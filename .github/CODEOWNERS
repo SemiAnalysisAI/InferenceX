@@ -4,7 +4,7 @@
 configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
 
 # NVIDIA master config
-configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @jgangani
+configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv
 
 # OperatorX experimental
 experimental/operatorx/ @hbarclay
