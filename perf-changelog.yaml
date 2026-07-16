@@ -4903,4 +4903,4 @@
     - "Retune P/D search space to all-TP4 prefill/decode (dropped TP8 — a real-weight sweep showed TP8 decode is no better than TP4 on tok/s/GPU): 1P(TP4)/1D(TP4) covers the full curve; 1P(TP4)/2D(TP4) adds decode KV headroom for the KV-bound 8k/1k tail (conc 256/512). All layouts keep prefill+decode nodes <= 3"
     - "Turn expert parallelism off (ep:1): single-node TP8 real-weight sweep showed EP -14% to -27% slower than dense"
     - "~2-3x tok/s/GPU vs the prior 1P2D TP8/EP8 baseline (PR #1585) across most concurrencies (8 GPU vs 24 GPU)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2247
