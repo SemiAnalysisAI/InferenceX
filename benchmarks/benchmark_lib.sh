@@ -1475,14 +1475,13 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Optional cache-pressure warmup for long agentic traces. AIPerf first
-    # completes its normal t* snapshot warmup, then continues those exact
-    # trajectories with one-token outputs and no idle delays for this many
-    # seconds. Profiling begins only after those requests drain and resumes
-    # from the resulting live trajectory state.
-    if [ -n "${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-}" ]; then
-        REPLAY_CMD+=" --agentic-cache-warmup-duration $AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
-    fi
+    # After the normal t* snapshot warmup, continue those exact trajectories
+    # with one-token outputs and no idle delays for 10 minutes. Profiling begins
+    # only after those requests drain and resumes from the resulting live state.
+    REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
+    # Give long-context warmup requests up to 10 minutes to drain before
+    # cancelling any remaining requests and starting profiling.
+    REPLAY_CMD+=" --warmup-grace-period 600"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the
