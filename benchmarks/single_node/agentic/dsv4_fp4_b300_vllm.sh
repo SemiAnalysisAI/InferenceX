@@ -249,10 +249,10 @@ export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 
-# DEP8 leaves slightly more headroom for its larger prefill token budget.
+# DEP8 leaves more headroom for its larger prefill token budget.
 GPU_MEM_UTIL=0.96
 if [ "$IS_DEP8" = "true" ]; then
-    GPU_MEM_UTIL=0.95
+    GPU_MEM_UTIL=0.92
 fi
 
 { set +x; } 2>/dev/null
