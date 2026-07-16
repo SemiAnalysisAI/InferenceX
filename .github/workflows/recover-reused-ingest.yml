@@ -4,158 +4,16 @@ on:
     workflow_dispatch:
         inputs:
             source-run-id:
-                description: Source PR sweep run ID
-                required: true
-                type: string
-            source-run-attempt:
-                description: Source PR sweep attempt
-                required: true
-                default: "1"
-                type: string
-            source-pr-number:
-                description: Source PR number
-                required: true
-                type: string
-            source-head-sha:
-                description: Source sweep commit SHA
+                description: Source PR sweep run ID containing benchmark artifacts
                 required: true
                 type: string
             merge-run-id:
-                description: Original failed merge run ID
+                description: Main publication run ID containing changelog metadata
                 required: true
-                type: string
-            merge-run-attempt:
-                description: Original failed merge run attempt
-                required: true
-                default: "1"
                 type: string
 
 jobs:
-    package-reused-artifacts:
-        runs-on: blacksmith-4vcpu-ubuntu-2404
-        permissions:
-            contents: read
-        steps:
-            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-            - name: Download source artifacts
-              env:
-                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
-                  SOURCE_RUN_ID: ${{ inputs.source-run-id }}
-                  ARTIFACTS_PATH: ${{ github.workspace }}/source-artifacts
-              run: |
-                  mkdir -p "$ARTIFACTS_PATH"
-
-                  download_artifact() {
-                      local name="$1"
-                      local url="$2"
-                      local zip_path="$RUNNER_TEMP/artifact.zip"
-
-                      echo "Downloading artifact: $name"
-                      for attempt in 1 2 3; do
-                          if gh api "$url" > "$zip_path"; then
-                              mkdir -p "$ARTIFACTS_PATH/$name"
-                              if unzip -oq "$zip_path" -d "$ARTIFACTS_PATH/$name"; then
-                                  rm -f "$zip_path"
-                                  return 0
-                              fi
-                              rm -rf "${ARTIFACTS_PATH:?}/$name"
-                          fi
-                          rm -f "$zip_path"
-                          echo "  Attempt $attempt/3 failed, retrying in ${attempt}s..."
-                          sleep "$attempt"
-                      done
-                      return 1
-                  }
-
-                  gh api "repos/${{ github.repository }}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100" --paginate --slurp \
-                    | jq -r '
-                        [.[].artifacts[]
-                          | select(.name != "changelog-metadata")
-                          | . + {logical_name: (.name | sub("_[A-Za-z][A-Za-z0-9.-]*_[0-9]+$"; ""))}
-                        ]
-                        | group_by(.logical_name)
-                        | map(sort_by(.created_at) | last)[]
-                        | "\(.name)\t\(.archive_download_url)"' \
-                    | while IFS=$'\t' read -r name url; do
-                        if ! download_artifact "$name" "$url"; then
-                            echo "::error::Failed to download source artifact: $name"
-                            exit 1
-                        fi
-                    done
-
-                  if [ -z "$(find "$ARTIFACTS_PATH" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-                      echo "::error::No source artifacts downloaded from run $SOURCE_RUN_ID"
-                      exit 1
-                  fi
-
-            - name: Record reuse provenance
-              env:
-                  ARTIFACTS_PATH: ${{ github.workspace }}/source-artifacts
-                  SOURCE_RUN_ID: ${{ inputs.source-run-id }}
-                  SOURCE_RUN_ATTEMPT: ${{ inputs.source-run-attempt }}
-                  SOURCE_PR_NUMBER: ${{ inputs.source-pr-number }}
-                  SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
-                  MERGE_RUN_ID: ${{ inputs.merge-run-id }}
-                  MERGE_RUN_ATTEMPT: ${{ inputs.merge-run-attempt }}
-              run: |
-                  mkdir -p "$ARTIFACTS_PATH/reused-ingest-metadata"
-                  jq -n \
-                    --arg source_run_id "$SOURCE_RUN_ID" \
-                    --arg source_run_attempt "$SOURCE_RUN_ATTEMPT" \
-                    --arg source_run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/$SOURCE_RUN_ID" \
-                    --arg source_pr_number "$SOURCE_PR_NUMBER" \
-                    --arg source_head_sha "$SOURCE_HEAD_SHA" \
-                    --arg ingest_run_id "$MERGE_RUN_ID" \
-                    --arg ingest_run_attempt "$MERGE_RUN_ATTEMPT" \
-                    --arg ingest_run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/$MERGE_RUN_ID" \
-                    '{
-                      source_run_id: $source_run_id,
-                      source_run_attempt: $source_run_attempt,
-                      source_run_url: $source_run_url,
-                      source_pr_number: $source_pr_number,
-                      source_head_sha: $source_head_sha,
-                      ingest_run_id: $ingest_run_id,
-                      ingest_run_attempt: $ingest_run_attempt,
-                      ingest_run_url: $ingest_run_url
-                    }' > "$ARTIFACTS_PATH/reused-ingest-metadata/reuse_source_run.json"
-
-            - name: Validate reusable artifacts
-              run: |
-                  python3 utils/validate_reusable_sweep_artifacts.py \
-                    --artifacts-dir "${{ github.workspace }}/source-artifacts"
-
-            - name: Download original merge changelog
-              env:
-                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
-                  MERGE_RUN_ID: ${{ inputs.merge-run-id }}
-                  CHANGELOG_PATH: ${{ github.workspace }}/merge-changelog
-              run: |
-                  url=$(gh api "repos/${{ github.repository }}/actions/runs/${MERGE_RUN_ID}/artifacts?per_page=100" --paginate --slurp \
-                    | jq -r '[.[].artifacts[] | select(.name == "changelog-metadata")] | sort_by(.created_at) | last | .archive_download_url // empty')
-                  if [ -z "$url" ]; then
-                      echo "::error::No changelog-metadata artifact found on run $MERGE_RUN_ID"
-                      exit 1
-                  fi
-                  mkdir -p "$CHANGELOG_PATH"
-                  gh api "$url" > "$RUNNER_TEMP/changelog.zip"
-                  unzip -oq "$RUNNER_TEMP/changelog.zip" -d "$CHANGELOG_PATH"
-                  rm -f "$RUNNER_TEMP/changelog.zip"
-
-            - name: Upload reusable ingest artifacts
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: reused-ingest-artifacts
-                  path: source-artifacts/*
-
-            - name: Upload merge changelog
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: changelog-metadata
-                  path: merge-changelog/*
-
     trigger-agentic-ingest:
-        needs: package-reused-artifacts
         runs-on: ubuntu-latest
         steps:
             - name: Trigger agentic database ingest
@@ -167,8 +25,8 @@ jobs:
                     -d '{
                       "event_type": "ingest-agentic-results",
                       "client_payload": {
-                        "run-id": "${{ github.run_id }}",
-                        "run-attempt": "${{ github.run_attempt }}",
+                        "source-run-id": "${{ inputs.source-run-id }}",
+                        "merge-run-id": "${{ inputs.merge-run-id }}",
                         "database-target": "production"
                       }
                     }'
