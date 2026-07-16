@@ -4789,3 +4789,37 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708"
     - "Clean the export envs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2198
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Add EAGLE3 speculative-decoding arm for the Kimi K2.6 NVFP4 B300 AgentX recipe (draft lightseekorg/kimi-k2.6-eagle3-mla, TOKENSPEED_MLA attention backend with TRT-LLM ragged MLA kernel)."
+    - "TP8/TP4 GPU-only KV points plus a TP4 native CPU-offload ladder via SimpleCPUOffloadConnector with lazy_offload off; TP4/DCP4 high-concurrency points (conc 32/64) using num_speculative_tokens=3 and synthetic_acceptance_length=2.88."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2222
+  
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-legacy-max-tput
+  description:
+    - "Replace the MiniMax-M3 NVFP4 B300 8k1k Dynamo-vLLM disaggregated DEP2-prefill sweep with TP1-prefill recipes, while preserving the exact prior max-throughput point; retain the existing 1k1k sweep unchanged."
+    - "Use vllm/vllm-openai:nightly-2dfaae752b4db0d43cfc0715c780e33be030d0f1 with Dynamo 1.3.0.dev20260713, and pin NVIDIA/srt-slurm at c1fb6989fc5aca803b4ca0f2d17d8be85fad9732."
+    - "Sweep TP4, TP8, and DEP8 decode topologies from concurrency 1 through 1024, with one-node prefill/decode colocation where the worker GPUs fit."
+    - "Retain the proven 4P2D DEP2-prefill/TEP4-decode concurrency-4096 point unchanged on vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41 and Dynamo 1.3.0.dev20260614."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2184
+
+- config-keys:
+    - glm5-fp4-gb200-dynamo-trt
+  description:
+    - "Add GLM-5 NVFP4 GB200 disaggregated TRT-LLM (STP, non-MTP) benchmarks via Dynamo"
+    - "Image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13"
+    - "Recipes ported from NVIDIA/srt-slurm tag v1.0.26 (recipes/trtllm/glm5/disagg/trtllm_dynamo/gb200_nvfp4/{ISL1K_OSL1K,ISL8K_OSL1K}/STP; 13 ISL1K + 10 ISL8K), checked into benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5/... and overlaid onto the srt-slurm checkout at runtime. Prefill tp=4/ep=4 (dep4)."
+    - "launch_gb200-nv.sh: added glm5-fp4 case to dynamo-trt branch (MODEL_PATH=/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4, SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4), pinned srt-slurm clone to v1.0.26 with cp -rT overlay of the local recipes/trtllm/glm5 recipes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1803
+  
+- config-keys:
+    - glm5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Add GLM-5.1 FP8 GB200 disaggregated dynamo-sglang MTP config covering 8k1k, high-throughput and low-latency topologies"
+    - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2123
+  
