@@ -32,12 +32,24 @@ backend:
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "900"
     NCCL_WATCHDOG_TIMEOUT: "1800"
     TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: "1800"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "n"
+    UCX_MAX_RMA_RAILS: "1"
+    UCX_MAX_RNDV_RAILS: "1"
+    UCX_RNDV_SCHEME: "put_zcopy"
   decode_environment:
     VLLM_USE_FLASHINFER_MOE_FP4: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     NCCL_CUMEM_ENABLE: "0"
     NCCL_WATCHDOG_TIMEOUT: "1800"
     TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: "1800"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "n"
+    UCX_MAX_RMA_RAILS: "1"
+    UCX_MAX_RNDV_RAILS: "1"
+    UCX_RNDV_SCHEME: "put_zcopy"
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
