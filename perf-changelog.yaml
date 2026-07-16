@@ -4885,7 +4885,7 @@
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713"
     - "Add SGLANG_MAMBA_SSM_DTYPE=bfloat16 in both non-MTP and MTP benchmark scripts"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201 
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic
