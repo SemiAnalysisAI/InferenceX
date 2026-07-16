@@ -4623,7 +4623,11 @@ dsv4-fp8-h100-dynamo-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      # Aggregated TP8 x PP2 over 2 H100 nodes (16 GPUs), EP8.
+      # Aggregated TP8 x PP2 over 2 H100 nodes (16 GPUs), EP8, max-num-seqs 256.
+      # The batch cap (256, was 16) lets decode throughput scale with concurrency
+      # so this one conc-list now spans a wide interactivity range: conc1 ~65
+      # tok/s/user (TPOT ~15ms) down to conc512 ~5 tok/s/user, peaking ~130
+      # tok/s/GPU by conc256 (on-cluster job 11364).
       - conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
         prefill:
           num-worker: 1
@@ -4642,11 +4646,13 @@ dsv4-fp8-h100-dynamo-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      # Aggregated TP8 x PP2 over 2 H100 nodes (16 GPUs), EP8.
-      # 8k1k capped at conc256: conc512 (5120 x 8k-token requests) needs ~3.6h
-      # for that single level and blew the 8h SLURM limit; conc256 completes in
-      # ~71min and fits with margin. 1k1k keeps 512 (short requests finish fast).
-      - conc-list: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+      # Aggregated TP8 x PP2 over 2 H100 nodes (16 GPUs), EP8, max-num-seqs 64.
+      # 8k1k capped at conc128: with the batch cap at 64, conc128 is 2x
+      # oversubscription (a queued low-interactivity point) and conc256 would be
+      # 4x -- queueing-dominated and timeout-prone for thousands of 8k-token
+      # requests. conc 1-64 spans the useful interactivity curve (64->12
+      # tok/s/user), 128 anchors the low end. Fits the 8h SLURM limit.
+      - conc-list: [1, 2, 4, 8, 16, 32, 64, 128]
         prefill:
           num-worker: 1
           tp: 8

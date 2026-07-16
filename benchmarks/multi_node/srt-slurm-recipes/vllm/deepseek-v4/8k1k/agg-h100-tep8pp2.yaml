@@ -67,7 +67,15 @@ backend:
       kv-cache-dtype: "fp8"
       gpu-memory-utilization: 0.92
       max-model-len: 9472
-      max-num-seqs: 16
+      # max-num-seqs 64 (not 16): the running-batch cap. At 16 the engine served
+      # at most 16 sequences at once, flattening decode throughput and collapsing
+      # the interactivity range (see 1k1k recipe). 8k1k KV/seq is ~4x the 1k1k
+      # (9472 vs 2304 max-model-len), so the batch-256 that fit at 1k1k maps to
+      # batch-64 here (64*9472 ~= 256*2304, same KV footprint). On-cluster prototype
+      # (job 11368) at 64: fits + serves on the same 2 nodes, throughput scales
+      # 60->640 tok/s from conc 1->64 (interactivity 64->12 tok/s/user). Saturates
+      # at conc 64 (= the batch cap); conc 128 adds one queued low-interactivity point.
+      max-num-seqs: 64
       max-num-batched-tokens: 16384
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
@@ -85,9 +93,12 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  # Capped at 256: conc512 (5120 x 8k-token requests) needs ~3.6h for that one
-  # level and exceeds the 8h SLURM limit; conc256 completes (~71min) and fits.
-  concurrencies: "1x2x4x8x16x32x64x128x256"
+  # Capped at 128: with max-num-seqs 64 the engine runs 64 seqs at once, so conc
+  # 128 is 2x oversubscription (one queued low-interactivity point) and conc 256
+  # would be 4x -- queueing-dominated, slow, and timeout-prone at 8k1k (each level
+  # is thousands of 8k-token requests). conc 1-64 spans the useful curve (64->12
+  # tok/s/user); 128 anchors the low-interactivity end. Keeps the sweep in 8h.
+  concurrencies: "1x2x4x8x16x32x64x128"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"

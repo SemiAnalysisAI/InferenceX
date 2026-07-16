@@ -67,7 +67,15 @@ backend:
       kv-cache-dtype: "fp8"
       gpu-memory-utilization: 0.92
       max-model-len: 2304
-      max-num-seqs: 16
+      # max-num-seqs 256 (not 16): the running-batch cap. At 16 the engine served
+      # at most 16 sequences at once, so every concurrency >=16 queued behind a
+      # batch-16 engine -- decode throughput plateaued and the whole conc sweep
+      # collapsed to a narrow interactivity band (this was the "range too small").
+      # On-cluster prototype (job 11364) at 256: throughput scales 56->2079 tok/s
+      # from conc 1->256 (interactivity 65->8 tok/s/user) on the same 2 nodes, and
+      # high-conc levels finish far faster (batch-256 vs batch-16). Fits at 1k1k
+      # KV (256 x 2304 tokens) within the 2-node headroom at gpu-mem-util 0.92.
+      max-num-seqs: 256
       max-num-batched-tokens: 16384
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
