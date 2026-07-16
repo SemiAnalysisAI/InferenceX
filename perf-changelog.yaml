@@ -4894,3 +4894,13 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B200: GPU-resident TP8 at conc [1,2,4,6,8] and SimpleCPU-offload TP8 at conc [8,12,16]; DEP8 at conc [8,16,24,32,40,48,56,64,68,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2224
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add LMCache 0.5.1 DRAM KV-offload arm to the official B200 AgentX sweep alongside the vllm-simple and Mooncake arms, on the same tuned recipe and image (vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec) from PR #2224"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; --enable-cumem-allocator dropped on the lmcache arm only (cuMem/VMM allocations cannot be CUDA-IPC-exported to the LMCache server)"
+    - "LMCache points mirror the vllm-simple ladder: TP8 conc [8, 12, 16]; TP8-DEP8 conc [8, 16, 24, 32, 40, 48, 56, 64, 68, 72, 80]; validated in the PR #2231 bring-up sweep (peak ~25.7k total tok/s/GPU at DEP8 conc 72, 96-98% cache hit)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2231
