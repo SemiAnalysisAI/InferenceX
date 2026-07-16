@@ -207,17 +207,10 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 
 Reusable source artifacts are authoritative. The merge-time
 dispatch passes the source and merge run IDs directly to InferenceX-app. The app
-selects the newest valid artifact family for each logical point and validates
-that the prepared artifacts are readable, non-duplicated, and internally
-consistent, but it does not require them to match a matrix regenerated from the
-merge commit. A generator-policy change between the PR sweep and merge therefore
-does not require another GPU sweep.
-
-Raw and aggregate eval identities must still match, as must agentic point/raw
-artifacts and summaries. Batched eval identities come from
-`completed_eval_concs`, so an explicitly pinned failed run may reuse only the
-points it completed. Missing or invalid metadata, duplicate identities, and
-raw/aggregate disagreement still fail reuse.
+keeps the newest upload for each exact artifact name and sends the resulting
+directory to the normal ingestion code. The only reuse-specific substitution is
+that changelog metadata comes from the merge run. A generator-policy change
+between the PR sweep and merge therefore does not require another GPU sweep.
 
 ---
 
