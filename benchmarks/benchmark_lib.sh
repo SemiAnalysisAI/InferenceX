@@ -1052,9 +1052,15 @@ append_lm_eval_summary() {
     fi
 
     local prefill_tp="${PREFILL_TP:-${TP:-1}}"
+    local prefill_pp="${PREFILL_PP_SIZE:-${PP_SIZE:-1}}"
+    local prefill_dcp_size="${PREFILL_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local prefill_pcp_size="${PREFILL_PCP_SIZE:-${PCP_SIZE:-1}}"
     local prefill_ep="${PREFILL_EP:-${EP_SIZE:-1}}"
     local prefill_num_workers="${PREFILL_NUM_WORKERS:-1}"
     local decode_tp="${DECODE_TP:-${TP:-1}}"
+    local decode_pp="${DECODE_PP_SIZE:-${PP_SIZE:-1}}"
+    local decode_dcp_size="${DECODE_DCP_SIZE:-${DCP_SIZE:-1}}"
+    local decode_pcp_size="${DECODE_PCP_SIZE:-${PCP_SIZE:-1}}"
     local decode_ep="${DECODE_EP:-${EP_SIZE:-1}}"
     local decode_num_workers="${DECODE_NUM_WORKERS:-1}"
 
@@ -1101,16 +1107,23 @@ append_lm_eval_summary() {
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING}",
   "tp": ${TP:-1},
+  "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
   "pcp_size": ${PCP_SIZE:-1},
   "conc": ${metadata_conc},
 ${batch_metadata}  "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
   "prefill_tp": ${prefill_tp},
+  "prefill_pp": ${prefill_pp},
+  "prefill_dcp_size": ${prefill_dcp_size},
+  "prefill_pcp_size": ${prefill_pcp_size},
   "prefill_ep": ${prefill_ep},
   "prefill_dp_attention": ${prefill_dp_json},
   "prefill_num_workers": ${prefill_num_workers},
   "decode_tp": ${decode_tp},
+  "decode_pp": ${decode_pp},
+  "decode_dcp_size": ${decode_dcp_size},
+  "decode_pcp_size": ${decode_pcp_size},
   "decode_ep": ${decode_ep},
   "decode_dp_attention": ${decode_dp_json},
   "decode_num_workers": ${decode_num_workers},
@@ -1462,14 +1475,13 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Optional cache-pressure warmup for long agentic traces. AIPerf first
-    # completes its normal t* snapshot warmup, then continues those exact
-    # trajectories with one-token outputs and no idle delays for this many
-    # seconds. Profiling begins only after those requests drain and resumes
-    # from the resulting live trajectory state.
-    if [ -n "${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-}" ]; then
-        REPLAY_CMD+=" --agentic-cache-warmup-duration $AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
-    fi
+    # After the normal t* snapshot warmup, continue those exact trajectories
+    # with one-token outputs and no idle delays for 10 minutes. Profiling begins
+    # only after those requests drain and resumes from the resulting live state.
+    REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
+    # Give long-context warmup requests up to 30 minutes to drain before
+    # cancelling any remaining requests and starting profiling.
+    REPLAY_CMD+=" --warmup-grace-period 1800"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the

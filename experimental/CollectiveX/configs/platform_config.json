@@ -1,0 +1,175 @@
+{
+  "platforms": {
+    "h100-dgxc": {
+      "arch": "sm90",
+      "product": "h100",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "backends": {"deepep-v2": [8, 16]},
+      "fabric": {"nic": "ConnectX-7 2x200GbE", "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"},
+      "operator": {
+        "partition": "hpc-gpu-1",
+        "account": "customer",
+        "squash_dir": "/mnt/nfs/sa-shared/cx-squash",
+        "exclude_nodes": "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+      },
+      "network": {
+        "socket_ifname": "eth0",
+        "rdma_devices": "mlx5_18,mlx5_19,mlx5_20,mlx5_21,mlx5_22,mlx5_23,mlx5_24,mlx5_25,mlx5_26,mlx5_27,mlx5_28,mlx5_29,mlx5_30,mlx5_31,mlx5_32,mlx5_33",
+        "ib_gid_index": "3"
+      }
+    },
+    "h200-dgxc": {
+      "arch": "sm90",
+      "product": "h200",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "backends": {"deepep-v2": [8, 16]},
+      "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
+      "operator": {
+        "partition": "main",
+        "squash_dir": "/home/sa-shared/containers"
+      },
+      "network": {
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
+      }
+    },
+    "b200-dgxc": {
+      "arch": "sm100",
+      "product": "b200",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "backends": {"deepep-v2": [8, 16]},
+      "fabric": {"nic": "ConnectX-7 400GbE", "switch": "Whitebox Tomahawk3 leaf + Tomahawk4 (RoCE)"},
+      "operator": {
+        "partition": "gpu-2",
+        "account": "benchmark",
+        "qos": "gpu-2_qos",
+        "squash_dir": "/home/sa-shared/containers"
+      },
+      "network": {
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7",
+        "ib_gid_index": "3"
+      }
+    },
+    "b300": {
+      "arch": "sm103",
+      "product": "b300",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "nvlink",
+      "launcher": "single-slurm",
+      "backends": {"deepep-v2": [8, 16]},
+      "fabric": {"nic": "ConnectX-8 2x400GbE", "switch": "NVIDIA Spectrum-X SN5600 (51.2T)"},
+      "operator": {
+        "partition": "batch_1",
+        "account": "benchmark",
+        "qos": "batch_1_qos",
+        "squash_dir": "/data/home/sa-shared/sqsh"
+      },
+      "network": {
+        "socket_ifname": "bond0",
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_8,mlx5_9,mlx5_10,mlx5_11,mlx5_16,mlx5_17,mlx5_20,mlx5_21,mlx5_22,mlx5_23",
+        "ib_gid_index": "3",
+        "rail_isolated": "1"
+      }
+    },
+    "gb200": {
+      "arch": "sm100",
+      "product": "gb200",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/arm64",
+      "gpus_per_node": 4,
+      "scale_up_domain": 72,
+      "scale_up_transport": "mnnvl",
+      "launcher": "gb-nv",
+      "backends": {"deepep-v2": [8, 16]},
+      "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
+      "operator": {
+        "partition": "batch",
+        "account": "benchmark",
+        "storage_roots": [
+          "/mnt/lustre01/users-public/sa-shared"
+        ]
+      }
+    },
+    "gb300": {
+      "arch": "sm103",
+      "product": "gb300",
+      "image": "lmsysorg/sglang:v0.5.11-cu130",
+      "image_platform": "linux/arm64",
+      "gpus_per_node": 4,
+      "scale_up_domain": 72,
+      "scale_up_transport": "mnnvl",
+      "launcher": "gb-nv",
+      "backends": {"deepep-v2": [8, 16]},
+      "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
+      "operator": {
+        "partition": "batch_1",
+        "account": "benchmark",
+        "qos": "batch_1_qos",
+        "squash_dir": "/data/home/sa-shared/collectivex/containers",
+        "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache"
+      }
+    },
+    "mi300x": {
+      "arch": "gfx942",
+      "product": "mi300x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {"mori": [8]},
+      "fabric": {"nic": "Pollara 400GbE", "switch": "Tomahawk5 (51.2T)"}
+    },
+    "mi325x": {
+      "arch": "gfx942",
+      "product": "mi325x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {"mori": [8]},
+      "fabric": {"nic": "Pollara 400GbE", "switch": "Tomahawk5 (51.2T)"}
+    },
+    "mi355x": {
+      "arch": "gfx950",
+      "product": "mi355x",
+      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
+      "image_platform": "linux/amd64",
+      "gpus_per_node": 8,
+      "scale_up_domain": 8,
+      "scale_up_transport": "xgmi",
+      "launcher": "mi-amds",
+      "backends": {"mori": [8, 16]},
+      "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},
+      "network": {
+        "socket_ifname": "eno0",
+        "rdma_devices": "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7",
+        "ib_gid_index": 1
+      },
+      "operator": {
+        "partition": "compute",
+        "squash_dir": "/var/lib/squash"
+      }
+    }
+  }
+}

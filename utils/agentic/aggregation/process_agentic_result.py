@@ -36,16 +36,63 @@ def required_env(name: str) -> str:
     return value
 
 
-def _validate_kv_offload_env() -> tuple[str, str]:
+def optional_component_metadata(env_name: str) -> dict[str, str] | None:
+    """Parse strict optional component metadata from a JSON environment value."""
+    raw_value = os.environ.get(env_name)
+    if raw_value in (None, "", "null"):
+        return None
+
+    try:
+        metadata = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{env_name} must contain valid JSON") from exc
+
+    if not isinstance(metadata, dict) or set(metadata) != {"name", "version"}:
+        raise SystemExit(f"{env_name} must contain exactly 'name' and 'version'")
+    if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
+        raise SystemExit(f"{env_name} name and version must be non-empty strings")
+    return metadata
+
+
+def optional_kv_offload_backend_metadata(
+    env_name: str,
+) -> dict[str, str] | None:
+    """Parse KV offload backend metadata with an optional version."""
+    raw_value = os.environ.get(env_name)
+    if raw_value in (None, "", "null"):
+        return None
+
+    try:
+        metadata = json.loads(raw_value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{env_name} must contain valid JSON") from exc
+
+    if not isinstance(metadata, dict) or not set(metadata) <= {"name", "version"}:
+        raise SystemExit(f"{env_name} may contain only 'name' and 'version'")
+    if set(metadata) not in ({"name"}, {"name", "version"}):
+        raise SystemExit(f"{env_name} must contain 'name' and optional 'version'")
+    if not all(isinstance(value, str) and value for value in metadata.values()):
+        raise SystemExit(f"{env_name} values must be non-empty strings")
+    return metadata
+
+
+def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
     kv_offloading = required_env("KV_OFFLOADING")
-    kv_offload_backend = os.environ.get("KV_OFFLOAD_BACKEND", "")
+    backend_name = os.environ.get("KV_OFFLOAD_BACKEND", "")
+    backend_metadata = optional_kv_offload_backend_metadata(
+        "KV_OFFLOAD_BACKEND_METADATA"
+    )
     if kv_offloading == "none":
-        if kv_offload_backend:
+        if backend_name or backend_metadata is not None:
             raise SystemExit("KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none")
     else:
-        if not kv_offload_backend or kv_offload_backend == "none":
+        if not backend_name or backend_name == "none" or backend_metadata is None:
             raise SystemExit("KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled")
-    return kv_offloading, kv_offload_backend
+        if backend_metadata["name"] != backend_name:
+            raise SystemExit(
+                "KV_OFFLOAD_BACKEND must match KV_OFFLOAD_BACKEND_METADATA.name"
+            )
+    return kv_offloading, backend_metadata
 
 
 def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
@@ -56,30 +103,61 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     fields: dict[str, Any] = {}
 
     if not is_multinode:
+        pp = env_int("PP_SIZE", 1)
         dcp_size = env_int("DCP_SIZE", 1)
         pcp_size = env_int("PCP_SIZE", 1)
-        if dcp_size <= 0 or pcp_size <= 0:
-            raise SystemExit("DCP_SIZE and PCP_SIZE must be positive integers.")
-        fields.update({"dcp_size": dcp_size, "pcp_size": pcp_size})
-        return fields, tp * pcp_size, tp, ep, dp_attention
+        if pp <= 0 or dcp_size <= 0 or pcp_size <= 0:
+            raise SystemExit(
+                "PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers."
+            )
+        fields.update({"pp": pp, "dcp_size": dcp_size, "pcp_size": pcp_size})
+        return fields, tp * pp * pcp_size, tp, ep, dp_attention
 
     prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
     prefill_tp = env_int("PREFILL_TP")
+    prefill_pp = env_int("PREFILL_PP_SIZE", 1)
+    prefill_dcp_size = env_int("PREFILL_DCP_SIZE", 1)
+    prefill_pcp_size = env_int("PREFILL_PCP_SIZE", 1)
     prefill_ep = env_int("PREFILL_EP", 1)
     prefill_dp_attention = os.environ.get("PREFILL_DP_ATTN", "false")
     decode_num_workers = env_int("DECODE_NUM_WORKERS")
     decode_tp = env_int("DECODE_TP")
+    decode_pp = env_int("DECODE_PP_SIZE", 1)
+    decode_dcp_size = env_int("DECODE_DCP_SIZE", 1)
+    decode_pcp_size = env_int("DECODE_PCP_SIZE", 1)
     decode_ep = env_int("DECODE_EP", 1)
     decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
+    worker_parallelism = (
+        prefill_pp,
+        prefill_dcp_size,
+        prefill_pcp_size,
+        decode_pp,
+        decode_dcp_size,
+        decode_pcp_size,
+    )
+    if any(value <= 0 for value in worker_parallelism):
+        raise SystemExit(
+            "Multinode PP, DCP, and PCP sizes must be positive integers."
+        )
     prefill_hardware = os.environ.get("PREFILL_HARDWARE", "")
     decode_hardware = os.environ.get("DECODE_HARDWARE", "")
     if bool(prefill_hardware) != bool(decode_hardware):
         raise SystemExit(
             "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
         )
-    num_prefill_gpu = prefill_num_workers * prefill_tp
-    num_decode_gpu = decode_num_workers * decode_tp
+    num_prefill_gpu = prefill_num_workers * prefill_tp * prefill_pp * prefill_pcp_size
+    num_decode_gpu = decode_num_workers * decode_tp * decode_pp * decode_pcp_size
     num_gpus = num_prefill_gpu + num_decode_gpu
+    # Aggregated configs set decode num-worker 0 (prefill+decode co-located on one
+    # worker), so there are no separate decode GPUs. Mirror process_result.py and drop
+    # the decode-side parallelism, so TP/EP and the per-GPU throughput denominator
+    # reflect the single aggregated worker instead of double-counting its GPUs.
+    if num_decode_gpu <= 0:
+        decode_tp = 0
+        decode_ep = 0
+        decode_pp = 1
+        decode_dcp_size = 1
+        decode_pcp_size = 1
     tp = prefill_tp + decode_tp
     ep = max(prefill_ep, decode_ep)
     dp_attention = (
@@ -91,11 +169,17 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
         {
             "prefill_num_workers": prefill_num_workers,
             "prefill_tp": prefill_tp,
+            "prefill_pp": prefill_pp,
+            "prefill_dcp_size": prefill_dcp_size,
+            "prefill_pcp_size": prefill_pcp_size,
             "prefill_ep": prefill_ep,
             "prefill_dp_attention": prefill_dp_attention,
             "num_prefill_gpu": num_prefill_gpu,
             "decode_num_workers": decode_num_workers,
             "decode_tp": decode_tp,
+            "decode_pp": decode_pp,
+            "decode_dcp_size": decode_dcp_size,
+            "decode_pcp_size": decode_pcp_size,
             "decode_ep": decode_ep,
             "decode_dp_attention": decode_dp_attention,
             "num_decode_gpu": num_decode_gpu,
@@ -151,6 +235,14 @@ def build_agg(
         "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
+
+    router = optional_component_metadata("ROUTER_METADATA")
+    if router is not None:
+        agg["router"] = router
+
+    kv_p2p_transfer = os.environ.get("KV_P2P_TRANSFER")
+    if kv_p2p_transfer:
+        agg["kv_p2p_transfer"] = kv_p2p_transfer
 
     metadata = aggregate.get("metadata")
     if isinstance(metadata, dict):
