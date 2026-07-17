@@ -4927,3 +4927,9 @@
     - "Expand mi355x-disagg runner pool from 3 to 9 nodes."
     - "Concurrency sweep: 1K1K and 8K1K both [ 8, 16, 32, 64, 128 ]."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2094
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
