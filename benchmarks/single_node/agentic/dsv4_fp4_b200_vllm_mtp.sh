@@ -253,7 +253,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     --max-model-len 1048576
-    --gpu-memory-utilization 0.92
+    --gpu-memory-utilization 0.9
     --numa-bind
     --enable-cumem-allocator
     --no-enable-flashinfer-autotune
