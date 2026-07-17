@@ -79,6 +79,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml ]]; then
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
+    git checkout c1b6b5c97f323baefad577d70c4e8392b6f537d9
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ]]; then

@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-b300-1p4d-dep2-tp4-fp4-8k1k-eagle3-gqa"
+name: "minimax-m3-vllm-disagg-b300-1p4d-dep2-tp4-fp4-8k1k-eagle3"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"

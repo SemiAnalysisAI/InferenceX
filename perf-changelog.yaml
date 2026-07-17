@@ -4922,6 +4922,5 @@
 - config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm-mtp
   description:
-    - "Refresh MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated GQA-EAGLE3 recipes with the six measured-Pareto topologies and only Pareto-optimal concurrencies."
-    - "Use nvidia/MiniMax-M3-NVFP4 with vllm/vllm-openai:nightly, matching the canonical model and container aliases used by this submission."
+    - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes with the six measured-Pareto topologies and only Pareto-optimal concurrencies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
