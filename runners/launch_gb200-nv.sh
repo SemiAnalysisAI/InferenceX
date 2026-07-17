@@ -159,7 +159,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
             # AgentX was tuned against the canonical DeepSeek-V4-Pro
             # checkpoint, which is staged on compute-visible Lustre.
-            export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
+            export MODEL_PATH="/mnt/lustre01/models/deepseek-V4-pro"
         else
             # Existing fixed-sequence GB200 recipes use the NVIDIA ModelOpt
             # NVFP4 checkpoint.
