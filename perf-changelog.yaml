@@ -4920,9 +4920,10 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2241
 
 - config-keys:
-    - dsv4-fp4-b300-vllm-agentic
+    - dsv4-fp4-b300-vllm-agentic-mtp
+    - dsv4-fp4-b300-vllm-agentic-tp8
   description:
-    - "Add an MTP speculative-decoding twin for every B300 AgentX topology (DeepSeek-V4 built-in MTP): --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}, routed via the launcher's spec-decoding=mtp suffix to dsv4_fp4_b300_vllm_mtp.sh -- TP8/TP4 GPU-resident, TP4 SimpleCPU, DEP4 SimpleCPU, and DEP8, each mirroring its non-MTP conc-list."
-    - "MTP FULL_DECODE_ONLY cudagraph capture sizes are in TOKENS: captured as num_seqs*(1+num_speculative_tokens) (= num_seqs*4) so vLLM's round-up-and-dedup keeps one graph per decode batch of 1..MAX_NUM_SEQS seqs. MTP variants also run the SWE-bench Lite accuracy eval (EVAL_ONLY path synced with the base recipe)."
-    - "Non-MTP search-space tweaks: add TP8 GPU-resident at conc [1,2,4,6,8], trim TP4 GPU-resident to conc [1,2,4,6,8,12,16,20], and extend TP4 SimpleCPU lazy-offload down to conc [20,24,28,32,36,40]."
+    - "Add MTP speculative-decoding and a new TP8 GPU-resident arm for the B300 vLLM AgentX recipe as separate config-keys, so the existing dsv4-fp4-b300-vllm-agentic aggregate is not re-run."
+    - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms -- TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56,64,72], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
+    - "dsv4-fp4-b300-vllm-agentic-tp8: new TP8 GPU-resident topology at conc [1,2,4,6,8], both non-MTP and MTP."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
