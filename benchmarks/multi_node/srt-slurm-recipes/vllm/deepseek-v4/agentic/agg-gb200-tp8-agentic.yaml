@@ -106,7 +106,6 @@ backend:
       max-num-batched-tokens: 32768
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
-      disable-uvicorn-access-log: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 32
