@@ -3263,7 +3263,7 @@ dsv4-fp8-mi325x-vllm-mtp:
 # tokens. Search space mirrors the MI355X MXFP8 MTP entry, trimming the base
 # FP4 sweep at extreme concurrency where speculative decoding loses value.
 minimaxm3-fp4-mi355x-vllm-mtp-agentic:
-  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
