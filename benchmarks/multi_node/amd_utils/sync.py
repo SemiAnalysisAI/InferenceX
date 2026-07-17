@@ -80,24 +80,34 @@ def cmd_barrier(args):
     if args.wait_for_all_ports:
         start_time = time.time()
         timeout = args.timeout
+        seen_open = set()
 
         while True:
+            status = {(ip, port): is_port_open(ip, port)
+                      for ip, port in zip(NODE_IPS, NODE_PORTS)}
+
+            # Fail fast: a port that was open and is now closed means that
+            # server died/was killed; don't wait out the full timeout.
+            regressed = [t for t in seen_open if not status[t]]
+            if regressed:
+                print("ERROR: the following ports were open then went down (server died):", flush=True)
+                for ip, port in regressed:
+                    print(f"  - {ip}:{port}", flush=True)
+                sys.exit(1)
+            seen_open.update(t for t, ok in status.items() if ok)
+
+            if all(status.values()):
+                break
+
             if timeout > 0:
                 elapsed = time.time() - start_time
                 if elapsed >= timeout:
-                    not_open = [(ip, port) for ip, port in zip(NODE_IPS, NODE_PORTS)
-                                if not is_port_open(ip, port)]
+                    not_open = [t for t, ok in status.items() if not ok]
                     print(f"ERROR: Timeout after {timeout} seconds waiting for ports to open.", flush=True)
                     print("The following nodes/ports are still not responding:", flush=True)
                     for ip, port in not_open:
                         print(f"  - {ip}:{port}", flush=True)
                     sys.exit(1)
-
-            all_open = all(is_port_open(ip, port) for ip, port in zip(NODE_IPS, NODE_PORTS))
-            if all_open:
-                break
-
-            if timeout > 0:
                 remaining = timeout - (time.time() - start_time)
                 print(f"Waiting for nodes.{NODE_PORTS},{NODE_IPS} . . ({remaining:.0f}s remaining)", flush=True)
             else:
@@ -109,30 +119,36 @@ def cmd_barrier(args):
         health_path = args.health_endpoint
         start_time = time.time()
         timeout = args.timeout
+        seen_ready = set()
 
         while True:
+            status = {
+                (ip, port): check_health(ip, port, health_path)
+                for ip, port in zip(NODE_IPS, NODE_PORTS)
+            }
+
+            # Fail fast: an endpoint that was healthy and is now down means the
+            # server died/was killed; don't wait out the full timeout.
+            regressed = [t for t in seen_ready if not status[t]]
+            if regressed:
+                print(f"ERROR: the following ({health_path}) were healthy then went down (server died):", flush=True)
+                for ip, port in regressed:
+                    print(f"  - http://{ip}:{port}{health_path}", flush=True)
+                sys.exit(1)
+            seen_ready.update(t for t, ok in status.items() if ok)
+
+            if all(status.values()):
+                break
+
             if timeout > 0:
                 elapsed = time.time() - start_time
                 if elapsed >= timeout:
-                    not_ready = [
-                        (ip, port)
-                        for ip, port in zip(NODE_IPS, NODE_PORTS)
-                        if not check_health(ip, port, health_path)
-                    ]
+                    not_ready = [t for t, ok in status.items() if not ok]
                     print(f"ERROR: Timeout after {timeout} seconds waiting for health endpoints.", flush=True)
                     print(f"The following (http://ip:port{health_path}) are still not responding:", flush=True)
                     for ip, port in not_ready:
                         print(f"  - http://{ip}:{port}{health_path}", flush=True)
                     sys.exit(1)
-
-            all_ready = all(
-                check_health(ip, port, health_path)
-                for ip, port in zip(NODE_IPS, NODE_PORTS)
-            )
-            if all_ready:
-                break
-
-            if timeout > 0:
                 remaining = timeout - (time.time() - start_time)
                 print(
                     f"Waiting for health on {list(zip(NODE_IPS, NODE_PORTS))} ({health_path}) .. ({remaining:.0f}s remaining)",
@@ -156,10 +172,13 @@ def cmd_barrier(args):
 
 def cmd_wait(args):
     """Wait while a remote port remains open, exit when it closes."""
-    print(f"Waiting while port {args.remote_port} on {args.remote_ip} is open...")
+    print(
+        f"Waiting while port {args.remote_port} on {args.remote_ip} is open...",
+        flush=True,
+    )
     while is_port_open(args.remote_ip, args.remote_port):
         time.sleep(5)
-    print(f"Port {args.remote_port} on {args.remote_ip} is now closed.")
+    print(f"Port {args.remote_port} on {args.remote_ip} is now closed.", flush=True)
 
 
 # =============================================================================

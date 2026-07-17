@@ -7,7 +7,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-native.
 
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -64,10 +64,10 @@ mkdir -p "$RESULT_DIR"
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
 
-if require_agentic_kv_offload_backend native; then
+if require_agentic_kv_offload_backend vllm-native; then
     unset VLLM_USE_SIMPLE_KV_OFFLOAD
     # Use vLLM's regular native KV-offload path (OffloadingConnector),
-    # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
+    # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
     # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
     # would switch it to SimpleCPUOffloadConnector. We intentionally leave
     # that env var UNSET here so the regular OffloadingConnector path is
@@ -112,7 +112,9 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

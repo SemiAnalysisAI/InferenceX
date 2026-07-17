@@ -1,0 +1,32 @@
+name: Recover Reused Ingest
+
+on:
+    workflow_dispatch:
+        inputs:
+            source-run-id:
+                description: Source PR sweep run ID containing benchmark artifacts
+                required: true
+                type: string
+            merge-run-id:
+                description: Main publication run ID containing changelog metadata
+                required: true
+                type: string
+
+jobs:
+    trigger-agentic-ingest:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger agentic database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
+                    -d '{
+                      "event_type": "ingest-agentic-results",
+                      "client_payload": {
+                        "source-run-id": "${{ inputs.source-run-id }}",
+                        "merge-run-id": "${{ inputs.merge-run-id }}",
+                        "database-target": "production"
+                      }
+                    }'

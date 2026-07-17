@@ -20,9 +20,14 @@ currently either `none` or `dram`; when it is `dram`, the backend must be set:
 ```yaml
 - dram-utilization: 0.80
   search-space:
-  - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 32] }
+  - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [16, 32] }
   - { tp: 8, kv-offloading: none, conc-list: [16, 32] }
 ```
+
+`kv-offload-backend.name` is required when offloading is enabled. Its
+`version` is optional: omit it for framework-native implementations without an
+independent release, and include it for separately versioned packages such as
+LMCache or Mooncake.
 
 Agentic matrix generation uses a 3600-second default duration. Reusable
 workflow callers can still override the `duration` input explicitly.

@@ -1,0 +1,542 @@
+[
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 4,
+      "shared_tensor_parallel_size": 4,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 4,
+      "shared_tensor_parallel_size": 4,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 8,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 8,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 4,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 4,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 4,
+      "shared_tensor_parallel_size": 4,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 4,
+      "shared_tensor_parallel_size": 4,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 8,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 8,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 4,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 4,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 8192,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 4,
+      "shared_tensor_parallel_size": 4,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 4,
+      "shared_tensor_parallel_size": 4,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 8,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 1,
+      "routed_tensor_parallel_size": 8,
+      "shared_tensor_parallel_size": 8,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 4,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 4,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 0,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  },
+  {
+    "type": "moe_gemm",
+    "args": {
+      "num_tokens": 65536,
+      "hidden": 7168,
+      "intermediate": 2048,
+      "num_experts": 256,
+      "top_k": 8,
+      "dtype_act": "bf16",
+      "dtype_weight": "mxfp4",
+      "expert_parallel_size": 8,
+      "routed_tensor_parallel_size": 1,
+      "shared_tensor_parallel_size": 1,
+      "n_shared_experts": 1,
+      "expert_distribution": "uniform"
+    },
+    "name": "dsv3"
+  }
+]

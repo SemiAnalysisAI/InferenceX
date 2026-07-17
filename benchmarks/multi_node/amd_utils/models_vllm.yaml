@@ -52,10 +52,17 @@ gpt-oss-120b:
 MiniMax-M3-MXFP8:
   # MiniMax-M3 MXFP8 disagg, no EP. The --tensor-parallel-size 8 below is just a
   # placeholder: server_vllm.sh sed-rewrites it to PREFILL_TP_SIZE/DECODE_TP_SIZE
-  # from the master-config prefill/decode tp (the sweep mixes TP8 and TP4 layouts).
+  # from the master-config prefill/decode tp (the sweep uses TP4 workers only,
+  # varying the prefill:decode worker ratio rather than TP).
   # --block-size 128 is mandatory (MSA sparse/index cache); text-only benchmark
   # so --language-model-only frees the vision encoder. gfx950 uses FP8 KV cache.
-  prefill_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
-  decode_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  # Serve flags + env kept in sync with the single-node recipe
+  # benchmarks/single_node/fixed_seq_len/minimaxm3_fp8_mi355x.sh:
+  #   --moe-backend aiter (AITER fused MoE), --linear-backend emulation, and the
+  #   larger --max-num-batched-tokens 32768 prefill budget; plus the AITER
+  #   router-append shared-experts fusion (self-disables under EP; the sweep is
+  #   EP1 so it stays active) and INT6 quick all-reduce quantization.
+  prefill_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --moe-backend aiter --linear-backend emulation --max-num-batched-tokens 32768 --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  decode_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --moe-backend aiter --linear-backend emulation --max-num-batched-tokens 32768 --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--MiniMaxAI--MiniMax-M3-MXFP8"

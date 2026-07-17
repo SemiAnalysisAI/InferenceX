@@ -60,6 +60,18 @@ on:
       prefill-tp:
         required: true
         type: string
+      prefill-pp:
+        required: false
+        type: string
+        default: '1'
+      prefill-dcp-size:
+        required: false
+        type: string
+        default: '1'
+      prefill-pcp-size:
+        required: false
+        type: string
+        default: '1'
       prefill-ep:
         required: true
         type: string
@@ -77,6 +89,18 @@ on:
       decode-tp:
         required: true
         type: string
+      decode-pp:
+        required: false
+        type: string
+        default: '1'
+      decode-dcp-size:
+        required: false
+        type: string
+        default: '1'
+      decode-pcp-size:
+        required: false
+        type: string
+        default: '1'
       decode-ep:
         required: true
         type: string
@@ -125,6 +149,18 @@ on:
         description: "KV offload backend for agentic scenarios when kv-offloading is not none"
         required: false
         type: string
+      kv-offload-backend-metadata:
+        description: "Optional KV offload backend name and version metadata as JSON"
+        required: false
+        type: string
+      router:
+        description: "Optional router name and version metadata as JSON"
+        required: false
+        type: string
+      kv-p2p-transfer:
+        description: "Optional multinode peer-to-peer KV transfer engine name"
+        required: false
+        type: string
       total-cpu-dram-gb:
         description: "Total CPU DRAM in GB for KV offloading"
         required: false
@@ -167,17 +203,26 @@ env:
   DURATION: ${{ inputs.duration }}
   KV_OFFLOADING: ${{ inputs.kv-offloading }}
   KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
+  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
+  ROUTER_METADATA: ${{ inputs.router }}
+  KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
   PREFILL_NUM_WORKERS: ${{ inputs.prefill-num-worker }}
   PREFILL_TP: ${{ inputs.prefill-tp }}
+  PREFILL_PP_SIZE: ${{ inputs.prefill-pp }}
+  PREFILL_DCP_SIZE: ${{ inputs.prefill-dcp-size }}
+  PREFILL_PCP_SIZE: ${{ inputs.prefill-pcp-size }}
   PREFILL_EP: ${{ inputs.prefill-ep }}
   PREFILL_DP_ATTN: ${{ inputs.prefill-dp-attn }}
 
   DECODE_NUM_WORKERS: ${{ inputs.decode-num-worker }}
   DECODE_TP: ${{ inputs.decode-tp }}
+  DECODE_PP_SIZE: ${{ inputs.decode-pp }}
+  DECODE_DCP_SIZE: ${{ inputs.decode-dcp-size }}
+  DECODE_PCP_SIZE: ${{ inputs.decode-pcp-size }}
   DECODE_EP: ${{ inputs.decode-ep }}
   DECODE_DP_ATTN: ${{ inputs.decode-dp-attn }}
 
@@ -190,12 +235,12 @@ jobs:
     timeout-minutes: 480
     name: >-
       ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
-      ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
-      x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}${{ inputs.decode-ep != '' && inputs.decode-ep != '1' && format('/EP{0}', inputs.decode-ep) || '' }}${{ inputs.decode-dp-attn == 'true' && '/DPA' || '' }})
+      ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}${{ inputs.prefill-pp != '' && inputs.prefill-pp != '1' && format('/PP{0}', inputs.prefill-pp) || '' }}${{ inputs.prefill-dcp-size != '' && inputs.prefill-dcp-size != '1' && format('/DCP{0}', inputs.prefill-dcp-size) || '' }}${{ inputs.prefill-pcp-size != '' && inputs.prefill-pcp-size != '1' && format('/PCP{0}', inputs.prefill-pcp-size) || '' }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
+      x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}${{ inputs.decode-pp != '' && inputs.decode-pp != '1' && format('/PP{0}', inputs.decode-pp) || '' }}${{ inputs.decode-dcp-size != '' && inputs.decode-dcp-size != '1' && format('/DCP{0}', inputs.decode-dcp-size) || '' }}${{ inputs.decode-pcp-size != '' && inputs.decode-pcp-size != '1' && format('/PCP{0}', inputs.decode-pcp-size) || '' }}${{ inputs.decode-ep != '' && inputs.decode-ep != '1' && format('/EP{0}', inputs.decode-ep) || '' }}${{ inputs.decode-dp-attn == 'true' && '/DPA' || '' }})
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
       ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
-      c${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+      c${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
       - name: Slurm cleanup (pre-run)
@@ -221,8 +266,8 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_prefill-tp{}-ep{}-dp{}-nw{}_decode-tp{}-ep{}-dp{}-nw{}_disagg-{}_spec-{}_conc{}_{runner}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+          # Hash uniquely on all prefill/decode parallelism fields, worker counts, serving mode, concurrency, and runner.
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-pp${{ env.PREFILL_PP_SIZE }}-dcp${{ env.PREFILL_DCP_SIZE }}-pcp${{ env.PREFILL_PCP_SIZE }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-pp${{ env.DECODE_PP_SIZE }}-dcp${{ env.DECODE_DCP_SIZE }}-pcp${{ env.DECODE_PCP_SIZE }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled

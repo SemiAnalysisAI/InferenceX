@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "suite": "ep-core",
+  "mode": "normal",
+  "routing": "uniform",
+  "ep_degrees": [8, 16],
+  "timing": {
+    "iters_per_trial": 8,
+    "trials_per_point": 256,
+    "warmup_iters_per_trial": 32
+  },
+  "workload": {
+    "name": "deepseek-v3",
+    "hidden": 7168,
+    "topk": 8,
+    "routed_experts": 256,
+    "seed": 67,
+    "token_ladders": {
+      "decode": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+      "prefill": [1024, 2048, 4096, 8192]
+    }
+  }
+}

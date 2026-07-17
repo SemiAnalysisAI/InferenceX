@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Runtime / caches
+logs/
+*.log
+.pytest_cache/
+.triton/
+triton_cache/
+
+# OS
+.DS_Store

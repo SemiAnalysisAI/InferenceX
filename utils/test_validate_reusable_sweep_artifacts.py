@@ -7,6 +7,7 @@ from pathlib import Path
 from validate_reusable_sweep_artifacts import (
     agentic_key,
     benchmark_key,
+    eval_key,
     dedupe_reran_evals,
     main,
     validate_agentic_artifacts,
@@ -42,6 +43,9 @@ def single_eval_result(
         "isl": isl,
         "osl": osl,
         "tp": 2,
+        "pp": 1,
+        "dcp_size": 1,
+        "pcp_size": 1,
         "ep": 1,
         "dp_attention": False,
         "conc": conc,
@@ -131,6 +135,7 @@ def fixed_result(conc: int) -> dict:
         "isl": 1024,
         "osl": 1024,
         "tp": 2,
+        "pp": 1,
         "dcp_size": 1,
         "pcp_size": 1,
         "ep": 1,
@@ -149,6 +154,7 @@ def agentic_result(conc: int = 16) -> dict:
         "scenario_type": "agentic-coding",
         "is_multinode": False,
         "tp": 8,
+        "pp": 1,
         "dcp_size": 1,
         "pcp_size": 1,
         "ep": 8,
@@ -158,17 +164,20 @@ def agentic_result(conc: int = 16) -> dict:
     }
 
 
-def test_single_node_reusable_keys_normalize_legacy_cp_and_separate_variants() -> None:
+def test_single_node_reusable_keys_normalize_legacy_parallelism_and_separate_variants() -> None:
     cases = (
         ("fixed", benchmark_key, fixed_result(16)),
         ("agentic", agentic_key, agentic_result()),
+        ("eval", eval_key, single_eval_result(16)),
     )
 
     for name, identity, row in cases:
         legacy_row = dict(row)
+        legacy_row.pop("pp")
         legacy_row.pop("dcp_size")
         legacy_row.pop("pcp_size")
         assert identity(legacy_row) == identity(row), name
+        assert identity({**row, "pp": 2}) != identity(row), name
         assert identity({**row, "dcp_size": 2}) != identity(row), name
         assert identity({**row, "pcp_size": 2}) != identity(row), name
 
@@ -184,10 +193,16 @@ def test_multinode_agentic_identity_fields_match() -> None:
         "scenario_type": "agentic-coding",
         "is_multinode": True,
         "prefill_tp": 4,
+        "prefill_pp": 2,
+        "prefill_dcp_size": 2,
+        "prefill_pcp_size": 2,
         "prefill_ep": 2,
         "prefill_dp_attention": "true",
         "prefill_num_workers": 2,
         "decode_tp": 8,
+        "decode_pp": 2,
+        "decode_dcp_size": 4,
+        "decode_pcp_size": 1,
         "decode_ep": 4,
         "decode_dp_attention": "false",
         "decode_num_workers": 3,
@@ -204,13 +219,84 @@ def test_multinode_agentic_identity_fields_match() -> None:
         True,
         4,
         2,
+        2,
+        2,
+        2,
         True,
         2,
         8,
+        2,
+        4,
+        1,
         4,
         False,
         3,
         64,
+    )
+
+    for identity in (benchmark_key, agentic_key, eval_key):
+        legacy_row = dict(row)
+        for field in (
+            "prefill_pp",
+            "prefill_dcp_size",
+            "prefill_pcp_size",
+            "decode_pp",
+            "decode_dcp_size",
+            "decode_pcp_size",
+        ):
+            legacy_row.pop(field)
+        default_row = {
+            **row,
+            "prefill_pp": 1,
+            "prefill_dcp_size": 1,
+            "prefill_pcp_size": 1,
+            "decode_pp": 1,
+            "decode_dcp_size": 1,
+            "decode_pcp_size": 1,
+        }
+        assert identity(legacy_row) == identity(default_row)
+        for field in (
+            "prefill_pp",
+            "prefill_dcp_size",
+            "prefill_pcp_size",
+            "decode_pp",
+            "decode_dcp_size",
+            "decode_pcp_size",
+        ):
+            assert identity({**default_row, field: 2}) != identity(default_row)
+
+
+def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
+    row = {
+        **agentic_result(),
+        "kv_offloading": "dram",
+        "kv_offload_backend": {
+            "name": "native",
+            "options": {"layers": ["cpu", "gpu"]},
+        },
+    }
+    row.pop("offloading")
+
+    identity = agentic_key(row)
+
+    assert isinstance(hash(identity), int)
+    assert identity == agentic_key(
+        {
+            **row,
+            "kv_offload_backend": {
+                "options": {"layers": ["cpu", "gpu"]},
+                "name": "native",
+            },
+        }
+    )
+    assert identity != agentic_key(
+        {
+            **row,
+            "kv_offload_backend": {
+                "name": "native",
+                "options": {"layers": ["cpu"]},
+            },
+        }
     )
 
 
@@ -461,6 +547,25 @@ def test_agentic_validation_rejects_duplicate_point_identity(
     result_path.write_text(
         json.dumps([agentic_result(), agentic_result()])
     )
+
+    errors = validate_agentic_artifacts(tmp_path)
+
+    assert "agentic point artifacts contain 1 duplicate row(s)" in errors
+
+
+def test_agentic_validation_handles_mapping_kv_offload_backend(
+    tmp_path: Path,
+) -> None:
+    row = {
+        **agentic_result(),
+        "kv_offloading": "dram",
+        "kv_offload_backend": {"name": "native"},
+    }
+    row.pop("offloading")
+    point_dir = tmp_path / "bmk_agentic_native_offload"
+    point_dir.mkdir()
+    (point_dir / "result.json").write_text(json.dumps([row, row]))
+    (tmp_path / "agentic_native_offload").mkdir()
 
     errors = validate_agentic_artifacts(tmp_path)
 

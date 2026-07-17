@@ -4,8 +4,8 @@ argument-hint: <failed-run-or-job-url | pr-number> [source-run-id]
 ---
 
 Recover the official database ingest for a failed or skipped InferenceX
-push-to-main `Run Sweep` workflow by creating a recovery PR that reuses validated
-artifacts from an earlier PR sweep. Do not add a one-off recovery workflow.
+push-to-main `Run Sweep` workflow by creating a recovery PR that reuses artifacts
+from an earlier PR sweep. Do not add a one-off recovery workflow.
 
 Inputs from `$ARGUMENTS`:
 
@@ -29,9 +29,8 @@ Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
   `.github/workflows/run-sweep.yml` on `main` whose official ingest did not
   complete.
 - Reuse only a completed `pull_request` run of `run-sweep.yml`. Unpinned reuse
-  requires success. A specifically pinned failed run is allowed only when
-  artifact validation proves its available result set is internally consistent;
-  only completed points are recovered.
+  requires success. A specifically pinned failed run is allowed; normal
+  ingestion skips failed benchmark rows, so only completed points are recovered.
 - The source run must belong to the original PR being recovered.
 - Stop if that PR changed the recovered configuration's execution semantics
   after the source SHA: image, model, recipe, runner, launcher, benchmark
@@ -111,10 +110,10 @@ TARGET_RUN_ID=<matching-run-id>
 Require event `push`, workflow path `.github/workflows/run-sweep.yml`, and branch
 `main`; confirm the target is no longer running before recovering. The
 disqualifying state is broader than `failure`/`skipped`: when `/reuse-sweep-run`
-was forgotten before merge, `reuse-ingest-artifacts` is skipped, the GPU jobs run
-(often `cancelled` to save cost), and because `collect-results`/`collect-evals`
-are not skipped, `trigger-ingest` still fires `always()` and lands a *bogus*
-ingest under the target's own `run_id`. So a target showing
+was forgotten before merge, setup leaves reuse disabled, the GPU jobs run (often
+`cancelled` to save cost), and because `collect-results`/`collect-evals` are not
+skipped, `trigger-ingest` still fires `always()` and lands a *bogus* ingest under
+the target's own `run_id`. So a target showing
 `trigger-ingest=success` (and concluding `success` or `cancelled`) can still hold
 no valid benchmark data — recovery is required. That bogus row is keyed on the
 target `run_id` and is superseded by the recovery ingest under a new `run_id`;
@@ -132,7 +131,7 @@ git diff "$ORIGINAL_BASE_SHA" "$ORIGINAL_MERGE_SHA" -- \
   perf-changelog.yaml
 ```
 
-## 2. Select and validate the source run
+## 2. Select the source run
 
 Find candidates from the original PR branch when no run ID was supplied:
 
@@ -238,7 +237,7 @@ Keep exactly one of `full-sweep-enabled`,
 `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or
 `full-sweep-fail-fast-no-canary`.
 
-## 5. Append the recovery changelog and validate source artifacts
+## 5. Append and validate the recovery changelog
 
 Append recovery entries to the end of `perf-changelog.yaml`. Preserve the
 original entries' `config-keys`, `description`, `evals-only`, and
@@ -280,61 +279,6 @@ python3 utils/process_changelog.py \
 
 Confirm the generated config contains only the intended recovery scope. Its row
 counts may differ from the source run.
-
-Download only the result artifacts needed for local validation. This avoids the
-large server-log artifacts retained in the official ingest bundle. Raw per-config
-`bmk_<model>_*` artifacts are intentionally not selected — they fall through the
-`case` below; the aggregate `results_bmk` is what the validator reads:
-
-```bash
-rm -rf /tmp/source-artifacts
-ARTIFACT_ARGS=()
-while IFS= read -r name; do
-  case "$name" in
-    results_bmk|eval_results_all|run-stats|bmk_agentic_*|agentic_*)
-      ARTIFACT_ARGS+=(-n "$name")
-      ;;
-    eval_server_logs_*|eval_gpu_metrics_*)
-      ;;
-    eval_*)
-      ARTIFACT_ARGS+=(-n "$name")
-      ;;
-  esac
-done < <(
-  gh api \
-    "repos/SemiAnalysisAI/InferenceX/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100" \
-    --paginate --jq '.artifacts[] | select(.expired == false) | .name' |
-    sort -u
-)
-
-((${#ARTIFACT_ARGS[@]})) || {
-  echo "No unexpired result artifacts found" >&2
-  exit 1
-}
-gh run download "$SOURCE_RUN_ID" \
-  --repo SemiAnalysisAI/InferenceX \
-  -D /tmp/source-artifacts \
-  "${ARTIFACT_ARGS[@]}"
-```
-
-Validate the source artifacts:
-
-```bash
-python3 utils/validate_reusable_sweep_artifacts.py \
-  --artifacts-dir /tmp/source-artifacts
-```
-
-The validator first collapses reran (flaky) eval duplicates in place — keeping
-the latest result per eval identity when a retried eval left duplicate raw dirs
-/ aggregate rows — so a legitimate rerun does not fail validation. It only
-collapses identities with a clear latest result; genuinely ambiguous duplicates
-are still rejected.
-
-The validator does not compare source coverage with
-`/tmp/recovery-full-config.json`. It rejects duplicate fixed rows, missing run
-stats, inconsistent agentic artifacts, malformed eval metadata, raw/aggregate
-eval mismatches, or an empty result set. For a pinned failed batched eval run,
-only `completed_eval_concs` are recovered.
 
 ## 6. Attach the source SHA without changing the tree
 
@@ -449,15 +393,15 @@ The push-to-main `Run Sweep` must:
 - run `setup` even if the merge message contains `[skip-sweep]`;
 - resolve the recovery PR and pinned source run;
 - set `reuse-enabled=true`;
-- pass `reuse-ingest-artifacts` consistency validation;
 - upload recovery changelog metadata;
-- run `trigger-ingest`.
+- dispatch `source-run-id` and `merge-run-id` from `trigger-ingest`.
 
 Then locate the resulting `repository_dispatch` run in
 `SemiAnalysisAI/InferenceX-app`. In the forgotten-`/reuse` case the target's
 bogus ingest is also a recent successful `ingest-results` run, so do not pick by
-recency — pick the run whose `Download artifacts from InferenceX run` step logs
-`RUN_ID: <RECOVERY_RUN_ID>`:
+recency — pick the run whose `Prepare artifacts from InferenceX` step logs both
+the expected source run and recovery merge run. That app workflow must download
+the source artifacts, substitute the merge changelog, and complete ingestion:
 
 ```bash
 gh run list --repo SemiAnalysisAI/InferenceX-app \
@@ -467,19 +411,22 @@ gh run list --repo SemiAnalysisAI/InferenceX-app \
 
 INGEST_RUN_ID=<candidate-run-id>
 gh run view "$INGEST_RUN_ID" --repo SemiAnalysisAI/InferenceX-app --log \
-  | grep -m1 "RUN_ID: $RECOVERY_RUN_ID"   # must match before you trust this run
+  | grep -m1 "Source run: $SOURCE_RUN_ID" # must match before you trust this run
+
+gh run view "$INGEST_RUN_ID" --repo SemiAnalysisAI/InferenceX-app --log \
+  | grep -m1 "Merge run:  $RECOVERY_RUN_ID" # must also match
 
 gh run watch "$INGEST_RUN_ID" \
   --repo SemiAnalysisAI/InferenceX-app --exit-status
 ```
 
-The ingest's first step is a `sleep 300` "wait for source run to finish", so the
-run idles ~5 minutes before doing work — that is normal, not a hang.
+Reused ingests skip the normal five-minute wait because the source run is already
+complete.
 
 Verify its logs identify `RECOVERY_RUN_ID` as the trigger and `SOURCE_RUN_ID`
 plus `SOURCE_RUN_ATTEMPT` as the reused source. Require successful artifact
-download, flattening, database ingest, run overrides, database verification,
-cache invalidation, and unmapped-entity checks.
+download, database ingest, run overrides, database verification, cache
+invalidation, and unmapped-entity checks.
 
 Post a final recovery PR comment with the original failed or skipped run/job,
 source run/attempt/SHA, recovery merge run, downstream ingest run, recovered

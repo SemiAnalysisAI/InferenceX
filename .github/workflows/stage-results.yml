@@ -1,0 +1,280 @@
+name: Stage PR Results
+
+run-name: Stage results for PR #${{ github.event.issue.number }}
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: stage-results-pr-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Authorize and dispatch staging
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/stage-results')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: write # Post staging status as github-actions rather than a PAT user
+    steps:
+      - name: Authorize request and resolve source run
+        id: request
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const body = context.payload.comment.body.trim();
+            const command = /^\/stage-results(?:\s+(?<runId>\d+))?$/u.exec(body);
+            if (!command) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: 'Usage: `/stage-results` or `/stage-results <run-id>`.',
+              });
+              core.setFailed('Unsupported /stage-results syntax');
+              return;
+            }
+
+            const actor = context.payload.comment.user.login;
+            const permissionResponse = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: actor,
+            });
+            const permission = permissionResponse.data.permission;
+            if (!['admin', 'maintain', 'write'].includes(permission)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `@${actor} \`/stage-results\` requires write access to this repository.`,
+              });
+              core.setFailed(`Actor ${actor} has ${permission} permission`);
+              return;
+            }
+
+            const pull = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+
+            const fullSweepLabels = [
+              'full-sweep-enabled',
+              'non-canary-full-sweep-enabled',
+              'full-sweep-fail-fast',
+              'full-sweep-fail-fast-no-canary',
+            ];
+            const pullLabels = new Set(
+              pull.data.labels
+                .map((label) => (typeof label === 'string' ? label : label.name))
+                .filter(Boolean),
+            );
+            const hasFullSweepLabel = fullSweepLabels.some((label) => pullLabels.has(label));
+            if (!hasFullSweepLabel) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `@${actor} \`/stage-results\` requires a completed run from a PR using one of: ${fullSweepLabels.map((label) => `\`${label}\``).join(', ')}.`,
+              });
+              core.setFailed('PR does not have a full-sweep label');
+              return;
+            }
+
+            const timelineEvents = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              },
+            );
+            const fullSweepLabelEvents = timelineEvents
+              .filter(
+                (event) =>
+                  ['labeled', 'unlabeled'].includes(event.event) &&
+                  fullSweepLabels.includes(event.label?.name),
+              )
+              .toSorted(
+                (left, right) =>
+                  Date.parse(left.created_at ?? '') - Date.parse(right.created_at ?? ''),
+              );
+            const fullSweepLabelsAt = (createdAt) => {
+              const candidateCreatedAt = Date.parse(createdAt);
+              if (!Number.isFinite(candidateCreatedAt)) return [];
+
+              const activeLabels = new Set();
+              for (const event of fullSweepLabelEvents) {
+                const eventCreatedAt = Date.parse(event.created_at ?? '');
+                if (!Number.isFinite(eventCreatedAt)) continue;
+                if (eventCreatedAt > candidateCreatedAt) break;
+                if (event.event === 'labeled') activeLabels.add(event.label.name);
+                else activeLabels.delete(event.label.name);
+              }
+              return [...activeLabels];
+            };
+
+            const pullCommits = await github.paginate(github.rest.pulls.listCommits, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            const pullCommitShas = new Set(pullCommits.map((commit) => commit.sha));
+
+            const usableArtifactNames = async (runId) => {
+              const artifacts = await github.paginate(
+                github.rest.actions.listWorkflowRunArtifacts,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: runId,
+                  per_page: 100,
+                },
+              );
+              return artifacts
+                .filter((artifact) => !artifact.expired)
+                .map((artifact) => artifact.name);
+            };
+            const hasBenchmarkData = (names) => names.some(
+              (name) =>
+                name === 'results_bmk' ||
+                name === 'eval_results_all' ||
+                name.startsWith('bmk_agentic_'),
+            );
+            const validateRun = async (candidate) => {
+              if (
+                candidate.path !== '.github/workflows/run-sweep.yml' ||
+                candidate.event !== 'pull_request'
+              ) {
+                return { valid: false, reason: 'not a pull-request run of run-sweep.yml' };
+              }
+              if (!pullCommitShas.has(candidate.head_sha)) {
+                return { valid: false, reason: 'its head commit is not in the PR commit list' };
+              }
+              if (fullSweepLabelsAt(candidate.created_at).length === 0) {
+                return {
+                  valid: false,
+                  reason: 'it was not created while a full-sweep label was applied',
+                };
+              }
+              if (candidate.status !== 'completed' || candidate.conclusion !== 'success') {
+                return {
+                  valid: false,
+                  reason: `it is ${candidate.status}/${candidate.conclusion}`,
+                };
+              }
+
+              const artifactNames = await usableArtifactNames(candidate.id);
+              if (!artifactNames.includes('changelog-metadata')) {
+                return { valid: false, reason: 'it has no unexpired changelog-metadata artifact' };
+              }
+              if (!hasBenchmarkData(artifactNames)) {
+                return { valid: false, reason: 'it has no unexpired benchmark result artifacts' };
+              }
+              return { valid: true };
+            };
+
+            let run;
+            const requestedRunId = command.groups?.runId;
+            if (requestedRunId) {
+              const response = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: Number(requestedRunId),
+              });
+              run = response.data;
+              const validation = await validateRun(run);
+              if (!validation.valid) {
+                core.setFailed(`Run ${requestedRunId} cannot be staged because ${validation.reason}`);
+                return;
+              }
+            } else {
+              const candidates = await github.paginate(
+                github.rest.actions.listWorkflowRuns,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  workflow_id: 'run-sweep.yml',
+                  event: 'pull_request',
+                  branch: pull.data.head.ref,
+                  status: 'completed',
+                  per_page: 100,
+                },
+              );
+              for (const candidate of candidates) {
+                const validation = await validateRun(candidate);
+                if (validation.valid) {
+                  run = candidate;
+                  break;
+                }
+              }
+              if (!run) {
+                core.setFailed(
+                  `No successful completed run-sweep.yml run with unexpired staging artifacts was found for PR #${context.issue.number}`,
+                );
+                return;
+              }
+            }
+
+            core.setOutput('run-id', String(run.id));
+            core.setOutput('run-attempt', String(run.run_attempt ?? 1));
+            core.setOutput('run-date', run.created_at.slice(0, 10));
+            core.setOutput('requested-by', actor);
+            core.setOutput('run-url', run.html_url);
+
+      - name: Acknowledge staging request
+        id: acknowledge
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ steps.request.outputs.run-id }}
+          RUN_URL: ${{ steps.request.outputs.run-url }}
+          REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const body = `@${process.env.REQUESTED_BY} staging [run ${process.env.RUN_ID}](${process.env.RUN_URL}). The shared staging slot is serialized; a completion link will be posted here.`;
+            const comment = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            core.setOutput('comment-id', String(comment.data.id));
+
+      - name: Dispatch InferenceX-app staging workflow
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RUN_ID: ${{ steps.request.outputs.run-id }}
+          RUN_ATTEMPT: ${{ steps.request.outputs.run-attempt }}
+          RUN_DATE: ${{ steps.request.outputs.run-date }}
+          REQUESTED_BY: ${{ steps.request.outputs.requested-by }}
+          COMMENT_ID: ${{ steps.acknowledge.outputs.comment-id }}
+        with:
+          github-token: ${{ secrets.INFX_FRONTEND_PAT }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: 'SemiAnalysisAI',
+              repo: 'InferenceX-app',
+              event_type: 'stage-results',
+              client_payload: {
+                'source-repository': `${context.repo.owner}/${context.repo.repo}`,
+                'pr-number': String(context.issue.number),
+                'run-id': process.env.RUN_ID,
+                'run-attempt': process.env.RUN_ATTEMPT,
+                'run-date': process.env.RUN_DATE,
+                'requested-by': process.env.REQUESTED_BY,
+                'comment-id': process.env.COMMENT_ID,
+              },
+            });

@@ -1,0 +1,134 @@
+[
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1,
+      "n": 7168,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 7168,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 4096,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 1024,
+      "n": 1536,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 4096,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16384,
+      "n": 8192,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 7168,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32768,
+      "n": 2048,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 4096,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "gemmperf"
+  }
+]
