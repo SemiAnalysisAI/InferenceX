@@ -341,6 +341,26 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
             source /workspace/benchmarks/benchmark_lib.sh
 
+            # Derive the eval context from the benchmark shape, mirroring the
+            # single-node recipe (which sets MAX_MODEL_LEN=$EVAL_MAX_MODEL_LEN).
+            # Without this, EVAL_MAX_MODEL_LEN is unset here and run_lm_eval
+            # falls back to 16384, asking lm-eval for max_tokens=12288 while the
+            # engine was launched with --max-model-len 9472 from models_vllm.yaml
+            # — every request 400s on context length and the eval fails.
+            export MODEL="${MODEL_PATH}"
+            export ISL="${BENCH_INPUT_LEN}"
+            export OSL="${BENCH_OUTPUT_LEN}"
+            setup_eval_context
+
+            # The engine's context window is fixed at launch by models_vllm.yaml,
+            # so never ask lm-eval for more than what is actually served.
+            SERVED_MAX_LEN=$(echo "$DECODE_SERVER_CONFIG" | grep -oE -- '--max-model-len[[:space:]]+[0-9]+' | awk '{print $2}' | head -1)
+            if [[ -n "$SERVED_MAX_LEN" && "${EVAL_MAX_MODEL_LEN:-0}" -gt "$SERVED_MAX_LEN" ]]; then
+                echo "[EVAL] Clamping EVAL_MAX_MODEL_LEN ${EVAL_MAX_MODEL_LEN} -> ${SERVED_MAX_LEN} (engine --max-model-len)"
+                export EVAL_MAX_MODEL_LEN="$SERVED_MAX_LEN"
+            fi
+            echo "[EVAL] EVAL_MAX_MODEL_LEN=${EVAL_MAX_MODEL_LEN} (ISL=${ISL} OSL=${OSL}, served=${SERVED_MAX_LEN:-unknown})"
+
             if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
