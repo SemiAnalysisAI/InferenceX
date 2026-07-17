@@ -24,6 +24,15 @@ doc_to_text: |
   Express your final answer as the corresponding option 'A', 'B', 'C', or 'D'.
 doc_to_target: answer
 
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+    - "<|eot_id|>"
+  do_sample: false
+  temperature: 0.0
+  max_gen_toks: 32768
+
 filter_list:
   - name: extract_abcd
     filter:
