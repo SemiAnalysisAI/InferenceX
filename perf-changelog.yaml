@@ -4985,3 +4985,4 @@
     - "MAX_RUNNING_REQUESTS = 2*CONC, CUDA_GRAPH_MAX_BS = CONC (cap 128)"
     - "MEM_FRACTION_STATIC reduced by 0.10 when spec decoding active"
     - "Sweep TP8 conc [4,8] non-DPA + conc [16,32,48,52] DPA"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2254
