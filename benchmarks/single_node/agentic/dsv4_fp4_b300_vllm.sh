@@ -13,9 +13,9 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# GPU-resident arms (TP4 and DEP8 in the parent config) use
-# KV_OFFLOADING=none. DRAM offload arms (TP and DEP) use KV_OFFLOADING=dram
-# with KV_OFFLOAD_BACKEND=vllm-simple, mooncake, or lmcache.
+# GPU-resident arms (TP4 and DEP8) use KV_OFFLOADING=none. DRAM offload
+# arms (TP and DEP) use KV_OFFLOADING=dram with
+# KV_OFFLOAD_BACKEND=vllm-simple, mooncake, or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 

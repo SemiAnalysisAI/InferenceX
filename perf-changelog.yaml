@@ -4929,14 +4929,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2094
 
 - config-keys:
-    - dsv4-fp4-b300-vllm-agentic-lmcache
     - dsv4-fp4-b300-vllm-agentic
   scenario-type:
     - agentic-coding
   description:
-    - "Add LMCache 0.5.1 DRAM KV-offload arms on the official B300 AgentX recipe from PR #2241 (sparse DSV4 FlashInfer attention, AMXF4 mega-MoE, FULL_DECODE_ONLY CUDA graphs, DEP8 large prefill budget + long-prefill chunking) with image vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
-    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153/#2231; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; PYTORCH_ALLOC_CONF=expandable_segments:True dropped on the lmcache arms only (VMM allocations cannot be CUDA-IPC-exported to the LMCache server, same failure mode as cuMem on B200); gpu-memory-utilization 0.92 on lmcache DEP8 (matches the official DEP8 derate) and 0.94 on lmcache TP/DEP4 (at 0.96 the PR #2232 bring-up sweep hit torch-pool, DeepGEMM-JIT, and cuBLAS-workspace OOMs; all 23 lmcache points green after the derate)"
-    - "Standalone dsv4-fp4-b300-vllm-agentic-lmcache points (validated in the PR #2232 bring-up sweeps): TP8 and TP4 conc [8, 12, 16]; TP4-DEP4 conc [8, 16, 24, 32, 40, 48, 56, 64, 72]; TP8-DEP8 conc [32, 64, 96, 128, 160, 192, 224, 228]"
-    - "Parent dsv4-fp4-b300-vllm-agentic gains lmcache arms interleaving the SimpleCPU ladders at a +4 conc offset (TP4 conc [32, 36, 40, 44]; DEP4 conc [36, 44, 52, 60, 68, 76]), so the lmcache backend is tracked in the main B300 AgentX sweep on distinct points"
+    - "Add LMCache 0.5.1 DRAM KV-offload arms to the official B300 AgentX config from PR #2241 (sparse DSV4 FlashInfer attention, AMXF4 mega-MoE, FULL_DECODE_ONLY CUDA graphs, image vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec), so LMCache is benchmarked in the same sweep as the SimpleCPU and GPU-resident arms"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153/#2231; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; PYTORCH_ALLOC_CONF=expandable_segments:True dropped on the lmcache arms only (VMM allocations cannot be CUDA-IPC-exported to the LMCache server, same failure mode as cuMem on B200); gpu-memory-utilization 0.92 on lmcache DEP8 (matches the official DEP8 derate) and 0.94 on lmcache TP4/DEP4 (at 0.96 the PR #2232 bring-up sweeps hit torch-pool, DeepGEMM-JIT, and cuBLAS-workspace OOMs; 23 lmcache points validated green in runs 29463061871/29535333851 after the derate)"
+    - "LMCache ladders interleave the official arms at a +4 conc offset: TP4 [32, 36, 40, 44] vs SimpleCPU [28, 32, 36, 40]; DEP4 [36, 44, 52, 60, 68, 76] vs SimpleCPU [32, 40, 48, 56, 64, 72]; DEP8 [68, 100, 116, 132, 148, 164, 180, 196, 228] vs GPU-resident [64, 96, 112, 128, 144, 160, 176, 192, 224]"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2232
 
