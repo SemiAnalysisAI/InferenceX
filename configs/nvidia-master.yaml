@@ -3126,7 +3126,7 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  image: vllm/vllm-openai:v0.24.0
+  image: vllm/vllm-openai:v0.25.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b200
@@ -3144,10 +3144,6 @@ kimik2.5-int4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
-
 kimik2.5-int4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
@@ -3164,7 +3160,7 @@ kimik2.5-int4-b200-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 64, 96, 128] }
 
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.24.0
+  image: vllm/vllm-openai:v0.25.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
