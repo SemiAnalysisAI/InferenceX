@@ -4918,3 +4918,10 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B300: GPU-resident TP4/TP8 at conc [1,2,4,6,8,12,16,20,24,28,32] and DEP8 at conc [32,64,96,128,160,192,196,224,228] (max-num-batched-tokens 16384, long-prefill-token-threshold 4096, gpu-memory-utilization 0.92); TP4 SimpleCPU lazy-offload at conc [28,32,36,40]; DEP4 at conc [8,16,24,32,40,48,56,64,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2241
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+  description:
+    - "Add an MTP speculative-decoding twin for every B200 AgentX topology (DeepSeek-V4 built-in MTP): --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}, routed via spec-decoding=mtp to dsv4_fp4_b200_vllm_mtp.sh -- TP8 GPU-resident, TP8 SimpleCPU, DEP8 SimpleCPU, DEP8 Mooncake, each mirroring its non-MTP conc-list."
+    - "MTP capture sizes are in TOKENS: --max-cudagraph-capture-size scaled to MAX_NUM_SEQS*(1+num_speculative_tokens) (= MAX_NUM_SEQS*4) so FULL_DECODE_ONLY covers the largest decode batches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2259
