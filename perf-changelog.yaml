@@ -4974,3 +4974,14 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add DSv4 FP4 MI355X SGLang agentic MTP recipe (separate from hicache config)"
+    - "Image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260714"
+    - "EAGLE speculative decoding: 3 steps, topk 1, 4 draft tokens"
+    - "DPA: --enable-prefill-delayer, GPU_MAX_HW_QUEUES=5, chunked prefill 8192*TP"
+    - "MAX_RUNNING_REQUESTS = 2*CONC, CUDA_GRAPH_MAX_BS = CONC (cap 128)"
+    - "MEM_FRACTION_STATIC reduced by 0.10 when spec decoding active"
+    - "Sweep TP8 conc [4,8] non-DPA + conc [16,32,48,52] DPA"
