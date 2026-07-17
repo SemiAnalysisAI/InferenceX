@@ -165,6 +165,7 @@
       "scale_up_transport": "xgmi",
       "launcher": "mi-tw",
       "backends": {"mori": [8]},
+      "ll_backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
     },
     "mi300x-tw": {
@@ -177,6 +178,7 @@
       "scale_up_transport": "xgmi",
       "launcher": "mi-tw",
       "backends": {"mori": [8]},
+      "ll_backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
     },
     "mi355x": {
