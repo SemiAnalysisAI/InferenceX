@@ -53,7 +53,7 @@ backend:
       global_segment_size: "150GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
-      device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+      device_name: ""
       mode: "embedded"
       enable_offload: false
   aggregated_environment:
@@ -84,9 +84,9 @@ backend:
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     NCCL_P2P_LEVEL: NVL
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-    MC_STORE_CLIENT_METRIC: "1"
-    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
-    MC_TE_METRIC: "0"
+    # MC_STORE_CLIENT_METRIC: "1"
+    # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    # MC_TE_METRIC: "0"
 
   vllm_config:
     aggregated:
@@ -131,9 +131,6 @@ benchmark:
     # One aggregate worker owns all eight GPUs. Use the aggregate accounting
     # path instead of summing independent prefill and decode allocations.
     IS_MULTINODE: "false"
-    TP: "8"
-    EP_SIZE: "1"
-    DP_ATTENTION: "false"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"

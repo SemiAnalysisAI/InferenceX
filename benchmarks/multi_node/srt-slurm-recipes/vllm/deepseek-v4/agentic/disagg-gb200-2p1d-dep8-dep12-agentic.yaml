@@ -59,7 +59,7 @@ backend:
       global_segment_size: "150GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
-      device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+      device_name: ""
       mode: "embedded"
       enable_offload: false
   prefill_environment:
@@ -87,9 +87,9 @@ backend:
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-    MC_STORE_CLIENT_METRIC: "1"
-    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
-    MC_TE_METRIC: "0"
+    # MC_STORE_CLIENT_METRIC: "1"
+    # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    # MC_TE_METRIC: "0"
   decode_environment:
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -112,9 +112,9 @@ backend:
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
-    MC_STORE_CLIENT_METRIC: "1"
-    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
-    MC_TE_METRIC: "0"
+    # MC_STORE_CLIENT_METRIC: "1"
+    # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    # MC_TE_METRIC: "0"
 
   vllm_config:
     prefill:
