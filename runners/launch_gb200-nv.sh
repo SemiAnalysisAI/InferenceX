@@ -293,23 +293,19 @@ fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # DSV4 AgentX DEP recipes require NVIDIA/srt-slurm#90's per-node DP launch
-    # mode so each process owns the four local DP ranks in one CUDA namespace.
-    # The pinned commit also provides everything else these recipes need:
-    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
-    #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
-    #   - DynamoConfig.wheel (recipes pin the ai-dynamo wheel)
-    #   - mooncake_kv_store for the external AgentX prefix-cache service
-    #   - srtctl apply --no-preflight (model path /mnt/numa1 is compute-node
-    #     local NVMe, invisible to the login-node runner)
-    #   - benchmark_stage srun_options propagation (container-remap-root
-    #     must reach the agentic_srt.sh srun)
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    git checkout 975e1e60d1442f42384b439b80dbaa686498b4f3
-    mkdir -p recipes/vllm/deepseek-v4/agentic
+    # v1.0.27 is the last release with the compatible mooncake_master command;
+    # v1.0.28 introduced the unsupported --nof_* flag.
+    # The pinned release also provides the vLLM mooncake_kv_store
+    SRT_SLURM_AGENTIC_SHA="f6eb42aee4664207dcf2ec601e3bd57bd527efd6"
+    git clone --branch v1.0.27 --depth 1 https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    if [[ "$(git rev-parse HEAD)" != "$SRT_SLURM_AGENTIC_SHA" ]]; then
+        echo "Error: NVIDIA/srt-slurm v1.0.27 did not resolve to $SRT_SLURM_AGENTIC_SHA" >&2
+        exit 1
+    fi
+    mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-        recipes/vllm/deepseek-v4/agentic
+        recipes/vllm/deepseek-v4/agentic || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
