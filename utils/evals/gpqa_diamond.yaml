@@ -1,8 +1,11 @@
 # Custom GPQA Diamond prompt with deterministic answer-option shuffling.
-# The dataset and task variant follow lm-evaluation-harness GPQA.
-dataset_path: Idavidrein/gpqa
+# The public mirror preserves the official schema without requiring each CI
+# token to accept the gated dataset terms; pin its immutable dataset revision.
+dataset_path: Wanfq/gpqa
 dataset_name: gpqa_diamond
-task: gpqa_diamond_cot_n_shot 
+dataset_kwargs:
+  revision: 03ff68d77f7a4103ae2bf72fb099d358f6308b65
+task: gpqa_diamond_cot_n_shot
 output_type: generate_until
 training_split: train
 validation_split: train
