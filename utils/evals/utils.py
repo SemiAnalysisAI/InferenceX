@@ -1,9 +1,28 @@
 import random
+import re
 import datasets
 
 LETTERS = "ABCD"
 
-def process_docs(dataset: datasets.Dataset, n_repeats: int = 2, seed: int = 3407) -> datasets.Dataset:
+_AIME_BOXED_RE = re.compile(r"\\boxed\s*\{\s*(\d{1,3})\s*\}")
+_AIME_INTEGER_RE = re.compile(r"(?<![\d.])(\d{1,3})(?!\d)(?!\.\d)")
+
+
+def process_aime_results(doc: dict, results: list[str]) -> dict[str, int]:
+    response = results[0]
+    boxed = _AIME_BOXED_RE.findall(response)
+    candidates = boxed or _AIME_INTEGER_RE.findall(response)
+    if not candidates:
+        return {"exact_match": 0}
+
+    prediction = int(candidates[-1])
+    target = int(doc["answer"])
+    return {"exact_match": int(prediction == target)}
+
+
+def process_docs(
+    dataset: datasets.Dataset, n_repeats: int = 2, seed: int = 3407
+) -> datasets.Dataset:
     rng = random.Random(seed)
     docs = list(dataset)
 

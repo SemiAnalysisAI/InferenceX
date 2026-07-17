@@ -332,13 +332,13 @@ def test_include_path_injected_when_eval_include_path_set():
     )
 
 
-def test_include_path_absent_when_eval_include_path_unset():
+def test_default_graded_eval_suite_is_registered():
     out = _run_lm_eval_with_include_path()
-    assert "--include_path" not in out, (
-        f"Expected no '--include_path' in output:\n{out}"
+    assert "--include_path utils/evals" in out, (
+        f"Expected repo-local eval tasks to be registered:\n{out}"
     )
-    assert "--tasks utils/evals/gsm8k.yaml" in out, (
-        f"Expected '--tasks utils/evals/gsm8k.yaml' in output:\n{out}"
+    assert "--tasks gsm8k gpqa_diamond_cot_n_shot aime26" in out, (
+        f"Expected all graded eval tasks in the default suite:\n{out}"
     )
 
 

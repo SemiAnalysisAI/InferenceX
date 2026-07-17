@@ -795,17 +795,17 @@ setup_eval_context() {
 
 run_lm_eval() {
     local port="${PORT:-8888}"
-    local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
+    local tasks_dir="${EVAL_TASKS_DIR:-gsm8k,gpqa_diamond_cot_n_shot,aime26}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
-    # SWE-bench adds a repo-local task YAML, so pass its task directory via
-    # --include_path. Full-dataset runs remain the default; --limit is passed
-    # only when EVAL_LIMIT explicitly requests a smaller smoke-test slice.
+    # Repo-local task YAMLs are discovered through --include_path. Full-dataset
+    # runs remain the default; --limit is passed only when EVAL_LIMIT explicitly
+    # requests a smaller smoke-test slice.
     local eval_limit="${EVAL_LIMIT:-}"
-    local include_path="${EVAL_INCLUDE_PATH:-}"
+    local include_path="${EVAL_INCLUDE_PATH:-utils/evals}"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -839,6 +839,14 @@ run_lm_eval() {
         echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"
         tasks_dir="$_repo_root/$tasks_dir"
     fi
+    if [[ "$include_path" != /* \
+          && ! -d "$include_path" && -d "$_repo_root/$include_path" ]]; then
+        echo "run_lm_eval: anchoring relative include path '$include_path' to repo root -> $_repo_root/$include_path"
+        include_path="$_repo_root/$include_path"
+    fi
+
+    local eval_tasks=()
+    IFS=',' read -r -a eval_tasks <<< "$tasks_dir"
 
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
@@ -864,7 +872,7 @@ run_lm_eval() {
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
       ${include_path:+--include_path "$include_path"} \
-      --tasks "${tasks_dir}" \
+      --tasks "${eval_tasks[@]}" \
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \

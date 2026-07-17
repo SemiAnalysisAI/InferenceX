@@ -1,7 +1,7 @@
 # Evals
 
-Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
-concurrency, kernels, and other throughput optimizations. They run separately
+Graded QA jobs (`gsm8k`, `gpqa_diamond_cot_n_shot`, and `aime26`) catch
+accuracy regressions from parallelism, concurrency, kernels, and other throughput optimizations. They run separately
 from throughput; selection lives in `mark_eval_entries()` in
 `utils/matrix_logic/generate_sweep_configs.py`.
 
@@ -149,7 +149,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
-| `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
+| `EVAL_TASKS_DIR` | `gsm8k,gpqa_diamond_cot_n_shot,aime26` | Comma-separated lm-eval task names, or one task YAML path |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
@@ -161,7 +161,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 ### Adding a new eval task
 
 1. Create a task YAML in `utils/evals/` following the lm-eval task format.
-2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
+2. Add its task name to `EVAL_TASKS_DIR`, or set `EVAL_TASKS_DIR` to its YAML path for an isolated run.
 3. Update `utils/collect_eval_results.py` if new metrics need extraction.
 
 ### Runtime patches (`utils/evals/patches/`)
@@ -221,4 +221,5 @@ append_lm_eval_summary
 The following files are task definitions from lm-eval; more information on changes lives within the files:
 - `utils/evals/gsm8k.yaml`
 - `utils/evals/gpqa_diamond.yaml`
+- `utils/evals/aime26.yaml`
 - `utils/evals/swebench_lite.yaml` (generation only; scored by `swebench_score.py`)
