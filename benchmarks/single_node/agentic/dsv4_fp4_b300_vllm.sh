@@ -3,8 +3,8 @@ set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B300 using vLLM.
-# v4pro-b300.yaml TP4 and DEP4 recipe. SimpleCPUOffload / MooncakeStore /
-# LMCache
+# v4pro-b300.yaml TP4, DEP4, and DEP8 recipe. SimpleCPUOffload /
+# MooncakeStore / LMCache
 #
 # Image is configured in nvidia-master.yaml. The recipe uses FP8 KV cache,
 # sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer cache, mega-MoE,
@@ -13,9 +13,9 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=none is used by the GPU-resident TP arms. DRAM offload arms
-# (DEP, and pure-TP on the lmcache config) use KV_OFFLOADING=dram with
-# KV_OFFLOAD_BACKEND=vllm-simple, mooncake, or lmcache.
+# GPU-resident arms (TP4 and DEP8 in the parent config) use
+# KV_OFFLOADING=none. DRAM offload arms (TP and DEP) use KV_OFFLOADING=dram
+# with KV_OFFLOAD_BACKEND=vllm-simple, mooncake, or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -33,6 +33,14 @@ export GPU_COUNT
 if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
     echo "Error: DEP requires 2*CONC divisible by TP, got CONC='$CONC' and TP='$TP'" >&2
     exit 1
+fi
+
+# DEP8 (TP8 + DP-attention) is a high-concurrency arm that is tuned
+# separately from the smaller DEP4 arm (larger prefill token budget,
+# long-prefill chunking, and a lower GPU-memory-utilization headroom).
+IS_DEP8=false
+if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
+    IS_DEP8=true
 fi
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
@@ -95,8 +103,6 @@ LMCACHE_SERVER_PID=""
 # On cluster:b300-nv, dram-utilization=0.80 and DEP4 resolve to roughly the
 # source recipe's 280 GiB per DP rank. TP4 remains GPU-resident.
 OFFLOAD_ARGS=()
-# Recipe default; the lmcache arm derates it (see the lmcache case below).
-GPU_MEM_UTIL=0.96
 case "$KV_OFFLOAD_BACKEND" in
     "")
         require_agentic_kv_offload_none
@@ -106,13 +112,20 @@ case "$KV_OFFLOAD_BACKEND" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
         # Identical prefixes must hash to identical block keys across DP ranks.
         export PYTHONHASHSEED=42
+        # The plain-TP (non-DP-attention) offload ladder uses lazy offload;
+        # DEP keeps eager offload for cross-rank block-hash stability.
+        SIMPLE_LAZY_OFFLOAD=false
+        if [ "$DP_ATTENTION" != "true" ]; then
+            SIMPLE_LAZY_OFFLOAD=true
+        fi
         OFFLOAD_CONFIG=$(cat <<EOF
 {
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
     "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
-    "enable_cross_layers_blocks": "true"
+    "enable_cross_layers_blocks": "true",
+    "lazy_offload": ${SIMPLE_LAZY_OFFLOAD}
   }
 }
 EOF
@@ -212,23 +225,6 @@ EOF
         # Per-engine scheduler stats every 5s, to diagnose per-DP-rank KV
         # cache imbalance under the session-sticky router.
         export VLLM_LOG_STATS_INTERVAL=5
-        # The LMCache MP server keeps a GPU worker (~0.8 GiB CUDA context +
-        # staging buffers) on every GPU, and this arm cannot run expandable
-        # segments (the KV cache must be legacy-CUDA-IPC-exportable), so the
-        # recipe's 0.96 leaves <1 GiB free after vLLM sizes its pool. In the
-        # PR #2232 bring-up sweep every DEP8 point OOMed deterministically
-        # growing the torch pool for a 1 GiB DeepGEMM workspace, so DEP8
-        # gets the B200 lmcache arm's proven 0.92. DEP4 was only marginal
-        # (7/9 passed; the failures were a DeepGEMM JIT module load hitting
-        # driver CUDA_ERROR_OUT_OF_MEMORY at startup and a cuBLAS workspace
-        # failure mid-run), so DEP4 and the pure-TP arms take a lighter 0.94
-        # to keep more GPU KV capacity. KV overflows to the DRAM pool by
-        # design, so the derate costs little.
-        if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
-            GPU_MEM_UTIL=0.92
-        else
-            GPU_MEM_UTIL=0.94
-        fi
 
         echo "Starting LMCache MP server on port $LMCACHE_PORT..."
         # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
@@ -314,10 +310,17 @@ if [ "$EP_SIZE" -gt 1 ]; then
     )
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
-    MODE_ARGS+=(
-        --prefill-schedule-interval 8
-        --max-num-batched-tokens 8192
-    )
+    MODE_ARGS+=(--prefill-schedule-interval 8)
+    if [ "$IS_DEP8" = "true" ]; then
+        # DEP8 gets a larger prefill token budget and chunks long prefills
+        # so decode latency stays bounded at high concurrency.
+        MODE_ARGS+=(
+            --max-num-batched-tokens 16384
+            --long-prefill-token-threshold 4096
+        )
+    else
+        MODE_ARGS+=(--max-num-batched-tokens 8192)
+    fi
 fi
 
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -340,6 +343,22 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+
+# DEP8 leaves more headroom for its larger prefill token budget.
+GPU_MEM_UTIL=0.96
+if [ "$IS_DEP8" = "true" ]; then
+    GPU_MEM_UTIL=0.92
+fi
+# The lmcache arm needs extra headroom on the other topologies too: the
+# LMCache MP server keeps a GPU worker (~0.8 GiB CUDA context + staging
+# buffers) on every GPU and the arm cannot run expandable segments (the KV
+# cache must stay legacy-CUDA-IPC-exportable), so at 0.96 the PR #2232
+# bring-up sweep hit DeepGEMM workspace/JIT-loader OOMs. 0.94 was validated
+# for lmcache TP and DEP4 in the same sweep; lmcache DEP8 keeps the 0.92
+# above (also validated).
+if [ "$KV_OFFLOAD_BACKEND" = "lmcache" ] && [ "$IS_DEP8" != "true" ]; then
+    GPU_MEM_UTIL=0.94
+fi
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -391,7 +410,9 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
