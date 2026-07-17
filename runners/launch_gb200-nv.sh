@@ -303,6 +303,23 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
         echo "Error: NVIDIA/srt-slurm v1.0.27 did not resolve to $SRT_SLURM_AGENTIC_SHA" >&2
         exit 1
     fi
+
+    # ai-dynamo/dynamo#11303.
+    DYNAMO_SCHEMA="src/srtctl/core/schema.py"
+    DYNAMO_UPSTREAM_HASH_CLONE='        f"git clone https://github.com/ai-dynamo/dynamo.git && "'
+    DYNAMO_FORK_HASH_CLONE='        f"git clone https://github.com/esmeetu/dynamo.git && "'
+    if [[ "$(grep -Fxc "$DYNAMO_UPSTREAM_HASH_CLONE" "$DYNAMO_SCHEMA")" != "1" ]]; then
+        echo "Error: Could not uniquely locate srt-slurm's hash-pinned Dynamo clone command" >&2
+        exit 1
+    fi
+    sed -i \
+        's#f"git clone https://github\.com/ai-dynamo/dynamo\.git && "#f"git clone https://github.com/esmeetu/dynamo.git \&\& "#' \
+        "$DYNAMO_SCHEMA" || exit 1
+    if [[ "$(grep -Fxc "$DYNAMO_FORK_HASH_CLONE" "$DYNAMO_SCHEMA")" != "1" ]]; then
+        echo "Error: Failed to redirect the hash-pinned Dynamo clone to esmeetu/dynamo" >&2
+        exit 1
+    fi
+
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic || exit 1
