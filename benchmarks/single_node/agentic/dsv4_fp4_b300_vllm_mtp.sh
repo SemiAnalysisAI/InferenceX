@@ -3,11 +3,11 @@ set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B300 using vLLM,
-# with MTP speculative decoding (num_speculative_tokens=2).
+# with MTP speculative decoding (num_speculative_tokens=3).
 #
 # Identical to dsv4_fp4_b300_vllm.sh (same image, engine args, offload, GPU
 # topologies, and agentic aiperf rig) with exactly two MTP deltas:
-#   --speculative-config '{"method": "mtp", "num_speculative_tokens": 2}'
+#   --speculative-config '{"method": "mtp", "num_speculative_tokens": 3}'
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
 # Image is configured in nvidia-master.yaml. The recipe uses FP8 KV cache,
@@ -247,7 +247,7 @@ fi
 # multiples of (1+N) and dedups (adjust_cudagraph_sizes_for_spec_decode), so a
 # plain 1..MAX_NUM_SEQS list would collapse to coverage of only
 # MAX_NUM_SEQS/(1+N) seqs and drop the largest decode batches to eager.
-NUM_SPEC_TOKENS=2
+NUM_SPEC_TOKENS=3
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 CUDA_GRAPH_CAPTURE_SIZES=""
 for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
@@ -320,7 +320,9 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
