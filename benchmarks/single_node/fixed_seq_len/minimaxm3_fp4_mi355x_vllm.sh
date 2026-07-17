@@ -35,6 +35,8 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+export AMDGCN_USE_BUFFER_OPS=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -60,6 +62,8 @@ vllm serve "$MODEL" --port "$PORT" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
+    --max-num-batched-tokens 65536 \
+    --kv-cache-dtype fp8 \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
     --moe-backend aiter \
