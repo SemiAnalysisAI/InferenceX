@@ -238,13 +238,19 @@ class DeepEPV2Backend(EPBackend):
         """The padded per-expert receive as BF16 `[num_local_experts, cap*num_ranks, hidden]`.
 
         BF16 dispatch already returns that tensor; FP8 dispatch returns an (e4m3fn, per-128-
-        block FP32 scale) tuple, dequantized here with the pinned cast-back (matches the
-        upstream test's `recv_x[0].view(-1, hidden)` / `recv_x[1].view(-1, hidden//128)`).
+        block FP32 scale) tuple, dequantized here with the pinned cast-back. The low-latency
+        fp8 scales come back column-major in their last two dims (TMA compatibility), i.e.
+        non-contiguous, so they are made contiguous before the per-block view — a plain
+        `.view()` raises "view size is not compatible with ... stride" on the transposed
+        layout (the fp8 tensor itself is row-major contiguous, so only the scales need it).
+        Mirrors the upstream low-latency test, which calls `.contiguous()` on the scales
+        before dequant.
         """
         if not self._fp8:
             return recv_x
         fp8, scales = recv_x
         num_experts, num_slots, hidden = fp8.shape
+        scales = scales.contiguous()
         bf16 = self._cast_back(fp8.view(-1, hidden), scales.view(-1, hidden // 128))
         return bf16.view(num_experts, num_slots, hidden)
 
