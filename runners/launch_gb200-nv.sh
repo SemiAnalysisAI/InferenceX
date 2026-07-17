@@ -293,18 +293,20 @@ fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses the same pinned cquil11/srt-slurm-nv commit as
-    # launch_gb300-nv.sh — everything the agentic recipes need is there:
+    # DSV4 AgentX DEP recipes require NVIDIA/srt-slurm#90's per-node DP launch
+    # mode so each process owns the four local DP ranks in one CUDA namespace.
+    # The pinned commit also provides everything else these recipes need:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
     #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
     #   - DynamoConfig.wheel (recipes pin the ai-dynamo wheel)
+    #   - mooncake_kv_store for the external AgentX prefix-cache service
     #   - srtctl apply --no-preflight (model path /mnt/numa1 is compute-node
     #     local NVMe, invisible to the login-node runner)
     #   - benchmark_stage srun_options propagation (container-remap-root
     #     must reach the agentic_srt.sh srun)
-    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
+    git checkout 975e1e60d1442f42384b439b80dbaa686498b4f3
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
