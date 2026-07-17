@@ -135,7 +135,8 @@ benchmark:
     TP: "8"
     EP_SIZE: "1"
     DP_ATTENTION: "false"
-    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    # Off: aiperf emits nvext.session_control, rejected by current dynamo (see benchmark_lib.sh).
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
