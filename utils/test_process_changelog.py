@@ -73,7 +73,7 @@ def test_all_evals_skips_benchmarks_and_uses_all_evals_generator_flag(
     assert "--all-evals" in commands[0]
     assert "--evals-only" in commands[0]
     assert "--no-evals" not in commands[0]
-    assert _scenario_values(commands[0]) == ["fixed-seq-len"]
+    assert _scenario_values(commands[0]) == ["fixed-seq-len", "agentic-coding"]
 
     output = json.loads(capsys.readouterr().out)
     assert output["changelog_metadata"]["entries"][0]["all-evals"] is True
@@ -121,7 +121,7 @@ def test_regular_changelog_entry_keeps_benchmark_and_subset_eval_commands(
     assert "--no-evals" in commands[0]
     assert "--evals-only" in commands[1]
     assert "--all-evals" not in commands[1]
-    assert _scenario_values(commands[1]) == ["fixed-seq-len"]
+    assert _scenario_values(commands[1]) == ["fixed-seq-len", "agentic-coding"]
     json.loads(capsys.readouterr().out)
 
 
@@ -169,7 +169,7 @@ def test_cli_all_evals_expands_evals_and_preserves_benchmarks(
     assert "--all-evals" not in commands[0]
     assert "--all-evals" in commands[1]
     assert "--evals-only" in commands[1]
-    assert _scenario_values(commands[1]) == ["fixed-seq-len"]
+    assert _scenario_values(commands[1]) == ["fixed-seq-len", "agentic-coding"]
     json.loads(capsys.readouterr().out)
 
 
@@ -263,7 +263,7 @@ def test_cli_evals_only_suppresses_benchmarks_and_keeps_default_subset(
     assert "--evals-only" in commands[0]
     assert "--all-evals" not in commands[0]
     assert "--no-evals" not in commands[0]
-    assert _scenario_values(commands[0]) == ["fixed-seq-len"]
+    assert _scenario_values(commands[0]) == ["fixed-seq-len", "agentic-coding"]
     json.loads(capsys.readouterr().out)
 
 
@@ -314,7 +314,7 @@ def test_cli_eval_modifiers_compose_as_all_evals_without_benchmarks(
     json.loads(capsys.readouterr().out)
 
 
-def test_cli_evals_only_is_noop_for_agentic_only_entry(
+def test_cli_evals_only_generates_agentic_eval(
     monkeypatch,
     capsys,
 ):
@@ -355,11 +355,14 @@ def test_cli_evals_only_is_noop_for_agentic_only_entry(
 
     process_changelog.main()
 
-    assert commands == []
+    assert len(commands) == 1
+    assert "--evals-only" in commands[0]
+    assert "--no-evals" not in commands[0]
+    assert _scenario_values(commands[0]) == ["agentic-coding"]
     json.loads(capsys.readouterr().out)
 
 
-def test_cli_all_evals_is_noop_for_agentic_only_entry(
+def test_cli_all_evals_generates_agentic_eval(
     monkeypatch,
     capsys,
 ):
@@ -400,10 +403,12 @@ def test_cli_all_evals_is_noop_for_agentic_only_entry(
 
     process_changelog.main()
 
-    assert len(commands) == 1
+    assert len(commands) == 2
     assert "--no-evals" in commands[0]
-    assert "--all-evals" not in commands[0]
     assert _scenario_values(commands[0]) == ["agentic-coding"]
+    assert "--evals-only" in commands[1]
+    assert "--all-evals" in commands[1]
+    assert _scenario_values(commands[1]) == ["agentic-coding"]
     json.loads(capsys.readouterr().out)
 
 
@@ -507,13 +512,15 @@ def test_disjoint_scenario_entries_for_same_config_are_not_deduplicated(
 
     process_changelog.main()
 
-    assert len(commands) == 3
+    assert len(commands) == 4
     assert "--no-evals" in commands[0]
     assert _scenario_values(commands[0]) == ["fixed-seq-len"]
     assert "--evals-only" in commands[1]
     assert _scenario_values(commands[1]) == ["fixed-seq-len"]
     assert "--no-evals" in commands[2]
     assert _scenario_values(commands[2]) == ["agentic-coding"]
+    assert "--evals-only" in commands[3]
+    assert _scenario_values(commands[3]) == ["agentic-coding"]
     json.loads(capsys.readouterr().out)
 
 
@@ -566,9 +573,13 @@ def test_agentic_only_all_evals_does_not_suppress_later_fixed_evals(
 
     process_changelog.main()
 
-    assert len(commands) == 2
-    assert "--no-evals" in commands[0]
-    assert "--evals-only" in commands[1]
-    assert "--all-evals" not in commands[1]
+    assert len(commands) == 3
+    assert "--evals-only" in commands[0]
+    assert "--all-evals" in commands[0]
+    assert _scenario_values(commands[0]) == ["agentic-coding"]
+    assert "--no-evals" in commands[1]
     assert _scenario_values(commands[1]) == ["fixed-seq-len"]
+    assert "--evals-only" in commands[2]
+    assert "--all-evals" not in commands[2]
+    assert _scenario_values(commands[2]) == ["fixed-seq-len"]
     json.loads(capsys.readouterr().out)
