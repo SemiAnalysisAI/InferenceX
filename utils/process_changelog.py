@@ -150,7 +150,7 @@ def main():
     # Track benchmark coverage per scenario so overlapping changelog entries
     # with disjoint scenario filters do not suppress each other.
     benchmark_scenarios_seen = defaultdict(set)
-    eval_configs_seen = set()
+    eval_scenarios_seen = defaultdict(set)
 
     master_config = load_config_files(MASTER_CONFIGS)
     resolved_entries = []
@@ -214,14 +214,20 @@ def main():
                     raise
                 all_benchmark_results.extend(json.loads(result.stdout))
 
-        # Evals only apply to fixed-sequence scenarios. Do not mark a config as
-        # seen when an agentic-only entry generates no eval matrix.
-        if "fixed-seq-len" not in entry_scenarios:
-            continue
+        eval_groups = defaultdict(list)
+        for config in all_configs:
+            unseen_scenarios = tuple(
+                scenario for scenario in SCENARIO_TYPES
+                if (
+                    scenario in entry_scenarios
+                    and scenario not in eval_scenarios_seen[config]
+                )
+            )
+            if unseen_scenarios:
+                eval_scenarios_seen[config].update(unseen_scenarios)
+                eval_groups[unseen_scenarios].append(config)
 
-        eval_configs = [c for c in all_configs if c not in eval_configs_seen]
-        if eval_configs:
-            eval_configs_seen.update(eval_configs)
+        for scenarios, eval_configs in eval_groups.items():
             eval_flags = ["--evals-only"]
             if expand_all_evals:
                 eval_flags.append("--all-evals")
@@ -235,7 +241,7 @@ def main():
                 *MASTER_CONFIGS,
                 *eval_flags,
                 "--scenario-type",
-                "fixed-seq-len",
+                *scenarios,
             ]
             try:
                 eval_result = subprocess.run(
