@@ -4920,8 +4920,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2241
 
 - config-keys:
-    - dsv4-fp4-b200-vllm-agentic
+    - dsv4-fp4-b200-vllm-agentic-mtp
   description:
-    - "Add an MTP speculative-decoding twin for every B200 AgentX topology (DeepSeek-V4 built-in MTP): --speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}, routed via spec-decoding=mtp to dsv4_fp4_b200_vllm_mtp.sh -- TP8 GPU-resident, TP8 SimpleCPU, DEP8 SimpleCPU, DEP8 Mooncake, each mirroring its non-MTP conc-list."
+    - "Add MTP speculative-decoding for the B200 vLLM AgentX recipe as a separate config-key, so the existing dsv4-fp4-b200-vllm-agentic aggregate is not re-run."
+    - "dsv4-fp4-b200-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms -- TP8 GPU-resident, TP8 SimpleCPU, DEP8 SimpleCPU, DEP8 Mooncake, each mirroring its non-MTP conc-list; routed via spec-decoding=mtp to dsv4_fp4_b200_vllm_mtp.sh."
     - "MTP capture sizes are in TOKENS: --max-cudagraph-capture-size scaled to MAX_NUM_SEQS*(1+num_speculative_tokens) (= MAX_NUM_SEQS*4) so FULL_DECODE_ONLY covers the largest decode batches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2259
