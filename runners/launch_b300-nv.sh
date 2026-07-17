@@ -94,7 +94,9 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECIS
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    if [[ $PRECISION == "fp8" ]]; then
+        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    fi
     # NVIDIA/srt-slurm#38
     git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
     if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then

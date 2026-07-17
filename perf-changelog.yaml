@@ -4922,5 +4922,5 @@
 - config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm-mtp
   description:
-    - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes with the six measured-Pareto topologies and only Pareto-optimal concurrencies."
+    - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
