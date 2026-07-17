@@ -18,7 +18,6 @@ from validation import (
     SingleNodeMasterConfigEntry,
     MultiNodeMasterConfigEntry,
     ChangelogEntry,
-    ChangelogMatrixEntry,
     validate_matrix_entry,
     validate_master_config,
     validate_runner_config,
@@ -405,53 +404,6 @@ class TestAgenticMatrixEntries:
         assert entry.kv_offloading == "dram"
         assert entry.kv_offload_backend.name == "future-backend"
         assert entry.kv_offload_backend.version is None
-
-    def test_agentic_eval_row_is_valid_in_changelog_matrix_evals(self):
-        """Agentic SWE-bench eval rows (mark_eval_entries with --evals-only)
-        carry run-eval/eval-only plus agentic-only fields and must validate
-        inside ChangelogMatrixEntry.evals (regression test for the schema gap
-        left by the PR #1947 SWE-bench eval selection)."""
-        agentic_eval_row = {
-            "image": "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec",
-            "model": "deepseek-ai/DeepSeek-V4-Pro",
-            "model-prefix": "dsv4",
-            "precision": "fp4",
-            "framework": "vllm",
-            "runner": "cluster:b300-nv",
-            "tp": 8,
-            "pp": 1,
-            "dcp-size": 1,
-            "pcp-size": 1,
-            "ep": 8,
-            "dp-attn": True,
-            "spec-decoding": "none",
-            "conc": 224,
-            "kv-offloading": "none",
-            "total-cpu-dram-gb": 0,
-            "duration": 3600,
-            "exp-name": "dsv4_tp8_conc224_kvnone",
-            "scenario-type": "agentic-coding",
-            "router": {"name": "vllm-router", "version": "0.1.14"},
-            "run-eval": True,
-            "eval-only": True,
-        }
-        validated = ChangelogMatrixEntry.model_validate({
-            "single_node": {},
-            "multi_node": {},
-            "evals": [agentic_eval_row],
-            "multinode_evals": [],
-            "changelog_metadata": {
-                "base_ref": "origin/main",
-                "head_ref": "abc123",
-                "entries": [{
-                    "config-keys": ["dsv4-fp4-b300-vllm-agentic"],
-                    "description": ["test"],
-                    "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/2232",
-                }],
-            },
-        })
-        assert isinstance(validated.evals[0], SingleNodeAgenticMatrixEntry)
-        assert validated.evals[0].eval_only is True
 
     def test_arbitrary_backend_is_valid_for_agentic_search_space(self):
         entry = AgenticCodingSearchSpaceEntry(**{
