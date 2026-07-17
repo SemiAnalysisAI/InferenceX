@@ -64,12 +64,18 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   [--runner-type b200|h100|h200|gb200|...]
 ```
 
-The canonical **production full sweep** is `curated-full-sweep` — it runs EXACTLY
-kimi single-node on `vllm` plus DeepSeek (dsr1/dsv4) multi-node on `dynamo-vllm`
-(vLLM), `dynamo-sglang` (SGLang), and `llmd-vllm` (llm-d), excluding `dynamo-trt`
-and every `qwen3.5-*` config. Prefer it over hand-rolled `full-sweep` filters for
-full sweeps (a bare `full-sweep --config-files configs/nvidia-master.yaml` sweeps
-everything, including qwen and TensorRT). Only trimming filters are overridable:
+The canonical **production full sweep** is `curated-full-sweep` — it matches the
+ClusterMAX dashboard charts (the source of truth) and runs EXACTLY the union of
+three passes: (1) `kimik2.5` single-node on `vllm`, (2) `dsr1` single-node on
+`sglang` (no dsr1 single-node vllm config exists; `trt` is not a chart engine),
+and (3) `dsv4` multi-node on `dynamo-vllm` and `llmd-vllm` (the chart's dsv4
+multi-node is vLLM-only; `llmd-vllm` emits vllm-prefixed metrics). It excludes
+`dynamo-sglang`, `dynamo-trt`/`trt`, and every `qwen3.5-*` config. `gptoss120b`
+is a chart scenario but has NO active master config (only `configs/deprecated/`),
+so it cannot be swept from `nvidia-master.yaml` and is intentionally left out.
+Prefer this over hand-rolled `full-sweep` filters for full sweeps (a bare
+`full-sweep --config-files configs/nvidia-master.yaml` sweeps everything,
+including qwen and TensorRT). Only trimming filters are overridable:
 
 ```bash
 python utils/matrix_logic/generate_sweep_configs.py curated-full-sweep \

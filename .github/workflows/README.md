@@ -13,9 +13,11 @@ positional arguments:
     full-sweep          Generate full sweep configurations with optional
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
-    curated-full-sweep  Generate the canonical production full sweep (kimi
-                        single-node vLLM + DeepSeek multi-node vLLM/SGLang/llm-d,
-                        excluding TensorRT and all qwen3.5 configs).
+    curated-full-sweep  Generate the canonical production full sweep matching
+                        the ClusterMAX dashboard charts (kimik2.5 single-node
+                        vLLM + dsr1 single-node SGLang + dsv4 multi-node
+                        dynamo-vllm/llmd-vllm), excluding TensorRT, dynamo-sglang
+                        and all qwen3.5 configs.
     test-config         Generate full sweep for specific config keys.
                         Supports wildcard patterns (* and ?) for matching
                         multiple keys at once.
@@ -95,14 +97,13 @@ full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.y
 
 ## `curated-full-sweep` Command
 
-`curated-full-sweep` is the **canonical production full sweep**. It exists because a full sweep must run EXACTLY one target set, and the `full-sweep` filters combine with AND within a single invocation — so "kimi single-node **and** DeepSeek multi-node" cannot be expressed in one `full-sweep` call, and the bare `full-sweep --config-files configs/nvidia-master.yaml` default sweeps *everything* (including qwen3.5 and TensorRT). `curated-full-sweep` composes the two required passes internally and emits exactly:
+`curated-full-sweep` is the **canonical production full sweep**. It exists because a full sweep must run EXACTLY the model×engine×node-type combinations that the ClusterMAX dashboard charts render — the charts are the source of truth — and the `full-sweep` filters combine with AND within a single invocation, so these three chart scenarios cannot be expressed in one `full-sweep` call (and the bare `full-sweep --config-files configs/nvidia-master.yaml` default sweeps *everything*, including qwen3.5 and TensorRT). `curated-full-sweep` composes the union of exactly three passes internally:
 
-- **Kimi single-node** (`model-prefix kimik2.5`) on framework `vllm`.
-- **DeepSeek multi-node** (`model-prefix dsr1` / `dsv4`) on the three requested engines, mapped to the concrete framework values in `configs/nvidia-master.yaml`:
-  - vLLM → `dynamo-vllm`
-  - SGLang → `dynamo-sglang`
-  - llm-d → `llmd-vllm`
-- **Excluded:** TensorRT (`dynamo-trt` / `trt`) and **every** `qwen3.5-*` config.
+- **kimik2.5 single-node** (`--single-node --model-prefix kimik2.5 --framework vllm`).
+- **dsr1 single-node** (`--single-node --model-prefix dsr1 --framework sglang`) — only SGLang single-node dsr1 configs exist; there is no dsr1 single-node vLLM config, and TensorRT is not a chart engine.
+- **dsv4 multi-node** (`--multi-node --model-prefix dsv4 --framework dynamo-vllm llmd-vllm`) — the chart's dsv4 multi-node is vLLM-only; `llmd-vllm` emits vllm-prefixed metrics so it renders as vLLM. `dynamo-sglang` and `dynamo-trt` are excluded.
+- **Excluded:** TensorRT (`dynamo-trt` / `trt`), `dynamo-sglang`, and **every** `qwen3.5-*` config.
+- **gptoss120b:** the chart keeps gptoss120b, but there is **no active master config** for it (only `configs/deprecated/`), so the harness cannot sweep it from the current `nvidia-master.yaml`. It is intentionally left out of the generated set; the chart is fed from other/legacy data, which is out of scope for the harness.
 
 Model prefix, framework, and node-type are fixed by the curated target set and are not overridable. Only trimming filters are exposed (`--precision`, `--runner-type`, `--seq-lens`, `--step-size`, `--min-conc`, `--max-conc`, `--max-tp`, `--max-ep`) so a smoke run can shrink the sweep without ever widening the target set. Eval flags (`--no-evals`, `--evals-only`, `--all-evals`) behave as in `full-sweep`.
 
