@@ -1,3 +1,4 @@
+import copy
 import fnmatch
 import json
 import argparse
@@ -776,6 +777,72 @@ def generate_full_sweep(args, all_config_data, runner_data):
     return matrix_values
 
 
+# Curated "full sweep" target set. A production full sweep must run EXACTLY:
+#   - Kimi single-node on vLLM (framework `vllm`)
+#   - DeepSeek (dsr1/dsv4) multi-node on vLLM/SGLang/llm-d, mapped to the
+#     concrete framework values that exist in configs/nvidia-master.yaml:
+#     dynamo-vllm (vLLM), dynamo-sglang (SGLang), llmd-vllm (llm-d).
+# TensorRT (`dynamo-trt`/`trt`) and every `qwen3.5-*` config are excluded.
+# The generator's --model-prefix/--framework/--single-node/--multi-node filters
+# combine with AND within a single invocation, so kimi-single-node and
+# deepseek-multi-node cannot be expressed at once; the curated sweep composes
+# two passes here so the harness has a single entrypoint.
+CURATED_SINGLE_NODE_PASS = {
+    "model-prefix": ["kimik2.5"],
+    "framework": ["vllm"],
+}
+CURATED_MULTI_NODE_PASS = {
+    "model-prefix": ["dsr1", "dsv4"],
+    "framework": ["dynamo-vllm", "dynamo-sglang", "llmd-vllm"],
+}
+
+
+def _curated_pass_args(base_args, *, model_prefix, framework, single_node, multi_node):
+    """Clone base args, pinning the dimensions the curated sweep fixes."""
+    passed = copy.copy(base_args)
+    passed.model_prefix = model_prefix
+    passed.framework = framework
+    passed.single_node = single_node
+    passed.multi_node = multi_node
+    return passed
+
+
+def generate_curated_full_sweep(args, all_config_data, runner_data):
+    """Generate the canonical production full sweep.
+
+    Composes two `generate_full_sweep` passes so the result is EXACTLY the
+    curated target set (see CURATED_SINGLE_NODE_PASS / CURATED_MULTI_NODE_PASS):
+    kimi single-node on vLLM plus DeepSeek multi-node on vLLM/SGLang/llm-d, with
+    TensorRT and all qwen3.5 configs excluded. Optional filters on `args`
+    (--seq-lens, --min-conc/--max-conc, --step-size, --runner-type, etc.) apply
+    to both passes, so trimming for a smoke run stays possible without widening
+    the target set.
+    """
+    single_node = generate_full_sweep(
+        _curated_pass_args(
+            args,
+            model_prefix=CURATED_SINGLE_NODE_PASS["model-prefix"],
+            framework=CURATED_SINGLE_NODE_PASS["framework"],
+            single_node=True,
+            multi_node=False,
+        ),
+        all_config_data,
+        runner_data,
+    )
+    multi_node = generate_full_sweep(
+        _curated_pass_args(
+            args,
+            model_prefix=CURATED_MULTI_NODE_PASS["model-prefix"],
+            framework=CURATED_MULTI_NODE_PASS["framework"],
+            single_node=False,
+            multi_node=True,
+        ),
+        all_config_data,
+        runner_data,
+    )
+    return single_node + multi_node
+
+
 def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter: str | None) -> list[str]:
     if not runner_node_filter:
         return [runner]
@@ -1256,6 +1323,73 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: curated-full-sweep
+    curated_parser = subparsers.add_parser(
+        'curated-full-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help=(
+            'Generate the canonical production full sweep: kimi single-node on '
+            'vLLM plus DeepSeek multi-node on vLLM/SGLang/llm-d, excluding '
+            'TensorRT and all qwen3.5 configs. Model/framework/node-type are '
+            'fixed by the curated target set; only trimming filters are exposed.'
+        )
+    )
+    curated_parser.add_argument(
+        '--precision',
+        nargs='+',
+        required=False,
+        help='Precision(s) to filter by (e.g., fp4, fp8) (optional, can specify multiple)'
+    )
+    curated_parser.add_argument(
+        '--runner-type',
+        nargs='+',
+        required=False,
+        help='Runner type(s) to filter by (e.g., h200, gb200) (optional, can specify multiple)'
+    )
+    curated_parser.add_argument(
+        '--seq-lens',
+        nargs='+',
+        choices=list(seq_len_stoi.keys()),
+        required=False,
+        help=f"Sequence length configurations to include: {', '.join(seq_len_stoi.keys())}. If not specified, all sequence lengths are included."
+    )
+    curated_parser.add_argument(
+        '--step-size',
+        type=int,
+        default=2,
+        help='Step size for concurrency values (default: 2)'
+    )
+    curated_parser.add_argument(
+        '--min-conc',
+        type=int,
+        required=False,
+        help='Minimum concurrency value to include (filters out lower concurrency values)'
+    )
+    curated_parser.add_argument(
+        '--max-conc',
+        type=int,
+        required=False,
+        help='Maximum concurrency value to include (filters out higher concurrency values)'
+    )
+    curated_parser.add_argument(
+        '--max-tp',
+        type=int,
+        required=False,
+        help='Maximum tensor parallelism value to include (single-node only)'
+    )
+    curated_parser.add_argument(
+        '--max-ep',
+        type=int,
+        required=False,
+        help='Maximum expert parallelism value to include (single-node only)'
+    )
+    curated_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     # Subcommand: test-config
     test_config_keys_parser = subparsers.add_parser(
         'test-config',
@@ -1291,10 +1425,10 @@ def main():
 
     args = parser.parse_args()
     apply_node_type_defaults(args)
-    if args.command == 'full-sweep' and args.step_size <= 1:
+    if args.command in ('full-sweep', 'curated-full-sweep') and args.step_size <= 1:
         parser.error("--step-size must be greater than 1")
     if (
-        args.command == 'full-sweep'
+        args.command in ('full-sweep', 'curated-full-sweep')
         and args.min_conc is not None
         and args.max_conc is not None
         and args.min_conc > args.max_conc
@@ -1310,6 +1444,8 @@ def main():
     # Route to appropriate function based on subcommand
     if args.command == 'full-sweep':
         matrix_values = generate_full_sweep(args, all_config_data, runner_data)
+    elif args.command == 'curated-full-sweep':
+        matrix_values = generate_curated_full_sweep(args, all_config_data, runner_data)
     elif args.command == 'test-config':
         matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
     else:

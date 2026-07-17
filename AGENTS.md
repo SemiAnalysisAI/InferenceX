@@ -64,6 +64,19 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   [--runner-type b200|h100|h200|gb200|...]
 ```
 
+The canonical **production full sweep** is `curated-full-sweep` — it runs EXACTLY
+kimi single-node on `vllm` plus DeepSeek (dsr1/dsv4) multi-node on `dynamo-vllm`
+(vLLM), `dynamo-sglang` (SGLang), and `llmd-vllm` (llm-d), excluding `dynamo-trt`
+and every `qwen3.5-*` config. Prefer it over hand-rolled `full-sweep` filters for
+full sweeps (a bare `full-sweep --config-files configs/nvidia-master.yaml` sweeps
+everything, including qwen and TensorRT). Only trimming filters are overridable:
+
+```bash
+python utils/matrix_logic/generate_sweep_configs.py curated-full-sweep \
+  --config-files configs/nvidia-master.yaml \
+  [--seq-lens 1k1k|8k1k] [--max-conc N] [--precision fp4|fp8] [--runner-type ...]
+```
+
 Process results: `python utils/process_result.py`.
 
 ## Supported Configuration Values

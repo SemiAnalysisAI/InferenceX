@@ -3,16 +3,19 @@
 In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
+usage: generate_sweep_configs.py [-h] {full-sweep,curated-full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
 positional arguments:
-  {full-sweep,test-config}
+  {full-sweep,curated-full-sweep,test-config}
                         Available commands
     full-sweep          Generate full sweep configurations with optional
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
+    curated-full-sweep  Generate the canonical production full sweep (kimi
+                        single-node vLLM + DeepSeek multi-node vLLM/SGLang/llm-d,
+                        excluding TensorRT and all qwen3.5 configs).
     test-config         Generate full sweep for specific config keys.
                         Supports wildcard patterns (* and ?) for matching
                         multiple keys at once.
@@ -88,6 +91,44 @@ full-sweep --multi-node --config-files configs/nvidia-master.yaml
 **Test agentic configurations:**
 ```
 full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.yaml configs/amd-master.yaml
+```
+
+## `curated-full-sweep` Command
+
+`curated-full-sweep` is the **canonical production full sweep**. It exists because a full sweep must run EXACTLY one target set, and the `full-sweep` filters combine with AND within a single invocation — so "kimi single-node **and** DeepSeek multi-node" cannot be expressed in one `full-sweep` call, and the bare `full-sweep --config-files configs/nvidia-master.yaml` default sweeps *everything* (including qwen3.5 and TensorRT). `curated-full-sweep` composes the two required passes internally and emits exactly:
+
+- **Kimi single-node** (`model-prefix kimik2.5`) on framework `vllm`.
+- **DeepSeek multi-node** (`model-prefix dsr1` / `dsv4`) on the three requested engines, mapped to the concrete framework values in `configs/nvidia-master.yaml`:
+  - vLLM → `dynamo-vllm`
+  - SGLang → `dynamo-sglang`
+  - llm-d → `llmd-vllm`
+- **Excluded:** TensorRT (`dynamo-trt` / `trt`) and **every** `qwen3.5-*` config.
+
+Model prefix, framework, and node-type are fixed by the curated target set and are not overridable. Only trimming filters are exposed (`--precision`, `--runner-type`, `--seq-lens`, `--step-size`, `--min-conc`, `--max-conc`, `--max-tp`, `--max-ep`) so a smoke run can shrink the sweep without ever widening the target set. Eval flags (`--no-evals`, `--evals-only`, `--all-evals`) behave as in `full-sweep`.
+
+```
+usage: generate_sweep_configs.py curated-full-sweep
+    --config-files CONFIG_FILES [CONFIG_FILES ...]
+    [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
+    [--precision PRECISION [PRECISION ...]]
+    [--runner-type RUNNER_TYPE [RUNNER_TYPE ...]]
+    [--seq-lens {1k1k,8k1k} [{1k1k,8k1k} ...]]
+    [--step-size STEP_SIZE]
+    [--min-conc MIN_CONC] [--max-conc MAX_CONC]
+    [--max-tp MAX_TP] [--max-ep MAX_EP]
+```
+
+### Examples
+
+**Dispatch the canonical production full sweep** (pass verbatim as `inputs[generate-cli-command]` to `e2e-tests.yml`):
+```
+curated-full-sweep --config-files configs/nvidia-master.yaml
+```
+
+**Trim to an 8k1k smoke slice for faster validation:**
+```
+curated-full-sweep --config-files configs/nvidia-master.yaml --seq-lens 8k1k --max-conc 64
 ```
 
 ## `test-config` Command

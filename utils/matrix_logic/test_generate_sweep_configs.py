@@ -2695,3 +2695,138 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
+
+
+# =============================================================================
+# Guard test: curated production full sweep target set
+# =============================================================================
+
+import argparse as _argparse
+from pathlib import Path as _Path
+
+from generate_sweep_configs import (
+    CURATED_SINGLE_NODE_PASS,
+    CURATED_MULTI_NODE_PASS,
+    generate_curated_full_sweep,
+)
+from validation import load_config_files, load_runner_file
+
+_REPO_ROOT = _Path(__file__).resolve().parents[2]
+_NVIDIA_MASTER = _REPO_ROOT / "configs" / "nvidia-master.yaml"
+_RUNNERS = _REPO_ROOT / "configs" / "runners.yaml"
+
+# Independently-encoded expectation (NOT imported from the generator) so the
+# guard cross-checks intent rather than echoing the implementation constants.
+_ALLOWED_MODEL_PREFIXES = {"kimik2.5", "dsr1", "dsv4"}
+_ALLOWED_FRAMEWORKS = {"vllm", "dynamo-vllm", "dynamo-sglang", "llmd-vllm"}
+_FORBIDDEN_FRAMEWORKS = {"dynamo-trt", "trt"}
+
+
+def _curated_base_args():
+    """Args mirroring the `curated-full-sweep` subcommand with no trimming."""
+    args = _argparse.Namespace()
+    args.precision = None
+    args.runner_type = None
+    args.seq_lens = None
+    args.step_size = 2
+    args.min_conc = None
+    args.max_conc = None
+    args.max_tp = None
+    args.max_ep = None
+    args.runner_node_filter = None
+    args.scenario_type = None
+    return args
+
+
+@pytest.fixture(scope="module")
+def curated_entries():
+    all_config_data = load_config_files([str(_NVIDIA_MASTER)])
+    runner_data = load_runner_file(str(_RUNNERS))
+    return generate_curated_full_sweep(
+        _curated_base_args(), all_config_data, runner_data
+    )
+
+
+class TestCuratedFullSweepTargetSet:
+    """Guard the canonical production full sweep against the real master config.
+
+    Runs `curated-full-sweep` over configs/nvidia-master.yaml and asserts the
+    generated set is EXACTLY kimi single-node on vLLM plus DeepSeek multi-node
+    on vLLM/SGLang/llm-d, with TensorRT and all qwen3.5 configs excluded.
+    """
+
+    def test_generates_a_non_empty_sweep(self, curated_entries):
+        assert curated_entries, "curated full sweep unexpectedly empty"
+
+    def test_every_model_prefix_is_in_target_set(self, curated_entries):
+        prefixes = {e["model-prefix"] for e in curated_entries}
+        assert prefixes <= _ALLOWED_MODEL_PREFIXES, (
+            f"unexpected model-prefix(es): {prefixes - _ALLOWED_MODEL_PREFIXES}"
+        )
+
+    def test_no_qwen_entries(self, curated_entries):
+        assert not any(
+            e["model-prefix"] == "qwen3.5" or str(e["model-prefix"]).startswith("qwen")
+            for e in curated_entries
+        ), "qwen configs must be fully excluded from the curated full sweep"
+
+    def test_every_framework_is_in_target_set(self, curated_entries):
+        frameworks = {e["framework"] for e in curated_entries}
+        assert frameworks <= _ALLOWED_FRAMEWORKS, (
+            f"unexpected framework(s): {frameworks - _ALLOWED_FRAMEWORKS}"
+        )
+
+    def test_no_tensorrt_frameworks(self, curated_entries):
+        assert not any(
+            e["framework"] in _FORBIDDEN_FRAMEWORKS for e in curated_entries
+        ), "dynamo-trt/trt must be excluded from the curated full sweep"
+
+    def test_kimi_entries_are_single_node_vllm(self, curated_entries):
+        kimi = [e for e in curated_entries if e["model-prefix"] == "kimik2.5"]
+        assert kimi, "expected kimi single-node entries in the curated sweep"
+        for e in kimi:
+            assert "prefill" not in e, "kimi entries must be single-node"
+            assert e["framework"] == "vllm", "kimi must run on framework vllm"
+
+    def test_deepseek_entries_are_multi_node(self, curated_entries):
+        deepseek = [
+            e for e in curated_entries if e["model-prefix"] in {"dsr1", "dsv4"}
+        ]
+        assert deepseek, "expected DeepSeek multi-node entries in the curated sweep"
+        for e in deepseek:
+            assert "prefill" in e, "DeepSeek entries must be multi-node"
+            assert e["framework"] in {
+                "dynamo-vllm",
+                "dynamo-sglang",
+                "llmd-vllm",
+            }
+
+    def test_all_three_deepseek_engines_are_represented(self, curated_entries):
+        ds_frameworks = {
+            e["framework"]
+            for e in curated_entries
+            if e["model-prefix"] in {"dsr1", "dsv4"}
+        }
+        assert {"dynamo-vllm", "dynamo-sglang", "llmd-vllm"} <= ds_frameworks, (
+            f"missing DeepSeek engine(s): "
+            f"{ {'dynamo-vllm', 'dynamo-sglang', 'llmd-vllm'} - ds_frameworks }"
+        )
+
+    def test_master_config_actually_contains_excluded_configs(self):
+        """Sanity: the exclusions are meaningful because qwen and dynamo-trt
+        configs really exist in the master config the curated sweep filters."""
+        all_config_data = load_config_files([str(_NVIDIA_MASTER)])
+        keys = list(all_config_data.keys())
+        assert any(k.startswith("qwen3.5") for k in keys), "expected qwen3.5 configs to exist"
+        assert any("dynamo-trt" in k for k in keys), "expected dynamo-trt configs to exist"
+
+    def test_curated_constants_match_intent(self):
+        """The generator constants must encode the documented target set."""
+        assert CURATED_SINGLE_NODE_PASS == {
+            "model-prefix": ["kimik2.5"],
+            "framework": ["vllm"],
+        }
+        assert CURATED_MULTI_NODE_PASS == {
+            "model-prefix": ["dsr1", "dsv4"],
+            "framework": ["dynamo-vllm", "dynamo-sglang", "llmd-vllm"],
+        }
