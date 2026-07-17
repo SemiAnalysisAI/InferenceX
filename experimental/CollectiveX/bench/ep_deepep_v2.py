@@ -37,6 +37,30 @@ def _fp8_cast_helpers():
     return per_token_cast_to_fp8, per_token_cast_back
 
 
+@torch.compile(dynamic=False)
+def _ll_dequant_static(fp8, scales):
+    """Static-shape FP32-accumulate dequant of the low-latency FP8 (e4m3fn, per-128-block
+    FP32 scale) receive buffer to BF16.
+
+    deep_ep's ``per_token_cast_back`` is ``@torch.compile(dynamic=True)``, which emits a
+    generic near-eager kernel (~3.2 ms measured on the fixed low-latency recv shape
+    ``[num_local_experts, cap*num_ranks, hidden]`` = (32, 2048, 7168) at EP8). The low-latency
+    padded shape is constant on every dispatch, so a static (``dynamic=False``) compile fuses
+    to one FP32 pass (~0.5 ms, 6.3x, bit-identical to the dynamic kernel on valid slots). The
+    dequant runs in every timed component's warmup and samples (~hundreds of thousands of
+    calls over the profile), so the dynamic kernel's per-call overhead overran the leg's
+    wall-clock budget (all ranks SIGKILLed ~22 min in, no result); the static form brings FP8
+    low-latency inside the budget BF16 already meets. Padding slots decode to NaN in both
+    forms (FP8 padding bytes) — harmless, because combine is handle-indexed and never reads
+    padding. Only the padded low-latency recv uses this; normal-mode and the oracle's
+    source-payload cast keep the pinned ``per_token_cast_back``.
+    """
+    e, s, h = fp8.shape
+    values = fp8.to(torch.float32).view(e, s, h // 128, 128)
+    block_scales = scales.to(torch.float32).view(e, s, h // 128, 1)
+    return (values * block_scales).to(torch.bfloat16).view(e, s, h)
+
+
 def _jit_cache_directory(
     args,
     world_size: int,
@@ -244,15 +268,15 @@ class DeepEPV2Backend(EPBackend):
         `.view()` raises "view size is not compatible with ... stride" on the transposed
         layout (the fp8 tensor itself is row-major contiguous, so only the scales need it).
         Mirrors the upstream low-latency test, which calls `.contiguous()` on the scales
-        before dequant.
+        before dequant. The dequant itself uses a static-shape compile (_ll_dequant_static)
+        rather than deep_ep's dynamic-shape per_token_cast_back — 6.3x faster on the fixed LL
+        recv shape and bit-identical, which is what keeps the FP8 leg inside its wall-clock
+        budget (the dynamic kernel overran it).
         """
         if not self._fp8:
             return recv_x
         fp8, scales = recv_x
-        num_experts, num_slots, hidden = fp8.shape
-        scales = scales.contiguous()
-        bf16 = self._cast_back(fp8.view(-1, hidden), scales.view(-1, hidden // 128))
-        return bf16.view(num_experts, num_slots, hidden)
+        return _ll_dequant_static(fp8, scales.contiguous())
 
     def _topk_idx_dtype(self):
         # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.
