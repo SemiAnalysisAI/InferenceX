@@ -183,7 +183,7 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
     ))
 
 
-def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
@@ -195,6 +195,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
+    - Agentic evals are opt-in to preserve default throughput coverage.
     """
     from collections import defaultdict
 
@@ -257,10 +258,28 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Mark the selected entries (skip agentic entries which don't support evals)
+    # Default sweeps preserve every agentic throughput result.
+    if include_agentic:
+        ag_sn_groups = defaultdict(list)
+        for i, entry in enumerate(matrix_values):
+            if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
+                continue
+            # Multi-node agentic eval is unsupported.
+            if Fields.PREFILL.value in entry:
+                continue
+            conc = entry[Fields.CONC.value]
+            conc_val = max(conc) if isinstance(conc, list) else conc
+            key = (
+                entry[Fields.MODEL.value],
+                entry[Fields.RUNNER.value],
+                entry[Fields.FRAMEWORK.value],
+                entry[Fields.PRECISION.value],
+            )
+            ag_sn_groups[key].append((i, conc_val))
+        for entries in ag_sn_groups.values():
+            eval_indices.add(max(entries, key=lambda item: item[1])[0])
+
     for i, entry in enumerate(matrix_values):
-        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
-            continue
         entry[Fields.RUN_EVAL.value] = i in eval_indices
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
@@ -274,7 +293,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Agentic entries are left untouched because they do not support lm-eval.
+    Single-node agentic entries use SWE-bench; multi-node eval is unsupported.
     Multi-node rows with the same engine topology are merged into one eval row
     whose full concurrency list is run sequentially against the same engine.
     """
@@ -285,6 +304,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            if Fields.PREFILL.value not in entry:
+                entry[Fields.RUN_EVAL.value] = True
             expanded_entries.append(entry)
             continue
 
@@ -645,6 +666,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
@@ -733,6 +755,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
@@ -740,6 +763,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
@@ -948,6 +972,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
@@ -1029,6 +1054,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.CONC.value: conc,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
@@ -1036,6 +1062,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_tp{tp}_conc{conc}_"
                                     f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                    + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
@@ -1290,7 +1317,7 @@ def main():
         
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values)
+        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 
