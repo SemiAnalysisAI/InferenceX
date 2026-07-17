@@ -138,6 +138,21 @@ class BackendTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             FakeBackend(args(mode="unsupported"))
 
+    def test_low_latency_mode_accepted_only_when_declared(self):
+        # The base backend is normal-only, so it must reject low-latency; an adapter that
+        # declares it in SUPPORTED_MODES is accepted and can carry the weighted-kernel
+        # combine semantics the low-latency oracle path keys on.
+        with self.assertRaises(ValueError):
+            FakeBackend(args(mode="low-latency"))
+
+        class LowLatencyBackend(FakeBackend):
+            SUPPORTED_MODES = ("normal", "low-latency")
+
+        backend = LowLatencyBackend(args(mode="low-latency"))
+        backend.combine_weight_semantics = "weighted-kernel-sum"
+        self.assertEqual(backend.mode, "low-latency")
+        self.assertEqual(backend.combine_weight_semantics, "weighted-kernel-sum")
+
     def test_precision_is_fail_closed(self):
         # The base SUPPORTED_PRECISIONS is BF16-only; an adapter that has not opted
         # into a precision must reject it rather than silently run the wrong codec.

@@ -1,7 +1,10 @@
 {
   "version": 1,
   "suite": "ep-core",
-  "mode": "normal",
+  "modes": {
+    "normal": ["decode", "prefill"],
+    "low-latency": ["decode"]
+  },
   "routing": "uniform",
   "ep_degrees": [8, 16],
   "precisions": ["bf16", "fp8"],

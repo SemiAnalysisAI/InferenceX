@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 
 
@@ -349,10 +350,10 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(parts[-1], b"")
         return [part.decode() for part in parts[:-1]]
 
-    def _case_argv(self, placement: list) -> list:
+    def _case_argv(self, placement: list, case: dict | None = None) -> list:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "shard.json"
-            path.write_text(json.dumps({"version": 1, "cases": [self.CASE]}))
+            path.write_text(json.dumps({"version": 1, "cases": [case or self.CASE]}))
             result = subprocess.run(
                 [sys.executable, str(RUNTIME / "config.py"), "case-args",
                  str(path), "0", "h200-dgxc", "TS", *placement],
@@ -381,6 +382,23 @@ class CaseArgvContract(unittest.TestCase):
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
+
+    def test_low_latency_case_round_trips_through_the_run_ep_parser(self) -> None:
+        # A low-latency decode EP8 case flows through the same codec; run_ep's --mode
+        # choices must accept "low-latency" or the leg dies before allocation.
+        ll_case = {
+            **self.CASE,
+            "mode": "low-latency", "phase": "decode",
+            "ep": 8, "nodes": 1, "gpus_per_node": 8, "scale_up_domain": 8,
+            "scope": "scale-up", "scale_up_transport": "nvlink",
+            "scale_out_transport": "", "transport": "nvlink",
+            "topology_class": "h200-nvlink-island", "ladder": "1 2 4 8",
+            "case_id": "h200-dgxc-deepep-v2-deepseek-v3-low-latency-decode-ep8-uniform-bf16",
+        }
+        argv = self._case_argv(["8", "1", "8", "8"], case=ll_case)
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual((args.mode, args.phase, args.scope), ("low-latency", "decode", "scale-up"))
+        self.assertEqual(args.case_id, ll_case["case_id"])
 
 
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
@@ -433,6 +451,88 @@ class LogicalByteProvenanceTests(unittest.TestCase):
         ):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 ep_harness.logical_byte_provenance(**kwargs)
+
+
+class ModeSemanticsContract(unittest.TestCase):
+    # The combine contract is a backend fact, not a pure function of mode: DeepEP's
+    # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is
+    # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
+    def test_mode_allowed_semantics(self) -> None:
+        self.assertEqual(
+            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
+        )
+        self.assertEqual(
+            ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],
+            {"weighted-kernel-sum", "unweighted-rank-sum"},
+        )
+
+
+try:
+    import torch as _torch
+except Exception:  # torch is absent in the CPU test image; these checks run on GPU CI
+    _torch = None
+
+
+@unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
+class WeightedCombineSemanticsTests(unittest.TestCase):
+    """Pin the semantic distinction between the two combine contracts, independent of any
+    GPU backend. Normal mode folds the gate weight INTO the staged transform (kernel
+    sums); low-latency stages the UNWEIGHTED transform and the kernel applies the gate."""
+
+    def _problem(self, weight_scale: float = 1.0):
+        torch = _torch
+        x = torch.randn(4, 64, dtype=torch.bfloat16)
+        idx = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]], dtype=torch.int64)
+        weights = (torch.rand(4, 2, dtype=torch.float32) + 0.1) * weight_scale
+        return types.SimpleNamespace(x=x, topk_idx=idx, topk_weights=weights)
+
+    def test_transform_drops_the_gate_under_weighted_kernel_sum(self):
+        torch = _torch
+        payload = torch.randn(3, 64, dtype=torch.bfloat16)
+        ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
+        low = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.2), "weighted-kernel-sum"
+        )
+        high = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.9), "weighted-kernel-sum"
+        )
+        # Unit coefficient: the staged value cannot depend on the gate magnitude.
+        self.assertTrue(torch.equal(low, high))
+
+    def test_transform_folds_the_gate_under_unweighted_rank_sum(self):
+        torch = _torch
+        payload = torch.randn(3, 64, dtype=torch.bfloat16)
+        ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
+        low = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.2), "unweighted-rank-sum"
+        )
+        high = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.9), "unweighted-rank-sum"
+        )
+        # The gate IS in the transform here, so a larger weight changes the staged value.
+        self.assertFalse(torch.equal(low, high))
+
+    def test_expected_combine_is_linear_in_the_gate_under_weighted_kernel_sum(self):
+        torch = _torch
+        p = self._problem(1.0)
+        p2 = types.SimpleNamespace(
+            x=p.x, topk_idx=p.topk_idx, topk_weights=p.topk_weights * 2
+        )
+        base = ep_harness._expected_transformed_combine(
+            torch, p, 4, 8, "weighted-kernel-sum"
+        )
+        doubled = ep_harness._expected_transformed_combine(
+            torch, p2, 4, 8, "weighted-kernel-sum"
+        )
+        # Same routing/activations, gate x2 -> expected x2 (the kernel applies the gate).
+        self.assertTrue(torch.allclose(doubled, base * 2, atol=1e-3, rtol=1e-3))
+
+    def test_unknown_semantics_fail_closed(self):
+        torch = _torch
+        with self.assertRaises(ValueError):
+            ep_harness._expected_transformed_combine(
+                torch, self._problem(), 4, 8, "made-up"
+            )
 
 
 if __name__ == "__main__":

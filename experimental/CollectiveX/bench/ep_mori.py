@@ -38,6 +38,7 @@ def _project_local_metadata(torch_module, raw_expert_ids, raw_weights, rank, exp
 
 class MoRIBackend(EPBackend):
     name = "mori"
+    SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     combine_needs_redispatch = True
     dispatch_needs_combine_cleanup = True
@@ -71,17 +72,38 @@ class MoRIBackend(EPBackend):
         gpus_per_node = int(args.gpus_per_node)
         scale_out = args.scope == "scale-out"
 
-        # The kernel is a pinned function of the cell, not an operator choice,
-        # and no cell runs a low-latency-family kernel (mirroring the
-        # normal-mode-only NVIDIA backends): scale-up uses the direct IntraNode
-        # kernel on every CDNA SKU (mori's default; `kernel_type` kwarg
-        # omitted); scale-out EP16 uses InterNodeV1, whose required enum member
-        # is an image-lineage check.
+        # NORMAL mode: the kernel is a pinned function of the cell, not an operator
+        # choice. Scale-up uses the direct IntraNode kernel on every CDNA SKU (mori's
+        # default; `kernel_type` kwarg omitted); scale-out EP16 uses InterNodeV1, whose
+        # required enum member is an image-lineage check.
         # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
         kernel_name, self.kernel_generation, blocks = (
             ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
             else ("IntraNode", "intranode", (80, 0, 16, 8))
         )
+        if self.mode == "low-latency":
+            # LOW-LATENCY (decode) mode: IntraNodeLL, the scale-up low-latency kernel. It is
+            # single-phase (plain dispatch()/combine(), no dispatch_recv/combine_recv split),
+            # pure-intranode (shares the no-RDMA ShmemBufsIntraNode staging with IntraNode, so
+            # no symmetric-heap registration), and returns the same compact [max_recv, hidden]
+            # layout. Its combine keeps the plain rank-deduplicated additive sum (combine is
+            # called with weights=None -> weight_ptr 0 in mori.ops, so the gate is NOT applied
+            # in-kernel), identical in semantics to IntraNode/normal mode ("unweighted-rank-sum",
+            # the base default the harness admits for low-latency). So LL differs from the normal
+            # IntraNode path ONLY by kernel_type (set here vs omitted) and timing; every transport
+            # method (dispatch/stage/combine/inspect_dispatch/combine_transformed) is reused as-is.
+            # AsyncLL (enum 4) is deliberately NOT used: it is split-phase (dispatch_recv/
+            # combine_recv) and RDMA-staged, which does not fit the single-call dispatch/stage/
+            # combine contract. Scale-up EP8 decode only; scale-out EP16 LL is out of scope (kept
+            # out of ll_backends). Reuse the IntraNode launch tuning under MANUAL launch mode.
+            if scale_out:
+                raise RuntimeError(
+                    "MoRI low-latency is scale-up EP8 only (scale-out EP16 low-latency "
+                    "is out of scope; see platform_config ll_backends)"
+                )
+            kernel_name, self.kernel_generation, blocks = (
+                "IntraNodeLL", "intranode-ll", (80, 0, 16, 8)
+            )
         self._kernel_type = None
         if kernel_name != "IntraNode":
             kernel_enum = getattr(mori.ops, "EpDispatchCombineKernelType", None)
@@ -152,6 +174,10 @@ class MoRIBackend(EPBackend):
         }
         if self._kernel_type is not None:
             config_kwargs["kernel_type"] = self._kernel_type
+        # Only InterNodeV1 carries explicit launch/topology fields (and the VMM_HEAP + realized-
+        # config asserts below). IntraNodeLL follows the IntraNode path unchanged: base config
+        # plus kernel_type, the registered staging buffer, the default STATIC heap, and the
+        # per-call block/warp launch args.
         if self._inter_node:
             config_kwargs.update({
                 "block_num": self.block_num,

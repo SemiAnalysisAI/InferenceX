@@ -51,10 +51,24 @@ x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; EP16 uses pinned
 InterNodeV1 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external
-input. No cell runs a low-latency-family kernel: throughput-oriented kernels are measured across the
-full token ladder on both vendors.
-Whether a given SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is
-decided only by the emitted artifact.
+input. Those throughput kernels run across the full token ladder in the `normal` mode.
+
+A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
+the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
+which deliver a per-expert padded receive buffer and apply the top-k gate weights inside a source-side
+combine (weighted-kernel-sum). For the scoped single-node EP8 cells these run over the intra-node
+NVLink low-latency path (`allow_nvlink_for_low_latency_mode`); NVSHMEM/IBGDA (and thus `/dev/gdrdrv`)
+is only exercised on the wire by a multi-node scale-out (EP16) run, and single-node EP8 was validated
+on H200 with `/dev/gdrdrv` absent. On MoRI it selects the `IntraNodeLL` kernel — a single-call,
+pure-intranode decode kernel that keeps the same rank-deduplicated compact layout and plain unweighted
+rank-sum combine as the throughput `IntraNode` kernel, so it differs only by kernel type and timing
+(the split-phase RDMA-staged `AsyncLL` kernel is deliberately not used — its separate receive phase
+does not fit the single-call dispatch/combine contract). Low latency is a decode-phase-only addition
+whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
+cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs; it is
+currently enabled for DeepEP V2 EP8 on H100/H200/B200 and MoRI
+EP8 on MI300X/MI325X/MI355X. Whether a given SKU/backend/EP/mode cell is attempted is a capability
+fact; whether it succeeded is decided only by the emitted artifact.
 
 ## Workload Identity
 
@@ -101,11 +115,15 @@ Logical payload bandwidth is:
 
 `logical_payload_bytes / measured_latency_seconds`
 
-Normal-mode payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
+Payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
 padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale payload; an FP8
 dispatch moves 1 byte per value, plus per-128-block FP32 scales for DeepEP's blockwise codec (none
 for MoRI's plain e4m3 cast), while combine stays BF16 — so the dispatch and combine directions can carry
-different byte counts and the roundtrip is their per-field sum. Algorithm bandwidth, bus bandwidth,
+different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
+for the normal-mode layout; the low-latency layout sends one copy per (token, expert) assignment
+rather than per (token, rank), so for a token whose experts share a destination rank this logical
+count is a lower bound on the bytes the low-latency kernels actually move. Latency (the headline) is
+measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
 wire utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
 rates are named `rate_at_latency_percentile`: bytes or tokens divided by the matching latency
@@ -133,8 +151,15 @@ scale_up_domain` — every EP8 case and the MNNVL EP16 cases) has a single domai
 rounding; a multi-node RoCE EP16 group carries one BF16 partial per node. Modelling that per-domain
 cast is what lets the gate stay tight — max elementwise relative error (denominator clamped at 0.02)
 below `8 * 2^-8`, the residual accumulation-order ambiguity — across scale-up and scale-out topologies
-alike (omitting it left multi-node EP16 ~0.048 off, above the gate). Under FP8 dispatch the oracle
-applies the backend's exact per-token cast round-trip to its semantic payload before both the
+alike (omitting it left multi-node EP16 ~0.048 off, above the gate).
+
+Low-latency adapters instead use a source-side gate-weighted combine: the kernel multiplies each
+expert's returned message by that assignment's top-k weight, so the adapter stages the UNWEIGHTED
+per-expert transform and a dedicated per-(source, expert)-slot oracle derives the expected combine as
+the gate-scaled sum of per-expert BF16 messages — no per-domain intermediate, since the low-latency
+kernels reduce at the source rank. The delivered (source, expert) assignment multiset and per-expert
+counts are checked against the routing trace, and the same tight combine gate applies. Under FP8
+dispatch the oracle applies the backend's exact per-token cast round-trip to its semantic payload before both the
 dispatched-payload compare and this combine expectation, so the payload match stays bit-exact and the
 same tight gate holds — the quantization is modeled, not absorbed into a wider tolerance. It is a
 correctness gate, not an estimate of transport error. Any failed rank or point makes the case ineligible in the result it writes.
