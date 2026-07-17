@@ -1,37 +1,7 @@
 #!/usr/bin/env python3
-"""Validate eval scores against minimum thresholds.
+"""Validate eval scores against per-task and per-model thresholds."""
 
-Reads lm-eval results JSON files and checks that scored metrics meet the
-required minimum.  Thresholds are configured per-task, with optional per-model
-overrides, in a JSON config file (default: utils/evals/thresholds.json):
-
-    {
-      "default": { "gsm8k": 0.85, "gpqa_diamond_cot_n_shot": 0.30 },
-      "models": {
-        "dsv4": { "gsm8k": 0.90 },
-        "glm5": { "gsm8k": 0.92 }
-      }
-    }
-
-The model is identified by its `infmax_model_prefix` (e.g. "dsv4", "glm5"),
-read from meta_env.json in the current directory -- written alongside the
-results*.json files by the eval harness.  For each task the threshold is
-resolved most-specific-first:
-
-    models[<prefix>][<task>]  ->  default[<task>]  ->  --min-score
-
-Models without an entry under "models" (or runs where the prefix can't be
-determined) fall back to the global default, then to --min-score.
-
-A legacy flat config ({"gsm8k": 0.85, ...}) is still accepted and treated as
-the global default with no per-model overrides.
-
-Usage:
-    python3 utils/evals/validate_scores.py
-    python3 utils/evals/validate_scores.py --thresholds my_thresholds.json
-    python3 utils/evals/validate_scores.py --model-prefix dsv4
-    python3 utils/evals/validate_scores.py --min-score 0.90  # flat fallback
-"""
+from __future__ import annotations
 import argparse
 import glob
 import json
@@ -44,16 +14,27 @@ CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def load_config(path: str) -> dict:
-    """Load thresholds config, normalized to {"default": {...}, "models": {...}}.
-
-    Accepts both the per-model format ({"default": {...}, "models": {...}}) and
-    the legacy flat format ({task: min_score}), which is treated as the global
-    default with no per-model overrides.
-    """
+    """Load YAML or JSON thresholds, including legacy flat configs."""
     with open(path) as f:
-        cfg = json.load(f)
+        text = f.read()
+    try:
+        import yaml
+    except ModuleNotFoundError:
+        # Runner hosts may lack PyYAML.
+        try:
+            cfg = json.loads(text)
+        except json.JSONDecodeError:
+            raise ValueError(
+                f"PyYAML is not installed and {path} is not JSON; "
+                "install it with 'pip install pyyaml'"
+            ) from None
+    else:
+        try:
+            cfg = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"invalid YAML: {exc}") from exc
     if not isinstance(cfg, dict):
-        raise ValueError("thresholds config must be a JSON object")
+        raise ValueError("thresholds config must be a mapping")
     if "default" not in cfg and "models" not in cfg:
         # Legacy flat format: the whole object is the per-task default.
         return {"default": cfg, "models": {}}
@@ -191,17 +172,11 @@ def validate_batch_manifest(
 
 
 def main() -> int:
-    # CI merges this script's stdout and stderr into a single log.  When stdout
-    # is a pipe it is block-buffered by default and only flushes at exit, which
-    # pushes the informational header (e.g. "Loaded thresholds...") below the
-    # unbuffered stderr FAIL lines.  Force line buffering on both streams so
-    # every line reaches the log in emission order.
+    # Keep merged CI logs ordered.
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(line_buffering=True)
         except (AttributeError, ValueError):
-            # Best-effort only: some wrapped streams (e.g. pytest's capture
-            # object) don't support reconfigure; leave their buffering as-is.
             pass
 
     parser = argparse.ArgumentParser(description="Validate eval scores")
@@ -211,7 +186,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--thresholds", default=None,
-        help="Path to thresholds JSON config (default: utils/evals/thresholds.json)",
+        help="Path to thresholds config, YAML or JSON (default: utils/evals/thresholds.yaml)",
     )
     parser.add_argument(
         "--meta-env", default="meta_env.json",
@@ -254,7 +229,7 @@ def main() -> int:
     config = {"default": {}, "models": {}}
     thresholds_path = args.thresholds
     if thresholds_path is None:
-        default_path = Path(__file__).parent / "thresholds.json"
+        default_path = Path(__file__).parent / "thresholds.yaml"
         if default_path.exists():
             thresholds_path = str(default_path)
     if thresholds_path:
