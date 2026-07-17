@@ -4927,3 +4927,18 @@
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms -- TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56,64,72], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
     - "dsv4-fp4-b300-vllm-agentic-tp8: new TP8 GPU-resident topology at conc [1,2,4,6,8], both non-MTP and MTP."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+    - "Bump Qwen3.5-FP8 MI355X SGLang disagg image from lmsysorg/sglang-rocm:v0.5.11-rocm700-mi35x-20260511 to lmsysorg/sglang:v0.5.14-rocm720-mi35x (ROCm 7.0 → 7.2, sglang v0.5.11 → v0.5.14)."
+    - "Fix disagg SLURM exclude list: add mia1-p01-g09 (broken pyxis) to submit.sh — was missing from multi-node path, causing prefill worker 503 failures."
+    - "Expand mi355x-disagg runner pool from 3 to 9 nodes."
+    - "Concurrency sweep: 1K1K and 8K1K both [ 8, 16, 32, 64, 128 ]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2094
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
