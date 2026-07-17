@@ -4922,8 +4922,12 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang-agentic-hicache-mtp
   description:
-    - "Add DSv4 FP4 MI355X SGLang agentic MTP recipe with HiCache support"
-    - "Image: lmsysorg/sglang-rocm:v0.5.15-rocm700-mi35x-20260713"
-    - "EAGLE speculative decoding: 3 steps, topk 1, 4 draft tokens"
-    - "Sweep TP8 +/- DPA +/- HiCache with MTP across conc 1-96"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2200
+    - "Tune DPA MTP serving parameters for higher-concurrency stability"
+    - "Keep CUDA_GRAPH_MAX_BS = CONC (disable per-DP-rank division), cap at 128"
+    - "Set MAX_RUNNING_REQUESTS = 2*CONC for scheduler headroom"
+    - "Add --enable-prefill-delayer and GPU_MAX_HW_QUEUES=5 for DPA"
+    - "Set DPA chunked prefill to 8192*TP"
+    - "Re-enable SGLANG_ENABLE_UNIFIED_RADIX_TREE=1"
+    - "Reduce MEM_FRACTION_STATIC by 0.10 when spec decoding is active"
+    - "Narrow search space to conc [4,8] non-DPA + conc [16,32,48,52] DPA"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2246

@@ -89,11 +89,9 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
+    export GPU_MAX_HW_QUEUES=5
 
-    # SGLang divides the configured chunk across DP schedulers. Use a 16K
-    # per-scheduler chunk so long agentic prefill tails drain within the
-    # standard 600-second warmup grace period.
-    CHUNKED_PREFILL_SIZE=$((16384 * TP))
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
@@ -105,16 +103,11 @@ if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
 
-# AgentX concurrency counts live session trees, not individual requests, so
-# retain 2x aggregate request headroom for subagent fan-out. SGLang applies
-# both limits per engine; with DP attention, divide the aggregate limits over
-# the DP ranks instead of granting the full global limit to every rank.
+# SGLang treats max-running-requests as a global DPA limit and partitions it
+# internally. CUDA graph capture is per scheduler, so only its batch size is
+# divided across DP ranks.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
-if [ "$DP_ATTENTION" = "true" ]; then
-    MAX_RUNNING_REQUESTS=$(( (MAX_RUNNING_REQUESTS + TP - 1) / TP ))
-    CUDA_GRAPH_MAX_BS=$(( (CUDA_GRAPH_MAX_BS + TP - 1) / TP ))
-fi
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 # Simulated acceptance-length (AL) settings.
@@ -128,9 +121,7 @@ export SGLANG_USE_ROCM700A=0
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export AITER_BF16_FP8_MOE_BOUND=0
 
-# sglang kv cache, when hicache is disabled
-# https://github.com/sgl-project/sglang/pull/30339
-#export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
 METRICS_ARGS=(--enable-metrics)
@@ -140,6 +131,10 @@ SPEC_ARGS=(
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 4
 )
+
+if [ ${#SPEC_ARGS[@]} -gt 0 ]; then
+    MEM_FRACTION_STATIC=$(awk "BEGIN {printf \"%.2f\", $MEM_FRACTION_STATIC - 0.10}")
+fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
