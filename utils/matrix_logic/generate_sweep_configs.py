@@ -780,19 +780,20 @@ def generate_full_sweep(args, all_config_data, runner_data):
 # Curated "full sweep" target set. The ClusterMAX dashboard charts are the
 # source of truth: the production full sweep must run EXACTLY the
 # model x engine x node-type combinations the charts render, and nothing else.
-# Mapped to the concrete framework values in configs/nvidia-master.yaml:
+# The dashboard keeps only two active tabs, so the curated sweep is the union of
+# two passes, mapped to the concrete framework values in nvidia-master.yaml:
 #   - kimik2.5 single-node -> framework `vllm`
-#   - dsr1     single-node -> framework `sglang` (no dsr1 single-node vllm config
-#     exists, and `trt` is not a chart engine, so dsr1-SN is sglang-only)
 #   - dsv4     multi-node  -> frameworks `dynamo-vllm` + `llmd-vllm` (the chart's
 #     dsv4 multinode is vLLM-only; llmd-vllm emits vllm-prefixed metrics so it
 #     renders as vLLM). `dynamo-sglang` and `dynamo-trt` are EXCLUDED.
 # Every `qwen3.5-*` config and all TensorRT (`trt`/`dynamo-trt`) are excluded.
 #
-# gptoss120b is a chart scenario too, but it has NO active master config (it
-# lives only under configs/deprecated/), so the harness cannot sweep it from
-# nvidia-master.yaml and it is intentionally left out of the generated set. The
-# chart keeps gptoss120b from other/legacy data; that is out of scope here.
+# Deprecated / deselected chart scenarios (their configs stay in the master
+# config for one-off dispatches, but the curated sweep no longer selects them):
+#   - dsr1 single-node (SGLang): deprecated tab, removed from the harness sweep.
+#   - gptoss120b single-node: has NO active master config (lives only under
+#     configs/deprecated/), so it cannot be swept from nvidia-master.yaml anyway.
+# The charts keep these from other/legacy data; that is out of scope here.
 #
 # The generator's --model-prefix/--framework/--single-node/--multi-node filters
 # combine with AND within a single invocation, so each chart scenario needs its
@@ -800,7 +801,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
 # entrypoint.
 CURATED_SWEEP_PASSES = [
     {"model-prefix": ["kimik2.5"], "framework": ["vllm"], "single-node": True},
-    {"model-prefix": ["dsr1"], "framework": ["sglang"], "single-node": True},
     {
         "model-prefix": ["dsv4"],
         "framework": ["dynamo-vllm", "llmd-vllm"],
@@ -823,12 +823,12 @@ def generate_curated_full_sweep(args, all_config_data, runner_data):
     """Generate the canonical production full sweep.
 
     Composes the `generate_full_sweep` passes in CURATED_SWEEP_PASSES so the
-    result is EXACTLY the dashboard chart scenarios: kimi single-node on vLLM,
-    dsr1 single-node on SGLang, and dsv4 multi-node on dynamo-vllm/llmd-vllm.
-    qwen3.5, TensorRT, dynamo-sglang, and gptoss (no active master config) are
-    all excluded. Optional filters on `args` (--seq-lens, --min-conc/--max-conc,
-    --step-size, --runner-type, etc.) apply to every pass, so trimming for a
-    smoke run stays possible without widening the target set.
+    result is EXACTLY the two active dashboard chart scenarios: kimi single-node
+    on vLLM, and dsv4 multi-node on dynamo-vllm/llmd-vllm. qwen3.5, TensorRT,
+    dynamo-sglang, dsr1 single-node (deprecated), and gptoss (no active master
+    config) are all excluded. Optional filters on `args` (--seq-lens,
+    --min-conc/--max-conc, --step-size, --runner-type, etc.) apply to every pass,
+    so trimming for a smoke run stays possible without widening the target set.
     """
     matrix_values = []
     for sweep_pass in CURATED_SWEEP_PASSES:
@@ -1332,11 +1332,11 @@ def main():
         add_help=False,
         help=(
             'Generate the canonical production full sweep matching the '
-            'ClusterMAX dashboard charts: kimik2.5 single-node vLLM + dsr1 '
-            'single-node SGLang + dsv4 multi-node dynamo-vllm/llmd-vllm, '
-            'excluding TensorRT, dynamo-sglang and all qwen3.5 configs. '
-            'Model/framework/node-type are fixed by the curated target set; '
-            'only trimming filters are exposed.'
+            'ClusterMAX dashboard charts: kimik2.5 single-node vLLM + dsv4 '
+            'multi-node dynamo-vllm/llmd-vllm, excluding TensorRT, '
+            'dynamo-sglang, dsr1 single-node (deprecated) and all qwen3.5 '
+            'configs. Model/framework/node-type are fixed by the curated target '
+            'set; only trimming filters are exposed.'
         )
     )
     curated_parser.add_argument(

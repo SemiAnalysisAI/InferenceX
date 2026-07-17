@@ -65,14 +65,16 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
 ```
 
 The canonical **production full sweep** is `curated-full-sweep` — it matches the
-ClusterMAX dashboard charts (the source of truth) and runs EXACTLY the union of
-three passes: (1) `kimik2.5` single-node on `vllm`, (2) `dsr1` single-node on
-`sglang` (no dsr1 single-node vllm config exists; `trt` is not a chart engine),
-and (3) `dsv4` multi-node on `dynamo-vllm` and `llmd-vllm` (the chart's dsv4
-multi-node is vLLM-only; `llmd-vllm` emits vllm-prefixed metrics). It excludes
-`dynamo-sglang`, `dynamo-trt`/`trt`, and every `qwen3.5-*` config. `gptoss120b`
-is a chart scenario but has NO active master config (only `configs/deprecated/`),
-so it cannot be swept from `nvidia-master.yaml` and is intentionally left out.
+ClusterMAX dashboard charts (the source of truth), which keep only two active
+tabs, and runs EXACTLY the union of two passes: (1) `kimik2.5` single-node on
+`vllm`, and (2) `dsv4` multi-node on `dynamo-vllm` and `llmd-vllm` (the chart's
+dsv4 multi-node is vLLM-only; `llmd-vllm` emits vllm-prefixed metrics). It
+excludes `dynamo-sglang`, `dynamo-trt`/`trt`, and every `qwen3.5-*` config.
+`dsr1` single-node (SGLang) and `gptoss120b` single-node are **deprecated** tabs
+and are no longer part of the curated sweep — `dsr1` configs remain in
+`nvidia-master.yaml` (deselected, not deleted; other one-off dispatches may still
+use them), and `gptoss120b` has no active master config (only
+`configs/deprecated/`) so it cannot be swept from `nvidia-master.yaml` anyway.
 Prefer this over hand-rolled `full-sweep` filters for full sweeps (a bare
 `full-sweep --config-files configs/nvidia-master.yaml` sweeps everything,
 including qwen and TensorRT). Only trimming filters are overridable:
