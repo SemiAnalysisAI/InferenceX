@@ -2179,7 +2179,8 @@ glm5-fp8-mi325x-sglang-mtp:
 # ============================================================================
 
 qwen3.5-fp8-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
+  # (srok) TODO: pub img
+  image: rocm/pytorch-private:sglang-rocm720-mi35x_dsv4_mlpnopad
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi355x-amds
@@ -2190,7 +2191,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      #- { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
