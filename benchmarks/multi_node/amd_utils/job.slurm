@@ -293,8 +293,10 @@ export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${S
 
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
-# dated tags are garbage-collected (manifest unknown)
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260629-e667ebb}"
+# dated tags are garbage-collected (manifest unknown). The previous pin
+# (nightly-20260629-e667ebb) had already been evicted — re-pin to a live tag
+# whenever this starts failing with "manifest unknown" on rank 0.
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260716-1fbcde7}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
