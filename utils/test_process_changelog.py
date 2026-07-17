@@ -583,3 +583,68 @@ def test_agentic_only_all_evals_does_not_suppress_later_fixed_evals(
     assert "--all-evals" not in commands[2]
     assert _scenario_values(commands[2]) == ["fixed-seq-len"]
     json.loads(capsys.readouterr().out)
+
+
+def test_agentic_matrix_omits_null_optional_metadata(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Preserve optional KV offload metadata
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+  scenario-type:
+    - agentic-coding
+"""
+    generated = [{
+        "image": "vllm/vllm-openai:test",
+        "model": "test/model",
+        "model-prefix": "test",
+        "precision": "fp8",
+        "framework": "vllm",
+        "runner": "cluster:test",
+        "tp": 4,
+        "pp": 1,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 4,
+        "dp-attn": True,
+        "spec-decoding": "none",
+        "conc": 8,
+        "kv-offloading": "dram",
+        "kv-offload-backend": {"name": "vllm-simple"},
+        "total-cpu-dram-gb": 1024,
+        "duration": 3600,
+        "exp-name": "test_tp4_conc8_kvdram-vllm-simple",
+        "scenario-type": "agentic-coding",
+    }]
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_, **__: SimpleNamespace(stdout=json.dumps(generated)),
+    )
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+    ])
+
+    process_changelog.main()
+
+    output = json.loads(capsys.readouterr().out)
+    entry = output["single_node"]["agentic"][0]
+    assert entry["kv-offload-backend"] == {"name": "vllm-simple"}

@@ -262,8 +262,9 @@ class TestProcessResultScript:
     @pytest.mark.parametrize("metadata", [
         {"name": "vllm-router"},
         {"name": "vllm-router", "version": "0.1.14", "mode": "round-robin"},
+        {"name": "vllm-router", "version": "image:vllm/vllm-openai:latest"},
     ])
-    def test_component_metadata_rejects_partial_or_extra_fields(
+    def test_component_metadata_rejects_values_rejected_by_source_schema(
         self, tmp_path, sample_benchmark_result, single_node_env_vars, metadata
     ):
         env = {**single_node_env_vars, "ROUTER_METADATA": json.dumps(metadata)}
@@ -271,7 +272,7 @@ class TestProcessResultScript:
         result = run_script(tmp_path, env, sample_benchmark_result)
 
         assert result.returncode != 0
-        assert "must contain exactly 'name' and 'version'" in result.stderr
+        assert "does not match ComponentMetadata" in result.stderr
 
     def test_homogeneous_multinode_omits_hardware_fields(
         self, tmp_path, sample_benchmark_result, multinode_env_vars
