@@ -134,7 +134,7 @@ backend:
       numa-bind: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       max-model-len: 1048576
-      max-num-seqs: 120
+      max-num-seqs: 214
       max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
@@ -158,13 +158,13 @@ backend:
       numa-bind: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       max-model-len: 1048576
-      max-num-seqs: 128
+      max-num-seqs: 160
       max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 128
+      max-cudagraph-capture-size: 160
       gpu-memory-utilization: 0.95
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4

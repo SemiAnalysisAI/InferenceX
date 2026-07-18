@@ -7708,7 +7708,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d-dep8-dep8:
     agentic-coding:
     - search-space:
       - spec-decoding: none
-        conc-list: [64, 128, 256, 320]
+        conc-list: [64, 128, 192, 256]
         prefill:
           num-worker: 1
           tp: 8
@@ -7737,7 +7737,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d-dep8-dep12:
     agentic-coding:
     - search-space:
       - spec-decoding: none
-        conc-list: [128, 256, 320]
+        conc-list: [384, 512]
         prefill:
           num-worker: 1
           tp: 8
@@ -7766,7 +7766,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep12:
     agentic-coding:
     - search-space:
       - spec-decoding: none
-        conc-list: [480, 640, 768]
+        conc-list: [640, 720, 768]
         prefill:
           num-worker: 2
           tp: 8
@@ -7795,7 +7795,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p1d-dep8-dep16:
     agentic-coding:
     - search-space:
       - spec-decoding: none
-        conc-list: [640, 800, 960, 1280]
+        conc-list: [800, 960, 1024, 1280]
         prefill:
           num-worker: 3
           tp: 8

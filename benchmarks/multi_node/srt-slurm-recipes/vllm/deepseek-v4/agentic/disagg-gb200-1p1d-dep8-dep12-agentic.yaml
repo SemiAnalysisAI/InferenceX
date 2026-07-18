@@ -134,7 +134,7 @@ backend:
       numa-bind: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       max-model-len: 1048576
-      max-num-seqs: 120
+      max-num-seqs: 256
       max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
