@@ -72,11 +72,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout sa-submission-q2-2026
     fi
 
-    if [[ -n "$LOCAL_CONFIG_FILE" ]]; then
-        mkdir -p "$(dirname "$CONFIG_FILE")"
-        cp "$LOCAL_CONFIG_FILE" "$CONFIG_FILE"
-    fi
-
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     source $HOME/.local/bin/env
@@ -171,6 +166,13 @@ EOF
 
     echo "Running make setup..."
     make setup ARCH=x86_64
+
+    # make setup refreshes the srt-slurm recipe tree. Overlay the checked-in
+    # InferenceX recipe afterwards so it remains available to srtctl apply.
+    if [[ -n "$LOCAL_CONFIG_FILE" ]]; then
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        cp "$LOCAL_CONFIG_FILE" "$CONFIG_FILE"
+    fi
 
     # Export eval-related env vars for srt-slurm post-benchmark eval
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
