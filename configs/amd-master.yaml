@@ -2204,6 +2204,23 @@ minimaxm3-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# GLM-5.2 FP8 full-context AgentX qualification on one MI325X node. Keep this
+# first pass at concurrency 1: the purpose is to verify that TP8 can allocate
+# the explicit 1,048,576-token BF16 KV pool and replay the unfiltered corpus.
+glm5.2-fp8-mi325x-sglang-agentic:
+  image: lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1] }
+
 minimaxm3-fp8-mi300x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
