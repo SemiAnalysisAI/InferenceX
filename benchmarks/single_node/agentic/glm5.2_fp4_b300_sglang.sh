@@ -60,7 +60,15 @@ if [ "$DP_ATTENTION" = "true" ]; then
 fi
 
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
+CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
+    # chunked-prefill-size is a whole-engine budget split across DP ranks:
+    # the cookbook HT cell's 8192 becomes 1,024 tokens/rank/step under dp8,
+    # which starves prefill on the 1M-context agentic corpus (observed: a
+    # conc-256 warmup could not drain within AIPerf's 1800s grace period
+    # while KV usage sat at ~0.01). Use the cookbook's own dp8 lever from
+    # the B200 cells (32768 = ~4096/rank).
+    CHUNKED_PREFILL_SIZE=32768
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
@@ -109,7 +117,7 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --quantization modelopt_fp4
-    --chunked-prefill-size 8192
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     "${GRAPH_ARGS[@]}"
