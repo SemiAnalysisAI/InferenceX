@@ -8,9 +8,10 @@ set -x
 #
 # The engine uses the upstream H200 cookbook's TP8 low-latency topology minus
 # its EAGLE flags, swept HBM-only and with a local-DRAM HiCache tier. Keeping
-# attention tensor-parallel is required for full-context AgentX replay: the
-# 1,048,576-token sequence KV is sharded across all eight H200s. BF16 KV is
-# selected automatically on Hopper; static-memory fraction is 0.85.
+# attention tensor-parallel is required for full-context AgentX replay. Match
+# the established DeepSeek-V4 AgentX pattern by using FP8 KV on H200; this
+# keeps every unfiltered trace intact while the model retains its native
+# 1,048,576-token context window.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -94,14 +95,16 @@ if require_agentic_kv_offload_backend hicache; then
 fi
 
 # The TP8 engine serves $PORT directly. Do not enable attention DP here: it
-# limits an individual request to one H200's KV pool (~135K tokens), whereas
-# TP8 exposes the node-wide pool (~1.08M tokens) to a full-context request.
+# limits an individual request to one H200's KV pool (~135K BF16-KV tokens),
+# whereas TP8 plus FP8 KV provides enough L1 capacity for the complete trace.
 SGLANG_BACKEND_PORT="$PORT"
 
 # AgentX concurrency counts live session trees, not individual HTTP requests.
 # Allow subagent fan-out while retaining the upstream H200 engine cap.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
+CUDA_GRAPH_MAX_BS="$CONC"
+[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=9.0
@@ -120,16 +123,19 @@ SGLANG_CMD=(
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    # Hopper uses BF16 KV for GLM-5.2 DSA; let SGLang select it rather than
-    # copying the Blackwell-only fp8_e4m3 setting from the NVFP4 recipe.
+    # The unfiltered AgentX corpus reaches 488,209 input tokens. The Hopper
+    # default BF16 KV pool holds only ~297K tokens in TP8, so use the same FP8
+    # KV strategy as the production DeepSeek-V4 AgentX launchers.
+    --kv-cache-dtype fp8_e4m3
     --tool-call-parser glm47
     --reasoning-parser glm45
     # Pin the checkpoint's native context explicitly. Truncation is forbidden:
     # an input-length rejection is a failed qualification, not a usable sample.
     --context-length 1048576
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    --mem-fraction-static 0.85
+    --mem-fraction-static 0.88
     --max-running-requests "$MAX_RUNNING_REQUESTS"
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --watchdog-timeout 1800
     --enable-metrics
     "${CACHE_ARGS[@]}"
@@ -156,16 +162,21 @@ capture_cache_metrics() {
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 # A model can advertise a 1M context while a topology exposes a much smaller
-# per-request KV pool. Qualify both independently and fail before replay if the
-# launcher regresses to attention DP or another sub-1M layout.
+# per-request KV pool. Qualify the native context, truncation policy, and enough
+# L1 capacity for the complete unfiltered AgentX corpus independently.
 SERVER_CONTEXT_LENGTH=$(sed -nE 's/.*context_len=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
 SERVER_KV_TOKEN_CAPACITY=$(sed -nE 's/.*max_total_num_tokens=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
+MIN_AGENTX_KV_TOKEN_CAPACITY=524288
 if [[ "$SERVER_CONTEXT_LENGTH" != "1048576" ]]; then
     echo "Error: SGLang reported context_len=${SERVER_CONTEXT_LENGTH:-unknown}; expected 1048576" >&2
     exit 1
 fi
-if [[ -z "$SERVER_KV_TOKEN_CAPACITY" || "$SERVER_KV_TOKEN_CAPACITY" -lt 1048576 ]]; then
-    echo "Error: SGLang reported max_total_num_tokens=${SERVER_KV_TOKEN_CAPACITY:-unknown}; full-context AgentX requires at least 1048576" >&2
+if ! grep -q 'allow_auto_truncate=False' "$SERVER_LOG"; then
+    echo "Error: could not verify that SGLang automatic truncation is disabled" >&2
+    exit 1
+fi
+if [[ -z "$SERVER_KV_TOKEN_CAPACITY" || "$SERVER_KV_TOKEN_CAPACITY" -lt "$MIN_AGENTX_KV_TOKEN_CAPACITY" ]]; then
+    echo "Error: SGLang reported max_total_num_tokens=${SERVER_KV_TOKEN_CAPACITY:-unknown}; untruncated AgentX replay requires at least $MIN_AGENTX_KV_TOKEN_CAPACITY" >&2
     exit 1
 fi
 echo "Full-context qualification passed: context_len=$SERVER_CONTEXT_LENGTH, max_total_num_tokens=$SERVER_KV_TOKEN_CAPACITY, truncation=disabled"

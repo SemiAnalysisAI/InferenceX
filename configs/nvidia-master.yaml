@@ -9898,8 +9898,10 @@ qwen3.5-fp8-gb300-dynamo-sglang:
 # The TP8 low-latency cell is swept HBM-only and with a local-DRAM HiCache
 # tier, minus its EAGLE flags (STP only, no speculative decoding even though
 # the checkpoint ships an MTP head). Attention stays tensor-parallel so a
-# single AgentX request can use the node-wide KV pool and retain the model's
-# native 1,048,576-token context without truncation.
+# single AgentX request can use the TP8 KV pool. FP8 KV follows the established
+# DeepSeek-V4 AgentX pattern and fits the unfiltered corpus's longest observed
+# 488,209-token input without truncation while retaining the model's native
+# 1,048,576-token context window.
 glm5.2-fp8-h200-sglang-agentic-hicache:
   image: lmsysorg/sglang:v0.5.15.post1-cu130
   model: zai-org/GLM-5.2-FP8
@@ -9912,8 +9914,8 @@ glm5.2-fp8-h200-sglang-agentic-hicache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # The TP8 BF16-KV pool is expected to cross its June-21
-      # service-time-weighted 269K-token working set near conc 4. Resolve the
-      # HBM cliff densely, then carry HiCache through its wider L2 frontier.
+      # Resolve the FP8-KV HBM cliff densely against the June-21
+      # service-time-weighted 269K-token working set, then carry HiCache
+      # through its wider L2 frontier.
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 40, 48, 56, 64] }
