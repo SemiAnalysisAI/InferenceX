@@ -4940,4 +4940,4 @@
     - "Add a GLM-5.2 FP8 MI325X SGLang single-node AgentX full-context qualification"
     - "Run TP8/EP1 STP with an explicit 1,048,576-token context and BF16 GPU KV pool against the complete unfiltered AgentX corpus"
     - "Use lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x with the AMD DSA TileLang prefill and decode backends; qualify concurrency 1 before expanding the frontier"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2273
