@@ -51,6 +51,10 @@ mkdir -p "$RESULT_DIR"
 export PYTHONNOUSERSITE=1
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
+# The mi30x image's sgl-kernel DSA top-k JIT includes CUDA's
+# cooperative_groups.h while compiling for gfx942. Use SGLang's portable
+# Torch fallback and disable the fused top-k path that requires that kernel.
+export SGLANG_DSA_FUSE_TOPK=false
 
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
@@ -67,6 +71,7 @@ SGLANG_CMD=(
     --ep-size "$EP_SIZE"
     --dsa-prefill-backend tilelang
     --dsa-decode-backend tilelang
+    --dsa-topk-backend torch
     --kv-cache-dtype bfloat16
     --tool-call-parser glm47
     --reasoning-parser glm45
