@@ -5,29 +5,43 @@ argument-hint: [pool-filter-regex]   # optional, e.g. "h200" or "b200|mi355x" to
 
 GitHub has no queue-metrics API for self-hosted runners, so this derives cluster
 pressure from the Actions API: a job's **wait so far = now − `created_at`** (queued
-jobs) and **runtime so far = now − `started_at`** (active jobs). The cluster is the
-job's runner label; the pool → runner-name mapping lives in `configs/runners.yaml`.
+jobs) and **runtime so far = now − `started_at`** (active jobs). Pool membership
+comes from the repo's own `configs/runners.yaml` (the authoritative pool →
+runner-name mapping), so run this **from the repo root**.
 
 `$ARGUMENTS` (optional) is a regex restricting which pools are shown in Steps 2–4
 (e.g. `h200`). Run all steps and report the tables as-is.
 
-**Key fact for interpreting the numbers:** a self-hosted runner agent executes
-**exactly one job at a time**, so per pool `jobs_active` should always be ≤
-`runners_busy`. Parallelism comes from multiple registered agents per pool
-(`h100-dgxc-slurm_00` … `_19`). A multi-node SLURM job still occupies exactly one
-agent (the orchestrator) — the nodes it allocates inside SLURM are invisible here.
+**Key facts for interpreting the numbers:**
+
+- A self-hosted runner agent executes **exactly one job at a time**, so per pool
+  `jobs_active` should always be ≤ `runners_busy`. Parallelism comes from multiple
+  registered agents per pool (`h100-dgxc-slurm_00` … `_19`).
+- Pools overlap **by design** in `configs/runners.yaml` (e.g. `h100-multinode` ⊂
+  `h100`, and the same `b200-dgxc_*` machines serve `b200`, `b200-dsv4`, and
+  `b200-dgxc` jobs), so one physical runner can count toward several pool rows.
+- A multi-node SLURM job still occupies exactly one agent (the orchestrator) — the
+  nodes it allocates inside SLURM are invisible here.
 
 ## Step 1 — Take one snapshot of jobs (active + queued) and runners
 
 A run can be `in_progress` while its matrix jobs are still `queued` waiting for
-runners (the sweep fan-out), so scan both statuses in a single pass:
+runners (the sweep fan-out), so scan both statuses. Every list call uses
+`--paginate` — without it the runs lists are silently capped at the first page.
 
 ```bash
 SNAP=$(mktemp /tmp/ci_snapshot.XXXXXX.ndjson)
 RUNNERS=$(mktemp /tmp/ci_runners.XXXXXX.ndjson)
+POOLS=$(mktemp /tmp/ci_pools.XXXXXX.tsv)
 
-{ gh api "repos/SemiAnalysisAI/InferenceX/actions/runs?status=queued&per_page=100" --jq '.workflow_runs[].id'
-  gh api "repos/SemiAnalysisAI/InferenceX/actions/runs?status=in_progress&per_page=100" --jq '.workflow_runs[].id'
+# Pool → runner-name membership, from the repo's own config (bare pool keys and
+# cluster:* keys are normalized to the same bucket: cluster:b200-dgxc → b200-dgxc).
+awk '/^  [A-Za-z0-9:-]+:$/ { k=$1; sub(":$","",k); sub("^cluster:","",k); pool=k; next }
+     /^    - / { print pool "\t" $2 }' configs/runners.yaml > "$POOLS"
+
+# Jobs, bucketed by the pool label they requested (demand side).
+{ gh api "repos/SemiAnalysisAI/InferenceX/actions/runs?status=queued&per_page=100" --paginate --jq '.workflow_runs[].id'
+  gh api "repos/SemiAnalysisAI/InferenceX/actions/runs?status=in_progress&per_page=100" --paginate --jq '.workflow_runs[].id'
 } | sort -u | while read -r RUN; do
   gh api "repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN/jobs?per_page=100" --paginate \
     --jq '.jobs[] | select(.status=="in_progress" or .status=="queued")
@@ -36,25 +50,26 @@ RUNNERS=$(mktemp /tmp/ci_runners.XXXXXX.ndjson)
       | select(.c != "other")'
 done > "$SNAP"
 
+# Runners by name (capacity side) — names match configs/runners.yaml entries.
 gh api "repos/SemiAnalysisAI/InferenceX/actions/runners?per_page=100" --paginate \
-  --jq '.runners[] | . as $r | [.labels[].name | select(test("^(cluster:)?(b200|b300|h100|h200|gb200|gb300|mi300x|mi325x|mi355x)")) | sub("^cluster:";"") | sub("_\\d+$";"")] | unique | .[] | {c: ., status: $r.status, busy: $r.busy}' \
-  > "$RUNNERS"
+  --jq '.runners[] | {name, status, busy}' > "$RUNNERS"
 ```
-
-Sanity-check coverage: compare against
-`gh api "repos/SemiAnalysisAI/InferenceX/actions/runs?status=in_progress&per_page=1" --jq .total_count`
-(and the same for `queued`) — if either exceeds 100, paginate the runs list too.
 
 ## Step 2 — Per-pool summary: runners online/busy vs jobs active/queued
 
+Joins demand (job labels) against capacity (`configs/runners.yaml` membership):
+
 ```bash
-jq -n -r --slurpfile jobs "$SNAP" --slurpfile runners "$RUNNERS" '
-  ($jobs | group_by(.c) | map({key: .[0].c, value: {
+jq -n -r --slurpfile jobs "$SNAP" --slurpfile runners "$RUNNERS" --rawfile pools "$POOLS" '
+  ($pools | split("\n") | map(select(contains("\t")) | split("\t"))
+    | group_by(.[1]) | map({key: .[0][1], value: [.[].[0]]}) | from_entries) as $name2pools
+  | ($jobs | group_by(.c) | map({key: .[0].c, value: {
       active: ([.[] | select(.status=="in_progress")] | length),
       queued: ([.[] | select(.status=="queued")] | length)}}) | from_entries) as $j
-  | ($runners | group_by(.c) | map({key: .[0].c, value: {
-      online: ([.[] | select(.status=="online")] | length),
-      busy:   ([.[] | select(.busy == true)] | length)}}) | from_entries) as $r
+  | ([ $runners[] as $r | ($name2pools[$r.name] // [])[] as $p | {c: $p, status: $r.status, busy: $r.busy} ]
+     | group_by(.c) | map({key: .[0].c, value: {
+         online: ([.[] | select(.status=="online")] | length),
+         busy:   ([.[] | select(.busy==true)] | length)}}) | from_entries) as $r
   | [([$j, $r] | map(keys) | add | unique | .[]) as $c
       | {c: $c, on: ($r[$c].online // 0), busy: ($r[$c].busy // 0),
          active: ($j[$c].active // 0), queued: ($j[$c].queued // 0)}]
@@ -71,12 +86,9 @@ How to read it (one job per runner agent, so these patterns are diagnostic):
 | `busy == active`, `queued == 0` | healthy, pool has spare capacity if `busy < online` |
 | `busy == online`, `queued > 0` | pool saturated — jobs waiting for a free runner (normal queue) |
 | `online == 0`, `queued > 0` | **pool is down** — no live runners; investigate the fleet, not the workflow |
-| `busy > active` | runners stuck "busy" (cancelled-job artifact) or busy with another repo's jobs (runners may be org-scoped) |
-| `active > busy` | impossible in steady state — treat as snapshot skew between the two API calls |
-
-Note a physical runner counts toward **every** pool label it carries (e.g. the
-same machine appears in `h200`, `h200-dgxc`, and `h200-dgxc-slurm`), so summing
-rows over-counts physical machines.
+| `busy > active` | the pool's runners are busy serving **another pool's** jobs (shared membership in `configs/runners.yaml`, e.g. `b200` vs `b200-dgxc`), stuck "busy" after a cancellation, or busy with another repo's jobs (runners may be org-scoped) |
+| `active > busy` | impossible in steady state — treat as snapshot skew between the API calls |
+| pool absent entirely | no online runners and no jobs — either idle-and-offline, or (if jobs *do* target it) the pool is not defined in `configs/runners.yaml` |
 
 ## Step 3 — Active jobs (what is running, and for how long)
 
@@ -99,11 +111,13 @@ header line of Step 2).
 
 ## Caveats
 
-- **Label shapes:** single-node jobs carry pool labels (`b200`, `mi355x`);
-  multi-node jobs carry `cluster:*` labels (`cluster:gb200-nv`); runners also carry
-  unique per-runner labels (`h100-dgxc-slurm_00`). The `sub()` calls normalize all
-  of these — do not drop the `cluster:` prefix handling or multi-node jobs silently
-  vanish from the results.
+- **Demand vs capacity bucketing:** jobs are bucketed by the label they *request*
+  (single-node jobs use pool labels like `b200`, multi-node jobs use `cluster:*`
+  labels — the `sub()` normalization merges them). Runners are bucketed strictly by
+  `configs/runners.yaml` membership, so bogus rows from per-runner name labels
+  (e.g. `h100-dgxc-slurm`) cannot appear.
+- **`gh api --jq` does not accept jq `--arg`** — extra arguments are parsed as API
+  parameters. Interpolate values into the `--jq` string via the shell instead.
 - **Re-run artifacts:** re-run jobs can report `started_at` from an earlier
   attempt, inflating runtime in Step 3. Cross-check an outlier against the job's
   page before believing it.
