@@ -3,11 +3,12 @@ set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM,
-# with MTP speculative decoding (num_speculative_tokens=3, synthetic acceptance length 2.49).
+# with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
+# length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
 #
 # Identical to dsv4_fp4_b200_vllm.sh (same image, engine args, offload, GPU
 # topologies, and agentic aiperf rig) with exactly two MTP deltas:
-#   --speculative-config '{"method": "mtp", "num_speculative_tokens": 3, "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 2.49}'
+#   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   --max-cudagraph-capture-size expressed in TOKENS (see the capture block below).
 #
 # Mirrors the fixed-seq-len parallelism options (pure TP and DEP) so the
@@ -233,9 +234,16 @@ MAX_NUM_SEQS=$((2 * CONC))
 # MAX_NUM_SEQS*(1+N) tokens -- otherwise vLLM's FULL_DECODE_ONLY ladder tops out
 # at MAX_NUM_SEQS/(1+N) seqs and the largest decode batches fall back to eager.
 NUM_SPEC_TOKENS=3
-# Standardize MTP acceptance to the dsv4-pro golden AL (thinking_on,
-# num_speculative_tokens=3) from golden_al_distribution/dsv4_mtp.yaml.
+# Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
+# num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
+# accuracy run uses real target verification instead -- synthetic acceptance
+# bypasses verification and corrupts the SWE-bench eval (0.0000 score).
 SYNTHETIC_ACCEPT_LEN=2.49
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+else
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+fi
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((MAX_NUM_SEQS * TOKENS_PER_SEQ))
 
@@ -260,7 +268,7 @@ VLLM_CMD=(
     --tokenizer-mode deepseek_v4
     --reasoning-parser deepseek_v4
     --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
-    --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    --speculative-config "$SPEC_CONFIG"
     --no-disable-hybrid-kv-cache-manager
     --disable-uvicorn-access-log
     --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
