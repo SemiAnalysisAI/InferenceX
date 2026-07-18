@@ -93,6 +93,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
+    # 0719
+    export GPU_MAX_HW_QUEUES=5
 
     # SGLang divides the configured chunk across DP schedulers. Use a 16K
     # per-scheduler chunk so long agentic prefill tails drain within the
