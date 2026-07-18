@@ -93,6 +93,12 @@ export TORCH_CUDA_ARCH_LIST=10.0
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+# AIPerf pins one pooled keep-alive connection per session (client-side
+# keep-alive 300s) while uvicorn's default SGLANG_TIMEOUT_KEEP_ALIVE is 5s;
+# inter-turn idle gaps (capped at 10s) can reuse a socket exactly as the
+# server closes it -> ECONNRESET -> terminal warmup failure. Outlast the
+# client pool so the race cannot occur.
+export SGLANG_TIMEOUT_KEEP_ALIVE=900
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
