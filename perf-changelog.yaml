@@ -4933,3 +4933,13 @@
   description:
     - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Add GLM-5.2 NVFP4 B300 SGLang single-node agentic benchmarks from the SGLang cookbook B300 NVFP4 recipes (STP only, no spec decoding)"
+    - "Image: lmsysorg/sglang:v0.5.15.post1-cu130; model nvidia/GLM-5.2-NVFP4"
+    - "Low-latency arm: TP8 (fp8 KV cache, cutedsl bf16 GEMM backend) at conc [1, 2, 4, 8, 16, 32]"
+    - "High-throughput arm: TP8/DP8 attention-DP behind sglang-router consistent hashing at conc [48, 64, 96, 128, 192, 256, 512]"
+    - "New 1M-context model prefix glm5.2 added to the unfiltered agentic corpus branch in benchmark_lib.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
