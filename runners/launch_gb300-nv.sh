@@ -103,29 +103,81 @@ NGINX_IMAGE="nginx:1.27.4"
 # symbolic links" bug from workflow worker NFS sessions on lockfiles
 # AND data files. /data/ has a separate NFS client cache that isn't
 # poisoned. See feedback_gb300_nfs_eloop_workaround for diagnosis.
-SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_DIR="${GB300_SQUASH_DIR:-/data/home/sa-shared/gharunners/squash}"
+FALLBACK_SQUASH_DIR="${GITHUB_WORKSPACE:-/tmp}/.container-squash/gb300"
+SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 # Run the import on a compute node via srun, not on the login node:
 # the login node is x86_64 while the compute nodes are aarch64, so the
 # arm64 squash file has to be built on a compute node.
-import_squash() {
+run_squash_import() {
     local squash="$1" image="$2"
-    local lock="${squash}.lock"
-    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
-        exec 9>\"$lock\"
-        flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
-        if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
-            echo 'Squash file already exists and is valid, skipping import: $squash'
-        else
-            rm -f \"$squash\"
-            enroot import -o \"$squash\" docker://$image
+    srun --partition="$SLURM_PARTITION" --exclusive --time=180 bash -s -- "$squash" "$image" <<'EOS'
+set -euo pipefail
+
+squash="$1"
+image="$2"
+squash_dir="$(dirname "$squash")"
+
+if unsquashfs -l "$squash" > /dev/null 2>&1; then
+    echo "Squash file already exists and is valid, skipping import: $squash"
+    exit 0
+fi
+
+if ! mkdir -p "$squash_dir" 2>/dev/null; then
+    echo "Error: failed to create squash dir: $squash_dir" >&2
+    exit 1
+fi
+
+probe="$squash_dir/.write-probe.${SLURM_JOB_ID:-$$}"
+if ! touch "$probe" 2>/dev/null; then
+    echo "Error: squash dir is not writable: $squash_dir" >&2
+    exit 1
+fi
+rm -f "$probe"
+
+lock_dir="${GB300_SQUASH_LOCK_DIR:-${TMPDIR:-/tmp}/inferencex-gb300-squash-locks-${USER:-unknown}}"
+mkdir -p "$lock_dir"
+lock="$lock_dir/$(basename "$squash").lock"
+
+(
+    exec 9>"$lock"
+    flock -w 600 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+    if unsquashfs -l "$squash" > /dev/null 2>&1; then
+        echo "Squash file already exists and is valid, skipping import: $squash"
+    else
+        tmp="${squash}.tmp.${SLURM_JOB_ID:-$$}.${RANDOM}"
+        rm -f "$tmp"
+        enroot import -o "$tmp" "docker://$image"
+        if ! unsquashfs -l "$tmp" > /dev/null 2>&1; then
+            echo "Error: enroot import did not produce a valid squash file: $tmp" >&2
+            rm -f "$tmp"
+            exit 1
         fi
-    "
+        mv -f "$tmp" "$squash"
+        chmod a+r "$squash" || true
+    fi
+)
+EOS
 }
 
-import_squash "$SQUASH_FILE" "$IMAGE"
-import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
+import_squash() {
+    local var_name="$1" image="$2"
+    local squash="${!var_name}"
+
+    if run_squash_import "$squash" "$image"; then
+        return 0
+    fi
+
+    local fallback="$FALLBACK_SQUASH_DIR/$(basename "$squash")"
+    echo "Warning: unable to use primary squash cache $squash; trying $fallback" >&2
+    run_squash_import "$fallback" "$image"
+    printf -v "$var_name" '%s' "$fallback"
+}
+
+import_squash SQUASH_FILE "$IMAGE"
+import_squash NGINX_SQUASH_FILE "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
@@ -149,6 +201,16 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
+    # This release includes the custom benchmark hook, Dynamo wheel support,
+    # and --no-preflight required by the node-local DeepSeek V4 model path.
+    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.30
+    mkdir -p recipes/trtllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4/agentic" \
+        recipes/trtllm/deepseek-v4/agentic
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
     # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
@@ -317,6 +379,7 @@ containers:
   v0.5.11: ${SQUASH_FILE}
   v0.5.13.post1: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
+  "${IMAGE//#//}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
 EOF

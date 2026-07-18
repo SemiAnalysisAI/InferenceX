@@ -9891,3 +9891,148 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           tp: 16
           ep: 16
           dp-attn: true
+
+dsv4-fp4-gb300-dynamo-trt-agentic:
+  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc21
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-trt
+  router: { name: dynamo-router, version: "1.3.0.dev2026071601" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        conc-list:
+        - 3
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-1p3d-dep4-tep8-c3-mtp-kvoffload.yaml
+        decode:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list:
+        - 5
+        - 10
+        - 20
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-1p5d-dep4-tep4-c5-mtp-kvoffload.yaml
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - spec-decoding: mtp
+        conc-list:
+        - 144
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-1p1d-dep8-dep32-c144-mtp-kvoffload.yaml
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list:
+        - 416
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-2p1d-dep8-dep32-c416-mtp-kvoffload.yaml
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list:
+        - 480
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-2p1d-dep8-dep16-c480-mtp-kvoffload.yaml
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list:
+        - 544
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-3p1d-dep8-dep32-c544-mtp-kvoffload.yaml
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list:
+        - 800
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-4p1d-dep8-dep16-c800-mtp-kvoffload.yaml
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list:
+        - 1200
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 8
+          dp-attn: true
+          # TRTLLM's KV offloading is controlled by 'host_cache_size'
+          additional-settings:
+          - CONFIG_FILE=recipes/trtllm/deepseek-v4/agentic/disagg-gb300-5p1d-dep8-dep16-c1200-mtp-kvoffload.yaml
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
