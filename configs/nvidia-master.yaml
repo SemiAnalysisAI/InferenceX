@@ -9892,11 +9892,14 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
-# GLM-5.2 H200 aggregate STP AgentX scouting grid. The engine follows the
-# upstream single-node H200 high-throughput topology (TP8/DP8/EP8 + DeepEP).
-# Both arms use consistent-hash routing for session affinity; the second adds
-# local-DRAM HiCache. Concurrency points are deliberately dense around the
-# expected HBM cliff and must be retuned from on-node results before submission.
+# GLM-5.2 H200 aggregate STP AgentX scouting grid, based on the official
+# SGLang cookbook recipe:
+# https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2
+# The engine uses the single-node H200 high-throughput topology
+# (TP8/DP8/EP8 + DeepEP). Both arms use consistent-hash routing for session
+# affinity; the second adds local-DRAM HiCache. Concurrency points are
+# deliberately dense around the expected HBM cliff and must be retuned from
+# on-node results before submission.
 glm5.2-fp8-h200-sglang-agentic-hicache:
   image: lmsysorg/sglang:v0.5.15.post1-cu130
   model: zai-org/GLM-5.2-FP8

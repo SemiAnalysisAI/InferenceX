@@ -102,9 +102,6 @@ export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=9.0
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
-# This is a maximum drain wait, not a fixed delay. The initial scouting grid
-# includes long-context saturation points that can exceed the shared default.
-export AGENTIC_WARMUP_GRACE_PERIOD="${AGENTIC_WARMUP_GRACE_PERIOD:-3600}"
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server

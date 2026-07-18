@@ -1780,10 +1780,8 @@ build_replay_cmd() {
     # only after those requests drain and resumes from the resulting live state.
     REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
     # Give long-context warmup requests up to 30 minutes to drain before
-    # cancelling any remaining requests and starting profiling. Recipes whose
-    # saturation arms carry a larger in-flight working set may override the
-    # maximum wait; warmup still exits as soon as the requests drain.
-    REPLAY_CMD+=" --warmup-grace-period ${AGENTIC_WARMUP_GRACE_PERIOD:-1800}"
+    # cancelling any remaining requests and starting profiling.
+    REPLAY_CMD+=" --warmup-grace-period 1800"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the
