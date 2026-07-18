@@ -1915,7 +1915,7 @@ dsv4-fp4-mi355x-sglang-disagg:
 
 
 dsv4-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260708
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1984,7 +1984,7 @@ dsv4-fp4-mi355x-sglang-mtp:
 # gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
 # probe to validate the ROCm DP+EP path.
 dsv4-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-67fe73b2b47e2927af1e5ec6fb91e16e3b075940
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2008,10 +2008,10 @@ dsv4-fp4-mi355x-vllm:
 # vllm-project/vllm#43385 (ROCm DeepSeek-V4 MTP, merged 2026-05-24, included in
 # v0.22.0). Full conc 4-512 range maps the complete crossover curve: MTP wins
 # at low batch (PR perf data: +75% @ conc1, +38% @ conc8) and falls behind STP
-# above ~conc32 (-37% @ conc32). The pinned nightly contains both the base
-# DeepSeek-V4 ROCm path and the MTP implementation.
+# above ~conc32 (-37% @ conc32). Image reuses the base entry's v0.22.0 ROCm
+# build, which already contains the MTP commit.
 dsv4-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-67fe73b2b47e2927af1e5ec6fb91e16e3b075940
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
