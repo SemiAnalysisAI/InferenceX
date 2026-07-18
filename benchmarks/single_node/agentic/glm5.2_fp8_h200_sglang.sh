@@ -10,8 +10,9 @@ set -x
 # its EAGLE flags, swept HBM-only and with a local-DRAM HiCache tier. Keeping
 # attention tensor-parallel is required for full-context AgentX replay. Match
 # the established DeepSeek-V4 AgentX pattern by using FP8 KV on H200, and
-# offload one expert layer in three so the active GPU pool can hold the native
-# 1,048,576-token context without truncating the unfiltered session replay.
+# offload two expert layers in five so the active GPU pool can hold the native
+# 1,048,576-token context plus FlashMLA runtime workspace without truncating
+# the unfiltered session replay.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -109,8 +110,8 @@ fi
 
 # The TP8 engine serves $PORT directly. Do not enable attention DP here: it
 # limits an individual request to one H200's KV pool. SGLang's grouped
-# DeepSeek offloader keeps one layer in three's expert weights in host memory,
-# leaving enough aggregate HBM for a native-context FP8 KV pool.
+# DeepSeek offloader keeps two layers in five's expert weights in host memory,
+# leaving enough HBM for a native-context FP8 KV pool and runtime workspaces.
 SGLANG_BACKEND_PORT="$PORT"
 
 # AgentX concurrency counts live session trees, not individual HTTP requests.
@@ -147,11 +148,13 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static 0.92
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    # One third of the sharded expert layers live in pinned host memory and are
-    # prefetched one layer ahead. Disable graphs because their fixed weight
-    # addresses are incompatible with the rotating expert staging buffers.
-    --offload-group-size 3
-    --offload-num-in-group 1
+    # Two fifths of the sharded expert layers live in pinned host memory and
+    # are prefetched one layer ahead. The extra reserve is required because
+    # FlashMLA allocates about 1 GiB of workspace under high AgentX concurrency.
+    # Disable graphs because their fixed weight addresses are incompatible
+    # with the rotating expert staging buffers.
+    --offload-group-size 5
+    --offload-num-in-group 2
     --offload-prefetch-step 1
     --offload-mode cpu
     --disable-cuda-graph
@@ -179,6 +182,33 @@ capture_cache_metrics() {
 }
 
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+# Configured context arguments do not prove that SGLang allocated the complete
+# L1 pool. Qualify the native context, truncation policy, allocated token pool,
+# and enough post-start HBM headroom for FlashMLA's high-concurrency workspace.
+SERVER_CONTEXT_LENGTH=$(sed -nE 's/.*context_len=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
+SERVER_KV_TOKEN_CAPACITY=$(sed -nE 's/.*max_total_num_tokens=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
+SERVER_GPU_RUNTIME_HEADROOM_GB=$(sed -nE 's/.*available_gpu_mem=([0-9]+([.][0-9]+)?) GB.*/\1/p' "$SERVER_LOG" | tail -1)
+MIN_AGENTX_KV_TOKEN_CAPACITY=1048576
+MIN_AGENTX_GPU_RUNTIME_HEADROOM_GB=18
+if [[ "$SERVER_CONTEXT_LENGTH" != "1048576" ]]; then
+    echo "Error: SGLang reported context_len=${SERVER_CONTEXT_LENGTH:-unknown}; expected 1048576" >&2
+    exit 1
+fi
+if ! grep -q 'allow_auto_truncate=False' "$SERVER_LOG"; then
+    echo "Error: could not verify that SGLang automatic truncation is disabled" >&2
+    exit 1
+fi
+if [[ -z "$SERVER_KV_TOKEN_CAPACITY" || "$SERVER_KV_TOKEN_CAPACITY" -lt "$MIN_AGENTX_KV_TOKEN_CAPACITY" ]]; then
+    echo "Error: SGLang reported max_total_num_tokens=${SERVER_KV_TOKEN_CAPACITY:-unknown}; untruncated AgentX replay requires at least $MIN_AGENTX_KV_TOKEN_CAPACITY" >&2
+    exit 1
+fi
+if [[ ! "$SERVER_GPU_RUNTIME_HEADROOM_GB" =~ ^[0-9]+([.][0-9]+)?$ ]] \
+    || (( ${SERVER_GPU_RUNTIME_HEADROOM_GB%%.*} < MIN_AGENTX_GPU_RUNTIME_HEADROOM_GB )); then
+    echo "Error: SGLang reported available_gpu_mem=${SERVER_GPU_RUNTIME_HEADROOM_GB:-unknown} GB; AgentX requires at least ${MIN_AGENTX_GPU_RUNTIME_HEADROOM_GB} GB for runtime workspaces" >&2
+    exit 1
+fi
+echo "Full-context qualification passed: context_len=$SERVER_CONTEXT_LENGTH, max_total_num_tokens=$SERVER_KV_TOKEN_CAPACITY, truncation=disabled, runtime_headroom=${SERVER_GPU_RUNTIME_HEADROOM_GB} GB"
 
 capture_cache_metrics
 trap capture_cache_metrics EXIT
