@@ -4933,3 +4933,11 @@
   description:
     - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-pcp-hicache
+  description:
+    - "Add GLM-5.2 FP8 full-context H200 AgentX qualification with SGLang DSA prefill context parallelism (TP1 x PCP8), LayerSplit, and TP16 decode"
+    - "Enable Mooncake PD transfer and HiCache on prefill and decode while replaying the unfiltered 1M-context AgentX trace at concurrency 1"
+    - "Use STP because DSA decode context parallelism is not merged and the GLM-5.2 MTP plus HiCache correctness issue remains open"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2275
