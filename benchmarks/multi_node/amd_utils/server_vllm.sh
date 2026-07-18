@@ -280,7 +280,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout 2500
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -291,7 +291,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-health \
         --health-endpoint /health \
-        --timeout 1800"
+        --timeout 2500"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
@@ -487,7 +487,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout 2500"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -543,7 +543,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout 2500"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
