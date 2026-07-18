@@ -1558,14 +1558,17 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
 # high-throughput strategies differ only in batch-shaping levers, which the
 # benchmark script derives from CONC, so a single TP8 arm traces the frontier.
 glm5.2-fp8-mi355x-sglang-agentic:
-  # Image: the cookbook-verified v0.5.13.post1-...-20260618 build segfaults in
-  # AITER's gemm_a8w8_blockscale_bpreshuffle under the agentic corpus (GLM-5.2
-  # gfx950 tuned configs are not upstream yet - ROCm/aiter#4243); use the
-  # newest rocm720 build for the latest AITER fallback fixes.
+  # Image: pinned to the build the DSv4 MI355X agentic recipe runs green on
+  # (same DSA architecture family, same harness/corpus/cluster). The
+  # cookbook-verified v0.5.13.post1-...-20260618 build segfaults in AITER's
+  # gemm_a8w8_blockscale_bpreshuffle under the agentic corpus (GLM-5.2 gfx950
+  # tuned configs are not upstream yet - ROCm/aiter#4243), and the newest
+  # v0.5.15.post1-...-20260717 build cannot boot DSA models on ROCm at all
+  # (dpsk_v4_topk_v2 JIT includes the CUDA-only cooperative_groups.h).
   # Conc capped at 32: the B300 sibling frontier showed no-offload points
   # beyond ~c48 are dominated (KV-pool cliff: radix hit rate collapses on the
   # 131k-token mean prompts), and MI355X prefill is slower still.
-  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260717
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
