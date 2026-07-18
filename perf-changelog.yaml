@@ -4941,4 +4941,4 @@
     - "Image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618 (cookbook-verified build with the gfx950 block-FP8 accuracy fix); model zai-org/GLM-5.2-FP8"
     - "Single TP8 arm at conc [1, 2, 4, 8, 16, 32, 48, 64]; cookbook low-latency vs balanced/high-throughput batch-shaping derived from CONC in the benchmark script"
     - "launch_mi355x-amds.sh: GLM-5.2 weights served from the NFS hf-hub-cache (MiniMax-M3 pattern); exclude broken-but-idle mia1-p01-g09/g11 from single-node salloc"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2272
