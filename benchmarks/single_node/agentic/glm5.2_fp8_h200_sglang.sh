@@ -122,6 +122,11 @@ export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=9.0
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
+# At the top of the native-1M HiCache curve, accelerated warmup requests can
+# need more than 30 minutes to drain while the server remains healthy. AIPerf
+# aborts the whole run if that grace expires, so retain the full warmup and let
+# c48-c64 drain for up to two hours before the one-hour profile begins.
+export AIPERF_AGENTIC_WARMUP_GRACE_PERIOD=7200
 
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
 # Keep the cookbook's default whole-engine prefill budget.
