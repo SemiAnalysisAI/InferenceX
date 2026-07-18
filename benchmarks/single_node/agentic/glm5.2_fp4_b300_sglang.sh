@@ -117,6 +117,16 @@ SGLANG_CMD=(
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --quantization modelopt_fp4
+    # GLM-5.2 emits the GLM-4.7-style <tool_call>/<arg_key>/<arg_value> format;
+    # the glm47 parser is required for structured message.tool_calls (glm45
+    # leaves calls as raw text). Without it the SWE-bench mini-swe-agent eval
+    # dies with RepeatedFormatError ("No tool calls found in the response") on
+    # every instance and scores 0. Reasoning parser keeps hybrid-thinking
+    # output in reasoning_content instead of polluting content. Neither flag
+    # affects trace-replay throughput (pre-canned replay discards live
+    # responses).
+    --tool-call-parser glm47
+    --reasoning-parser glm45
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
