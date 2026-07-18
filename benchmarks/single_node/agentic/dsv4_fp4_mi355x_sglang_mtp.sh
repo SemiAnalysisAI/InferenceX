@@ -112,7 +112,8 @@ fi
 # SGLang treats max-running-requests as a global DPA limit and partitions it
 # internally. CUDA graph capture is per scheduler, so only its batch size is
 # divided across DP ranks.
-MAX_RUNNING_REQUESTS=$CONC
+# 0719
+MAX_RUNNING_REQUESTS=$((2 * CONC))
 # 0719
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
