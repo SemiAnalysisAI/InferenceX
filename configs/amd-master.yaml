@@ -1708,7 +1708,14 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
 # high-throughput strategies differ only in batch-shaping levers, which the
 # benchmark script derives from CONC, so a single TP8 arm traces the frontier.
 glm5.2-fp8-mi355x-sglang-agentic:
-  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618
+  # Image: the cookbook-verified v0.5.13.post1-...-20260618 build segfaults in
+  # AITER's gemm_a8w8_blockscale_bpreshuffle under the agentic corpus (GLM-5.2
+  # gfx950 tuned configs are not upstream yet - ROCm/aiter#4243); use the
+  # newest rocm720 build for the latest AITER fallback fixes.
+  # Conc capped at 32: the B300 sibling frontier showed no-offload points
+  # beyond ~c48 are dominated (KV-pool cliff: radix hit rate collapses on the
+  # 131k-token mean prompts), and MI355X prefill is slower still.
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260717
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi355x-amds
@@ -1718,7 +1725,7 @@ glm5.2-fp8-mi355x-sglang-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64] }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32] }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
