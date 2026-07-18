@@ -4933,3 +4933,11 @@
   description:
     - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Pin image to vllm/vllm-openai-rocm:nightly-67fe73b2b47e2927af1e5ec6fb91e16e3b075940"
+    - "Add temporary AITER v0.1.16.post4 bridge with flydsl==0.2.2 until vllm-project/vllm#48683 reaches the official ROCm nightly"
+    - "Enable validated MI355X vLLM settings: AITER linear, FSE, INT4 quick-reduce, MXFP4 intermediate, KV FP8, block size 16, and --moe-backend aiter"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2266
