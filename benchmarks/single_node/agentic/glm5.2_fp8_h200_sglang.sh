@@ -121,6 +121,10 @@ SGLANG_CMD=(
     # copying the Blackwell-only fp8_e4m3 setting from the NVFP4 recipe.
     --tool-call-parser glm47
     --reasoning-parser glm45
+    # AgentX session trees can exceed the engine's usable context after
+    # multi-turn tool output accumulates. Retain the newest context instead
+    # of failing the request with HTTP 400.
+    --allow-auto-truncate
     --chunked-prefill-size 32768
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
