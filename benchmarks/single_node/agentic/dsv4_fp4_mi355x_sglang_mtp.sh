@@ -97,7 +97,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # SGLang divides the configured chunk across DP schedulers. Use a 16K
     # per-scheduler chunk so long agentic prefill tails drain within the
     # standard 600-second warmup grace period.
-    CHUNKED_PREFILL_SIZE=$((16384 * TP))
+    # 0719
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
