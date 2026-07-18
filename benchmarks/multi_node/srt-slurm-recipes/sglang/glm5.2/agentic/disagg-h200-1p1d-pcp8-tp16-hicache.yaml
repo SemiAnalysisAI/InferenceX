@@ -58,6 +58,7 @@ backend:
   type: sglang
 
   prefill_environment:
+    HF_HOME: "/hf_hub_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     PYTHONUNBUFFERED: "1"
@@ -68,6 +69,7 @@ backend:
     SGLANG_TIMEOUT_KEEP_ALIVE: "900"
 
   decode_environment:
+    HF_HOME: "/hf_hub_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     PYTHONUNBUFFERED: "1"
@@ -118,6 +120,7 @@ backend:
       ep-size: 1
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: decode
+      disaggregation-decode-enable-radix-cache: true
       kv-cache-dtype: fp8_e4m3
       context-length: 1048576
       max-total-tokens: 1048576
