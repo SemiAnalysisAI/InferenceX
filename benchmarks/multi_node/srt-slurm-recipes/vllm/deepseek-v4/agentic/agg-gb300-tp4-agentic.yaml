@@ -104,6 +104,7 @@ backend:
       pipeline-parallel-size: 1
       enable-cumem-allocator: true
       numa-bind: true
+      numa-bind-nodes: [0, 0, 1, 1]
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
       max-model-len: 1048576
       max-num-seqs: 32

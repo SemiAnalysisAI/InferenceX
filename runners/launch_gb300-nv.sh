@@ -198,6 +198,14 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
         exit 1
     fi
     git cherry-pick --no-commit "$SRT_SLURM_MULTINODE_VLLM_PORT_SHA"
+
+    # Per-node DP launches one Dynamo generate endpoint per node-local process,
+    # not one per DP rank. Backport the health-count fix from
+    # ivanium/srt-slurm@ca0880138fa606130ae4acbb8d0afddfb84c69fa.
+    SRT_SLURM_PER_NODE_HEALTH_PATCH="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-vllm-per-node-health.patch"
+    git apply --check "$SRT_SLURM_PER_NODE_HEALTH_PATCH"
+    git apply "$SRT_SLURM_PER_NODE_HEALTH_PATCH"
+
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
