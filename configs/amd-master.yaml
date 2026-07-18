@@ -1701,6 +1701,25 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
       - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
 
+# GLM-5.2 MI355X FP8 AgentX frontier from the SGLang cookbook MI355X FP8
+# single-node recipes (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2):
+# TP8 with DSA tilelang prefill/decode backends, STP only (MTP/EAGLE is not
+# yet validated on ROCm gfx950). The cookbook's low-latency / balanced /
+# high-throughput strategies differ only in batch-shaping levers, which the
+# benchmark script derives from CONC, so a single TP8 arm traces the frontier.
+glm5.2-fp8-mi355x-sglang-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64] }
+
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.

@@ -208,7 +208,10 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    # mia1-p01-g09 and mia1-p01-g11 are broken but sit idle in slurm (g09 was
+    # already excluded on the multi-node disagg path); keep single-node jobs
+    # off them too.
+    salloc --partition=$PARTITION --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -243,6 +246,13 @@ else
     # they are pre-downloaded once to the NFS share instead. Covers both the
     # MiniMaxAI MXFP8 checkpoint and the amd MXFP4 atom checkpoint.
     if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* || "$MODEL" == amd/MiniMax-M3* ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
+    # GLM-5.2-FP8 (~756 GB) is pre-staged once on the NFS share rather than
+    # re-downloaded onto each node's local NVMe cache (same pattern as
+    # MiniMax-M3 above).
+    if [[ "$MODEL" == zai-org/GLM-5.2* ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
