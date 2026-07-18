@@ -337,7 +337,10 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only && (inputs.eval-limit == '' || inputs.eval-limit == 'full' || inputs.eval-limit == '0') }}
-        run: python3 utils/evals/validate_scores.py
+        run: |
+          python3 -m venv "$RUNNER_TEMP/eval-validation-venv"
+          "$RUNNER_TEMP/eval-validation-venv/bin/pip" install 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/eval-validation-venv/bin/python" utils/evals/validate_scores.py
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (env.RUN_EVAL == 'true' || inputs.eval-only) }}

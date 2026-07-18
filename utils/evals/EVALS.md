@@ -156,7 +156,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks full-split eval results against thresholds in `utils/evals/thresholds.json`. The JSON format keeps validation independent of optional PyYAML installations on runner hosts. First-N smoke slices skip the quality gate because their scores are not statistically representative. Validation runs after artifact upload so full-run results are preserved even if the gate fails.
+`utils/evals/validate_scores.py` checks full-split eval results against thresholds in `utils/evals/thresholds.yaml`. The workflow installs the pinned PyYAML dependency before validation. First-N smoke slices skip the quality gate because their scores are not statistically representative. Validation runs after artifact upload so full-run results are preserved even if the gate fails.
 
 ### Adding a new eval task
 
@@ -214,7 +214,7 @@ append_lm_eval_summary
   is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
   `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
 - Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
-  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.json` gate is `0.50`, calibrated
+  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.yaml` gate is `0.50`, calibrated
   from full-split runs (54%); historical 50-instance slices scored 62–76%.
 
 ## Task files

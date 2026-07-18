@@ -186,7 +186,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--thresholds", default=None,
-        help="Path to thresholds config, YAML or JSON (default: utils/evals/thresholds.json)",
+        help="Path to thresholds config, YAML or JSON (default: utils/evals/thresholds.yaml)",
     )
     parser.add_argument(
         "--meta-env", default="meta_env.json",
@@ -229,7 +229,7 @@ def main() -> int:
     config = {"default": {}, "models": {}}
     thresholds_path = args.thresholds
     if thresholds_path is None:
-        default_path = Path(__file__).parent / "thresholds.json"
+        default_path = Path(__file__).parent / "thresholds.yaml"
         if default_path.exists():
             thresholds_path = str(default_path)
     if thresholds_path:
