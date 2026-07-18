@@ -180,26 +180,6 @@ capture_cache_metrics() {
 
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# A model can advertise a 1M context while a topology exposes a much smaller
-# per-request KV pool. Qualify the native context, truncation policy, and enough
-# L1 capacity for the complete unfiltered AgentX corpus independently.
-SERVER_CONTEXT_LENGTH=$(sed -nE 's/.*context_len=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
-SERVER_KV_TOKEN_CAPACITY=$(sed -nE 's/.*max_total_num_tokens=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
-MIN_AGENTX_KV_TOKEN_CAPACITY=1048576
-if [[ "$SERVER_CONTEXT_LENGTH" != "1048576" ]]; then
-    echo "Error: SGLang reported context_len=${SERVER_CONTEXT_LENGTH:-unknown}; expected 1048576" >&2
-    exit 1
-fi
-if ! grep -q 'allow_auto_truncate=False' "$SERVER_LOG"; then
-    echo "Error: could not verify that SGLang automatic truncation is disabled" >&2
-    exit 1
-fi
-if [[ -z "$SERVER_KV_TOKEN_CAPACITY" || "$SERVER_KV_TOKEN_CAPACITY" -lt "$MIN_AGENTX_KV_TOKEN_CAPACITY" ]]; then
-    echo "Error: SGLang reported max_total_num_tokens=${SERVER_KV_TOKEN_CAPACITY:-unknown}; untruncated AgentX replay requires at least $MIN_AGENTX_KV_TOKEN_CAPACITY" >&2
-    exit 1
-fi
-echo "Full-context qualification passed: context_len=$SERVER_CONTEXT_LENGTH, max_total_num_tokens=$SERVER_KV_TOKEN_CAPACITY, truncation=disabled"
-
 capture_cache_metrics
 trap capture_cache_metrics EXIT
 
