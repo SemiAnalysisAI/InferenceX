@@ -11,9 +11,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Resolve InferenceX-owned recipes before entering the cloned srt-slurm
     # checkout. AgentX also needs persistent host caches on every worker.
+    CONFIG_PATH="${CONFIG_FILE%%:*}"
     LOCAL_CONFIG_FILE=""
-    if [[ -n "${CONFIG_FILE:-}" && -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ]]; then
-        LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/$CONFIG_FILE"
+    LOCAL_CONFIG_PATH="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
+    if [[ -n "${CONFIG_FILE:-}" && -f "$LOCAL_CONFIG_PATH" ]]; then
+        LOCAL_CONFIG_FILE="$LOCAL_CONFIG_PATH"
     fi
     AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
     HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
@@ -170,8 +172,8 @@ EOF
     # make setup refreshes the srt-slurm recipe tree. Overlay the checked-in
     # InferenceX recipe afterwards so it remains available to srtctl apply.
     if [[ -n "$LOCAL_CONFIG_FILE" ]]; then
-        mkdir -p "$(dirname "$CONFIG_FILE")"
-        cp "$LOCAL_CONFIG_FILE" "$CONFIG_FILE"
+        mkdir -p "$(dirname "$CONFIG_PATH")"
+        cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
     fi
 
     # Export eval-related env vars for srt-slurm post-benchmark eval
@@ -186,9 +188,9 @@ EOF
     fi
 
     # Override the job name in the config file with the runner name
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "${CONFIG_FILE%%:*}"
-    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "${CONFIG_FILE%%:*}"
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+    sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
+    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
     WORKLOAD_TAG="${ISL}x${OSL}"
     if [[ "$IS_AGENTIC" == "1" ]]; then
         WORKLOAD_TAG="agentic"
