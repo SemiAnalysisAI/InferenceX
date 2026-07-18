@@ -171,6 +171,13 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
+    # GLM-5.2's chat template defaults to reasoning_effort=Max when the
+    # client passes no chat_template_kwargs (mini-swe-agent doesn't), and the
+    # heavy thinking burns the default 75-step budget: on the 23-instance
+    # slice, 12/23 trajectories exited LimitsExceeded unsubmitted while 10 of
+    # the 11 that submitted resolved. Double the step budget for this recipe;
+    # other recipes keep the shared 75 default.
+    export SWEBENCH_AGENT_STEP_LIMIT=150
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
