@@ -4935,6 +4935,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
 
 - config-keys:
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Bump vLLM image to v0.25.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-trt-agentic
   description:
     - "Add DeepSeek V4 Pro FP4 GB300 disaggregated Dynamo TensorRT-LLM MTP agentic config with eight prefill/decode topologies"
