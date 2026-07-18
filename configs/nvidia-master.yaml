@@ -9898,10 +9898,10 @@ qwen3.5-fp8-gb300-dynamo-sglang:
 # The TP8 low-latency cell is swept HBM-only and with a local-DRAM HiCache
 # tier, minus its EAGLE flags (STP only, no speculative decoding even though
 # the checkpoint ships an MTP head). Attention stays tensor-parallel so a
-# single AgentX request can use the TP8 KV pool. FP8 KV follows the established
-# DeepSeek-V4 AgentX pattern and fits the unfiltered corpus's longest observed
-# 488,209-token input without truncation while retaining the model's native
-# 1,048,576-token context window.
+# single AgentX request can use the TP8 KV pool. FP8 KV plus grouped expert
+# offload follows the established DeepSeek serving primitives and provisions
+# the model's native 1,048,576-token active context without truncating the
+# unfiltered session replay. Reserve part of host DRAM for offloaded experts.
 glm5.2-fp8-h200-sglang-agentic-hicache:
   image: lmsysorg/sglang:v0.5.15.post1-cu130
   model: zai-org/GLM-5.2-FP8
@@ -9912,7 +9912,7 @@ glm5.2-fp8-h200-sglang-agentic-hicache:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.65
       search-space:
       # Resolve the FP8-KV HBM cliff densely against the June-21
       # service-time-weighted 269K-token working set, then carry HiCache

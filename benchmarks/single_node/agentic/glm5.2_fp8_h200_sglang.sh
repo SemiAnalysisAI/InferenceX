@@ -9,9 +9,9 @@ set -x
 # The engine uses the upstream H200 cookbook's TP8 low-latency topology minus
 # its EAGLE flags, swept HBM-only and with a local-DRAM HiCache tier. Keeping
 # attention tensor-parallel is required for full-context AgentX replay. Match
-# the established DeepSeek-V4 AgentX pattern by using FP8 KV on H200; this
-# keeps every unfiltered trace intact while the model retains its native
-# 1,048,576-token context window.
+# the established DeepSeek-V4 AgentX pattern by using FP8 KV on H200, and
+# offload one expert layer in three so the active GPU pool can hold the native
+# 1,048,576-token context without truncating the unfiltered session replay.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -108,17 +108,15 @@ if require_agentic_kv_offload_backend hicache; then
 fi
 
 # The TP8 engine serves $PORT directly. Do not enable attention DP here: it
-# limits an individual request to one H200's KV pool (~135K BF16-KV tokens),
-# whereas TP8 plus FP8 KV provides enough L1 capacity for the complete trace.
+# limits an individual request to one H200's KV pool. SGLang's grouped
+# DeepSeek offloader keeps one layer in three's expert weights in host memory,
+# leaving enough aggregate HBM for a native-context FP8 KV pool.
 SGLANG_BACKEND_PORT="$PORT"
 
 # AgentX concurrency counts live session trees, not individual HTTP requests.
 # Allow subagent fan-out while retaining the upstream H200 engine cap.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
-CUDA_GRAPH_MAX_BS="$CONC"
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
-
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=9.0
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
@@ -136,7 +134,7 @@ SGLANG_CMD=(
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    # The unfiltered AgentX corpus reaches 488,209 input tokens. The Hopper
+    # The unfiltered replay grows live sessions beyond 618K tokens. Hopper's
     # default BF16 KV pool holds only ~297K tokens in TP8, so use the same FP8
     # KV strategy as the production DeepSeek-V4 AgentX launchers.
     --kv-cache-dtype fp8_e4m3
@@ -145,10 +143,18 @@ SGLANG_CMD=(
     # Pin the checkpoint's native context explicitly. Truncation is forbidden:
     # an input-length rejection is a failed qualification, not a usable sample.
     --context-length 1048576
+    --max-total-tokens 1048576
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    --mem-fraction-static 0.88
+    --mem-fraction-static 0.92
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    # One third of the sharded expert layers live in pinned host memory and are
+    # prefetched one layer ahead. Disable graphs because their fixed weight
+    # addresses are incompatible with the rotating expert staging buffers.
+    --offload-group-size 3
+    --offload-num-in-group 1
+    --offload-prefetch-step 1
+    --offload-mode cpu
+    --disable-cuda-graph
     --watchdog-timeout 1800
     --enable-metrics
     "${CACHE_ARGS[@]}"
@@ -179,7 +185,7 @@ wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" -
 # L1 capacity for the complete unfiltered AgentX corpus independently.
 SERVER_CONTEXT_LENGTH=$(sed -nE 's/.*context_len=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
 SERVER_KV_TOKEN_CAPACITY=$(sed -nE 's/.*max_total_num_tokens=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
-MIN_AGENTX_KV_TOKEN_CAPACITY=524288
+MIN_AGENTX_KV_TOKEN_CAPACITY=1048576
 if [[ "$SERVER_CONTEXT_LENGTH" != "1048576" ]]; then
     echo "Error: SGLang reported context_len=${SERVER_CONTEXT_LENGTH:-unknown}; expected 1048576" >&2
     exit 1
