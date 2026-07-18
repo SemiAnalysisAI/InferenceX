@@ -4935,6 +4935,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
 
 - config-keys:
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Bump vLLM image to v0.25.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
+
+- config-keys:
     - glm5.2-fp8-mi325x-sglang-agentic
   description:
     - "Add a GLM-5.2 FP8 MI325X SGLang single-node AgentX full-context qualification"

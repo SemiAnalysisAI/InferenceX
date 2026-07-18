@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -x
 
-source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/../../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
