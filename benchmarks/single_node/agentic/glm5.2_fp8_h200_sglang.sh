@@ -55,8 +55,9 @@ mkdir -p "$RESULT_DIR"
 export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
-# HiCache allocates its host pool per rank. GLM-5.2 has one DSA KV pool per
-# rank, so divide the workflow-provided aggregate host budget across TP8.
+# HiCache allocates its host pool per rank. GLM-5.2 also allocates a separate
+# DSA indexer in host memory (observed at 20.1% of the KV pool), so reserve 21%
+# for it before dividing the workflow-provided aggregate budget across TP8.
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
     REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
@@ -65,7 +66,15 @@ if require_agentic_kv_offload_backend hicache; then
         exit 1
     fi
     HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
-    MAX_HICACHE_SIZE_GB=$((REQUESTED_HICACHE_TOTAL_GB / TP / HICACHE_HOST_POOL_COUNT))
+    HICACHE_DSA_INDEXER_OVERHEAD_PERCENT="${HICACHE_DSA_INDEXER_OVERHEAD_PERCENT:-21}"
+    if ! [[ "$HICACHE_DSA_INDEXER_OVERHEAD_PERCENT" =~ ^[0-9]+$ ]]; then
+        echo "Error: HICACHE_DSA_INDEXER_OVERHEAD_PERCENT must be a non-negative integer" >&2
+        exit 1
+    fi
+    MAX_HICACHE_SIZE_GB=$((
+        REQUESTED_HICACHE_TOTAL_GB * 100
+        / (TP * HICACHE_HOST_POOL_COUNT * (100 + HICACHE_DSA_INDEXER_OVERHEAD_PERCENT))
+    ))
     HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
     if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
         echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-pool limit $MAX_HICACHE_SIZE_GB" >&2
@@ -83,6 +92,10 @@ if require_agentic_kv_offload_backend hicache; then
     # page_first_direct if GLM-5.2's DSA element shape misses the JIT fast path.
     HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-kernel}"
     HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
+    ESTIMATED_HICACHE_TOTAL_GB=$((
+        HICACHE_SIZE_GB * TP * HICACHE_HOST_POOL_COUNT
+        * (100 + HICACHE_DSA_INDEXER_OVERHEAD_PERCENT) / 100
+    ))
     CACHE_ARGS=(
         --page-size "$HICACHE_PAGE_SIZE"
         --enable-hierarchical-cache
@@ -91,7 +104,7 @@ if require_agentic_kv_offload_backend hicache; then
         --hicache-io-backend "$HICACHE_IO_BACKEND"
         --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
     )
-    echo "HiCache GLM-5.2 CPU tier: ${HICACHE_SIZE_GB} GB per rank across TP=${TP}; page_size=$HICACHE_PAGE_SIZE, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+    echo "HiCache GLM-5.2 CPU tier: ${HICACHE_SIZE_GB} GB KV per rank across TP=${TP}; reserving ${HICACHE_DSA_INDEXER_OVERHEAD_PERCENT}% DSA indexer overhead, estimated aggregate=${ESTIMATED_HICACHE_TOTAL_GB} GB/${REQUESTED_HICACHE_TOTAL_GB} GB; page_size=$HICACHE_PAGE_SIZE, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
 fi
 
 # The TP8 engine serves $PORT directly. Do not enable attention DP here: it
