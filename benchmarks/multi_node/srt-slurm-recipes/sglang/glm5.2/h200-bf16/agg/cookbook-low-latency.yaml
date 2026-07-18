@@ -1,0 +1,55 @@
+name: "glm5.2-h200-bf16-agg-cookbook-low-latency"
+
+# Unofficial 2x8xH200 BF16 qualification of the SGLang GLM-5.2 cookbook's
+# low-latency multi-2 profile. The launcher patches benchmark lengths and
+# concurrencies from the generated InferenceX matrix.
+model:
+  path: "glm5.2-bf16"
+  container: "lmsysorg/sglang:latest"
+  precision: "bf16"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev1"
+
+slurm:
+  time_limit: "8:00:00"
+
+resources:
+  gpu_type: "h200"
+  gpus_per_node: 8
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: sglang
+  aggregated_environment:
+    PYTHONUNBUFFERED: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+  sglang_config:
+    aggregated:
+      served-model-name: "zai-org/GLM-5.2"
+      trust-remote-code: true
+      tp-size: 16
+      context-length: 1048576
+      mem-fraction-static: 0.85
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 5
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 6
+      reasoning-parser: glm45
+      tool-call-parser: glm47
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  random_range_ratio: 0.8
+  concurrencies: "1"
+  req_rate: "inf"
+  use_chat_template: true

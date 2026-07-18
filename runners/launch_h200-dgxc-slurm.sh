@@ -9,6 +9,13 @@ set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
+    # InferenceX-owned recipes are referenced relative to the checkout. Resolve
+    # them before entering the cloned srt-slurm repository.
+    LOCAL_CONFIG_FILE=""
+    if [[ -n "${CONFIG_FILE:-}" && -f "$GITHUB_WORKSPACE/$CONFIG_FILE" ]]; then
+        LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/$CONFIG_FILE"
+    fi
+
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
@@ -16,8 +23,25 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+        elif [[ $MODEL_PREFIX == glm5.2-* && $PRECISION == "bf16" ]]; then
+            export MODEL_PATH="${GLM52_BF16_MODEL_PATH:-/models/GLM-5.2}"
+            if [[ ! -d "$MODEL_PATH" ]]; then
+                export MODEL_PATH="hf:zai-org/GLM-5.2"
+            fi
+            export SRT_SLURM_MODEL_PREFIX="glm5.2-bf16"
         else
             echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
+    elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        if [[ $MODEL_PREFIX == glm5.2-* && $PRECISION == "bf16" ]]; then
+            export MODEL_PATH="${GLM52_BF16_MODEL_PATH:-/models/GLM-5.2}"
+            if [[ ! -d "$MODEL_PATH" ]]; then
+                export MODEL_PATH="hf:zai-org/GLM-5.2"
+            fi
+            export SRT_SLURM_MODEL_PREFIX="glm5.2-bf16"
+        else
+            echo "Unsupported model prefix/precision for dynamo-vllm: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
@@ -30,7 +54,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             exit 1
         fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
         exit 1
     fi
 
@@ -51,6 +75,21 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout sa-submission-q2-2026
     fi
 
+    if [[ -n "$LOCAL_CONFIG_FILE" ]]; then
+        mkdir -p recipes/inferencex
+        CONFIG_FILE="recipes/inferencex/$(basename "$LOCAL_CONFIG_FILE")"
+        cp "$LOCAL_CONFIG_FILE" "$CONFIG_FILE"
+        AGG_GPUS=$((PREFILL_TP * PREFILL_PP_SIZE * PREFILL_PCP_SIZE))
+        AGG_NODES=$(((AGG_GPUS + 7) / 8))
+        sed -i -E "s/^([[:space:]]*)isl:.*/\1isl: ${ISL}/" "$CONFIG_FILE"
+        sed -i -E "s/^([[:space:]]*)osl:.*/\1osl: ${OSL}/" "$CONFIG_FILE"
+        sed -i -E "s/^([[:space:]]*)concurrencies:.*/\1concurrencies: \"${CONC_LIST}\"/" "$CONFIG_FILE"
+        sed -i -E "s/^([[:space:]]*)agg_nodes:.*/\1agg_nodes: ${AGG_NODES}/" "$CONFIG_FILE"
+        sed -i -E "s/^([[:space:]]*)gpus_per_agg:.*/\1gpus_per_agg: ${AGG_GPUS}/" "$CONFIG_FILE"
+        sed -i -E "s/^([[:space:]]*)prefill-context-parallel-size:.*/\1prefill-context-parallel-size: ${PREFILL_PCP_SIZE}/" "$CONFIG_FILE"
+        sed -i -E "s/^([[:space:]]*)decode-context-parallel-size:.*/\1decode-context-parallel-size: ${PREFILL_DCP_SIZE}/" "$CONFIG_FILE"
+    fi
+
     echo "Installing srtctl..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     source $HOME/.local/bin/env
@@ -69,14 +108,37 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        # SGLang container mapping
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+    if [[ $FRAMEWORK == "dynamo-sglang" || $FRAMEWORK == "dynamo-vllm" ]]; then
+        # Framework container mapping. GLM-5.2 day-zero images are imported
+        # into the same writable cache used by H200 one-off jobs.
+        if [[ $MODEL_PREFIX == glm5.2-* ]]; then
+            SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        else
+            SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        fi
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    fi
+
+    if ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+        DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
+        LOCK_FILE="${SQUASH_FILE}.lock"
+        srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+            --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
+            bash -c "
+                exec 9>\"$LOCK_FILE\"
+                flock -w 1800 9 || { echo 'Failed to acquire $LOCK_FILE'; exit 1; }
+                if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
+                    exit 0
+                fi
+                rm -f \"$SQUASH_FILE\"
+                export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
+                mkdir -p \"\$ENROOT_CACHE_PATH\"
+                enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
+            "
     fi
 
     export ISL="$ISL"
@@ -105,6 +167,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"

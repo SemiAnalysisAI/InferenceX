@@ -4935,8 +4935,9 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
 
 - config-keys:
-    - glm5.2-fp8-h200-sglang-agentic-hicache
+    - glm5.2-bf16-h200-dynamo-sglang-*
+    - glm5.2-bf16-h200-dynamo-vllm-context-parallel
   description:
-    - "Add the full-context GLM-5.2 FP8 single-node H200 SGLang AgentX STP HBM and local-DRAM HiCache sweep."
-    - "新增支持完整上下文的 GLM-5.2 FP8 单节点 H200 SGLang AgentX STP HBM 与本地 DRAM HiCache 扫描。"
+    - "Add an unofficial GLM-5.2 BF16 H200 aggregate multi-node sweep covering the three SGLang cookbook profiles and vLLM PCP/DCP alternatives."
+    - "新增非官方 GLM-5.2 BF16 H200 聚合式多节点扫描，覆盖三组 SGLang cookbook 配置以及 vLLM PCP/DCP 备选方案。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2271

@@ -1,0 +1,61 @@
+name: "glm5.2-h200-bf16-agg-vllm-context-parallel"
+
+# Unofficial GLM-5.2 BF16 context-parallel qualification. The launcher patches
+# PCP/DCP sizes and the matching aggregate node/GPU count from the matrix.
+model:
+  path: "glm5.2-bf16"
+  container: "vllm/vllm-openai:glm52"
+  precision: "bf16"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev1"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+resources:
+  gpu_type: "h200"
+  gpus_per_node: 8
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 16
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+    NCCL_CUMEM_ENABLE: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "zai-org/GLM-5.2"
+      trust-remote-code: true
+      tensor-parallel-size: 16
+      prefill-context-parallel-size: 1
+      decode-context-parallel-size: 1
+      cp-kv-cache-interleave-size: 128
+      block-size: 256
+      max-model-len: 1048576
+      max-num-seqs: 256
+      max-num-batched-tokens: 32768
+      gpu-memory-utilization: 0.85
+      no-enable-prefix-caching: true
+      enable-auto-tool-choice: true
+      reasoning-parser: glm45
+      tool-call-parser: glm47
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  random_range_ratio: 0.8
+  concurrencies: "1"
+  req_rate: "inf"
+  use_chat_template: true
