@@ -245,6 +245,47 @@ class TestSeqLenToStr:
 class TestMarkEvalEntries:
     """Tests for eval matrix selection policy."""
 
+    def test_marks_agentic_entry_for_swebench(self):
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 32,
+            },
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 64,
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values, include_agentic=True)
+
+        marked = [e for e in result if e.get("run-eval")]
+        assert len(marked) == 1
+        assert marked[0]["conc"] == 64
+
+    def test_default_mode_does_not_mark_agentic(self):
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 32,
+            },
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 64,
+            },
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        marked = [e for e in result if e.get("run-eval")]
+        assert len(marked) == 0, (
+            f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
+        )
+
     def test_single_node_skips_eval_entries_below_min_conc(self):
         """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""
         matrix_values = [
@@ -654,7 +695,7 @@ class TestMarkAllEvalEntries:
         assert eight_k['eval-all-concs'] is True
         assert eight_k['conc'] == [8, 32]
 
-    def test_skips_agentic_entries(self):
+    def test_marks_agentic_entries_for_swebench(self):
         entries = [
             {
                 'scenario-type': 'agentic-coding',
@@ -666,7 +707,7 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(entries)
 
-        assert 'run-eval' not in result[0]
+        assert result[0]['run-eval'] is True
         assert 'eval-conc' not in result[0]
         assert 'eval-all-concs' not in result[0]
 
