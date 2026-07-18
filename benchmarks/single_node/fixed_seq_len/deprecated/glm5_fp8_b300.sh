@@ -4,7 +4,7 @@
 # does not have a B300-specific recipe, so this script reuses the existing
 # GLM5 FP8 B200 SGLang recipe as-is until B300-specific tuning is available.
 
-source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/../../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -33,10 +33,7 @@ fi
 
 nvidia-smi
 
-
-
 export SGLANG_ENABLE_JIT_DEEPGEMM=1
-export SGLANG_ENABLE_SPEC_V2=1
 
 SERVER_LOG=/workspace/server.log
 
@@ -67,10 +64,6 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL_PATH --se
 --chunked-prefill-size 32768 --max-prefill-tokens 32768 \
 --enable-flashinfer-allreduce-fusion --disable-radix-cache \
 --stream-interval 30 \
---speculative-algorithm EAGLE \
---speculative-num-steps 3 \
---speculative-eagle-topk 1 \
---speculative-num-draft-tokens 4 \
 --model-loader-extra-config '{"enable_multithread_load": true}' $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
@@ -90,8 +83,7 @@ run_benchmark_serving \
     --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
-    --result-dir /workspace/ \
-    --use-chat-template
+    --result-dir /workspace/
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then

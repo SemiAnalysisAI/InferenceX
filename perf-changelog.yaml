@@ -4940,3 +4940,10 @@
   description:
     - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Bump vLLM image to v0.25.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
