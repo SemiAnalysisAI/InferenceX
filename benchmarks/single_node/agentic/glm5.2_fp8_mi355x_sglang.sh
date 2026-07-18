@@ -122,6 +122,13 @@ echo "Server PID: $SERVER_PID"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
+    # GLM-5.2's chat template defaults to reasoning_effort=Max when the
+    # client passes no chat_template_kwargs (mini-swe-agent doesn't), and the
+    # heavy thinking burns the default 75-step budget before submission
+    # (observed on the B300 sibling recipe: 12/23 trajectories exited
+    # LimitsExceeded unsubmitted while 10 of the 11 that submitted resolved).
+    # Double the step budget for this recipe; others keep the shared default.
+    export SWEBENCH_AGENT_STEP_LIMIT=150
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
