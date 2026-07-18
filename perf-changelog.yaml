@@ -4939,4 +4939,4 @@
   description:
     - "Add DeepSeek V4 Pro FP4 GB300 disaggregated Dynamo TensorRT-LLM MTP agentic config with eight prefill/decode topologies"
     - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2274
