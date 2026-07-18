@@ -9830,6 +9830,45 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
           tp: 16
           ep: 16
           dp-attn: true
+
+# GLM-5.2 FP8 full-context AgentX qualification on H200. SGLang prefill CP
+# runs inside one TP8 worker, so the matrix describes the effective attention
+# topology as TP1 x PCP8 while the recipe launches eight ranks. LayerSplit
+# shards DSA KV/indexer cache layers across those ranks. Decode remains TP16:
+# upstream DSA decode-context parallelism is not merged, and two H200 nodes
+# are required to leave runtime headroom beside the explicit 1M FP8 KV pool.
+glm5.2-fp8-h200-dynamo-sglang-agentic-pcp-hicache:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:h200-dgxc
+  precision: fp8
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: none
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 1
+          pcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-1p1d-pcp8-tp16-hicache.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 1
+          dp-attn: false
 qwen3.5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260709-074bb928
   model: Qwen/Qwen3.5-397B-A17B-FP8

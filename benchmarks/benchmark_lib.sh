@@ -1660,7 +1660,7 @@ resolve_trace_source() {
     # WEKA_LOADER_OVERRIDE.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|minimaxm3*)
+        dsv4*|glm5.2*|minimaxm3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)
