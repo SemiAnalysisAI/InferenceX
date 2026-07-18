@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${IS_MULTINODE:-false}" == "true" ]]; then
+    exec bash "$(dirname "$0")/launch_mi325x-amds_multinode.sh"
+fi
+
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 
 PARTITION="compute"

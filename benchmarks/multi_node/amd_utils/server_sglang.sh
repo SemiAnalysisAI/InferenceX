@@ -10,6 +10,7 @@ NODE0_ADDR="${NODE0_ADDR:-localhost}"
 NODE_RANK="${NODE_RANK:-0}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
+MODEL_CONFIG_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
 
 xP="${xP:-1}" #-> Number of Prefill Workers
 yD="${yD:-1}" #-> Number of Decode Workers
@@ -80,7 +81,7 @@ eval "$(python3 -c "
 import yaml, sys, os
 
 config_path = '${MODELS_YAML}'
-model_name = '${MODEL_NAME}'
+model_name = '${MODEL_CONFIG_KEY}'
 
 with open(config_path) as f:
     models = yaml.safe_load(f)
@@ -173,7 +174,7 @@ print(f'DECODE_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 ")"
 
-echo "Loaded model configuration for: $MODEL_NAME"
+echo "Loaded model configuration for: $MODEL_CONFIG_KEY"
 
 # Compute DP-dependent prefill parameters
 if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
@@ -379,8 +380,8 @@ build_server_config() {
 PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP_SIZE" "$PREFILL_ENABLE_EP" "$PREFILL_ENABLE_DP" "$DECODE_MTP_SIZE")
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
 
-if [[ -n "$MODEL_NAME" ]]; then
-    echo "Using model-specific configuration for: $MODEL_NAME"
+if [[ -n "$MODEL_CONFIG_KEY" ]]; then
+    echo "Using model-specific configuration for: $MODEL_CONFIG_KEY"
 fi
 
 if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
@@ -506,12 +507,16 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
+    ROUTER_POLICY="random"
+    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+        ROUTER_POLICY="cache_aware"
+    fi
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
         --port 30000 \
-        --policy random \
+        --policy ${ROUTER_POLICY} \
         --prefill-policy random \
-        --decode-policy random \
+        --decode-policy ${ROUTER_POLICY} \
         ${PREFILL_ARGS} \
         ${DECODE_ARGS}"
 
@@ -573,11 +578,41 @@ if [ "$NODE_RANK" -eq 0 ]; then
         export IS_MTP=false
     fi
 
-    # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
-    BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+        export PORT=30000
+        export INFMAX_CONTAINER_WORKSPACE=/workspace
+        export RESULT_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/agentic"
+        export AGENTIC_OUTPUT_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/agentic-output"
+        export CONC_LIST="${BENCH_MAX_CONCURRENCY//x/ }"
+        export CONC="${CONC:-${CONC_LIST%% *}}"
+        export PREFILL_TP="$PREFILL_TP_SIZE"
+        export PREFILL_EP=1
+        [[ "$PREFILL_ENABLE_EP" == "true" ]] && export PREFILL_EP="$PREFILL_TP_SIZE"
+        export PREFILL_DP_ATTENTION="$PREFILL_ENABLE_DP"
+        export PREFILL_NUM_WORKERS="$xP"
+        export DECODE_TP="$DECODE_TP_SIZE"
+        export DECODE_EP=1
+        [[ "$DECODE_ENABLE_EP" == "true" ]] && export DECODE_EP="$DECODE_TP_SIZE"
+        export DECODE_DP_ATTENTION="$DECODE_ENABLE_DP"
+        export DECODE_NUM_WORKERS="$yD"
+
+        metrics_urls=()
+        for i in $(seq 0 $((xP - 1))); do
+            metrics_urls+=("http://${IP_ARRAY[$((i * PREFILL_NODES_PER_WORKER))]}:8000/metrics")
+        done
+        for i in $(seq 0 $((yD - 1))); do
+            metrics_urls+=("http://${IP_ARRAY[$((i * DECODE_NODES_PER_WORKER + NODE_OFFSET))]}:8000/metrics")
+        done
+        export AIPERF_SERVER_METRICS_URLS
+        AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${metrics_urls[*]}")
+        BENCH_CMD="bash /workspace/benchmarks/multi_node/agentic_srt.sh"
+    else
+        # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
+        BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"

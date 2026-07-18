@@ -206,10 +206,16 @@ else
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
 
     # GLM-5: uses NSA (not MLA), needs fused-decode-MLA disabled + fast loading
-    if [[ "$MODEL_NAME" == "GLM-5-FP8" ]]; then
+    MODEL_CONFIG_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
+    if [[ "$MODEL_CONFIG_KEY" == "GLM-5-FP8" || "$MODEL_CONFIG_KEY" == "GLM-5.2-FP8" ]]; then
         export SGLANG_ROCM_FUSED_DECODE_MLA=0
         export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
         export SAFETENSORS_FAST_GPU=1
+    fi
+
+    if [[ "$MODEL_CONFIG_KEY" == "GLM-5.2-FP8" ]]; then
+        export SGLANG_DSA_FUSE_TOPK=false
+        export SGLANG_OPT_USE_TOPK_V2=false
     fi
 
     # Disable allocating memory in one pass

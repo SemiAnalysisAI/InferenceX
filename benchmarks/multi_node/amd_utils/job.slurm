@@ -42,13 +42,14 @@ if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
 fi
 
 MODEL_NAME="${MODEL_NAME:-None}"
-if ! grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_NAME' not found in $MODELS_YAML"
+MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
+if ! grep -Fqx "${MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    echo "Error: Model '$MODEL_YAML_KEY' not found in $MODELS_YAML"
     echo "Available models:"
     grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
     exit 1
 fi
-echo "Model found: $MODEL_NAME"
+echo "Model configuration found: $MODEL_YAML_KEY"
 
 RUN_FILE="server.sh"
 echo "Runfile set: $RUN_FILE"
@@ -262,6 +263,7 @@ export MODEL_DIR=$MODEL_DIR
 export xP=$xP
 export yD=$yD
 export MODEL_NAME=$MODEL_NAME
+export MODEL_YAML_KEY=$MODEL_YAML_KEY
 export USER_NAME=$USER_NAME
 export IPADDRS="$(echo "${IPS[*]}" | sed 's/ /,/g')"
 export GPUS_PER_NODE=$GPUS_PER_NODE
@@ -287,9 +289,24 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-fixed-seq-len}"
+export IS_AGENTIC="${IS_AGENTIC:-0}"
+export CONC="${CONC:-}"
+export CONC_LIST="${CONC_LIST:-}"
+export DURATION="${DURATION:-3600}"
+export KV_OFFLOADING="${KV_OFFLOADING:-none}"
+export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
+export KV_OFFLOAD_BACKEND_METADATA="${KV_OFFLOAD_BACKEND_METADATA:-}"
+export ROUTER_METADATA="${ROUTER_METADATA:-}"
+export KV_P2P_TRANSFER="${KV_P2P_TRANSFER:-}"
+export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-0}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
+export MODEL="${MODEL:-}"
+export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+SANITIZED_MODEL=$(echo "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
+export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
 
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
@@ -339,6 +356,7 @@ DOCKER_ENV_COMMON=(
     -e NODE0_ADDR=\$NODE0_ADDR
     -e MODEL_DIR=/models
     -e MODEL_NAME=\$MODEL_NAME
+    -e MODEL_YAML_KEY=\$MODEL_YAML_KEY
     -e GPUS_PER_NODE=\$GPUS_PER_NODE
     -e xP=\$xP
     -e yD=\$yD
@@ -371,6 +389,21 @@ DOCKER_ENV_COMMON=(
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e SCENARIO_TYPE=\$SCENARIO_TYPE
+    -e IS_AGENTIC=\$IS_AGENTIC
+    -e CONC=\$CONC
+    -e "CONC_LIST=\$CONC_LIST"
+    -e DURATION=\$DURATION
+    -e KV_OFFLOADING=\$KV_OFFLOADING
+    -e KV_OFFLOAD_BACKEND=\$KV_OFFLOAD_BACKEND
+    -e "KV_OFFLOAD_BACKEND_METADATA=\$KV_OFFLOAD_BACKEND_METADATA"
+    -e "ROUTER_METADATA=\$ROUTER_METADATA"
+    -e KV_P2P_TRANSFER=\$KV_P2P_TRANSFER
+    -e TOTAL_CPU_DRAM_GB=\$TOTAL_CPU_DRAM_GB
+    -e MAX_MODEL_LEN=\$MAX_MODEL_LEN
+    -e MODEL=\$MODEL
+    -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
+    -e HF_HUB_CACHE=/models
 )
 
 # Engine-specific env vars

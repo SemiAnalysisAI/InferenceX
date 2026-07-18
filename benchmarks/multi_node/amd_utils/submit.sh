@@ -121,6 +121,7 @@ export DECODE_MTP_SIZE=${DECODE_MTP_SIZE}
 export NUM_NODES=$NUM_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
 export MODEL_NAME=$MODEL_NAME
+export MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
 export BENCH_INPUT_LEN=${ISL}
 export BENCH_OUTPUT_LEN=${OSL}
 export BENCH_NUM_PROMPTS_MULTIPLIER=${BENCH_NUM_PROMPTS_MULTIPLIER:-10}
@@ -145,6 +146,20 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-fixed-seq-len}"
+export IS_AGENTIC="${IS_AGENTIC:-0}"
+export CONC="${CONC:-${CONCURRENCIES%%x*}}"
+export CONC_LIST="${CONC_LIST:-${CONCURRENCIES//x/ }}"
+export DURATION="${DURATION:-3600}"
+export KV_OFFLOADING="${KV_OFFLOADING:-none}"
+export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
+export KV_OFFLOAD_BACKEND_METADATA="${KV_OFFLOAD_BACKEND_METADATA:-}"
+export ROUTER_METADATA="${ROUTER_METADATA:-}"
+export KV_P2P_TRANSFER="${KV_P2P_TRANSFER:-}"
+export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-0}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
+export MODEL="${MODEL:-}"
+export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
@@ -166,7 +181,12 @@ fi
 # Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
 # Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
+if [[ -z "${SLURM_EXCLUDE_NODES+x}" ]]; then
+    case "$(hostname -s)" in
+        mia1*) SLURM_EXCLUDE_NODES="mia1-p01-g11,mia1-p01-g12,mia1-p01-g15" ;;
+        *) SLURM_EXCLUDE_NODES="" ;;
+    esac
+fi
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi

@@ -4941,3 +4941,12 @@
     - "Run TP8/EP1 STP with an explicit 1,048,576-token context and BF16 GPU KV pool against the complete unfiltered AgentX corpus"
     - "Use lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x with the AMD DSA TileLang prefill and decode backends; qualify concurrency 1 before expanding the frontier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2273
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic
+    - glm5.2-fp8-mi325x-sglang-disagg-agentic
+  description:
+    - "Expand the single-node GLM-5.2 MI325X full-context AgentX curve to concurrency [1, 2, 3, 4, 5, 6, 8] around the measured KV-capacity knee"
+    - "Add TP8 SGLang disaggregated AgentX sweeps for balanced 1P1D, decode-heavy 1P2D, and prefill-heavy 2P1D topologies, with at most four concurrency points per server allocation"
+    - "Keep EP and DP attention disabled because MoRI all-to-all remains unstable on the MI325X Broadcom bnxt_re fleet"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2273
