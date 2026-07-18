@@ -32,6 +32,10 @@ on:
       tp:
         required: true
         type: string
+      pp:
+        required: false
+        type: string
+        default: '1'
       dcp-size:
         required: false
         type: string
@@ -90,6 +94,18 @@ on:
         description: "KV offload backend for agentic scenarios when kv-offloading is not none"
         required: false
         type: string
+      kv-offload-backend-metadata:
+        description: "Optional KV offload backend name and version metadata as JSON"
+        required: false
+        type: string
+      router:
+        description: "Optional router name and version metadata as JSON"
+        required: false
+        type: string
+      kv-p2p-transfer:
+        description: "Optional multinode peer-to-peer KV transfer engine name"
+        required: false
+        type: string
       total-cpu-dram-gb:
         description: "Configured CPU DRAM capacity in GB for KV offloading"
         required: false
@@ -100,6 +116,16 @@ on:
         required: false
         type: string
         default: '3600'
+      eval-limit:
+        description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+        required: false
+        type: string
+        default: ""
+      swebench-gen-mode:
+        description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+        required: false
+        type: string
+        default: ""
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -114,6 +140,7 @@ env:
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
   TP: ${{ inputs.tp }}
+  PP_SIZE: ${{ inputs.pp }}
   DCP_SIZE: ${{ inputs.dcp-size }}
   PCP_SIZE: ${{ inputs.pcp-size }}
   EP_SIZE: ${{ inputs.ep }}
@@ -129,12 +156,23 @@ env:
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   KV_OFFLOADING: ${{ inputs.kv-offloading }}
   KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
+  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
+  ROUTER_METADATA: ${{ inputs.router }}
+  KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  EVAL_LIMIT: ${{ inputs.eval-limit }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  # GPU runners lack Docker for SWE-bench scoring.
+  SWEBENCH_USE_MODAL: 'true'
+  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+  # These b300 nodes are currently broken.
+  SALLOC_EXCLUDE: 'b300-005,b300-006'
 
 permissions:
   contents: read
@@ -145,7 +183,7 @@ jobs:
     timeout-minutes: 500
     name: >-
       ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
-      TP${{ inputs.tp }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
+      TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
       ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
@@ -186,13 +224,13 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-dcp{}-pcp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
+          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-pp{}-dcp{}-pcp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
-          export GPU_COUNT=$((TP * PCP_SIZE))
+          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
 
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
@@ -291,6 +329,10 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
+            agent_preds.json
+            predictions.jsonl
+            swebench_report_*.json
+            *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
@@ -304,6 +346,7 @@ jobs:
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
           rm -f sample*.jsonl || true
+          rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)
         if: always()

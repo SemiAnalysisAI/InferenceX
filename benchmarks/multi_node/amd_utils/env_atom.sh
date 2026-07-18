@@ -32,13 +32,6 @@ else
 fi
 export IBDEVICES
 
-export SAFETENSORS_FAST_GPU=1
-export VLLM_LOG_LEVEL=WARNING
-export ATOM_LOG_LEVEL=WARNING
-export AITER_LOG_LEVEL=WARNING
-export LOG_LEVEL=WARNING
-export LOGLEVEL=WARNING
-
 # =============================================================================
 # ATOM/mooncake-specific environment
 # =============================================================================
@@ -46,22 +39,17 @@ export LOGLEVEL=WARNING
 # mooncake RDMA KV transfer library path
 export LD_LIBRARY_PATH=/opt/venv/lib/python3.10/site-packages/mooncake:/opt/rocm/lib:${LD_LIBRARY_PATH:-}
 
-
-# ATOM_HOST_IP is set per-node in server_atom.sh (= host_ip, used as handshake IP)
+# faster model loading (safetensors only)
+export SAFETENSORS_FAST_GPU=1
 
 # aiter logging (WARNING to reduce noise; use DEBUG for troubleshooting)
+export VLLM_LOG_LEVEL=WARNING
+export ATOM_LOG_LEVEL=WARNING
 export AITER_LOG_LEVEL=WARNING
-
-if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
-    # ATOM MoE gather/scatter interleave optimization
-    export ATOM_MOE_GU_ITLV=1
-    # Disable bf16->fp8 MoE bound (only for DeepSeek-V4-Pro)
-    export AITER_BF16_FP8_MOE_BOUND=0
-fi
-
-# Clear stale ATOM cache on startup (server_atom.sh handles this via rm -rf)
-# No env var needed; documented here for reference.
+export LOG_LEVEL=WARNING
+export LOGLEVEL=WARNING
 
 set +x
 
+# ATOM_HOST_IP is set per-node in server_atom.sh (= host_ip, used as handshake IP)
 echo "[INFO] ATOM env: IBDEVICES=$IBDEVICES  LD_LIBRARY_PATH includes mooncake"

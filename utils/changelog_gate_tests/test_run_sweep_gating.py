@@ -346,6 +346,36 @@ def test_trigger_types_enable_gated_events() -> None:
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
+def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
+    jobs = _WF["jobs"]
+    assert "reuse-ingest-artifacts" not in jobs
+
+    for job_name in ("trigger-ingest", "trigger-agentic-ingest"):
+        job = jobs[job_name]
+        assert "reuse-ingest-artifacts" not in job["needs"]
+        dispatch = job["steps"][0]["run"]
+        assert '"source-run-id"' in dispatch
+        assert '"merge-run-id"' in dispatch
+        assert '"source-run-attempt"' not in dispatch
+        assert '"merge-run-attempt"' not in dispatch
+
+
+def test_reuse_recovery_dispatches_only_run_ids() -> None:
+    recovery = yaml.safe_load(
+        (REPO_ROOT / ".github/workflows/recover-reused-ingest.yml").read_text()
+    )
+    inputs = recovery[True]["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"source-run-id", "merge-run-id"}
+
+    jobs = recovery["jobs"]
+    assert set(jobs) == {"trigger-agentic-ingest"}
+    dispatch = jobs["trigger-agentic-ingest"]["steps"][0]["run"]
+    assert '"source-run-id"' in dispatch
+    assert '"merge-run-id"' in dispatch
+    assert '"source-run-attempt"' not in dispatch
+    assert '"merge-run-attempt"' not in dispatch
+
+
 # --------------------------------------------------------------------------
 # Independent reference spec of the INTENDED gating, plus an exhaustive
 # cross-product cross-check: every combination of the input axes is fed to

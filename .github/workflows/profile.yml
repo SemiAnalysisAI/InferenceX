@@ -100,7 +100,7 @@ jobs:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     name: >-
       ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
-      TP${{ matrix.config.tp }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
+      TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
     runs-on: ${{ matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
@@ -113,6 +113,7 @@ jobs:
       FRAMEWORK: ${{ matrix.config.framework }}
       PRECISION: ${{ matrix.config.precision }}
       TP: ${{ matrix.config.tp }}
+      PP_SIZE: ${{ matrix.config.pp }}
       DCP_SIZE: ${{ matrix.config.dcp-size }}
       PCP_SIZE: ${{ matrix.config.pcp-size }}
       EP_SIZE: ${{ matrix.config.ep }}
@@ -164,10 +165,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export GPU_COUNT=$((TP * PCP_SIZE))
+          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
           echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
@@ -259,7 +260,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
 
@@ -267,13 +268,13 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} dcp${{ matrix.config.dcp-size }} pcp${{ matrix.config.pcp-size }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
+          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} pp${{ matrix.config.pp }} dcp${{ matrix.config.dcp-size }} pcp${{ matrix.config.pcp-size }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
           git push
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
-          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
 
           enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
           enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"

@@ -430,24 +430,6 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    # DSv4 is also staged on the compute nodes' local RAID. Loading the 806 GB
-    # checkpoint independently from Lustre on every TP rank leaves the loader
-    # threads blocked in Lustre I/O for hours. Select the local copy only after
-    # Slurm assigns a node, and retain the shared-Lustre path as a fallback for
-    # nodes whose local staging is incomplete.
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "sglang" ]]; then
-        LOCAL_MODEL_PATH=/raid/models/DeepSeek-V4-Pro-NVFP4
-        if srun --jobid="$JOB_ID" bash -c \
-            'test -f "$1/config.json" && test -f "$1/model.safetensors.index.json" && test "$(find "$1" -maxdepth 1 -name "model-*.safetensors" | wc -l)" -eq 64' \
-            _ "$LOCAL_MODEL_PATH"; then
-            export MODEL_PATH="$LOCAL_MODEL_PATH"
-            export MODEL="$MODEL_PATH"
-            echo "Using node-local DSv4 checkpoint: $MODEL_PATH"
-        else
-            echo "Node-local DSv4 checkpoint unavailable; using shared checkpoint: $MODEL_PATH"
-        fi
-    fi
-
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
     srun --jobid=$JOB_ID bash -c "
