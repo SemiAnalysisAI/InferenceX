@@ -25,8 +25,8 @@ amd-Llama-3.3-70B-Instruct-FP8-KV:
   env: "VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
 
 Kimi-K2.5-MXFP4:
-  prefill_flags: "--tensor-parallel-size 8 --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 512 --max-num-batched-tokens 32768"
-  decode_flags: "--tensor-parallel-size 8 --all2all-backend mori_low_latency --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 512 --max-num-batched-tokens 32768"
+  prefill_flags: "--tensor-parallel-size 8 --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 32768"
+  decode_flags: "--tensor-parallel-size 8 --all2all-backend mori_low_latency --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 32768"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 

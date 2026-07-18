@@ -1348,10 +1348,9 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P(TP4) 2D(TP4) = 3 nodes. High-conc KV relief: doubles decode KV so the
-      # 8k/1k tail isn't KV-capped like 1D.
+      # 1P(TP4) 2D(TP4) = 3 nodes. 2 decode ~1.8x tok/s vs 1D at conc 256.
       - spec-decoding: "none"
-        conc-list: [ 256, 512 ]
+        conc-list: [ 256 ]
         prefill:
           num-worker: 1
           tp: 4
