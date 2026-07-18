@@ -4933,12 +4933,3 @@
   description:
     - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
-
-- config-keys:
-    - dsv4-fp4-b300-vllm-agentic
-  description:
-    - "Validate the agentic SWE-bench eval dispatch path (agentic_evals bucket + sweep-agentic-evals job, fixing the eval-only failures first seen on #2258/#2259): re-run only the DEP8 top-concurrency SWE-bench eval; no throughput re-run."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2267
-  evals-only: true
-  scenario-type:
-    - agentic-coding
