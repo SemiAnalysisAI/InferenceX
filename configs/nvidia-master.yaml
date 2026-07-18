@@ -9912,5 +9912,8 @@ glm5.2-fp8-h200-sglang-agentic-hicache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 6, 8, 12, 16] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8, 12, 16, 24, 32] }
+      # The TP8 BF16-KV pool is expected to cross its June-21
+      # service-time-weighted 269K-token working set near conc 4. Resolve the
+      # HBM cliff densely, then carry HiCache through its wider L2 frontier.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 40, 48, 56, 64] }

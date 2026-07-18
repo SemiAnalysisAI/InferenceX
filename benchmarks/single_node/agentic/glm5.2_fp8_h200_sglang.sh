@@ -47,8 +47,12 @@ resolve_trace_source
 install_agentic_deps
 
 SERVER_LOG="$RESULT_DIR/server.log"
-ROUTER_LOG="$RESULT_DIR/router.log"
 mkdir -p "$RESULT_DIR"
+
+# Match the production SGLang AgentX launchers: retain inactive radix-tree
+# entries in HiCache so multi-turn session prefixes can be reused from L2.
+export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
 # HiCache allocates its host pool per rank. GLM-5.2 has one DSA KV pool per
 # rank, so divide the workflow-provided aggregate host budget across TP8.
@@ -150,6 +154,21 @@ capture_cache_metrics() {
 }
 
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+# A model can advertise a 1M context while a topology exposes a much smaller
+# per-request KV pool. Qualify both independently and fail before replay if the
+# launcher regresses to attention DP or another sub-1M layout.
+SERVER_CONTEXT_LENGTH=$(sed -nE 's/.*context_len=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
+SERVER_KV_TOKEN_CAPACITY=$(sed -nE 's/.*max_total_num_tokens=([0-9]+).*/\1/p' "$SERVER_LOG" | tail -1)
+if [[ "$SERVER_CONTEXT_LENGTH" != "1048576" ]]; then
+    echo "Error: SGLang reported context_len=${SERVER_CONTEXT_LENGTH:-unknown}; expected 1048576" >&2
+    exit 1
+fi
+if [[ -z "$SERVER_KV_TOKEN_CAPACITY" || "$SERVER_KV_TOKEN_CAPACITY" -lt 1048576 ]]; then
+    echo "Error: SGLang reported max_total_num_tokens=${SERVER_KV_TOKEN_CAPACITY:-unknown}; full-context AgentX requires at least 1048576" >&2
+    exit 1
+fi
+echo "Full-context qualification passed: context_len=$SERVER_CONTEXT_LENGTH, max_total_num_tokens=$SERVER_KV_TOKEN_CAPACITY, truncation=disabled"
 
 capture_cache_metrics
 trap capture_cache_metrics EXIT

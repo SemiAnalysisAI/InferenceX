@@ -4937,6 +4937,6 @@
 - config-keys:
     - glm5.2-fp8-h200-sglang-agentic-hicache
   description:
-    - "Add the GLM-5.2 FP8 single-node H200 SGLang AgentX STP recipe with local-DRAM HiCache."
-    - "新增 GLM-5.2 FP8 单节点 H200 SGLang AgentX STP 配方，并启用本地 DRAM HiCache。"
+    - "Add the full-context GLM-5.2 FP8 single-node H200 SGLang AgentX STP HBM and local-DRAM HiCache sweep."
+    - "新增支持完整上下文的 GLM-5.2 FP8 单节点 H200 SGLang AgentX STP HBM 与本地 DRAM HiCache 扫描。"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2271
