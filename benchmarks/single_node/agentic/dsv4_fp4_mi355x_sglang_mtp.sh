@@ -113,10 +113,8 @@ fi
 # internally. CUDA graph capture is per scheduler, so only its batch size is
 # divided across DP ranks.
 MAX_RUNNING_REQUESTS=$CONC
+# 0719
 CUDA_GRAPH_MAX_BS=$CONC
-if [ "$DP_ATTENTION" = "true" ]; then
-    CUDA_GRAPH_MAX_BS=$(( (CUDA_GRAPH_MAX_BS + TP - 1) / TP ))
-fi
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
 # Simulated acceptance-length (AL) settings.
