@@ -11,7 +11,7 @@ name: "disagg-h200-1p1d-pcp8-tp16-hicache"
 # is resolved.
 
 model:
-  path: "glm5.2-fp8"
+  path: "hf:zai-org/GLM-5.2-FP8"
   container: "lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8"
   precision: "fp8"
 
@@ -58,6 +58,7 @@ backend:
   type: sglang
 
   prefill_environment:
+    HF_HUB_CACHE: "/hf_hub_cache"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     PYTHONUNBUFFERED: "1"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
@@ -67,6 +68,7 @@ backend:
     SGLANG_TIMEOUT_KEEP_ALIVE: "900"
 
   decode_environment:
+    HF_HUB_CACHE: "/hf_hub_cache"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
     PYTHONUNBUFFERED: "1"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
