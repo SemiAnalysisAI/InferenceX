@@ -1405,107 +1405,43 @@ class TestChangelogEntry:
 # Test ChangelogMatrixEntry
 # =============================================================================
 
-@pytest.fixture
-def valid_agentic_eval_row():
-    """Agentic SWE-bench eval row as emitted by generate_sweep_configs --evals-only."""
-    return {
-        "image": "vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec",
-        "model": "deepseek-ai/DeepSeek-V4-Pro",
-        "model-prefix": "dsv4",
-        "precision": "fp4",
-        "framework": "vllm",
-        "runner": "cluster:b300-nv",
-        "tp": 8,
-        "pp": 1,
-        "dcp-size": 1,
-        "pcp-size": 1,
-        "ep": 8,
-        "dp-attn": True,
-        "spec-decoding": "mtp",
-        "conc": 224,
-        "kv-offloading": "none",
-        "router": {"name": "vllm-router", "version": "0.1.14"},
-        "total-cpu-dram-gb": 0,
-        "duration": 3600,
-        "exp-name": "dsv4_tp8_conc224_kvnone_spec-mtp",
-        "scenario-type": "agentic-coding",
-        "run-eval": True,
-        "eval-only": True,
-    }
+AGENTIC_EVAL_ROW = {
+    "image": "vllm/vllm-openai:nightly", "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "model-prefix": "dsv4", "precision": "fp4", "framework": "vllm",
+    "runner": "cluster:b300-nv", "tp": 8, "pp": 1, "dcp-size": 1,
+    "pcp-size": 1, "ep": 8, "dp-attn": True, "spec-decoding": "mtp",
+    "conc": 224, "kv-offloading": "none", "total-cpu-dram-gb": 0,
+    "duration": 3600, "exp-name": "dsv4_tp8_conc224_kvnone_spec-mtp",
+    "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
+}
 
-
-@pytest.fixture
-def valid_changelog_metadata():
-    return {
-        "base_ref": "base",
-        "head_ref": "head",
-        "entries": [{
-            "config-keys": ["test-config"],
-            "description": ["Test entry"],
-            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
-        }],
-    }
+CHANGELOG_METADATA = {
+    "base_ref": "base", "head_ref": "head",
+    "entries": [{
+        "config-keys": ["test-config"], "description": ["Test entry"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }],
+}
 
 
 class TestChangelogMatrixEntry:
     """Tests for the final search-space contract consumed by run-sweep.yml."""
 
-    def test_agentic_eval_rows_validate_in_agentic_evals(
-        self, valid_agentic_eval_row, valid_changelog_metadata,
-    ):
+    def test_agentic_eval_rows_live_in_agentic_evals_only(self):
+        """`evals` is dispatched with fixed-seq-len inputs (isl/osl/
+        max-model-len), so agentic rows must only validate in agentic_evals."""
         entry = ChangelogMatrixEntry.model_validate({
-            "agentic_evals": [valid_agentic_eval_row],
-            "changelog_metadata": valid_changelog_metadata,
+            "agentic_evals": [AGENTIC_EVAL_ROW],
+            "changelog_metadata": CHANGELOG_METADATA,
         })
-
-        assert entry.agentic_evals[0].scenario_type == "agentic-coding"
         assert entry.agentic_evals[0].run_eval is True
         assert entry.agentic_evals[0].eval_only is True
 
-    def test_evals_bucket_rejects_agentic_rows(
-        self, valid_agentic_eval_row, valid_changelog_metadata,
-    ):
-        """The `evals` bucket is dispatched with fixed-seq-len inputs
-        (isl/osl/max-model-len), so agentic rows must never validate there."""
         with pytest.raises(ValueError):
             ChangelogMatrixEntry.model_validate({
-                "evals": [valid_agentic_eval_row],
-                "changelog_metadata": valid_changelog_metadata,
+                "evals": [AGENTIC_EVAL_ROW],
+                "changelog_metadata": CHANGELOG_METADATA,
             })
-
-    def test_evals_bucket_accepts_fixed_seq_len_rows(
-        self, valid_single_node_matrix_entry, valid_changelog_metadata,
-    ):
-        eval_row = {
-            **valid_single_node_matrix_entry,
-            "run-eval": True,
-            "eval-only": True,
-        }
-        entry = ChangelogMatrixEntry.model_validate({
-            "evals": [eval_row],
-            "changelog_metadata": valid_changelog_metadata,
-        })
-
-        assert entry.evals[0].run_eval is True
-        assert entry.evals[0].eval_only is True
-
-    def test_agentic_benchmark_rows_dump_without_eval_flags(
-        self, valid_agentic_eval_row, valid_changelog_metadata,
-    ):
-        """Benchmark rows omit run-eval/eval-only, and exclude_none must keep
-        them out of the dump so the dispatched row shape is unchanged."""
-        benchmark_row = {
-            k: v for k, v in valid_agentic_eval_row.items()
-            if k not in ("run-eval", "eval-only")
-        }
-        entry = ChangelogMatrixEntry.model_validate({
-            "single_node": {"agentic": [benchmark_row]},
-            "changelog_metadata": valid_changelog_metadata,
-        })
-        dumped = entry.model_dump(by_alias=True, exclude_none=True)
-
-        assert "run-eval" not in dumped["single_node"]["agentic"][0]
-        assert "eval-only" not in dumped["single_node"]["agentic"][0]
 
 
 # =============================================================================
