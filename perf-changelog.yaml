@@ -4976,4 +4976,4 @@
     - "Add GB300 Dynamo-vLLM AgentX aggregate TP4/TP8 low-latency sweeps at conc [1,4,8,16]."
     - "Add NVIDIA/srt-slurm#229-derived GB300 P/D topologies: 1P/1D DEP8/DEP8 at c512, 2P/1D DEP8/DEP8 at c1280, and 3P/1D DEP8/DEP16 at c1536."
     - "Use vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96 for all new recipes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2260
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2269
