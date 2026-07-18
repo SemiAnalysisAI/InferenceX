@@ -2253,8 +2253,8 @@ class TestGenerateTestConfigSweep:
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_test_config_sweep(args, config, runner_config)
 
-    def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
-        """One server allocation should run the selected concurrency batch."""
+    def test_multinode_agentic_uses_one_allocation_per_concurrency(self):
+        """Each concurrency should get its own server allocation."""
         config = {
             "dsv4-agentic-2p1d": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2292,17 +2292,27 @@ class TestGenerateTestConfigSweep:
 
         result = generate_test_config_sweep(args, config)
 
-        assert len(result) == 2
-        assert result[0]["conc"] == [16, 32, 64, 128]
-        assert result[0]["exp-name"] == "dsv4_p2x4_d1x4_conc16x32x64x128"
+        assert len(result) == 5
+        assert [entry["conc"] for entry in result] == [
+            [16],
+            [32],
+            [64],
+            [128],
+            [256],
+        ]
+        assert [entry["exp-name"] for entry in result] == [
+            "dsv4_p2x4_d1x4_conc16",
+            "dsv4_p2x4_d1x4_conc32",
+            "dsv4_p2x4_d1x4_conc64",
+            "dsv4_p2x4_d1x4_conc128",
+            "dsv4_p2x4_d1x4_conc256",
+        ]
         assert result[0]["prefill"]["pp"] == 2
         assert result[0]["prefill"]["dcp-size"] == 2
         assert result[0]["prefill"]["pcp-size"] == 2
         assert result[0]["decode"]["pp"] == 2
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
-        assert result[1]["conc"] == [256]
-        assert result[1]["exp-name"] == "dsv4_p2x4_d1x4_conc256"
         assert all(entry["router"] == {"name": "dynamo-router", "version": "1.3.0"} for entry in result)
         assert all(entry["kv-p2p-transfer"] == "nixl" for entry in result)
 
@@ -2493,9 +2503,10 @@ class TestGenerateFullSweepMixed:
         assert "prefill" not in single_result[0]
         assert single_result[0]["runner"] == "cluster:b300-nv"
         assert single_result[0]["pp"] == 2
-        assert len(multi_result) == 1
-        assert "prefill" in multi_result[0]
-        assert multi_result[0]["runner"] == "cluster:gb200-nv"
+        assert len(multi_result) == 2
+        assert [entry["conc"] for entry in multi_result] == [[16], [32]]
+        assert all("prefill" in entry for entry in multi_result)
+        assert all(entry["runner"] == "cluster:gb200-nv" for entry in multi_result)
         assert (
             multi_result[0]["prefill"]["pp"],
             multi_result[0]["prefill"]["dcp-size"],
