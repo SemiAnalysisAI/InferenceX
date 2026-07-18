@@ -134,7 +134,6 @@ backend:
 
 sbatch_directives:
   mem: "0"
-  cpus-per-task: "144"
 
 srun_options:
   mem: "0"
