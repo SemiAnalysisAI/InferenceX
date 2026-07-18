@@ -4933,3 +4933,11 @@
   description:
     - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - 'Add vLLM compile-time fusion passes to benchmarks/single_node/fixed_seq_len/kimik2.5_fp4_mi355x.sh: --compilation_config.pass_config.{fuse_norm_quant,fuse_act_quant,fuse_allreduce_rms,fuse_mla_dual_rms_norm}=true (script previously set no --compilation_config)'
+    - "Motivated by two-trace torch-profiler triage: all-reduce ran fully serial (hid=0%) and residual-add+RMSNorm / RMSNorm+Quant families were un-collapsed"
+    - "Also removes a duplicate --no-enable-prefix-caching flag"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2264
