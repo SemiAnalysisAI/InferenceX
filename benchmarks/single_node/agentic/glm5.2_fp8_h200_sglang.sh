@@ -6,9 +6,11 @@ set -x
 # aggregate SGLang serving. This is intentionally STP: no speculative decoding
 # flags are passed even though the checkpoint includes an MTP head.
 #
-# The base engine follows the upstream H200 high-throughput recipe: TP8/DP8,
-# attention DP, EP8/DeepEP, BF16 KV selected automatically on Hopper, and a
-# 0.85 static-memory fraction. The optional DRAM tier uses SGLang HiCache.
+# The engine uses the upstream H200 cookbook's TP8 low-latency topology minus
+# its EAGLE flags, swept HBM-only and with a local-DRAM HiCache tier. Keeping
+# attention tensor-parallel is required for full-context AgentX replay: the
+# 1,048,576-token sequence KV is sharded across all eight H200s. BF16 KV is
+# selected automatically on Hopper; static-memory fraction is 0.85.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -18,12 +20,12 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION SPEC_DECODING
 
-if [[ "$TP" != "8" || "$EP_SIZE" != "8" || "$DP_ATTENTION" != "true" ]]; then
-    echo "Error: this H200 recipe requires TP=8, EP_SIZE=8, and DP_ATTENTION=true" >&2
-    exit 1
-fi
 if [[ "$SPEC_DECODING" != "none" ]]; then
     echo "Error: this is an STP recipe; expected SPEC_DECODING=none, got '$SPEC_DECODING'" >&2
+    exit 1
+fi
+if [[ "$TP" != "8" || "$DP_ATTENTION" != "false" ]]; then
+    echo "Error: full-context GLM-5.2 AgentX requires TP=8 and DP_ATTENTION=false" >&2
     exit 1
 fi
 
@@ -87,11 +89,10 @@ if require_agentic_kv_offload_backend hicache; then
     echo "HiCache GLM-5.2 CPU tier: ${HICACHE_SIZE_GB} GB per rank across TP=${TP}; page_size=$HICACHE_PAGE_SIZE, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
 fi
 
-# DP-aware consistent hashing keeps every multi-turn AgentX session on the DP
-# rank that owns its Radix/HiCache state.
-export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
-SGLANG_BACKEND_PORT=$((PORT + 1))
-SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
+# The TP8 engine serves $PORT directly. Do not enable attention DP here: it
+# limits an individual request to one H200's KV pool (~135K tokens), whereas
+# TP8 exposes the node-wide pool (~1.08M tokens) to a full-context request.
+SGLANG_BACKEND_PORT="$PORT"
 
 # AgentX concurrency counts live session trees, not individual HTTP requests.
 # Allow subagent fan-out while retaining the upstream H200 engine cap.
@@ -103,6 +104,10 @@ export TORCH_CUDA_ARCH_LIST=9.0
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
 
+PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
+# Keep the cookbook's default whole-engine prefill budget.
+CHUNKED_PREFILL_SIZE=8192
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
@@ -110,22 +115,15 @@ SGLANG_CMD=(
     --host 0.0.0.0
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
-    --tp "$TP"
-    --dp "$TP"
-    --ep-size "$EP_SIZE"
-    --enable-dp-attention
-    --moe-a2a-backend deepep
-    --tokenizer-worker-num "$TP"
-    --dist-init-addr "127.0.0.1:$((PORT + 2000))"
+    "${PARALLEL_ARGS[@]}"
     # Hopper uses BF16 KV for GLM-5.2 DSA; let SGLang select it rather than
     # copying the Blackwell-only fp8_e4m3 setting from the NVFP4 recipe.
     --tool-call-parser glm47
     --reasoning-parser glm45
-    # AgentX session trees can exceed the engine's usable context after
-    # multi-turn tool output accumulates. Retain the newest context instead
-    # of failing the request with HTTP 400.
-    --allow-auto-truncate
-    --chunked-prefill-size 32768
+    # Pin the checkpoint's native context explicitly. Truncation is forbidden:
+    # an input-length rejection is a failed qualification, not a usable sample.
+    --context-length 1048576
+    --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --watchdog-timeout 1800
@@ -152,24 +150,6 @@ capture_cache_metrics() {
 }
 
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-echo "Starting SGLang router on port $PORT for $TP DP ranks..."
-python3 -m sglang_router.launch_router \
-    --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-    --policy consistent_hashing \
-    --request-id-headers x-correlation-id \
-    --dp-aware \
-    --host 0.0.0.0 \
-    --port "$PORT" \
-    --prometheus-host 127.0.0.1 \
-    --prometheus-port "$SGLANG_ROUTER_METRICS_PORT" \
-    --connect-timeout-secs 900 \
-    --request-timeout-secs 14400 \
-    --disable-health-check \
-    --disable-retries > "$ROUTER_LOG" 2>&1 &
-ROUTER_PID=$!
-echo "Router PID: $ROUTER_PID"
-wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 
 capture_cache_metrics
 trap capture_cache_metrics EXIT
