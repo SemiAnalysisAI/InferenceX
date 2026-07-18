@@ -74,7 +74,10 @@ $EP \
 --block-size=1 \
 --no-enable-prefix-caching \
 --trust-remote-code \
---no-enable-prefix-caching \
+--compilation_config.pass_config.fuse_norm_quant true \
+--compilation_config.pass_config.fuse_act_quant true \
+--compilation_config.pass_config.fuse_allreduce_rms true \
+--compilation_config.pass_config.fuse_mla_dual_rms_norm true \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
