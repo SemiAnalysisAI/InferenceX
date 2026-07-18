@@ -308,6 +308,17 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
         exit 1
     fi
 
+    # Backport NVIDIA/srt-slurm#90 without taking the post-v1.0.27
+    # mooncake_master changes. The feature launches one vLLM process per node
+    # and lets that process manage all node-local data-parallel ranks.
+    SRT_SLURM_PER_NODE_DP_SHA="1a0f9e3633318ab1ee9428d2129161b583786b18"
+    git fetch --depth 2 origin refs/pull/90/head || exit 1
+    if [[ "$(git rev-parse FETCH_HEAD)" != "$SRT_SLURM_PER_NODE_DP_SHA" ]]; then
+        echo "Error: NVIDIA/srt-slurm PR #90 commit did not resolve to $SRT_SLURM_PER_NODE_DP_SHA" >&2
+        exit 1
+    fi
+    git cherry-pick --no-commit "$SRT_SLURM_PER_NODE_DP_SHA" || exit 1
+
     # ai-dynamo/dynamo#11303.
     DYNAMO_SCHEMA="src/srtctl/core/schema.py"
     DYNAMO_UPSTREAM_HASH_CLONE='        f"git clone https://github.com/ai-dynamo/dynamo.git && "'

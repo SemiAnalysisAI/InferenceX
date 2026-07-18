@@ -50,6 +50,7 @@ frontend:
 
 backend:
   type: vllm
+  dp_launch_mode: per_node
   connector: "null"
   kv_events_config:
     prefill: true
