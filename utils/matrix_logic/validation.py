@@ -291,10 +291,6 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows (SWE-bench) carry run_eval/eval_only; benchmark rows omit
-    # them. Optional so both shapes validate and benchmark output is unchanged.
-    run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
-    eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
 
     @model_validator(mode='after')
     def validate_kv_offload_fields(self):
@@ -893,7 +889,7 @@ class ChangelogMatrixEntry(BaseModel):
                       ] = Field(default_factory=dict)
     multi_node: dict[str, list[Union[MultiNodeMatrixEntry, MultiNodeAgenticMatrixEntry]]
                      ] = Field(default_factory=dict)
-    evals: list[Union[SingleNodeMatrixEntry, SingleNodeAgenticMatrixEntry]] = Field(default_factory=list)
+    evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 
