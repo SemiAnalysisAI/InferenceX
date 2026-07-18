@@ -1,0 +1,127 @@
+name: "minimax-m3-vllm-disagg-b200-1p2d-fp4-dep2-tp4-c64-8k1k"
+model:
+  path: "nvidia/MiniMax-M3-NVFP4"
+  container: "vllm/vllm-openai:cu129-nightly-8e981630c9336233ca9de91452f68918bddbc4e2"
+  precision: "fp4"
+resources:
+  gpu_type: "b200"
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 2
+  decode_nodes: 2
+  decode_workers: 2
+  spread_workers: true
+  gpus_per_decode: 4
+  gpus_per_node: 8
+dynamo: {install: true, version: 1.3.0.dev20260710}
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    dyn-chat-processor: vllm
+    reasoning-parser: minimax_m3
+backend:
+  type: vllm
+  connector: null
+  prefill_environment:
+    VLLM_USE_DEEP_GEMM: '1'
+    VLLM_SKIP_P2P_CHECK: '1'
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+    NVIDIA_GDRCOPY: '1'
+    PYTHONUNBUFFERED: '1'
+    VLLM_LOG_STATS_INTERVAL: '1'
+    NVSHMEM_IB_ENABLE_IBGDA: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    NCCL_TIMEOUT: '1800'
+    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
+    VLLM_USE_FLASHINFER_MOE_FP4: '1'
+    VLLM_USE_TRTLLM_RAGGED_DEEPSEEK_PREFILL: '0'
+    VLLM_USE_NCCL_SYMM_MEM: '1'
+    UCX_IB_ROCE_REACHABILITY_MODE: local_subnet
+    VLLM_NIXL_SIDE_CHANNEL_PORT: '5600'
+    VLLM_NIXL_ABORT_REQUEST_TIMEOUT: '300'
+    VLLM_FLOAT32_MATMUL_PRECISION: high
+    UCX_TLS: cuda_ipc,cuda_copy,rc
+  decode_environment:
+    VLLM_USE_DEEP_GEMM: '1'
+    VLLM_SKIP_P2P_CHECK: '1'
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: '1'
+    NVIDIA_GDRCOPY: '1'
+    PYTHONUNBUFFERED: '1'
+    VLLM_LOG_STATS_INTERVAL: '1'
+    NVSHMEM_IB_ENABLE_IBGDA: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    NCCL_TIMEOUT: '1800'
+    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: '1800'
+    VLLM_USE_FLASHINFER_MOE_FP4: '1'
+    VLLM_USE_TRTLLM_RAGGED_DEEPSEEK_PREFILL: '0'
+    VLLM_USE_NCCL_SYMM_MEM: '1'
+    UCX_IB_ROCE_REACHABILITY_MODE: local_subnet
+    VLLM_NIXL_SIDE_CHANNEL_PORT: '5600'
+    VLLM_NIXL_ABORT_REQUEST_TIMEOUT: '300'
+    VLLM_MOE_DP_CHUNK_SIZE: '384'
+    VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD: '8192'
+    VLLM_FLOAT32_MATMUL_PRECISION: high
+    UCX_TLS: cuda_ipc,cuda_copy,rc
+  vllm_config:
+    prefill:
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      data-parallel-size: 2
+      data-parallel-rpc-port: 13345
+      data-parallel-hybrid-lb: true
+      max-model-len: 9472
+      max-num-seqs: 16
+      enforce-eager: true
+      gpu-memory-utilization: 0.9
+      max-num-batched-tokens: 16384
+      no-enable-chunked-prefill: true
+      kv-cache-dtype: fp8
+      async-scheduling: true
+      no-enable-prefix-caching: true
+      trust-remote-code: true
+      served-model-name: nvidia/MiniMax-M3-NVFP4
+      no-enable-flashinfer-autotune: true
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      block-size: 128
+      language-model-only: true
+      stream-interval: 32
+      max-cudagraph-capture-size: 2048
+    decode:
+      tensor-parallel-size: 4
+      pipeline-parallel-size: 1
+      enable-expert-parallel: false
+      max-model-len: 9472
+      max-num-seqs: 32
+      gpu-memory-utilization: 0.9
+      max-num-batched-tokens: 16384
+      max-cudagraph-capture-size: 2048
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","custom_ops":["+rms_norm"],"pass_config":{}}'
+      kv-cache-dtype: fp8
+      all2all-backend: deepep_low_latency
+      async-scheduling: true
+      stream-interval: 32
+      enable-dbo: true
+      dbo-decode-token-threshold: 32
+      no-enable-prefix-caching: true
+      trust-remote-code: true
+      served-model-name: nvidia/MiniMax-M3-NVFP4
+      no-enable-flashinfer-autotune: true
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      block-size: 128
+      language-model-only: true
+health_check: {max_attempts: 360, interval_seconds: 10}
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  random_range_ratio: 0.8
+  concurrencies: "64"
+  req_rate: "inf"
