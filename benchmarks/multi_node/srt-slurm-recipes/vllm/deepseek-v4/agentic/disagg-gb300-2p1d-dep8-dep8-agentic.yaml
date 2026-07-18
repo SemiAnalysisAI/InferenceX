@@ -14,11 +14,11 @@ identity:
   container:
     image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
   frameworks:
-    dynamo: "1.2.1"
+    dynamo: "af0dbfe8233fafdfaaa5d12e17518758c99e8da5"
     vllm: "0.17.2rc1.dev3675+gc188b96eb"
 
 dynamo:
-  hash: "919682da679aa699d5bca9c872f4c1d9a530bbc0"
+  hash: "af0dbfe8233fafdfaaa5d12e17518758c99e8da5"
   install: true
 
 setup_script: vllm-container-deps.sh

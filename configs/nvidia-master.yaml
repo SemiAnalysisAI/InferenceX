@@ -7712,7 +7712,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-1p1d-dep8-dep8:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.2.1" }
+  router: { name: dynamo-router, version: "af0dbfe8233fafdfaaa5d12e17518758c99e8da5" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -7741,7 +7741,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-2p1d-dep8-dep8:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.2.1" }
+  router: { name: dynamo-router, version: "af0dbfe8233fafdfaaa5d12e17518758c99e8da5" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -7770,7 +7770,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-3p1d-dep8-dep16:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.2.1" }
+  router: { name: dynamo-router, version: "af0dbfe8233fafdfaaa5d12e17518758c99e8da5" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
