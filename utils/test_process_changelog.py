@@ -583,3 +583,107 @@ def test_agentic_only_all_evals_does_not_suppress_later_fixed_evals(
     assert "--all-evals" not in commands[2]
     assert _scenario_values(commands[2]) == ["fixed-seq-len"]
     json.loads(capsys.readouterr().out)
+
+
+def test_eval_rows_split_into_fixed_and_agentic_buckets(
+    monkeypatch,
+    capsys,
+):
+    """Realistic eval rows must pass final validation and land in the bucket
+    matching their dispatch job: fixed-seq-len rows in `evals`, agentic
+    (SWE-bench) rows in `agentic_evals`."""
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Mixed fixed-seq-len and agentic eval selection
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+
+    fixed_eval_row = {
+        "image": "vllm/vllm-openai:v0.11.0",
+        "model": "deepseek-ai/DeepSeek-V4-Pro",
+        "model-prefix": "dsv4",
+        "precision": "fp4",
+        "framework": "vllm",
+        "spec-decoding": "mtp",
+        "runner": "cluster:b300-nv",
+        "isl": 8192,
+        "osl": 1024,
+        "tp": 8,
+        "pp": 1,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 8,
+        "dp-attn": True,
+        "conc": 224,
+        "max-model-len": 10240,
+        "exp-name": "dsv4_8k1k_fixed_eval",
+        "disagg": False,
+        "run-eval": True,
+        "eval-only": True,
+    }
+    agentic_eval_row = {
+        "image": "vllm/vllm-openai:v0.11.0",
+        "model": "deepseek-ai/DeepSeek-V4-Pro",
+        "model-prefix": "dsv4",
+        "precision": "fp4",
+        "framework": "vllm",
+        "runner": "cluster:b300-nv",
+        "tp": 8,
+        "pp": 1,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 8,
+        "dp-attn": True,
+        "spec-decoding": "mtp",
+        "conc": 224,
+        "kv-offloading": "none",
+        "router": {"name": "vllm-router", "version": "0.1.14"},
+        "total-cpu-dram-gb": 0,
+        "duration": 3600,
+        "exp-name": "dsv4_agentic_eval",
+        "scenario-type": "agentic-coding",
+        "run-eval": True,
+        "eval-only": True,
+    }
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        if "--evals-only" in command:
+            stdout = json.dumps([fixed_eval_row, agentic_eval_row])
+        else:
+            stdout = "[]"
+        return SimpleNamespace(stdout=stdout)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+    ])
+
+    process_changelog.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert [row["exp-name"] for row in output["evals"]] == [
+        "dsv4_8k1k_fixed_eval"
+    ]
+    assert [row["exp-name"] for row in output["agentic_evals"]] == [
+        "dsv4_agentic_eval"
+    ]
+    assert output["multinode_evals"] == []
+    assert output["agentic_evals"][0]["scenario-type"] == "agentic-coding"
+    assert output["agentic_evals"][0]["run-eval"] is True
+    assert output["agentic_evals"][0]["eval-only"] is True
