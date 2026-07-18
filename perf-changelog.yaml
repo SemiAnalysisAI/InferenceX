@@ -4942,4 +4942,4 @@
     - "Low-latency arm: TP8 (fp8 KV cache, cutedsl bf16 GEMM backend) at conc [1, 2, 4, 8, 16, 32]"
     - "High-throughput arm: TP8/DP8 attention-DP behind sglang-router consistent hashing at conc [48, 64, 96, 128, 192, 256, 512]"
     - "New 1M-context model prefix glm5.2 added to the unfiltered agentic corpus branch in benchmark_lib.sh"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2268
