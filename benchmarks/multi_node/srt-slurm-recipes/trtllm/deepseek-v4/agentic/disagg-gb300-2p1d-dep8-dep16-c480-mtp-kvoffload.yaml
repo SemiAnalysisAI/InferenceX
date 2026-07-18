@@ -1,0 +1,167 @@
+name: disagg-gb300-2p1d-dep8-dep16-c480-mtp-kvoffload
+model:
+  path: deepseek-ai/DeepSeek-V4-Pro
+  container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21
+  precision: fp4
+dynamo:
+  install: true
+  wheel: "1.3.0.dev2026071601"
+  request_plane: tcp
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  prefill_nodes: 4
+  prefill_workers: 2
+  gpus_per_prefill: 8
+  decode_nodes: 4
+  decode_workers: 1
+  gpus_per_decode: 16
+backend:
+  type: trtllm
+  publish_events_and_metrics: false
+  prefill_environment:
+    DYN_ENGINE_CONV_AFFINITY: "1"
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    TRTLLM_ENABLE_PDL: '1'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    MIMALLOC_PURGE_DELAY: '0'
+    PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '1.48'
+    UCX_TLS: cuda_ipc,cuda_copy,sm,self,tcp
+  decode_environment:
+    DYN_ENGINE_CONV_AFFINITY: "1"
+    TLLM_LOG_LEVEL: INFO
+    TRTLLM_SERVER_DISABLE_GC: '1'
+    TRTLLM_WORKER_DISABLE_GC: '1'
+    TRTLLM_ENABLE_PDL: '1'
+    NCCL_GRAPH_MIXING_SUPPORT: '0'
+    MIMALLOC_PURGE_DELAY: '0'
+    TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: '1.48'
+    UCX_TLS: cuda_ipc,cuda_copy,sm,self,tcp
+  trtllm_config:
+    prefill:
+      attention_dp_config:
+        kv_cache_routing_conversation_affinity: true
+      cache_transceiver_config:
+        backend: NIXL
+        kv_transfer_timeout_ms: 600000
+        transceiver_runtime: PYTHON
+      cuda_graph_config: null
+      custom_tokenizer: deepseek_v4
+      disable_overlap_scheduler: true
+      enable_attention_dp: true
+      enable_chunked_prefill: true
+      kv_cache_config:
+        dtype: fp8
+        enable_block_reuse: true
+        event_buffer_max_size: 0
+        free_gpu_memory_fraction: 0.8
+        host_cache_size: 137438953472
+        pool_ratio:
+        - 0.3
+        - 0.4
+        - 0.3
+        tokens_per_block: 256
+      max_batch_size: 256
+      max_num_tokens: 16384
+      max_seq_len: 990016
+      moe_config:
+        backend: TRTLLM
+      moe_expert_parallel_size: 8
+      perf_metrics_max_requests: 100000
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      return_perf_metrics: true
+      scheduler_config:
+        capacity_scheduler_policy: MAX_UTILIZATION
+      sparse_attention_config:
+        algorithm: deepseek_v4
+        enable_heuristic_topk: true
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 3
+      tensor_parallel_size: 8
+    decode:
+      cache_transceiver_config:
+        backend: NIXL
+        kv_transfer_timeout_ms: 600000
+        transceiver_runtime: PYTHON
+      cuda_graph_config:
+        batch_sizes:
+        - 1
+        - 2
+        - 4
+        - 8
+        - 12
+        - 16
+        enable_padding: true
+      custom_tokenizer: deepseek_v4
+      enable_attention_dp: true
+      enable_lm_head_tp_in_adp: false
+      kv_cache_config:
+        avg_seq_len: 200000
+        dtype: fp8
+        enable_block_reuse: false
+        event_buffer_max_size: 0
+        free_gpu_memory_fraction: 0.8
+        host_cache_size: 137438953472
+        tokens_per_block: 256
+      max_batch_size: 16
+      max_num_tokens: 64
+      max_seq_len: 996595
+      moe_config:
+        backend: MEGAMOE_DEEPGEMM
+        use_low_precision_moe_combine: true
+      moe_expert_parallel_size: 16
+      num_postprocess_workers: 4
+      perf_metrics_max_requests: 100000
+      pipeline_parallel_size: 1
+      print_iter_log: true
+      return_perf_metrics: true
+      speculative_config:
+        decoding_type: MTP
+        max_draft_len: 3
+      stream_interval: 20
+      tensor_parallel_size: 16
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  env:
+    # Dynamo's 10-second default can expire during brief etcd stalls while
+    # many long-loading DEP ranks initialize. Slurm still detects hard exits.
+    ETCD_LEASE_TTL: "120"
+    DYN_ROUTER_QUEUE_THRESHOLD: None
+    DYN_ROUTER_TRACK_PREFILL_TOKENS: "1"
+    DYN_TOKENIZER_CACHE: "1"
+    DYN_TOKENIZER_CACHE_BYTES: "8000000000"
+    DYN_TOKENIZER: "fastokens"
+    # DYN_ROUTER_TEMPERATURE: "10000000"
+    # Keep session affinity alive across long-running agentic requests.
+    DYN_ROUTER_SESSION_AFFINITY_TTL_SECS: "14400"
+  args:
+    # Session-based routing is handled by Dynamo.
+    # no-kv-events for approximate routing (WAR some indexer issues, currently
+    # okay as conversation aware routing is the major routing here)
+    router-mode: "kv"
+    no-kv-events: true
+    router-reset-states: true
+  # orchestrator_placement: first_decode
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
+    SERVED_MODEL_NAME: "DeepSeek-V4-Pro"
+    AIPERF_NEW_DYNAMO_SESSION_CONTROL: "true"

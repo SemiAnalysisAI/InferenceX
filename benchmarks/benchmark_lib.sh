@@ -1761,7 +1761,8 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    local replay_model="${AIPERF_MODEL_NAME:-${SERVED_MODEL_NAME:-$MODEL}}"
+    REPLAY_CMD+=" --model $replay_model"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"
@@ -1795,12 +1796,19 @@ build_replay_cmd() {
     # binding by itself. AIPerf emits nvext.session_control bind/close actions
     # keyed by the stable conversation correlation ID when this flag is set.
     if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
-        REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
-        # The upstream 300s affinity TTL is shorter than an overloaded
-        # high-concurrency agentic request. Keep bindings alive across long
-        # prefills, generation, and capped inter-turn delay. This controls the
-        # router's inactivity lease; it does not relax HTTP/request failures.
-        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+        # Newer Dynamo versions accept session IDs through X-Session-ID. Opt in
+        # only when the recipe requests that path; older configurations retain
+        # AIPerf's conversation-aware routing flags.
+        if [[ -n "${AIPERF_NEW_DYNAMO_SESSION_CONTROL:-}" ]]; then
+            export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
+        else
+            REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+            # The upstream 300s affinity TTL is shorter than an overloaded
+            # high-concurrency agentic request. Keep bindings alive across long
+            # prefills, generation, and capped inter-turn delay. This controls the
+            # router's inactivity lease; it does not relax HTTP/request failures.
+            REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+        fi
     fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
