@@ -82,7 +82,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     # DPA + MTP needs additional runtime headroom for speculative decode and
     # communication buffers beyond SGLang's static KV pool.
-    MEM_FRACTION_STATIC=0.75
+    # 0719
+    #MEM_FRACTION_STATIC=0.75
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
