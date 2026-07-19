@@ -84,7 +84,13 @@ stage_model_to_shared_cache() {
     local python_path=""
     local tool_dir=""
 
-    mkdir -p "$MODEL_PATH"
+    if ! mkdir -p "$MODEL_PATH" 2>/dev/null; then
+        sudo install -d -m 0775 -o "$USER" -g "$(id -gn)" "$MODEL_PATH"
+    fi
+    if [[ ! -w "$MODEL_PATH" ]]; then
+        echo "ERROR: shared model cache '$MODEL_PATH' is not writable by $USER" >&2
+        return 1
+    fi
     exec 9>"$lock_file"
     if ! flock -w 18000 9; then
         echo "ERROR: timed out waiting to stage '$MODEL' under $MODEL_PATH" >&2
