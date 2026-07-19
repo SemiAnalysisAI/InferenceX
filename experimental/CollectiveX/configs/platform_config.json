@@ -129,32 +129,6 @@
         "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache"
       }
     },
-    "mi300x": {
-      "arch": "gfx942",
-      "product": "mi300x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
-      "image_platform": "linux/amd64",
-      "gpus_per_node": 8,
-      "scale_up_domain": 8,
-      "scale_up_transport": "xgmi",
-      "launcher": "mi-amds",
-      "backends": {"mori": [8]},
-      "ll_backends": {"mori": [8]},
-      "fabric": {"nic": "Pollara 400GbE", "switch": "Tomahawk5 (51.2T)"}
-    },
-    "mi325x": {
-      "arch": "gfx942",
-      "product": "mi325x",
-      "image": "rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701",
-      "image_platform": "linux/amd64",
-      "gpus_per_node": 8,
-      "scale_up_domain": 8,
-      "scale_up_transport": "xgmi",
-      "launcher": "mi-amds",
-      "backends": {"mori": [8]},
-      "ll_backends": {"mori": [8]},
-      "fabric": {"nic": "Pollara 400GbE", "switch": "Tomahawk5 (51.2T)"}
-    },
     "mi325x-tw": {
       "arch": "gfx942",
       "product": "mi325x",
@@ -190,7 +164,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
-      "backends": {"mori": [8, 16]},
+      "backends": {"mori": [8]},
       "ll_backends": {"mori": [8]},
       "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},
       "network": {

@@ -100,10 +100,10 @@ jobs:
       COLLX_SHARD_SKU: ${{ matrix.sku }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      # Consolidated shards run one bounded build-group in one Slurm allocation.
-      # MI300X's compute partition has a 180-minute ceiling; the other production
-      # pools accept 300 minutes. Allocations release as soon as the shard finishes.
-      COLLX_TIME: ${{ matrix.sku == 'mi300x' && '180' || '300' }}
+      # Consolidated shards run one bounded build-group in one Slurm allocation;
+      # every production pool accepts 300 minutes. Allocations release as soon as
+      # the shard finishes.
+      COLLX_TIME: '300'
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
       COLLX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
       COLLX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}

@@ -143,7 +143,7 @@ class ConfigTests(unittest.TestCase):
     def test_operator_config_registry_only_emits_image_for_secret_fed_sku(self) -> None:
         # A SKU without tracked operator settings still gets its public image
         # configuration; private scheduler values can arrive through the overlay.
-        payload = self._emit_registry_only("mi325x")
+        payload = self._emit_registry_only("mi325x-tw")
         self.assertIn(b"COLLX_IMAGE\0rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701\0", payload)
         self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/amd64\0", payload)
 
