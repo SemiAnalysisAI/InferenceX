@@ -453,7 +453,7 @@ srun \
   --kill-on-bad-exit=1 \
   --signal=TERM@30 \
   --unbuffered \
-  bash -lc "
+  bash -c "
 set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
@@ -543,6 +543,8 @@ fi  # end: if ENGINE == atom-disagg
 # Pre-clean (idempotent)
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+
+echo \"[docker-run] image=$DOCKER_IMAGE_NAME container=$DOCKER_CONT_NAME\"
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
