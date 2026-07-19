@@ -63,7 +63,7 @@ backend:
       global_segment_size: "150GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
-      device_name: ""
+      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
       mode: "embedded"
       enable_offload: false
   aggregated_environment:
