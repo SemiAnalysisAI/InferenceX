@@ -96,7 +96,7 @@ install_amd_quark() {
 # ---------------------------------------------------------------------------
 patch_gluon_pa_mqa_logits_instr_shape() {
     python3 -c '
-import os, sys
+import os, re, sys
 
 target = "/sgl-workspace/aiter/aiter/ops/triton/gluon/pa_mqa_logits.py"
 if not os.path.isfile(target):
@@ -231,7 +231,7 @@ print("[SETUP] Patched: synchronous scheduler initialization traceback")
 '
 
     python3 -c '
-import os, sys
+import os, re, sys
 
 target = "/sgl-workspace/sglang/python/sglang/srt/entrypoints/engine.py"
 if not os.path.isfile(target):
@@ -244,8 +244,8 @@ if marker in src:
     print("[SETUP] scheduler process traceback patch already applied")
     sys.exit(0)
 
-class_marker = "class Engine:"
-old_target = "target=run_scheduler_process_func,"
+class_match = re.search(r"^class Engine(?:\\(|:)", src, re.MULTILINE)
+target_match = re.search(r"target\\s*=\\s*run_scheduler_process_func\\s*,", src)
 wrapper = """\
 def _inferencex_run_scheduler_with_traceback(*args, **kwargs):
     from sglang.srt.managers.scheduler import run_scheduler_process
@@ -258,14 +258,17 @@ def _inferencex_run_scheduler_with_traceback(*args, **kwargs):
 
 
 """
-new_target = "target=_inferencex_run_scheduler_with_traceback,"
-
-if class_marker not in src or old_target not in src:
+if class_match is None or target_match is None:
     print("[SETUP] WARN: SGLang engine scheduler target pattern not found")
     sys.exit(0)
 
-src = src.replace(class_marker, wrapper + class_marker, 1)
-src = src.replace(old_target, new_target, 1)
+src = src[:class_match.start()] + wrapper + src[class_match.start():]
+src = re.sub(
+    r"target\\s*=\\s*run_scheduler_process_func\\s*,",
+    "target=_inferencex_run_scheduler_with_traceback,",
+    src,
+    count=1,
+)
 open(target, "w").write(src)
 print("[SETUP] Patched: scheduler process target traceback")
 '
