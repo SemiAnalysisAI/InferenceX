@@ -150,9 +150,8 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
 elif [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
-    # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
-    # (`srtctl apply --no-preflight`) — needed because:
+    # Agentic multi-node pins NVIDIA/srt-slurm v1.0.27, whose
+    # `srtctl apply --no-preflight` flag is needed because:
     #
     #   - We want MODEL_PATH=/scratch/models/DeepSeek-V4-Pro (node-local
     #     NVMe, fast) instead of the NFS path under /data/home/sa-shared.
@@ -167,18 +166,46 @@ elif [[ "$IS_AGENTIC" == "1" ]]; then
     #     vLLM still fails loudly at runtime if the path is genuinely
     #     missing on the compute node.
     #
-    # All other upstream schema features we need are inherited from
-    # NVIDIA HEAD:
+    # Other required schema features are also present in v1.0.27:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
     #     (hook that hands off to benchmarks/multi_node/agentic_srt.sh)
-    #   - DynamoConfig.wheel (so vllm recipes can pin the ai-dynamo wheel)
+    #   - DynamoConfig.hash (so vLLM recipes can pin the ai-dynamo source)
     #   - sbatch_directives / srun_options (top-level recipe fields)
-    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    SRT_SLURM_AGENTIC_SHA="f6eb42aee4664207dcf2ec601e3bd57bd527efd6"
+    git clone --branch v1.0.27 --depth 1 https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    # 854b3fd = --no-preflight flag
-    # 6e34b8b = benchmark_stage propagates srun_options (needed for
-    #           container-remap-root to reach the agentic_srt.sh srun)
-    git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
+    if [[ "$(git rev-parse HEAD)" != "$SRT_SLURM_AGENTIC_SHA" ]]; then
+        echo "Error: NVIDIA/srt-slurm v1.0.27 did not resolve to $SRT_SLURM_AGENTIC_SHA" >&2
+        exit 1
+    fi
+
+    # Backport NVIDIA/srt-slurm#90. GB300 P/D workers use one vLLM process
+    # per physical node, with that process managing all node-local DP ranks.
+    SRT_SLURM_PER_NODE_DP_SHA="1a0f9e3633318ab1ee9428d2129161b583786b18"
+    git fetch --depth 2 origin refs/pull/90/head
+    if [[ "$(git rev-parse FETCH_HEAD)" != "$SRT_SLURM_PER_NODE_DP_SHA" ]]; then
+        echo "Error: NVIDIA/srt-slurm PR #90 commit did not resolve to $SRT_SLURM_PER_NODE_DP_SHA" >&2
+        exit 1
+    fi
+    git cherry-pick --no-commit "$SRT_SLURM_PER_NODE_DP_SHA"
+
+    # Multi-node TP8 needs distinct internal ZMQ ports for its node-local
+    # vLLM ranks rather than the inherited process-level VLLM_PORT.
+    SRT_SLURM_MULTINODE_VLLM_PORT_SHA="de1a4f0257dae5bf871881dc4696e35389c37483"
+    git fetch --depth 2 origin "$SRT_SLURM_MULTINODE_VLLM_PORT_SHA"
+    if [[ "$(git rev-parse FETCH_HEAD)" != "$SRT_SLURM_MULTINODE_VLLM_PORT_SHA" ]]; then
+        echo "Error: NVIDIA/srt-slurm multi-node VLLM_PORT fix did not resolve to $SRT_SLURM_MULTINODE_VLLM_PORT_SHA" >&2
+        exit 1
+    fi
+    git cherry-pick --no-commit "$SRT_SLURM_MULTINODE_VLLM_PORT_SHA"
+
+    # Per-node DP launches one Dynamo generate endpoint per node-local process,
+    # not one per DP rank. Backport the health-count fix from
+    # ivanium/srt-slurm@ca0880138fa606130ae4acbb8d0afddfb84c69fa.
+    SRT_SLURM_PER_NODE_HEALTH_PATCH="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-vllm-per-node-health.patch"
+    git apply --check "$SRT_SLURM_PER_NODE_HEALTH_PATCH"
+    git apply "$SRT_SLURM_PER_NODE_HEALTH_PATCH"
+
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
