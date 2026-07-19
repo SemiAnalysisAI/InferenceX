@@ -186,130 +186,21 @@ install_transformers_glm5() {
 }
 
 # ---------------------------------------------------------------------------
-# SGLang: write scheduler initialization exceptions synchronously.
-#
-# The scheduler normally emits through Python logging and immediately signals
-# the parent to tear down the process tree. On the MI325X Slurm path that can
-# terminate the container before the buffered traceback reaches the job log.
-# Keep the normal error handling, but mirror the traceback to stderr first.
+# SGLang: install GLM-5.2 tokenizer conversion dependencies.
 # ---------------------------------------------------------------------------
-patch_sglang_scheduler_traceback() {
+install_glm52_tokenizer_deps() {
     if [[ "${MODEL_CONFIG_KEY:-}" != "GLM-5.2-FP8" ]]; then
         return 0
     fi
 
-    python3 -c '
-import os, sys
+    if python3 -c 'import sentencepiece, tiktoken' 2>/dev/null; then
+        echo "[SETUP] GLM-5.2 tokenizer dependencies already present"
+        return 0
+    fi
 
-target = "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py"
-if not os.path.isfile(target):
-    print("[SETUP] SGLang scheduler.py not found, skipping traceback patch")
-    sys.exit(0)
-
-src = open(target).read()
-marker = "SGLANG_SCHEDULER_INIT_TRACEBACK"
-if marker in src:
-    print("[SETUP] synchronous scheduler traceback patch already applied")
-    sys.exit(0)
-
-old = """\
-        traceback = get_exception_traceback()
-        logger.error(f"Scheduler hit an exception: {traceback}")
-        parent_process.send_signal(signal.SIGQUIT)"""
-new = """\
-        traceback = get_exception_traceback()
-        logger.error(f"Scheduler hit an exception: {traceback}")
-        os.write(2, ("SGLANG_SCHEDULER_INIT_TRACEBACK\\n" + traceback + "\\n").encode("utf-8", errors="replace"))
-        parent_process.send_signal(signal.SIGQUIT)"""
-
-if old not in src:
-    print("[SETUP] WARN: SGLang scheduler exception pattern not found")
-    sys.exit(0)
-
-open(target, "w").write(src.replace(old, new, 1))
-print("[SETUP] Patched: synchronous scheduler initialization traceback")
-'
-
-    python3 -c '
-import os, re, sys
-
-target = "/sgl-workspace/sglang/python/sglang/srt/entrypoints/engine.py"
-if not os.path.isfile(target):
-    print("[SETUP] SGLang engine.py not found, skipping process traceback patch")
-    sys.exit(0)
-
-src = open(target).read()
-marker = "SGLANG_SCHEDULER_PROCESS_TRACEBACK"
-if marker in src:
-    print("[SETUP] scheduler process traceback patch already applied")
-    sys.exit(0)
-
-class_match = re.search(r"^class Engine(?:\(|:)", src, re.MULTILINE)
-target_match = re.search(r"target\s*=\s*run_scheduler_process_func\s*,", src)
-wrapper = """\
-def _inferencex_run_scheduler_with_traceback(*args, **kwargs):
-    from sglang.srt.managers.scheduler import run_scheduler_process
-    try:
-        return run_scheduler_process(*args, **kwargs)
-    except BaseException:
-        trace = __import__("traceback").format_exc()
-        os.write(2, ("SGLANG_SCHEDULER_PROCESS_TRACEBACK\\n" + trace + "\\n").encode("utf-8", errors="replace"))
-        raise
-
-
-"""
-if class_match is None or target_match is None:
-    print("[SETUP] WARN: SGLang engine scheduler target pattern not found")
-    sys.exit(0)
-
-src = src[:class_match.start()] + wrapper + src[class_match.start():]
-src = re.sub(
-    r"target\s*=\s*run_scheduler_process_func\s*,",
-    "target=_inferencex_run_scheduler_with_traceback,",
-    src,
-    count=1,
-)
-open(target, "w").write(src)
-print("[SETUP] Patched: scheduler process target traceback")
-'
-
-    python3 -c '
-import os, sys
-
-target = "/sgl-workspace/sglang/python/sglang/launch_server.py"
-if not os.path.isfile(target):
-    print("[SETUP] SGLang launch_server.py not found, skipping top-level traceback patch")
-    sys.exit(0)
-
-src = open(target).read()
-marker = "SGLANG_LAUNCH_SERVER_TRACEBACK"
-if marker in src:
-    print("[SETUP] top-level launch traceback patch already applied")
-    sys.exit(0)
-
-old = """\
-    try:
-        run_server(server_args)
-    finally:
-        kill_process_tree(os.getpid(), include_parent=False)"""
-new = """\
-    try:
-        run_server(server_args)
-    except BaseException:
-        trace = __import__("traceback").format_exc()
-        os.write(2, ("SGLANG_LAUNCH_SERVER_TRACEBACK\\n" + trace + "\\n").encode("utf-8", errors="replace"))
-        raise
-    finally:
-        kill_process_tree(os.getpid(), include_parent=False)"""
-
-if old not in src:
-    print("[SETUP] WARN: SGLang top-level launch pattern not found")
-    sys.exit(0)
-
-open(target, "w").write(src.replace(old, new, 1))
-print("[SETUP] Patched: top-level launch traceback")
-'
-    _SETUP_INSTALLED+=("scheduler-init-traceback")
+    echo "[SETUP] Installing GLM-5.2 tokenizer dependencies..."
+    pip install --quiet --no-cache-dir sentencepiece tiktoken
+    _SETUP_INSTALLED+=("glm52-tokenizer-deps")
 }
 
 # =============================================================================
@@ -331,7 +222,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 else
     patch_gluon_pa_mqa_logits_instr_shape
     install_transformers_glm5
-    patch_sglang_scheduler_traceback
+    install_glm52_tokenizer_deps
 fi
 
 _SETUP_END=$(date +%s)
