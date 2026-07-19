@@ -51,29 +51,34 @@ if require_agentic_kv_offload_backend hicache; then
     # conc 8 (TP8) / 64 (DP8) and the radix hit rate collapses to <0.1
     # against a ~0.97 theoretical ceiling, so every turn re-prefills its
     # whole history; the host tier restores those hits at C2C bandwidth.
-    # GLM-5.2 is plain GQA, so each rank owns a single host KV pool (no
-    # Mamba side pool as on Qwen3.5). SGLang --hicache-size is per rank,
-    # while the workflow input is a node-total DRAM budget: divide by TP,
-    # which equals the attention-DP rank count on the DP arm.
-    MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP))
-    HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
-    if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
-        echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-rank limit $MAX_HICACHE_SIZE_GB" >&2
+    # GLM-5.2 is DSA/MLA-family (attention_backend=dsa): every rank holds
+    # complete per-token KV (169.98 GB device pool per rank, replicated on
+    # all 8 ranks), so host capacity is controlled through the host/device
+    # token-capacity ratio like the DSv4 recipe, NOT a per-rank
+    # --hicache-size. A GB-based size of TOTAL_CPU_DRAM_GB/TP pinned the
+    # whole 0.80-DRAM budget (8 x 299 GB) at init on top of 465 GB of
+    # weights and OOM-killed the node (run 29678598595); DSv4's own
+    # ratio=2 default pins 2 x 170 GB x 8 = 2.7 TB here and OOMs too
+    # (GLM-5.2's device pool is far larger than DSv4's). Fractional 0.75
+    # = ~128 GB/rank = ~1.0 TB total, matching the cluster's proven ~1 TB
+    # host-pool envelope; validated on-node 2026-07-19 (boot + 4.2M-token
+    # overflow bench forcing eviction through the DSA KV+INDEXER pools).
+    DEFAULT_HICACHE_RATIO=0.75
+    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
+    if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
+        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
         exit 1
     fi
-    if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
-        echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB, TP=$TP" >&2
-        exit 1
-    fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-    echo "HiCache CPU pool: ${HICACHE_SIZE_GB} GB per rank across TP=${TP}, write_policy=${HICACHE_WRITE_POLICY}"
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
+    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    echo "HiCache CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
     CACHE_ARGS=(
-        --page-size 64
         --enable-hierarchical-cache
-        --hicache-size "$HICACHE_SIZE_GB"
-        --hicache-io-backend kernel
-        --hicache-mem-layout page_first
+        --hicache-ratio "$HICACHE_RATIO"
         --hicache-write-policy "$HICACHE_WRITE_POLICY"
+        --hicache-io-backend "$HICACHE_IO_BACKEND"
+        --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
     )
 fi
 
