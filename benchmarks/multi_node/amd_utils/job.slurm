@@ -179,14 +179,77 @@ else
         fi
     }
 
-    if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
-        MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
-        echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
-    else
-        echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
-        echo "  - $MODEL_DIR/$MODEL_NAME"
-        exit 1
+    # Opt-in auto-download fallback. Fetches the HuggingFace repo into the
+    # shared model store once, atomically, when the model is missing. The store
+    # ($MODEL_DIR) is a shared mount visible on every allocated node, so a single
+    # download on the batch host populates all of them. flock serializes
+    # concurrent matrix jobs targeting the same path; the download lands in a
+    # temp dir and is published with an atomic rename so a crashed/partial fetch
+    # never satisfies the existence check.
+    autodownload_model() {
+        local model_dir=$1
+        local model_name=$2
+        local repo_id="${MODEL:-$model_name}"
+        local dst="$model_dir/$model_name"
+        local lock="$model_dir/.$model_name.download.lock"
+        local tmp="$model_dir/.$model_name.tmp.$$"
+
+        if [[ "$repo_id" != */* ]]; then
+            echo "[autodownload] MODEL='$repo_id' is not an 'org/name' repo id; cannot download. Set MODEL=<org/name>." >&2
+            return 1
+        fi
+
+        echo "[autodownload] Model missing; fetching '$repo_id' -> $dst"
+        mkdir -p "$model_dir" || { echo "[autodownload] cannot create $model_dir" >&2; return 1; }
+
+        # Some lean runtime images ship without the HF CLI.
+        if ! command -v hf >/dev/null 2>&1; then
+            local pip_install=(python3 -m pip install -q)
+            python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages" \
+                && pip_install+=(--break-system-packages)
+            "${pip_install[@]}" "huggingface_hub[cli]>=0.25.0" || {
+                echo "[autodownload] failed to install huggingface_hub CLI" >&2; return 1; }
+        fi
+
+        exec 200>"$lock"
+        flock 200
+        if [[ -d "$dst" ]]; then
+            echo "[autodownload] Another job already staged $dst; skipping."
+            flock -u 200
+            return 0
+        fi
+        rm -rf "$tmp"
+        if hf download "$repo_id" --local-dir "$tmp"; then
+            mv "$tmp" "$dst"
+            echo "[autodownload] Published $dst"
+            flock -u 200
+            return 0
+        fi
+        echo "[autodownload] hf download failed for '$repo_id'" >&2
+        rm -rf "$tmp"
+        flock -u 200
+        return 1
+    }
+
+    if ! check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+        # Default (MODEL_AUTODOWNLOAD unset/false): hard-fail so a mis-staged
+        # model is caught immediately. When enabled, fetch from HuggingFace and
+        # re-check before giving up.
+        if [[ "${MODEL_AUTODOWNLOAD:-false}" == "true" || "${MODEL_AUTODOWNLOAD:-0}" == "1" ]]; then
+            autodownload_model "$MODEL_DIR" "$MODEL_NAME"
+            if ! check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+                echo "FATAL ERROR: Model '$MODEL_NAME' still not found on all nodes after auto-download"
+                exit 1
+            fi
+        else
+            echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+            echo "  - $MODEL_DIR/$MODEL_NAME"
+            echo "  (set MODEL_AUTODOWNLOAD=1 to fetch '${MODEL:-<org/name>}' from HuggingFace automatically)"
+            exit 1
+        fi
     fi
+    MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
+    echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
     echo "Final MODEL_PATH: $MODEL_PATH"
 fi
 
