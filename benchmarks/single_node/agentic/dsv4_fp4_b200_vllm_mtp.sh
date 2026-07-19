@@ -266,6 +266,8 @@ VLLM_CMD=(
     --enable-cumem-allocator
     --no-enable-flashinfer-autotune
     --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
     --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
     --speculative-config "$SPEC_CONFIG"
