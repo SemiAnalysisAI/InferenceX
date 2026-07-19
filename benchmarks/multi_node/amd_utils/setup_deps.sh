@@ -229,6 +229,52 @@ if old not in src:
 open(target, "w").write(src.replace(old, new, 1))
 print("[SETUP] Patched: synchronous scheduler initialization traceback")
 '
+
+    python3 -c '
+import os, sys
+
+target = "/sgl-workspace/sglang/python/sglang/srt/entrypoints/engine.py"
+if not os.path.isfile(target):
+    print("[SETUP] SGLang engine.py not found, skipping process traceback patch")
+    sys.exit(0)
+
+src = open(target).read()
+marker = "SGLANG_SCHEDULER_PROCESS_TRACEBACK"
+if marker in src:
+    print("[SETUP] scheduler process traceback patch already applied")
+    sys.exit(0)
+
+class_marker = "class Engine:"
+old_target = """\
+                            target=run_scheduler_process_func,
+                            args=(
+                                server_args,"""
+wrapper = """\
+def _inferencex_run_scheduler_with_traceback(target, *args):
+    try:
+        return target(*args)
+    except BaseException:
+        trace = __import__("traceback").format_exc()
+        os.write(2, ("SGLANG_SCHEDULER_PROCESS_TRACEBACK\\n" + trace + "\\n").encode("utf-8", errors="replace"))
+        raise
+
+
+"""
+new_target = """\
+                            target=_inferencex_run_scheduler_with_traceback,
+                            args=(
+                                run_scheduler_process_func,
+                                server_args,"""
+
+if class_marker not in src or old_target not in src:
+    print("[SETUP] WARN: SGLang engine scheduler target pattern not found")
+    sys.exit(0)
+
+src = src.replace(class_marker, wrapper + class_marker, 1)
+src = src.replace(old_target, new_target, 1)
+open(target, "w").write(src)
+print("[SETUP] Patched: scheduler process target traceback")
+'
     _SETUP_INSTALLED+=("scheduler-init-traceback")
 }
 
