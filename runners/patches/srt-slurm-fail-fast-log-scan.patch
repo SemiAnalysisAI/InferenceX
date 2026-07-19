@@ -1,0 +1,111 @@
+diff --git a/src/srtctl/core/processes.py b/src/srtctl/core/processes.py
+index 46e6c69..8df0e63 100644
+--- a/src/srtctl/core/processes.py
++++ b/src/srtctl/core/processes.py
+@@ -22,6 +22,20 @@ from pathlib import Path
+ logger = logging.getLogger(__name__)
+ 
+ 
++# Terminal markers a worker may log while its OS process stays alive. e.g.
++# dynamo.vllm keeps its runtime (and etcd leases) running after the vLLM
++# EngineCore fails to initialize, so the srun step never exits and the plain
++# exit-code check never trips -- the readiness gate then polls until the health
++# timeout (hours). Scanning worker logs for these lets the monitor fail fast.
++# Keep these unambiguous and non-recoverable to avoid false positives.
++FATAL_LOG_MARKERS: tuple[str, ...] = (
++    "EngineCore failed to start",
++    "Engine core initialization failed",
++    "Worker failed with error",
++    "torch.OutOfMemoryError",
++)
++
++
+ @dataclass
+ class ManagedProcess:
+     """A process managed by the registry.
+@@ -95,6 +109,9 @@ class ProcessRegistry:
+         self._processes: dict[str, ManagedProcess] = {}
+         self._lock = threading.Lock()
+         self._failed_processes: list[str] = []
++        # Byte offset scanned so far per process log, for incremental fatal-
++        # marker detection (see _scan_log_for_fatal_marker).
++        self._log_scan_pos: dict[str, int] = {}
+ 
+     def add_process(self, process: ManagedProcess) -> None:
+         """Add a process to the registry.
+@@ -129,23 +146,72 @@ class ProcessRegistry:
+     def check_failures(self) -> bool:
+         """Check if any critical process has failed.
+ 
++        A process counts as failed if it either exited with a non-zero code, or
++        is still running but logged a terminal engine-failure marker (a hung
++        worker -- see FATAL_LOG_MARKERS). The latter catches dynamo.vllm workers
++        that keep their runtime alive after the vLLM EngineCore dies, which would
++        otherwise stall the readiness gate until the health-check timeout.
++
+         Returns:
+-            True if any critical process has exited with non-zero code
++            True if any critical process has failed.
+         """
+         with self._lock:
+             for name, proc in self._processes.items():
+-                if proc.critical and not proc.is_running:
++                if not proc.critical or name in self._failed_processes:
++                    continue
++                if not proc.is_running:
+                     exit_code = proc.exit_code
+-                    if exit_code != 0 and name not in self._failed_processes:
++                    if exit_code != 0:
+                         self._failed_processes.append(name)
+                         logger.error(
+                             "Critical process '%s' exited with code %d",
+                             name,
+                             exit_code,
+                         )
++                else:
++                    marker = self._scan_log_for_fatal_marker(name, proc.log_file)
++                    if marker is not None:
++                        self._failed_processes.append(name)
++                        logger.error(
++                            "Critical process '%s' logged a fatal error and is not "
++                            "recovering (marker: %r)",
++                            name,
++                            marker,
++                        )
+ 
+             return len(self._failed_processes) > 0
+ 
++    def _scan_log_for_fatal_marker(self, name: str, log_file: Path | None) -> str | None:
++        """Scan a process log's newly-appended bytes for a fatal marker.
++
++        Only content written since the previous scan is read, so a marker is
++        caught when it first appears regardless of later log spam, and repeated
++        scans stay cheap. Returns the matched marker, or None. Never raises --
++        log I/O problems must not take down the monitor.
++        """
++        if log_file is None:
++            return None
++        try:
++            if not log_file.exists():
++                return None
++            size = log_file.stat().st_size
++            pos = self._log_scan_pos.get(name, 0)
++            if size < pos:  # log rotated or truncated
++                pos = 0
++            if size <= pos:
++                return None
++            with log_file.open("rb") as fh:
++                fh.seek(pos)
++                chunk = fh.read()
++            self._log_scan_pos[name] = size
++        except OSError:
++            return None
++        text = chunk.decode("utf-8", errors="replace")
++        for marker in FATAL_LOG_MARKERS:
++            if marker in text:
++                return marker
++        return None
++
+     def cleanup(self) -> None:
+         """Terminate all registered processes."""
+         with self._lock:

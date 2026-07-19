@@ -327,6 +327,14 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     # patch until it lands upstream.
     git apply "$GITHUB_WORKSPACE/runners/patches/srt-slurm-vllm-port-single-gpu.patch" || exit 1
 
+    # Fail fast when a worker logs a fatal engine error but its OS process stays
+    # alive. dynamo.vllm keeps its runtime up after the vLLM EngineCore dies, so
+    # the srun step never exits and srt-slurm's exit-code monitor never trips --
+    # the readiness gate then polls until the health timeout (hours). The patch
+    # makes the process monitor also scan running workers' logs for terminal
+    # markers. Not yet in an srt-slurm release, so apply it here until upstream.
+    git apply "$GITHUB_WORKSPACE/runners/patches/srt-slurm-fail-fast-log-scan.patch" || exit 1
+
     # Per-node DP launches one Dynamo generate endpoint per node-local process,
     # not one per DP rank. Backport the health-count fix from
     # ivanium/srt-slurm@ca0880138fa606130ae4acbb8d0afddfb84c69fa.
