@@ -4976,4 +4976,4 @@
     - "Test only the GB300 Dynamo-vLLM AgentX aggregate TP4/TP8 low-latency sweeps at conc [1,4,8,16]."
     - "Set gpu-memory-utilization to 0.92 for TP4/TP8 and enable the DeepSeek-V4 tool-call and reasoning parsers."
     - "Use vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96 for all new recipes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2269
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2284
