@@ -11,6 +11,7 @@ NODE_RANK="${NODE_RANK:-0}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
 MODEL_CONFIG_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
+export PYTHONFAULTHANDLER=1
 
 xP="${xP:-1}" #-> Number of Prefill Workers
 yD="${yD:-1}" #-> Number of Decode Workers

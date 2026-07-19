@@ -272,6 +272,43 @@ src = re.sub(
 open(target, "w").write(src)
 print("[SETUP] Patched: scheduler process target traceback")
 '
+
+    python3 -c '
+import os, sys
+
+target = "/sgl-workspace/sglang/python/sglang/launch_server.py"
+if not os.path.isfile(target):
+    print("[SETUP] SGLang launch_server.py not found, skipping top-level traceback patch")
+    sys.exit(0)
+
+src = open(target).read()
+marker = "SGLANG_LAUNCH_SERVER_TRACEBACK"
+if marker in src:
+    print("[SETUP] top-level launch traceback patch already applied")
+    sys.exit(0)
+
+old = """\
+    try:
+        run_server(server_args)
+    finally:
+        kill_process_tree(os.getpid(), include_parent=False)"""
+new = """\
+    try:
+        run_server(server_args)
+    except BaseException:
+        trace = __import__("traceback").format_exc()
+        os.write(2, ("SGLANG_LAUNCH_SERVER_TRACEBACK\\n" + trace + "\\n").encode("utf-8", errors="replace"))
+        raise
+    finally:
+        kill_process_tree(os.getpid(), include_parent=False)"""
+
+if old not in src:
+    print("[SETUP] WARN: SGLang top-level launch pattern not found")
+    sys.exit(0)
+
+open(target, "w").write(src.replace(old, new, 1))
+print("[SETUP] Patched: top-level launch traceback")
+'
     _SETUP_INSTALLED+=("scheduler-init-traceback")
 }
 
