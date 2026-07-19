@@ -40,7 +40,6 @@ frontend:
   enable_multiple_frontends: false
   args:
     router-mode: "kv"
-    router-reset-states: true
     router-temperature: 0.0
     router-queue-threshold: 65536
     active-decode-blocks-threshold: "None"

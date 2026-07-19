@@ -47,7 +47,6 @@ frontend:
     ETCD_LEASE_TTL: "120"
   args:
     router-mode: "kv"
-    router-reset-states: true
 
 backend:
   type: vllm
