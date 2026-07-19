@@ -4955,7 +4955,7 @@
     - glm5.2-fp8-mi355x-sglang-agentic
   description:
     - "Add GLM-5.2 FP8 MI355X SGLang single-node agentic benchmarks from the SGLang cookbook MI355X FP8 recipes (TP8, DSA tilelang backends, STP only - MTP not validated on ROCm)"
-    - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710, the build the DSv4 MI355X agentic recipe runs green on (the cookbook-verified 20260618 build segfaults in AITER gemm_a8w8_blockscale_bpreshuffle under the agentic corpus - GLM-5.2 gfx950 tuned configs not upstream yet, ROCm/aiter#4243; the 20260717 nightly cannot boot DSA models on ROCm: dpsk_v4_topk_v2 JIT includes CUDA-only cooperative_groups.h); model zai-org/GLM-5.2-FP8"
+    - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710, the build the DSv4 MI355X agentic recipe runs green on (the cookbook-verified 20260618 build segfaults in AITER gemm_a8w8_blockscale_bpreshuffle under the agentic corpus - GLM-5.2 gfx950 tuned configs not upstream yet, ROCm/aiter#4243); builds >= v0.5.14 default the DSA indexer topk to a CUDA-only JIT kernel (cooperative_groups.h, cannot build for gfx950), so the recipe forces the precompiled-HIP v1 path with SGLANG_OPT_USE_TOPK_V2=false, mirroring upstream MI355X CI; model zai-org/GLM-5.2-FP8"
     - "Single TP8 arm at conc [1, 2, 4, 8, 16, 24, 32] (no-offload points beyond ~c32 are KV-cliff-dominated on the 131k-token mean corpus per the B300 sibling frontier); cookbook low-latency vs balanced/high-throughput batch-shaping derived from CONC in the benchmark script"
     - "launch_mi355x-amds.sh: GLM-5.2 weights served from the NFS hf-hub-cache (MiniMax-M3 pattern); exclude broken-but-idle mia1-p01-g09/g11 from single-node salloc"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2272
