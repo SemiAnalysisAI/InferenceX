@@ -245,14 +245,12 @@ if marker in src:
     sys.exit(0)
 
 class_marker = "class Engine:"
-old_target = """\
-                            target=run_scheduler_process_func,
-                            args=(
-                                server_args,"""
+old_target = "target=run_scheduler_process_func,"
 wrapper = """\
-def _inferencex_run_scheduler_with_traceback(target, *args):
+def _inferencex_run_scheduler_with_traceback(*args, **kwargs):
+    from sglang.srt.managers.scheduler import run_scheduler_process
     try:
-        return target(*args)
+        return run_scheduler_process(*args, **kwargs)
     except BaseException:
         trace = __import__("traceback").format_exc()
         os.write(2, ("SGLANG_SCHEDULER_PROCESS_TRACEBACK\\n" + trace + "\\n").encode("utf-8", errors="replace"))
@@ -260,11 +258,7 @@ def _inferencex_run_scheduler_with_traceback(target, *args):
 
 
 """
-new_target = """\
-                            target=_inferencex_run_scheduler_with_traceback,
-                            args=(
-                                run_scheduler_process_func,
-                                server_args,"""
+new_target = "target=_inferencex_run_scheduler_with_traceback,"
 
 if class_marker not in src or old_target not in src:
     print("[SETUP] WARN: SGLang engine scheduler target pattern not found")
