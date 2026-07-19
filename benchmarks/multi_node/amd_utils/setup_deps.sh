@@ -185,24 +185,6 @@ install_transformers_glm5() {
     _SETUP_INSTALLED+=("transformers-glm5")
 }
 
-# ---------------------------------------------------------------------------
-# SGLang: install GLM-5.2 tokenizer conversion dependencies.
-# ---------------------------------------------------------------------------
-install_glm52_tokenizer_deps() {
-    if [[ "${MODEL_CONFIG_KEY:-}" != "GLM-5.2-FP8" ]]; then
-        return 0
-    fi
-
-    if python3 -c 'import sentencepiece, tiktoken' 2>/dev/null; then
-        echo "[SETUP] GLM-5.2 tokenizer dependencies already present"
-        return 0
-    fi
-
-    echo "[SETUP] Installing GLM-5.2 tokenizer dependencies..."
-    pip install --quiet --no-cache-dir sentencepiece tiktoken
-    _SETUP_INSTALLED+=("glm52-tokenizer-deps")
-}
-
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
@@ -222,7 +204,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 else
     patch_gluon_pa_mqa_logits_instr_shape
     install_transformers_glm5
-    install_glm52_tokenizer_deps
 fi
 
 _SETUP_END=$(date +%s)

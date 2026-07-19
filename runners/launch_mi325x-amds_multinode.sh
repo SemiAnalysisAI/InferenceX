@@ -75,6 +75,21 @@ export GPUS_PER_NODE=8
 export IBDEVICES="${IBDEVICES:-bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re7,bnxt_re8}"
 export MORI_RDMA_TC="${MORI_RDMA_TC:-104}"
 
+snapshot_has_required_files() {
+    local snapshot_dir="$1"
+    local required_file
+    for required_file in \
+        config.json \
+        model.safetensors.index.json \
+        tokenizer.json \
+        tokenizer_config.json; do
+        if [[ ! -f "$snapshot_dir/$required_file" ]]; then
+            echo "Model snapshot is incomplete: missing $snapshot_dir/$required_file" >&2
+            return 1
+        fi
+    done
+}
+
 resolve_model_name() {
     local hf_dir="models--${MODEL//\//--}"
     local snapshot_root="$MODEL_PATH/$hf_dir/snapshots"
@@ -83,7 +98,7 @@ resolve_model_name() {
     if [[ -d "$snapshot_root" ]]; then
         snapshot=$(find "$snapshot_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -1)
     fi
-    if [[ -n "$snapshot" ]]; then
+    if [[ -n "$snapshot" ]] && snapshot_has_required_files "$snapshot_root/$snapshot"; then
         printf '%s\n' "$hf_dir/snapshots/$snapshot"
         return 0
     fi
