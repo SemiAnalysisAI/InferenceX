@@ -194,6 +194,13 @@ poll_pid=$!
 tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null || true
 wait "$poll_pid"
 
+err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.err"
+if [[ -s "$err_file" ]]; then
+    echo "===== Slurm stderr: job $JOB_ID =====" >&2
+    sudo cat "$err_file" >&2 || true
+    echo "===== End Slurm stderr: job $JOB_ID =====" >&2
+fi
+
 job_state=$(sacct -n -X -j "$JOB_ID" --format=State --parsable2 2>/dev/null | head -1 | cut -d'|' -f1)
 job_exit=$(sacct -n -X -j "$JOB_ID" --format=ExitCode --parsable2 2>/dev/null | head -1 | cut -d'|' -f1)
 echo "Slurm job $JOB_ID finished: state=${job_state:-unknown}, exit=${job_exit:-unknown}"

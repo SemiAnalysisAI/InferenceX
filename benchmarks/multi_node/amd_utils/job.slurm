@@ -447,6 +447,7 @@ fi
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
 
+SERVER_RUN_RC=0
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
@@ -622,7 +623,7 @@ DOCKER_EXIT_CODE=\$?
 echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-router...\"
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
-"
+" || SERVER_RUN_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
@@ -633,4 +634,9 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
             eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
         '
     fi
+fi
+
+if [[ "$SERVER_RUN_RC" -ne 0 ]]; then
+    echo "ERROR: distributed server step failed with exit code $SERVER_RUN_RC" >&2
+    exit "$SERVER_RUN_RC"
 fi
