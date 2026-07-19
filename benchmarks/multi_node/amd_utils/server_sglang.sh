@@ -419,7 +419,10 @@ wait_or_die() {            # $1 = server pid to watch; rest = blocking command
     "$@" & local cmd=$!
     while kill -0 "$cmd" 2>/dev/null; do
         kill -0 "$watch" 2>/dev/null || {
-            echo "FATAL: $(hostname) local sglang server (pid $watch) died; tearing down job" >&2
+            local server_rc=0
+            wait "$watch" || server_rc=$?
+            sleep 1
+            echo "FATAL: $(hostname) local sglang server (pid $watch) died with rc=$server_rc; tearing down job" >&2
             local log_dir="/run_logs/slurm_job-${SLURM_JOB_ID}"
             local log_file
             for log_file in "$log_dir"/*_"$(hostname)".log; do
