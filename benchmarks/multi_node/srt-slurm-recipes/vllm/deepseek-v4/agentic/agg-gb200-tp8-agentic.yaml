@@ -111,13 +111,14 @@ backend:
       # AgentX session fan-out can exceed the configured live-session
       # concurrency; retain scheduler/graph headroom for subagent bursts.
       max-num-seqs: 32
-      max-num-batched-tokens: 32768
+      max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 32
-      gpu-memory-utilization: 0.96
+      gpu-memory-utilization: 0.93
+      kv-cache-memory: 37580963840  # 35 GiB
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
