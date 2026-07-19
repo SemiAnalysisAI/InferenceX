@@ -18,7 +18,7 @@ slurm:
   time_limit: "8:00:00"
 
 health_check:
-  max_attempts: 2160
+  max_attempts: 720
   interval_seconds: 10
 
 resources:

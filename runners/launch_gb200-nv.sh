@@ -319,6 +319,14 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     fi
     git cherry-pick --no-commit "$SRT_SLURM_PER_NODE_DP_SHA" || exit 1
 
+    # Pin VLLM_PORT only for single-GPU processes. Multi-GPU worker processes
+    # (multi-node tensor parallel, e.g. the TP8 aggregate spanning two 4-GPU
+    # nodes) run vLLM's internal multiproc executor whose same-node subprocesses
+    # otherwise all read one VLLM_PORT and race to bind the shm-broadcast port
+    # (EADDRINUSE crash). Not yet in an srt-slurm release, so apply it here as a
+    # patch until it lands upstream.
+    git apply "$GITHUB_WORKSPACE/runners/patches/srt-slurm-vllm-port-single-gpu.patch" || exit 1
+
     # ai-dynamo/dynamo#11303 is merged into ai-dynamo/dynamo main, so the
     # recipe-pinned dynamo hash resolves against upstream directly -- no
     # esmeetu/dynamo fork redirect of srt-slurm's schema.py needed anymore.

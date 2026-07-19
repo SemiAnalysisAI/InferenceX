@@ -18,7 +18,7 @@ slurm:
   time_limit: "8:00:00"
 
 health_check:
-  max_attempts: 2160
+  max_attempts: 720
   interval_seconds: 10
 
 resources:
@@ -63,7 +63,11 @@ backend:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
+    # Off: the c188b96 container's CUDA-graph capture path enters vLLM's
+    # nccl_symm_mem_context without set_graph_pool_id, so capture asserts
+    # "graph_pool_id is not set under graph capture". Re-enable once this recipe
+    # moves to a container built from a vLLM with the cuda_graph.py fix.
+    VLLM_USE_NCCL_SYMM_MEM: "0"
     TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -97,7 +101,11 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       enable-cumem-allocator: true
-      numa-bind: true
+      # numa-bind disabled: srt-slurm's cpus-per-task/cgroup already constrains
+      # CPU affinity, so vLLM's auto-NUMA detection bails and --numa-bind hard-
+      # errors ("could not detect the GPU-to-NUMA topology"). Re-enable only with
+      # an explicit --numa-bind-nodes mapping for this cluster.
+      # numa-bind: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       max-model-len: 1048576
       # AgentX session fan-out can exceed the configured live-session
