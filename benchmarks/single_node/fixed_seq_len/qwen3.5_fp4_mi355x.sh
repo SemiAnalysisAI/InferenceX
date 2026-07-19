@@ -21,6 +21,7 @@ export SGLANG_USE_AITER=1
 export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export AITER_FLYDSL_FORCE=1
 export SGLANG_MAMBA_SSM_DTYPE=bfloat16
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT8
 
 SERVER_LOG=/workspace/server.log
 MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
@@ -41,7 +42,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --model-loader-extra-config '{"enable_multithread_load": true}' \
 --watchdog-timeout 1200  \
 --disable-radix-cache \
---enable-aiter-allreduce-fusion --max-running-requests $CONC \
+--max-running-requests $CONC \
 --page-size 16 \
 > $SERVER_LOG 2>&1 &
 

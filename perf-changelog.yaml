@@ -4888,6 +4888,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Add ROCM_QUICK_REDUCE_QUANTIZATION=INT8 in both non-MTP and MTP benchmark scripts"
+    - "Remove --enable-aiter-allreduce-fusion from both non-MTP and MTP launch commands"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2265
+
+- config-keys:
     - dsv4-fp4-b200-vllm-agentic
   description:
     - "Update B200 AgentX: KV offload, sparse DSV4 attention, mega-MoE, and FULL_DECODE_ONLY CUDA graphs."
