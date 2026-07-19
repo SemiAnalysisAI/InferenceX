@@ -244,8 +244,8 @@ if marker in src:
     print("[SETUP] scheduler process traceback patch already applied")
     sys.exit(0)
 
-class_match = re.search(r"^class Engine(?:\\(|:)", src, re.MULTILINE)
-target_match = re.search(r"target\\s*=\\s*run_scheduler_process_func\\s*,", src)
+class_match = re.search(r"^class Engine(?:\(|:)", src, re.MULTILINE)
+target_match = re.search(r"target\s*=\s*run_scheduler_process_func\s*,", src)
 wrapper = """\
 def _inferencex_run_scheduler_with_traceback(*args, **kwargs):
     from sglang.srt.managers.scheduler import run_scheduler_process
@@ -264,7 +264,7 @@ if class_match is None or target_match is None:
 
 src = src[:class_match.start()] + wrapper + src[class_match.start():]
 src = re.sub(
-    r"target\\s*=\\s*run_scheduler_process_func\\s*,",
+    r"target\s*=\s*run_scheduler_process_func\s*,",
     "target=_inferencex_run_scheduler_with_traceback,",
     src,
     count=1,
