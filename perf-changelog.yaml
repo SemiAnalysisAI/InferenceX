@@ -4973,4 +4973,4 @@
     - "Convert the high-throughput arm to DEP: add ep: 8 to the TP8/DP8 attention-DP arm so the MoE layers run expert-parallel across all 8 ranks (--ep-size 8) instead of TP-sharded (the arm previously left ep unset -> EP_SIZE=1). Attention stays data-parallel behind sglang-router consistent hashing; the recipe already passes --ep-size EP_SIZE unconditionally, so only the master-config search space changes"
     - "Cap the DEP arm concurrency at 64: conc-list [48, 64] (was [48, 64, 96, 128, 192, 256, 512])"
     - "Low-latency TP8 arm (conc [1, 2, 4, 8, 16, 32], fp8 KV + cutedsl bf16 GEMM) unchanged; DEP mirrors the proven dsv4-fp4-b300-sglang tp8/ep8/dp-attn DEP arm"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2281
