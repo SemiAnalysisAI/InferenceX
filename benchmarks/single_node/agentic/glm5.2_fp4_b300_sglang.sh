@@ -13,15 +13,12 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
 #   EP_SIZE, DP_ATTENTION
+#
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
-
-if [[ "$KV_OFFLOADING" != "none" ]]; then
-    echo "Error: KV_OFFLOADING=$KV_OFFLOADING is not supported by this recipe" >&2
-    exit 1
-fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -45,6 +42,40 @@ install_agentic_deps
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+
+CACHE_ARGS=()
+if require_agentic_kv_offload_backend hicache; then
+    # HiCache extends RadixAttention: prefixes evicted from the HBM KV pool
+    # spill to a pinned host pool instead of being recomputed. On the
+    # 1M-context agentic corpus the live working set outgrows HBM past
+    # conc 8 (TP8) / 64 (DP8) and the radix hit rate collapses to <0.1
+    # against a ~0.97 theoretical ceiling, so every turn re-prefills its
+    # whole history; the host tier restores those hits at C2C bandwidth.
+    # GLM-5.2 is plain GQA, so each rank owns a single host KV pool (no
+    # Mamba side pool as on Qwen3.5). SGLang --hicache-size is per rank,
+    # while the workflow input is a node-total DRAM budget: divide by TP,
+    # which equals the attention-DP rank count on the DP arm.
+    MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP))
+    HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
+    if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
+        echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-rank limit $MAX_HICACHE_SIZE_GB" >&2
+        exit 1
+    fi
+    if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
+        echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB, TP=$TP" >&2
+        exit 1
+    fi
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+    echo "HiCache CPU pool: ${HICACHE_SIZE_GB} GB per rank across TP=${TP}, write_policy=${HICACHE_WRITE_POLICY}"
+    CACHE_ARGS=(
+        --page-size 64
+        --enable-hierarchical-cache
+        --hicache-size "$HICACHE_SIZE_GB"
+        --hicache-io-backend kernel
+        --hicache-mem-layout page_first
+        --hicache-write-policy "$HICACHE_WRITE_POLICY"
+    )
+fi
 
 # With attention-DP, front the DP ranks with sglang-router using consistent
 # hashing on the AIPerf correlation id so multi-turn sessions stay on the DP
@@ -136,6 +167,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     "${GRAPH_ARGS[@]}"
+    "${CACHE_ARGS[@]}"
     --watchdog-timeout 1800
     --enable-metrics
 )

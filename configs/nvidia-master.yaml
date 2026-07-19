@@ -7873,5 +7873,5 @@ glm5.2-fp4-b300-sglang-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [48, 64, 96, 128, 192, 256, 512], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64, 96, 128, 192, 256, 512], router: { name: sglang-router, version: "0.3.2" } }

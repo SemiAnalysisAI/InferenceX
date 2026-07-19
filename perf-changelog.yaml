@@ -4950,3 +4950,11 @@
   description:
     - "Bump vLLM image to v0.25.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Enable DRAM KV offloading (SGLang HiCache) on all points of both arms: per-rank pinned host pool = 0.80 x node DRAM / TP, page size 64, io-backend kernel, mem-layout page_first, write policy write_through_selective"
+    - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
+    - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
+  pr-link: XXX
