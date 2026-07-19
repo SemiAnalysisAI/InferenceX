@@ -7853,3 +7853,25 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           tp: 16
           ep: 16
           dp-attn: true
+
+# GLM-5.2 B300 NVFP4 AgentX frontier from the SGLang cookbook B300 NVFP4
+# single-node recipes (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2),
+# STP only (the cookbook's EAGLE MTP variants are deferred). The TP8 arm is the
+# cookbook low-latency recipe (fp8 KV, cutedsl bf16 GEMM) and covers the
+# interactivity end; the TP8/DP8 attention-DP arm is the cookbook
+# high-throughput recipe behind sglang-router consistent hashing for session
+# affinity. Conc lists are disjoint between arms so exp-names stay unique.
+glm5.2-fp4-b300-sglang-agentic:
+  image: lmsysorg/sglang:v0.5.15.post1-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [48, 64, 96, 128, 192, 256, 512], router: { name: sglang-router, version: "0.3.2" } }
