@@ -80,10 +80,6 @@ CHUNKED_PREFILL_SIZE=8192
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
-    # DPA + MTP needs additional runtime headroom for speculative decode and
-    # communication buffers beyond SGLang's static KV pool.
-    # 0719
-    #MEM_FRACTION_STATIC=0.75
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
@@ -93,13 +89,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
-    # 0719
     export GPU_MAX_HW_QUEUES=5
 
-    # SGLang divides the configured chunk across DP schedulers. Use a 16K
-    # per-scheduler chunk so long agentic prefill tails drain within the
-    # standard 600-second warmup grace period.
-    # 0719
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
@@ -111,13 +102,6 @@ fi
 if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
-
-# SGLang treats max-running-requests as a global DPA limit and partitions it
-# internally. CUDA graph capture is per scheduler, so only its batch size is
-# divided across DP ranks.
-# 0719
-MAX_RUNNING_REQUESTS=$((2 * CONC))
-# 0719
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 128 ] && CUDA_GRAPH_MAX_BS=128
 
