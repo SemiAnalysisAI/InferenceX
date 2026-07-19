@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ORIGINAL_GITHUB_WORKSPACE="$GITHUB_WORKSPACE"
+
 scancel_sync() {
     local job_id="$1"
     local deadline=$((SECONDS + 600))
@@ -26,7 +28,7 @@ stage_server_logs() {
         -C "$BENCHMARK_LOGS_DIR" . 2>/dev/null || true
     sudo chown "$USER" "$archive" 2>/dev/null || true
     if [[ -s "$archive" ]]; then
-        mv -f "$archive" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+        mv -f "$archive" "$ORIGINAL_GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
     else
         rm -f "$archive"
     fi
@@ -44,6 +46,12 @@ cleanup() {
     fi
     if [[ -n "${BENCHMARK_LOGS_PARENT:-}" && -d "$BENCHMARK_LOGS_PARENT" ]]; then
         rmdir "$BENCHMARK_LOGS_PARENT" 2>/dev/null || true
+    fi
+    if [[ -n "${SHARED_WORKSPACE:-}" && -d "$SHARED_WORKSPACE" ]]; then
+        sudo rm -rf -- "$SHARED_WORKSPACE" 2>/dev/null || true
+    fi
+    if [[ -n "${SHARED_WORKSPACES_PARENT:-}" && -d "$SHARED_WORKSPACES_PARENT" ]]; then
+        rmdir "$SHARED_WORKSPACES_PARENT" 2>/dev/null || true
     fi
     exit "$rc"
 }
@@ -155,7 +163,19 @@ if [[ -z "${MODEL_NAME:-}" ]]; then
 fi
 
 runner_tag=${RUNNER_NAME//[^a-zA-Z0-9_.-]/_}
-BENCHMARK_LOGS_PARENT="$(dirname "$GITHUB_WORKSPACE")/.inferencex-benchmark-logs"
+SHARED_WORKSPACES_PARENT="$runner_shared_root/.inferencex-workspaces"
+mkdir -p "$SHARED_WORKSPACES_PARENT"
+SHARED_WORKSPACE=$(mktemp -d "$SHARED_WORKSPACES_PARENT/mi325x-${runner_tag}.XXXXXX")
+rsync -a \
+    --exclude='.git' \
+    --exclude='LOGS' \
+    --exclude='results' \
+    "$ORIGINAL_GITHUB_WORKSPACE/" "$SHARED_WORKSPACE/"
+export SHARED_WORKSPACES_PARENT
+export SHARED_WORKSPACE
+export GITHUB_WORKSPACE="$SHARED_WORKSPACE"
+
+BENCHMARK_LOGS_PARENT="$runner_shared_root/.inferencex-benchmark-logs"
 mkdir -p "$BENCHMARK_LOGS_PARENT"
 BENCHMARK_LOGS_DIR=$(mktemp -d "$BENCHMARK_LOGS_PARENT/mi325x-${runner_tag}.XXXXXX")
 export BENCHMARK_LOGS_PARENT
@@ -214,7 +234,7 @@ if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
         staged_result=$(mktemp /tmp/inferencex-mi325x-result.XXXXXX.json)
         sudo cp -f "$result_file" "$staged_result"
         sudo chown "$USER" "$staged_result"
-        mv -f "$staged_result" "$GITHUB_WORKSPACE/$(basename "$result_file")"
+        mv -f "$staged_result" "$ORIGINAL_GITHUB_WORKSPACE/$(basename "$result_file")"
     done
 
     raw_dir=$(find "$BENCHMARK_LOGS_DIR/logs" -type d -path '*/agentic' -print -quit 2>/dev/null || true)
@@ -222,13 +242,13 @@ if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
         staged_raw=$(mktemp -d /tmp/inferencex-mi325x-agentic.XXXXXX)
         sudo cp -a "$raw_dir/." "$staged_raw/"
         sudo chown -R "$USER" "$staged_raw"
-        mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
-        cp -a "$staged_raw/." "$GITHUB_WORKSPACE/LOGS/agentic/"
+        mkdir -p "$ORIGINAL_GITHUB_WORKSPACE/LOGS/agentic"
+        cp -a "$staged_raw/." "$ORIGINAL_GITHUB_WORKSPACE/LOGS/agentic/"
         rm -rf -- "$staged_raw"
     fi
 else
     while IFS= read -r -d '' result_file; do
-        output="$GITHUB_WORKSPACE/${RESULT_FILENAME}_$(basename "$result_file")"
+        output="$ORIGINAL_GITHUB_WORKSPACE/${RESULT_FILENAME}_$(basename "$result_file")"
         staged_result=$(mktemp /tmp/inferencex-mi325x-result.XXXXXX.json)
         sudo cp -f "$result_file" "$staged_result"
         sudo chown "$USER" "$staged_result"
