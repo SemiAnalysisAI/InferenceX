@@ -176,6 +176,14 @@ print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 echo "Loaded model configuration for: $MODEL_CONFIG_KEY"
 
+if [[ "$MODEL_CONFIG_KEY" == "GLM-5.2-FP8" ]]; then
+    # Match the working MI325X single-node recipe: the fused DSA top-k JIT
+    # includes CUDA-only headers when compiled for gfx942.
+    export SGLANG_DSA_FUSE_TOPK=false
+    export SGLANG_OPT_USE_TOPK_V2=false
+    export PYTHONUNBUFFERED=1
+fi
+
 # Compute DP-dependent prefill parameters
 if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_cuda_graph_bs=($PREFILL_CUDA_GRAPH_BS_DP)
