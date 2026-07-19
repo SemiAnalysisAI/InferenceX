@@ -9,7 +9,7 @@ model:
   precision: "fp4"
 
 dynamo:
-  hash: "6972dd2a39aa61c5dbfdf7e901ca859111897643"
+  hash: "1f74ef8c204ed6e283c22374f2b8c5cc83bf7b52"
   install: true
 
 setup_script: vllm-container-deps.sh
