@@ -420,6 +420,14 @@ wait_or_die() {            # $1 = server pid to watch; rest = blocking command
     while kill -0 "$cmd" 2>/dev/null; do
         kill -0 "$watch" 2>/dev/null || {
             echo "FATAL: $(hostname) local sglang server (pid $watch) died; tearing down job" >&2
+            local log_dir="/run_logs/slurm_job-${SLURM_JOB_ID}"
+            local log_file
+            for log_file in "$log_dir"/*_"$(hostname)".log; do
+                [[ -f "$log_file" ]] || continue
+                echo "===== Local SGLang log: $log_file =====" >&2
+                tail -n 200 "$log_file" >&2 || true
+                echo "===== End local SGLang log =====" >&2
+            done
             kill "$cmd" 2>/dev/null || true
             return 1
         }
