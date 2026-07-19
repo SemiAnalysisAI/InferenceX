@@ -126,6 +126,12 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
+    - mi355x-amds_12
+    - mi355x-amds_14
+    - mi355x-amds_16
+    - mi355x-amds_17
+    - mi355x-amds_18
+    - mi355x-amds_19
   gb200:
     - gb200-nv_0
     - gb200-nv_1
