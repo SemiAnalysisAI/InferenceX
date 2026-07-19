@@ -52,7 +52,15 @@ trap cleanup EXIT
 export SLURM_ACCOUNT="$USER"
 export SLURM_PARTITION="compute"
 export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
-export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache"
+runner_shared_root="$GITHUB_WORKSPACE"
+for _ in 1 2 3 4 5; do
+    runner_shared_root=$(dirname "$runner_shared_root")
+done
+if [[ "$(basename "$runner_shared_root")" != "gharunners" ]]; then
+    echo "ERROR: cannot derive shared runner root from $GITHUB_WORKSPACE" >&2
+    exit 1
+fi
+export HF_HUB_CACHE_MOUNT="${MI325X_SHARED_HF_CACHE:-$runner_shared_root/.inferencex-hf-cache}"
 export MODEL_PATH="$HF_HUB_CACHE_MOUNT"
 export MODEL_YAML_KEY="${MODEL_YAML_KEY:-${MODEL##*/}}"
 export GPUS_PER_NODE=8
@@ -84,9 +92,7 @@ stage_model_to_shared_cache() {
     local python_path=""
     local tool_dir=""
 
-    if ! mkdir -p "$MODEL_PATH" 2>/dev/null; then
-        sudo install -d -m 0775 -o "$USER" -g "$(id -gn)" "$MODEL_PATH"
-    fi
+    mkdir -p "$MODEL_PATH"
     if [[ ! -w "$MODEL_PATH" ]]; then
         echo "ERROR: shared model cache '$MODEL_PATH' is not writable by $USER" >&2
         return 1
