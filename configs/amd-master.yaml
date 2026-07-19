@@ -1567,9 +1567,15 @@ glm5.2-fp8-mi355x-sglang-agentic:
   # the CUDA-only cooperative_groups.h and cannot build for gfx950; the
   # benchmark script forces the precompiled-HIP v1 path with
   # SGLANG_OPT_USE_TOPK_V2=false (mirroring upstream's own MI355X CI).
-  # Conc capped at 32: the B300 sibling frontier showed no-offload points
-  # beyond ~c48 are dominated (KV-pool cliff: radix hit rate collapses on the
-  # 131k-token mean prompts), and MI355X prefill is slower still.
+  # KV offloading (all arms layer on HiCache; sizing rationale in the
+  # benchmark script): the device pool holds only 1.335M tokens against
+  # 131k-token mean prompts, so the radix-cache cliff bites around conc
+  # 10-16 - much earlier than the B300 sibling - and host tiers are what
+  # extend the frontier past it. Three backends are traced: hicache
+  # (L2 host pool only), mooncake (L2 + Mooncake store as HiCache L3),
+  # and mori (L2 + AMD MORI UMBP as HiCache L3). The primary hicache arm
+  # runs the full conc list; the storage arms sample the post-cliff band
+  # where the L3 tier actually engages.
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
@@ -1579,8 +1585,11 @@ glm5.2-fp8-mi355x-sglang-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32] }
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [16, 32, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mori }, conc-list: [16, 32, 64] }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
