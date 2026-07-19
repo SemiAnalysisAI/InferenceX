@@ -404,6 +404,8 @@ DOCKER_ENV_COMMON=(
     -e MODEL=\$MODEL
     -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
     -e HF_HUB_CACHE=/models
+    -e IBDEVICES
+    -e MORI_RDMA_TC
 )
 
 # Engine-specific env vars
@@ -446,6 +448,20 @@ fi
 
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
+
+echo "Ensuring Docker image is present on every selected node..."
+srun \
+  --nodelist="$SELECTED_NODELIST_SRUN" \
+  --kill-on-bad-exit=1 \
+  --unbuffered \
+  bash -c '
+set -euo pipefail
+eval "$DOCKER_CMD_DETECT"
+if ! $DOCKER_CMD image inspect "$DOCKER_IMAGE_NAME" >/dev/null 2>&1; then
+    echo "[docker-pull] $(hostname): $DOCKER_IMAGE_NAME"
+    $DOCKER_CMD pull "$DOCKER_IMAGE_NAME"
+fi
+'
 
 SERVER_RUN_RC=0
 srun \
@@ -605,7 +621,7 @@ fi
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
-    -v /tmp:/run_logs \
+    -v ${BENCHMARK_LOGS_DIR}:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     ${EXTRA_DOCKER_MOUNTS:-} \
