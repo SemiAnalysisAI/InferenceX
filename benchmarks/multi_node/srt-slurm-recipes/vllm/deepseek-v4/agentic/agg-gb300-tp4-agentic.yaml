@@ -115,10 +115,13 @@ backend:
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 32
-      gpu-memory-utilization: 0.94
+      gpu-memory-utilization: 0.92
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
+      dyn-tool-call-parser: deepseek_v4
+      reasoning-parser: deepseek_v4
+      dyn-reasoning-parser: deepseek_v4
 
 sbatch_directives:
   cpus-per-task: "72"

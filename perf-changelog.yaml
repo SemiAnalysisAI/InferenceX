@@ -4969,11 +4969,11 @@
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-vllm-agentic-agg
-    - dsv4-fp4-gb300-dynamo-vllm-agentic-1p1d-dep8-dep8
-    - dsv4-fp4-gb300-dynamo-vllm-agentic-2p1d-dep8-dep8
-    - dsv4-fp4-gb300-dynamo-vllm-agentic-3p1d-dep8-dep16
+#     - dsv4-fp4-gb300-dynamo-vllm-agentic-1p1d-dep8-dep8
+#     - dsv4-fp4-gb300-dynamo-vllm-agentic-2p1d-dep8-dep8
+#     - dsv4-fp4-gb300-dynamo-vllm-agentic-3p1d-dep8-dep16
   description:
-    - "Add GB300 Dynamo-vLLM AgentX aggregate TP4/TP8 low-latency sweeps at conc [1,4,8,16]."
-    - "Add NVIDIA/srt-slurm#229-derived GB300 P/D topologies: 1P/1D DEP8/DEP8 at c512, 2P/1D DEP8/DEP8 at c1280, and 3P/1D DEP8/DEP16 at c1536."
+    - "Test only the GB300 Dynamo-vLLM AgentX aggregate TP4/TP8 low-latency sweeps at conc [1,4,8,16]."
+    - "Set gpu-memory-utilization to 0.92 for TP4/TP8 and enable the DeepSeek-V4 tool-call and reasoning parsers."
     - "Use vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96 for all new recipes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2269
