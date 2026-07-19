@@ -129,10 +129,6 @@ backend:
       watchdog-timeout: 86400
       stream-interval: 60
       enable-metrics: true
-      enable-hierarchical-cache: true
-      hicache-write-policy: write_back
-      hicache-ratio: 1
-      hicache-io-backend: direct
 
 sbatch_directives:
   mem: "0"
