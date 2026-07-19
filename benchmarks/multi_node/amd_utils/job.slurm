@@ -576,6 +576,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
     set +e
 fi
 
+set -x
 \$MAYBE_EXEC \$DOCKER_CMD run \
     --init \
     --stop-timeout 10 \
