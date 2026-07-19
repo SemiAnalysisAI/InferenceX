@@ -196,10 +196,28 @@ if ! [[ "$JOB_ID" =~ ^[0-9]+$ ]]; then
 fi
 
 log_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
+err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.err"
 while [[ ! -f "$log_file" ]]; do
     if ! squeue -h -j "$JOB_ID" 2>/dev/null | grep -q .; then
+        echo "Slurm job $JOB_ID ended before its output log became visible; waiting for NFS metadata" >&2
+        for _ in 1 2 3 4 5 6; do
+            sync
+            [[ -f "$log_file" || -f "$err_file" ]] && break
+            sleep 5
+        done
+        if [[ -f "$log_file" ]]; then
+            break
+        fi
+        if [[ -s "$err_file" ]]; then
+            echo "===== Slurm stderr: job $JOB_ID =====" >&2
+            sudo cat "$err_file" >&2 || true
+            echo "===== End Slurm stderr: job $JOB_ID =====" >&2
+        fi
         echo "ERROR: Slurm job $JOB_ID ended before creating its output log" >&2
         scontrol show job "$JOB_ID" 2>/dev/null || true
+        sacct -X -j "$JOB_ID" \
+            --format=JobID,State,ExitCode,DerivedExitCode,NodeList,Comment,SystemComment \
+            2>/dev/null || true
         exit 1
     fi
     sleep 5
@@ -214,7 +232,6 @@ poll_pid=$!
 tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null || true
 wait "$poll_pid"
 
-err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.err"
 if [[ -s "$err_file" ]]; then
     echo "===== Slurm stderr: job $JOB_ID =====" >&2
     sudo cat "$err_file" >&2 || true
