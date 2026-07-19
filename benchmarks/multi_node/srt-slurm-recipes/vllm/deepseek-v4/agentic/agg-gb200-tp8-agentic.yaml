@@ -53,7 +53,9 @@ backend:
       global_segment_size: "150GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
-      device_name: ""
+      # Pin to the IB compute fabric. device_name: "" auto-discovers RoCE/link-local
+      # NICs (mlx5_2/mlx5_5) that can not route cross-node and hang mooncake setup.
+      device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
       mode: "embedded"
       enable_offload: false
   aggregated_environment:
