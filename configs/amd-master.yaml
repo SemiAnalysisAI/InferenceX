@@ -2077,7 +2077,7 @@ glm5.2-fp8-mi325x-sglang-agentic:
 # Broadcom bnxt_re MoRI all-to-all path is still unstable, so this sweep varies
 # TP8 prefill/decode worker ratios without EP or DP attention.
 glm5.2-fp8-mi325x-sglang-disagg-agentic:
-  image: semianalysiswork/sgl-bnxt-cdna3:pr22665-bnxt
+  image: lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
   runner: cluster:mi325x-amds
