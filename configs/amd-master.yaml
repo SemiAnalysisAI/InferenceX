@@ -2101,6 +2101,7 @@ glm5.2-fp8-mi325x-sglang-disagg-agentic:
           additional-settings:
           - "PREFILL_NODES=1"
           - "MODEL_YAML_KEY=GLM-5.2-FP8"
+          - "SGLANG_SERVER_READY_TIMEOUT=3600"
         decode:
           num-worker: 1
           tp: 8
@@ -2121,6 +2122,7 @@ glm5.2-fp8-mi325x-sglang-disagg-agentic:
           additional-settings:
           - "PREFILL_NODES=1"
           - "MODEL_YAML_KEY=GLM-5.2-FP8"
+          - "SGLANG_SERVER_READY_TIMEOUT=3600"
         decode:
           num-worker: 2
           tp: 8
@@ -2141,6 +2143,7 @@ glm5.2-fp8-mi325x-sglang-disagg-agentic:
           additional-settings:
           - "PREFILL_NODES=2"
           - "MODEL_YAML_KEY=GLM-5.2-FP8"
+          - "SGLANG_SERVER_READY_TIMEOUT=3600"
         decode:
           num-worker: 1
           tp: 8

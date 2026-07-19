@@ -517,7 +517,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout ${SGLANG_SERVER_READY_TIMEOUT:-1800}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
