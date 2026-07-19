@@ -327,6 +327,13 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     # patch until it lands upstream.
     git apply "$GITHUB_WORKSPACE/runners/patches/srt-slurm-vllm-port-single-gpu.patch" || exit 1
 
+    # Per-node DP launches one Dynamo generate endpoint per node-local process,
+    # not one per DP rank. Backport the health-count fix from
+    # ivanium/srt-slurm@ca0880138fa606130ae4acbb8d0afddfb84c69fa.
+    SRT_SLURM_PER_NODE_HEALTH_PATCH="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-vllm-per-node-health.patch"
+    git apply --check "$SRT_SLURM_PER_NODE_HEALTH_PATCH" || exit 1
+    git apply "$SRT_SLURM_PER_NODE_HEALTH_PATCH" || exit 1
+
     # ai-dynamo/dynamo#11303 is merged into ai-dynamo/dynamo main, so the
     # recipe-pinned dynamo hash resolves against upstream directly -- no
     # esmeetu/dynamo fork redirect of srt-slurm's schema.py needed anymore.
