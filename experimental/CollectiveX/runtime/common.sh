@@ -160,7 +160,11 @@ collx_apply_network_profile() {
   unset MORI_RDMA_DEVICES
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   # Single-node and MNNVL runs need only the scrub above; everything past this
-  # point is the scale-out path, so no per-branch scale-out guards remain.
+  # point is the scale-out path, so no per-branch scale-out guards remain. Single-node
+  # low-latency also takes this early return: the decode kernels run over the intra-node
+  # NVLink/XGMI path (DeepEP's allow_nvlink_for_low_latency_mode; MoRI's IntraNodeLL), so
+  # they need no scale-out RDMA env and must NOT force IBGDA — verified on h200 EP8 with
+  # /dev/gdrdrv absent (forcing IBGDA there would fail, as it did historically on b300).
   { [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; } || return 0
   [ -n "${COLLX_RDMA_DEVICES:-}" ] \
     || collx_die "RDMA execution requires a private device selector"

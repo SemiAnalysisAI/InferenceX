@@ -4948,3 +4948,20 @@
     - "Add --kv-cache-dtype fp8, --max-model-len 32768, --max-num-seqs 256 and --max-num-batched-tokens 32768 to the prefill/decode workers. Local TP4 8k/1k real-weight A/B vs the prior flags (total tok/s): +16.2%/+19.1%/+27.4% at conc 16/64/128, with TTFT -18% and TPOT -22% at conc 128. fp8 KV alone accounts for +9.7%/+16.1%/+20.5% — it halves KV read bandwidth and doubles resident capacity (1,358,885 -> 2,730,007 tokens), relieving the KV-bound decode tail. No accuracy cost: GSM8K 0.9697 flexible / 0.9712 strict, identical to the bf16-KV run and clear of the 0.90 gate"
     - "Bump the vLLM disagg server-readiness barrier 1800s -> 2500s in benchmarks/multi_node/amd_utils/server_vllm.sh (matching the atom disagg path). Kimi-K2.5-MXFP4 (~64-shard MoE) loads in ~30min, right at the old 1800s barrier; a slow load left workers unregistered when the harness proceeded anyway, so every request failed with 0 successful (run 29643810806)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2247
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Add GLM-5.2 NVFP4 B300 SGLang single-node agentic benchmarks from the SGLang cookbook B300 NVFP4 recipes (STP only, no spec decoding)"
+    - "Image: lmsysorg/sglang:v0.5.15.post1-cu130; model nvidia/GLM-5.2-NVFP4"
+    - "Low-latency arm: TP8 (fp8 KV cache, cutedsl bf16 GEMM backend) at conc [1, 2, 4, 8, 16, 32]"
+    - "High-throughput arm: TP8/DP8 attention-DP behind sglang-router consistent hashing at conc [48, 64, 96, 128, 192, 256, 512]"
+    - "New 1M-context model prefix glm5.2 added to the unfiltered agentic corpus branch in benchmark_lib.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2268
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Bump vLLM image to v0.25.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
