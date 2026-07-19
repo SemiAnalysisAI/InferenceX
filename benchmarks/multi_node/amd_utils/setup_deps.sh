@@ -185,6 +185,53 @@ install_transformers_glm5() {
     _SETUP_INSTALLED+=("transformers-glm5")
 }
 
+# ---------------------------------------------------------------------------
+# SGLang: write scheduler initialization exceptions synchronously.
+#
+# The scheduler normally emits through Python logging and immediately signals
+# the parent to tear down the process tree. On the MI325X Slurm path that can
+# terminate the container before the buffered traceback reaches the job log.
+# Keep the normal error handling, but mirror the traceback to stderr first.
+# ---------------------------------------------------------------------------
+patch_sglang_scheduler_traceback() {
+    if [[ "${MODEL_CONFIG_KEY:-}" != "GLM-5.2-FP8" ]]; then
+        return 0
+    fi
+
+    python3 -c '
+import os, sys
+
+target = "/sgl-workspace/sglang/python/sglang/srt/managers/scheduler.py"
+if not os.path.isfile(target):
+    print("[SETUP] SGLang scheduler.py not found, skipping traceback patch")
+    sys.exit(0)
+
+src = open(target).read()
+marker = "SGLANG_SCHEDULER_INIT_TRACEBACK"
+if marker in src:
+    print("[SETUP] synchronous scheduler traceback patch already applied")
+    sys.exit(0)
+
+old = """\
+        traceback = get_exception_traceback()
+        logger.error(f"Scheduler hit an exception: {traceback}")
+        parent_process.send_signal(signal.SIGQUIT)"""
+new = """\
+        traceback = get_exception_traceback()
+        logger.error(f"Scheduler hit an exception: {traceback}")
+        os.write(2, ("SGLANG_SCHEDULER_INIT_TRACEBACK\\n" + traceback + "\\n").encode("utf-8", errors="replace"))
+        parent_process.send_signal(signal.SIGQUIT)"""
+
+if old not in src:
+    print("[SETUP] WARN: SGLang scheduler exception pattern not found")
+    sys.exit(0)
+
+open(target, "w").write(src.replace(old, new, 1))
+print("[SETUP] Patched: synchronous scheduler initialization traceback")
+'
+    _SETUP_INSTALLED+=("scheduler-init-traceback")
+}
+
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
@@ -204,6 +251,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 else
     patch_gluon_pa_mqa_logits_instr_shape
     install_transformers_glm5
+    patch_sglang_scheduler_traceback
 fi
 
 _SETUP_END=$(date +%s)
