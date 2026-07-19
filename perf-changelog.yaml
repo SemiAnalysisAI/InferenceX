@@ -4969,9 +4969,6 @@
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-vllm-agentic-agg
-#     - dsv4-fp4-gb300-dynamo-vllm-agentic-1p1d-dep8-dep8
-#     - dsv4-fp4-gb300-dynamo-vllm-agentic-2p1d-dep8-dep8
-#     - dsv4-fp4-gb300-dynamo-vllm-agentic-3p1d-dep8-dep16
   description:
     - "Test only the GB300 Dynamo-vLLM AgentX aggregate TP4/TP8 low-latency sweeps at conc [1,4,8,16]."
     - "Set gpu-memory-utilization to 0.92 for TP4/TP8 and enable the DeepSeek-V4 tool-call and reasoning parsers."
