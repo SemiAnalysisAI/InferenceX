@@ -86,6 +86,12 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # inter-turn idle gaps can reuse a socket exactly as the server closes it.
 # Outlast the client pool so the race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
+# The DSA indexer's top-k v2 kernel (default since v0.5.14) is JIT-compiled
+# from CUDA-only source (cooperative_groups.h) and cannot build for gfx950,
+# killing decode CUDA-graph capture. v1 dispatches to the precompiled HIP op
+# in sgl-kernel instead; upstream's own MI355X CI runs DSA models this way
+# (scripts/ci/slurm/launch_mi355x.sh).
+export SGLANG_OPT_USE_TOPK_V2=false
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server

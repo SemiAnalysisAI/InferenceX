@@ -1562,9 +1562,11 @@ glm5.2-fp8-mi355x-sglang-agentic:
   # (same DSA architecture family, same harness/corpus/cluster). The
   # cookbook-verified v0.5.13.post1-...-20260618 build segfaults in AITER's
   # gemm_a8w8_blockscale_bpreshuffle under the agentic corpus (GLM-5.2 gfx950
-  # tuned configs are not upstream yet - ROCm/aiter#4243), and the newest
-  # v0.5.15.post1-...-20260717 build cannot boot DSA models on ROCm at all
-  # (dpsk_v4_topk_v2 JIT includes the CUDA-only cooperative_groups.h).
+  # tuned configs are not upstream yet - ROCm/aiter#4243). Builds >= v0.5.14
+  # default the DSA indexer to the topk v2 kernel, whose JIT source includes
+  # the CUDA-only cooperative_groups.h and cannot build for gfx950; the
+  # benchmark script forces the precompiled-HIP v1 path with
+  # SGLANG_OPT_USE_TOPK_V2=false (mirroring upstream's own MI355X CI).
   # Conc capped at 32: the B300 sibling frontier showed no-offload points
   # beyond ~c48 are dominated (KV-pool cliff: radix hit rate collapses on the
   # 131k-token mean prompts), and MI355X prefill is slower still.
