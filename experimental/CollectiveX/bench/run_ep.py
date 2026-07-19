@@ -119,7 +119,7 @@ def main() -> int:
             print(
                 f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
                 f"world={world_size} ep_size={world_size} hidden={args.hidden} "
-                f"topk={args.topk} experts={args.experts} dtype=bf16 "
+                f"topk={args.topk} experts={args.experts} precision={args.precision} "
                 f"routing={args.routing} seed={args.seed}"
             )
         rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)
