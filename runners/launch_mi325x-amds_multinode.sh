@@ -69,7 +69,16 @@ if [[ "$(basename "$runner_shared_root")" != "gharunners" ]]; then
     exit 1
 fi
 export HF_HUB_CACHE_MOUNT="${MI325X_SHARED_HF_CACHE:-$runner_shared_root/.inferencex-hf-cache}"
-export MODEL_PATH="$HF_HUB_CACHE_MOUNT"
+if [[ "$MODEL" == "zai-org/GLM-5.2-FP8" ]]; then
+    # Reuse the node-local cache populated and validated by the successful
+    # single-node MI325X AgentX sweep. Both nodes used by the 1P1D allocation
+    # have this exact revision; copying the 753 GB checkpoint into the
+    # controller-visible cache is unnecessary and unreliable through Xet.
+    export MODEL_PATH="${MI325X_NODE_LOCAL_HF_CACHE:-/raid/hf-hub-cache}"
+    export MODEL_NAME="models--zai-org--GLM-5.2-FP8/snapshots/ba978f7d347eaf65d22f1a86833408afdb953541"
+else
+    export MODEL_PATH="$HF_HUB_CACHE_MOUNT"
+fi
 export MODEL_YAML_KEY="${MODEL_YAML_KEY:-${MODEL##*/}}"
 export GPUS_PER_NODE=8
 export IBDEVICES="${IBDEVICES:-bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re7,bnxt_re8}"
