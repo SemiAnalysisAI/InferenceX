@@ -4943,3 +4943,10 @@
     - "High-throughput arm: TP8/DP8 attention-DP behind sglang-router consistent hashing at conc [48, 64, 96, 128, 192, 256, 512]"
     - "New 1M-context model prefix glm5.2 added to the unfiltered agentic corpus branch in benchmark_lib.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2268
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Bump vLLM image to v0.25.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
