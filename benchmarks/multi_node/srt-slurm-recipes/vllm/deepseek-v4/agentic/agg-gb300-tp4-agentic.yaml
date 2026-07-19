@@ -115,7 +115,7 @@ backend:
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 32
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.94
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
