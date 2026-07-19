@@ -59,22 +59,87 @@ export GPUS_PER_NODE=8
 export IBDEVICES="${IBDEVICES:-bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re7,bnxt_re8}"
 export MORI_RDMA_TC="${MORI_RDMA_TC:-104}"
 
-if [[ -z "${MODEL_NAME:-}" ]]; then
-    hf_dir="models--${MODEL//\//--}"
-    snapshot_root="$MODEL_PATH/$hf_dir/snapshots"
+resolve_model_name() {
+    local hf_dir="models--${MODEL//\//--}"
+    local snapshot_root="$MODEL_PATH/$hf_dir/snapshots"
+    local snapshot=""
+
     if [[ -d "$snapshot_root" ]]; then
         snapshot=$(find "$snapshot_root" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | tail -1)
-    else
-        snapshot=""
     fi
     if [[ -n "$snapshot" ]]; then
-        export MODEL_NAME="$hf_dir/snapshots/$snapshot"
-    elif [[ -d "$MODEL_PATH/${MODEL##*/}" ]]; then
-        export MODEL_NAME="${MODEL##*/}"
-    else
-        echo "ERROR: model '$MODEL' is not staged under $MODEL_PATH" >&2
-        exit 1
+        printf '%s\n' "$hf_dir/snapshots/$snapshot"
+        return 0
     fi
+    if [[ -d "$MODEL_PATH/${MODEL##*/}" ]]; then
+        printf '%s\n' "${MODEL##*/}"
+        return 0
+    fi
+    return 1
+}
+
+stage_model_to_shared_cache() {
+    local hf_dir="models--${MODEL//\//--}"
+    local lock_file="$MODEL_PATH/.${hf_dir}.download.lock"
+    local python_path=""
+    local tool_dir=""
+
+    mkdir -p "$MODEL_PATH"
+    exec 9>"$lock_file"
+    if ! flock -w 18000 9; then
+        echo "ERROR: timed out waiting to stage '$MODEL' under $MODEL_PATH" >&2
+        return 1
+    fi
+
+    # Another topology may have completed the download while this launcher
+    # waited for the shared-cache lock.
+    if resolve_model_name >/dev/null; then
+        flock -u 9
+        exec 9>&-
+        return 0
+    fi
+
+    echo "Staging '$MODEL' into shared cache $MODEL_PATH"
+    if ! python3 -c 'import huggingface_hub' >/dev/null 2>&1; then
+        tool_dir=$(mktemp -d /tmp/inferencex-hf-client.XXXXXX)
+        python3 -m pip install --quiet --disable-pip-version-check \
+            --target "$tool_dir" 'huggingface_hub>=0.30'
+        python_path="$tool_dir"
+    fi
+
+    PYTHONPATH="${python_path}${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 - "$MODEL" "$MODEL_PATH" <<'PY'
+import os
+import sys
+
+from huggingface_hub import snapshot_download
+
+snapshot_download(
+    repo_id=sys.argv[1],
+    cache_dir=sys.argv[2],
+    token=os.environ.get("HF_TOKEN"),
+)
+PY
+
+    if [[ -n "$tool_dir" ]]; then
+        rm -rf -- "$tool_dir"
+    fi
+    if ! resolve_model_name >/dev/null; then
+        echo "ERROR: download completed but '$MODEL' is unresolved under $MODEL_PATH" >&2
+        flock -u 9
+        exec 9>&-
+        return 1
+    fi
+    flock -u 9
+    exec 9>&-
+}
+
+if [[ -z "${MODEL_NAME:-}" ]]; then
+    if ! MODEL_NAME=$(resolve_model_name); then
+        stage_model_to_shared_cache
+        MODEL_NAME=$(resolve_model_name)
+    fi
+    export MODEL_NAME
 fi
 
 runner_tag=${RUNNER_NAME//[^a-zA-Z0-9_.-]/_}
