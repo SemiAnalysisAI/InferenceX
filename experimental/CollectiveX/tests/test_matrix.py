@@ -162,12 +162,13 @@ class MatrixTests(unittest.TestCase):
                     self.assertLessEqual(set(degrees), set(platform["backends"][backend]))
 
     def test_uccl_ep_rollout_shape(self):
-        # UCCL-EP's intended rollout, locked here: runnable on exactly the six supported
-        # SKUs; EP16 (cross-node) on h100/h200/b200/mi355x; EP8-only on the -tw pair (no
-        # cross-node fabric, so their EP16 cells are unsupported placeholders); and no rows
-        # at all on b300/gb200/gb300, where the backend is not offered (a missing backends
-        # key means "not provided", exactly like NVIDIA SKUs carrying no mori rows). LL
-        # (decode) on every supported SKU at EP8.
+        # UCCL-EP's rollout, locked here: EP8 runnable on exactly the six supported SKUs, and
+        # EP16 an unsupported coverage row on every one of them. uccl-ep is EP8-only: the
+        # -tw pair has no cross-node fabric, and on the fabric SKUs cross-node EP16 is
+        # functional but its CPU-proxy throughput overruns the standardized per-case
+        # wall-clock budget (the internode Config fix landed; EP16 stays scoped out of the
+        # sweep, mirroring the mori EP16 re-wall). No rows at all on b300/gb200/gb300, where
+        # the backend is not offered. LL (decode) on every NVIDIA supported SKU at EP8.
         document = matrix(backend="all")
         runnable = {
             (item["sku"], item["case"]["ep"])
@@ -182,12 +183,12 @@ class MatrixTests(unittest.TestCase):
         supported_skus = {
             "h100-dgxc", "h200-dgxc", "b200-dgxc", "mi355x", "mi325x-tw", "mi300x-tw",
         }
+        # EP8 runnable on all six; nothing runnable at EP16.
         self.assertEqual({sku for sku, _ in runnable}, supported_skus)
-        self.assertEqual(
-            {sku for sku, ep in runnable if ep == 16},
-            {"h100-dgxc", "h200-dgxc", "b200-dgxc", "mi355x"},
-        )
-        self.assertEqual(unsupported, {("mi325x-tw", 16), ("mi300x-tw", 16)})
+        self.assertEqual({sku for sku, ep in runnable if ep == 8}, supported_skus)
+        self.assertEqual({sku for sku, ep in runnable if ep == 16}, set())
+        # EP16 is an honest unsupported coverage row on every supported SKU.
+        self.assertEqual(unsupported, {(sku, 16) for sku in supported_skus})
         offered = {sku for sku, _ in runnable | unsupported}
         for absent in ("b300", "gb200", "gb300"):
             self.assertNotIn(absent, offered)
