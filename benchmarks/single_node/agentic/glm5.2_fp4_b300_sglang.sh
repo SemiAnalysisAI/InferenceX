@@ -106,11 +106,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # while KV usage sat at ~0.01). Use the cookbook's own dp8 lever from
     # the B200 cells (32768 = ~4096/rank).
     CHUNKED_PREFILL_SIZE=32768
-    # At conc 512 the saturation working set outlives the default 1800s
-    # warmup drain grace: the drain converges healthily (~0.45 req/s, zero
-    # errors) but needs ~2500s end to end. 3600 is a maximum wait, not a
-    # fixed sleep — lower-conc DPA points still finish as fast as they drain.
-    export AGENTIC_WARMUP_GRACE_PERIOD=3600
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
