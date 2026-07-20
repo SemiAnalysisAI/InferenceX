@@ -65,9 +65,6 @@ elif [[ $MODEL_PREFIX == "minimaxm2.7" && $PRECISION == "fp4" ]]; then
     # shared model tree by the benchmark's revision-pinned preflight.
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M2.7-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.7-nvfp4"
-    # Keep this experiment off the saturated gpu-2 partition. All ten gpu-1
-    # B200 nodes are currently healthy and idle.
-    SLURM_PARTITION="gpu-1"
 elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
     export SRT_SLURM_MODEL_PREFIX="gptoss"
@@ -435,8 +432,8 @@ else
     fi
 
     # b200-dgxc is partitioned into gpu-1 / gpu-2; the prior gpu-10 and gpu-15
-    # names no longer exist. Model-specific mappings above may select the
-    # currently idle partition without affecting other benchmark families.
+    # names no longer exist. sa-shared's benchmark association currently has
+    # only gpu-2_qos, so idle gpu-1 nodes cannot accept these jobs.
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
