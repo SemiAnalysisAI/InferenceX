@@ -252,7 +252,7 @@ else
     # GLM-5.2-FP8 (~756 GB) is pre-staged once on the NFS share rather than
     # re-downloaded onto each node's local NVMe cache (same pattern as
     # MiniMax-M3 above).
-    if [[ "$MODEL" == zai-org/GLM-5.2* ]]; then
+    if [[ "$MODEL" == zai-org/GLM-5.2* || "$MODEL" == amd/GLM-5.2* ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 

@@ -49,6 +49,20 @@ fi
 rocm-smi || true
 amd-smi || true
 
+
+# A server killed on this node minutes earlier (previous job, crashed run)
+# can still be draining its ~1.4 TB of HBM: KFD reclaim takes minutes, and
+# booting into a half-drained node fails RCCL init with HIP 'unhandled cuda
+# error' / 'invalid argument' (observed as the mooncake-c64 CI failure).
+# Wait for the GPUs to come back before launching.
+GPU_CLEAN=false
+for i in $(seq 1 90); do
+    VRAM_BUSY=$(rocm-smi --showmemuse 2>/dev/null | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" | awk '{s+=$NF} END {print s+0}')
+    if [ "${VRAM_BUSY:-0}" -le 8 ]; then echo "GPUs clean (vram%sum=$VRAM_BUSY after $((i*10))s)"; GPU_CLEAN=true; break; fi
+    echo "waiting for prior-job GPU memory reclaim: vram%sum=$VRAM_BUSY"; sleep 10
+done
+[ "$GPU_CLEAN" = "true" ] || { echo "Error: GPUs still draining prior job's memory after 15min" >&2; exit 1; }
+
 resolve_trace_source
 install_agentic_deps
 
