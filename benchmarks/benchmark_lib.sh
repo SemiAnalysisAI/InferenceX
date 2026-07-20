@@ -757,7 +757,7 @@ except Exception:
 }
 
 # Compute the context length for eval-only mode.
-# Uses the requested benchmark context capped at the model's native max.
+# Eval-only runs use at least EVAL_MIN_MODEL_LEN, capped at the model's native max.
 # Sets EVAL_MAX_MODEL_LEN (needed by run_lm_eval).
 # Echoes the computed value for scripts to capture.
 #
@@ -768,6 +768,15 @@ compute_eval_context_length() {
     local native_max
     native_max=$(get_native_max_context_length "$model")
     native_max="${native_max:-0}"
+
+    # Fixed-sequence benchmark windows are often too short for reasoning evals.
+    # In eval-only mode, raise the context budget without changing recipe configs
+    # or throughput runs.
+    local eval_min="${EVAL_MIN_MODEL_LEN:-32768}"
+    if [ "${EVAL_ONLY:-false}" = "true" \
+        ] && [ "$benchmark_ctx" -lt "$eval_min" ] 2>/dev/null; then
+        benchmark_ctx="$eval_min"
+    fi
 
     if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
         benchmark_ctx="${native_max:-0}"

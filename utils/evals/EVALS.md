@@ -151,7 +151,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
 | `EVAL_TASKS_DIR` | `gsm8k,gpqa_diamond_cot_n_shot,aime26` | Comma-separated lm-eval task names, or one task YAML path |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
-| `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
+| `EVAL_MAX_MODEL_LEN` | computed | Max context passed to the eval client and, where supported, the serving engine |
+| `EVAL_MIN_MODEL_LEN` | `32768` | Minimum context for eval-only reasoning tasks; capped at the model's native maximum and does not affect throughput runs |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
 

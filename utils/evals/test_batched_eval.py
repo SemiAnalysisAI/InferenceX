@@ -190,6 +190,44 @@ def test_workflow_concurrencies_are_independent_of_eval_metadata(
     assert any("missing result files for concurrency: 1, 4" in error for error in errors)
 
 
+def test_eval_context_has_reasoning_floor_capped_by_native_max(
+    tmp_path: Path,
+) -> None:
+    benchmark_lib = (
+        Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
+    )
+    script = r'''
+source "$BENCHMARK_LIB"
+get_native_max_context_length() { echo "$NATIVE_MAX"; }
+
+export EVAL_ONLY=true
+export EVAL_MIN_MODEL_LEN=32768
+export NATIVE_MAX=100000
+printf 'eval=%s\n' "$(compute_eval_context_length test-model 9472)"
+
+export NATIVE_MAX=16000
+printf 'native-cap=%s\n' "$(compute_eval_context_length test-model 9472)"
+
+export EVAL_ONLY=false
+export NATIVE_MAX=100000
+printf 'throughput=%s\n' "$(compute_eval_context_length test-model 9472)"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env={**os.environ, "BENCHMARK_LIB": str(benchmark_lib)},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.stdout.splitlines() == [
+        "eval=32768",
+        "native-cap=16000",
+        "throughput=9472",
+    ]
+
+
 def test_validate_scores_checks_threshold_for_every_concurrency(
     tmp_path: Path,
     monkeypatch,
