@@ -7875,5 +7875,8 @@ glm5.2-fp4-b300-sglang-agentic:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 16, 32] }
-      # DEP (attention-DP + EP8 expert-parallel MoE) throughput arm, capped at conc 64.
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64], router: { name: sglang-router, version: "0.3.2" } }
+      # DEP (attention-DP + EP8 expert-parallel MoE) throughput arm at conc 48 — the
+      # frontier peak (163 tok/s/gpu out, ttft 2.8s). conc >=64 overflows the HBM+host
+      # radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is
+      # strictly dominated by conc 48 on both throughput and interactivity.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], router: { name: sglang-router, version: "0.3.2" } }
