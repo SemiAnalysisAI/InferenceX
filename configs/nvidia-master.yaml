@@ -11831,7 +11831,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
 
 
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260715-50d1edaa
+  image: lmsysorg/sglang:nightly-dev-cu13-20260716-b0b2dfbd
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
@@ -11878,7 +11878,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
 
 
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260715-50d1edaa
+  image: lmsysorg/sglang:nightly-dev-cu13-20260716-b0b2dfbd
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: cluster:gb300-nv
