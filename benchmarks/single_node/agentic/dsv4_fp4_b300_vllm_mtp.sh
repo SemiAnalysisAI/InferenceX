@@ -25,7 +25,17 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-GPU_COUNT=$TP
+DCP_SIZE="${DCP_SIZE:-1}"
+PCP_SIZE="${PCP_SIZE:-1}"
+VLLM_CP_ARGS=()
+if [ "$DCP_SIZE" -gt 1 ]; then
+    VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
+fi
+if [ "$PCP_SIZE" -gt 1 ]; then
+    VLLM_CP_ARGS+=(--prefill-context-parallel-size "$PCP_SIZE")
+fi
+
+GPU_COUNT="${GPU_COUNT:-$((TP * PCP_SIZE))}"
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
     exit 1
@@ -302,6 +312,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4
     --compilation-config "$COMPILATION_CONFIG"
     "${PARALLEL_ARGS[@]}"
+    "${VLLM_CP_ARGS[@]}"
     "${TP_ARGS[@]}"
     "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"

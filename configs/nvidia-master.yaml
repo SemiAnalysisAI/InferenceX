@@ -1771,9 +1771,9 @@ dsv4-fp4-b300-vllm-agentic-mtp:
       # TP4 GPU-resident + MTP (num_speculative_tokens=3)
       - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12, 16, 20] }
       # TP4 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, spec-decoding: mtp, conc-list: [20, 24, 28, 32, 36, 40] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [20, 24, 28, 32, 36, 40] }
       # DEP4 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple, version: "904e4ec" }, spec-decoding: mtp, conc-list: [32, 40, 48, 56], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 40, 48, 56], router: { name: vllm-router, version: "0.1.14" } }
       # DEP8 SimpleCPU + MTP (num_speculative_tokens=3)
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 96, 112, 128, 144, 160, 176, 192, 224], router: { name: vllm-router, version: "0.1.14" } }
 
