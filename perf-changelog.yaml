@@ -4966,3 +4966,11 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - kimik2.7-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add Kimi-K2.7-Code-MXFP4 agentic-coding MTP config on MI355X via vLLM v0.24.0, using EAGLE3 speculative decoding with lightseekorg/kimi-k2.6-eagle3.1-mla"
+    - "Mirror the best-config agentic sweep: GPU-only none at conc [4,8] and dram/LMCache at conc [16], duration 3600s, dram-utilization 0.80"
+    - "Recipe benchmarks/single_node/agentic/kimik2.7_fp4_mi355x_mtp.sh reuses the Kimi-K2.7 agentic recipe and adds --speculative-config for EAGLE3"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
