@@ -377,7 +377,7 @@ DeepSeek-V4-Pro-AgentX:
       context_length: 1048576
       # max_total_tokens: 1048576
     no_dp:
-      max_running_requests: 128
+      max_running_requests: 64
       # Small prefill chunks interleave long-context agentic prefills across
       # requests instead of letting one ~100K-token prefill monopolize the
       # engine (the conc>=16 queue-saturation / decode-stall failure mode).

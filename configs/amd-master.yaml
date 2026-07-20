@@ -3201,7 +3201,7 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260718
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -3257,8 +3257,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           # upstream CI can fetch it; aiperf is built on the fly from
           # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
           # selects the sibling-container mode.
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260718
-          "
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
         decode:
           num-worker: 1
           tp: 8
