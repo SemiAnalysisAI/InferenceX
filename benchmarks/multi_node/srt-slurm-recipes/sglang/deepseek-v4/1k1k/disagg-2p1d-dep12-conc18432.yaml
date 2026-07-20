@@ -3,8 +3,6 @@
 # stack: lmsysorg/sglang nightly-dev-cu13-20260707-b4155233 (megamoe) + dynamo 81d0555e
 
 name: "disagg-2p1d-dep12-conc18432"
-slurm:
-  time_limit: 03:00:00
 sbatch_directives:
   cpus-per-task: '144'
   mem: '0'
@@ -141,4 +139,24 @@ backend:
       cuda-graph-max-bs: 1152
 benchmark:
   type: custom
-  command: "set -e\nulimit -n 1048576\nREPO=/configs/upstream-sa-bench/InferenceX\n[ -d \"$REPO\" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git \"$REPO\"\ncd \"$REPO/utils/bench_serving\"\n\necho \"=== 2P1D DEP12 rate-match point: conc=18432 prompts=55296 warmups=18432 mrr=13824 ===\"\npython3 benchmark_serving.py \\\n  --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \\\n  --host 127.0.0.1 --port 8000 --endpoint /v1/completions \\\n  --dataset-name random \\\n  --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \\\n  --random-num-workers 96 \\\n  --num-prompts 55296 --max-concurrency 18432 --request-rate inf \\\n  --num-warmups 18432 \\\n  --ignore-eos --trust-remote-code \\\n  --percentile-metrics ttft,tpot,itl,e2el \\\n  --save-result --result-dir /logs --result-filename results_conc18432_mrr13824.json\n"
+  command: |
+      set -e
+      ulimit -n 1048576
+      REPO=/configs/upstream-sa-bench/InferenceX
+      [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
+      cd "$REPO/utils/bench_serving"
+      RESULT_DIR=/logs/sa-bench_isl_1024_osl_1024_mrr13824
+      mkdir -p "$RESULT_DIR"
+
+      echo "=== 2P1D DEP12 rate-match point: conc=18432 prompts=55296 warmups=18432 mrr=13824 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 55296 --max-concurrency 18432 --request-rate inf \
+        --num-warmups 18432 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_18432_gpus_20_ctx_8_gen_12.json

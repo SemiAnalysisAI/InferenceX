@@ -4,9 +4,6 @@
 
 name: "disagg-1p1d-dep8-conc8192"
 
-slurm:
-  time_limit: "03:00:00"
-
 sbatch_directives:
   cpus-per-task: '144'
   mem: '0'
@@ -159,6 +156,8 @@ benchmark:
       REPO=/configs/upstream-sa-bench/InferenceX
       [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
       cd "$REPO/utils/bench_serving"
+      RESULT_DIR=/logs/sa-bench_isl_1024_osl_1024
+      mkdir -p "$RESULT_DIR"
 
       echo "=== block conc=2048 prompts=6144 warmups=2048 ==="
       python3 benchmark_serving.py \
@@ -171,7 +170,7 @@ benchmark:
         --num-warmups 2048 \
         --ignore-eos --trust-remote-code \
         --percentile-metrics ttft,tpot,itl,e2el \
-        --save-result --result-dir /logs --result-filename results_conc2048.json
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_2048_gpus_12_ctx_4_gen_8.json
 
       echo "=== block conc=4096 prompts=12288 warmups=4096 ==="
       python3 benchmark_serving.py \
@@ -184,7 +183,7 @@ benchmark:
         --num-warmups 4096 \
         --ignore-eos --trust-remote-code \
         --percentile-metrics ttft,tpot,itl,e2el \
-        --save-result --result-dir /logs --result-filename results_conc4096.json
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_4096_gpus_12_ctx_4_gen_8.json
 
       echo "=== block conc=8192 prompts=24576 warmups=8192 ==="
       python3 benchmark_serving.py \
@@ -197,5 +196,4 @@ benchmark:
         --num-warmups 8192 \
         --ignore-eos --trust-remote-code \
         --percentile-metrics ttft,tpot,itl,e2el \
-        --save-result --result-dir /logs --result-filename results_conc8192.json
-
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_8192_gpus_12_ctx_4_gen_8.json
