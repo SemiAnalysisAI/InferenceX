@@ -7677,7 +7677,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-agg:
     agentic-coding:
     - search-space:
       - spec-decoding: none
-        conc-list: [1, 4, 8]
+        conc-list: [4]
         prefill:
           num-worker: 1
           tp: 4
@@ -7691,7 +7691,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-agg:
           ep: 1
           dp-attn: false
       - spec-decoding: none
-        conc-list: [1, 8, 16]
+        conc-list: [1]
         prefill:
           num-worker: 1
           tp: 8
