@@ -10,7 +10,6 @@ NODE0_ADDR="${NODE0_ADDR:-localhost}"
 NODE_RANK="${NODE_RANK:-0}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
-MODEL_CONFIG_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
 
 xP="${xP:-1}" #-> Number of Prefill Workers
 yD="${yD:-1}" #-> Number of Decode Workers
@@ -81,16 +80,27 @@ eval "$(python3 -c "
 import yaml, sys, os
 
 config_path = '${MODELS_YAML}'
-model_name = '${MODEL_CONFIG_KEY}'
+model_name = '${MODEL_NAME}'
+explicit_model_key = '${MODEL_YAML_KEY:-}'.strip()
+
+# Select the models.yaml recipe variant by run type: agentic runs (IS_AGENTIC)
+# use the '<model>-AgentX' entry, non-agentic disaggregated runs use '<model>-DI'.
+# Fall back to the bare model name if the variant-specific key is absent.
+is_agentic = '${IS_AGENTIC:-0}'.strip().lower() in ('1', 'true')
+model_key = explicit_model_key or (f'{model_name}-AgentX' if is_agentic else f'{model_name}-DI')
 
 with open(config_path) as f:
     models = yaml.safe_load(f)
 
-if model_name not in models:
-    print(f'echo \"ERROR: Model {model_name} not in models.yaml\"; exit 1')
-    sys.exit(0)
+if model_key not in models:
+    if model_name in models:
+        model_key = model_name
+    else:
+        print(f'echo \"ERROR: Model {model_key} not in models.yaml\"; exit 1')
+        sys.exit(0)
 
-m = models[model_name]
+m = models[model_key]
+print(f'echo \"Selected models.yaml entry: {model_key} (IS_AGENTIC={is_agentic})\"')
 
 def eval_formula(val):
     \"\"\"Evaluate chunked_prefill_size: if string, resolve variable names from env and compute.\"\"\"
@@ -147,6 +157,7 @@ print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 print(f'DECODE_MEM_FRACTION_STATIC=\"{decode.get(\"mem_fraction_static\", 0.85)}\"')
 print(f'DECODE_PREFILL_ROUND_ROBIN_BALANCE=\"{decode.get(\"prefill_round_robin_balance\", True)}\"')
+print(f'DECODE_DISAGG_ENABLE_RADIX_CACHE=\"{decode.get(\"disagg_decode_enable_radix_cache\", False)}\"')
 
 dp = decode.get('dp', {})
 ep_only = decode.get('ep_only', {})
@@ -174,15 +185,7 @@ print(f'DECODE_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 ")"
 
-echo "Loaded model configuration for: $MODEL_CONFIG_KEY"
-
-if [[ "$MODEL_CONFIG_KEY" == "GLM-5.2-FP8" ]]; then
-    # Match the working MI325X single-node recipe: the fused DSA top-k JIT
-    # includes CUDA-only headers when compiled for gfx942.
-    export SGLANG_DSA_FUSE_TOPK=false
-    export SGLANG_OPT_USE_TOPK_V2=false
-    export PYTHONUNBUFFERED=1
-fi
+echo "Loaded model configuration for: $MODEL_NAME"
 
 # Compute DP-dependent prefill parameters
 if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
@@ -241,8 +244,13 @@ if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GR
 else
     PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
 fi
+
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
+fi
+# Agentic runs: keep radix/prefix cache enabled by replacing --disable-radix-cache with empty.
+if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+    PREFILL_MODE_FLAGS="${PREFILL_MODE_FLAGS//--disable-radix-cache/}"
 fi
 if [[ -n "$prefill_context_length" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --context-length ${prefill_context_length}"
@@ -259,6 +267,9 @@ DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-run
 
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
+fi
+if [[ "$DECODE_DISAGG_ENABLE_RADIX_CACHE" == "True" ]] || [[ "$DECODE_DISAGG_ENABLE_RADIX_CACHE" == "true" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --disaggregation-decode-enable-radix-cache"
 fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
@@ -279,10 +290,20 @@ NODE_OFFSET=$((PREFILL_NODES_PER_WORKER * xP))
 # Build prefill arguments dynamically based on xP
 PREFILL_HEADNODE_URLS=()
 PREFILL_ARGS=""
+# Per-worker Prometheus /metrics endpoints (port 8000) for aiperf's
+# --server-metrics scrape. The router on :30000 does not serve Prometheus, so
+# aiperf must scrape each prefill/decode worker directly (see ENABLE_METRICS).
+SERVER_METRICS_URLS=()
+# Per-worker base URLs (port 8000) for direct cache flushing between
+# concurrency points. The router (:30000) does not fan /flush_cache out, so
+# trace_replay.sh must POST to each prefill/decode worker directly.
+SERVER_FLUSH_URLS=()
 for i in $(seq 0 $((xP - 1))); do
     prefill_idx=$((i * PREFILL_NODES_PER_WORKER))
     PREFILL_HEADNODE_URLS[$i]="${IP_ARRAY[$prefill_idx]}:${HEADNODE_PORT}"
     PREFILL_ARGS="$PREFILL_ARGS --prefill http://${IP_ARRAY[$prefill_idx]}:8000"
+    SERVER_METRICS_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000/metrics")
+    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000")
 done
 
 # Build decode arguments dynamically based on yD
@@ -292,14 +313,34 @@ for i in $(seq 0 $((yD - 1))); do
     decode_idx=$((i * DECODE_NODES_PER_WORKER + NODE_OFFSET))
     DECODE_HEADNODE_URLS[$i]="${IP_ARRAY[$decode_idx]}:${HEADNODE_PORT}"
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$decode_idx]}:8000"
+    SERVER_METRICS_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000/metrics")
+    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000")
 done
 
 echo "Prefill worker headnode list: ${PREFILL_HEADNODE_URLS[@]}"
 echo "Decode  worker headnode list: ${DECODE_HEADNODE_URLS[@]}"
+echo "Server metrics endpoints:     ${SERVER_METRICS_URLS[@]}"
+echo "Server flush endpoints:       ${SERVER_FLUSH_URLS[@]}"
 
 # =============================================================================
 # Configuration Builder Functions
 # =============================================================================
+
+# KV_P2P_TRANSFER (from amd-master.yaml kv-p2p-transfer) overrides the
+# --disaggregation-transfer-backend baked into models.yaml base_flags.
+apply_kv_p2p_transfer_override() {
+    local flags="$1"
+    if [[ -z "${KV_P2P_TRANSFER:-}" ]]; then
+        printf '%s' "$flags"
+        return 0
+    fi
+    local stripped
+    stripped="$(echo "$flags" | sed -E 's/--disaggregation-transfer-backend[[:space:]]+[^[:space:]]+//g')"
+    stripped="${stripped#"${stripped%%[![:space:]]*}"}"
+    stripped="${stripped%"${stripped##*[![:space:]]}"}"
+    echo "[KV_P2P] Using disaggregation-transfer-backend=${KV_P2P_TRANSFER} (KV_P2P_TRANSFER env)" >&2
+    printf '%s --disaggregation-transfer-backend %s' "$stripped" "$KV_P2P_TRANSFER"
+}
 
 build_server_config() {
     local mode="$1"
@@ -333,7 +374,8 @@ build_server_config() {
     fi
 
     # Get model-specific configuration from YAML-loaded variables
-    local base_config="$MODEL_BASE_FLAGS"
+    local base_config
+    base_config="$(apply_kv_p2p_transfer_override "$MODEL_BASE_FLAGS")"
     local mtp_config=""
     local dp_config=""
     local ep_config=""
@@ -363,7 +405,7 @@ build_server_config() {
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + mtp config (decode only) + dp config + specific config
+    # Combine: parallel args + base config + ep config + mtp config (decode only) + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
@@ -388,8 +430,131 @@ build_server_config() {
 PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP_SIZE" "$PREFILL_ENABLE_EP" "$PREFILL_ENABLE_DP" "$DECODE_MTP_SIZE")
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
 
-if [[ -n "$MODEL_CONFIG_KEY" ]]; then
-    echo "Using model-specific configuration for: $MODEL_CONFIG_KEY"
+# Expose Prometheus /metrics on the servers when requested (ENABLE_METRICS=1).
+if [[ "${ENABLE_METRICS:-0}" == "1" ]]; then
+    [[ "$PREFILL_SERVER_CONFIG" != *"--enable-metrics"* ]] && PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enable-metrics"
+    [[ "$DECODE_SERVER_CONFIG" != *"--enable-metrics"* ]] && DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enable-metrics"
+fi
+
+if [[ -n "$MODEL_NAME" ]]; then
+    echo "Using model-specific configuration for: $MODEL_NAME"
+fi
+
+# sync.py barrier timeout for server-up (port 8000). DSV4 needs more headroom.
+# Override via SYNC_BARRIER_TIMEOUT if needed.
+if [[ -z "${SYNC_BARRIER_TIMEOUT:-}" ]]; then
+    case "${MODEL_NAME}" in
+        *DeepSeek-V4*) SYNC_BARRIER_TIMEOUT=3000 ;;
+        *) SYNC_BARRIER_TIMEOUT=1800 ;;
+    esac
+fi
+echo "SYNC_BARRIER_TIMEOUT=${SYNC_BARRIER_TIMEOUT}s (model=${MODEL_NAME:-unset})"
+
+# =============================================================================
+# Optional KV cache offloading (HiCache) — enabled when
+# KV_OFFLOADING != none AND KV_OFFLOAD_BACKEND == hicache.
+# HiCache extends RadixAttention, so radix cache MUST stay on (drop
+# --disable-radix-cache). The --hicache-* flags are appended to BOTH the
+# prefill and decode server configs.
+# =============================================================================
+KV_OFFLOADING="${KV_OFFLOADING:-none}"
+KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
+if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
+    HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
+    HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-1}"
+    HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-wait_complete}"
+
+    # Optional L3 storage tier behind the CPU-DRAM (L2) cache.
+    #   ""        -> CPU DRAM only (default)
+    #   "mooncake"-> Mooncake distributed KV store (needs a mooncake_master)
+    HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
+
+    # Layout / IO backend / write policy are backend-specific:
+    #   mooncake L3: page_first_direct + the "direct" IO backend (the Mooncake
+    #     store maps a page-contiguous segment for RDMA/zero-copy).  This layout
+    #     asserts host_pool > device_pool, so it needs a large CPU-DRAM budget.
+    #   L2-only (CPU DRAM): layer_first + the "kernel" IO backend.  layer_first
+    #     has no host>device constraint (the "direct" IO backend REQUIRES a
+    #     page_first layout, so it cannot be paired with layer_first).
+    if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
+        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
+        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    else
+        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    fi
+
+    # Mooncake master/connection settings (used only when storage=mooncake).
+    # The master runs once on node 0; every prefill/decode server connects to
+    # it via NODE0_ADDR so it is reachable across nodes.
+    MC_MASTER_PORT="${MC_MASTER_PORT:-50061}"
+    MC_METADATA_PORT="${MC_METADATA_PORT:-8080}"
+    MC_METRICS_PORT="${MC_METRICS_PORT:-9003}"
+    MC_MASTER_THREADS="${MC_MASTER_THREADS:-64}"
+    MC_EVICTION_HIGH_WATERMARK="${MC_EVICTION_HIGH_WATERMARK:-0.95}"
+    MC_PROTOCOL="${MC_PROTOCOL:-tcp}"
+    MC_GLOBAL_SEG="${MC_GLOBAL_SEG:-64gb}"
+    MC_DEVICE="${MC_DEVICE:-$IBDEVICES}"
+    MC_MASTER_ADDR="${MC_MASTER_ADDR:-${NODE0_ADDR}:${MC_MASTER_PORT}}"
+    MC_METADATA_SERVER="${MC_METADATA_SERVER:-http://${NODE0_ADDR}:${MC_METADATA_PORT}/metadata}"
+
+    # Emit the --hicache-storage-backend flags (empty unless mooncake).  The
+    # extra-config JSON is single-quoted so it survives the later `eval` of the
+    # launch command as a single argument.
+    build_storage_flags() {
+        [[ "$HICACHE_STORAGE_BACKEND" != "mooncake" ]] && return 0
+        local extra="{\"master_server_address\": \"${MC_MASTER_ADDR}\", \"protocol\": \"${MC_PROTOCOL}\", \"device_name\": \"${MC_DEVICE}\", \"local_hostname\": \"${host_ip}\", \"global_segment_size\": \"${MC_GLOBAL_SEG}\", \"metadata_server\": \"${MC_METADATA_SERVER}\", \"check_server\": false}"
+        echo "--hicache-storage-backend mooncake --hicache-storage-backend-extra-config '${extra}' --enable-metrics --enable-cache-report"
+    }
+
+    # HiCache capacity. Prefer an absolute per-rank pool derived from the
+    # per-node DRAM budget computed by the sweep generator (enforcement); fall
+    # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
+    # provided, keeping configs that predate the budget unchanged.
+    HICACHE_RATIO="${HICACHE_RATIO:-5}"
+    HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
+    # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
+    # --hicache-ratio), so the absolute per-node budget cannot be applied to it.
+    # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
+    # server_args.hicache_size > 0):
+    # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
+    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+        # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
+        # offloads KV to CPU DRAM today); --hicache-size is per rank per host
+        # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
+        # ranks), so divide by the ranks that land on one node.
+        prefill_ranks_per_node=$(( PREFILL_TP_SIZE < GPUS_PER_NODE ? PREFILL_TP_SIZE : GPUS_PER_NODE ))
+        prefill_hicache_size_gb=$(( TOTAL_CPU_DRAM_GB / prefill_ranks_per_node / HICACHE_HOST_POOL_COUNT ))
+        if (( prefill_hicache_size_gb < 1 )); then
+            echo "Error: TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB} / ranks_per_node=${prefill_ranks_per_node} / host_pools=${HICACHE_HOST_POOL_COUNT} rounds below 1 GB" >&2
+            exit 1
+        fi
+        HICACHE_SIZING_FLAGS="--hicache-size ${prefill_hicache_size_gb}"
+        echo "[HiCache] prefill CPU pool capped at ${prefill_hicache_size_gb} GB/rank (budget ${TOTAL_CPU_DRAM_GB} GB / ranks_per_node ${prefill_ranks_per_node} / host_pools ${HICACHE_HOST_POOL_COUNT})"
+    fi
+
+    build_hicache_flags() {
+        echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache ${HICACHE_SIZING_FLAGS} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
+    }
+
+    # HiCache requires RadixAttention; strip any --disable-radix-cache.
+    PREFILL_SERVER_CONFIG="${PREFILL_SERVER_CONFIG//--disable-radix-cache/}"
+    DECODE_SERVER_CONFIG="${DECODE_SERVER_CONFIG//--disable-radix-cache/}"
+
+    # Prefill always gets HiCache.
+    PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG $(build_hicache_flags "$PREFILL_TP_SIZE")"
+
+
+    DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --page-size ${HICACHE_PAGE_SIZE}"
+    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND} applied to prefill only; decode mirrors --page-size ${HICACHE_PAGE_SIZE} for transfer compatibility (chunk cache under the mori transfer backend)"
+    echo "[HiCache] params: io_backend=${HICACHE_IO_BACKEND}, mem_layout=${HICACHE_MEM_LAYOUT}, page_size=${HICACHE_PAGE_SIZE}, write_policy=${HICACHE_WRITE_POLICY}, prefetch_policy=${HICACHE_PREFETCH_POLICY}, storage_backend=${HICACHE_STORAGE_BACKEND:-none}"
+    if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
+        echo "[HiCache] Mooncake store: master=${MC_MASTER_ADDR} metadata=${MC_METADATA_SERVER} protocol=${MC_PROTOCOL} device=${MC_DEVICE} segment=${MC_GLOBAL_SEG} threads=${MC_MASTER_THREADS} eviction_watermark=${MC_EVICTION_HIGH_WATERMARK}"
+    fi
+else
+    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND:-none} (HiCache disabled)"
 fi
 
 if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
@@ -403,15 +568,28 @@ fi
 # Container Synchronization
 # =============================================================================
 
+# sync.py barrier/health-barrier exits 1 on timeout (and prints which
+# node/port never became ready), but without an explicit check here the
+# script would silently continue past a timed-out barrier -- printing a
+# misleading "success" message and launching the next stage against
+# servers/routers that never actually came up, instead of failing fast.
+run_barrier_or_die() {
+    local desc="$1" cmd="$2"
+    if ! eval "$cmd"; then
+        echo "FATAL: ${desc} failed — see the sync.py timeout output above for which node/port never became ready." >&2
+        exit 1
+    fi
+}
+
 echo "Waiting at the container creation barrier on $host_name"
-python3 $SGLANG_WS_PATH/sync.py barrier \
+run_barrier_or_die "container creation barrier" "python3 $SGLANG_WS_PATH/sync.py barrier \
     --local-ip ${host_ip} \
     --local-port 5000 \
     --enable-port \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300
+    --timeout 300"
 
 
 # =============================================================================
@@ -469,6 +647,63 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "================================================"
 
+    # Dump all resolved commands to a text file for debugging / reproducibility.
+    CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
+    dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
+    echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
+    echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
+    echo "# Model: ${MODEL_NAME}  Image: ${DOCKER_IMAGE_NAME:-unknown}" >> "$CMD_DUMP"
+
+    # Start the Mooncake store master (L3 HiCache backend) on node 0 only.
+    # All prefill/decode servers connect to it via NODE0_ADDR:MC_MASTER_PORT.
+    if [[ "${KV_OFFLOADING:-none}" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" && "${HICACHE_STORAGE_BACKEND:-}" == "mooncake" ]]; then
+        echo "Starting Mooncake master on ${host_ip}:${MC_MASTER_PORT} (metadata :${MC_METADATA_PORT}, metrics :${MC_METRICS_PORT})"
+        MC_MASTER_CMD="mooncake_master \
+        --enable_http_metadata_server=true \
+        --http_metadata_server_host=0.0.0.0 \
+        --http_metadata_server_port=${MC_METADATA_PORT} \
+        --rpc_port=${MC_MASTER_PORT} \
+        --rpc_thread_num=${MC_MASTER_THREADS} \
+        --metrics_port=${MC_METRICS_PORT} \
+        --enable_metric_reporting=true \
+        --eviction_high_watermark_ratio=${MC_EVICTION_HIGH_WATERMARK}"
+        dump_cmd "MOONCAKE MASTER" "$MC_MASTER_CMD"
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo "DRY RUN: $MC_MASTER_CMD"
+        else
+            MC_MASTER_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/mooncake_master_${host_name}.log"
+            mooncake_master \
+                --enable_http_metadata_server=true \
+                --http_metadata_server_host=0.0.0.0 \
+                --http_metadata_server_port="${MC_METADATA_PORT}" \
+                --rpc_port="${MC_MASTER_PORT}" \
+                --rpc_thread_num="${MC_MASTER_THREADS}" \
+                --metrics_port="${MC_METRICS_PORT}" \
+                --enable_metric_reporting=true \
+                --eviction_high_watermark_ratio="${MC_EVICTION_HIGH_WATERMARK}" \
+                > "${MC_MASTER_LOG}" 2>&1 &
+            mc_master_pid=$!
+            sleep 3
+            # Fail loudly on a port collision. On shared nodes the Mooncake RPC
+            # port may already be taken by another user's master; in that case the
+            # metrics-port health check below can still pass against the foreign
+            # master while our RPC port is dead, and the prefill then hangs.
+            if grep -qiE "Address already in use|bind .*error" "${MC_MASTER_LOG}" 2>/dev/null; then
+                echo "ERROR: mooncake_master failed to bind port ${MC_MASTER_PORT} (already in use)."
+                echo "       Set MC_MASTER_PORT/MC_METRICS_PORT to free ports and resubmit."
+                grep -iE "Address already in use|bind .*error" "${MC_MASTER_LOG}" | tail -3
+                exit 1
+            fi
+            for ((i=3; i<=60; i+=3)); do
+                if curl -sf "http://127.0.0.1:${MC_METRICS_PORT}/get_all_segments" >/dev/null 2>&1; then
+                    echo "  mooncake master OK at ${i}s"
+                    break
+                fi
+                sleep 3
+            done
+        fi
+    fi
+
     # start the head prefill server
     PREFILL_MORI_MOE_ENV=""
     set -x
@@ -476,7 +711,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
     fi
     set +x
-    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/$MODEL_NAME \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -490,6 +725,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
 
+    dump_cmd "PREFILL (node 0)" "$PREFILL_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
@@ -517,7 +753,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports 8000 \
         --wait-for-all-ports \
-        --timeout ${SGLANG_SERVER_READY_TIMEOUT:-1800}"
+        --timeout ${SYNC_BARRIER_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -526,24 +762,41 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
-    ROUTER_POLICY="random"
-    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
-        ROUTER_POLICY="cache_aware"
-    fi
+    # Router resilience: a single prefill worker doing huge long-context prefills
+    # (256K+ token agentic prompts in 65280-token chunks) can be slow to drain a
+    # concurrent burst. With defaults the circuit breaker opens after 10 failures
+    # and short-circuits the whole worker, so the aiperf profiling burst sees
+    # "No available prefill workers (all circuits open or unhealthy)" and aborts
+    # with 100% errors. Disable the breaker and relax health-check sensitivity so
+    # a busy-but-alive worker is not ejected. Override via ROUTER_RESILIENCE_FLAGS.
+    ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
+
+    # Router scheduling policy. cache_aware prefill routing exploits HiCache/radix
+    # prefix reuse across the agentic trace; round_robin decode keeps the single
+    # decode worker fed evenly. cache_threshold / balance_*_threshold tune the
+    # cache_aware load-balancing (router defaults are 0.5 / 64 / 1.5). Override any
+    # of these via env.
+    ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-cache_aware}"
+    ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+    ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
+    ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
+    ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
+    ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --prefill-policy ${ROUTER_PREFILL_POLICY} --decode-policy ${ROUTER_DECODE_POLICY} --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
         --port 30000 \
-        --policy ${ROUTER_POLICY} \
-        --prefill-policy random \
-        --decode-policy ${ROUTER_POLICY} \
+        ${ROUTER_POLICY_FLAGS} \
+        ${ROUTER_RESILIENCE_FLAGS} \
         ${PREFILL_ARGS} \
         ${DECODE_ARGS}"
 
 
+    dump_cmd "ROUTER" "$ROUTER_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
-        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/proxy_${host_name}.log"
+        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/router_${host_name}.log"
         # sgl-router (Rust/tracing) emits ANSI color codes. NO_COLOR asks it to
         # skip them at the source; the sed strip guarantees a clean file even if
         # it doesn't honor NO_COLOR. Both branches use process substitution so
@@ -573,7 +826,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ports 30000 \
             --wait-for-all-health \
             --health-endpoint /readiness \
-            --timeout 1800"
+            --timeout ${SYNC_BARRIER_TIMEOUT}"
 
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
@@ -597,46 +850,139 @@ if [ "$NODE_RANK" -eq 0 ]; then
         export IS_MTP=false
     fi
 
-    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
-        export PORT=30000
-        export INFMAX_CONTAINER_WORKSPACE=/workspace
-        export RESULT_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/agentic"
-        export AGENTIC_OUTPUT_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/agentic-output"
-        export CONC_LIST="${BENCH_MAX_CONCURRENCY//x/ }"
-        export CONC="${CONC:-${CONC_LIST%% *}}"
-        export PREFILL_TP="$PREFILL_TP_SIZE"
-        export PREFILL_EP=1
-        [[ "$PREFILL_ENABLE_EP" == "true" ]] && export PREFILL_EP="$PREFILL_TP_SIZE"
-        export PREFILL_DP_ATTENTION="$PREFILL_ENABLE_DP"
-        export PREFILL_NUM_WORKERS="$xP"
-        export DECODE_TP="$DECODE_TP_SIZE"
-        export DECODE_EP=1
-        [[ "$DECODE_ENABLE_EP" == "true" ]] && export DECODE_EP="$DECODE_TP_SIZE"
-        export DECODE_DP_ATTENTION="$DECODE_ENABLE_DP"
-        export DECODE_NUM_WORKERS="$yD"
-
-        metrics_urls=()
-        for i in $(seq 0 $((xP - 1))); do
-            metrics_urls+=("http://${IP_ARRAY[$((i * PREFILL_NODES_PER_WORKER))]}:8000/metrics")
-        done
-        for i in $(seq 0 $((yD - 1))); do
-            metrics_urls+=("http://${IP_ARRAY[$((i * DECODE_NODES_PER_WORKER + NODE_OFFSET))]}:8000/metrics")
-        done
-        export AIPERF_SERVER_METRICS_URLS
-        AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${metrics_urls[*]}")
-        BENCH_CMD="bash /workspace/benchmarks/multi_node/agentic_srt.sh"
+    # Select the benchmark runner.
+    # IS_AGENTIC=1/true  → agentic trace replay (trace_replay.sh)
+    # IS_AGENTIC unset/0 → fixed-seq-len throughput benchmark (bench.sh)
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        # Point aiperf's server-metrics scrape at the per-worker Prometheus
+        # /metrics endpoints. The router (:30000) that aiperf auto-detects from
+        # --url does not expose Prometheus, so without this the scrape finds no
+        # reachable endpoint and all server-side cache/KV fields come out null.
+        # Only set it when the workers were actually started with --enable-metrics.
+        if [[ "${ENABLE_METRICS:-0}" == "1" && "${#SERVER_METRICS_URLS[@]}" -gt 0 ]]; then
+            AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${SERVER_METRICS_URLS[*]}")
+            export AIPERF_SERVER_METRICS_URLS
+            echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
+        fi
+        # Per-worker base URLs for cache flushing between concurrency points.
+        # trace_replay.sh consults these when CLEAR_CACHE_BETWEEN_CONC=1.
+        if [[ "${#SERVER_FLUSH_URLS[@]}" -gt 0 ]]; then
+            SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
+            export SERVER_FLUSH_URLS_CSV
+            echo "SERVER_FLUSH_URLS_CSV=${SERVER_FLUSH_URLS_CSV}"
+        fi
+        # trace_replay.sh signature: model_path model_name concurrency_list log_path
+        BENCH_CMD="bash $SGLANG_WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING:-none}, backend=${KV_OFFLOAD_BACKEND:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
     else
-        # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
+        # bench.sh signature:
+        # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path
+        # isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
         BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
             $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-            ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
             ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+    fi
+
+    IS_AGENTIC_RUN=0
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        IS_AGENTIC_RUN=1
     fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
+    elif [[ -n "${CLIENT_IMAGE:-}" && "$IS_AGENTIC_RUN" == "1" ]]; then
+        # Separate client image (node-0 sibling container): run the aiperf trace
+        # replay in its own sibling container built from CLIENT_IMAGE (which ships
+        # a pre-baked aiperf + deps) instead of rebuilding the aiperf venv inside
+        # this server container. The server/router stay up in this container while
+        # the client container drives the benchmark against the router on
+        # localhost (--network host). job.slurm mounts the host docker socket + CLI
+        # into this container and forwards HOST_REPO_DIR / HOST_MODEL_DIR /
+        # HOST_BENCH_LOGS / CLIENT_CONT_NAME so the sibling can be launched here.
+        CLIENT_ENV_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/client.env"
+        mkdir -p "/run_logs/slurm_job-${SLURM_JOB_ID}"
+        # Forward the benchmark-relevant env (incl. runtime-computed metrics/flush
+        # URLs) to the client container; override the few paths/flags that differ
+        # inside the pre-baked image. Unset vars are skipped, so the client keeps
+        # its own defaults for anything not exported here.
+        {
+            for _v in ENGINE MODEL_NAME MODEL_PREFIX PRECISION FRAMEWORK SPEC_DECODING \
+                      DURATION MAX_MODEL_LEN RESULT_FILENAME RUNNER_NAME RUNNER_TYPE IMAGE \
+                      AIPERF_SERVER_METRICS_URLS SERVER_FLUSH_URLS_CSV \
+                      ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
+                      DISAGG IS_MULTINODE \
+                      TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
+                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
+                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
+                      KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA TOTAL_CPU_DRAM_GB KV_P2P_TRANSFER \
+                      WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
+                      AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
+                      AIPERF_TRAJECTORY_START_MIN_RATIO AIPERF_TRAJECTORY_START_MAX_RATIO \
+                      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES ROUTER_PORT TQDM_MININTERVAL; do
+                if [[ -n "${!_v+x}" ]]; then
+                    _val="${!_v}"
+                    # docker --env-file requires one KEY=VALUE per line with no
+                    # embedded newlines; KV_OFFLOAD_BACKEND_METADATA carries
+                    # pretty-printed multi-line JSON, which otherwise splits
+                    # into unparseable lines (e.g. '"name": "hicache",') and
+                    # aborts the client container launch. Re-serialize it to
+                    # compact single-line JSON (round-tripping through
+                    # json.loads/json.dumps) instead of naively stripping
+                    # newlines, so this stays correct even if a value ever
+                    # contained a literal newline inside a string. Empty/
+                    # "none"/"null" is the normal case when KV offloading is
+                    # disabled (job.slurm always sets this var, even to ""),
+                    # and must pass through untouched -- matching how
+                    # optional_kv_offload_backend_metadata() in
+                    # process_agentic_result.py treats those as "no metadata"
+                    # rather than invalid JSON.
+                    if [[ "$_v" == "KV_OFFLOAD_BACKEND_METADATA" && -n "$_val" && "$_val" != "null" ]]; then
+                        _val="$(python3 -c 'import json, sys
+print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
+                            echo "KV_OFFLOAD_BACKEND_METADATA must contain valid JSON" >&2
+                            exit 1
+                        }
+                    fi
+                    printf '%s=%s\n' "$_v" "$_val"
+                fi
+            done
+            echo "INFMAX_CONTAINER_WORKSPACE=/workspace"
+            # Do NOT pin AGENTIC_OUTPUT_DIR: it must default to /workspace (the
+            # host repo mount == GITHUB_WORKSPACE) so the aggregated
+            # ${RESULT_FILENAME}_conc<N>.json lands where the workflow guard globs
+            # it. /workspace is bind-mounted writable, same as the co-located path.
+            echo "HF_HOME=/run_logs/hf_cache"
+            echo "MODEL_DIR=/models"
+            # A pre-baked client image ships aiperf at CLIENT_AIPERF_VENV; when
+            # unset (e.g. reusing the server image, which carries no pre-baked
+            # venv), trace_replay builds aiperf on the fly from
+            # /workspace/utils/aiperf — same as the co-located path.
+            if [[ -n "${CLIENT_AIPERF_VENV:-}" ]]; then
+                echo "AIPERF_USE_PREBUILT=1"
+                echo "AIPERF_VENV=${CLIENT_AIPERF_VENV}"
+            fi
+        } > "$CLIENT_ENV_FILE"
+
+        echo "Launching agentic benchmark in separate client container: ${CLIENT_IMAGE}"
+        docker rm -f "${CLIENT_CONT_NAME}" 2>/dev/null || true
+        set -x
+        docker run --rm --network host \
+            --name "${CLIENT_CONT_NAME}" \
+            --shm-size 32G \
+            -v "${HOST_REPO_DIR}:/workspace" \
+            -v "${HOST_MODEL_DIR}:/models" \
+            -v /tmp:/run_logs \
+            -v "${HOST_BENCH_LOGS}:/benchmark_logs" \
+            --env-file "${CLIENT_ENV_FILE}" \
+            --entrypoint "" \
+            "${CLIENT_IMAGE}" \
+            bash -lc "cd /workspace/benchmarks/multi_node/amd_utils && bash trace_replay.sh /models ${MODEL_NAME} \"${BENCH_MAX_CONCURRENCY}\" /run_logs/slurm_job-${SLURM_JOB_ID}"
+        set +x
     else
         set -x
         eval "$BENCH_CMD"
@@ -767,13 +1113,18 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
     echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}"
 
+    CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
+    dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
+    echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
+    echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
+
     PREFILL_MORI_MOE_ENV=""
     set -x
     if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
         PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
     fi
     set +x
-    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/${MODEL_NAME} \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -788,6 +1139,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         PREFILL_CMD="$PREFILL_CMD --dist-init-addr ${PREFILL_HEADNODE_URLS[$prefill_idx]} --nnodes ${PREFILL_NODES_PER_WORKER} --node-rank $rank"
     fi
 
+    dump_cmd "PREFILL (rank ${NODE_RANK})" "$PREFILL_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
@@ -808,7 +1160,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout ${SYNC_BARRIER_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -842,13 +1194,18 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
+    CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
+    dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
+    echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
+    echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
+
     DECODE_MORI_MOE_ENV=""
     set -x
     if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_DECODE" ]]; then
         DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
     fi
     set +x
-    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} python3 -m sglang.launch_server \
+    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -863,6 +1220,7 @@ else
         DECODE_CMD="$DECODE_CMD --dist-init-addr ${DECODE_HEADNODE_URLS[$decode_idx]} --nnodes ${DECODE_NODES_PER_WORKER} --node-rank $rank"
     fi
 
+    dump_cmd "DECODE (rank ${NODE_RANK})" "$DECODE_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $DECODE_CMD"
     else
@@ -885,7 +1243,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports 30000 \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout ${SYNC_BARRIER_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"

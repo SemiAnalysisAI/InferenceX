@@ -42,14 +42,26 @@ if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
 fi
 
 MODEL_NAME="${MODEL_NAME:-None}"
-MODEL_YAML_KEY="${MODEL_YAML_KEY:-$MODEL_NAME}"
-if ! grep -Fqx "${MODEL_YAML_KEY}:" "$MODELS_YAML"; then
-    echo "Error: Model '$MODEL_YAML_KEY' not found in $MODELS_YAML"
-    echo "Available models:"
-    grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
-    exit 1
+# Respect an explicit recipe key (needed when MODEL_NAME is a cache path), then
+# follow the standard AgentX/DI naming convention used by current AMD recipes.
+if [[ -z "${MODEL_YAML_KEY:-}" ]]; then
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        MODEL_YAML_KEY="${MODEL_NAME}-AgentX"
+    else
+        MODEL_YAML_KEY="${MODEL_NAME}-DI"
+    fi
 fi
-echo "Model configuration found: $MODEL_YAML_KEY"
+if ! grep -q "^${MODEL_YAML_KEY}:" "$MODELS_YAML"; then
+    if grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
+        MODEL_YAML_KEY="$MODEL_NAME"
+    else
+        echo "Error: Model '$MODEL_YAML_KEY' (nor bare '$MODEL_NAME') not found in $MODELS_YAML"
+        echo "Available models:"
+        grep -E '^[A-Za-z]' "$MODELS_YAML" | sed 's/:.*$//' | sed 's/^/  - /'
+        exit 1
+    fi
+fi
+echo "Model found: $MODEL_YAML_KEY (MODEL_NAME=$MODEL_NAME, IS_AGENTIC=${IS_AGENTIC:-0})"
 
 RUN_FILE="server.sh"
 echo "Runfile set: $RUN_FILE"
@@ -180,11 +192,41 @@ else
         fi
     }
 
-    if check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
+    # Extract hf_dir from models.yaml (same as vllm-disagg path above)
+    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+        found && /^[^ ]/{exit}
+        found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
+    SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
+
+    # Prefer the caller-supplied MODEL_PATH (recipe scripts set this explicitly);
+    # fall back to MODEL_DIR/hf_dir then MODEL_DIR/MODEL_NAME.
+    if [[ -n "${MODEL_PATH:-}" && "$MODEL_PATH" != "$MODEL_DIR" ]]; then
+        # Caller already resolved the path (e.g. MODEL_PATH=/it-share/hf_cache/models--...)
+        # Use it directly if it exists on all nodes, otherwise try subdirectory combos.
+        if check_model_path "$MODEL_PATH" "MODEL_PATH (caller-supplied)"; then
+            echo "Selected MODEL_PATH: $MODEL_PATH (caller-supplied, available on all nodes)"
+        elif check_model_path "$MODEL_PATH/$SGL_DISK_DIR_NAME" "$MODEL_PATH/$SGL_DISK_DIR_NAME"; then
+            MODEL_PATH="$MODEL_PATH/$SGL_DISK_DIR_NAME"
+            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        elif check_model_path "$MODEL_PATH/$MODEL_NAME" "$MODEL_PATH/$MODEL_NAME"; then
+            MODEL_PATH="$MODEL_PATH/$MODEL_NAME"
+            echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+        else
+            echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+            echo "  - $MODEL_PATH"
+            echo "  - $MODEL_PATH/$SGL_DISK_DIR_NAME"
+            echo "  - $MODEL_PATH/$MODEL_NAME"
+            exit 1
+        fi
+    elif check_model_path "$MODEL_DIR/$SGL_DISK_DIR_NAME" "$MODEL_DIR/$SGL_DISK_DIR_NAME"; then
+        MODEL_PATH="$MODEL_DIR/$SGL_DISK_DIR_NAME"
+        echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
+    elif check_model_path "$MODEL_DIR/$MODEL_NAME" "$MODEL_DIR"; then
         MODEL_PATH="$MODEL_DIR/$MODEL_NAME"
         echo "Selected MODEL_PATH: $MODEL_PATH (available on all nodes)"
     else
         echo "FATAL ERROR: Model '$MODEL_NAME' not found on ALL allocated nodes in:"
+        echo "  - $MODEL_DIR/$SGL_DISK_DIR_NAME"
         echo "  - $MODEL_DIR/$MODEL_NAME"
         exit 1
     fi
@@ -201,6 +243,11 @@ echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD)"
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
 SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
+SELECTED_NODE_COUNT=$(echo "$SELECTED_NODES" | sed '/^$/d' | wc -l)
+if [[ "$SELECTED_NODE_COUNT" -ne "$NUM_NODES" ]]; then
+    echo "FATAL ERROR: allocation exposes ${SELECTED_NODE_COUNT} nodes, expected ${NUM_NODES}" >&2
+    exit 1
+fi
 
 # Docker privilege detection — evaluated per-node since group membership varies.
 # Exported as a snippet so every srun participant resolves it locally.
@@ -225,15 +272,26 @@ echo "Selected nodes: $SELECTED_NODELIST_STR"
 
 USER_NAME=$(whoami)
 MASTER_NODE=$(echo "$SELECTED_NODES" | head -n 1)
-NODE0_ADDR=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$MASTER_NODE" bash -c 'ip route get 1.1.1.1')
-NODE0_ADDR=$(echo "$NODE0_ADDR" | awk '/src/ {print $7}')
-
 IPS=()
 for NODE in $SELECTED_NODES; do
-    IP=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$NODE" bash -c 'ip route get 1.1.1.1')
-    IP=$(echo "$IP" | awk '/src/ {print $7}')
+    if ! IP_ROUTE=$(srun --nodes=1 --ntasks=1 --time=00:05:00 --nodelist="$NODE" \
+        bash -c 'ip route get 1.1.1.1'); then
+        echo "FATAL ERROR: unable to launch IP-resolution task on $NODE" >&2
+        exit 1
+    fi
+    IP=$(echo "$IP_ROUTE" | awk '/src/ {print $7; exit}')
+    if [[ -z "$IP" ]]; then
+        echo "FATAL ERROR: no source IP resolved for $NODE" >&2
+        exit 1
+    fi
     IPS+=("$IP")
 done
+
+if [[ "${#IPS[@]}" -ne "$NUM_NODES" ]]; then
+    echo "FATAL ERROR: resolved ${#IPS[@]} node IPs, expected ${NUM_NODES}" >&2
+    exit 1
+fi
+NODE0_ADDR="${IPS[0]}"
 
 echo "Node IPs: ${IPS[*]}"
 
@@ -263,7 +321,6 @@ export MODEL_DIR=$MODEL_DIR
 export xP=$xP
 export yD=$yD
 export MODEL_NAME=$MODEL_NAME
-export MODEL_YAML_KEY=$MODEL_YAML_KEY
 export USER_NAME=$USER_NAME
 export IPADDRS="$(echo "${IPS[*]}" | sed 's/ /,/g')"
 export GPUS_PER_NODE=$GPUS_PER_NODE
@@ -289,30 +346,17 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
-export SCENARIO_TYPE="${SCENARIO_TYPE:-fixed-seq-len}"
-export IS_AGENTIC="${IS_AGENTIC:-0}"
-export CONC="${CONC:-}"
-export CONC_LIST="${CONC_LIST:-}"
-export DURATION="${DURATION:-3600}"
-export KV_OFFLOADING="${KV_OFFLOADING:-none}"
-export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
-export KV_OFFLOAD_BACKEND_METADATA="${KV_OFFLOAD_BACKEND_METADATA:-}"
-export ROUTER_METADATA="${ROUTER_METADATA:-}"
-export KV_P2P_TRANSFER="${KV_P2P_TRANSFER:-}"
-export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-0}"
-export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
-export MODEL="${MODEL:-}"
-export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-SANITIZED_MODEL=$(echo "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
+export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
 # dated tags are garbage-collected (manifest unknown)
 VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260629-e667ebb}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
+# Separate agentic benchmark-client container (see CLIENT_IMAGE handling below).
+CLIENT_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_client_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
@@ -356,7 +400,6 @@ DOCKER_ENV_COMMON=(
     -e NODE0_ADDR=\$NODE0_ADDR
     -e MODEL_DIR=/models
     -e MODEL_NAME=\$MODEL_NAME
-    -e MODEL_YAML_KEY=\$MODEL_YAML_KEY
     -e GPUS_PER_NODE=\$GPUS_PER_NODE
     -e xP=\$xP
     -e yD=\$yD
@@ -368,45 +411,68 @@ DOCKER_ENV_COMMON=(
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
     -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
-    -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
     -e ENGINE=\$ENGINE
     -e WS_PATH=${WS_PATH}
     -e RUN_EVAL=\$RUN_EVAL
     -e EVAL_ONLY=\$EVAL_ONLY
-    -e EVAL_CONC
+    -e \"EVAL_CONC=\$EVAL_CONC\"
     -e FRAMEWORK=\$FRAMEWORK
     -e PRECISION=\$PRECISION
     -e MODEL_PREFIX=\$MODEL_PREFIX
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    # DISAGG was never forwarded into the container at all (not even under a
+    # different name), so process_agentic_result.py's env_bool("DISAGG") always
+    # defaulted to false in the result JSON regardless of the actual topology.
+    -e DISAGG=\${DISAGG:-false}
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
+    # PREFILL_TP/DECODE_TP/*_NUM_WORKERS (below, undecorated -- distinct from the
+    # *_SIZE vars server_sglang.sh uses for launch args) are what
+    # process_agentic_result.py's _gpu_shape() reads for multinode runs. Without
+    # these the container never sees them (only *_SIZE was passed), so agentic
+    # result JSONs silently recorded tp=0 / prefill_tp=0 / prefill_num_workers=0
+    # for every multinode run.
+    -e PREFILL_TP=\$PREFILL_TP
+    -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
+    -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
+    -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-0}
+    -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-0}
+    -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
+    -e DURATION=\${DURATION:-1800}
+    -e IS_AGENTIC=\${IS_AGENTIC:-0}
+    -e KV_OFFLOADING=\${KV_OFFLOADING:-none}
+    -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
+    -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
+    -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
+    -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
+    -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
+    -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
+    -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
+    -e DECODE_TP=\$DECODE_TP
+    -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
     -e SCENARIO_TYPE=\$SCENARIO_TYPE
-    -e IS_AGENTIC=\$IS_AGENTIC
     -e CONC=\$CONC
     -e CONC_LIST
-    -e DURATION=\$DURATION
-    -e KV_OFFLOADING=\$KV_OFFLOADING
-    -e KV_OFFLOAD_BACKEND=\$KV_OFFLOAD_BACKEND
-    -e KV_OFFLOAD_BACKEND_METADATA
     -e ROUTER_METADATA
     -e KV_P2P_TRANSFER=\$KV_P2P_TRANSFER
-    -e TOTAL_CPU_DRAM_GB=\$TOTAL_CPU_DRAM_GB
-    -e MAX_MODEL_LEN=\$MAX_MODEL_LEN
     -e MODEL=\$MODEL
     -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
-    -e SGLANG_SERVER_READY_TIMEOUT
+    -e SYNC_BARRIER_TIMEOUT
     -e HF_HUB_CACHE=/models
     -e IBDEVICES
     -e MORI_RDMA_TC
+    -e DRY_RUN=\${DRY_RUN:-0}
 )
 
 # Engine-specific env vars
@@ -447,8 +513,58 @@ else
     )
 fi
 
+# HiCache / Mooncake settings are delivered via a bind-mounted config file rather
+# than a long list of docker -e flags. Write it once to the shared benchmark-logs
+# dir (already a host path, visible on every node) and mount it read-only at
+# /config/hicache_mc.env, where env.sh sources it before applying its defaults.
+# Empty values are preserved so env.sh's "${VAR:-default}" fallbacks still apply.
+HICACHE_MC_CONFIG="${BENCHMARK_LOGS_DIR}/hicache_mc_${SLURM_JOB_ID}.env"
+cat > "$HICACHE_MC_CONFIG" <<EOF
+HICACHE_RATIO=${HICACHE_RATIO:-}
+HICACHE_HOST_POOL_COUNT=${HICACHE_HOST_POOL_COUNT:-}
+HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-}
+HICACHE_IO_BACKEND=${HICACHE_IO_BACKEND:-}
+HICACHE_MEM_LAYOUT=${HICACHE_MEM_LAYOUT:-}
+HICACHE_WRITE_POLICY=${HICACHE_WRITE_POLICY:-}
+HICACHE_STORAGE_BACKEND=${HICACHE_STORAGE_BACKEND:-}
+HICACHE_PREFETCH_POLICY=${HICACHE_PREFETCH_POLICY:-}
+MC_PATCH_HOSTPOOL=${MC_PATCH_HOSTPOOL:-}
+MC_MASTER_PORT=${MC_MASTER_PORT:-}
+MC_METADATA_PORT=${MC_METADATA_PORT:-}
+MC_METRICS_PORT=${MC_METRICS_PORT:-}
+MC_MASTER_THREADS=${MC_MASTER_THREADS:-}
+MC_EVICTION_HIGH_WATERMARK=${MC_EVICTION_HIGH_WATERMARK:-}
+MC_PROTOCOL=${MC_PROTOCOL:-}
+MC_GLOBAL_SEG=${MC_GLOBAL_SEG:-}
+MC_DEVICE=${MC_DEVICE:-}
+MC_MASTER_ADDR=${MC_MASTER_ADDR:-}
+MC_METADATA_SERVER=${MC_METADATA_SERVER:-}
+EOF
+echo "[config] wrote HiCache/Mooncake settings -> $HICACHE_MC_CONFIG"
+
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
+
+# =============================================================================
+# Optional: separate benchmark-client image (agentic runs) — node-0 sibling
+# =============================================================================
+# When CLIENT_IMAGE is set, node 0 runs the aiperf trace replay in its own
+# sibling container built from CLIENT_IMAGE (which ships a pre-baked aiperf +
+# deps), instead of rebuilding the aiperf venv inside the server container every
+# run. Give the server container access to the host docker socket + CLI and the
+# host paths the sibling needs for its bind mounts. These fragments are expanded
+# at submit time and injected into the server `docker run` below; empty (no-op)
+# when CLIENT_IMAGE is unset, so the in-container aiperf path is unchanged.
+CLIENT_DOCKER_MOUNTS=""
+CLIENT_DOCKER_ENV=""
+if [[ -n "${CLIENT_IMAGE:-}" ]]; then
+    HOST_DOCKER_BIN="$(command -v docker || echo /usr/bin/docker)"
+    CLIENT_DOCKER_MOUNTS="-v /var/run/docker.sock:/var/run/docker.sock -v ${HOST_DOCKER_BIN}:/usr/bin/docker"
+    CLIENT_DOCKER_ENV="-e CLIENT_IMAGE=${CLIENT_IMAGE} -e HOST_REPO_DIR=${DI_REPO_DIR} -e HOST_MODEL_DIR=${MODEL_DIR} -e HOST_BENCH_LOGS=${BENCHMARK_LOGS_DIR} -e CLIENT_CONT_NAME=${CLIENT_CONT_NAME}"
+    echo "[client] node-0 sibling benchmark-client image enabled: ${CLIENT_IMAGE}"
+    # Best-effort pre-pull on all nodes so node 0's sibling launch doesn't stall.
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
+fi
 
 echo "Ensuring Docker image is present on every selected node..."
 srun \
@@ -625,10 +741,13 @@ fi
     -v ${BENCHMARK_LOGS_DIR}:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
+    -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
     ${EXTRA_DOCKER_MOUNTS:-} \
+    ${CLIENT_DOCKER_MOUNTS} \
     \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
+    ${CLIENT_DOCKER_ENV} \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
@@ -645,7 +764,7 @@ exit \$DOCKER_EXIT_CODE
 " || SERVER_RUN_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
-    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
 
     # Clean up vLLM external router container on node 0
     if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
