@@ -93,7 +93,9 @@ PY
         # handles to pinned host memory (coherent + device-accessible on CDNA).
         sed -i "s/cudaMallocManaged/cudaMallocHost/g" /tmp/ub/ep/src/uccl_ep.cc /tmp/ub/ep/src/uccl_proxy.cpp
         cd /tmp/ub/ep && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 PYTORCH_ROCM_ARCH="'"$UCCL_ARCH"'" python3 setup.py install >&2
-        cd /tmp/ub/ep/deep_ep_wrapper && python3 setup.py install >&2
+        # --no-deps: the wrapper install_requires=["uccl"] pulls the PyPI uccl->uccl-cu12 wheel
+        # (absent on ROCm); our from-source ep build already provides uccl.ep in site-packages.
+        cd /tmp/ub/ep/deep_ep_wrapper && { pip install -q --no-deps . || pip install -q --no-deps --break-system-packages . ; } >&2
         SP="$(python3 -c "import site;print(site.getsitepackages()[0])")"
         mkdir -p /cx/.collx_uccl_pfx && cp -R "$SP"/deep_ep* "$SP"/uccl* /cx/.collx_uccl_pfx/
         python3 -c "import torch,sys; sys.path.insert(0,\"/cx/.collx_uccl_pfx\"); import deep_ep; from deep_ep import Buffer; assert hasattr(Buffer,\"get_dispatch_layout\")" >&2

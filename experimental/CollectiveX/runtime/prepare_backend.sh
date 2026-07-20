@@ -314,7 +314,14 @@ uccl_prepare() {
   ( cd "$source_dir/ep" \
       && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 "$arch_env" python3 setup.py install ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL ep extension build failed"; return 1; }
-  ( cd "$source_dir/ep/deep_ep_wrapper" && python3 setup.py install ) >&2 2>&1 \
+  # Install the wrapper WITHOUT its deps: install_requires=["uccl"] resolves to the PyPI
+  # uccl metapackage, which depends on the prebuilt uccl-cu12 wheel — absent on ROCm (hard
+  # fail) and wrong even on CUDA, since our from-source ep build already provides uccl.ep in
+  # site-packages/uccl. --no-deps makes the source build authoritative on both vendors.
+  ( cd "$source_dir/ep/deep_ep_wrapper" \
+      && { python3 -m pip install -q --disable-pip-version-check --no-input --no-deps . \
+             || python3 -m pip install -q --disable-pip-version-check --no-input \
+                  --no-deps --break-system-packages . ; } ) >&2 2>&1 \
     || { collx_log "ERROR: UCCL deep_ep_wrapper build failed"; return 1; }
   uccl_probe || { collx_log "ERROR: UCCL import probe failed"; return 1; }
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
