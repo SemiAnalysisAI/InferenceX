@@ -4974,3 +4974,13 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic
+    - glm5.2-fp8-mi325x-sglang-disagg-agentic
+  description:
+    - "Add a GLM-5.2 FP8 MI325X SGLang single-node AgentX full-context curve at concurrency [1, 2, 3, 4, 5, 6, 8] around the measured KV-capacity knee"
+    - "Run TP8/EP1 STP with an explicit 1,048,576-token context and BF16 GPU KV pool against the complete unfiltered AgentX corpus"
+    - "Add TP8 SGLang disaggregated AgentX sweeps for balanced 1P1D, decode-heavy 1P2D, and prefill-heavy 2P1D topologies, with at most four concurrency points per server allocation"
+    - "Keep EP and DP attention disabled because MoRI all-to-all remains unstable on the MI325X Broadcom bnxt_re fleet"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2273

@@ -42,14 +42,14 @@ if [[ -z "${DOCKER_IMAGE_NAME:-}" ]]; then
 fi
 
 MODEL_NAME="${MODEL_NAME:-None}"
-# Resolve the models.yaml entry the same way server_sglang.sh does: agentic runs
-# (IS_AGENTIC) use the '<model>-AgentX' recipe, non-agentic disaggregated runs use
-# '<model>-DI'. Fall back to the bare model name if the variant key is absent.
-# MODEL_NAME itself is left unchanged so env.sh/server_sglang.sh still see the base name.
-if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
-    MODEL_YAML_KEY="${MODEL_NAME}-AgentX"
-else
-    MODEL_YAML_KEY="${MODEL_NAME}-DI"
+# Respect an explicit recipe key (needed when MODEL_NAME is a cache path), then
+# follow the standard AgentX/DI naming convention used by current AMD recipes.
+if [[ -z "${MODEL_YAML_KEY:-}" ]]; then
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        MODEL_YAML_KEY="${MODEL_NAME}-AgentX"
+    else
+        MODEL_YAML_KEY="${MODEL_NAME}-DI"
+    fi
 fi
 if ! grep -q "^${MODEL_YAML_KEY}:" "$MODELS_YAML"; then
     if grep -q "^${MODEL_NAME}:" "$MODELS_YAML"; then
@@ -117,7 +117,7 @@ export MODEL_DIR
 
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
-    DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    DISK_DIR_NAME=$(awk -v key="$MODEL_YAML_KEY" '$0 == key ":" {found=1; next}
         found && /^[^ ]/{exit}
         found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
     DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
@@ -193,7 +193,7 @@ else
     }
 
     # Extract hf_dir from models.yaml (same as vllm-disagg path above)
-    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    SGL_DISK_DIR_NAME=$(awk -v key="$MODEL_YAML_KEY" '$0 == key ":" {found=1; next}
         found && /^[^ ]/{exit}
         found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
     SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
@@ -243,6 +243,11 @@ echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD)"
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
 SELECTED_NODELIST_STR=$(echo "$SELECTED_NODES" | tr '\n' ',' | sed 's/,$//')
+SELECTED_NODE_COUNT=$(echo "$SELECTED_NODES" | sed '/^$/d' | wc -l)
+if [[ "$SELECTED_NODE_COUNT" -ne "$NUM_NODES" ]]; then
+    echo "FATAL ERROR: allocation exposes ${SELECTED_NODE_COUNT} nodes, expected ${NUM_NODES}" >&2
+    exit 1
+fi
 
 # Docker privilege detection — evaluated per-node since group membership varies.
 # Exported as a snippet so every srun participant resolves it locally.
@@ -267,15 +272,26 @@ echo "Selected nodes: $SELECTED_NODELIST_STR"
 
 USER_NAME=$(whoami)
 MASTER_NODE=$(echo "$SELECTED_NODES" | head -n 1)
-NODE0_ADDR=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$MASTER_NODE" bash -c 'ip route get 1.1.1.1')
-NODE0_ADDR=$(echo "$NODE0_ADDR" | awk '/src/ {print $7}')
-
 IPS=()
 for NODE in $SELECTED_NODES; do
-    IP=$(srun --nodes=1 --ntasks=1 --time=00:20:00 --nodelist="$NODE" bash -c 'ip route get 1.1.1.1')
-    IP=$(echo "$IP" | awk '/src/ {print $7}')
+    if ! IP_ROUTE=$(srun --nodes=1 --ntasks=1 --time=00:05:00 --nodelist="$NODE" \
+        bash -c 'ip route get 1.1.1.1'); then
+        echo "FATAL ERROR: unable to launch IP-resolution task on $NODE" >&2
+        exit 1
+    fi
+    IP=$(echo "$IP_ROUTE" | awk '/src/ {print $7; exit}')
+    if [[ -z "$IP" ]]; then
+        echo "FATAL ERROR: no source IP resolved for $NODE" >&2
+        exit 1
+    fi
     IPS+=("$IP")
 done
+
+if [[ "${#IPS[@]}" -ne "$NUM_NODES" ]]; then
+    echo "FATAL ERROR: resolved ${#IPS[@]} node IPs, expected ${NUM_NODES}" >&2
+    exit 1
+fi
+NODE0_ADDR="${IPS[0]}"
 
 echo "Node IPs: ${IPS[*]}"
 
@@ -332,7 +348,8 @@ export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+SANITIZED_MODEL=$(printf '%s' "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
+export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
 
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
@@ -384,6 +401,7 @@ DOCKER_ENV_COMMON=(
     -e NODE0_ADDR=\$NODE0_ADDR
     -e MODEL_DIR=/models
     -e MODEL_NAME=\$MODEL_NAME
+    -e MODEL_YAML_KEY=\$MODEL_YAML_KEY
     -e GPUS_PER_NODE=\$GPUS_PER_NODE
     -e xP=\$xP
     -e yD=\$yD
@@ -445,6 +463,17 @@ DOCKER_ENV_COMMON=(
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e SCENARIO_TYPE=\$SCENARIO_TYPE
+    -e CONC=\$CONC
+    -e CONC_LIST
+    -e ROUTER_METADATA
+    -e KV_P2P_TRANSFER=\$KV_P2P_TRANSFER
+    -e MODEL=\$MODEL
+    -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
+    -e SYNC_BARRIER_TIMEOUT
+    -e HF_HUB_CACHE=/models
+    -e IBDEVICES
+    -e MORI_RDMA_TC
     -e DRY_RUN=\${DRY_RUN:-0}
 )
 
@@ -539,12 +568,27 @@ if [[ -n "${CLIENT_IMAGE:-}" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD pull '"$CLIENT_IMAGE"' >/dev/null 2>&1 || true' 2>/dev/null || true
 fi
 
+echo "Ensuring Docker image is present on every selected node..."
+srun \
+  --nodelist="$SELECTED_NODELIST_SRUN" \
+  --kill-on-bad-exit=1 \
+  --unbuffered \
+  bash -c '
+set -euo pipefail
+eval "$DOCKER_CMD_DETECT"
+if ! $DOCKER_CMD image inspect "$DOCKER_IMAGE_NAME" >/dev/null 2>&1; then
+    echo "[docker-pull] $(hostname): $DOCKER_IMAGE_NAME"
+    $DOCKER_CMD pull "$DOCKER_IMAGE_NAME"
+fi
+'
+
+SERVER_RUN_RC=0
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
   --signal=TERM@30 \
   --unbuffered \
-  bash -lc "
+  bash -c "
 set -euo pipefail
 
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
@@ -635,6 +679,8 @@ fi  # end: if ENGINE == atom-disagg
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
 
+echo \"[docker-run] image=$DOCKER_IMAGE_NAME container=$DOCKER_CONT_NAME\"
+
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
@@ -694,7 +740,7 @@ fi
     -v ${MODEL_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
-    -v /tmp:/run_logs \
+    -v ${BENCHMARK_LOGS_DIR}:/run_logs \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
@@ -717,7 +763,7 @@ DOCKER_EXIT_CODE=\$?
 echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-router...\"
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
-"
+" || SERVER_RUN_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
     srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' '"$CLIENT_CONT_NAME"' 2>/dev/null || true'
@@ -728,4 +774,9 @@ if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
             eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
         '
     fi
+fi
+
+if [[ "$SERVER_RUN_RC" -ne 0 ]]; then
+    echo "ERROR: distributed server step failed with exit code $SERVER_RUN_RC" >&2
+    exit "$SERVER_RUN_RC"
 fi

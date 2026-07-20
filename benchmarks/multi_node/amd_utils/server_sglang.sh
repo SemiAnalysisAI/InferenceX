@@ -81,12 +81,13 @@ import yaml, sys, os
 
 config_path = '${MODELS_YAML}'
 model_name = '${MODEL_NAME}'
+explicit_model_key = '${MODEL_YAML_KEY:-}'.strip()
 
 # Select the models.yaml recipe variant by run type: agentic runs (IS_AGENTIC)
 # use the '<model>-AgentX' entry, non-agentic disaggregated runs use '<model>-DI'.
 # Fall back to the bare model name if the variant-specific key is absent.
 is_agentic = '${IS_AGENTIC:-0}'.strip().lower() in ('1', 'true')
-model_key = f'{model_name}-AgentX' if is_agentic else f'{model_name}-DI'
+model_key = explicit_model_key or (f'{model_name}-AgentX' if is_agentic else f'{model_name}-DI')
 
 with open(config_path) as f:
     models = yaml.safe_load(f)
@@ -604,7 +605,18 @@ wait_or_die() {            # $1 = server pid to watch; rest = blocking command
     "$@" & local cmd=$!
     while kill -0 "$cmd" 2>/dev/null; do
         kill -0 "$watch" 2>/dev/null || {
-            echo "FATAL: $(hostname) local sglang server (pid $watch) died; tearing down job" >&2
+            local server_rc=0
+            wait "$watch" || server_rc=$?
+            sleep 1
+            echo "FATAL: $(hostname) local sglang server (pid $watch) died with rc=$server_rc; tearing down job" >&2
+            local log_dir="/run_logs/slurm_job-${SLURM_JOB_ID}"
+            local log_file
+            for log_file in "$log_dir"/*_"$(hostname)".log; do
+                [[ -f "$log_file" ]] || continue
+                echo "===== Local SGLang log: $log_file =====" >&2
+                tail -n 200 "$log_file" >&2 || true
+                echo "===== End local SGLang log =====" >&2
+            done
             kill "$cmd" 2>/dev/null || true
             return 1
         }

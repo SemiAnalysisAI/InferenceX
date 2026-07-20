@@ -2054,6 +2054,105 @@ minimaxm3-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# GLM-5.2 FP8 full-context AgentX curve on one MI325X node. The qualification
+# run used about 35% of the explicit 1,048,576-token BF16 KV pool at concurrency
+# 1, so sample densely around the expected concurrency 3-4 capacity knee.
+glm5.2-fp8-mi325x-sglang-agentic:
+  image: lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8] }
+
+# GLM-5.2 FP8 full-context AgentX disaggregation on MI325X. Follow the
+# DeepSeek-V4-Pro AgentX convention: keep each engine/topology to at most four
+# sequential concurrency points and use separate topology arms. MI325X's
+# Broadcom bnxt_re MoRI all-to-all path is still unstable, so this sweep varies
+# TP8 prefill/decode worker ratios without EP or DP attention.
+glm5.2-fp8-mi325x-sglang-disagg-agentic:
+  image: lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      # Balanced baseline: one TP8 prefill worker and one TP8 decode worker.
+      - spec-decoding: none
+        conc-list: [1, 2, 3, 4]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MODEL_YAML_KEY=GLM-5.2-FP8"
+          - "SYNC_BARRIER_TIMEOUT=3600"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+      # Decode-heavy: split conversations across two independent TP8 decoders.
+      - spec-decoding: none
+        conc-list: [3, 4, 6, 8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "MODEL_YAML_KEY=GLM-5.2-FP8"
+          - "SYNC_BARRIER_TIMEOUT=3600"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "DECODE_MTP_SIZE=0"
+
+      # Prefill-heavy: two TP8 prefill workers feeding one TP8 decoder.
+      - spec-decoding: none
+        conc-list: [2, 3, 4, 6]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "MODEL_YAML_KEY=GLM-5.2-FP8"
+          - "SYNC_BARRIER_TIMEOUT=3600"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
 minimaxm3-fp8-mi300x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
