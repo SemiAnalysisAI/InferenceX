@@ -29,6 +29,29 @@ PLATFORMS = _load_config("platform_config.json")["platforms"]
 SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
+# Dispatch precisions each backend realizes. BF16 is the universal control; FP8 is a
+# caller-prequantized dispatch (DeepEP blockwise e4m3fn; MoRI per-SKU e4m3 tensor cast).
+# A precision the backend does not list is gated out at generation (no case emitted).
+BACKEND_PRECISIONS = {
+    "deepep-v2": ("bf16", "fp8"),
+    "mori": ("bf16", "fp8"),
+}
+# Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
+# segment so existing references stay valid; a low-latency shard adds "-ll".
+_MODE_SLUG = {"low-latency": "ll"}
+
+
+def _ll_runnable(platform: dict[str, Any], backend: str, ep: int) -> bool:
+    """Whether this SKU/backend/EP cell can run the low-latency decode kernels.
+
+    Capability is data-driven from the platform registry's optional ``ll_backends``
+    map (backend -> runnable EP degrees), mirroring ``backends`` for normal mode. A SKU
+    with no ``ll_backends`` entry emits no low-latency cases. This is scope, not a wall:
+    the low-latency DeepEP path mandates NVSHMEM/IBGDA (and thus gdrdrv) even for
+    single-node EP8, so the LL-runnable set is narrower than and distinct from the
+    normal-mode set and is enabled per SKU as bring-up confirms it.
+    """
+    return ep in platform.get("ll_backends", {}).get(backend, [])
 
 
 def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
@@ -70,6 +93,8 @@ def resolve_matrix(
     only_sku: str = "",
     exclude_skus: str = "",
     ep_sizes: str = "",
+    precisions: str = "",
+    modes: str = "",
 ) -> dict[str, Any]:
     """Resolve the fixed sweep into allocation-sized workflow shards."""
     selected_eps: set[int] = set()
@@ -77,6 +102,18 @@ def resolve_matrix(
         if not value.isdigit() or int(value) <= 0:
             raise SystemExit(f"invalid --ep-sizes {ep_sizes!r}; expected positive integers")
         selected_eps.add(int(value))
+    known_precisions = set(SWEEP["precisions"])
+    selected_precisions = {value.strip() for value in precisions.split(",") if value.strip()}
+    unknown_precisions = sorted(selected_precisions - known_precisions)
+    if unknown_precisions:
+        raise SystemExit(
+            f"unknown --precisions {unknown_precisions}; have {sorted(known_precisions)}"
+        )
+    known_modes = set(SWEEP["modes"])
+    selected_modes = {value.strip() for value in modes.split(",") if value.strip()}
+    unknown_modes = sorted(selected_modes - known_modes)
+    if unknown_modes:
+        raise SystemExit(f"unknown --modes {unknown_modes}; have {sorted(known_modes)}")
 
     if only_sku and only_sku not in PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(PLATFORMS)}")
@@ -94,7 +131,7 @@ def resolve_matrix(
     workload = SWEEP["workload"]
     targets = _selected_backends(backend)
     requested_cases: list[dict[str, Any]] = []
-    shards: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
+    shards: dict[tuple[str, str, str, int, str], list[dict[str, Any]]] = {}
 
     for sku in sorted(PLATFORMS):
         if (only_sku and sku != only_sku) or sku in excluded:
@@ -110,40 +147,80 @@ def resolve_matrix(
                     if runnable_eps is None:
                         continue
                     runnable = ep in runnable_eps
-                    case = {
-                        "suite": SWEEP["suite"],
-                        "workload": workload["name"],
-                        "backend": target,
-                        "routing": SWEEP["routing"],
-                        "phase": phase,
-                        "ep": ep,
-                        "hidden": workload["hidden"],
-                        "topk": workload["topk"],
-                        "experts": workload["routed_experts"],
-                        "seed": workload["seed"],
-                        "ladder": " ".join(map(str, ladder)),
-                        "mode": SWEEP["mode"],
-                        "timing": timing_profile,
-                        **{field: topology[field] for field in TOPOLOGY_FIELDS},
-                    }
-                    case["case_id"] = ep_harness.case_id(sku, case)
-                    requested_cases.append({
-                        "sku": sku,
-                        "case": case,
-                        "disposition": "runnable" if runnable else "unsupported",
-                        "reason": None if runnable else "backend-platform-unsupported",
-                        "detail": None,
-                    })
+                    backend_precisions = BACKEND_PRECISIONS.get(target, ("bf16",))
+                    supported = [
+                        precision for precision in SWEEP["precisions"]
+                        if precision in backend_precisions
+                    ]
                     if runnable:
-                        shards.setdefault((sku, target, topology["nodes"]), []).append(case)
+                        # A runnable cell fans out over the modes it realizes at this
+                        # phase (normal everywhere; low-latency only where the mode is
+                        # decode-scoped in sweep.json AND the cell is capability-gated in),
+                        # crossed with the selected precisions.
+                        cell_modes = [
+                            mode for mode in SWEEP["modes"]
+                            if phase in SWEEP["modes"][mode]
+                            and (not selected_modes or mode in selected_modes)
+                            and (mode == "normal" or _ll_runnable(platform, target, ep))
+                        ]
+                        emit_precisions = [
+                            precision for precision in supported
+                            if not selected_precisions or precision in selected_precisions
+                        ]
+                    else:
+                        # An ep-unsupported cell records once with a placeholder mode and
+                        # precision (never dispatched). It is independent of BOTH the --modes
+                        # and --precisions filters (so a subset stays a strict subset of the
+                        # full matrix) and of the sweep.json mode/precision ORDER (so
+                        # reordering the config never silently renames unsupported case_ids):
+                        # normal mode plus sorted() pin it to the supported control (bf16
+                        # sorts first). Low-latency adds only runnable cells, never
+                        # unsupported rows.
+                        cell_modes = ["normal"]
+                        emit_precisions = sorted(supported)[:1]
+                    for mode in cell_modes:
+                        for precision in emit_precisions:
+                            case = {
+                                "suite": SWEEP["suite"],
+                                "workload": workload["name"],
+                                "backend": target,
+                                "routing": SWEEP["routing"],
+                                "precision": precision,
+                                "phase": phase,
+                                "ep": ep,
+                                "hidden": workload["hidden"],
+                                "topk": workload["topk"],
+                                "experts": workload["routed_experts"],
+                                "seed": workload["seed"],
+                                "ladder": " ".join(map(str, ladder)),
+                                "mode": mode,
+                                "timing": timing_profile,
+                                **{field: topology[field] for field in TOPOLOGY_FIELDS},
+                            }
+                            case["case_id"] = ep_harness.case_id(sku, case)
+                            requested_cases.append({
+                                "sku": sku,
+                                "case": case,
+                                "disposition": "runnable" if runnable else "unsupported",
+                                "reason": None if runnable else "backend-platform-unsupported",
+                                "detail": None,
+                            })
+                            if runnable:
+                                shards.setdefault(
+                                    (sku, target, mode, topology["nodes"], precision), []
+                                ).append(case)
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
-    for (sku, target, nodes), cases in sorted(shards.items()):
+    for (sku, target, mode, nodes, precision), cases in sorted(shards.items()):
         first = cases[0]
+        # Normal-mode shard IDs are unchanged (no mode segment) so existing references
+        # stay valid; a non-normal mode inserts a short slug (low-latency -> "ll").
+        mode_segment = "" if mode == "normal" else f"-{_MODE_SLUG[mode]}"
         shards_by_sku.setdefault(sku, []).append({
-            "id": f"{sku}-{target}-n{nodes}",
+            "id": f"{sku}-{target}{mode_segment}-{precision}-n{nodes}",
             "sku": sku,
             "backend": target,
+            "mode": mode,
             "launcher": PLATFORMS[sku]["launcher"],
             "nodes": nodes,
             "gpus_per_node": first["gpus_per_node"],
@@ -184,6 +261,11 @@ def main() -> int:
     parser.add_argument("--only-sku", default="")
     parser.add_argument("--exclude-skus", default="")
     parser.add_argument("--ep-sizes", default="")
+    parser.add_argument("--precisions", default="",
+                        help="comma-separated subset of configs/sweep.json precisions")
+    parser.add_argument("--modes", default="",
+                        help="comma-separated subset of configs/sweep.json modes "
+                             "(normal, low-latency); blank = all")
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--out", default="")
@@ -202,6 +284,8 @@ def main() -> int:
         only_sku=args.only_sku,
         exclude_skus=args.exclude_skus,
         ep_sizes=args.ep_sizes,
+        precisions=args.precisions,
+        modes=args.modes,
     )
     if args.out:
         Path(args.out).write_text(
