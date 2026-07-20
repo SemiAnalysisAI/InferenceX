@@ -21,6 +21,10 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 
 SERVER_LOG=/workspace/server.log
 
+
+export ATOM_DISABLE_MMAP=true # Model load faster.
+export AITER_QUICK_REDUCE_QUANTIZATION=INT4
+export AITER_MXFP4_INTERMEDIATE=1
 export OMP_NUM_THREADS=1
 
 # Calculate max-model-len based on ISL and OSL
@@ -45,6 +49,7 @@ python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
+    --scheduler-delay-factor 1 \
     --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
     --trust-remote-code \
     > $SERVER_LOG 2>&1 &
