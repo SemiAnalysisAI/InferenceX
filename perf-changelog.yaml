@@ -4981,4 +4981,4 @@
     - "Experiment with MiniMax-M2.7 NVFP4 and a public full-vocabulary EAGLE3 draft on B200 using upstream SGLang v0.5.15.post1."
     - "Run 8K/1K and AgentX at pure TP4/TP8 with chat templates and a 3-step, top-k-1, 4-draft-token speculative chain."
     - "Pin nvidia/MiniMax-M2.7-NVFP4 and asherszhang/MiniMax-M2.7-EAGLE3-draft-vocab200k revisions in the benchmark preflight."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2289
