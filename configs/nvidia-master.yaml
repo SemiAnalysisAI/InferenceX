@@ -7875,3 +7875,28 @@ glm5.2-fp4-b300-sglang-agentic:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48, 64, 96, 128, 192, 256, 512], router: { name: sglang-router, version: "0.3.2" } }
+
+# Experimental public-weight MiniMax-M2.7 NVFP4 + EAGLE3 B200 baseline. The
+# target and full-vocabulary draft revisions are pinned in the benchmark
+# entrypoint; both scenarios use the same upstream SGLang runtime and 3/1/4
+# speculative chain.
+minimaxm2.7-fp4-b200-sglang-eagle:
+  image: lmsysorg/sglang:v0.5.15.post1-cu130
+  model: nvidia/MiniMax-M2.7-NVFP4
+  model-prefix: minimaxm2.7
+  runner: cluster:b200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 1, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+      - { tp: 8, ep: 1, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4], spec-decoding: mtp }

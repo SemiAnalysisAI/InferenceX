@@ -4974,3 +4974,11 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - minimaxm2.7-fp4-b200-sglang-eagle
+  description:
+    - "Experiment with MiniMax-M2.7 NVFP4 and a public full-vocabulary EAGLE3 draft on B200 using upstream SGLang v0.5.15.post1."
+    - "Run 8K/1K and AgentX at pure TP4/TP8 with chat templates and a 3-step, top-k-1, 4-draft-token speculative chain."
+    - "Pin nvidia/MiniMax-M2.7-NVFP4 and asherszhang/MiniMax-M2.7-EAGLE3-draft-vocab200k revisions in the benchmark preflight."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

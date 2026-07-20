@@ -60,6 +60,11 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
+elif [[ $MODEL_PREFIX == "minimaxm2.7" && $PRECISION == "fp4" ]]; then
+    # Public NVFP4 target and EAGLE3 draft are staged in the runner-writable
+    # shared model tree by the benchmark's revision-pinned preflight.
+    export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M2.7-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m2.7-nvfp4"
 elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
     export SRT_SLURM_MODEL_PREFIX="gptoss"
@@ -397,6 +402,12 @@ else
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
     # MODEL is a local path.
     export MODEL="$MODEL_PATH"
+    MODEL_MOUNT_SPEC="$MODEL_PATH:$MODEL_PATH"
+    if [[ "$MODEL_PREFIX" == "minimaxm2.7" ]]; then
+        MODEL_ROOT=$(dirname "$MODEL_PATH")
+        mkdir -p "$MODEL_PATH" "$MODEL_ROOT/MiniMax-M2.7-EAGLE3-draft-vocab200k"
+        MODEL_MOUNT_SPEC="$MODEL_ROOT:$MODEL_ROOT"
+    fi
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -447,7 +458,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_MOUNT_SPEC,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
