@@ -101,6 +101,15 @@ def _ll_dequant_static(fp8, scales):
 _NORMAL_NUM_SMS = 24
 _NORMAL_NVL_BUFFER_SIZE = 256
 _NORMAL_NVL_BYTES = int(2e9)
+# Internode (EP16) buffer-sizing Config, straight from UCCL's own test_internode bench
+# compute_buffer_sizes (nvl_chunk=8/512, rdma_chunk=16/512). Used only to size the NVLink+RDMA
+# staging; dispatch/combine themselves run on the per-world-size recommended configs.
+_INTERNODE_SIZE_CFG = (8, 512, 16, 512)
+
+
+def _align_buffer_bytes(size, margin=1.2, alignment=128):
+    """Safety margin + alignment for a buffer-size hint (mirrors the UCCL bench helper)."""
+    return ((int(size * margin) + alignment - 1) // alignment) * alignment
 
 
 class UCCLEPBackend(EPBackend):
@@ -158,28 +167,52 @@ class UCCLEPBackend(EPBackend):
             self._create_ll_buffer(spec)
             return
         args, world_size = self.args, self.world_size
-        # Normal mode: legacy Buffer with an NVLink scale-up buffer plus (internode) an RDMA
-        # buffer. UCCL's own intranode bench sizes num_nvl_bytes at a fixed ~2 GB; internode adds
-        # an RDMA buffer sized from the Config hint. Reservations are generous and backed on
-        # demand; num_sms/nvl_buffer are bring-up-tunable (see _NORMAL_* above).
-        self.config = Config(_NORMAL_NUM_SMS, 8, _NORMAL_NVL_BUFFER_SIZE)
-        num_rdma_bytes = 0
         if self._internode:
-            # BF16 combine wire is the widest per-value direction; size the RDMA staging for it.
+            # Internode (EP16) scale-out: the RDMA combine kernel asserts
+            # num_max_rdma_chunked_send_tokens >= num_warps_per_forwarder, which a hand-rolled
+            # Config does NOT satisfy (its rdma-chunked-send default is 6). Mirror UCCL's own
+            # internode bench: size NVLink+RDMA from a generous sizing Config, give each rank
+            # num_sms QPs, and drive dispatch/combine with the per-world-size RECOMMENDED configs
+            # (these set rdma-chunked-send to 20/12 for EP16 and satisfy the kernel constraints).
+            num_sms = Buffer.num_sms
+            self.dispatch_config = Buffer.get_dispatch_config(world_size)
+            self.combine_config = Buffer.get_combine_config(world_size)
+            self.config = self.combine_config
             hidden_bytes = args.hidden * 2
-            num_rdma_bytes = int(
-                self.config.get_rdma_buffer_size_hint(hidden_bytes, world_size)
+            size_config = Config(num_sms, *_INTERNODE_SIZE_CFG)
+            num_nvl_bytes = _align_buffer_bytes(
+                size_config.get_nvl_buffer_size_hint(hidden_bytes, world_size)
             )
+            num_rdma_bytes = _align_buffer_bytes(
+                size_config.get_rdma_buffer_size_hint(hidden_bytes, world_size)
+            )
+            self.buffer = Buffer(
+                self.group,
+                num_nvl_bytes,
+                num_rdma_bytes,
+                low_latency_mode=False,
+                num_qps_per_rank=num_sms,
+                allow_nvlink_for_low_latency_mode=True,
+                allow_mnnvl=False,
+                explicitly_destroy=True,
+                is_intranode=False,
+            )
+            return
+        # Intranode (EP8) scale-up: validated recipe — one fixed ~2 GB NVLink buffer, no RDMA, a
+        # single QP, and the legacy 3-arg Config (rdma-chunked params unused with no RDMA path).
+        self.config = Config(_NORMAL_NUM_SMS, 8, _NORMAL_NVL_BUFFER_SIZE)
+        self.dispatch_config = self.config
+        self.combine_config = self.config
         self.buffer = Buffer(
             self.group,
             _NORMAL_NVL_BYTES,
-            num_rdma_bytes,
+            0,
             low_latency_mode=False,
             num_qps_per_rank=1,
             allow_nvlink_for_low_latency_mode=True,
             allow_mnnvl=False,
             explicitly_destroy=True,
-            is_intranode=not self._internode,
+            is_intranode=True,
         )
 
     def _create_ll_buffer(self, spec):
@@ -283,7 +316,7 @@ class UCCLEPBackend(EPBackend):
             num_tokens_per_expert=num_tokens_per_expert,
             topk_idx=p.topk_idx,
             topk_weights=p.topk_weights,
-            config=self.config,
+            config=self.dispatch_config,
             async_finish=False,
         )
         return types.SimpleNamespace(
@@ -316,7 +349,7 @@ class UCCLEPBackend(EPBackend):
         combined_x, _weights, _event = self.buffer.combine(
             x=h.combine_input,
             handle=h.handle,
-            config=self.config,
+            config=self.combine_config,
             async_finish=False,
         )
         return combined_x
@@ -396,7 +429,7 @@ class UCCLEPBackend(EPBackend):
         combined, _weights, _event = self.buffer.combine(
             x=transformed.to(torch.bfloat16),
             handle=h.handle,
-            config=self.config,
+            config=self.combine_config,
             async_finish=False,
         )
         return combined
