@@ -261,6 +261,12 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     # heavy thinking burns the default 75-step budget before submission.
     # Double the step budget for this recipe; others keep the shared default.
     export SWEBENCH_AGENT_STEP_LIMIT=150
+    # Pin eval agent parallelism to the proven-green level: workers default
+    # to CONC, and at 64 concurrent Modal sandboxes the cluster's egress
+    # collapses (18k "Cannot connect to *.modal.host" errors crippled the
+    # trajectories in run 29764760177) while 32 ran clean. The serving
+    # config is unchanged - only the agent's session fan-out is capped.
+    export SWEBENCH_AGENT_WORKERS="${SWEBENCH_AGENT_WORKERS:-32}"
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
