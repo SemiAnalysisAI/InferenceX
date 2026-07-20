@@ -142,7 +142,9 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm v1.0.10 has the nginx
     # client_max_body_size fix (>1 MiB agentic warmup bodies), the
     # session-affinity frontend, and the BenchmarkType.CUSTOM / extra_mount
-    # schema these recipes need.
+    # schema these recipes need. Keep this checkout byte-for-byte upstream;
+    # agentic_srt.sh derives custom-benchmark metrics endpoints from the Slurm
+    # allocation and recipe-provided logical worker widths.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout v1.0.10

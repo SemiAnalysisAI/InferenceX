@@ -132,6 +132,11 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     PORT: "8000"
+    # Upstream srt-slurm passes custom benchmark env verbatim. Describe its
+    # topology so agentic_srt.sh can discover the one logical worker leader.
+    AIPERF_SRT_WORKER_NODE_COUNTS: "1"
+    AIPERF_SRT_INFRA_NODE_COUNT: "1"
+    AIPERF_SRT_SYSTEM_PORT_BASE: "7500"
     # Aggregated: one worker serves both prefill and decode, so GPU accounting
     # is the single-worker form num_gpus = TP (not the disagg prefill+decode
     # sum). The multinode post-processing path assumes disagg and would divide
@@ -151,4 +156,3 @@ benchmark:
     # Persistent HF hub cache (also via default_mounts) so the trace dataset
     # isn't re-downloaded each run; overrides the workflow-level HF_HUB_CACHE.
     HF_HUB_CACHE: "/hf_hub_cache"
-

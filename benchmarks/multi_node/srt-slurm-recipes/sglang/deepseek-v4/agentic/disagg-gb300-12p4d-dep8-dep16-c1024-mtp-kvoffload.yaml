@@ -205,8 +205,12 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     PORT: "8000"
+    # Logical worker node widths in upstream topology order: 6P x 2 nodes,
+    # then 1D x 4 nodes. Ports advance once per physical worker process.
+    AIPERF_SRT_WORKER_NODE_COUNTS: "2,2,2,2,2,2,4"
+    AIPERF_SRT_INFRA_NODE_COUNT: "1"
+    AIPERF_SRT_SYSTEM_PORT_BASE: "7500"
     IS_MULTINODE: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-
