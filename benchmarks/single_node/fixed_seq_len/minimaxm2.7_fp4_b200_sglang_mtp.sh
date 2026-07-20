@@ -161,6 +161,7 @@ SGLANG_CMD=(
     --tool-call-parser minimax-m2
     --context-length "$CONTEXT_LENGTH"
     --chunked-prefill-size 16384
+    --weight-loader-prefetch-checkpoints
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --mem-fraction-static 0.90
     --enable-metrics
