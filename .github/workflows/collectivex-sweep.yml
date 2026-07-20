@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori]
+        options: [all, deepep-v2, mori, uccl-ep]
       only_sku:
         description: Restrict to one GHA runner pool; blank = all
         type: string
