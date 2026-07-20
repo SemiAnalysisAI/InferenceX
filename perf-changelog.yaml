@@ -4974,3 +4974,13 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 FP4 GB300 SGLang AgentX Pareto-frontier benchmarks via the srtctl/dynamo stack"
+    - "agg: single aggregated node (TP4, MTP/NEXTN, hierarchical KV cache), concurrencies [1, 96]"
+    - "disagg: 1P1D-4P1D (TP4/DEP4 prefill, TP4/DEP4/DEP8 decode, MTP/NEXTN, hicache, conv-aware routing) over 7 Pareto points at concurrency 32-384"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260716-b0b2dfbd; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2121

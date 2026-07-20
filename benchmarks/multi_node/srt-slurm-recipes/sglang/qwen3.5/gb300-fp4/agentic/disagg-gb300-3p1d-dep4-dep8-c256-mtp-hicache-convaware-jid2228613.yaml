@@ -1,0 +1,213 @@
+name: "disagg-gb300-3p1d-dep4-dep8-c256-mtp-hicache-convaware-jid2228613"
+
+# Agentic-coding SGLang disaggregated 3P1D DEP recipe for Qwen3.5-397B-A17B-NVFP4
+# on GB300, ported to the flat single-variant agentic schema. Concurrency is
+# NOT a recipe field: the GHA matrix fans out one job per concurrency and
+# exports CONC into agentic_srt.sh. Serving tuning (sglang_config, env,
+# frontend, dynamo hash, topology) is preserved verbatim from the source run.
+
+model:
+  path: "qwen3.5-fp4"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev1"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  prefill_nodes: 3
+  decode_nodes: 2
+  prefill_workers: 3
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+  nats_max_payload_mb: 8
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  num_additional_frontends: 0
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  args:
+    router-mode: kv
+    router-reset-states: true
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_DISAGG_STAGING_BUFFER: '1'
+    NO_COLOR: '1'
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    SGLANG_ENABLE_SPEC_V2: '1'
+    PYTHONUNBUFFERED: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    MC_FORCE_MNNVL: '1'
+    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+    FLASHINFER_DISABLE_VERSION_CHECK: '1'
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm-cache
+    FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  decode_environment:
+    SGLANG_SIMULATE_ACC_LEN: '3.39'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+    SGLANG_DISAGG_STAGING_BUFFER: '1'
+    NO_COLOR: '1'
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    SGLANG_ENABLE_SPEC_V2: '1'
+    PYTHONUNBUFFERED: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    MC_FORCE_MNNVL: '1'
+    MC_TE_METRIC: 'true'
+    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+    SGLANG_ENABLE_JIT_DEEPGEMM: 'true'
+    SGLANG_FLASHINFER_FP4_GEMM_BACKEND: cutlass
+    SGLANG_MOE_NVFP4_DISPATCH: '1'
+    SGLANG_CUTEDSL_MOE_NVFP4_DISPATCH: '1'
+    SGLANG_NVFP4_CKPT_FP8_NEXTN_MOE: '1'
+    SGLANG_NCCL_ALL_GATHER_IN_OVERLAP_SCHEDULER_SYNC_BATCH: '1'
+    FLASHINFER_DISABLE_VERSION_CHECK: '1'
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm-cache
+    FLASHINFER_WORKSPACE_BASE: /configs/flashinfer-cache
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
+    SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '256'
+    SGLANG_HEALTH_CHECK_TIMEOUT: '1800'
+    SGLANG_HEALTH_STARTING_OK: '1'
+    SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: '0'
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+
+  sglang_config:
+    prefill:
+      served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+      model-path: /model/
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      trust-remote-code: true
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      mamba-ssm-dtype: bfloat16
+      disaggregation-mode: prefill
+      disaggregation-bootstrap-port: 31000
+      load-balance-method: round_robin
+      watchdog-timeout: 1000000
+      log-level: info
+      page-size: 64
+      attention-backend: trtllm_mha
+      moe-runner-backend: flashinfer_trtllm
+      linear-attn-decode-backend: flashinfer
+      mem-fraction-static: 0.8
+      chunked-prefill-size: 65536
+      disable-cuda-graph: true
+      mamba-scheduler-strategy: extra_buffer
+      mamba-track-interval: 2048
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first_direct
+      hicache-ratio: 1.01
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+    decode:
+      served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+      model-path: /model/
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+      moe-dense-tp-size: 1
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      prefill-round-robin-balance: true
+      mamba-scheduler-strategy: no_buffer
+      mamba-track-interval: 128
+      mamba-ssm-dtype: bfloat16
+      disaggregation-mode: decode
+      disable-radix-cache: true
+      disaggregation-bootstrap-port: 31000
+      page-size: 64
+      attention-backend: trtllm_mha
+      moe-runner-backend: flashinfer_cutedsl
+      linear-attn-decode-backend: flashinfer
+      disable-shared-experts-fusion: true
+      moe-a2a-backend: deepep
+      deepep-mode: low_latency
+      ep-dispatch-algorithm: static
+      eplb-algorithm: deepseek
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      speculative-moe-runner-backend: deep_gemm
+      speculative-moe-a2a-backend: deepep
+      chunked-prefill-size: 4096
+      mem-fraction-static: 0.75
+      max-mamba-cache-size: 1024
+      max-running-requests: 512
+      cuda-graph-max-bs: 64
+      watchdog-timeout: 1000000
+      decode-log-interval: 10
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "144"
+
+srun_options:
+  mem: "0"
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"

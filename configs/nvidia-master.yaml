@@ -6327,6 +6327,184 @@ qwen3.5-fp4-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260716-b0b2dfbd
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp4-c1-mtp-hicache-jid2191933.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [96]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp4-c96-mtp-hicache-jid2195211.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+
+qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260716-b0b2dfbd
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "3169427d2ed7ea6a0451e47ce443822d26893bae" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # 1P1D STP (TP4 prefill / TP4 decode). 2 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [32]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c32-mtp-hicache-convaware-jid2212783.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [64]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c64-mtp-convaware-jid2214439.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [96]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c96-mtp-convaware-jid2214440.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1P1D wide-EP (DEP4 prefill / DEP4 decode). 2 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-dep4-c128-mtp-hicache-convaware-jid2220685.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+      # 2P1D wide-EP (2x DEP4 prefill / DEP4 decode). 3 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [192]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-2p1d-dep4-dep4-c192-mtp-hicache-convaware-jid2230562.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+      # 3P1D wide-EP (3x DEP4 prefill / DEP8 decode). 5 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p1d-dep4-dep8-c256-mtp-hicache-convaware-jid2228613.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4P1D wide-EP (4x DEP4 prefill / DEP8 decode). 6 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [384]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-4p1d-dep4-dep8-c384-mtp-hicache-convaware-jid2239740.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
 qwen3.5-fp8-b300-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
