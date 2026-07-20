@@ -154,6 +154,7 @@ no_dp = decode.get('no_dp', {})
 # Decode DP config
 print(f'DECODE_MAX_RUNNING_REQUESTS_DP=\"{dp.get(\"max_running_requests\", 4096)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_DP=\"{eval_formula(dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_DP=\"{dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(dp.get('cuda_graph_bs_range', '1-160'), 1, 160)
 print(f'DECODE_CUDA_GRAPH_BS_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_DP_END=\"{e}\"')
@@ -161,6 +162,7 @@ print(f'DECODE_CUDA_GRAPH_BS_DP_END=\"{e}\"')
 # Decode EP-only config (EP enabled but DP disabled)
 print(f'DECODE_MAX_RUNNING_REQUESTS_EP_ONLY=\"{ep_only.get(\"max_running_requests\", 256)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_EP_ONLY=\"{eval_formula(ep_only.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_EP_ONLY=\"{ep_only.get(\"context_length\", \"\")}\"')
 s, e = parse_range(ep_only.get('cuda_graph_bs_range', '1-256'), 1, 256)
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
@@ -168,6 +170,7 @@ print(f'DECODE_CUDA_GRAPH_BS_EP_ONLY_END=\"{e}\"')
 # Decode no-DP config
 print(f'DECODE_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
 print(f'DECODE_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'DECODE_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
@@ -205,12 +208,23 @@ fi
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))
     decode_max_running_requests=$((DECODE_CUDA_GRAPH_BS_DP_END * DECODE_TP_SIZE))
+    decode_context_length=$DECODE_CONTEXT_LENGTH_DP
 elif [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_EP_ONLY_START $DECODE_CUDA_GRAPH_BS_EP_ONLY_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_EP_ONLY
+    decode_context_length=$DECODE_CONTEXT_LENGTH_EP_ONLY
 else
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_NO_DP_START $DECODE_CUDA_GRAPH_BS_NO_DP_END))
     decode_max_running_requests=$DECODE_MAX_RUNNING_REQUESTS_NO_DP
+    decode_context_length=$DECODE_CONTEXT_LENGTH_NO_DP
+fi
+# In PD-disaggregation the decode must admit requests against the SAME context
+# length as prefill; otherwise decode accepts over-length requests that prefill
+# rejects, and those requests hang forever waiting for a KV transfer that never
+# comes (the 8k1k conc-500 straggler). Fall back to the prefill value if the
+# decode context_length is not set in the model config, so the two always agree.
+if [[ -z "$decode_context_length" ]]; then
+    decode_context_length=$prefill_context_length
 fi
 
 # When both DP and EP are enabled, override max-running-requests and dispatch tokens
@@ -250,6 +264,9 @@ DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-run
 
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
+fi
+if [[ -n "$decode_context_length" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --context-length ${decode_context_length}"
 fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
@@ -506,12 +523,23 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
+    # Circuit-breaker recovery tuning (run 28696443568):
+    # With defaults the per-worker circuit stays OPEN for cb-timeout-duration-secs=60
+    # before a half-open retrial. In that run every request 503'd from request #1
+    # ("all circuits open or unhealthy") for ~31s and lm_eval (max_retries=5) then gave
+    # up -- i.e. the circuit was still open when the client budget ran out, so 0 result
+    # files were produced. Shortening the open->half-open window (and letting the router
+    # itself retry a failed worker selection) lets a transient trip re-close INSIDE the
+    # client retry budget instead of nuking the whole eval. The breaker stays fully
+    # ENABLED (thresholds unchanged); this only speeds recovery.
+    ROUTER_CB_ARGS="${ROUTER_CB_ARGS:---cb-timeout-duration-secs 15 --retry-max-retries 3}"
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
         --port 30000 \
         --policy random \
         --prefill-policy random \
         --decode-policy random \
+        ${ROUTER_CB_ARGS} \
         ${PREFILL_ARGS} \
         ${DECODE_ARGS}"
 
@@ -555,6 +583,39 @@ if [ "$NODE_RANK" -eq 0 ]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
         else
             wait_or_die "$prefill0_pid" bash -c "$HEALTH_BARRIER_CMD" || exit 1
+        fi
+
+        # ---- End-to-end router readiness canary (run 28696443568) ----
+        # The /readiness barrier above only proves the router PROCESS is up; it does
+        # NOT prove the router can reach a prefill worker and complete a generation.
+        # In that run the eval fired the instant /readiness passed and EVERY request
+        # 503'd ("No available prefill workers (all circuits open or unhealthy)") from
+        # request #1 -> lm_eval gave up -> 0 result files -> "Verify eval scores" failed.
+        # Gate the benchmark on ONE successful generation THROUGH the router so the eval
+        # never starts against a router whose prefill path is not yet actually serving.
+        if [[ "${ROUTER_READINESS_CANARY:-1}" == "1" ]]; then
+            CANARY_URL="http://${NODE0_ADDR}:30000/v1/chat/completions"
+            CANARY_MODEL="${MODEL_DIR}/${MODEL_NAME}"
+            canary_ok=0
+            canary_deadline=$(( $(date +%s) + ${ROUTER_CANARY_TIMEOUT:-600} ))
+            while [ "$(date +%s)" -lt "$canary_deadline" ]; do
+                canary_code=$(curl -s -o /tmp/router_canary.out -w '%{http_code}' \
+                    -m "${ROUTER_CANARY_REQ_TIMEOUT:-120}" \
+                    -X POST "$CANARY_URL" -H 'Content-Type: application/json' \
+                    -d "{\"model\":\"${CANARY_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1,\"temperature\":0}" 2>/dev/null)
+                if [ "$canary_code" = "200" ] && \
+                   ! grep -qE "circuits open|server_selection_failed|No available" /tmp/router_canary.out 2>/dev/null; then
+                    canary_ok=1; break
+                fi
+                echo "Router readiness canary not ready yet (http=${canary_code}); retrying in 5s . . ."
+                sleep 5
+            done
+            if [ "$canary_ok" -ne 1 ]; then
+                echo "ERROR: router readiness canary failed after ${ROUTER_CANARY_TIMEOUT:-600}s -- the router cannot complete a generation through a prefill worker (all circuits open/unhealthy). Refusing to start the eval against a non-serving router."
+                head -c 800 /tmp/router_canary.out 2>/dev/null
+                exit 1
+            fi
+            echo "Router readiness canary passed (end-to-end generation OK)"
         fi
 
         echo "Router is ready for benchmarking"
