@@ -65,6 +65,9 @@ elif [[ $MODEL_PREFIX == "minimaxm2.7" && $PRECISION == "fp4" ]]; then
     # shared model tree by the benchmark's revision-pinned preflight.
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M2.7-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.7-nvfp4"
+    # Covers the one-hour AgentX measurement plus setup and warmup while still
+    # allowing Slurm to backfill this experiment ahead of large reservations.
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-150}"
 elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
     export SRT_SLURM_MODEL_PREFIX="gptoss"
