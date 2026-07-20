@@ -117,7 +117,7 @@ export MODEL_DIR
 
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
-    DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    DISK_DIR_NAME=$(awk -v key="$MODEL_YAML_KEY" '$0 == key ":" {found=1; next}
         found && /^[^ ]/{exit}
         found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
     DISK_DIR_NAME="${DISK_DIR_NAME:-$MODEL_NAME}"
@@ -193,7 +193,7 @@ else
     }
 
     # Extract hf_dir from models.yaml (same as vllm-disagg path above)
-    SGL_DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
+    SGL_DISK_DIR_NAME=$(awk -v key="$MODEL_YAML_KEY" '$0 == key ":" {found=1; next}
         found && /^[^ ]/{exit}
         found && /hf_dir:/{gsub(/[" ]/, "", $2); print $2; exit}' "$MODELS_YAML")
     SGL_DISK_DIR_NAME="${SGL_DISK_DIR_NAME:-$MODEL_NAME}"
@@ -348,7 +348,8 @@ export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
-export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
+SANITIZED_MODEL=$(printf '%s' "$MODEL_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
+export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${SANITIZED_MODEL}_${SLURM_JOB_ID}"
 
 # vLLM external router container.
 # NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
@@ -400,6 +401,7 @@ DOCKER_ENV_COMMON=(
     -e NODE0_ADDR=\$NODE0_ADDR
     -e MODEL_DIR=/models
     -e MODEL_NAME=\$MODEL_NAME
+    -e MODEL_YAML_KEY=\$MODEL_YAML_KEY
     -e GPUS_PER_NODE=\$GPUS_PER_NODE
     -e xP=\$xP
     -e yD=\$yD
