@@ -108,6 +108,7 @@ if [[ "${SCENARIO_TYPE:-fixed-seq-len}" == "agentic-coding" ]]; then
     install_agentic_deps
     OUTPUT_DIR="$RESULT_DIR"
     CONTEXT_LENGTH=196608
+    export MAX_MODEL_LEN="$CONTEXT_LENGTH"
     MAX_RUNNING_REQUESTS=$((CONC * 2))
     (( MAX_RUNNING_REQUESTS < 8 )) && MAX_RUNNING_REQUESTS=8
 else
