@@ -163,7 +163,7 @@ SGLANG_CMD=(
     --chunked-prefill-size 16384
     --weight-loader-prefetch-checkpoints
     --max-running-requests "$MAX_RUNNING_REQUESTS"
-    --mem-fraction-static 0.90
+    --mem-fraction-static 0.85
     --enable-metrics
     --watchdog-timeout 1800
 )
