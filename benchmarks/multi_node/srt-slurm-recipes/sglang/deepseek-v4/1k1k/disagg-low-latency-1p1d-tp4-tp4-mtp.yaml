@@ -1,31 +1,23 @@
-name: "dsv4-pro-gb300-disagg-8k1k-mid-curve-2p1d-dep4-dep8-mtp"
+name: "dsv4-pro-gb300-disagg-1k1k-mtp-low-latency-1p1d-tp4-tp4"
 
 frontend:
-  type: dynamo
-  enable_multiple_frontends: true
-  num_additional_frontends: 8
-
-dynamo:
-  version: 1.2.1
+  type: sglang
+  enable_multiple_frontends: false
+  args:
+    policy: "cache_aware"
 
 model:
   path: "deepseek-v4-pro"
   container: "lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
   precision: "mxfp4"
 
-sbatch_directives:
-  cpus-per-task: "144"
-  mem: "0"
-
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 2
-  prefill_workers: 2
-  gpus_per_prefill: 4
-  decode_nodes: 2
+  prefill_nodes: 1
+  prefill_workers: 1
+  decode_nodes: 1
   decode_workers: 1
-  gpus_per_decode: 8
 
 backend:
   type: sglang
@@ -37,13 +29,9 @@ backend:
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-
-    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
-
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -59,12 +47,9 @@ backend:
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-
-    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
-    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "4096"
-
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
     SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
@@ -72,50 +57,46 @@ backend:
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
-    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "0"  # CAR_V2 is single-node only.
+    # SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2 intentionally NOT set: CAR_V2
+    # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
     prefill:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
-      tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
+      disable-radix-cache: true
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
 
       tensor-parallel-size: 4
-      data-parallel-size: 4
-      expert-parallel-size: 4
+      data-parallel-size:   1
+      expert-parallel-size: 1
 
-      enable-dp-attention: true
-      enable-dp-lm-head: true
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
 
-      moe-a2a-backend: "megamoe"
-
-      mem-fraction-static: 0.9
-      max-running-requests: 512
-      cuda-graph-max-bs: 512
-      chunked-prefill-size: 32768
-      stream-interval: 60
+      mem-fraction-static: 0.90
+      max-running-requests: 8
+      cuda-graph-max-bs: 8
+      chunked-prefill-size: 4096
 
     decode:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       model-path: "/model/"
       trust-remote-code: true
-      tool-call-parser: deepseekv4  # gates dsv4 chat-encoding spec.
+      disable-radix-cache: true
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
 
-      tensor-parallel-size: 8
-      data-parallel-size: 8
-      expert-parallel-size: 8
+      tensor-parallel-size: 4
+      data-parallel-size:   1
+      expert-parallel-size: 1
 
-      enable-dp-attention: true
-      enable-dp-lm-head: true
-
-      moe-a2a-backend: "megamoe"
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
 
       speculative-algo: "EAGLE"
       speculative-num-steps: 3
@@ -123,18 +104,17 @@ backend:
       speculative-num-draft-tokens: 4
 
       mem-fraction-static: 0.9
-      max-running-requests: 3072
-      cuda-graph-max-bs: 512
-      swa-full-tokens-ratio: 0.15
-      context-length: 16384
-      stream-interval: 60
+      max-running-requests: 8
+      cuda-graph-max-bs:    8
+      swa-full-tokens-ratio: 0.1
+      context-length: 4096
 
 benchmark:
   type: "sa-bench"
-  isl: 8192
+  isl: 1024
   osl: 1024
   random_range_ratio: 0.8
-  concurrencies: "512"
+  concurrencies: "1x2"
   req_rate: "inf"
   use_chat_template: true
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"

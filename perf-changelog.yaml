@@ -4974,3 +4974,13 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Add 1k/1k coverage under the existing dsv4-fp4-gb300-dynamo-sglang-mtp key so a single top-level config covers both 8k/1k and 1k/1k on GB300. Master image and all 19 (11 x 1k1k + 8 x 8k1k) recipe containers pinned to lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
+    - "Wire 11 disagg recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/1k1k/: 3 high-throughput conc=8192 recipes (1p1d-dep8, 1p1d-dep16, 2p1d-dep16), 4 flat low-latency dep4 recipes (1p1d/1p2d/1p4d/1p6d-dep4-tp4 at conc=64), and 4 flat low-latency tp4 recipes (1p1d/1p2d/1p4d/1p6d-tp4-tp4 at conc=2)"
+    - "Flat dep4 and tp4 splits replace the upstream disagg-low-latency-dep4-mtp.yaml and disagg-low-latency-tp4-mtp.yaml templates (each base + zip_override_1k1k_lowlat with decode_nodes [1,2,4,6]). The templated form silently broke under the launcher: srtctl fans the single recipe into 4 Slurm submissions per `srtctl apply`, but the launcher captures job IDs with `grep -oP '✅ Job \\K[0-9]+'` into a scalar JOB_ID, jamming 4 newline-separated IDs into one variable and corrupting downstream LOGS_DIR interpolation and squeue polling. Single-config files match the 8k1k convention (one recipe per decode-worker count) and force srtctl to emit exactly 1 job per launcher invocation"
+    - "Decode side runs EAGLE (num-steps=3, eagle-topk=1, num-draft-tokens=4) on all 11 new 1k/1k recipes"
+    - "Extend runners/launch_gb300-nv.sh so dynamo-sglang + dsv4 clones NVIDIA/srt-slurm@main and overlays the local deepseek-v4 recipe tree at job time"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1697
