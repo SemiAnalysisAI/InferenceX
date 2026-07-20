@@ -24,7 +24,8 @@ seq_len_stoi = {
 
 MIN_EVAL_CONC = 16
 # Bound how many multinode agentic conc points share one server allocation.
-MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
+# 1 = one task/SLURM allocation per concurrency (matches single-node agentic).
+MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
 # 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
@@ -99,11 +100,57 @@ def with_worker_parallelism_defaults(worker: dict) -> dict:
     }
 
 
+def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
+    """Return GPUs a single worker replica occupies on one node.
+
+    The DRAM offload budget is sized per server process (per replica), matching
+    the single-node path: a replica claims the node-DRAM fraction that mirrors
+    its GPU footprint on the node. Topologies that do not tile a node cleanly
+    are rejected rather than silently truncated, keeping parity with the
+    single-node "must fit the node" rule:
+
+    * A replica larger than one node (tp*pp*pcp > gpus-per-node) must fill whole
+      nodes, i.e. be an exact multiple of gpus-per-node; each of its nodes is
+      then fully occupied (fraction 1).
+    * A replica within one node must divide it evenly so co-located replicas of
+      the same role tile the node without overlap.
+    """
+    gpus_per_replica = (
+        worker[Fields.TP.value]
+        * worker.get(Fields.PP.value, 1)
+        * worker.get(Fields.PCP_SIZE.value, 1)
+    )
+    if gpus_per_replica > gpus_per_node:
+        if gpus_per_replica % gpus_per_node != 0:
+            raise ValueError(
+                f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+                f"={gpus_per_replica} spans multiple nodes but is not a multiple "
+                f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
+            )
+        return gpus_per_node
+    if gpus_per_node % gpus_per_replica != 0:
+        raise ValueError(
+            f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+            f"={gpus_per_replica} does not divide "
+            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
+        )
+    return gpus_per_replica
+
+
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
 ) -> int:
-    """Return the aggregate DRAM offload budget for a single-node entry."""
-    kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
+    """Return the DRAM offload budget (GB) for one agentic server node.
+
+    The budget scales the node's (MAX-capped) available CPU DRAM by the
+    utilization and by the fraction of the node's GPUs in use:
+
+    * Single-node entries use the TP/PP/PCP topology, which must fit one node.
+    * Disaggregated multinode entries use the prefill worker's per-node GPU
+      footprint, since only prefill offloads KV to CPU DRAM today (decode can be
+      budgeted separately if it ever gains its own pool).
+    """
+    kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
     if kv_offloading != "dram":
         return 0
 
@@ -113,15 +160,20 @@ def agentic_dram_offload_gb(
     )
     utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
-    gpu_count = effective_gpu_count(benchmark)
-    if gpu_count > gpus_per_node:
-        raise ValueError(
-            f"tp={benchmark[Fields.TP.value]} with "
-            f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
-            f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
-            f"requires {gpu_count} GPUs and exceeds "
-            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
-        )
+
+    if Fields.PREFILL.value in benchmark:
+        gpu_count = worker_gpus_per_node(
+            benchmark[Fields.PREFILL.value], gpus_per_node)
+    else:
+        gpu_count = effective_gpu_count(benchmark)
+        if gpu_count > gpus_per_node:
+            raise ValueError(
+                f"tp={benchmark[Fields.TP.value]} with "
+                f"{Fields.PP.value}={benchmark.get(Fields.PP.value, 1)} and "
+                f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
+                f"requires {gpu_count} GPUs and exceeds "
+                f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
+            )
     proportional_bytes = (
         Decimal(available_mib) * BYTES_PER_MIB * utilization
         * gpu_count / gpus_per_node
@@ -183,7 +235,7 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
     ))
 
 
-def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
@@ -195,6 +247,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
+    - Agentic evals are opt-in to preserve default throughput coverage.
     """
     from collections import defaultdict
 
@@ -257,10 +310,28 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Mark the selected entries (skip agentic entries which don't support evals)
+    # Default sweeps preserve every agentic throughput result.
+    if include_agentic:
+        ag_sn_groups = defaultdict(list)
+        for i, entry in enumerate(matrix_values):
+            if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
+                continue
+            # Multi-node agentic eval is unsupported.
+            if Fields.PREFILL.value in entry:
+                continue
+            conc = entry[Fields.CONC.value]
+            conc_val = max(conc) if isinstance(conc, list) else conc
+            key = (
+                entry[Fields.MODEL.value],
+                entry[Fields.RUNNER.value],
+                entry[Fields.FRAMEWORK.value],
+                entry[Fields.PRECISION.value],
+            )
+            ag_sn_groups[key].append((i, conc_val))
+        for entries in ag_sn_groups.values():
+            eval_indices.add(max(entries, key=lambda item: item[1])[0])
+
     for i, entry in enumerate(matrix_values):
-        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
-            continue
         entry[Fields.RUN_EVAL.value] = i in eval_indices
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
@@ -274,7 +345,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Agentic entries are left untouched because they do not support lm-eval.
+    Single-node agentic entries use SWE-bench; multi-node eval is unsupported.
     Multi-node rows with the same engine topology are merged into one eval row
     whose full concurrency list is run sequentially against the same engine.
     """
@@ -285,6 +356,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            if Fields.PREFILL.value not in entry:
+                entry[Fields.RUN_EVAL.value] = True
             expanded_entries.append(entry)
             continue
 
@@ -648,11 +721,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
-                total_cpu_dram_gb = (
-                    0
-                    if is_multinode
-                    else agentic_dram_offload_gb(agentic_config, bmk, runner, runner_data)
-                )
+                total_cpu_dram_gb = agentic_dram_offload_gb(
+                    agentic_config, bmk, runner, runner_data)
 
                 # Get concurrency values
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -703,6 +773,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
@@ -954,11 +1025,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
-                total_cpu_dram_gb = (
-                    0
-                    if is_multinode
-                    else agentic_dram_offload_gb(agentic_config, bmk, runner, runner_data)
-                )
+                total_cpu_dram_gb = agentic_dram_offload_gb(
+                    agentic_config, bmk, runner, runner_data)
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
                 if conc_list:
@@ -1003,6 +1071,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
                                 Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
@@ -1296,7 +1365,7 @@ def main():
         
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values)
+        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 
