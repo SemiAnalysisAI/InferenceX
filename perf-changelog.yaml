@@ -4974,3 +4974,14 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+  
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d-dep8-dep8
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d-dep8-dep12
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep12
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-3p1d-dep8-dep16
+  description:
+    - "Add GB200 Dynamo-vLLM AgentX aggregate TP8 at conc [1,4,8,16] and disaggregated topologies: 1P/1D DEP8/DEP8 at [64,128,256,320], 1P/1D DEP8/DEP12 at [128,256,320], 2P/1D DEP8/DEP12 at [480,640,768], and 3P/1D DEP8/DEP16 at [640,800,960,1280]."
+    - "Image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2260

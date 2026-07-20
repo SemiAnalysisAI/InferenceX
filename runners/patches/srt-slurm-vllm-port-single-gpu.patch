@@ -1,0 +1,36 @@
+diff --git a/src/srtctl/backends/vllm.py b/src/srtctl/backends/vllm.py
+index 0484d70..f3a95ca 100644
+--- a/src/srtctl/backends/vllm.py
++++ b/src/srtctl/backends/vllm.py
+@@ -284,7 +284,8 @@ class VLLMProtocol:
+           multi-node NIXL handshake)
+         - VLLM_PORT: private base for vLLM's get_open_port() scans, unique per
+           process so co-located workers don't race for the same rendezvous port
+-          (see the notes on VLLM_PORT_BASE in srtctl.ports)
++          (see the notes on VLLM_PORT_BASE in srtctl.ports). Set ONLY for
++          single-GPU processes -- see below.
+         """
+         from srtctl.core.slurm import get_hostname_ip
+ 
+@@ -299,8 +300,19 @@ class VLLMProtocol:
+         # 4xGB200 nodes: each prefill endpoint is DEP2 (uses 2 of the 4 GPUs), so
+         # two endpoints share one physical node and would otherwise scan
+         # overlapping get_open_port() ranges.
+-        proc_index = max(process.sys_port - DYN_SYSTEM_PORT_BASE, 0)
+-        env["VLLM_PORT"] = str(VLLM_PORT_BASE + proc_index * VLLM_PORT_STRIDE)
++        #
++        # Only pin it for single-GPU processes (the per-GPU DP layout). A
++        # multi-GPU process runs vLLM's internal multiproc executor, whose N
++        # same-node worker subprocesses all read this one VLLM_PORT; in a
++        # multi-node TP group the remote-node subprocesses then race to bind the
++        # shm-broadcast port from that shared base and crash with EADDRINUSE
++        # (e.g. the TP8 aggregate spanning two 4-GPU nodes). Leaving VLLM_PORT
++        # unset lets those subprocesses fall back to OS-assigned ephemeral ports,
++        # which are unique per bind. Single-node multi-GPU TP never hit this
++        # (same-node reader -> IPC, no TCP bind), so this is safe there too.
++        if len(process.gpu_indices) == 1:
++            proc_index = max(process.sys_port - DYN_SYSTEM_PORT_BASE, 0)
++            env["VLLM_PORT"] = str(VLLM_PORT_BASE + proc_index * VLLM_PORT_STRIDE)
+         return env
+ 
+     def get_mooncake_worker_env(self, infra_node_ip: str, local_hostname: str) -> dict[str, str]:
