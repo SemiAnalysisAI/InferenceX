@@ -55,11 +55,14 @@ amd-smi || true
 # booting into a half-drained node fails RCCL init with HIP 'unhandled cuda
 # error' / 'invalid argument' (observed as the mooncake-c64 CI failure).
 # Wait for the GPUs to come back before launching.
+# Per-GPU threshold: idle nodes hold a small driver/firmware VRAM baseline
+# (observed up to ~4%/GPU, node-dependent), while a draining or occupied
+# GPU sits at 50-90%. Require every GPU <= 10%.
 GPU_CLEAN=false
 for i in $(seq 1 90); do
-    VRAM_BUSY=$(rocm-smi --showmemuse 2>/dev/null | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" | awk '{s+=$NF} END {print s+0}')
-    if [ "${VRAM_BUSY:-0}" -le 8 ]; then echo "GPUs clean (vram%sum=$VRAM_BUSY after $((i*10))s)"; GPU_CLEAN=true; break; fi
-    echo "waiting for prior-job GPU memory reclaim: vram%sum=$VRAM_BUSY"; sleep 10
+    VRAM_MAX=$(rocm-smi --showmemuse 2>/dev/null | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" | awk '{if ($NF > m) m = $NF} END {print m+0}')
+    if [ "${VRAM_MAX:-0}" -le 10 ]; then echo "GPUs clean (vram%max=$VRAM_MAX after $((i*10))s)"; GPU_CLEAN=true; break; fi
+    echo "waiting for prior-job GPU memory reclaim: vram%max=$VRAM_MAX"; sleep 10
 done
 [ "$GPU_CLEAN" = "true" ] || { echo "Error: GPUs still draining prior job's memory after 15min" >&2; exit 1; }
 
