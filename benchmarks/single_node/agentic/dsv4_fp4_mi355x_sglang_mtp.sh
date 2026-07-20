@@ -110,7 +110,7 @@ CUDA_GRAPH_MAX_BS=$CONC
 # Simulated acceptance-length (AL) settings.
 # openai.BadRequestError: Error code: 400 - {'object': 'error', 'message': "The   input (3620936 tokens) is longer than the model's context length (1048576       tokens).", 'type': 'BadRequestError', 'param': None, 'code': 400} 
 #export SGLANG_DEFAULT_THINKING=1
-export SGLANG_DSV4_REASONING_EFFORT=high
+#export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_SIMULATE_ACC_LEN=2.49
 export SGLANG_SIMULATE_ACC_METHOD=match-expected
 export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
