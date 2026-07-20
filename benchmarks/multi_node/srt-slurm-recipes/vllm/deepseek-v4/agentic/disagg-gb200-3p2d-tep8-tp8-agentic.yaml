@@ -21,7 +21,7 @@ slurm:
   time_limit: "8:00:00"
 
 health_check:
-  max_attempts: 720
+  max_attempts: 1440
   interval_seconds: 10
 
 resources:
@@ -46,6 +46,7 @@ frontend:
     ETCD_LEASE_TTL: "120"
   args:
     router-mode: "kv"
+    router-reset-states: true
 
 backend:
   type: vllm
