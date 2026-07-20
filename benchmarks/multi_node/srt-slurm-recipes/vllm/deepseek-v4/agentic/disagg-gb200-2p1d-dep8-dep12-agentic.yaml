@@ -65,6 +65,13 @@ backend:
       mode: "embedded"
       enable_offload: false
   prefill_environment:
+    # dynamo's primary etcd lease defaults to a 10s TTL. A brief etcd stall
+    # during the CPU/memory/IO-heavy cold start (~380s weight load, etcd
+    # co-located with a worker) then revokes every worker's lease at once, so
+    # registration fails with "requested lease not found" and workers never go
+    # ready (health check times out at 2h). 600s rides through transient etcd
+    # stalls; longer TTL only delays dead-worker cleanup, handled independently.
+    ETCD_LEASE_TTL: "600"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
     TORCH_SYMMMEM: "NVSHMEM"
     VLLM_USE_NCCL_SYMM_MEM: "1"
@@ -93,6 +100,9 @@ backend:
     # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
     # MC_TE_METRIC: "0"
   decode_environment:
+    # See prefill_environment: raise dynamo's primary etcd lease TTL from the
+    # 10s default so the lease survives the CPU-saturated cold start.
+    ETCD_LEASE_TTL: "600"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
     TORCH_SYMMMEM: "NVSHMEM"
     VLLM_USE_NCCL_SYMM_MEM: "1"

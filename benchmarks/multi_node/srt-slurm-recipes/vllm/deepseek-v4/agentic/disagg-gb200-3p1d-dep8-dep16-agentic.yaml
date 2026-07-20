@@ -65,6 +65,14 @@ backend:
       mode: "embedded"
       enable_offload: false
   prefill_environment:
+    # dynamo's primary etcd lease defaults to a 10s TTL. During the ~380s
+    # weight load the process is CPU-saturated and the Rust keep-alive task
+    # cannot renew in time, so etcd revokes the lease and worker registration
+    # later fails with "requested lease not found" (workers never go ready ->
+    # health check times out at 2h). 600s covers the weight load + cudagraph
+    # stalls; longer TTL only delays dead-worker cleanup, which the health
+    # check / fail-fast monitor handle independently.
+    ETCD_LEASE_TTL: "600"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
     TORCH_SYMMMEM: "NVSHMEM"
     VLLM_USE_NCCL_SYMM_MEM: "1"
@@ -93,6 +101,9 @@ backend:
     # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
     # MC_TE_METRIC: "0"
   decode_environment:
+    # See prefill_environment: raise dynamo's primary etcd lease TTL from the
+    # 10s default so the lease survives the CPU-saturated cold start.
+    ETCD_LEASE_TTL: "600"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
     TORCH_SYMMMEM: "NVSHMEM"
     VLLM_USE_NCCL_SYMM_MEM: "1"
