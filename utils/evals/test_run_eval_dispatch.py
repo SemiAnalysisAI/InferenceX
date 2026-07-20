@@ -342,6 +342,17 @@ def test_default_graded_eval_suite_is_registered():
     )
 
 
+def test_agentic_eval_workflow_forwards_framework_override():
+    repo_root = BENCHMARK_LIB.parents[1]
+    e2e_workflow = (repo_root / ".github/workflows/e2e-tests.yml").read_text()
+    benchmark_workflow = (
+        repo_root / ".github/workflows/benchmark-tmpl.yml"
+    ).read_text()
+
+    assert "eval-framework: ${{ inputs.eval-framework }}" in e2e_workflow
+    assert "EVAL_FRAMEWORK: ${{ inputs.eval-framework }}" in benchmark_workflow
+
+
 def test_swebench_single_shot_registers_task_yaml():
     script = r'''
 source "$BENCHMARK_LIB"

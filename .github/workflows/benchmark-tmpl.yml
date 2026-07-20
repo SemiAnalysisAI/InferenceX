@@ -121,6 +121,11 @@ on:
         required: false
         type: string
         default: ""
+      eval-framework:
+        description: "Explicit eval framework override"
+        required: false
+        type: string
+        default: ""
       swebench-gen-mode:
         description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
         required: false
@@ -162,6 +167,7 @@ env:
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
+  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
