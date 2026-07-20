@@ -341,13 +341,57 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
             source /workspace/benchmarks/benchmark_lib.sh
 
+            # Derive the eval context from the benchmark shape, mirroring the
+            # single-node recipe (which sets MAX_MODEL_LEN=$EVAL_MAX_MODEL_LEN).
+            # Without this, EVAL_MAX_MODEL_LEN is unset here and run_lm_eval
+            # falls back to 16384, asking lm-eval for max_tokens=12288 while the
+            # engine was launched with --max-model-len 9472 from models_vllm.yaml
+            # — every request 400s on context length and the eval fails.
+            export MODEL="${MODEL_PATH}"
+            export ISL="${BENCH_INPUT_LEN}"
+            export OSL="${BENCH_OUTPUT_LEN}"
+            setup_eval_context
+
+            # The engine's context window is fixed at launch by models_vllm.yaml,
+            # so never ask lm-eval for more than what is actually served.
+            SERVED_MAX_LEN=$(echo "$DECODE_SERVER_CONFIG" | grep -oE -- '--max-model-len[[:space:]]+[0-9]+' | awk '{print $2}' | head -1)
+            if [[ -n "$SERVED_MAX_LEN" && "${EVAL_MAX_MODEL_LEN:-0}" -gt "$SERVED_MAX_LEN" ]]; then
+                echo "[EVAL] Clamping EVAL_MAX_MODEL_LEN ${EVAL_MAX_MODEL_LEN} -> ${SERVED_MAX_LEN} (engine --max-model-len)"
+                export EVAL_MAX_MODEL_LEN="$SERVED_MAX_LEN"
+            fi
+            echo "[EVAL] EVAL_MAX_MODEL_LEN=${EVAL_MAX_MODEL_LEN} (ISL=${ISL} OSL=${OSL}, served=${SERVED_MAX_LEN:-unknown})"
+
+            # Fail fast on a token budget the engine will reject. /health only
+            # proves the router is up, not that a generation of this size is
+            # accepted: when EVAL_MAX_MODEL_LEN exceeded the served window, every
+            # one of the 1319 gsm8k requests 400'd and lm-eval burned ~20 min over
+            # 4203 retries before returning rc=1 (run 29522769567). One probe at
+            # the real output budget turns that into a few seconds and a message
+            # that names the mismatch.
+            _probe_max_tokens=$(( EVAL_MAX_MODEL_LEN > 4096 ? EVAL_MAX_MODEL_LEN - 4096 : EVAL_MAX_MODEL_LEN / 2 ))
+            [[ "$_probe_max_tokens" -gt 16384 ]] && _probe_max_tokens=16384
+            _probe_body="{\"model\":\"${SERVED_MODEL}\",\"prompt\":\"hi\",\"max_tokens\":${_probe_max_tokens},\"temperature\":0}"
+            _probe_out=$(curl -sS --max-time 120 "http://0.0.0.0:${ROUTER_PORT}/v1/completions" \
+                -H 'Content-Type: application/json' -d "$_probe_body" 2>&1)
+            # Match only error-shaped bodies. A bare "400" would false-positive on
+            # a healthy response (created/total_tokens can contain those digits)
+            # and silently skip a working eval.
+            if echo "$_probe_out" | grep -qiE '"object"[[:space:]]*:[[:space:]]*"error"|"code"[[:space:]]*:[[:space:]]*"?400|maximum context length|BadRequestError|"error"[[:space:]]*:[[:space:]]*\{'; then
+                echo "ERROR: eval token budget rejected by the engine — not running the full eval." >&2
+                echo "ERROR: probed max_tokens=${_probe_max_tokens} against served --max-model-len=${SERVED_MAX_LEN:-unknown}" >&2
+                echo "ERROR: engine said: $(echo "$_probe_out" | head -c 400)" >&2
+                EVAL_FAILED=1
+            fi
+
             if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
             else
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
 
-            if [[ "$DRY_RUN" -eq 1 ]]; then
+            if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
+                echo "Skipping lm-eval: pre-flight probe already failed" >&2
+            elif [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port $ROUTER_PORT (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else
                 run_eval --framework lm-eval --port "$ROUTER_PORT"

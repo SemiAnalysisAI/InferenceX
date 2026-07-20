@@ -25,9 +25,51 @@ amd-Llama-3.3-70B-Instruct-FP8-KV:
   env: "VLLM_USE_V1=1 VLLM_V1_USE_PREFILL_DECODE_ATTENTION=1 AMDGCN_USE_BUFFER_OPS=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_ROPE=1 TRITON_HIP_ASYNC_COPY_BYPASS_PERMUTE=1 TRITON_HIP_USE_ASYNC_COPY=1 TRITON_HIP_USE_BLOCK_PINGPONG=1 TRITON_HIP_ASYNC_FAST_SWIZZLE=1"
 
 Kimi-K2.5-MXFP4:
-  prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
-  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori_low_latency --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  # Serve flags/env synced with single-node kimik2.5_fp4_mi355x.sh (INT4
+  # QuickReduce, AITER defaults). max-model-len 9472 covers both sweep scenarios
+  # (isl+osl+256). EP off: single-node TP8 sweep showed it -14% to -27% slower.
+  # decode keeps --all2all-backend mori_low_latency (no-op unless EP restored).
+  # VLLM_ROCM_USE_AITER_RMSNORM=1: the single-node recipe disables AITER RMSNorm
+  # for TP<8 due to a historical accuracy issue (perf-changelog.yaml, v0.16->0.18
+  # era), but on the current nightly a local TP4 GSM8K check gave identical
+  # accuracy with RMSNorm on vs off (0.9697 vs 0.9697), so keep the AITER RMSNorm
+  # perf path on rather than pin it off for a regression that no longer reproduces.
+  # No --compilation-config: take vLLM's default cudagraph_mode
+  # (FULL_AND_PIECEWISE since 0.11.0), same as the single-node recipe. The
+  # PIECEWISE pin carried over from the original bring-up (#1569) and forfeited
+  # full cudagraphs on the decode workers. Measured locally on MI350X/gfx950,
+  # TP4, 8k/1k, real weights, on this image (output tok/s vs PIECEWISE):
+  #   conc     1      4     16     64
+  #   FULL_AND_PIECEWISE  +15.9% +11.1% +12.6%  +1.7%
+  #   FULL_DECODE_ONLY    +18.5% +13.6% +11.9%  +1.5%
+  # PIECEWISE loses everywhere; the two full modes tie within run-to-run noise
+  # (~2%). FULL_DECODE_ONLY captures far cheaper (0.63 GiB/28s vs 7.28 GiB/69s)
+  # but that buys nothing here — KV cache is 89.33 GiB either way, since graph
+  # memory comes out of the 10% headroom left by --gpu-memory-utilization 0.90,
+  # not out of KV. So prefer the default and stay in sync with single-node.
+  # --kv-cache-dtype fp8 + --max-model-len 32768 + --max-num-seqs 256 +
+  # --max-num-batched-tokens 32768: measured locally (MI350X/gfx950, TP4, 8k/1k,
+  # real weights, this image) against the flags above as baseline, total tok/s:
+  #   conc            16      64     128
+  #   kv fp8 only  +9.7%  +16.1%  +20.5%
+  #   all four    +16.2%  +19.1%  +27.4%   <- adopted
+  # TTFT and TPOT improve too (conc 128: 5721 vs 6975 ms, 65.3 vs 83.5 ms).
+  # fp8 KV costs no accuracy here: local TP4 GSM8K with this recipe scored
+  # 0.9697 flexible / 0.9712 strict, identical to the bf16-KV run (0.9697) and
+  # well clear of the 0.90 gate in utils/evals/thresholds.json.
+  # fp8 KV wins on two counts: it halves KV read bandwidth (helps at every
+  # concurrency) and doubles resident capacity (1,358,885 -> 2,730,007 tokens),
+  # which is what relieves the KV-bound decode tail. The other three add ~+5%
+  # on top of fp8 alone, mostly the larger prefill token budget at 8k input.
+  # NOTE --max-num-seqs 256 caps engine concurrency at 256; the 8k/1k conc-512
+  # point only exists on the 1P2D arm, where the router splits across two decode
+  # workers, so no single engine should exceed the cap. Revisit if 1D ever runs
+  # conc 512. INT4 quick reduce is VLLM_ROCM_QUICK_REDUCE_QUANTIZATION (below):
+  # AITER_QUICK_REDUCE_QUANTIZATION is not read by the vLLM serve path and
+  # AITER_MXFP4_INTERMEDIATE does not exist in this build.
+  prefill_flags: "--tensor-parallel-size 8 --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 32768"
+  decode_flags: "--tensor-parallel-size 8 --all2all-backend mori_low_latency --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --max-model-len 32768 --mm-encoder-tp-mode data --kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 32768"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
 MiniMax-M2.5:
