@@ -3,17 +3,12 @@
 # MiniMax-M3 MXFP8 MI355X (gfx950) single-node vLLM recipe with EAGLE3
 # speculative decoding — the spec-decoding=mtp variant of
 # minimaxm3_fp8_mi355x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
-# --speculative-config with 3 speculative tokens. Everything else mirrors the
-# non-MTP recipe: MXFP8 from TP=4 on gfx950, mandatory --block-size 128,
-# --language-model-only for the text-only benchmark, FP8 KV cache, and
-# --attention-backend TRITON_ATTN. Runs with CUDA graphs (no --enforce-eager);
-# VLLM_USE_BREAKABLE_CUDAGRAPH=0 avoids the M3-decode breakable-cudagraph path.
+# --speculative-config with 3 speculative tokens. 
 #
-# Unlike the CUDA recipes, the drafter needs no attention_backend override:
-# the FlashInfer "page size 128 requires GQA/MQA" limitation that forced
-# FLASH_ATTN for the EAGLE3 MHA head on Blackwell is FlashInfer/CUDA-specific.
-# Here the whole server runs on TRITON_ATTN (set globally below), which serves
-# the MHA draft fine.
+# The EAGLE3 drafter (dense Llama MHA head) is pinned to TRITON_ATTN in the
+# speculative-config, otherwise it would fall back to a slow default backend.
+# Adding the explicit override left the draft's token acceptance unchanged but
+# sped up the draft forward enough to turn into a win across the board.
 #
 # [AI generated draft test] The shipped vllm/vllm-openai-rocm:minimax-m3 image
 # does NOT implement SupportsEagle3 on the AMD MiniMax-M3 model, so EAGLE3
@@ -38,7 +33,7 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+DRAFT_MODEL="${DRAFT_MODEL:-Inferact/MiniMax-M3-EAGLE3}"
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -61,6 +56,10 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # Run with CUDA graphs (no --enforce-eager): VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # avoids the M3-decode breakable-cudagraph path that previously forced eager.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# MI355X mxfp8 recipe (vllm-project/recipes#581): INT6 quick all-reduce plus
+# the router-append shared-experts MoE fusion (vllm-project/vllm#46545).
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -77,8 +76,21 @@ elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
+# Gate the AITER master switch on expert parallelism. With EP, 
+# the AITER master switch produces degenerate MiniMax-M3
+# output, so leave it off.
+if printf '%s\n' "${PARALLEL_ARGS[@]}" | grep -qxF -- '--enable-expert-parallel'; then
+    export VLLM_ROCM_USE_AITER=0
+else
+    export VLLM_ROCM_USE_AITER=1
+fi
+
 # use 3 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=3
+
+# Larger per-step prefill token budget to improve TP4 throughput at high
+# concurrency. Overridable via env.
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
 # [AI generated draft test] Patch the installed AMD MiniMax-M3 model to add the
 # SupportsEagle3 interface (functionstackx/vllm#1). Mirrors nvidia/model.py:
@@ -174,10 +186,13 @@ vllm serve "$MODEL" --port "$PORT" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
+    --moe-backend aiter \
     --max-model-len "$MAX_MODEL_LEN" \
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
-    --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
+    --linear-backend emulation \
+    --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &

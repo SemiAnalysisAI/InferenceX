@@ -1,7 +1,10 @@
 * @InferenceX/core
 
 # AMD master config
-.github/configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
+configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9trash
 
 # NVIDIA master config
-.github/configs/nvidia-master.yaml @ankursingh-nv @kedarpotdar-nv @jgangani
+configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @InferenceX/core
+
+# OperatorX experimental
+experimental/operatorx/ @hbarclay

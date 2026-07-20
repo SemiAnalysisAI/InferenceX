@@ -48,7 +48,13 @@ from transformers import PreTrainedTokenizerBase
 try:
     from backend_request_func import get_tokenizer
 except ImportError:
-    from vllm.transformers_utils.tokenizer import get_tokenizer
+    # vLLM moved get_tokenizer from vllm.transformers_utils.tokenizer to
+    # vllm.tokenizers; the old path was a deprecation alias in v0.20 and
+    # was removed by v0.23. Try the new location first, fall back to old.
+    try:
+        from vllm.tokenizers import get_tokenizer
+    except ImportError:
+        from vllm.transformers_utils.tokenizer import get_tokenizer
 
 try:
     from vllm.utils import FlexibleArgumentParser
@@ -103,6 +109,19 @@ def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
     transformers). Prefer backend_request_func.get_tokenizer on fallback so
     client tokenization stays aligned with the sglang server (#1381, #1428).
     """
+    if tokenizer_mode == "deepseek_v4":
+        # HF AutoTokenizer may not recognize deepseek_v4; use vLLM's loader.
+        try:
+            from vllm.tokenizers import get_tokenizer as _vllm_get_tokenizer
+        except ImportError:
+            from vllm.transformers_utils.tokenizer import (
+                get_tokenizer as _vllm_get_tokenizer,
+            )
+        return _vllm_get_tokenizer(
+            tokenizer_id,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=trust_remote_code,
+        )
     try:
         return get_tokenizer(
             tokenizer_id,
@@ -1249,7 +1268,7 @@ if __name__ == "__main__":
         '--tokenizer-mode',
         type=str,
         default="auto",
-        choices=['auto', 'slow', 'mistral', 'custom'],
+        choices=['auto', 'slow', 'mistral', 'custom', 'deepseek_v4'],
         help='The tokenizer mode.\n\n* "auto" will use the '
         'fast tokenizer if available.\n* "slow" will '
         'always use the slow tokenizer. \n* '

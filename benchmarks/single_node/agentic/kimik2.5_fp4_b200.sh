@@ -5,23 +5,30 @@ set -x
 # Agentic trace replay benchmark for Kimi-K2.5 NVFP4 on B200 using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# OFFLOADING values:
-#   none    - vLLM GPU KV only.
-#   cpu     - vLLM native simple CPU offload.
-#   lmcache - LMCache MP server + vLLM LMCacheMPConnector.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
+# `hf download` creates the target dir if missing and is itself idempotent.
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
 nvidia-smi
 
 # ---- Resolve traces and install deps ----------------------------------------
@@ -85,36 +92,18 @@ wait_for_lmcache_ready() {
     exit 1
 }
 
-case "$OFFLOADING" in
-    none)
-        ;;
-    cpu)
-        # B200 DGXC nodes have ~2.7 TiB host DRAM; reserve 2.5 TB for the
-        # simple offload connector and leave ~200 GB headroom for worker
-        # RSS + page cache. Eager mode (the shortcut form default) is
-        # intentional here per user request — Kimi FP4 on B200 has cleared
-        # the full eager sweep before.
-        TOTAL_CPU_DRAM_GB=2500
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS=(
-            --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
-            --disable-hybrid-kv-cache-manager
-        )
-        ;;
-    lmcache)
+if require_agentic_kv_offload_backend lmcache; then
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        agentic_pip_install --quiet --no-cache-dir lmcache
+        agentic_pip_install --quiet --no-cache-dir 'lmcache==0.5.1'
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        # Keep the semantic CPU KV pool at 2.5 TB for every TP shape. MP mode
-        # owns that pool in the external LMCache server instead of passing
+        # MP mode owns the configured CPU pool in the external LMCache
+        # server instead of passing
         # --kv-offloading-size through vLLM's integrated LMCache convenience
         # path, which divides the value by TP and then hits a large single-shot
         # cudaHostAlloc in LMCache 0.4.5's single-process local CPU backend.
-        TOTAL_CPU_DRAM_GB=2500
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -124,6 +113,10 @@ case "$OFFLOADING" in
         # a ZMQ-style host string to the connector.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
+            echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
+            exit 1
+        fi
         # Initial allocation is deliberately small; --l1-size-gb above is the
         # actual pool capacity and grows lazily as the run fills the cache.
         LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
@@ -157,12 +150,7 @@ case "$OFFLOADING" in
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
             --disable-hybrid-kv-cache-manager
         )
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu, lmcache)" >&2
-        exit 1
-        ;;
-esac
+fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
@@ -178,7 +166,7 @@ export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
-    vllm serve "$MODEL"
+    vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     --tensor-parallel-size="$TP"
@@ -202,7 +190,9 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

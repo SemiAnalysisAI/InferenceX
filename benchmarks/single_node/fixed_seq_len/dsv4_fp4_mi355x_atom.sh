@@ -22,14 +22,30 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 SERVER_LOG=/workspace/server.log
 
 PARALLEL_ARGS=(-tp "$TP") #TP
+CUDAGRAPH_SIZES='[1, 2, 4, 8, 16, 32, 48, 64, 128, 256, 512]'
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
-    else #DP+TP
-        PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+    else #DPA+TP
+        #DPA+TP+TBO
+        if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+            export GPU_MAX_HW_QUEUES=5
+        elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+            export GPU_MAX_HW_QUEUES=5
+        else
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+        fi
     fi
 fi 
 
+BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -37,16 +53,18 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
-# TODO: add --no-enable_chunked_prefill, when dsv4 prefix caching is supported 
-#https://github.com/ROCm/ATOM/commit/7df93a181da4d3c3250c2441c7d5e2745a03d0cd#diff-61b1ba0b8b74523530d2d5cdc739d4f3a23a43bedf69015a5235844d46e9373bL1127
+MEM_FRAC_STATIC=0.9
+
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     "${PARALLEL_ARGS[@]}" \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.85 \
-    > $SERVER_LOG 2>&1 &
+    --gpu-memory-utilization $MEM_FRAC_STATIC \
+    --no-enable_prefix_caching \
+    --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
+    > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 

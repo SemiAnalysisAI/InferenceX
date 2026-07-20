@@ -1,0 +1,231 @@
+# Generate a shard matrix, run each shard on its GPU pool, and upload raw results.
+name: CollectiveX Sweep
+permissions:
+  actions: read
+  contents: read
+on:
+  workflow_dispatch:
+    inputs:
+      backend:
+        description: "EP library to sweep — 'all' runs every EP backend in one matrix"
+        type: choice
+        default: all
+        options: [all, deepep-v2, mori]
+      only_sku:
+        description: Restrict to one GHA runner pool; blank = all
+        type: string
+        default: ''
+      exclude_skus:
+        description: Comma-list of runner pools to drop from the matrix (partial run, e.g. b300); disjoint from only_sku; blank = none
+        type: string
+        default: ''
+      ep_sizes:
+        description: Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
+        type: string
+        default: ''
+      modes:
+        description: "Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
+        type: string
+        default: ''
+concurrency:
+  group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
+  cancel-in-progress: false
+
+jobs:
+  # ---- setup: generate the shard matrix and upload its requested coverage ----
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      n: ${{ steps.gen.outputs.n }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
+        with: { clean: true, persist-credentials: false }
+      - id: gen
+        working-directory: experimental/CollectiveX
+        env:
+          INPUT_BACKEND: ${{ inputs.backend }}
+          INPUT_ONLY_SKU: ${{ inputs.only_sku }}
+          INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
+          INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
+          INPUT_MODES: ${{ inputs.modes }}
+        run: |
+          set -euo pipefail
+          args=(--backend "$INPUT_BACKEND")
+          [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+          [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
+          [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
+          [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
+          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
+          python3 - "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          matrix = json.loads(pathlib.Path("matrix_full.json").read_text())
+          cells = matrix["include"]
+          slim = {"include": cells}
+          with open(sys.argv[1], "a", encoding="utf-8") as output:
+              output.write(f"matrix={json.dumps(slim, separators=(',', ':'))}\n")
+              output.write(f"n={len(cells)}\n")
+          print(f"execution-cells: {len(cells)}")
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxsweep-matrix-${{ github.run_id }}
+          path: experimental/CollectiveX/matrix_full.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 14
+
+  # ---- sweep: ONE matrix cell per shard (the parent job with child jobs) ----
+  sweep:
+    needs: setup
+    if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
+    strategy:
+      fail-fast: false
+      # Fixed global cap; real throttling is each SKU pool's runner count and its
+      # cluster's Slurm partition. setup interleaves shards across SKUs, so the
+      # first jobs under this cap spread over pools instead of queuing on one.
+      max-parallel: 10
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    runs-on: ${{ matrix.sku }}
+    timeout-minutes: 350
+    env:
+      COLLX_BENCH: ${{ matrix.backend }}
+      COLLX_NODES: ${{ matrix.nodes }}
+      COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
+      COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
+      COLLX_SHARD_FILE: .shards/${{ matrix.id }}.json
+      COLLX_SHARD_SKU: ${{ matrix.sku }}
+      COLLECTIVEX_CANONICAL_GHA: '1'
+      COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      # Consolidated shards run one bounded build-group in one Slurm allocation;
+      # every production pool accepts 300 minutes. Allocations release as soon as
+      # the shard finishes.
+      COLLX_TIME: '300'
+      COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
+      COLLX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
+      COLLX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
+      COLLX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
+      HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
+    steps:
+      # Create the private mode-0700 /tmp job root and git-fetch the exact COLLECTIVEX_SOURCE_SHA into it; shards never execute from the runner's shared checkout.
+      - name: Prepare isolated source
+        id: source
+        env:
+          COLLECTIVEX_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [ "${COLLX_JOB_ROOT%/*}" = "$COLLX_JOB_PARENT" ] \
+            && [[ "${COLLX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+            || { echo "CollectiveX isolated root is invalid" >&2; exit 1; }
+          [ "$COLLX_SOURCE_ROOT" = "$COLLX_JOB_ROOT/source" ] \
+            || { echo "CollectiveX source root is invalid" >&2; exit 1; }
+          if [ "$COLLX_JOB_PARENT" != /tmp ]; then
+            [[ "$COLLX_JOB_PARENT" =~ ^/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+              || { echo "CollectiveX isolated parent is invalid" >&2; exit 1; }
+            shared_parent="$GITHUB_WORKSPACE/.collectivex-jobs"
+            install -d -m 700 "$shared_parent"
+            [ "$(stat -c '%u:%a' "$shared_parent")" = "$(id -u):700" ] \
+              || { echo "CollectiveX shared parent is unsafe" >&2; exit 1; }
+            [ ! -e "$COLLX_JOB_PARENT" ] && [ ! -L "$COLLX_JOB_PARENT" ] \
+              || { echo "CollectiveX isolated parent already exists" >&2; exit 1; }
+            ln -s "$shared_parent" "$COLLX_JOB_PARENT"
+          fi
+          umask 077
+          [ ! -e "$COLLX_JOB_ROOT" ] && [ ! -L "$COLLX_JOB_ROOT" ] \
+            || { echo "CollectiveX isolated root already exists" >&2; exit 1; }
+          mkdir -m 700 "$COLLX_JOB_ROOT"
+          trap 'rc=$?; if [ "$rc" != 0 ]; then rm -rf -- "$COLLX_JOB_ROOT"; [ "$COLLX_JOB_PARENT" = /tmp ] || rm -f -- "$COLLX_JOB_PARENT"; fi; exit "$rc"' EXIT
+          mkdir -m 700 "$HOME" "$COLLX_JOB_ROOT/control" "$COLLX_JOB_ROOT/artifact" "$COLLX_SOURCE_ROOT"
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+          if ! git init -q "$COLLX_SOURCE_ROOT" \
+              || ! git -C "$COLLX_SOURCE_ROOT" remote add origin \
+                "https://github.com/${COLLECTIVEX_REPOSITORY}.git" \
+              || ! git -C "$COLLX_SOURCE_ROOT" -c credential.helper= -c protocol.version=2 \
+                fetch -q --no-tags --depth=1 origin "$COLLECTIVEX_SOURCE_SHA" \
+              || ! git -C "$COLLX_SOURCE_ROOT" -c advice.detachedHead=false \
+                checkout -q --detach FETCH_HEAD \
+              || [ "$(git -C "$COLLX_SOURCE_ROOT" rev-parse HEAD)" != "$COLLECTIVEX_SOURCE_SHA" ]; then
+            echo "CollectiveX source preparation failed" >&2
+            exit 1
+          fi
+          echo 'prepared=true' >> "$GITHUB_OUTPUT"
+          trap - EXIT
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cxsweep-matrix-${{ github.run_id }}
+          path: ${{ env.COLLX_JOB_ROOT }}/control
+      # Materialize this shard's .shards/<id>.json case control from the run-scoped matrix artifact downloaded above.
+      - name: Extract execution control
+        run: |
+          set -euo pipefail
+          cd "$COLLX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          python3 sweep_matrix.py \
+            --extract-from "$COLLX_JOB_ROOT/control/matrix_full.json" \
+            --shard-id '${{ matrix.id }}' \
+            --out '${{ env.COLLX_SHARD_FILE }}' >/dev/null
+      # Merge the base + per-SKU operator-config secrets into one validated mode-0600 file, then run the SKU launcher (allocate -> stage -> build -> run cases).
+      - name: Execute sweep cell ${{ matrix.id }}
+        id: sweep_shard
+        run: |
+          set -euo pipefail
+          umask 077
+          # Runner-local Slurm/storage config comes from the tracked
+          # configs/platform_config.json baseline (no operator secret); the
+          # launcher's collx_load_operator_config emits it per SKU.
+          cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
+      # always(): cancel any Slurm allocation a killed launcher left recorded, append the summary table, and stage result JSONs so a red or partial leg still uploads.
+      - name: Summarize and stage shard results
+        id: stage_artifact
+        if: ${{ always() && steps.source.outputs.prepared == 'true' }}
+        run: |
+          set -euo pipefail
+          cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          source experimental/CollectiveX/runtime/common.sh
+          collx_cleanup_allocation "$COLLX_JOB_ROOT" \
+            || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
+          python3 experimental/CollectiveX/summarize.py \
+            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+          shopt -s nullglob
+          results=(experimental/CollectiveX/results/*.json)
+          if [ "${#results[@]}" -eq 0 ]; then
+            echo "staged=false" >> "$GITHUB_OUTPUT"
+            echo "No result JSON to stage; leg produced none."
+            exit 0
+          fi
+          cp -- "${results[@]}" "$COLLX_JOB_ROOT/artifact/"
+          echo "staged=true" >> "$GITHUB_OUTPUT"
+      # The neutral per-case JSONs are the workflow's only output; a consumer downloads them and decides what to display.
+      - name: Upload shard results
+        id: upload_artifact
+        if: always() && steps.stage_artifact.outputs.staged == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
+          path: |
+            ${{ env.COLLX_JOB_ROOT }}/artifact/*.json
+          if-no-files-found: error
+          retention-days: 14
+      # Delete the private /tmp job root after the preceding step releases any allocation.
+      - name: Cleanup isolated workspace
+        if: ${{ always() && steps.source.outputs.prepared == 'true' }}
+        run: |
+          set -euo pipefail
+          [ "$COLLX_JOB_PARENT" = /tmp ] \
+            || [[ "$COLLX_JOB_PARENT" =~ ^/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+            || { echo "CollectiveX cleanup parent is invalid" >&2; exit 1; }
+          [ "${COLLX_JOB_ROOT%/*}" = "$COLLX_JOB_PARENT" ] \
+            && [[ "${COLLX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+            || { echo "CollectiveX cleanup root is invalid" >&2; exit 1; }
+          [ "$COLLX_SOURCE_ROOT" = "$COLLX_JOB_ROOT/source" ] \
+            || { echo "CollectiveX cleanup source is invalid" >&2; exit 1; }
+          cd "$COLLX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          rm -rf -- "$COLLX_JOB_ROOT"
+          [ "$COLLX_JOB_PARENT" = /tmp ] || rm -f -- "$COLLX_JOB_PARENT"

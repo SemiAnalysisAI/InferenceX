@@ -136,5 +136,5 @@ benchmark:
   isl: 8192
   osl: 1024
   req_rate: 300
-  concurrencies: "4x8x16x32x64"
+  concurrencies: "4x8x16x32"
   use_chat_template: true

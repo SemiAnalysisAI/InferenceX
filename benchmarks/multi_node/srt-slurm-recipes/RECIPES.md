@@ -87,6 +87,6 @@ dsr1-fp8-h200-dynamo-sglang:
 
 ```bash
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --config-files .github/configs/nvidia-master.yaml \
+  --config-files configs/nvidia-master.yaml \
   --framework dynamo-sglang
 ```

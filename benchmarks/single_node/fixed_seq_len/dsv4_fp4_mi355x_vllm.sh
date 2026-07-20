@@ -12,11 +12,11 @@ set -eo pipefail
 # same ROCm recipe while switching parallelism to vLLM's DP+EP form.
 # Image-pin details live in amd-master.yaml.
 #
-# --moe-backend triton_unfused is required for the FP4 MoE expert
-# weight format used by deepseek-ai/DeepSeek-V4-Pro. Letting --moe-backend
-# default to auto picks a backend that doesn't register the FP4 scale
-# parameters (w13_weight_scale / w2_weight_scale), so safetensors
-# loading raises KeyError.
+# Use the AITER MoE backend (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter)
+# for the FP4 MoE expert weights of deepseek-ai/DeepSeek-V4-Pro. The AITER
+# MXFP4 path registers the FP4 scale parameters (w13_weight_scale /
+# w2_weight_scale), so safetensors loads correctly and decode runs on the
+# fused AITER experts instead of triton_unfused.
 #
 # --compilation-config mode=3 with FULL_AND_PIECEWISE cudagraph mode
 # enables full CUDA graph capture for improved throughput on MI355X.
@@ -45,6 +45,7 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
 
 SERVER_LOG=/workspace/server.log
 
@@ -75,7 +76,7 @@ vllm serve $MODEL --port $PORT \
     --gpu-memory-utilization 0.8 \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --moe-backend triton_unfused \
+    --moe-backend aiter \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' > $SERVER_LOG 2>&1 &

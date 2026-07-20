@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -eo pipefail
 
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 export PORT=8888
@@ -11,16 +12,21 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
+export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
 set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
 #   chi-mi300x-049: persistent /nvme_home disk-full
-JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+#   chi-mi300x-121: provisioning incomplete; missing /raid and Enroot storage
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi300x-049,chi-mi300x-121 --gres=gpu:$GPU_COUNT --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
     exit 1
 fi
+
+trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "

@@ -32,6 +32,19 @@ on:
       tp:
         required: true
         type: string
+      pp:
+        required: false
+        type: string
+        default: '1'
+      dcp-size:
+        required: false
+        type: string
+        default: '1'
+      pcp-size:
+        required: false
+        type: string
+        default: '1'
+
       ep:
         required: true
         type: string
@@ -67,26 +80,52 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         required: false
         type: string
         default: 'fixed-seq-len'
-      offloading:
-        description: "KV offload backend for agentic scenarios (none/cpu/ssd/lmcache/lmcache-mp/hicache)"
+      kv-offloading:
+        description: "KV offload mode for agentic scenarios (none/dram)"
         required: false
         type: string
-        default: 'none'
+      kv-offload-backend:
+        description: "KV offload backend for agentic scenarios when kv-offloading is not none"
+        required: false
+        type: string
+      kv-offload-backend-metadata:
+        description: "Optional KV offload backend name and version metadata as JSON"
+        required: false
+        type: string
+      router:
+        description: "Optional router name and version metadata as JSON"
+        required: false
+        type: string
+      kv-p2p-transfer:
+        description: "Optional multinode peer-to-peer KV transfer engine name"
+        required: false
+        type: string
       total-cpu-dram-gb:
-        description: "Total CPU DRAM in GB for KV offloading"
+        description: "Configured CPU DRAM capacity in GB for KV offloading"
         required: false
         type: string
-        default: '600'
+        default: '0'
       duration:
         description: "Benchmark duration in seconds"
         required: false
         type: string
-        default: '1800'
+        default: '3600'
+      eval-limit:
+        description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+        required: false
+        type: string
+        default: ""
+      swebench-gen-mode:
+        description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+        required: false
+        type: string
+        default: ""
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -101,6 +140,9 @@ env:
   FRAMEWORK: ${{ inputs.framework }}
   PRECISION: ${{ inputs.precision }}
   TP: ${{ inputs.tp }}
+  PP_SIZE: ${{ inputs.pp }}
+  DCP_SIZE: ${{ inputs.dcp-size }}
+  PCP_SIZE: ${{ inputs.pcp-size }}
   EP_SIZE: ${{ inputs.ep }}
   DP_ATTENTION: ${{ inputs.dp-attn }}
   CONC: ${{ inputs.conc }}
@@ -108,15 +150,29 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
-  OFFLOADING: ${{ inputs.offloading }}
+  KV_OFFLOADING: ${{ inputs.kv-offloading }}
+  KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
+  KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
+  ROUTER_METADATA: ${{ inputs.router }}
+  KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  EVAL_LIMIT: ${{ inputs.eval-limit }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  # GPU runners lack Docker for SWE-bench scoring.
+  SWEBENCH_USE_MODAL: 'true'
+  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+  # These b300 nodes are currently broken.
+  SALLOC_EXCLUDE: 'b300-005,b300-006'
 
 permissions:
   contents: read
@@ -125,7 +181,13 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 500
-    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
+    name: >-
+      ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
+      TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
+      ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
+      ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
+      ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
+      c${{ inputs.conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
@@ -150,13 +212,7 @@ jobs:
             done
           fi
 
-          # Cleanup results/ from a prior job on this runner. Agentic jobs
-          # write to fixed subpaths (aiperf_artifacts/, metrics_*, etc.), so stale
-          # data from a previous job would otherwise be picked up as this
-          # job's output when replay fails early.
-          rm -rf "${{ github.workspace }}/results" 2>/dev/null || true
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0
@@ -164,24 +220,19 @@ jobs:
           clean: true
           submodules: true
 
-      - name: Cleanup stale outputs (pre-run)
-        run: |
-          rm -f meta_env.json || true
-          rm -f results*.json || true
-          rm -f sample*.jsonl || true
-          rm -f server.log || true
-          rm -f gpu_metrics.csv || true
-
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
+          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_tp{}-pp{}-dcp{}-pcp{}-ep{}-dpa{}_disagg-{}_spec-{}_conc{}_{runner}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_tp${{ env.TP }}-pp${{ env.PP_SIZE }}-dcp${{ env.DCP_SIZE }}-pcp${{ env.PCP_SIZE }}-ep${{ env.EP_SIZE }}-dpa${{ env.DP_ATTENTION }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ env.CONC }}_${{ runner.name }}
           # Suppress per-job eval markdown from being appended to the step summary.
           # We'll publish a single combined eval table in the collection job instead.
           GITHUB_STEP_SUMMARY: ''
         run: |
+          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
+          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
+
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
 
@@ -208,6 +259,12 @@ jobs:
             if [ -z "$FOUND_RESULT_FILE" ]; then
               echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
               exit 1
+            fi
+
+            if [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+              python3 -m utils.agentic.validation.validate_agentic_result \
+                results/aiperf_artifacts \
+                --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
             fi
           fi
 
@@ -238,38 +295,9 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            results/server.log
-            results/lmcache_server.log
-            results/benchmark.log
-            results/config.yaml
-            results/lmcache_command.txt
-            results/sglang_command.txt
-            results/vllm_command.txt
-            results/benchmark_command.txt
-            results/workload_distribution_summary.txt
-            results/workload_distribution_plots.png
-            results/metrics_plots.png
-            results/aiperf_artifacts/profile_export.jsonl
-            results/aiperf_artifacts/profile_export_aiperf.json
-            results/aiperf_artifacts/profile_export_aiperf.csv
-            results/aiperf_artifacts/profile_export_aiperf_timeslices.json
-            results/aiperf_artifacts/profile_export_aiperf_timeslices.csv
-            results/aiperf_artifacts/profile_export_aiperf_aggregate.json
-            results/aiperf_artifacts/profile_export_aiperf_aggregate.csv
-            results/aiperf_artifacts/profile_export_aiperf_collated.json
-            results/aiperf_artifacts/server_metrics_export.json
-            results/aiperf_artifacts/server_metrics_export.jsonl
-            results/aiperf_artifacts/server_metrics_export.csv
-            results/aiperf_artifacts/server_metrics_export.parquet
-            results/aiperf_artifacts/gpu_telemetry_export.jsonl
-            results/aiperf_artifacts/logs/aiperf.log
-            results/aiperf_artifacts/logs/*.log
-          # Excluded by design (multi-GB debug artifacts, not consumed by
-          # post-processing): results/aiperf_artifacts/inputs.json (pre-formatted
-          # request bodies — the mmap'd binary equivalent is rebuilt from
-          # --public-dataset + --random-seed) and
-          # results/aiperf_artifacts/profile_export_raw.jsonl (full HTTP bodies
-          # per request — recoverable by re-running the same trace).
+            results/**
+            !results/aiperf_artifacts/inputs.json
+            !results/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload server logs
@@ -277,9 +305,11 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
+          # fixed-seq writes server.log at root; agentic writes logs under results/.
           path: |
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/server.log' || 'server.log' }}
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/lmcache_server.log' || '' }}
+            server.log
+            results/*.log
+            results/*_config.json
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
@@ -299,6 +329,10 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
+            agent_preds.json
+            predictions.jsonl
+            swebench_report_*.json
+            *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
@@ -312,6 +346,7 @@ jobs:
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
           rm -f sample*.jsonl || true
+          rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           
       - name: Resource cleanup (post-run)
         if: always()

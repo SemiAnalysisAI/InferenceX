@@ -120,3 +120,4 @@ benchmark:
   osl: 1024
   req_rate: inf
   concurrencies: 16x512
+  use_chat_template: true

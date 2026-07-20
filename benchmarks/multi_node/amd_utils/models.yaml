@@ -9,7 +9,10 @@
 #   <model-name>:
 #     base_flags: str          # Common flags for both prefill and decode
 #     mtp_flags: str           # Appended to decode when DECODE_MTP_SIZE > 0
-#     dp_flags: str            # Appended when DP is enabled (prefill or decode)
+#     dp_flags: str            # Appended when DP attention is enabled (prefill or decode)
+#     ep_flags: str            # Appended when EP is enabled. EP-specific MoE knobs only
+#                              # (a2a backend, deepep mode, ep-dispatch algorithm). With
+#                              # ep=1 these are dropped so the MoE runs tensor-parallel (TP).
 #     prefill:
 #       mem_fraction_static: float
 #       disable_radix_cache: bool
@@ -38,9 +41,10 @@
 #         cuda_graph_bs_range: str
 
 DeepSeek-V3:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -69,9 +73,10 @@ DeepSeek-V3:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-V3-0324:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -100,9 +105,10 @@ DeepSeek-V3-0324:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-R1:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -131,9 +137,10 @@ DeepSeek-R1:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-R1-0528:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.9
     disable_radix_cache: true
@@ -164,7 +171,8 @@ DeepSeek-R1-0528:
 Qwen3.5-397B-A17B-MXFP4:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori --moe-dense-tp-size 1"
   mtp_flags: ""
-  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --enable-dp-lm-head"
+  ep_flags: "--moe-a2a-backend mori"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -195,7 +203,8 @@ Qwen3.5-397B-A17B-MXFP4:
 Qwen3.5-397B-A17B-FP8:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori --moe-dense-tp-size 1"
   mtp_flags: ""
-  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --enable-dp-lm-head"
+  ep_flags: "--moe-a2a-backend mori"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -226,7 +235,8 @@ Qwen3.5-397B-A17B-FP8:
 GLM-5-FP8:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --disaggregation-transfer-backend mori --tool-call-parser glm47 --reasoning-parser glm45 --model-loader-extra-config '{\\\"enable_multithread_load\\\": true, \\\"num_threads\\\": 8}'"
   mtp_flags: ""
-  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--moe-a2a-backend mori"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -255,9 +265,10 @@ GLM-5-FP8:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-R1-0528-MXFP4-Preview:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -286,9 +297,10 @@ DeepSeek-R1-0528-MXFP4-Preview:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-R1-0528-MXFP4:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-algorithm NEXTN --speculative-eagle-topk 1"
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -317,9 +329,10 @@ DeepSeek-R1-0528-MXFP4:
       cuda_graph_bs_range: "1-128"
 
 DeepSeek-R1-0528-MXFP4-v2:
-  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --ep-dispatch-algorithm fake --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori"
   mtp_flags: "--speculative-draft-model-path SGLang/DeepSeek-R1-NextN --speculative-algorithm NEXTN --speculative-eagle-topk 1 --speculative-attention-mode decode "
-  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head --stream-interval 100 --tokenizer-worker-num 32 "
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head --stream-interval 100 --tokenizer-worker-num 32 "
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
@@ -348,4 +361,66 @@ DeepSeek-R1-0528-MXFP4-v2:
     no_dp:
       max_running_requests: 128
       chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-128"
+
+DeepSeek-V4-Pro-AgentX:
+  base_flags: "--watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
+  dp_flags: "--enable-dp-attention --enable-prefill-delayer --enable-two-batch-overlap"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: false
+    disable_cuda_graph: false
+    dp:
+      max_running_requests: 1024
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
+      context_length: 1048576
+      # max_total_tokens: 1048576
+    no_dp:
+      max_running_requests: 128
+      # Small prefill chunks interleave long-context agentic prefills across
+      # requests instead of letting one ~100K-token prefill monopolize the
+      # engine (the conc>=16 queue-saturation / decode-stall failure mode).
+      # Mirrors the single-node DSv4 agentic recipe (dsv4_fp4_mi355x.sh=8192).
+      # Was 65280 (255*256, the dsv4 compressor kernel uint16 token cap); 8192
+      # (32*256) stays a page-size multiple well under that cap.
+      chunked_prefill_size: 8192
+      context_length: 1048576
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    disagg_decode_enable_radix_cache: false
+    dp:
+      max_running_requests: 1024
+      cuda_graph_bs_range: "1-128"
+    no_dp:
+      max_running_requests: 128
+      cuda_graph_bs_range: "1-128"
+
+DeepSeek-V4-Pro-DI:
+  base_flags: "--decode-log-interval 100 --log-level info --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori"
+  dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    disable_cuda_graph: true
+    dp:
+      max_running_requests: 1024
+      chunked_prefill_size: 131072
+      context_length: 9217
+      max_total_tokens: 262144
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 131072
+      context_length: 9217
+      max_total_tokens: 262144
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 1024
+      cuda_graph_bs_range: "1-128"
+    no_dp:
+      max_running_requests: 128
       cuda_graph_bs_range: "1-128"

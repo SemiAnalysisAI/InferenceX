@@ -76,11 +76,28 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     # Engine-specific extra flags
     extra_flags=""
+    # vllm
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
+    # atom
+    elif [[ "$ENGINE" == "atom-disagg" ]]; then
+        extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
+        if [ "$IS_MTP" = "true" ]; then
+            # just override extra_flags as dsv3 use different tokenizer path
+            if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+                extra_flags="--dsv4"
+            else
+                extra_flags="--use-chat-template"
+            fi
+        fi
+    # sglang
     else
         if [ "$IS_MTP" = "true" ]; then
-            extra_flags="--use-chat-template"
+            if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+                extra_flags="--dsv4"
+            else
+                extra_flags="--use-chat-template"
+            fi
         fi
     fi
 

@@ -10,12 +10,8 @@
 # encoder for the text-only benchmark. dp-attn=true maps to DP×EP (DEP);
 # ep>1 maps to TP+EP (TEP).
 #
-# The drafter is pinned to FLASH_ATTN: the EAGLE3 head is MHA, and FlashInfer
-# only supports page size 128 through its trtllm-gen kernel, which requires
-# GQA/MQA — engine init dies in FlashInferMetadataBuilder otherwise (the
-# failure hit on the B300 MTP canary). The target keeps its default
-# (FlashInfer) backend; FLASH_ATTN takes any multiple-of-16 block size, so
-# the mandatory 128 is fine for the draft.
+# The target uses the FlashInfer TRT-LLM attention path. The EAGLE3 drafter is
+# pinned separately to TRITON_ATTN.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -30,6 +26,39 @@ check_env_vars \
     MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
+
+# The 0618 image keeps MiniMax M3 top-k indices in a persistent
+# [head_kv, max_tokens, topK] buffer for CUDA graphs. Slicing that buffer to
+# the actual prefill length is non-contiguous when TP leaves multiple local KV
+# heads, and the MSA CSR builder rejects it. Materialize the slice until the
+# image includes this fix.
+python3 - <<'PYEOF' || { echo "MiniMax M3 MSA contiguity patch failed" >&2; exit 1; }
+import importlib.util
+import pathlib
+
+spec = importlib.util.find_spec("vllm")
+if spec is None or not spec.submodule_search_locations:
+    raise RuntimeError("Could not locate the installed vllm package")
+
+target = (
+    pathlib.Path(next(iter(spec.submodule_search_locations)))
+    / "models"
+    / "minimax_m3"
+    / "nvidia"
+    / "sparse_attention_msa.py"
+)
+src = target.read_text()
+old = "            prefill_topk = topk[:, nd:num_tokens, :]\n"
+new = "            prefill_topk = topk[:, nd:num_tokens, :].contiguous()\n"
+
+if new in src:
+    print(f"[minimax-m3-msa-patch] already applied: {target}")
+elif src.count(old) == 1:
+    target.write_text(src.replace(old, new, 1))
+    print(f"[minimax-m3-msa-patch] patched: {target}")
+else:
+    raise RuntimeError(f"Expected exactly one patch anchor in {target}")
+PYEOF
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
 
@@ -61,6 +90,7 @@ SERVER_LOG=/workspace/server.log
 # 444 GB of MXFP8 weights off shared FS; engine startup can exceed the
 # default 600s readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_FLOAT32_MATMUL_PRECISION=high
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
@@ -72,14 +102,6 @@ fi
 
 # use 3 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=3
-
-# Fixed-seq-len runs don't need graphs past the decode step's token count:
-# with spec decoding every running request contributes 1 + NUM_SPEC_TOKENS
-# tokens per step, so capture up to the next power of two >=
-# CONC * (1 + NUM_SPEC_TOKENS), capped at vLLM's 2048 ceiling.
-CAPTURE_SIZE=4
-while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) )); do CAPTURE_SIZE=$((CAPTURE_SIZE * 2)); done
-(( CAPTURE_SIZE > 2048 )) && CAPTURE_SIZE=2048
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -94,10 +116,13 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
+--attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true}' \
+--attention-config.indexer_kv_dtype "fp8" \
+--kv-cache-dtype fp8 \
 --language-model-only \
---max-cudagraph-capture-size $CAPTURE_SIZE \
+--max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
---speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
+--speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}" \
 --stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 

@@ -11,15 +11,21 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC RESULT_DIR DURATION EP_SIZE
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
+# `hf download` creates the target dir if missing and is itself idempotent.
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
 rocm-smi || true
 amd-smi || true
 
@@ -36,7 +42,7 @@ export PYTHONNOUSERSITE=1
 
 python3 -m sglang.launch_server \
     --attention-backend triton \
-    --model-path $MODEL \
+    --model-path "$MODEL_PATH" --served-model-name "$MODEL" \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
@@ -49,14 +55,15 @@ python3 -m sglang.launch_server \
     --max-prefill-tokens 32768 \
     --scheduler-recv-interval 30 \
     --mem-fraction-static 0.8 \
-    --context-length $MAX_MODEL_LEN \
     --enable-metrics > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

@@ -5,18 +5,28 @@ set -x
 # Agentic trace replay benchmark for Kimi-K2.5 INT4 on H100 using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
+# `hf download` creates the target dir if missing and is itself idempotent.
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
 nvidia-smi
 
 # ---- Resolve traces and install deps ----------------------------------------
@@ -28,24 +38,16 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
-case "$OFFLOADING" in
-    none) ;;
-    cpu)
-        # H100 nodes have ~1.5-2 TiB host DRAM. Reserve up to 1.4 TB for the
-        # simple CPU offload connector (leaves headroom for worker RSS +
-        # page cache).
-        TOTAL_CPU_DRAM_GB=1400
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
-        ;;
-    *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
-esac
+if require_agentic_kv_offload_backend vllm-simple; then
+    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+    OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
+fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_USE_FLASHINFER_MOE_INT4=1
 
-vllm serve $MODEL \
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
 --port $PORT \
 --gpu-memory-utilization 0.95 \
@@ -62,7 +64,9 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

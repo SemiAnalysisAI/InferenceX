@@ -39,6 +39,9 @@ BENCH_MAX_CONCURRENCY="${BENCH_MAX_CONCURRENCY:-512}"
 DRY_RUN="${DRY_RUN:-0}"
 GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
+PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-$GPUS_PER_NODE}"
+DECODE_TP_SIZE="${DECODE_TP_SIZE:-$GPUS_PER_NODE}"
+
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 SERVER_PORT="${SERVER_PORT:-2584}"
 ENGINE_ID="${ENGINE_ID:-${MODEL_NAME}-pd-run}"
@@ -256,7 +259,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -302,7 +305,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
+    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
@@ -422,7 +425,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -478,7 +481,7 @@ else
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then

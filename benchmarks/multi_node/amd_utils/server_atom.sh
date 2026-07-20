@@ -35,17 +35,16 @@ DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
 DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
+# MTP
+DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
+
 # ATOM server ports (different from SGLang which uses 8000 for all)
 PREFILL_PORT="${PREFILL_PORT:-8010}"
 DECODE_PORT="${DECODE_PORT:-8020}"
 ROUTER_PORT="${ROUTER_PORT:-8000}"
 HANDSHAKE_PORT="${HANDSHAKE_PORT:-6301}"
 
-# ATOM server tuning (from reference script defaults)
-MEM_FRACTION="${MEM_FRACTION:-0.85}"
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-BLOCK_SIZE="${BLOCK_SIZE:-16}"
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
+# ATOM server tuning — defaults applied after YAML load (env var > YAML > shell default)
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
 # Benchmark Configuration
@@ -66,11 +65,62 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 source $ATOM_WS_PATH/setup_deps.sh
 source $ATOM_WS_PATH/env_atom.sh
 
+# Raise FD limit — lm-eval with high num_concurrent can exhaust the default 1024
+ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true
+echo "ulimit -n (open files): $(ulimit -n)"
+
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 if [[ -z "$host_ip" ]]; then
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 fi
 host_name=$(hostname)
+
+# =============================================================================
+# Model-Specific Configuration from YAML
+# =============================================================================
+# Load model-specific config from YAML (single parse for all fields)
+set -x
+_yaml_tmp=$(mktemp)
+python3 << PYEOF > "$_yaml_tmp"
+import yaml
+with open('${ATOM_WS_PATH}/models_atom.yaml') as f:
+    m = yaml.safe_load(f).get('${MODEL_NAME}', {})
+def sh(v): return v.replace("'", "'\\''")
+print(f"MODEL_ENVS='{sh(m.get('env', ''))}'")
+_tp_dp = m.get('tp_dp_flags', '')
+print(f"PREFILL_MODEL_TP_DP_FLAGS='{sh(m.get('prefill_tp_dp_flags', _tp_dp))}'")
+print(f"DECODE_MODEL_TP_DP_FLAGS='{sh(m.get('decode_tp_dp_flags', _tp_dp))}'")
+_ep_dp = m.get('ep_dp_flags', '')
+print(f"PREFILL_MODEL_EP_DP_FLAGS='{sh(m.get('prefill_ep_dp_flags', _ep_dp))}'")
+print(f"DECODE_MODEL_EP_DP_FLAGS='{sh(m.get('decode_ep_dp_flags', _ep_dp))}'")
+print(f"MODEL_TP_DP_ENV='{sh(m.get('tp_dp_env', ''))}'")
+print(f"MODEL_EP_DP_ENV='{sh(m.get('ep_dp_env', ''))}'")
+print(f"MODEL_MTP_FLAGS='{sh(m.get('mtp_flags', ''))}'")
+print(f"MODEL_KV_ARG='{sh(m.get('kv_cache_flags', ''))}'")
+print(f"_ONLINE_QUANT_CONFIG='{sh(m.get('online_quant_config', ''))}'")
+print(f"_ONLINE_QUANT_DPA_CONFIG='{sh(m.get('online_quant_dpa_config', m.get('online_quant_config', '')))}'")
+print(f"_YAML_BLOCK_SIZE='{sh(m.get('block_size', ''))}'")
+print(f"_YAML_MEM_FRAC_STATIC='{sh(m.get('mem_frac_static', ''))}'")
+print(f"_YAML_MAX_MODEL_LEN='{sh(m.get('max_model_len', ''))}'")
+print(f"_YAML_MAX_NUM_SEQS='{sh(m.get('max_num_seqs', ''))}'")
+print(f"_YAML_MAX_NUM_BATCHED_TOKENS='{sh(m.get('max_num_batched_tokens', ''))}'")
+print(f"_YAML_SCHEDULER_DELAY_FACTOR='{sh(m.get('scheduler_delay_factor', ''))}'")
+PYEOF
+# shellcheck source=/dev/null
+source "$_yaml_tmp"
+rm -f "$_yaml_tmp"
+unset _yaml_tmp
+
+# Apply server-tuning: YAML > env var > shell default
+# (job.slurm injects BLOCK_SIZE/MEM_FRAC_STATIC/MAX_NUM_SEQS with hardcoded
+#  defaults into the Docker env, so env-first would always shadow the YAML.)
+BLOCK_SIZE="${_YAML_BLOCK_SIZE:-${BLOCK_SIZE:-16}}"
+MEM_FRAC_STATIC="${_YAML_MEM_FRAC_STATIC:-${MEM_FRAC_STATIC:-0.85}}"
+MAX_MODEL_LEN="${_YAML_MAX_MODEL_LEN:-${MAX_MODEL_LEN:-}}"
+MAX_NUM_SEQS="${_YAML_MAX_NUM_SEQS:-${MAX_NUM_SEQS:-256}}"
+MAX_NUM_BATCHED_TOKENS="${_YAML_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS:-}}"
+SCHEDULER_DELAY_FACTOR="${_YAML_SCHEDULER_DELAY_FACTOR:-${SCHEDULER_DELAY_FACTOR:-}}"
+unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS _YAML_SCHEDULER_DELAY_FACTOR
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -100,34 +150,96 @@ for i in $(seq 0 $((yD - 1))); do
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$idx]}:${DECODE_PORT}"
 done
 
-echo "Prefill IPs : ${PREFILL_IPS[*]}"
-echo "Decode  IPs : ${DECODE_IPS[*]}"
-
 PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
 PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
 DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
+
+
+
+# Parallel args
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
+ONLINE_QUANT_ARG=""
 if [ "$PREFILL_ENABLE_DP" = "true" ]; then
-    if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #DPA+TP
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
+    if [ "$PREFILL_ENABLE_EP" = "true" ]; then #EP+DPA
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${PREFILL_MODEL_EP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
+    else #TP+DPA
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${PREFILL_MODEL_TP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
     fi
-fi 
+    if [[ -n "$_ONLINE_QUANT_DPA_CONFIG" ]]; then
+        ONLINE_QUANT_ARG="--online_quant_config '${_ONLINE_QUANT_DPA_CONFIG}'"
+    fi
+else
+    if [[ -n "$_ONLINE_QUANT_CONFIG" ]]; then
+        ONLINE_QUANT_ARG="--online_quant_config '${_ONLINE_QUANT_CONFIG}'"
+    fi
+fi
 
-DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
+DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
-    if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #DPA+TP
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
+    if [ "$DECODE_ENABLE_EP" = "true" ]; then #EP+DPA
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${DECODE_MODEL_EP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
+    else #TP+DPA
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${DECODE_MODEL_TP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
     fi
-fi 
+fi
+unset _dp_env_pair
+unset _ONLINE_QUANT_CONFIG _ONLINE_QUANT_DPA_CONFIG
 
-echo "Prefill Parallel args : ${PREFILL_PARALLEL_ARGS[*]}"
-echo "Decode  Parallel args : ${DECODE_PARALLEL_ARGS[*]}"
+for _env_pair in ${MODEL_ENVS}; do
+    export "$_env_pair"
+done
+unset _env_pair
+
+# MTP args
+SPEC_ARGS=()
+if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+    SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
+fi
+
+# KV cache arg - full flag string from YAML
+KV_CACHE_ARG="${MODEL_KV_ARG}"
+
+# Optional model length / batched-token cap
+MODEL_LEN_ARGS=""
+if [[ -n "$MAX_MODEL_LEN" ]]; then
+    MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-model-len ${MAX_MODEL_LEN}"
+fi
+if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
+    MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS}"
+fi
+if [[ -n "$SCHEDULER_DELAY_FACTOR" ]]; then
+    MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --scheduler-delay-factor ${SCHEDULER_DELAY_FACTOR}"
+fi
+
+
+cat <<INFO
+=== Configuration ===
+PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP:-false}, DP=${PREFILL_ENABLE_DP:-false}, port=${PREFILL_PORT})
+DECODE   : ${DECODE_IPS[*]}  (TP=${DECODE_TP_SIZE},  EP=${DECODE_ENABLE_EP:-false},  DP=${DECODE_ENABLE_DP:-false},  port=${DECODE_PORT})
+ROUTER   : port=${ROUTER_PORT}
+MODEL    : ${MODEL_NAME}
+BACKEND  : atom (PD mooncake KV transfer)
+MTP      : method=mtp num_speculative_tokens=${DECODE_MTP_SIZE}
+xP/yD    : ${xP} / ${yD}
+KV cache : ${KV_CACHE_ARG:-none} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_STATIC}
+Model len: max_model_len=${MAX_MODEL_LEN:-unset} max_num_batched_tokens=${MAX_NUM_BATCHED_TOKENS:-unset}
+Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
+Decode  args : ${DECODE_PARALLEL_ARGS[*]}
+Spec    args : ${SPEC_ARGS[*]}
+Opt     args : ${ONLINE_QUANT_ARG}
+=====================
+INFO
+
+set -x
+echo "::group::Environment Variables"
+env
+echo "::endgroup::"
 
 # =============================================================================
 # Node Role Assignment
@@ -137,7 +249,6 @@ echo "Decode  Parallel args : ${DECODE_PARALLEL_ARGS[*]}"
 #   rank 1 .. (NODE_OFFSET-1)       -> remaining prefill nodes
 #   rank NODE_OFFSET ..             -> decode nodes
 # =============================================================================
-
 if [ "$NODE_RANK" -eq 0 ]; then
     # ──────────────────────────────────────────────────────────────────────────
     # Node 0: prefill server (producer) + atomesh router
@@ -153,12 +264,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        "${PREFILL_PARALLEL_ARGS[@]}" \
-        --kv_cache_dtype ${KV_CACHE_DTYPE} \
+        ${PREFILL_PARALLEL_ARGS[*]} \
+        ${SPEC_ARGS[*]} \
+        ${KV_CACHE_ARG} \
         --block-size ${BLOCK_SIZE} \
-        --gpu-memory-utilization ${MEM_FRACTION} \
+        --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
+        ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
+        ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -247,6 +361,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
 
     cd $ATOM_WS_PATH
+
+    export IS_MTP="false"
+    if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+        export IS_MTP="true"
+    fi
 
     BENCH_CMD="bash $ATOM_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
@@ -367,12 +486,15 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        "${PREFILL_PARALLEL_ARGS[@]}" \
-        --kv_cache_dtype ${KV_CACHE_DTYPE} \
+        ${PREFILL_PARALLEL_ARGS[*]} \
+        ${SPEC_ARGS[*]} \
+        ${KV_CACHE_ARG} \
         --block-size ${BLOCK_SIZE} \
-        --gpu-memory-utilization ${MEM_FRACTION} \
+        --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
+        ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
+        ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -429,32 +551,23 @@ else
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
     _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
-    if [[ "$_MAX_CONC" -gt 2048 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048,4096]'
-    elif [[ "$_MAX_CONC" -gt 1024 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048]'
-    elif [[ "$_MAX_CONC" -gt 512 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,768,1024]'
-    else
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512]'
-    fi
+    CUDAGRAPH_SIZES='[1,2,4,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,248,256]'
 
-    if [[ "$BENCH_INPUT_LEN" == "1024" && "$BENCH_OUTPUT_LEN" == "1024" ]]; then
-        DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
-    else
-        DECODE_MAX_NUM_SEQS="${MAX_NUM_SEQS}"
-    fi
+    DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
 
     DECODE_CMD="python3 -m atom.entrypoints.openai_server \
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${DECODE_PORT} \
         --trust-remote-code \
-        "${DECODE_PARALLEL_ARGS[@]}" \
-        --kv_cache_dtype ${KV_CACHE_DTYPE} \
+        ${DECODE_PARALLEL_ARGS[*]} \
+        ${SPEC_ARGS[*]} \
+        ${KV_CACHE_ARG} \
         --block-size ${BLOCK_SIZE} \
-        --gpu-memory-utilization ${MEM_FRACTION} \
+        --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
+        ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
+        ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"

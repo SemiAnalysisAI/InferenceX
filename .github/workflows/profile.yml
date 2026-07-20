@@ -11,7 +11,7 @@ on:
         description: "Config file to use"
         required: false
         type: string
-        default: '.github/configs/nvidia-master.yaml'
+        default: 'configs/nvidia-master.yaml'
       conc:
         description: "Concurrency value (must exist in config's conc-range/list)"
         required: false
@@ -46,7 +46,7 @@ jobs:
       count: ${{ steps.filter.outputs.count }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
 
@@ -98,6 +98,9 @@ jobs:
       fail-fast: false
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
+    name: >-
+      ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
+      TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
     runs-on: ${{ matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
@@ -110,6 +113,9 @@ jobs:
       FRAMEWORK: ${{ matrix.config.framework }}
       PRECISION: ${{ matrix.config.precision }}
       TP: ${{ matrix.config.tp }}
+      PP_SIZE: ${{ matrix.config.pp }}
+      DCP_SIZE: ${{ matrix.config.dcp-size }}
+      PCP_SIZE: ${{ matrix.config.pcp-size }}
       EP_SIZE: ${{ matrix.config.ep }}
       DP_ATTENTION: ${{ matrix.config['dp-attn'] }}
       CONC: ${{ matrix.config.conc }}
@@ -142,7 +148,7 @@ jobs:
           fi
 
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
@@ -159,8 +165,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export GPU_COUNT=$((TP * PP_SIZE * PCP_SIZE))
+          echo "GPU_COUNT=${GPU_COUNT}" >> "$GITHUB_ENV"
           ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}-pp${PP_SIZE}-dcp${DCP_SIZE}-pcp${PCP_SIZE}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
           export RESULT_FILENAME="${res_name}"
           echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
 
@@ -235,7 +243,7 @@ jobs:
 
       - name: Checkout storage repo
         if: ${{ steps.run.outputs.trace != '' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: SemiAnalysisAI/InferenceX-trace-storage
           path: storage
@@ -252,7 +260,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
           mkdir -p "$dest_dir"
           cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
 
@@ -260,13 +268,13 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add -A
-          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
+          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} pp${{ matrix.config.pp }} dcp${{ matrix.config.dcp-size }} pcp${{ matrix.config.pcp-size }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
           git push
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
-          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
+          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_pp${{ matrix.config.pp }}_dcp${{ matrix.config.dcp-size }}_pcp${{ matrix.config.pcp-size }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
 
           enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
           enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"

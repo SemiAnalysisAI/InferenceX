@@ -1,0 +1,107 @@
+name: "minimax-m3-vllm-disagg-gb300-2p4d-dep2-dep4-fp8-1k1k"
+
+# 2P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 4D DEP4 decode (TP1 DP4 EP, 4 GPU/worker = 1 node each).
+# GB300 has 4 GPUs/node. Adapted from NV B300 PR #1863.
+# Nodes: 1 prefill + 4 decode (+ head/infra).
+
+model:
+  path: "minimax-m3-mxfp8"
+  container: "vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+  precision: "fp8"
+
+
+dynamo:
+  install: true
+  version: 1.3.0.dev20260614
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
+
+srun_options:
+  mem: "0"
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  decode_nodes: 4
+  prefill_workers: 2
+  decode_workers: 4
+  gpus_per_prefill: 2
+  gpus_per_decode: 4
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+
+  prefill_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+
+  decode_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      tensor-parallel-size: 1
+      data-parallel-size: 2
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      max-model-len: 2304
+      language-model-only: true
+      kv-cache-dtype: fp8
+      stream-interval: 100
+      max-cudagraph-capture-size: 2048
+      max-num-batched-tokens: 2048
+
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      tensor-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      max-model-len: 2304
+      language-model-only: true
+      kv-cache-dtype: fp8
+      stream-interval: 100
+      max-num-seqs: 1024
+      max-num-batched-tokens: 16384
+      max-cudagraph-capture-size: 2048
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "8192"
+  req_rate: "inf"

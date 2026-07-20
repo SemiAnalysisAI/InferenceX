@@ -1,0 +1,312 @@
+name: CODEOWNER Sign-off Verify
+
+# Independently re-verifies a CODEOWNER reviewer sign-off.
+#
+# A reviewer marks a PR ready by posting the sign-off checklist that starts with
+# "As a PR reviewer and CODEOWNER" (see e.g.
+# https://github.com/SemiAnalysisAI/InferenceX/pull/1792#issuecomment-4781799476).
+# That sign-off can be posted three different ways, and all three trigger here:
+#   - a conversation comment            -> issue_comment
+#   - an Approve/Comment review summary  -> pull_request_review
+#   - an inline code-review comment      -> pull_request_review_comment
+#
+# When the sign-off lands on an open PR, this workflow asks Claude to
+# independently confirm the claims that actually gate a merge:
+#   0. The sign-off author is a CODEOWNER for the files the PR changes.
+#   1. PR validation has at least one fully-green run on a commit in the PR.
+#   2. Evals pass on that same green run.
+#   3. The single-node recipe(s) are linked in the sign-off AND the linked
+#      recipe PR/commit contains all of the reproduction information that is in
+#      this InferenceX PR. Single-node submissions only — disaggregated /
+#      multi-node PRs (dynamo, ATOM/ATOMesh, sglang/vllm disagg) are N/A.
+#   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
+#      command on the PR (the reuse-merge path requires it).
+#   5. The sign-off uses the latest docs/PR_REVIEW_CHECKLIST.md template.
+#   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
+#      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
+#      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
+#   7. No benchmark hacks that change the model architecture / cut FLOPs.
+#   8. Speculative-decoding configs benchmark through chat templates.
+#   9. No patches to the inference engine / serving stack (the pinned image
+#      runs as shipped) — the only exception is a patch covered by a
+#      filled-out docs/waiver/<PR_NUMBER>.md waiver.
+#  10. Agentic spec-decode configs simulate acceptance at the committed golden
+#      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
+#      vLLM synthetic rejection sampling in --speculative-config).
+# If any of those are not to standard, Claude posts a single comment that
+# @-mentions the reviewer who signed off and explains exactly what is wrong.
+#
+# The verdict is also published as a `codeowner-signoff-verify` commit status
+# on the PR head SHA (success only on "Verdict: PASS"). That status context is
+# a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
+# (without org-admin bypass) until a sign-off has been posted AND independently
+# verified as passing on the current head commit.
+#
+# It can also be run manually via workflow_dispatch by passing the URL of the
+# sign-off comment/review to verify.
+
+on:
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+  workflow_dispatch:
+    inputs:
+      comment_url:
+        description: >-
+          URL of the sign-off comment/review to verify, e.g.
+          https://github.com/OWNER/REPO/pull/123#issuecomment-456 (also accepts
+          #pullrequestreview-<id> and #discussion_r<id> review URLs).
+        required: true
+        type: string
+
+concurrency:
+  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: only proceed for the sign-off checklist on an OPEN, non-draft PR.
+  # Normalizes the three event shapes (issue_comment / pull_request_review /
+  # pull_request_review_comment) into a single set of outputs, resolves an
+  # immutable head SHA (TOCTOU-safe), and hands the verifier a ready-to-run
+  # command for fetching the exact sign-off body.
+  # ---------------------------------------------------------------------------
+  gate:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
+      (github.event_name == 'pull_request_review' &&
+       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      proceed: ${{ steps.resolve.outputs.proceed }}
+      pr-number: ${{ steps.resolve.outputs.pr-number }}
+      head-sha: ${{ steps.resolve.outputs.head-sha }}
+      signoff-author: ${{ steps.resolve.outputs.signoff-author }}
+      signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
+      signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
+    steps:
+      - name: Resolve PR state and sign-off metadata
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const repoFull = `${owner}/${repo}`;
+            const eventName = context.eventName;
+
+            // Normalize the event payloads (3 comment events + manual dispatch).
+            let prNumber, author, refId, kind, fetchCmd;
+            if (eventName === 'issue_comment') {
+              prNumber = context.payload.issue.number;
+              author = context.payload.comment.user.login;
+              refId = context.payload.comment.id;
+              kind = 'conversation comment';
+              fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
+            } else if (eventName === 'pull_request_review') {
+              prNumber = context.payload.pull_request.number;
+              author = context.payload.review.user.login;
+              refId = context.payload.review.id;
+              kind = 'review summary';
+              fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
+            } else if (eventName === 'pull_request_review_comment') {
+              prNumber = context.payload.pull_request.number;
+              author = context.payload.comment.user.login;
+              refId = context.payload.comment.id;
+              kind = 'inline review comment';
+              fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+            } else if (eventName === 'workflow_dispatch') {
+              // Parse a sign-off URL like
+              //   https://github.com/OWNER/REPO/pull/123#issuecomment-456
+              //   .../pull/123#pullrequestreview-456
+              //   .../pull/123#discussion_r456
+              const url = (context.payload.inputs && context.payload.inputs.comment_url) || '';
+              const prMatch = url.match(/\/pull\/(\d+)/);
+              if (!prMatch) {
+                core.setOutput('proceed', 'false');
+                core.setFailed(`comment_url must contain /pull/<number>: ${url}`);
+                return;
+              }
+              prNumber = parseInt(prMatch[1], 10);
+              let m;
+              if ((m = url.match(/#issuecomment-(\d+)/))) {
+                refId = m[1];
+                kind = 'conversation comment';
+                fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
+                const c = await github.rest.issues.getComment({ owner, repo, comment_id: parseInt(refId, 10) });
+                author = c.data.user.login;
+              } else if ((m = url.match(/#pullrequestreview-(\d+)/))) {
+                refId = m[1];
+                kind = 'review summary';
+                fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
+                const r = await github.rest.pulls.getReview({ owner, repo, pull_number: prNumber, review_id: parseInt(refId, 10) });
+                author = r.data.user.login;
+              } else if ((m = url.match(/#discussion_r(\d+)/))) {
+                refId = m[1];
+                kind = 'inline review comment';
+                fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+                const rc = await github.rest.pulls.getReviewComment({ owner, repo, comment_id: parseInt(refId, 10) });
+                author = rc.data.user.login;
+              } else {
+                core.setOutput('proceed', 'false');
+                core.setFailed(`comment_url must end with #issuecomment-<id>, #pullrequestreview-<id>, or #discussion_r<id>: ${url}`);
+                return;
+              }
+            } else {
+              core.setOutput('proceed', 'false');
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            });
+
+            // Event-triggered: only act on open, non-draft ("ready") PRs.
+            // Manual dispatch is an explicit override, so allow any PR state.
+            const ready = eventName === 'workflow_dispatch'
+              ? true
+              : (pr.state === 'open' && pr.draft === false);
+            if (!ready) {
+              core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
+            }
+
+            core.setOutput('proceed', ready ? 'true' : 'false');
+            core.setOutput('pr-number', String(prNumber));
+            core.setOutput('head-sha', pr.head.sha);
+            core.setOutput('signoff-author', author);
+            core.setOutput('signoff-kind', kind);
+            core.setOutput('signoff-fetch-cmd', fetchCmd);
+
+  verify:
+    needs: gate
+    if: ${{ needs.gate.outputs.proceed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+      statuses: write
+    steps:
+      # SECURITY: this is a privileged job (write perms + secrets) triggered by
+      # comment events, so it must NOT check out untrusted PR head code — the
+      # setup step and the MCP server would then execute attacker-controlled
+      # files. Check out the trusted default branch; all PR content is read
+      # read-only via the GitHub API (gh / MCP), never from the working tree.
+      - name: Checkout repository (trusted default branch only)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.CLAUDE_PAT }}
+
+      - name: Setup MCP Server
+        run: |
+          pip3 install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
+      # The verifier prompt lives in .github/codeowner-signoff-verify-prompt.md:
+      # GitHub caps any ${{ }}-bearing workflow scalar at 21000 characters and
+      # the prompt outgrew that, so it is rendered here (envsubst on the
+      # template from the TRUSTED default-branch checkout — same trust level
+      # as this workflow file; never PR head content) and handed to the action
+      # as a file the tiny static prompt below points at.
+      - name: Render verifier prompt
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
+          SIGNOFF_AUTHOR: ${{ needs.gate.outputs.signoff-author }}
+          SIGNOFF_KIND: ${{ needs.gate.outputs.signoff-kind }}
+          SIGNOFF_FETCH_CMD: ${{ needs.gate.outputs.signoff-fetch-cmd }}
+        run: |
+          envsubst '${REPO} ${PR_NUMBER} ${HEAD_SHA} ${SIGNOFF_AUTHOR} ${SIGNOFF_KIND} ${SIGNOFF_FETCH_CMD}' \
+            < .github/codeowner-signoff-verify-prompt.md \
+            > /tmp/codeowner-signoff-verify-prompt.md
+          grep -q "PR #${PR_NUMBER}" /tmp/codeowner-signoff-verify-prompt.md
+          wc -c /tmp/codeowner-signoff-verify-prompt.md
+
+      - name: Verify sign-off with Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
+          BASH_DEFAULT_TIMEOUT_MS: "1800000"
+          BASH_MAX_TIMEOUT_MS: "3600000"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CLAUDE_PAT }}
+          track_progress: false
+          allowed_bots: ''
+          additional_permissions: |
+            actions: read
+          settings: |
+            {"fastMode": true}
+
+          claude_args: |
+            --model 'claude-fable-5'
+            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
+          prompt: |
+            Read the file /tmp/codeowner-signoff-verify-prompt.md and follow the
+            instructions in it exactly — it is your complete task specification,
+            already rendered with this run's PR number, head SHA, and sign-off
+            metadata.
+
+      # Publish the verdict as a commit status on the PR head SHA so it can act
+      # as a required check. Deterministic: reads the verdict comment posted
+      # above (matched by the sha-pinned marker) and maps "Verdict: PASS" to
+      # success, anything else — including a missing verdict — to failure.
+      # Runs on always() so a crashed verify step still reports failure rather
+      # than leaving the status stuck at "expected".
+      - name: Publish verdict as commit status on PR head
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = process.env.HEAD_SHA;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const marker = `<!-- codeowner-signoff-verify sha=${headSha} -->`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const verdicts = comments.filter(c => c.body && c.body.includes(marker));
+            const latest = verdicts[verdicts.length - 1];
+
+            let state, description, target_url;
+            if (!latest) {
+              state = 'failure';
+              description = 'No verification verdict was posted for this commit';
+              target_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            } else if (latest.body.includes('**Verdict: PASS**')) {
+              state = 'success';
+              description = 'CODEOWNER sign-off independently verified';
+              target_url = latest.html_url;
+            } else {
+              state = 'failure';
+              description = 'Sign-off verification rejected - see verdict comment';
+              target_url = latest.html_url;
+            }
+
+            await github.rest.repos.createCommitStatus({
+              owner, repo, sha: headSha, state, description,
+              context: 'codeowner-signoff-verify', target_url,
+            });
+            core.info(`codeowner-signoff-verify=${state} on ${headSha}`);

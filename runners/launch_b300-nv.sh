@@ -3,6 +3,8 @@
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
+# b300-018 repeatedly times out UCX/NIXL transfers; allow an empty override to disable this.
+MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018}"
 
 set -x
 
@@ -45,13 +47,20 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M2.5"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    export MODEL_PATH="/scratch/models/MiniMax-M3-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
+    export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
     exit 1
 fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
+SRTCTL_SETUP_SCRIPT=""
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."
     rm -rf "$SRT_REPO_DIR"
@@ -67,18 +76,34 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml ]]; then
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout c1b6b5c97f323baefad577d70c4e8392b6f537d9
+    mkdir -p recipes/vllm/minimax-m3
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout main
-    mkdir -p recipes/vllm/minimax-m2.5
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300" recipes/vllm/minimax-m2.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
+    git checkout c1fb6989fc5aca803b4ca0f2d17d8be85fad9732
+    mkdir -p recipes/vllm/minimax-m3
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECISION == "fp4" || $PRECISION == "fp8" ) ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
-    git checkout main
-    mkdir -p recipes/vllm/minimax-m2.5-fp8
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300-fp8" recipes/vllm/minimax-m2.5-fp8
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/vllm/minimax-m3
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
+    if [[ $PRECISION == "fp8" ]]; then
+        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    fi
+    # NVIDIA/srt-slurm#38
+    git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
+    if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+        cp \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+            "configs/$SRTCTL_SETUP_SCRIPT"
+    fi
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -161,7 +186,25 @@ fi
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
+fi
+SRTCTL_APPLY_ARGS=(
+    -f "$CONFIG_FILE"
+    --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
+# The MTP and TP1 8k1k recipes use newer srt-slurm revisions whose preflight checks
+# model.path on this GHA login host. MiniMax-M3 NVFP4 is intentionally staged
+# under compute-node-local /scratch (as in the original B300 submission), so
+# the login host cannot stat it even though workers can. Keep this bypass
+# scoped to those recipe sets; runtime model loading still validates the path.
+if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
+fi
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
@@ -172,6 +215,15 @@ set +x
 if [ -z "$JOB_ID" ]; then
     echo "Error: Failed to extract JOB_ID from srtctl output"
     exit 1
+fi
+
+if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+    SBATCH_SCRIPT="outputs/$JOB_ID/sbatch_script.sh"
+    if ! grep -Fq "#SBATCH --exclude=${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}" "$SBATCH_SCRIPT"; then
+        echo "Error: Slurm node exclusion was not rendered in $SBATCH_SCRIPT" >&2
+        scancel "$JOB_ID" || true
+        exit 1
+    fi
 fi
 
 echo "Extracted JOB_ID: $JOB_ID"
@@ -320,10 +372,13 @@ else
         Kimi-K2.5
         Kimi-K2.5-NVFP4
         Kimi-K2.6
+        Kimi-K2.6-NVFP4
         MiniMax-M2.5
         MiniMax-M2.5-NVFP4
         MiniMax-M2.7
         MiniMax-M2.7-NVFP4
+        MiniMax-M3
+        MiniMax-M3-NVFP4
         Qwen3.5-397B-A17B
         Qwen3.5-397B-A17B-FP8
         Qwen3.5-397B-A17B-NVFP4
@@ -403,9 +458,10 @@ else
         fi
     )
 
-    # Default 180 min; AL-matrix collection (16 server starts) needs longer and
-    # overrides via SALLOC_TIME_LIMIT.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time="${SALLOC_TIME_LIMIT:-180}" --no-shell --job-name="$RUNNER_NAME"
+    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
@@ -413,6 +469,7 @@ else
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
+        --container-remap-root \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash "$BENCH_SCRIPT"

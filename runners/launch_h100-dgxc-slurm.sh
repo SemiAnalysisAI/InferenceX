@@ -1,9 +1,9 @@
 #!/usr/bin/bash
+set -e
 
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
-SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
@@ -143,7 +143,6 @@ EOF
 
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
     # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
@@ -288,8 +287,15 @@ else
     SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    salloc --exclude="$SLURM_EXCLUDED_NODELIST" --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+    if [[ -z "$JOB_ID" ]]; then
+        echo "ERROR: failed to resolve H100 Slurm allocation" >&2
+        exit 1
+    fi
+    trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
     # flock-serialize the enroot import so concurrent sweep jobs on the same
     # shared NFS path don't race each other into 'File already exists' (race

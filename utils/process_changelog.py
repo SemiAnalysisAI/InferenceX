@@ -13,6 +13,8 @@ from matrix_logic.validation import (
     load_config_files,
 )
 
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     result = subprocess.run(
@@ -85,7 +87,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 def get_config_keys_from_master(
     config_keys: list[str], master_config: dict
 ) -> list[str]:
-    resolved_keys = set()
+    resolved_keys = {}
     for key in config_keys:
         if "*" in key:
             pattern = re.compile(re.escape(key).replace(r"\*", ".*"))
@@ -94,11 +96,12 @@ def get_config_keys_from_master(
                 raise ValueError(
                     f"No config keys matched the wildcard pattern '{key}' in master configs."
                 )
-            resolved_keys.update(matched_keys)
+            for matched_key in matched_keys:
+                resolved_keys.setdefault(matched_key, None)
         elif key not in master_config:
             raise ValueError(f"Config key '{key}' not found in master configs.")
         else:
-            resolved_keys.add(key)
+            resolved_keys.setdefault(key, None)
     return list(resolved_keys)
 
 
@@ -108,6 +111,16 @@ def main():
     parser.add_argument("--head-ref", type=str, required=True)
     parser.add_argument("--changelog-file", type=str, required=True)
     parser.add_argument("--trim-conc", action="store_true")
+    parser.add_argument(
+        "--all-evals",
+        action="store_true",
+        help="Expand every changelog entry's eval selection without changing throughput.",
+    )
+    parser.add_argument(
+        "--evals-only",
+        action="store_true",
+        help="Suppress throughput for every changelog entry without expanding eval selection.",
+    )
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -124,6 +137,7 @@ def main():
         "single_node": defaultdict(list),
         "multi_node": defaultdict(list),
         "evals": [],
+        "agentic_evals": [],
         "multinode_evals": [],
         "changelog_metadata": {
             "base_ref": args.base_ref,
@@ -134,23 +148,49 @@ def main():
 
     all_benchmark_results = []
     all_eval_results = []
-    # Deduplicate repeated configs separately for benchmarks and evals.
-    # An evals-only entry should not prevent a later regular entry from
-    # generating benchmarks for the same config, and vice versa.
-    benchmark_configs_seen = set()
-    eval_configs_seen = set()
+    # Track benchmark coverage per scenario so overlapping changelog entries
+    # with disjoint scenario filters do not suppress each other.
+    benchmark_scenarios_seen = defaultdict(set)
+    eval_scenarios_seen = defaultdict(set)
 
+    master_config = load_config_files(MASTER_CONFIGS)
+    resolved_entries = []
     for entry_data in changelog_data:
         entry = ChangelogEntry.model_validate(entry_data)
         all_configs = get_config_keys_from_master(
-            entry.config_keys, load_config_files(MASTER_CONFIGS)
+            entry.config_keys, master_config
+        )
+        resolved_entries.append((entry, all_configs))
+
+    # Process all-evals entries first so their broader eval matrix wins when
+    # the same config appears in multiple changelog entries.
+    resolved_entries.sort(key=lambda item: not item[0].all_evals)
+
+    for entry, all_configs in resolved_entries:
+        entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+        expand_all_evals = args.all_evals or entry.all_evals
+        suppress_throughput = (
+            args.evals_only
+            or entry.evals_only
+            or entry.all_evals
         )
 
-        if not entry.evals_only:
+        if not suppress_throughput:
             # Generate benchmark entries (no evals)
-            benchmark_configs = [c for c in all_configs if c not in benchmark_configs_seen]
-            if benchmark_configs:
-                benchmark_configs_seen.update(benchmark_configs)
+            benchmark_groups = defaultdict(list)
+            for config in all_configs:
+                unseen_scenarios = tuple(
+                    scenario for scenario in SCENARIO_TYPES
+                    if (
+                        scenario in entry_scenarios
+                        and scenario not in benchmark_scenarios_seen[config]
+                    )
+                )
+                if unseen_scenarios:
+                    benchmark_scenarios_seen[config].update(unseen_scenarios)
+                    benchmark_groups[unseen_scenarios].append(config)
+
+            for scenarios, benchmark_configs in benchmark_groups.items():
                 base_cmd = [
                     "python3",
                     GENERATE_SWEEPS_PY_SCRIPT,
@@ -161,8 +201,8 @@ def main():
                     *MASTER_CONFIGS,
                     "--no-evals",
                 ]
-                if entry.scenario_type:
-                    base_cmd.extend(["--scenario-type", *entry.scenario_type])
+                if scenarios != SCENARIO_TYPES:
+                    base_cmd.extend(["--scenario-type", *scenarios])
                 try:
                     result = subprocess.run(
                         base_cmd,
@@ -175,10 +215,23 @@ def main():
                     raise
                 all_benchmark_results.extend(json.loads(result.stdout))
 
-        # Generate eval entries separately
-        eval_configs = [c for c in all_configs if c not in eval_configs_seen]
-        if eval_configs:
-            eval_configs_seen.update(eval_configs)
+        eval_groups = defaultdict(list)
+        for config in all_configs:
+            unseen_scenarios = tuple(
+                scenario for scenario in SCENARIO_TYPES
+                if (
+                    scenario in entry_scenarios
+                    and scenario not in eval_scenarios_seen[config]
+                )
+            )
+            if unseen_scenarios:
+                eval_scenarios_seen[config].update(unseen_scenarios)
+                eval_groups[unseen_scenarios].append(config)
+
+        for scenarios, eval_configs in eval_groups.items():
+            eval_flags = ["--evals-only"]
+            if expand_all_evals:
+                eval_flags.append("--all-evals")
             base_cmd = [
                 "python3",
                 GENERATE_SWEEPS_PY_SCRIPT,
@@ -187,10 +240,10 @@ def main():
                 *eval_configs,
                 "--config-files",
                 *MASTER_CONFIGS,
-                "--evals-only",
+                *eval_flags,
+                "--scenario-type",
+                *scenarios,
             ]
-            if entry.scenario_type:
-                base_cmd.extend(["--scenario-type", *entry.scenario_type])
             try:
                 eval_result = subprocess.run(
                     base_cmd,
@@ -219,12 +272,23 @@ def main():
             seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
-    final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]
+    # Agentic eval rows go to their own bucket so run-sweep.yml can dispatch
+    # them with agentic inputs (scenario-type, kv-offloading, ...) instead of
+    # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have.
+    single_node_evals = [e for e in all_eval_results if e.get("prefill") is None]
+    final_results["evals"] = [
+        e for e in single_node_evals
+        if e.get("scenario-type") != "agentic-coding"
+    ]
+    final_results["agentic_evals"] = [
+        e for e in single_node_evals
+        if e.get("scenario-type") == "agentic-coding"
+    ]
     final_results["multinode_evals"] = [e for e in all_eval_results if e.get("prefill") is not None]
 
     # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)
-    print(validated.model_dump_json(by_alias=True))
+    print(validated.model_dump_json(by_alias=True, exclude_none=True))
 
 
 if __name__ == "__main__":

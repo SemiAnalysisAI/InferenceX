@@ -1,25 +1,18 @@
 # How to Test Workflows
 
-In order to test configurations described in `.github/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,runner-model-sweep,test-config} ...
+usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
 positional arguments:
-  {full-sweep,runner-model-sweep,test-config}
+  {full-sweep,test-config}
                         Available commands
     full-sweep          Generate full sweep configurations with optional
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
-    runner-model-sweep  Given a runner type, find all configurations matching
-                        the type, and run that configuration on all individual
-                        runner nodes for the specified runner type. This is
-                        meant to validate that all runner nodes work on all
-                        configurations for a runner type. For instance, to
-                        validate that all configs that specify an h200 runner
-                        successfully run across all h200 runner nodes.
     test-config         Generate full sweep for specific config keys.
                         Supports wildcard patterns (* and ?) for matching
                         multiple keys at once.
@@ -36,6 +29,7 @@ The `full-sweep` command generates benchmark configurations with optional filter
 usage: generate_sweep_configs.py full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -50,82 +44,51 @@ usage: generate_sweep_configs.py full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand; it cannot be combined with `--no-evals`.
+
+`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided; when both bounds are set, `--min-conc` must not exceed `--max-conc`.
+
 ### Examples
 
 **Generate all single-node and multi-node configurations (default):**
 ```
-full-sweep --config-files .github/configs/nvidia-master.yaml
+full-sweep --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
 ```
-full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 **Test all single-node TRT configs on H200 runners:**
 ```
-full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files configs/nvidia-master.yaml
 ```
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
 ```
-full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --max-conc 64 --max-tp 4 --config-files configs/nvidia-master.yaml
 ```
 
 **Test all multi-node configurations:**
 ```
-full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
+full-sweep --multi-node --config-files configs/nvidia-master.yaml
 ```
 
-## `runner-model-sweep` Command
-
-The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
-
+**Test agentic configurations:**
 ```
-usage: generate_sweep_configs.py runner-model-sweep
-    --config-files CONFIG_FILES [CONFIG_FILES ...]
-    [--runner-config RUNNER_CONFIG]
-    --runner-type RUNNER_TYPE
-    [--runner-node-filter RUNNER_NODE_FILTER]
-    [--single-node] [--multi-node]
+full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
-
-### Scenario: Validating Runner Infrastructure
-
-I just upgraded the CUDA drivers on all H200 runners and need to verify that all models that use H200 still work correctly across all H200 nodes.
-
-Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the following command as the text input:
-```
-runner-model-sweep --single-node --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml
-```
-
-This will run a test (just the highest available parallelism and lowest available concurrency) for each configuration that specifies the `h200` runner type, across all H200 runner nodes defined in `.github/configs/runners.yaml`.
-
-For example, if you have configs `dsr1-fp8-h200-sglang`, `dsr1-fp8-h200-trt`, and `gptoss-fp4-h200-vllm` that all use `runner: h200`, and you have 8 H200 nodes (`h200-cw_0`, `h200-cw_1`, etc.), this will run all 3 configs on all 8 nodes (24 total test runs).
-
-This is particularly useful when:
-- You've made infrastructure changes to a specific runner type (driver updates, system configuration, Docker setup)
-- You've added new runner nodes and want to validate they work with all existing model configurations
-- You want to verify that all models remain compatible with a specific GPU type after system updates
-
-### Filtering Runner Nodes
-
-Use `--runner-node-filter` to only test a subset of runner nodes:
-```
-runner-model-sweep --single-node --runner-type mi300x --runner-node-filter mi300x-amd --config-files .github/configs/amd-master.yaml
-```
-
-This will only include runner nodes whose names contain "mi300x-amd"
 
 ## `test-config` Command
 
@@ -135,6 +98,7 @@ The `test-config` command generates the full sweep for one or more specific conf
 usage: generate_sweep_configs.py test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
 ```
@@ -145,87 +109,92 @@ Config keys support **wildcard patterns** using `*` (matches any characters) and
 
 **Test a single config by exact name:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang --config-files configs/nvidia-master.yaml
 ```
 
 **Test multiple exact configs:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files configs/nvidia-master.yaml
 ```
 
 **Use wildcard to test all B200 configs:**
 ```
-test-config --config-keys *-b200-* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys *-b200-* --config-files configs/nvidia-master.yaml
 ```
 
 **Use wildcard to test all sglang configs:**
 ```
-test-config --config-keys *-sglang --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+test-config --config-keys *-sglang --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 **Use wildcard to test all dsr1 model configs:**
 ```
-test-config --config-keys dsr1* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1* --config-files configs/nvidia-master.yaml
 ```
 
 **Mix exact keys and patterns:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files configs/nvidia-master.yaml
 ```
 
 **Override concurrency for targeted testing:**
 ```
-test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys *-b200-* --conc 4 8 --config-files configs/nvidia-master.yaml
 ```
+
+**Run eval-only jobs for every generated fixed-sequence config:**
+```
+test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files configs/nvidia-master.yaml
+```
+
+## PR Eval Modifiers
+
+Use `all-evals` and/or `evals-only` with one primary sweep label (`full-sweep-fail-fast` is the strongly recommended primary for full sweeps; use `full-sweep-enabled` only when jobs must keep running past a failure). `all-evals`
+covers every fixed-sequence config; each multi-node topology runs all
+`conc-list` values on one engine. `evals-only` suppresses throughput; together
+they run all evals only. The primary label still controls canary/fail-fast.
+`all-evals` full sweeps are reusable. Runs with `evals-only`, including runs
+with both modifiers, are not. Default full sweeps, including default evals,
+are also reusable.
 
 ## Reusing an Approved PR Full Sweep
 
-If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
-sequential canary, `non-canary-full-sweep-enabled` without one, or a
-fail-fast variant — `full-sweep-fail-fast` / `full-sweep-fail-fast-no-canary`), a
-maintainer can avoid running the same sweep again after merge by leaving a PR
-comment before merging:
+`[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
+run. Pushes to `main` ignore it.
+
+After an eligible full sweep (`full-sweep-enabled`,
+`non-canary-full-sweep-enabled`, or either fail-fast variant), an authorized
+maintainer can comment:
 
 ```
 /reuse-sweep-run
 ```
 
-That reuses the latest successful `run-sweep.yml` `pull_request` run whose
-commit is still part of the PR. To select a particular eligible successful
-or failed run, pin the source run explicitly:
+This selects the latest successful `run-sweep.yml` PR run whose commit remains
+in the PR. A run ID can pin an eligible successful or failed run:
 
 ```
 /reuse-sweep-run <run_id>
 ```
 
-Only an explicitly pinned run may have a `failure` conclusion. An unpinned
-command always selects the latest successful eligible run. Pinned failed runs
-must still contain complete artifacts for the merge run's expected matrix.
+The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+Comments do not trigger or cancel sweeps; later commits skip a new sweep after
+changelog/matrix validation.
+Remove and re-add the sweep label to force one.
 
-The comment is the reuse authorization, so adding it does not trigger or cancel
-a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. GitHub still creates a
-lightweight `pull_request` workflow run so it can inspect the PR comments, but
-the sweep setup and benchmark jobs are skipped. Removing and re-adding a sweep
-label explicitly starts a new sweep.
+`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
+pushes a synchronization commit, waits for checks, then merges.
 
-On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
-commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
-run for the same PR, downloads the ingest-relevant artifacts, validates that
-`results_bmk` covers the merge run's expected benchmark matrix, and uploads
-them as `reused-ingest-artifacts`. The normal database ingest then publishes
-those artifacts with the merge run's changelog metadata.
+The main run passes the selected source run ID and its own merge run ID directly
+to InferenceX-app. The app downloads source artifacts, keeps the newest upload
+for each exact artifact name, and ingests them with changelog metadata from the
+merge run. The normal ingestion code skips failed benchmark rows. Benchmark
+rows and public links retain source-run provenance. Source coverage is
+authoritative, so later matrix/eval policy changes do not invalidate reuse.
 
-Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
-The most recent matching comment wins, so a maintainer can supersede an earlier
-pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
-
-Reuse fails closed: if the comment is present but no full-sweep label
-(`full-sweep-enabled`, `non-canary-full-sweep-enabled`,
-`full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`) is present, or if
-the source PR run or artifacts cannot be validated, the push-to-main workflow
-fails instead of falling back to a cluster sweep. Without the comment, the
-push-to-main workflow runs the normal full sweep.
+Reuse fails closed when authorized but ineligible or invalid; without
+authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
@@ -235,7 +204,7 @@ The benchmarking system uses a strict validation methodology to ensure correctne
 
 The system validates **both ends** of the configuration pipeline:
 
-1. **Input Validation (Master Configs)**: Validates the structure of `.github/configs/*.yaml` files before any processing occurs
+1. **Input Validation (Master Configs)**: Validates the structure of `configs/*.yaml` files before any processing occurs
 2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
 
 This dual-validation approach ensures:
@@ -291,7 +260,7 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
 ### Validation Flow
 
 ```
-.github/configs/*.yaml
+configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
@@ -312,16 +281,3 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
   benchmark-tmpl.yml or
   benchmark-multinode-tmpl.yml
 ```
-
-## Utility Scripts
-
-### `utils/summarize.py`
-
-Aggregates benchmark results from a directory of JSON files and outputs a markdown summary table. Used after `collect-results.yml` downloads all artifacts.
-
-Usage:
-```bash
-python utils/summarize.py <results_directory>
-```
-
-Outputs GitHub-flavored markdown tables with metrics including TTFT, TPOT, interactivity, E2EL, and throughput per GPU for both single-node and multi-node results.

@@ -4,7 +4,7 @@ name: "svf-vllm-disagg-b300-low-latency"
 # one full 8-GPU B300 node, plus a dedicated NATS/etcd infra node.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.20.1"
+  container: "vllm/vllm-openai:v0.23.0"
   precision: "fp4"
 
 dynamo:
@@ -118,7 +118,7 @@ benchmark:
 
 identity:
   container:
-    image: "vllm/vllm-openai:v0.20.1"
+    image: "vllm/vllm-openai:v0.23.0"
   frameworks:
     dynamo: "1.2.0.dev20260426"
-    vllm: "0.20.1"
+    vllm: "0.23.0"

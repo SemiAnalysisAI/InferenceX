@@ -275,6 +275,7 @@ run_cell() {
         --num-prompts -1 \
         --max-concurrency "$CONCURRENCY" \
         --save-result \
+        --save-detailed \
         --result-dir "$RESULTS_DIR" \
         --result-filename "speedbench_${mode}_mtp${mtp}" \
         --trust-remote-code \

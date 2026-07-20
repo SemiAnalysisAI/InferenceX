@@ -26,19 +26,43 @@ amd-Llama-3.3-70B-Instruct-FP8-KV:
 
 Kimi-K2.5-MXFP4:
   prefill_flags: "--tensor-parallel-size 8 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
-  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
+  decode_flags: "--tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori_low_latency --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --block-size 1 --gpu-memory-utilization 0.90 --mm-encoder-tp-mode data"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=0 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
   # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.
-  prefill_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
-  decode_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  prefill_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori_low_latency --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
+  decode_flags: "--max-num-batched-tokens 4K --tensor-parallel-size 8 --enable-expert-parallel --all2all-backend mori_low_latency --no-enable-prefix-caching --gpu-memory-utilization 0.95 --block-size 32"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1"
   hf_dir: "models--MiniMaxAI--MiniMax-M2.5"
+
+MiniMax-M3-MXFP4:
+  prefill_flags: "--tensor-parallel-size 8 --max-num-batched-tokens 32768 --max-num-seqs 512 --block-size 128 --language-model-only --attention-backend TRITON_ATTN --moe-backend aiter --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  decode_flags: "--tensor-parallel-size 8 --max-num-batched-tokens 32768 --max-num-seqs 512 --block-size 128 --language-model-only --attention-backend TRITON_ATTN --moe-backend aiter --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_MOE=1 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--amd--MiniMax-M3-MXFP4"
 
 gpt-oss-120b:
   prefill_flags: "--tensor-parallel-size 8"
   decode_flags: "--tensor-parallel-size 8"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0 VLLM_USE_AITER_UNIFIED_ATTENTION=1 VLLM_ROCM_USE_AITER_MHA=0 ROCM_TRITON_MOE_PRESHUFFLE_SCALES=0"
+
+MiniMax-M3-MXFP8:
+  # MiniMax-M3 MXFP8 disagg, no EP. The --tensor-parallel-size 8 below is just a
+  # placeholder: server_vllm.sh sed-rewrites it to PREFILL_TP_SIZE/DECODE_TP_SIZE
+  # from the master-config prefill/decode tp (the sweep uses TP4 workers only,
+  # varying the prefill:decode worker ratio rather than TP).
+  # --block-size 128 is mandatory (MSA sparse/index cache); text-only benchmark
+  # so --language-model-only frees the vision encoder. gfx950 uses FP8 KV cache.
+  # Serve flags + env kept in sync with the single-node recipe
+  # benchmarks/single_node/fixed_seq_len/minimaxm3_fp8_mi355x.sh:
+  #   --moe-backend aiter (AITER fused MoE), --linear-backend emulation, and the
+  #   larger --max-num-batched-tokens 32768 prefill budget; plus the AITER
+  #   router-append shared-experts fusion (self-disables under EP; the sweep is
+  #   EP1 so it stays active) and INT6 quick all-reduce quantization.
+  prefill_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --moe-backend aiter --linear-backend emulation --max-num-batched-tokens 32768 --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  decode_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --moe-backend aiter --linear-backend emulation --max-num-batched-tokens 32768 --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--MiniMaxAI--MiniMax-M3-MXFP8"

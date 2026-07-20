@@ -1,22 +1,42 @@
 # Evals
 
-## What?
-Quick graded QnA which measures model performance. Examples of test suites:
-- **gsm8k**: Grade school math questions
-- **gpqa**: Graduate level, Google-Proof multiple choice questions
+Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
+concurrency, kernels, and other throughput optimizations. They run separately
+from throughput; selection lives in `mark_eval_entries()` in
+`utils/matrix_logic/generate_sweep_configs.py`.
 
-## When?
-Evals run as **separate workflow jobs** from throughput benchmarks. The selection logic is in `mark_eval_entries()` of `utils/matrix_logic/generate_sweep_configs.py`.
+## Selection
 
-**Single-node**: At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k.
+- **Single-node:** 8k1k only; highest and median concurrency for every model,
+  runner, framework, precision, TP, and decoding configuration.
+- **Multi-node:** 8k1k only; one job per parallelism topology at its highest
+  eligible concurrency. Rows differing only by concurrency share a topology.
 
-**Multi-node**: One entry per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) with the highest max eligible concurrency, only for 8k1k. The eval job runs at `eval-conc`, the upper median of that config's eligible concurrency list.
+Generator eval modes:
 
-## Why?
-To verify how model outputs are affected by throughput optimizations.
-- TP/Conc might affect model outputs
-- Check kernel implementations for correctness
-- If there was a tradeoff in accuracy for performance
+- Default: throughput plus the selected eval subset.
+- `--no-evals`: throughput only.
+- `--evals-only`: selected evals only.
+- `--all-evals`: every fixed-sequence eval only; equivalent to
+  `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
+  sequentially on one engine. Agentic-coding configs are included and run
+  SWE-bench (they are excluded only from the default, non-eval sweep).
+
+Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
+implies eval-only there. On PRs, the same names are modifier labels:
+`all-evals` expands coverage without suppressing throughput, while `evals-only`
+suppresses it. Modifier runs cannot be reused.
+
+Deduplication is scenario-aware: fixed-sequence coverage does not suppress
+agentic coverage, and `all-evals` wins over default eval coverage.
+
+### Artifact reuse
+
+Default full sweeps may reuse their eval subset. Source coverage is
+authoritative: raw `meta_env.json` identities must match `eval_results_all`,
+and batched evals use `completed_eval_concs`. Policy drift is allowed;
+malformed metadata, duplicates, or raw/aggregate mismatches are not. See
+[workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
 `run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
@@ -79,6 +99,8 @@ Multi-node evals support two hardware paths:
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
+
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
 - `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
@@ -130,10 +152,11 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
+| `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 
@@ -141,14 +164,61 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
 3. Update `utils/collect_eval_results.py` if new metrics need extraction.
 
-### lm-eval patches
+### Runtime patches (`utils/evals/patches/`)
 
-The codebase patches lm-eval compatibility via `_patch_lm_eval`:
+The benchmark helpers invoke these standalone scripts against pinned dependencies.
+Source rewrites are anchor-checked, idempotent, and atomic.
 
-1. Reasoning token handling: extracts `reasoning_content` when `message.content` is empty.
-2. TRT compatibility: avoids injecting `{"type": "text"}` for non-HF tokenizers.
+- `lm_eval_sitecustomize.py` (`_patch_lm_eval`): reasoning-token handling
+  (extracts `reasoning_content` when `message.content` is empty) and TRT
+  compatibility (no `{"type": "text"}` injection for non-HF tokenizers).
+  Copied into a temp dir as `sitecustomize.py` on `PYTHONPATH`.
+- `patch_swebench_agent.py` (`_patch_swebench_agent`): mini-swe-agent/swe-rex
+  sandbox lifecycle cleanup + budget-exhaustion submission fallback.
+- `patch_swebench_scoring.py` (`_patch_swebench_scoring`): swebench Modal
+  scorer reserved-CPU reduction + sandbox termination on instance completion.
+
+### SWE-bench Lite (`--framework swebench`)
+
+SWE-bench requires applying each generated patch and running repository tests.
+The dedicated framework uses mini-swe-agent for agentic generation by default,
+then scores predictions with the official SWE-bench harness. It emits
+`exact_match,resolved` in the existing lm-eval result shape so collection and
+validation remain shared with the other evals.
+
+```bash
+run_eval --framework swebench --port "$PORT"
+append_lm_eval_summary
+```
+
+- Task metadata and single-shot prompt: `utils/evals/swebench_lite.yaml`.
+- Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
+  `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
+  `--report` mode skips Docker for testing.
+- Generation modes (`SWEBENCH_GEN_MODE`): `agentic` (default; mini-swe-agent loop against the
+  local endpoint, each instance's shell running in a Modal sandbox via swe-rex — the real
+  SWE-bench setting) or `single-shot` (lm-eval, one prompt per instance — a ~10% floor baseline,
+  kept only as an explicit debugging escape hatch). Agentic knobs: `SWEBENCH_AGENT_WORKERS`
+  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (75), `SWEBENCH_AGENT_TIMEOUT`
+  (4h), `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), `SWEBENCH_MODAL_APP_NAME`
+  (`infx-evals-swe`).
+- Run size: `EVAL_LIMIT` empty runs the full ~300-instance split; a positive integer runs the
+  first N as an explicit smoke-test slice. `EVAL_LIMIT=full` (or `0`) also selects the full split.
+- Scoring knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
+  `SWEBENCH_EVAL_SANDBOX_CPU` (cores per scoring sandbox, default 2), `SWEBENCH_EVAL_TIMEOUT`
+  (per-instance test timeout, default 900s), `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac),
+  `SWEBENCH_SKIP_SCORE=true` (generate-only), `SWEBENCH_USE_MODAL=true` (score on Modal remote
+  sandboxes instead of local Docker — the CI path). Modal credentials: set
+  `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide `~/.modal.toml`;
+  if the file is absent the env vars are bootstrapped into it automatically. The scoring dataset
+  is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
+  `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
+- Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
+  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.yaml` gate is `0.50`, calibrated
+  from full-split runs (54%); historical 50-instance slices scored 62–76%.
 
 ## Task files
 The following files are task definitions from lm-eval; more information on changes lives within the files:
 - `utils/evals/gsm8k.yaml`
 - `utils/evals/gpqa_diamond.yaml`
+- `utils/evals/swebench_lite.yaml` (generation only; scored by `swebench_score.py`)

@@ -30,9 +30,11 @@ else
     CONTAINER_MOUNT_DIR=/workspace
 fi
 
+export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
 set -x
 
-JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:b200:$TP --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:b200:$GPU_COUNT --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
