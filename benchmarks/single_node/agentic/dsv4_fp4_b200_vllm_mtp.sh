@@ -49,7 +49,7 @@ if [ "$PCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--prefill-context-parallel-size "$PCP_SIZE")
 fi
 
-GPU_COUNT=$TP
+GPU_COUNT="${GPU_COUNT:-$((TP * PCP_SIZE))}"
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
     exit 1
