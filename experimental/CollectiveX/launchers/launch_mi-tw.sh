@@ -64,13 +64,16 @@ fi
 
 collx_log "runner=$RUNNER nodes=1 x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH image=$IMAGE (${DOCKER[*]}/torchrun)"
 
-# ---- uccl-ep: prepare source + one-time persisted build ---------------------
-# UCCL is not in the image, so build it from source. Cases each run in a throwaway
-# `docker run --rm`, so build ONCE here into a host-persisted prefix
-# ($COLLX_DIR/.collx_uccl_pfx) that every case container puts on PYTHONPATH — the same
-# build-once/reuse the enroot paths get from prepare_backend.sh, adapted to Docker. The
-# AMD build applies the CDNA managed->pinned-host-memory patch (see prepare_backend.sh).
-UCCL_PFX_HOST="$COLLX_DIR/.collx_uccl_pfx"
+# ---- uccl-ep: prepare source + build (persisted node-local, outside the job root) --------
+# UCCL is not in the image, so build from source. Cases each run in a throwaway `docker run
+# --rm`, so build ONCE into a prefix every case container puts on PYTHONPATH. The prefix lives
+# in a NODE-LOCAL /tmp path keyed on the pinned commit, NOT under the isolated job root: the
+# build container writes it as root, and the workflow's cleanup step (non-root runner) cannot
+# rm root-owned files under the job root (that reds an otherwise-green leg). /tmp is outside
+# cleanup's scope and lets a second leg on the same node reuse the build. The AMD build applies
+# the CDNA managed->pinned-host-memory patch (see prepare_backend.sh).
+UCCL_PFX_HOST="/tmp/collx-uccl-pfx-$COLLX_UCCL_COMMIT"
+UCCL_PFX_MOUNT=()
 if [ "$COLLX_BENCH" = uccl-ep ]; then
   REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
   collx_prepare_uccl_source "$REPO_ROOT" || collx_die "UCCL source preparation failed"
@@ -79,12 +82,14 @@ import json, sys
 print(json.load(open(sys.argv[1]))["platforms"][sys.argv[2]]["arch"])
 PY
 )"
+  mkdir -p "$UCCL_PFX_HOST"
+  UCCL_PFX_MOUNT=(-v "$UCCL_PFX_HOST:/uccl_pfx")
   if [ ! -d "$UCCL_PFX_HOST/deep_ep" ]; then
     collx_log "uccl-ep: one-time from-source build (arch=$UCCL_ARCH, USE_DMABUF, host-atomic path)"
     "${DOCKER[@]}" run --rm \
       --device /dev/kfd --device /dev/dri --group-add video --group-add render \
       --ipc host --shm-size 32g --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
-      -v "$COLLX_DIR:/cx" -w /cx "$IMAGE" \
+      -v "$COLLX_DIR:/cx" -v "$UCCL_PFX_HOST:/uccl_pfx" -w /cx "$IMAGE" \
       bash -c '
         set -e
         { pip install -q nanobind || pip install -q --break-system-packages nanobind; } >&2
@@ -97,8 +102,8 @@ PY
         # (absent on ROCm); our from-source ep build already provides uccl.ep in site-packages.
         cd /tmp/ub/ep/deep_ep_wrapper && { pip install -q --no-deps . || pip install -q --no-deps --break-system-packages . ; } >&2
         SP="$(python3 -c "import site;print(site.getsitepackages()[0])")"
-        mkdir -p /cx/.collx_uccl_pfx && cp -R "$SP"/deep_ep* "$SP"/uccl* /cx/.collx_uccl_pfx/
-        python3 -c "import torch,sys; sys.path.insert(0,\"/cx/.collx_uccl_pfx\"); import deep_ep; from deep_ep import Buffer; assert hasattr(Buffer,\"get_dispatch_layout\")" >&2
+        rm -rf /uccl_pfx/* && cp -R "$SP"/deep_ep* "$SP"/uccl* /uccl_pfx/
+        python3 -c "import torch,sys; sys.path.insert(0,\"/uccl_pfx\"); import deep_ep; from deep_ep import Buffer; assert hasattr(Buffer,\"get_dispatch_layout\")" >&2
       ' >&2 \
       || collx_die "uccl-ep from-source build failed"
     collx_log "uccl-ep: build persisted to $UCCL_PFX_HOST"
@@ -124,7 +129,7 @@ if [ "$COLLX_BENCH" = uccl-ep ]; then
   # uccl-ep imports the host-persisted build via PYTHONPATH; CDNA needs the aggressive
   # host-atomic EP path (matches prepare_backend.sh's uccl_prepare AMD branch).
   docker_env=(
-    -e PYTHONPATH=/cx/.collx_uccl_pfx
+    -e PYTHONPATH=/uccl_pfx
     -e UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC="${UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC:-1}"
     -e HSA_NO_SCRATCH_RECLAIM=1
     -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
@@ -169,7 +174,7 @@ for ((ci = 0; ci < ncases; ci++)); do
         --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
         --network host \
         "${docker_env[@]}" \
-        -v "$COLLX_DIR:/cx" -v "$argv_file:/cx-argv:ro" -w /cx \
+        -v "$COLLX_DIR:/cx" -v "$argv_file:/cx-argv:ro" ${UCCL_PFX_MOUNT[@]+"${UCCL_PFX_MOUNT[@]}"} -w /cx \
         "$IMAGE" \
         bash -c 'xargs -0 torchrun --standalone --nproc-per-node='"$NGPUS"' bench/run_ep.py < /cx-argv'; then
       case_ok=1; break
