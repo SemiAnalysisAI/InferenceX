@@ -4888,6 +4888,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201  
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X SGLang-disagg agentic-coding benchmark with HiCache DRAM KV offloading."
+    - "Add the multi-node agentic runtime plumbing: node-0 sibling benchmark-client container, per-worker metrics scrape, per-concurrency cache flushing, trace replay client, and one allocation per concurrency."
+    - "Image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2170
+ 
+- config-keys:
     - dsv4-fp4-b200-vllm-agentic
   description:
     - "Update B200 AgentX: KV offload, sparse DSV4 attention, mega-MoE, and FULL_DECODE_ONLY CUDA graphs."
