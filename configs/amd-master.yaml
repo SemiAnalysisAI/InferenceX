@@ -1169,7 +1169,7 @@ dsv4-fp4-mi355x-sglang-disagg:
 
       # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
       - spec-decoding: "none"
-        conc-list: [ 128, 256 ]
+        conc-list: [ 500, 512 ]
         prefill:
           num-worker: 2
           tp: 8
