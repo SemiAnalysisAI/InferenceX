@@ -4974,3 +4974,12 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add DeepSeek-V4-Pro NVFP4 GB300 1k1k STP disagg scenarios to the existing dsv4-fp4-gb300-dynamo-sglang key (7 fixed-seq-len entries alongside the existing 8k1k scenarios)."
+    - "Topologies: 1P1D DEP8 and DEP16 (custom conc sweep), 1P4D and 1P6D TP4 (sa-bench conc sweep), 2P1D DEP12/DEP16/DEP48 (custom conc sweep)."
+    - "Recipes live under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/1k1k/, container aligned with the existing 8k1k image (lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd)."
+    - "launch_gb300-nv.sh gains a dynamo-sglang + dsv4 overlay branch (srt-slurm sa-submission-q2-2026 base, in-tree recipes overlaid on top)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2099

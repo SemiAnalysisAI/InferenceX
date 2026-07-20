@@ -1,0 +1,199 @@
+# 1k1k 2P1D / DEP16 / total 6 nodes
+# conc sweep: 4096, 8192, 16384 (c/4, c/2, c where c = X * 8192)
+# stack: lmsysorg/sglang nightly-dev-cu13-20260707-b4155233 (megamoe) + dynamo 81d0555e
+
+name: "disagg-2p1d-dep16-conc16384"
+
+sbatch_directives:
+  cpus-per-task: '144'
+  mem: '0'
+
+# Backend workers build dynamo from source; that install runs
+# `apt-get install libclang-dev`, which needs root. Run the worker container
+# as remapped root so dpkg works (pyxis maps container-root back to the
+# invoking user on the host, so files on mounted dirs stay caller-owned).
+# Without this, workers run non-root and the install dies with exit 100
+# (`dpkg: requested operation requires superuser privilege`), hidden by the
+# install's `> /dev/null 2>&1`.
+srun_options:
+  container-remap-root: ""
+  # Step-level --mem=0: give each worker srun step all node RAM so the
+  # DSV4-Pro weight load does not hit the step cgroup limit and stall/OOM
+  # (job-level `sbatch --mem=0` does not lift the per-step memory cgroup).
+  mem: "0"
+
+dynamo:
+  hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
+  install: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
+  env:
+    DYN_ROUTER_LOAD_BLOCK_SIZE: "1"
+  args:
+    router-mode: "kv"
+    router-kv-overlap-score-weight: 0
+    router-queue-threshold: 64
+    router-temperature: 0.5
+    no-kv-events: true
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
+  precision: fp4
+
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  prefill_nodes: 2
+  prefill_workers: 2
+  gpus_per_prefill: 4
+  decode_nodes: 4
+  decode_workers: 1
+  gpus_per_decode: 16
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    PYTHONUNBUFFERED: '1'
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '0'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_REASONING_EFFORT: max
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8192"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    MC_FORCE_MNNVL: '1'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_LOG_FORWARD_ITERS: '1'
+    SGLANG_LOG_MS: '1'
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    DYN_LOG: 'info,dynamo_runtime::pipeline::network::ingress::push_handler=warn'
+
+  decode_environment:
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    PYTHONUNBUFFERED: '1'
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '0'
+    SGLANG_ENABLE_THINKING: '1'
+    SGLANG_REASONING_EFFORT: max
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '1152'
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: "8"
+    MC_FORCE_MNNVL: '1'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_LOG_FORWARD_ITERS: '1'
+    SGLANG_LOG_MS: '1'
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    DYN_LOG: 'info,dynamo_runtime::pipeline::network::ingress::push_handler=warn'
+
+  sglang_config:
+    prefill:
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      trust-remote-code: true
+      weight-loader-prefetch-checkpoints: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      moe-dense-tp-size: 1
+      enable-dp-lm-head: true
+      moe-a2a-backend: megamoe
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: mooncake
+      mem-fraction-static: 0.9
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      chunked-prefill-size: 32768
+
+    decode:
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      trust-remote-code: true
+      weight-loader-prefetch-checkpoints: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+      tensor-parallel-size: 16
+      data-parallel-size: 16
+      expert-parallel-size: 16
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      moe-a2a-backend: megamoe
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: mooncake
+      mem-fraction-static: 0.94
+      swa-full-tokens-ratio: 0.12
+      context-length: 16384
+      max-running-requests: 18432
+      cuda-graph-max-bs: 1152
+
+benchmark:
+  type: custom
+  command: |
+      set -e
+      ulimit -n 1048576
+      REPO=/configs/upstream-sa-bench/InferenceX
+      [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
+      cd "$REPO/utils/bench_serving"
+      RESULT_DIR=/logs/sa-bench_isl_1024_osl_1024
+      mkdir -p "$RESULT_DIR"
+
+      echo "=== block conc=4096 prompts=12288 warmups=4096 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 12288 --max-concurrency 4096 --request-rate inf \
+        --num-warmups 4096 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_4096_gpus_24_ctx_8_gen_16.json
+
+      echo "=== block conc=8192 prompts=24576 warmups=8192 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 24576 --max-concurrency 8192 --request-rate inf \
+        --num-warmups 8192 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_8192_gpus_24_ctx_8_gen_16.json
+
+      echo "=== block conc=16384 prompts=49152 warmups=16384 ==="
+      python3 benchmark_serving.py \
+        --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \
+        --host 127.0.0.1 --port 8000 --endpoint /v1/completions \
+        --dataset-name random \
+        --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \
+        --random-num-workers 96 \
+        --num-prompts 49152 --max-concurrency 16384 --request-rate inf \
+        --num-warmups 16384 \
+        --ignore-eos --trust-remote-code \
+        --percentile-metrics ttft,tpot,itl,e2el \
+        --save-result --result-dir "$RESULT_DIR" --result-filename results_concurrency_16384_gpus_24_ctx_8_gen_16.json

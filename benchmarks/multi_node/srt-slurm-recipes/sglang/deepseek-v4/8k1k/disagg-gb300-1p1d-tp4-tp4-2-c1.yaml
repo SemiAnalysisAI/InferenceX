@@ -33,7 +33,7 @@ name: "disagg-gb300-1p1d-tp4-tp4-2-c1"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
   precision: "fp4"
 
 # See ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the dynamo pin

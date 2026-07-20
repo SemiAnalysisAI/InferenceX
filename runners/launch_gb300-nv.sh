@@ -188,6 +188,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/gb200-dsv4-recipes
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    # Pin v1.0.17 (not sa-submission-q2-2026) — the new 1k/1k STP recipes use
+    # benchmark: {type: custom, command: ...}, a schema feature added in the
+    # v1.0.x line. sa-submission-q2-2026 rejects it with
+    # "Invalid config … {'benchmark': {'command': ['Unknown field.']}}".
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.17
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
