@@ -168,6 +168,7 @@ fi
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
+MEM_FRACTION_STATIC=0.85
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
@@ -186,7 +187,12 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES=5
 elif [ "$CONC" -le 16 ]; then
+    # A full 131072-token prefill chunk needs ~7 GiB/rank of activation
+    # headroom on top of the static pool; pair it with mem-fraction 0.80
+    # like the FP8 sibling's low-conc band (0.85 OOMs the device mid-replay:
+    # "Tried to allocate 6.86 GiB ... 5.15 GiB is free", run 29751563205).
     CHUNKED_PREFILL_SIZE=131072
+    MEM_FRACTION_STATIC=0.80
 else
     CHUNKED_PREFILL_SIZE=32768
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
@@ -211,7 +217,7 @@ SGLANG_CMD=(
     --tool-call-parser glm47
     --reasoning-parser glm45
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    --mem-fraction-static 0.85
+    --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     "${CACHE_ARGS[@]}"
