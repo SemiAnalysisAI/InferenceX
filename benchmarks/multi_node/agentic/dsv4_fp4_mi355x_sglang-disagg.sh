@@ -83,8 +83,14 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-  # HiCache ratio (host pool = ratio * GPU KV pool). Default derived in server_sglang.sh.
-  export HICACHE_RATIO="${HICACHE_RATIO:-}"
+  # HiCache ratio (host pool = ratio * GPU KV pool).
+  export HICACHE_RATIO="${HICACHE_RATIO:-5}"
+  # server_sglang.sh prefers an absolute --hicache-size (derived from
+  # TOTAL_CPU_DRAM_GB, the sweep generator's per-node DRAM budget) over
+  # --hicache-ratio whenever TOTAL_CPU_DRAM_GB is set. DSv4 wants the
+  # ratio-based pool instead, so drop the budget here rather than in
+  # server_sglang.sh (which other models still rely on for --hicache-size).
+  unset TOTAL_CPU_DRAM_GB
 
   # ── HiCache layout/backend by tier ──
   #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
