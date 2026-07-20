@@ -14,6 +14,9 @@ collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
 COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 
+COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
+COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
+
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {
   local log_path="$1"
@@ -159,6 +162,8 @@ collx_apply_network_profile() {
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
   unset MORI_RDMA_DEVICES
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
+  unset UCCL_SOCKET_IFNAME UCCL_IB_HCA UCCL_IB_GID_INDEX UCCL_IB_SL UCCL_IB_TC
+  unset UCCL_IB_MAX_INFLIGHT_BYTES UCCL_IB_MAX_INFLIGHT_NORMAL UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
   # Single-node and MNNVL runs need only the scrub above; everything past this
   # point is the scale-out path, so no per-branch scale-out guards remain. Single-node
   # low-latency also takes this early return: the decode kernels run over the intra-node
@@ -191,6 +196,15 @@ collx_apply_network_profile() {
   fi
   export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
   export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
+  # UCCL-EP's CPU proxies read UCCL_* selectors but fall back to NCCL_IB_HCA / NCCL_IB_GID_INDEX
+  # (set above / by the link-layer helper) for the device list and GID, so only the socket iface
+  # and, on AMD, the strict Pollara/Broadcom flow control + CDNA host-atomic path need setting.
+  export UCCL_SOCKET_IFNAME="${COLLX_SOCKET_IFNAME:-}"
+  if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
+    export UCCL_IB_MAX_INFLIGHT_BYTES="${UCCL_IB_MAX_INFLIGHT_BYTES:-2097152}"
+    export UCCL_IB_MAX_INFLIGHT_NORMAL="${UCCL_IB_MAX_INFLIGHT_NORMAL:-1}"
+    export UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC="${UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC:-1}"
+  fi
   # The selector enumerates individual ports. NCCL's default dual-port fusion
   # would collapse each card into one "fused" device, and any fused device
   # disables NCCL GIN (init.cc nicFused gate) — the deep_ep EP16 hybrid path
@@ -216,11 +230,13 @@ collx_apply_network_profile() {
     export NCCL_IB_SL="$COLLX_RDMA_SERVICE_LEVEL"
     export EP_OVERRIDE_RDMA_SL="$COLLX_RDMA_SERVICE_LEVEL"
     export MORI_RDMA_SL="$COLLX_RDMA_SERVICE_LEVEL" MORI_IO_SL="$COLLX_RDMA_SERVICE_LEVEL"
+    export UCCL_IB_SL="$COLLX_RDMA_SERVICE_LEVEL"
   fi
   if [ -n "${COLLX_RDMA_TRAFFIC_CLASS:-}" ]; then
     [[ "$COLLX_RDMA_TRAFFIC_CLASS" =~ ^[0-9]+$ ]] && [ "$COLLX_RDMA_TRAFFIC_CLASS" -le 255 ] \
       || collx_die "invalid private RDMA traffic class"
     export MORI_RDMA_TC="$COLLX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$COLLX_RDMA_TRAFFIC_CLASS"
+    export UCCL_IB_TC="$COLLX_RDMA_TRAFFIC_CLASS"
   fi
   local nic_handler=gpu
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
@@ -496,6 +512,44 @@ collx_materialize_deepep_source() {
   local destination="$1" source
   [ -n "${COLLX_BACKEND_SOURCE_ROOT:-}" ] || return 1
   source="$COLLX_BACKEND_SOURCE_ROOT/deepep-v2-$COLLX_DEEPEP_V2_COMMIT"
+  [ -d "$source" ] || return 1
+  rm -rf -- "$destination" && cp -R -- "$source" "$destination"
+}
+
+# Fetch the pinned UCCL tree before allocating GPUs. Like the DeepEP fetch, this runs on the
+# submit host (which has network) because compute nodes may not reach GitHub. The EP extension
+# needs the main tree (ep/ + top-level util/ + include/) but NOT the thirdparty submodules
+# (rccl/mscclpp, for other targets), so this skips them — faster and sufficient. NB: build the
+# whole tree, not ep/ alone: the ROCm path (common_hip.hpp) includes top-level util/gpu_rt.h.
+collx_prepare_uccl_source() {
+  local mount_src="$1" root source temporary log
+  root="$mount_src/experimental/CollectiveX/.collx_sources"
+  source="$root/uccl-$COLLX_UCCL_COMMIT"
+  [ ! -d "$source" ] || return 0
+  mkdir -p -- "$root" && chmod 700 "$root" || return 1
+  temporary="$(mktemp -d "$root/.uccl.XXXXXX")" || return 1
+  log="$(collx_private_log_path backend-source-uccl)" || return 1
+  git config --global --add safe.directory '*' >> "$log" 2>&1 || true
+  if GIT_TERMINAL_PROMPT=0 git init -q "$temporary" > "$log" 2>&1 \
+      && git -C "$temporary" remote add origin "$COLLX_UCCL_REPO" >> "$log" 2>&1 \
+      && GIT_TERMINAL_PROMPT=0 git -C "$temporary" fetch -q --no-tags --depth 1 \
+        origin "$COLLX_UCCL_COMMIT" >> "$log" 2>&1 \
+      && git -C "$temporary" -c advice.detachedHead=false checkout -q --detach FETCH_HEAD \
+        >> "$log" 2>&1 \
+      && [ "$(git -C "$temporary" rev-parse HEAD)" = "$COLLX_UCCL_COMMIT" ] \
+      && mv -- "$temporary" "$source" >> "$log" 2>&1; then
+    return 0
+  fi
+  rm -rf -- "$temporary"
+  collx_log "ERROR: UCCL source preparation failed"
+  collx_log_tail "$log"
+  return 1
+}
+
+collx_materialize_uccl_source() {
+  local destination="$1" source
+  [ -n "${COLLX_BACKEND_SOURCE_ROOT:-}" ] || return 1
+  source="$COLLX_BACKEND_SOURCE_ROOT/uccl-$COLLX_UCCL_COMMIT"
   [ -d "$source" ] || return 1
   rm -rf -- "$destination" && cp -R -- "$source" "$destination"
 }

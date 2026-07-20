@@ -5,6 +5,8 @@ unsupported/
 .shards/
 .collx_workloads/
 .collx_backend/
+.collx_sources/
+.collx_uccl_pfx/
 /matrix_full.json
 gpucore.*
 

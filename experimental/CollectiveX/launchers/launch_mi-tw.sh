@@ -21,7 +21,10 @@ case "$RUNNER" in
   *) collx_die "launch_mi-tw expects a Slurm-less -tw AMD SKU (mi325x-tw|mi300x-tw), got '${RUNNER}'" ;;
 esac
 export COLLX_RUNNER="$RUNNER" COLLX_BENCH="${COLLX_BENCH:-mori}" COLLX_VENDOR=amd
-[ "$COLLX_BENCH" = mori ] || collx_die "mi325x-tw supports only the mori backend, got '$COLLX_BENCH'"
+case "$COLLX_BENCH" in
+  mori | uccl-ep) ;;
+  *) collx_die "the -tw AMD clusters support only the mori and uccl-ep backends, got '$COLLX_BENCH'" ;;
+esac
 
 # ---- setup: trimmed prologue (no Slurm stage-dir / enroot squash) -----------
 # collx_launcher_prologue's collx_prepare_stage_dir requires COLLX_SQUASH_DIR (the
@@ -61,6 +64,47 @@ fi
 
 collx_log "runner=$RUNNER nodes=1 x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH image=$IMAGE (${DOCKER[*]}/torchrun)"
 
+# ---- uccl-ep: prepare source + one-time persisted build ---------------------
+# UCCL is not in the image, so build it from source. Cases each run in a throwaway
+# `docker run --rm`, so build ONCE here into a host-persisted prefix
+# ($COLLX_DIR/.collx_uccl_pfx) that every case container puts on PYTHONPATH — the same
+# build-once/reuse the enroot paths get from prepare_backend.sh, adapted to Docker. The
+# AMD build applies the CDNA managed->pinned-host-memory patch (see prepare_backend.sh).
+UCCL_PFX_HOST="$COLLX_DIR/.collx_uccl_pfx"
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
+  collx_prepare_uccl_source "$REPO_ROOT" || collx_die "UCCL source preparation failed"
+  UCCL_ARCH="$(python3 - "$COLLX_DIR/configs/platform_config.json" "$RUNNER" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1]))["platforms"][sys.argv[2]]["arch"])
+PY
+)"
+  if [ ! -d "$UCCL_PFX_HOST/deep_ep" ]; then
+    collx_log "uccl-ep: one-time from-source build (arch=$UCCL_ARCH, USE_DMABUF, host-atomic path)"
+    "${DOCKER[@]}" run --rm \
+      --device /dev/kfd --device /dev/dri --group-add video --group-add render \
+      --ipc host --shm-size 32g --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
+      -v "$COLLX_DIR:/cx" -w /cx "$IMAGE" \
+      bash -c '
+        set -e
+        { pip install -q nanobind || pip install -q --break-system-packages nanobind; } >&2
+        rm -rf /tmp/ub && cp -R "/cx/.collx_sources/uccl-'"$COLLX_UCCL_COMMIT"'" /tmp/ub
+        # gfx942/gfx950 lack usable managed memory; swap UCCL'"'"'s cudaMallocManaged CPU-proxy
+        # handles to pinned host memory (coherent + device-accessible on CDNA).
+        sed -i "s/cudaMallocManaged/cudaMallocHost/g" /tmp/ub/ep/src/uccl_ep.cc /tmp/ub/ep/src/uccl_proxy.cpp
+        cd /tmp/ub/ep && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 PYTORCH_ROCM_ARCH="'"$UCCL_ARCH"'" python3 setup.py install >&2
+        cd /tmp/ub/ep/deep_ep_wrapper && python3 setup.py install >&2
+        SP="$(python3 -c "import site;print(site.getsitepackages()[0])")"
+        mkdir -p /cx/.collx_uccl_pfx && cp -R "$SP"/deep_ep* "$SP"/uccl* /cx/.collx_uccl_pfx/
+        python3 -c "import torch,sys; sys.path.insert(0,\"/cx/.collx_uccl_pfx\"); import deep_ep; from deep_ep import Buffer; assert hasattr(Buffer,\"get_dispatch_layout\")" >&2
+      ' >&2 \
+      || collx_die "uccl-ep from-source build failed"
+    collx_log "uccl-ep: build persisted to $UCCL_PFX_HOST"
+  else
+    collx_log "uccl-ep: reusing persisted build at $UCCL_PFX_HOST"
+  fi
+fi
+
 # ---- execute: one Docker+torchrun invocation per case -----------------------
 # The shard control and results dir live under the CX source tree the workflow
 # checked out; mount that tree so run_ep.py's `results/*.json` land where the
@@ -74,19 +118,30 @@ ncases="$(python3 "$COLLX_RUNTIME_DIR/config.py" case-count "$COLLX_SHARD_FILE")
   || collx_die "cannot count cases in $COLLX_SHARD_FILE"
 [ "$ncases" -gt 0 ] || collx_die "shard $COLLX_SHARD_FILE declares no cases"
 
-# MoRI's SDMA "anvil" transport (hsaKmtCreateQueueExt with HSA_QUEUE_SDMA_BY_ENG_ID)
-# fails at init on the mi300x-tw nodes' kernel thunk (anvil.cpp:193, both nodes), so
-# disable it there and let MoRI fall back to the hipIpc/P2P intra-node path (correct
-# results, normal latency). mi325x-tw's thunk accepts the SDMA queue, so keep it on.
-mori_sdma_default=1
-[ "$RUNNER" = mi300x-tw ] && mori_sdma_default=0
-docker_env=(
-  -e MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
-  -e MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-$mori_sdma_default}"
-  -e MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
-  -e HSA_NO_SCRATCH_RECLAIM=1
-  -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
-)
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  # uccl-ep imports the host-persisted build via PYTHONPATH; CDNA needs the aggressive
+  # host-atomic EP path (matches prepare_backend.sh's uccl_prepare AMD branch).
+  docker_env=(
+    -e PYTHONPATH=/cx/.collx_uccl_pfx
+    -e UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC="${UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC:-1}"
+    -e HSA_NO_SCRATCH_RECLAIM=1
+    -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
+  )
+else
+  # MoRI's SDMA "anvil" transport (hsaKmtCreateQueueExt with HSA_QUEUE_SDMA_BY_ENG_ID)
+  # fails at init on the mi300x-tw nodes' kernel thunk (anvil.cpp:193, both nodes), so
+  # disable it there and let MoRI fall back to the hipIpc/P2P intra-node path (correct
+  # results, normal latency). mi325x-tw's thunk accepts the SDMA queue, so keep it on.
+  mori_sdma_default=1
+  [ "$RUNNER" = mi300x-tw ] && mori_sdma_default=0
+  docker_env=(
+    -e MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
+    -e MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-$mori_sdma_default}"
+    -e MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
+    -e HSA_NO_SCRATCH_RECLAIM=1
+    -e COLLECTIVEX_SOURCE_SHA="${COLLECTIVEX_SOURCE_SHA:-}"
+  )
+fi
 
 final_rc=0
 for ((ci = 0; ci < ncases; ci++)); do
