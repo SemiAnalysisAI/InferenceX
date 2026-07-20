@@ -628,6 +628,58 @@ jobs:
             run-eval: true
             eval-only: true
 
+    # Agentic (SWE-bench) eval rows carry the agentic input shape, so they are
+    # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
+    # inputs (isl/osl/max-model-len, which agentic rows don't have).
+    sweep-agentic-evals:
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
+            }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: agentic eval /
+        strategy:
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            matrix:
+                config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
+            tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
+            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
+            duration: ${{ matrix.config.duration }}
+            isl: '0'
+            osl: '0'
+            max-model-len: '0'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ 'false' }}
+            run-eval: true
+            eval-only: true
+            scenario-type: agentic-coding
+
     sweep-multi-node-evals:
         needs: [setup, canary-select, canary-sweep]
         if: >-
@@ -714,8 +766,8 @@ jobs:
             result-prefix: "bmk"
 
     collect-evals:
-        needs: [sweep-evals, sweep-multi-node-evals, setup]
-        if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped') }}
+        needs: [sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, setup]
+        if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-agentic-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped') }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 

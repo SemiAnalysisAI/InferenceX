@@ -4918,3 +4918,51 @@
     - "Image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec"
     - "B300: GPU-resident TP4/TP8 at conc [1,2,4,6,8,12,16,20,24,28,32] and DEP8 at conc [32,64,96,128,160,192,196,224,228] (max-num-batched-tokens 16384, long-prefill-token-threshold 4096, gpu-memory-utilization 0.92); TP4 SimpleCPU lazy-offload at conc [28,32,36,40]; DEP4 at conc [8,16,24,32,40,48,56,64,72] with both SimpleCPU and Mooncake 0.3.11.post1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2241
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+    - "Bump Qwen3.5-FP8 MI355X SGLang disagg image from lmsysorg/sglang-rocm:v0.5.11-rocm700-mi35x-20260511 to lmsysorg/sglang:v0.5.14-rocm720-mi35x (ROCm 7.0 → 7.2, sglang v0.5.11 → v0.5.14)."
+    - "Fix disagg SLURM exclude list: add mia1-p01-g09 (broken pyxis) to submit.sh — was missing from multi-node path, causing prefill worker 503 failures."
+    - "Expand mi355x-disagg runner pool from 3 to 9 nodes."
+    - "Concurrency sweep: 1K1K and 8K1K both [ 8, 16, 32, 64, 128 ]."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2094
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Add MiniMax M3 NVFP4 B300 Dynamo-vLLM disaggregated EAGLE3 recipes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2182
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Add GLM-5.2 NVFP4 B300 SGLang single-node agentic benchmarks from the SGLang cookbook B300 NVFP4 recipes (STP only, no spec decoding)"
+    - "Image: lmsysorg/sglang:v0.5.15.post1-cu130; model nvidia/GLM-5.2-NVFP4"
+    - "Low-latency arm: TP8 (fp8 KV cache, cutedsl bf16 GEMM backend) at conc [1, 2, 4, 8, 16, 32]"
+    - "High-throughput arm: TP8/DP8 attention-DP behind sglang-router consistent hashing at conc [48, 64, 96, 128, 192, 256, 512]"
+    - "New 1M-context model prefix glm5.2 added to the unfiltered agentic corpus branch in benchmark_lib.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2268
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Bump vLLM image to v0.25.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Enable DRAM KV offloading (SGLang HiCache) on all points of both arms: DSv4-style host/device token-capacity ratio, tuned to 0.75 for GLM-5.2 (DSA/MLA-family: the 169.98 GB device pool is replicated on all 8 ranks, so ratio 0.75 = ~1.0 TB pinned host pools; ratio 2 and GB-based sizing both OOM-killed 3 TB nodes), io-backend direct, mem-layout page_first_direct, write policy write_back; validated on-node with an overflow bench forcing eviction through the DSA KV+INDEXER host pools"
+    - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
+    - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2279
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Enable DRAM KV offloading (SGLang HiCache) on all points of both arms: DSv4-style host/device token-capacity ratio, tuned to 0.75 for GLM-5.2 (DSA/MLA-family: the 169.98 GB device pool is replicated on all 8 ranks, so ratio 0.75 = ~1.0 TB pinned host pools; ratio 2 and GB-based sizing both OOM-killed 3 TB nodes), io-backend direct, mem-layout page_first_direct, write policy write_back; validated on-node with an overflow bench forcing eviction through the DSA KV+INDEXER host pools"
+    - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
+    - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/../../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -15,16 +15,14 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-nvidia-smi
-
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-export SGLANG_ENABLE_JIT_DEEPGEMM=1
+# ROCm / SGLang performance tuning for MI355X
+export SGLANG_ROCM_FUSED_DECODE_MLA=0
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export SAFETENSORS_FAST_GPU=1
 
 SERVER_LOG=/workspace/server.log
-
-
-echo "CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -34,30 +32,27 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.0.0.0 --port=$PORT \
---trust-remote-code \
---tensor-parallel-size=$TP \
---data-parallel-size 1 --expert-parallel-size 1 \
---tool-call-parser glm47 \
---reasoning-parser glm45 \
---kv-cache-dtype fp8_e4m3 --quantization fp8 \
---attention-backend nsa \
---nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
---moe-runner-backend flashinfer_trtllm \
---cuda-graph-max-bs $CONC --max-running-requests $CONC \
---mem-fraction-static 0.85 \
---chunked-prefill-size 32768 --max-prefill-tokens 32768 \
---enable-flashinfer-allreduce-fusion --disable-radix-cache \
---stream-interval 30 \
---model-loader-extra-config '{"enable_multithread_load": true}' $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+python3 -m sglang.launch_server \
+    --model-path $MODEL \
+    --host=0.0.0.0 \
+    --port $PORT \
+    --tensor-parallel-size $TP \
+    --trust-remote-code \
+    --tool-call-parser glm47 \
+    --reasoning-parser glm45 \
+    --mem-fraction-static 0.85 \
+    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
+    --nsa-prefill-backend tilelang \
+    --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
+    --kv-cache-dtype fp8_e4m3 \
+    --max-running-requests ${CONC} \
+    --cuda-graph-max-bs ${CONC} \
+    --disable-radix-cache> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \
