@@ -75,11 +75,11 @@ THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# AL is a per-draft acceptance property and is invariant to concurrency, so we
-# batch multiple SPEED-Bench prompts to cut wall-clock. Kept moderate (16, the
-# same max-concurrency the GQA head was characterized at) to avoid vLLM
-# auto-disabling spec decode under large batches, which would zero out drafts.
-CONCURRENCY="${CONCURRENCY:-32}"
+# AL is a per-draft acceptance property and is largely invariant to concurrency,
+# so we batch multiple SPEED-Bench prompts to cut wall-clock. Kept at 16 (the
+# max-concurrency the GQA head was characterized at) to avoid vLLM auto-disabling
+# spec decode under large batches, which would zero out drafts.
+CONCURRENCY="${CONCURRENCY:-16}"
 # Official MiniMax-M3 sampling: temperature 1.0, top_p 0.95, top_k 40.
 TEMPERATURE="${TEMPERATURE:-1.0}"
 TOP_P="${TOP_P:-0.95}"
