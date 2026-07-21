@@ -5010,4 +5010,13 @@
     - "Add MTP speculative-decoding for the B300 vLLM AgentX recipe as a separate config-key, so the existing dsv4-fp4-b300-vllm-agentic aggregate is not re-run."
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
-  
+
+- config-keys:
+    - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
+    - dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe
+  description:
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, max-num-seqs 512->1024, disable NCCL symmetric memory, add no-enable-flashinfer-autotune"
+    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
+    - "EPP: switch from max-score-picker to weighted-random-picker (threshold=0.1) for better load distribution under high concurrency"
+    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2242
