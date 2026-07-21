@@ -109,7 +109,10 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
     CHUNKED_PREFILL_ARGS=()
     MAX_RUNNING_REQUESTS=256
-    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs 256)
+    # TileLang's DPA DSA kernel needs 115,200 bytes of dynamic shared memory
+    # during graph capture, above gfx942's 65,536-byte limit. Keep the DPA
+    # topology in eager mode; the non-DPA profiles still use CUDA graphs.
+    CUDA_GRAPH_ARGS=(--disable-cuda-graph)
 elif [ "$EP_SIZE" -gt 1 ]; then
     PROFILE=balanced
     CHUNKED_PREFILL_ARGS=(--chunked-prefill-size 32768)
