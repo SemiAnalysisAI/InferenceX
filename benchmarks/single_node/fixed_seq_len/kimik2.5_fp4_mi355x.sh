@@ -56,7 +56,6 @@ export VLLM_ROCM_USE_SKINNY_GEMM=0
 export AITER_MXFP4_INTERMEDIATE=1
 export AITER_BYPASS_TUNE_CONFIG=0
 export AITER_MOE_SORT_BACKEND=auto
-export AITER_LOG_LEVEL=INFO
 export OMP_NUM_THREADS=1
 
 # Disable AITER RMSNorm for TP < 8 due to accuracy issues
