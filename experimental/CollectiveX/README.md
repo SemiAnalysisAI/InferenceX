@@ -13,8 +13,9 @@ responsibility. The full measurement methodology is in [docs/methodology.md](doc
 
 The workload uses packed placement and one pinned `fixed-profile` resource configuration per
 backend/topology; there is no tuning sweep. Combine is always BF16; dispatch precision is a swept
-dimension — a BF16 control plus a caller-prequantized FP8 dispatch on every backend. Coverage is
-uniform routing only. Cases run in one of two modes:
+dimension — a BF16 control plus an FP8 dispatch on every backend, caller-prequantized in `normal`
+mode (in `low-latency` the DeepEP and UCCL-EP kernels quantize internally from BF16; MoRI stays
+caller-prequantized). Coverage is uniform routing only. Cases run in one of two modes:
 
 - `normal` uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only,
   unweighted rank-sum combine. It runs the full decode and prefill ladders.

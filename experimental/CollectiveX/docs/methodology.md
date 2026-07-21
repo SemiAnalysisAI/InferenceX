@@ -21,8 +21,11 @@ It does not predict serving throughput without a separate correlation study.
 
 The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16;
-dispatch precision is a swept dimension — a BF16 control and a caller-prequantized FP8 dispatch
-(`bf16`, `fp8`). Every case uses the normal `layout-and-dispatch-v1` semantics.
+dispatch precision is a swept dimension — a BF16 control and an FP8 dispatch (`bf16`, `fp8`),
+caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
+DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). `normal`-mode cases use the
+`layout-and-dispatch-v1` semantics; `low-latency` cases use each backend's decode-kernel semantics
+(detailed below).
 
 - `ep-core`: uniform routing over the workload's token ladders — for `deepseek-v3`, decode
   T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and

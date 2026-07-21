@@ -199,12 +199,13 @@ collx_apply_network_profile() {
   fi
   export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
   export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
-  # UCCL-EP's CPU proxies read ONLY the UCCL_* selectors; they do NOT consult NCCL_IB_HCA /
-  # NCCL_IB_GID_INDEX. So the device list and GID must come through UCCL's own vars: the HCA list
-  # here, and the GID index via collx_export_gid_index_for_link_layer (RoCE, called at the end of
-  # this function). The socket iface and, on AMD, the strict Pollara/Broadcom flow control + CDNA
-  # host-atomic path are likewise UCCL_* vars.
-  export UCCL_IB_HCA="$rdma_names"
+  # UCCL-EP's EP transport reads UCCL_IB_HCA and falls back to NCCL_IB_HCA (ep/src/rdma.cpp), and
+  # its filter honors the same leading '=' exact-match and ':port' syntax as NCCL. So mirror the
+  # exact-match selector already set on NCCL_IB_HCA above — a bare name list would prefix-match
+  # (mlx5_1 -> mlx5_1,mlx5_10..19) and drop the port. The GID index, by contrast, has NO NCCL
+  # fallback in UCCL's EP path (it reads only UCCL_IB_GID_INDEX, ep/include/rdma_util.hpp), so
+  # collx_export_gid_index_for_link_layer must set that UCCL_* var explicitly for RoCE.
+  export UCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
   export UCCL_SOCKET_IFNAME="${COLLX_SOCKET_IFNAME:-}"
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     export UCCL_IB_MAX_INFLIGHT_BYTES="${UCCL_IB_MAX_INFLIGHT_BYTES:-2097152}"
