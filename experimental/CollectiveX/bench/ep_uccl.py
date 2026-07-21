@@ -238,11 +238,12 @@ class UCCLEPBackend(EPBackend):
         self.num_local_experts = args.experts // world_size
         # LL requires the QP-per-rank count to equal the number of local experts.
         num_qps_per_rank = self.num_local_experts
-        if not hasattr(Buffer, "low_latency_dispatch") and not hasattr(
+        if not hasattr(Buffer, "low_latency_dispatch") or not hasattr(
             Buffer, "get_low_latency_rdma_size_hint"
         ):
             raise RuntimeError(
-                "invalid UCCL-EP LL runtime: Buffer.low_latency_dispatch is absent"
+                "invalid UCCL-EP LL runtime: Buffer.low_latency_dispatch / "
+                "get_low_latency_rdma_size_hint absent"
             )
         num_rdma_bytes = Buffer.get_low_latency_rdma_size_hint(
             self.max_tokens, args.hidden, world_size, args.experts

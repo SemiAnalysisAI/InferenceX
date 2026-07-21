@@ -123,6 +123,15 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
+# uccl-ep builds from source, so give it the same cross-allocation backend cache the single-slurm
+# launcher provides (built once per arch/image/commit under /cx-cache, reused each allocation).
+# mori ships in the image and needs no cache, so its mounts are left untouched.
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  collx_prepare_backend_cache "$SQUASH_DIR" \
+    || collx_die "cannot prepare the isolated backend cache"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
+  export COLLX_BACKEND_CACHE_ROOT=/cx-cache
+fi
 
 # ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
