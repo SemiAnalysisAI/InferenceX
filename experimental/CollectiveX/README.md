@@ -12,11 +12,25 @@ responsibility. The full measurement methodology is in [docs/methodology.md](doc
 ## Execution Profile
 
 The workload uses packed placement and one pinned `fixed-profile` resource configuration per
-backend/topology; there is no tuning sweep. Dispatch and combine are fixed BF16 on every backend;
-precision is not a swept dimension. Every case runs the single normal-mode contract:
+backend/topology; there is no tuning sweep. Combine is always BF16; dispatch precision is a swept
+dimension — a BF16 control plus an FP8 dispatch on every backend, caller-prequantized in `normal`
+mode (in `low-latency` the DeepEP and UCCL-EP kernels quantize internally from BF16; MoRI stays
+caller-prequantized). Coverage is uniform routing only. Cases run in one of two modes:
 
-- Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
-  combine. Coverage is uniform routing only.
+- `normal` uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only,
+  unweighted rank-sum combine. It runs the full decode and prefill ladders.
+- `low-latency` uses each backend's decode-optimized kernel family: on DeepEP the legacy
+  `deep_ep.Buffer` IBGDA `low_latency_dispatch`/`low_latency_combine` (a per-expert padded receive
+  and a source-side gate-weighted combine); on UCCL-EP the same legacy `Buffer` low-latency kernels
+  over its CPU-proxy transport; on MoRI the `IntraNodeLL` kernel (single-call,
+  pure-intranode, same compact layout and unweighted rank-sum combine as `IntraNode`). It is a
+  decode-phase-only, per-SKU-capability-gated addition whose runnable set differs from `normal`'s, so
+  it is enabled from each SKU's `ll_backends` registry entry (currently DeepEP V2 EP8 on H100/H200/B200,
+  MoRI EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only — UCCL's low-latency kernel
+  trips a warp-group assertion on AMD's CU count, so the AMD SKUs keep UCCL-EP normal mode without LL).
+  Scoped single-node EP8 runs over the intra-node NVLink/XGMI
+  low-latency path (no `/dev/gdrdrv` needed — validated on H200 with it absent); NVSHMEM/IBGDA on the
+  wire is only a multi-node scale-out (EP16) concern.
 
 Cases use a fixed timing profile from `configs/sweep.json`: 256 trials x 8 timed iterations (2048
 samples per component) with 32 synchronized full roundtrip warmups before each measured component at
@@ -29,13 +43,16 @@ Correctness is checked against an implementation-independent oracle that reprodu
 two-level reduction — intra-scale-up-domain FP32, then a BF16 cast of each domain's partial for the
 scale-out send. The combine gate is a tight max elementwise relative error below `8 * 2^-8`
 (denominator clamped at 0.02), which holds across scale-up and multi-node scale-out topologies
-alike. Any failed rank or point makes the case ineligible in the result it writes.
+alike. Under FP8 dispatch the oracle applies the same per-token cast round-trip to its semantic
+payload, so the dispatched-payload compare stays bit-exact and the combine gate is unchanged — the
+quantization is modeled, not tolerated. Any failed rank or point makes the case ineligible in the
+result it writes.
 
 The matrix covers H100, H200, B200, B300, GB200, GB300, MI300X, MI325X, and MI355X. `sweep_matrix.py` materializes
 the requested SKUs, backends, EP sizes, and token ladders, then extracts strict per-shard controls
-and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`, and
-`--ep-sizes` select a subset; the matrix is generated per dispatch, with no frozen digest or locked
-case count.
+and rejects missing, stale, malformed, or altered shard controls. `--only-sku`, `--exclude-skus`,
+`--ep-sizes`, and `--precisions` select a subset; the matrix is generated per dispatch, with no
+frozen digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -48,8 +65,9 @@ scale-up domain.
 
 | Backend | Current scope |
 |---|---|
-| DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out |
-| MoRI | AMD EP8 uses IntraNode-family kernels (MI355X IntraNode, MI300X/MI325X asyncLL); EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
+| DeepEP V2 | `normal` mode is PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out. FP8 dispatch via `use_fp8_dispatch` (blockwise e4m3fn) alongside BF16. `low-latency` mode is the legacy `deep_ep.Buffer` IBGDA decode kernels (per-expert padded layout, weighted combine, `use_fp8` e4m3fn), decode/EP8 only |
+| MoRI | `normal` mode uses the direct `IntraNode` kernel for scale-up EP8 on every CDNA SKU and pins `InterNodeV1` for EP16 over 2x8 XGMI + RDMA. `low-latency` mode selects the `IntraNodeLL` decode kernel (single-call, pure-intranode, same compact layout and unweighted combine as `IntraNode`), decode/EP8 only. FP8 dispatch is caller-prequantized (per-SKU e4m3fnuz on gfx942, e4m3fn on gfx950); combine stays BF16 (`quant_type=none`) alongside BF16 dispatch |
+| UCCL-EP | [UCCL](https://github.com/uccl-project/uccl) EP: a drop-in, API-identical DeepEP replacement whose CPU proxies issue GPUDirect RDMA over plain `libibverbs` (no NVSHMEM/IBGDA), with software message ordering, atomics, and flow control; scale-up is single-node `cudaIpc` over NVLink/XGMI (never MNNVL). `normal` mode is the legacy `Buffer` `dispatch`/`combine` (unweighted rank-sum); `low-latency` reuses the legacy `low_latency_dispatch`/`low_latency_combine` decode kernels (weighted combine), decode/EP8 only. FP8 dispatch is caller-prequantized in `normal` mode (blockwise e4m3fn, per-SKU e4m3fnuz on gfx942); in `low-latency` mode the caller sends BF16 and the decode kernel quantizes to e4m3 internally (`use_fp8`). Combine is BF16. Runs on NVIDIA and AMD (H100/H200/B200 + MI300X/MI325X/MI355X), EP8 scale-up. Cross-node EP16 is functional (the internode RDMA path connects and the light case passes correctness) but its CPU-proxy throughput overruns the standardized per-case wall-clock budget on heavy token counts, so EP16 is an unsupported coverage row for now |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.

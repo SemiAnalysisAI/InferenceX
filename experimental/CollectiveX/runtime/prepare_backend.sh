@@ -16,7 +16,7 @@ collx_log "backend preparation: runner=$COLLX_RUNNER bench=$COLLX_BENCH nodes=${
 readonly -a RANK_ENV_VARS=(
   PATH VIRTUAL_ENV LD_LIBRARY_PATH PYTHONPATH CUDA_HOME CPATH NVCC_PREPEND_FLAGS
   NVSHMEM_DIR EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR
-  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE
+  EP_REUSE_NCCL_COMM NCCL_CUMEM_ENABLE UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC
 )
 readonly -a DEEPEP_RANK_UNSETS=(EP_SUPPRESS_NCCL_CHECK)
 
@@ -256,6 +256,154 @@ deepep_prepare() {
   collx_log "DeepEP V2 ready ($COLLX_DEEPEP_V2_COMMIT, ElasticBuffer, NCCL Device API; LSA/Gin selected by adapter)"
 }
 
+# ---- UCCL-EP lifecycle ------------------------------------------------------
+
+# Registry arch string for the runner (gfx942/gfx950 on AMD) for PYTORCH_ROCM_ARCH.
+uccl_rocm_arch() {
+  python3 - "$COLLX_RUNNER" <<'PY'
+import json, sys
+print(json.load(open("configs/platform_config.json"))["platforms"][sys.argv[1]]["arch"])
+PY
+}
+
+uccl_probe() {
+  # import torch FIRST so libc10 is resident before the uccl.ep extension dlopens (it links
+  # libc10/libtorch); importing deep_ep before torch fails with "libc10.so: cannot open".
+  python3 - <<'PY'
+import torch  # noqa: F401
+import deep_ep
+from deep_ep import Buffer
+assert hasattr(Buffer, "low_latency_dispatch") and hasattr(Buffer, "get_dispatch_layout")
+PY
+}
+
+# Direct in-container source build against the image's torch — validated on h200 (sglang
+# cu130). NOT `build.sh` (that spins up its own Docker image to make a wheel and cannot run
+# inside enroot/pyxis). single-slurm and mi-amds run the writable container as remapped root,
+# so the build needs no venv. verbs/nl/numa dev headers ship in the sglang/rocm images; only
+# nanobind must be added. The built deep_ep/uccl packages are persisted under a cache root and
+# put on PYTHONPATH (which write_rank_env carries to the ranks), so later allocations reuse them
+# without recompiling — the same copy+PYTHONPATH scheme the mi-tw Docker launcher already uses.
+
+# Cache root keyed by cpu + build arch + image + pinned commit, under the shared /cx-cache mount
+# ($COLLX_BACKEND_CACHE_ROOT). Returns non-zero when no shared cache is mounted (manual runs), so
+# the caller falls back to a node-local build. Mirrors deepep_cache_root.
+uccl_cache_root() {
+  local arch="$1" cpu base image
+  cpu="$(uname -m)"
+  [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  base="${COLLX_BACKEND_CACHE_ROOT:-}"
+  [[ "$base" = /* ]] || return 1
+  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
+  arch="$(printf '%s' "$arch" | tr -cs 'A-Za-z0-9_.-' '-')"
+  printf '%s/uccl-ep-%s-%s-%s-%s' \
+    "$base" "$cpu" "${arch#-}" "${image#-}" "${COLLX_UCCL_COMMIT:0:12}"
+}
+
+# Put the persisted build ($root/site) on PYTHONPATH for the probe and the rank tasks; mirror the
+# minimal runtime bits of deepep_activate. CDNA additionally needs the aggressive host-atomic path.
+uccl_activate() {
+  local site="$1/site"
+  [ -d "$site" ] || { collx_log "ERROR: UCCL cache site is unavailable"; return 1; }
+  export PYTHONPATH="$site${PYTHONPATH:+:$PYTHONPATH}"
+  [ "${COLLX_VENDOR:-nvidia}" != amd ] || export UCCL_EP_ENABLE_AGGRESSIVE_ATOMIC=1
+}
+
+# Build UCCL from source into $root/site (fresh root, with a .ready marker written LAST). The
+# build installs into the image's system python as a sandbox, then copies the built deep_ep/uccl
+# packages into the cache; the runtime imports them via PYTHONPATH (uccl_activate), so cache-hit
+# and cache-miss paths import identically. Only nanobind is added to the image.
+uccl_install() {
+  local root="$1" arch="$2" source_dir="/tmp/collectivex-uccl-$COLLX_UCCL_COMMIT" arch_env sp
+  if [ -e "$root" ] || [ -L "$root" ]; then
+    rm -rf "$root" || { collx_log "ERROR: incomplete UCCL cache-reset failed"; return 1; }
+  fi
+  mkdir -m 700 "$root" || { collx_log "ERROR: UCCL cache-create failed"; return 1; }
+  collx_log "UCCL-EP: building $COLLX_UCCL_COMMIT from source (USE_DMABUF, PER_EXPERT_BATCHING)"
+  # Plain install first; some sglang/rocm image variants mark the system env externally-managed
+  # (PEP 668), so fall back to --break-system-packages (a no-op on older pip that lacks the flag).
+  { python3 -m pip install -q --disable-pip-version-check --no-input nanobind \
+      || python3 -m pip install -q --disable-pip-version-check --no-input \
+           --break-system-packages nanobind; } >&2 2>&1 \
+    || { collx_log "ERROR: UCCL nanobind install failed"; return 1; }
+  collx_materialize_uccl_source "$source_dir" \
+    || { collx_log "ERROR: UCCL staged source is invalid"; return 1; }
+  if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
+    arch_env="PYTORCH_ROCM_ARCH=$arch"
+    # Managed/unified memory (cudaMallocManaged) is unavailable on our CDNA nodes (hipMallocManaged
+    # fails even for 4 KiB, regardless of XNACK / --privileged / memlock). UCCL's HIP CPU-proxy path
+    # uses it for the d2h channel handles + proxy atomic buffer; pinned host memory (cudaMallocHost)
+    # is coherent + device-accessible on gfx942/gfx950 and is already used elsewhere in UCCL (e.g.
+    # the RDMA scratch), so swap the two on the runtime path before building. Validated on mi300x-tw
+    # (bf16/fp8 normal green). NB: build the WHOLE tree (materialize copies it) — the ROCm path
+    # includes top-level util/gpu_rt.h.
+    sed -i 's/cudaMallocManaged/cudaMallocHost/g' \
+      "$source_dir/ep/src/uccl_ep.cc" "$source_dir/ep/src/uccl_proxy.cpp" \
+      || { collx_log "ERROR: UCCL AMD managed-memory patch failed"; return 1; }
+  else
+    arch_env="TORCH_CUDA_ARCH_LIST=$arch"
+  fi
+  ( cd "$source_dir/ep" \
+      && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 "$arch_env" python3 setup.py install ) >&2 2>&1 \
+    || { collx_log "ERROR: UCCL ep extension build failed"; return 1; }
+  # Install the wrapper WITHOUT its deps: install_requires=["uccl"] resolves to the PyPI
+  # uccl metapackage, which depends on the prebuilt uccl-cu12 wheel — absent on ROCm (hard
+  # fail) and wrong even on CUDA, since our from-source ep build already provides uccl.ep in
+  # site-packages/uccl. --no-deps makes the source build authoritative on both vendors.
+  ( cd "$source_dir/ep/deep_ep_wrapper" \
+      && { python3 -m pip install -q --disable-pip-version-check --no-input --no-deps . \
+             || python3 -m pip install -q --disable-pip-version-check --no-input \
+                  --no-deps --break-system-packages . ; } ) >&2 2>&1 \
+    || { collx_log "ERROR: UCCL deep_ep_wrapper build failed"; return 1; }
+  sp="$(python3 -c 'import site; print(site.getsitepackages()[0])')" \
+    || { collx_log "ERROR: UCCL site-packages resolution failed"; return 1; }
+  mkdir -p "$root/site" \
+    && cp -R "$sp"/deep_ep* "$sp"/uccl* "$root/site/" \
+    || { collx_log "ERROR: UCCL cache population failed"; return 1; }
+  : > "$root/.ready"
+}
+
+# UCCL-EP lifecycle: build once per (arch, image, commit) into the shared /cx-cache behind an
+# flock + .ready marker, reused on every later allocation (mirrors deepep_prepare); fall back to
+# a node-local build when no shared cache is mounted (e.g. a manual run).
+uccl_prepare() {
+  local arch root ready lock_path
+  command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for UCCL build"; return 1; }
+  if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
+    arch="$(uccl_rocm_arch)" || return 1
+  else
+    arch="$(cuda_arch)" || return 1
+  fi
+  if root="$(uccl_cache_root "$arch")"; then
+    ready="$root/.ready"; lock_path="${root}.lock"
+    command -v flock >/dev/null \
+      || { collx_log "ERROR: flock is required for UCCL-EP caching"; return 1; }
+    mkdir -p "${root%/*}" || return 1
+    collx_log "UCCL-EP: preparing $COLLX_UCCL_COMMIT (shared cache $root)"
+    if ! (
+      [ ! -L "$lock_path" ] || { collx_log "ERROR: UCCL cache lock is unsafe"; exit 1; }
+      (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
+        || { collx_log "ERROR: UCCL cache-lock-create failed"; exit 1; }
+      exec 9<>"$lock_path" || { collx_log "ERROR: UCCL cache-lock-open failed"; exit 1; }
+      flock 9 || { collx_log "ERROR: UCCL cache-lock-acquire failed"; exit 1; }
+      if [ ! -f "$ready" ] || [ ! -d "$root/site" ]; then
+        uccl_install "$root" "$arch" || exit 1
+      fi
+    ); then
+      collx_log "ERROR: shared UCCL-EP environment is incomplete"; return 1
+    fi
+  else
+    root="/tmp/collectivex-uccl-cache-$COLLX_UCCL_COMMIT"
+    collx_log "UCCL-EP: preparing $COLLX_UCCL_COMMIT (node-local $root; no shared cache mounted)"
+    if [ ! -f "$root/.ready" ] || [ ! -d "$root/site" ]; then
+      uccl_install "$root" "$arch" || return 1
+    fi
+  fi
+  uccl_activate "$root" || return 1
+  uccl_probe || { collx_log "ERROR: UCCL import probe failed"; return 1; }
+  collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
+}
+
 # ---- container boundary ----------------------------------------------------
 
 write_rank_env() {
@@ -313,6 +461,7 @@ main() {
       python3 -c "import mori" \
         || { collx_log "ERROR: MoRI backend import failed"; return 1; }
       ;;
+    uccl-ep) uccl_prepare || return 1 ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1

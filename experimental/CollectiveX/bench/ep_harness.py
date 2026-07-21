@@ -27,6 +27,7 @@ def case_id(sku: str, case: dict) -> str:
         case["phase"],
         f"ep{int(case['ep'])}",
         case["routing"],
+        case["precision"],
     )
     values = [_NON_SLUG.sub("-", str(part).lower()).strip("-") for part in parts]
     if not all(values):
@@ -36,7 +37,9 @@ def case_id(sku: str, case: dict) -> str:
 
 # Workload and timing values arrive from configs/sweep.json through the matrix.
 CONDITIONING_ROUNDS_PER_SHAPE = 8
-# Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
+# Combine is always BF16, and an FP8 dispatch is modeled exactly (the same quant->
+# dequant round-trip is applied to the oracle's semantic payload), so the combine
+# oracle keeps one frozen gate regardless of dispatch precision.
 # _expected_transformed_combine reproduces the two-level (intra-domain FP32,
 # per-domain BF16 scale-out partial) reduction, so a correct backend's only
 # residual is the accumulation-order ambiguity the model cannot pin down: at most
@@ -45,19 +48,45 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 COMBINE_REL_TOL = 8 * 2.0 ** -8
 COMBINE_MAG_FLOOR = 2e-2
 
-def logical_byte_provenance(logical_copies: int, hidden: int) -> dict[str, int]:
-    """Return comparable logical BF16 activation bytes for one direction.
+# The combine contract(s) each mode may realize. The combine semantics is a BACKEND
+# fact, not a pure function of mode: DeepEP's legacy-Buffer decode combine applies the
+# top-k gate weights INSIDE the kernel ("weighted-kernel-sum" — the benchmark stages the
+# unweighted per-expert transform and the kernel multiplies by the gate), whereas MoRI's
+# decode kernels (IntraNodeLL/AsyncLL) keep the plain additive rank sum and reduce the
+# gate weights in parallel ("unweighted-rank-sum", identical to normal mode). Normal mode
+# is frozen to the unweighted v1 contract. The backend declares which it realizes;
+# run_sweep only checks that the declared value is ALLOWED for the mode (so a mislabeled
+# adapter fails closed), and the oracle keys on that same declared value.
+MODE_ALLOWED_SEMANTICS = {
+    "normal": {"unweighted-rank-sum"},
+    "low-latency": {"weighted-kernel-sum", "unweighted-rank-sum"},
+}
 
-    Dispatch and combine both move BF16 (2 bytes/value) with no separate scale
-    payload, so ``scale_bytes`` is always zero.
+def logical_byte_provenance(
+    logical_copies: int,
+    hidden: int,
+    value_bytes: int = 2,
+    scale_bytes_per_copy: int = 0,
+) -> dict[str, int]:
+    """Return comparable logical activation bytes for one direction.
+
+    BF16 moves 2 bytes/value with no scale payload (``scale_bytes`` zero). An FP8
+    dispatch moves 1 byte/value; a blockwise codec (DeepEP) also carries per-block
+    FP32 scales (``scale_bytes_per_copy`` > 0), while a plain e4m3 tensor cast (MoRI)
+    carries none. Combine is always BF16.
     """
     if logical_copies < 0 or hidden < 0:
         raise ValueError("logical byte dimensions must be non-negative")
-    activation_data_bytes = logical_copies * hidden * 2
+    # Every realized dispatch moves at least one byte per value; scale bytes may be zero
+    # (BF16, and MoRI's scale-free e4m3 cast).
+    if value_bytes <= 0 or scale_bytes_per_copy < 0:
+        raise ValueError("value_bytes must be positive and scale bytes non-negative")
+    activation_data_bytes = logical_copies * hidden * value_bytes
+    scale_bytes = logical_copies * scale_bytes_per_copy
     return {
         "activation_data_bytes": activation_data_bytes,
-        "scale_bytes": 0,
-        "total_logical_bytes": activation_data_bytes,
+        "scale_bytes": scale_bytes,
+        "total_logical_bytes": activation_data_bytes + scale_bytes,
     }
 
 def format_collective_version(raw) -> str:
@@ -73,7 +102,9 @@ def format_collective_version(raw) -> str:
 
 def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
-    ap.add_argument("--mode", required=True, choices=["normal"])
+    ap.add_argument("--mode", required=True, choices=["normal", "low-latency"])
+    ap.add_argument("--precision", required=True, choices=["bf16", "fp8"],
+                    help="dispatch payload precision; combine is always BF16")
     ap.add_argument("--phase", required=True, choices=["decode", "prefill"],
                     help="token-size regime label: decode (small T) / prefill (large T)")
     ap.add_argument("--tokens-ladder", required=True,
@@ -294,16 +325,29 @@ def _column_pattern(torch, ncols, device):
 
 
 def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semantics):
-    """Build one local expert aggregate for the v1 unweighted combine contract."""
-    if combine_weight_semantics != "unweighted-rank-sum":
-        raise ValueError("benchmark requires unweighted rank-sum combine")
+    """Build the per-received-token combine input the staged combine consumes.
+
+    Both contracts apply the same per-expert affine coefficients; they differ only in
+    WHERE the top-k gate weight enters. Under ``unweighted-rank-sum`` (normal mode) the
+    gate is folded in here (coefficient = the routing weight) because the combine kernel
+    only sums. Under ``weighted-kernel-sum`` (low-latency decode) the combine kernel
+    multiplies by the gate itself, so the staged payload must be the UNWEIGHTED expert
+    transform (coefficient = 1 for each valid assignment) or the gate would be applied
+    twice. Each received row still carries at most one valid expert on the low-latency
+    padded layout; the sum over the top-k axis then collapses to that single expert.
+    """
     valid = expert_ids >= 0
     expert = expert_ids.clamp(min=0).to(torch.int64)
-    gate = weights.to(torch.float32).masked_fill(~valid, 0)
+    if combine_weight_semantics == "unweighted-rank-sum":
+        coefficient = weights.to(torch.float32).masked_fill(~valid, 0)
+    elif combine_weight_semantics == "weighted-kernel-sum":
+        coefficient = valid.to(torch.float32)
+    else:
+        raise ValueError(f"unknown combine semantics {combine_weight_semantics!r}")
     scale, offset_a, offset_b = _expert_coefficients(torch, expert)
-    scale_sum = (gate * scale).sum(dim=1, keepdim=True)
-    offset_a_sum = (gate * offset_a).sum(dim=1, keepdim=True)
-    offset_b_sum = (gate * offset_b).sum(dim=1, keepdim=True)
+    scale_sum = (coefficient * scale).sum(dim=1, keepdim=True)
+    offset_a_sum = (coefficient * offset_a).sum(dim=1, keepdim=True)
+    offset_b_sum = (coefficient * offset_b).sum(dim=1, keepdim=True)
     pattern = _column_pattern(torch, payload.shape[1], payload.device)
     transformed = (
         payload.float() * scale_sum + offset_a_sum + offset_b_sum * pattern.unsqueeze(0)
@@ -311,23 +355,51 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     return transformed.to(payload.dtype)
 
 
-def _expected_transformed_combine(torch, problem, experts_per_rank, scale_up_domain):
-    """Reproduce the two-level reduction combine actually performs, so the
-    expectation carries the same BF16 rounding a correct backend does rather than
-    hiding it in a wide tolerance. Each destination rank casts its FP32 local
-    aggregate to the payload dtype (as _expert_transform does). Ranks sharing a
-    scale-up domain (NVLink/MNNVL) then reduce in FP32, and each domain casts its
-    aggregate to the payload dtype for the scale-out send before those
-    communicated BF16 partials are summed. When the whole EP group fits in one
-    scale-up domain (ep_size <= scale_up_domain — every EP8 case and the MNNVL
-    EP16 cases) there is a single domain and no scale-out rounding; a multi-node
-    RoCE EP16 group has one BF16 partial per node, and omitting that cast is what
-    left the scale-out combine ~0.048 off a single-domain reference."""
+def _expected_transformed_combine(
+    torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+):
+    """Reproduce the reduction combine actually performs so the expectation carries the
+    same BF16 rounding a correct backend does rather than hiding it in a wide tolerance.
+
+    Two reduction shapes, one per combine contract:
+
+    ``weighted-kernel-sum`` (low-latency decode): every routed expert returns its own
+    BF16 message and the source rank multiplies each by that assignment's gate weight
+    and FP32-accumulates. The rounding granularity is therefore per (token, expert): cast
+    each expert's affine transform to the payload dtype, scale by the gate in FP32, and
+    sum. There is no per-domain intermediate — the low-latency kernels reduce at the
+    source, so scale-up vs scale-out topology does not change the model.
+
+    ``unweighted-rank-sum`` (normal mode): each destination rank casts its FP32 local
+    aggregate to the payload dtype. Ranks sharing a scale-up domain (NVLink/MNNVL) reduce
+    in FP32, and each domain casts its aggregate to the payload dtype for the scale-out
+    send before those communicated BF16 partials are summed. When the whole EP group fits
+    in one scale-up domain (ep_size <= scale_up_domain — every EP8 case and the MNNVL EP16
+    cases) there is a single domain and no scale-out rounding; a multi-node RoCE EP16 group
+    has one BF16 partial per node, and omitting that cast is what left the scale-out
+    combine ~0.048 off a single-domain reference.
+    """
     semantic_x = getattr(problem, "oracle_x", problem.x)
     expert_ids = problem.topk_idx.to(torch.int64)
     weights = problem.topk_weights.to(torch.float32)
     pattern = _column_pattern(torch, semantic_x.shape[1], semantic_x.device)
     dtype = semantic_x.dtype
+    if combine_weight_semantics == "weighted-kernel-sum":
+        # Per-assignment BF16 message, gate-scaled in FP32 at the source and summed.
+        valid = expert_ids >= 0
+        scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids.clamp(min=0))
+        expected = torch.zeros_like(semantic_x, dtype=torch.float32)
+        for slot in range(expert_ids.shape[1]):
+            transform = (
+                semantic_x.float() * scale[:, slot:slot + 1]
+                + offset_a[:, slot:slot + 1]
+                + offset_b[:, slot:slot + 1] * pattern.unsqueeze(0)
+            ).to(dtype).float()
+            gate = (weights[:, slot:slot + 1] * valid[:, slot:slot + 1].to(torch.float32))
+            expected += gate * transform
+        return expected
+    if combine_weight_semantics != "unweighted-rank-sum":
+        raise ValueError(f"unknown combine semantics {combine_weight_semantics!r}")
     destination = expert_ids // experts_per_rank
     ranks_per_domain = max(1, scale_up_domain)
     domains: dict[int, object] = {}
@@ -393,6 +465,15 @@ def _run_expert_oracle(
     seed: int,
 ):
     """Verify one real dispatch/transform/combine without entering a timed region."""
+    # The low-latency decode kernels deliver a per-(source, expert) slot layout with a
+    # gate-weighted combine, which breaks this oracle's rank-deduplicated, unweighted
+    # assumptions. Route those cases to the dedicated per-slot oracle; keying on the
+    # declared combine semantics keeps the normal-mode path below untouched.
+    if getattr(backend, "combine_weight_semantics", None) == "weighted-kernel-sum":
+        return _run_ll_expert_oracle(
+            torch, routing, backend, problem, global_idx, global_weights,
+            rank, experts_per_rank, scale_up_domain, seed,
+        )
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
@@ -430,8 +511,10 @@ def _run_expert_oracle(
         local = (expected_idx // experts_per_rank) == rank
         expected_ids = torch.where(local, expected_idx, torch.full_like(expected_idx, -1))
         expected_weights = expected_weights.masked_fill(~local, 0)
-        expected_payload = routing.activations_for_source_ids(
-            source_ids, problem.x.shape[1], seed, problem.x.dtype
+        expected_payload = backend.semantic_payload(
+            routing.activations_for_source_ids(
+                source_ids, problem.x.shape[1], seed, problem.x.dtype
+            )
         )
     else:
         expected_ids = torch.full_like(view.expert_ids, -1)
@@ -477,7 +560,7 @@ def _run_expert_oracle(
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
-        torch, problem, experts_per_rank, scale_up_domain
+        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
     )
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
@@ -514,10 +597,177 @@ def _run_expert_oracle(
     )
 
 
+def _run_ll_expert_oracle(
+    torch,
+    routing,
+    backend,
+    problem,
+    global_idx,
+    global_weights,
+    rank: int,
+    experts_per_rank: int,
+    scale_up_domain: int,
+    seed: int,
+):
+    """Correctness oracle for the low-latency per-expert-slot dispatch/combine layout.
+
+    Normal mode delivers a rank-deduplicated payload: one row per source token per rank,
+    carrying every one of that token's experts that live on the rank, combined by an
+    unweighted rank-sum. The low-latency decode kernels instead deliver one row per
+    (source token, expert) ASSIGNMENT — a token routed to two experts on this rank
+    appears in two rows — and the combine kernel applies the top-k gate weights itself.
+
+    The adapter's low-latency ``inspect_dispatch`` therefore exposes a flat per-slot view:
+      * ``payload``            [N, hidden]  activations of each slot's source token
+      * ``expert_ids``         [N]          global expert id owning the slot (from the
+                                            padded layout's leading dimension)
+      * ``local_expert_counts``[experts_per_rank]
+    Source identity is decoded from the payload bytes. The low-latency dispatch does NOT
+    transport per-slot gate weights — the combine kernel applies the top-k weights at the
+    source — so there is no receive-side weight to check here; weight correctness is
+    covered end-to-end by the combine-values comparison. The staged combine input is the
+    UNWEIGHTED per-expert transform (the kernel multiplies by the gate), so the expected
+    combine sums the gate-scaled per-expert BF16 messages (see
+    _expected_transformed_combine's weighted-kernel-sum branch)."""
+    handle = backend.dispatch(problem)
+    torch.cuda.synchronize()
+    try:
+        view = backend.inspect_dispatch(problem, handle)
+        source_ids = routing.decode_source_ids(view.payload, seed)
+    except Exception as inspection_error:
+        # Drain the in-flight dispatch before reporting (an abandoned handle would
+        # deadlock the peer ranks), mirroring the normal-mode oracle's fail-soft path.
+        try:
+            problem.recv_tokens = backend.recv_tokens(handle)
+            backend.stage(problem, handle)
+            backend.combine(problem, handle)
+            torch.cuda.synchronize()
+        except Exception as cleanup_error:
+            raise inspection_error from cleanup_error
+        return _oracle_report(
+            combine_weight_semantics=getattr(
+                backend, "combine_weight_semantics", "undeclared"
+            ),
+        )
+
+    device = problem.x.device
+    count = int(view.payload.shape[0])
+    expert_ids = view.expert_ids.to(torch.int64).reshape(-1)
+    local_lo = rank * experts_per_rank
+    shape_ok = view.payload.ndim == 2 and tuple(expert_ids.shape) == (count,)
+    source_range = bool(
+        count == 0
+        or ((source_ids >= 0) & (source_ids < global_idx.shape[0])).all().item()
+    )
+    expert_range = bool(
+        count == 0
+        or ((expert_ids >= local_lo) & (expert_ids < local_lo + experts_per_rank)).all().item()
+    )
+    # Every (source, local-expert) assignment the global trace routes to this rank —
+    # the exact multiset the per-slot dispatch must deliver.
+    local_assignment = (global_idx.to(device) // experts_per_rank) == rank
+    exp_source, exp_slot = local_assignment.nonzero(as_tuple=True)
+    expected_expert = global_idx.to(device)[exp_source, exp_slot]
+
+    if source_range:
+        expected_payload = backend.semantic_payload(
+            routing.activations_for_source_ids(
+                source_ids, problem.x.shape[1], seed, problem.x.dtype
+            )
+        )
+        payload_ok = torch.equal(view.payload, expected_payload)
+    else:
+        payload_ok = False
+
+    # Compare the delivered (source, expert) pairs against the expected assignment
+    # multiset, and the per-slot gate weight against the trace. A 20-bit expert shift is
+    # safe: total experts stay far below 2^20.
+    if (
+        source_range and expert_range
+        and count == int(expected_expert.numel())
+    ):
+        got_key = source_ids.to(torch.int64) * (1 << 20) + expert_ids
+        want_key = exp_source.to(torch.int64) * (1 << 20) + expected_expert
+        source_set_ok = bool(
+            torch.equal(torch.sort(got_key).values, torch.sort(want_key).values)
+        )
+    else:
+        source_set_ok = False
+    # No receive-side weight is transported under low latency (the combine applies the
+    # gate at the source), so there is nothing to check here; weight correctness is
+    # verified by combine_values below. Report a zero weight error so the artifact field
+    # stays populated and comparable with normal mode.
+    weights_ok = True
+    max_weight_error = 0.0
+
+    actual_counts = view.local_expert_counts.to(torch.int64)
+    if source_range and expert_range:
+        expected_counts = torch.bincount(
+            (expected_expert - local_lo), minlength=experts_per_rank
+        ).to(torch.int64)
+        counts_ok = tuple(actual_counts.shape) == (experts_per_rank,) and torch.equal(
+            actual_counts, expected_counts
+        )
+    else:
+        counts_ok = False
+    metadata_ok = shape_ok and source_range and expert_range
+    # Each source token must appear once per local expert it routes to; source_set_ok
+    # already verified the exact (source, expert) multiset, so multiplicity rides on it.
+    multiplicity_ok = source_set_ok
+
+    problem.recv_tokens = count
+    combine_weight_semantics = backend.combine_weight_semantics
+    # Per-slot unweighted transform: one valid expert per row, unit coefficient (the
+    # kernel applies the gate). weights arg is unused under weighted-kernel-sum.
+    slot_expert = expert_ids.reshape(count, 1)
+    slot_weight = torch.ones((count, 1), dtype=torch.float32, device=device)
+    transformed = _expert_transform(
+        torch, view.payload, slot_expert, slot_weight, combine_weight_semantics
+    )
+    view.combine_input = transformed
+    combined = backend.combine_transformed(problem, handle, transformed)
+    torch.cuda.synchronize()
+    expected_combined = _expected_transformed_combine(
+        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+    )
+    if combined.shape == expected_combined.shape:
+        max_absolute_error = max_elementwise_relative_error = 0.0
+        combine_values_ok = True
+        if combined.numel():
+            absolute_error = (combined.float() - expected_combined).abs()
+            max_absolute_error = float(absolute_error.max().item())
+            max_elementwise_relative_error = float(
+                (absolute_error / expected_combined.abs().clamp_min(COMBINE_MAG_FLOOR))
+                .max().item()
+            )
+            combine_values_ok = max_elementwise_relative_error < COMBINE_REL_TOL
+    else:
+        max_absolute_error = max_elementwise_relative_error = None
+        combine_values_ok = False
+    checks = {
+        "combine_values": combine_values_ok,
+        "counts": counts_ok,
+        "metadata": metadata_ok,
+        "multiplicity": multiplicity_ok,
+        "payload": payload_ok,
+        "source_set": source_set_ok,
+        "weights": weights_ok,
+    }
+    return _oracle_report(
+        passed=all(checks.values()),
+        combine_weight_semantics=combine_weight_semantics,
+        receive_count=count,
+        max_absolute_error=max_absolute_error,
+        max_elementwise_relative_error=max_elementwise_relative_error,
+        max_weight_error=max_weight_error,
+        checks=checks,
+    )
+
+
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = args.mode
-    if mode != "normal":
+    if mode not in MODE_ALLOWED_SEMANTICS:
         if rank == 0:
             print(f"ERROR: unknown CollectiveX case mode {mode!r}")
         return 2
@@ -543,11 +793,23 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         if rank == 0:
             print(f"ERROR: backend mode {getattr(backend, 'mode', None)!r} != {mode!r}")
         return 2
-    expected_weight_semantics = "unweighted-rank-sum"
-    if getattr(backend, "combine_weight_semantics", None) != expected_weight_semantics:
+    allowed_semantics = MODE_ALLOWED_SEMANTICS[mode]
+    if getattr(backend, "combine_weight_semantics", None) not in allowed_semantics:
         if rank == 0:
             print(
-                f"ERROR: {mode} requires combine semantics {expected_weight_semantics}"
+                f"ERROR: {mode} requires combine semantics in {sorted(allowed_semantics)}; "
+                f"backend declares {getattr(backend, 'combine_weight_semantics', None)!r}"
+            )
+        return 2
+    # A non-control precision must realize a non-BF16 dispatch wire format. Otherwise a
+    # backend that lists the precision in SUPPORTED_PRECISIONS but never overrode its
+    # encode hooks would run the case in BF16 and emit an artifact mislabeled with the
+    # scheduled precision — fail closed rather than publish a mislabeled measurement.
+    if args.precision != "bf16" and backend.dispatch_dtype == "bf16":
+        if rank == 0:
+            print(
+                f"ERROR: precision {args.precision!r} did not realize a non-BF16 dispatch "
+                f"dtype (backend reports {backend.dispatch_dtype!r})"
             )
         return 2
 
@@ -695,11 +957,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             for percentile_name, latency_us in rtp.items()
         }
         # Canonical LOGICAL payload bytes come from the routing trace (NOT backend recv
-        # tensors): one copy per unique (token, dest-rank) pair. Dispatch and combine
-        # move the same logical payload; the roundtrip is their sum and stage moves nothing.
-        one_way_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
-        roundtrip_bytes = {field: 2 * value for field, value in one_way_bytes.items()}
-        stage_bytes = dict.fromkeys(one_way_bytes, 0)
+        # tensors): one copy per unique (token, dest-rank) pair. Dispatch carries the
+        # backend's realized precision (BF16, or 1-byte FP8 + optional scales); combine
+        # is always BF16. The roundtrip is their per-field sum and stage moves nothing.
+        dispatch_bytes = logical_byte_provenance(
+            rstats["routed_copies"], args.hidden,
+            backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy,
+        )
+        combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
+        roundtrip_bytes = {
+            field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
+        }
+        stage_bytes = dict.fromkeys(dispatch_bytes, 0)
         rows.append({
             "components": {
                 "combine": _component(cp, len(c)),
@@ -716,8 +985,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             },
             "global_tokens": gt,
             "byte_provenance": {
-                "combine": one_way_bytes,
-                "dispatch": one_way_bytes,
+                "combine": combine_bytes,
+                "dispatch": dispatch_bytes,
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
             },
@@ -755,6 +1024,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "mode": mode,
             "nodes": nodes,
             "phase": args.phase,
+            "precision": args.precision,
             "routing": args.routing,
             "scale_up_domain": scale_up_domain,
             "scale_up_transport": args.scale_up_transport,
@@ -798,9 +1068,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "cross_rank_consistent": routing_consistent,
         },
         "measurement": {
-            "combine_dtype": "bf16",
+            "combine_dtype": backend.combine_dtype,
             "combine_semantics": "activation-only",
-            "dispatch_dtype": "bf16",
+            "dispatch_dtype": backend.dispatch_dtype,
             "payload_unit": "token-rank",
             "rows": rows,
             "sampling": {

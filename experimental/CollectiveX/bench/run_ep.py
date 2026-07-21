@@ -50,7 +50,7 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
-    ap.add_argument("--backend", required=True, choices=["deepep-v2", "mori"])
+    ap.add_argument("--backend", required=True, choices=["deepep-v2", "mori", "uccl-ep"])
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -90,13 +90,20 @@ def main() -> int:
     # explicit case dimension; adapters do not infer it from the token ladder.
     if args.backend == "mori":
         from ep_mori import MoRIBackend as Backend
+    elif args.backend == "uccl-ep":
+        from ep_uccl import UCCLEPBackend as Backend
     else:
         from ep_deepep_v2 import DeepEPV2Backend as Backend
 
     # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
     # group device-only so scale-out does not also depend on a host Gloo fabric.
     if not dist.is_initialized():
-        if args.backend == "mori":
+        if args.backend in ("mori", "uccl-ep"):
+            # MoRI registers this group with its SHMEM runtime; UCCL-EP is portable across
+            # NVIDIA (NCCL) and AMD (RCCL) and bootstraps its Buffer + CPU-proxy ranks from
+            # it. Both take the explicit rank/world_size form and keep the group device-only
+            # so scale-out does not also depend on a host Gloo fabric. (uccl-ep's own default-
+            # PG registration, if any, happens in the adapter's create_buffer, mirroring MoRI.)
             dist.init_process_group(
                 backend="nccl",
                 rank=rank,
@@ -119,7 +126,7 @@ def main() -> int:
             print(
                 f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
                 f"world={world_size} ep_size={world_size} hidden={args.hidden} "
-                f"topk={args.topk} experts={args.experts} dtype=bf16 "
+                f"topk={args.topk} experts={args.experts} precision={args.precision} "
                 f"routing={args.routing} seed={args.seed}"
             )
         rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)

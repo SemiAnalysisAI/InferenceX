@@ -291,6 +291,10 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+    # Agentic eval rows (SWE-bench) carry run-eval/eval-only; benchmark rows
+    # omit them, and exclude_none keeps them out of dumped benchmark output.
+    run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
+    eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
 
     @model_validator(mode='after')
     def validate_kv_offload_fields(self):
@@ -325,6 +329,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     kv_p2p_transfer: Optional[str] = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
     )
+    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -890,6 +895,13 @@ class ChangelogMatrixEntry(BaseModel):
     multi_node: dict[str, list[Union[MultiNodeMatrixEntry, MultiNodeAgenticMatrixEntry]]
                      ] = Field(default_factory=dict)
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
+    # Agentic (SWE-bench) eval rows live in their own bucket rather than a
+    # union inside `evals`: each bucket maps 1:1 to a run-sweep.yml job with a
+    # static input block, so an agentic row can never reach the fixed-seq-len
+    # eval dispatch (which reads isl/osl/max-model-len and would launch the
+    # wrong benchmark script).
+    agentic_evals: list[SingleNodeAgenticMatrixEntry] = Field(
+        default_factory=list)
     multinode_evals: list[MultiNodeMatrixEntry] = Field(default_factory=list)
     changelog_metadata: ChangelogMetadata
 

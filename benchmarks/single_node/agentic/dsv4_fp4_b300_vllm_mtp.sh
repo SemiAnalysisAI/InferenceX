@@ -2,26 +2,40 @@
 set -eo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B300 using vLLM.
-# v4pro-b300.yaml TP4, DEP4, and DEP8 recipe. SimpleCPUOffload /
-# MooncakeStore / LMCache
+# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B300 using vLLM,
+# with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
+# length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
+#
+# Identical to dsv4_fp4_b300_vllm.sh (same image, engine args, offload, GPU
+# topologies, and agentic aiperf rig) with exactly two MTP deltas:
+#   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
+#   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
 # Image is configured in nvidia-master.yaml. The recipe uses FP8 KV cache,
 # sparse DeepSeek-V4 FlashInfer attention with an FP4 indexer cache, mega-MoE,
-# and FULL_DECODE_ONLY CUDA graphs with every batch size captured explicitly.
+# and FULL_DECODE_ONLY CUDA graphs with every decode batch captured explicitly.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# GPU-resident arms (TP4 and DEP8) use KV_OFFLOADING=none. DRAM offload
-# arms (TP and DEP) use KV_OFFLOADING=dram with
-# KV_OFFLOAD_BACKEND=vllm-simple, mooncake, or lmcache.
+# TP4, TP8, and DEP8 (TP8 + DP-attention) are GPU-resident (KV_OFFLOADING=none).
+# DEP4 uses KV_OFFLOADING=dram with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-GPU_COUNT=$TP
+DCP_SIZE="${DCP_SIZE:-1}"
+PCP_SIZE="${PCP_SIZE:-1}"
+VLLM_CP_ARGS=()
+if [ "$DCP_SIZE" -gt 1 ]; then
+    VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
+fi
+if [ "$PCP_SIZE" -gt 1 ]; then
+    VLLM_CP_ARGS+=(--prefill-context-parallel-size "$PCP_SIZE")
+fi
+
+GPU_COUNT=$((TP * PCP_SIZE))
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
     exit 1
@@ -35,8 +49,8 @@ if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
     exit 1
 fi
 
-# DEP8 (TP8 + DP-attention) is a high-concurrency arm that is tuned
-# separately from the smaller DEP4 arm (larger prefill token budget,
+# DEP8 (TP8 + DP-attention) is a GPU-resident, high-concurrency arm that is
+# tuned separately from the smaller DEP4 arm (larger prefill token budget,
 # long-prefill chunking, and a lower GPU-memory-utilization headroom).
 IS_DEP8=false
 if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
@@ -91,13 +105,11 @@ export VLLM_USE_RUST_FRONTEND=1
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
-LMCACHE_SERVER_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
-LMCACHE_SERVER_PID=""
 
 # The generated TOTAL_CPU_DRAM_GB budget is proportional to allocated GPUs.
 # On cluster:b300-nv, dram-utilization=0.80 and DEP4 resolve to roughly the
@@ -190,89 +202,6 @@ EOF
         OFFLOAD_CONFIG='{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         OFFLOAD_ARGS=(--kv-transfer-config "$OFFLOAD_CONFIG")
         ;;
-    lmcache)
-        require_agentic_kv_offload_backend lmcache
-        # The LMCache MP server owns the host-DRAM KV pool as one shared
-        # tier; vLLM ranks attach via LMCacheMPConnector, so the aggregate
-        # host budget is passed through undivided (unlike Mooncake's
-        # per-rank segments). Follows the LMCache DeepSeek-V4 recipe
-        # (docs.lmcache.ai/recipes/deepseek_v4_flash.html); LMCache handles
-        # DSV4's Sparse-MLA hybrid KV geometries automatically.
-        LMCACHE_VERSION=0.5.1
-        agentic_pip_install --quiet --no-cache-dir "lmcache==$LMCACHE_VERSION"
-        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
-
-        LMCACHE_HOST=127.0.0.1
-        LMCACHE_PORT=$((PORT + 12000))
-        LMCACHE_HTTP_PORT=$((PORT + 13000))
-        # LMCacheMPConnector concatenates lmcache.mp.host and port into the
-        # ZMQ endpoint. Bind the server to a raw host, but pass the connector
-        # a ZMQ-style host string.
-        LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
-        # Pool target derated to 75% of the aggregate budget: pinned host
-        # memory is unswappable and also consumes GPU-side mapping
-        # resources, so leave headroom for vLLM host buffers and the OS.
-        # Full-budget targets OOM-killed the node (host OOM-killer or
-        # cudaErrorMemoryAllocation) as the cache filled past ~2 TB during
-        # PR #2153 bring-up.
-        LMCACHE_L1_SIZE_GB=$((TOTAL_CPU_DRAM_GB * 3 / 4))
-        # The pool grows lazily from the initial allocation, so the full
-        # --l1-size-gb target is not pinned at startup.
-        LMCACHE_L1_INIT_SIZE_GB=20
-        LMCACHE_MQ_TIMEOUT=300
-        # Identical prefixes must hash to identical cache keys across DP ranks.
-        export PYTHONHASHSEED=0
-        # Per-engine scheduler stats every 5s, to diagnose per-DP-rank KV
-        # cache imbalance under the session-sticky router.
-        export VLLM_LOG_STATS_INTERVAL=5
-
-        echo "Starting LMCache MP server on port $LMCACHE_PORT..."
-        # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
-        # under heavy async-load pressure; CPU-side workers stay at 8.
-        lmcache server \
-            --host "$LMCACHE_HOST" \
-            --port "$LMCACHE_PORT" \
-            --http-host "$LMCACHE_HOST" \
-            --http-port "$LMCACHE_HTTP_PORT" \
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB" \
-            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB" \
-            --max-gpu-workers 1 \
-            --max-cpu-workers 8 \
-            --chunk-size 1024 \
-            --l1-align-bytes 16384 \
-            --eviction-trigger-watermark 0.85 \
-            --eviction-ratio 0.10 \
-            --eviction-policy LRU \
-            --supported-transfer-mode lmcache_driven \
-            --no-separate-object-groups \
-            > "$LMCACHE_SERVER_LOG" 2>&1 &
-        LMCACHE_SERVER_PID=$!
-        LMCACHE_READY=0
-        for _ in $(seq 1 60); do
-            if ! kill -0 "$LMCACHE_SERVER_PID" 2>/dev/null; then
-                echo "LMCache server died during startup." >&2
-                cat "$LMCACHE_SERVER_LOG" >&2
-                exit 1
-            fi
-            if curl --output /dev/null --silent --fail \
-                "http://127.0.0.1:$LMCACHE_HTTP_PORT/healthcheck"; then
-                LMCACHE_READY=1
-                break
-            fi
-            sleep 2
-        done
-        if [ "$LMCACHE_READY" -ne 1 ]; then
-            echo "LMCache server did not become healthy in time." >&2
-            cat "$LMCACHE_SERVER_LOG" >&2
-            exit 1
-        fi
-
-        unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
-        )
-        ;;
     *)
         echo "Error: unsupported B300 KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
         exit 1
@@ -286,15 +215,7 @@ fi
 
 TP_ARGS=()
 if [ "$DP_ATTENTION" = "true" ]; then
-    # LMCacheMPConnector exports the KV cache to the LMCache server through
-    # legacy CUDA IPC handles, and expandable-segment (cuMem/VMM) allocations
-    # cannot be exported that way (register_kv_caches fails with
-    # cudaErrorInvalidValue, same failure mode as --enable-cumem-allocator on
-    # the B200 lmcache arm in PR #2231), so the lmcache arm keeps the stock
-    # caching allocator.
-    if [ "$KV_OFFLOAD_BACKEND" != "lmcache" ]; then
-        export PYTORCH_ALLOC_CONF=expandable_segments:True
-    fi
+    export PYTORCH_ALLOC_CONF=expandable_segments:True
 else
     export VLLM_ALLREDUCE_USE_FLASHINFER=1
     export VLLM_FLASHINFER_ALLREDUCE_BACKEND=auto
@@ -312,8 +233,8 @@ fi
 if [ "$DP_ATTENTION" = "true" ]; then
     MODE_ARGS+=(--prefill-schedule-interval 8)
     if [ "$IS_DEP8" = "true" ]; then
-        # DEP8 gets a larger prefill token budget and chunks long prefills
-        # so decode latency stays bounded at high concurrency.
+        # GPU-resident DEP8 gets a larger prefill token budget and chunks long
+        # prefills so decode latency stays bounded at high concurrency.
         MODE_ARGS+=(
             --max-num-batched-tokens 16384
             --long-prefill-token-threshold 4096
@@ -330,12 +251,30 @@ else
     # Preserve the previous TP4 scheduler headroom for agentic fan-out.
     MAX_NUM_SEQS=$((2 * CONC))
 fi
+# MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
+# every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
+# explicit multiples (1+N), 2*(1+N), ..., MAX_NUM_SEQS*(1+N) -- one graph per
+# decode batch of 1..MAX_NUM_SEQS seqs. vLLM rounds configured sizes up to
+# multiples of (1+N) and dedups (adjust_cudagraph_sizes_for_spec_decode), so a
+# plain 1..MAX_NUM_SEQS list would collapse to coverage of only
+# MAX_NUM_SEQS/(1+N) seqs and drop the largest decode batches to eager.
+NUM_SPEC_TOKENS=3
+TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
+# Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
+# num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
+# accuracy run uses real target verification instead -- synthetic acceptance
+# bypasses verification and corrupts the SWE-bench eval (0.0000 score).
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+else
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
+fi
 CUDA_GRAPH_CAPTURE_SIZES=""
-for ((capture_size = 1; capture_size <= MAX_NUM_SEQS; capture_size++)); do
+for ((num_seqs = 1; num_seqs <= MAX_NUM_SEQS; num_seqs++)); do
     if [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ]; then
         CUDA_GRAPH_CAPTURE_SIZES+=","
     fi
-    CUDA_GRAPH_CAPTURE_SIZES+="$capture_size"
+    CUDA_GRAPH_CAPTURE_SIZES+="$((num_seqs * TOKENS_PER_SEQ))"
 done
 COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
 
@@ -344,20 +283,11 @@ export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
 
-# DEP8 leaves more headroom for its larger prefill token budget.
-GPU_MEM_UTIL=0.96
+# DEP8 leaves more headroom for its larger prefill token budget; all other
+# topologies (TP4/DEP4/TP8) use 0.95.
+GPU_MEM_UTIL=0.95
 if [ "$IS_DEP8" = "true" ]; then
     GPU_MEM_UTIL=0.92
-fi
-# The lmcache arm needs extra headroom on the other topologies too: the
-# LMCache MP server keeps a GPU worker (~0.8 GiB CUDA context + staging
-# buffers) on every GPU and the arm cannot run expandable segments (the KV
-# cache must stay legacy-CUDA-IPC-exportable), so at 0.96 the PR #2232
-# bring-up sweep hit DeepGEMM workspace/JIT-loader OOMs. 0.94 was validated
-# for lmcache TP and DEP4 in the same sweep; lmcache DEP8 keeps the 0.92
-# above (also validated).
-if [ "$KV_OFFLOAD_BACKEND" = "lmcache" ] && [ "$IS_DEP8" != "true" ]; then
-    GPU_MEM_UTIL=0.94
 fi
 
 { set +x; } 2>/dev/null
@@ -374,6 +304,7 @@ VLLM_CMD=(
     --block-size 256
     --max-model-len 1048576
     --attention-config '{"use_fp4_indexer_cache":true,"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true}'
+    --speculative-config "$SPEC_CONFIG"
     --disable-uvicorn-access-log
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
@@ -381,6 +312,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4
     --compilation-config "$COMPILATION_CONFIG"
     "${PARALLEL_ARGS[@]}"
+    "${VLLM_CP_ARGS[@]}"
     "${TP_ARGS[@]}"
     "${MODE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"

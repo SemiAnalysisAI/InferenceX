@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 
-# GLM-5 FP8 on H200 (Hopper) with EAGLE / MTP speculative decoding.
-# Mirrors glm5_fp8_h200.sh but adds the speculative-* flags. We keep the
-# server-arg shape from the non-MTP H200 recipe (sglang defaults — no
-# nsa/trtllm-mha) since those backends are Blackwell-specific and not
-# applicable to Hopper.
-
-source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/../../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -33,6 +27,7 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
 fi
 
+# Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
@@ -46,14 +41,12 @@ python3 -m sglang.launch_server \
   --mem-fraction-static 0.85 \
   --served-model-name glm-5-fp8 \
   --trust-remote-code \
-  --speculative-algorithm EAGLE \
-  --speculative-num-steps 3 \
-  --speculative-eagle-topk 1 \
-  --speculative-num-draft-tokens 4 \
+  --enable-flashinfer-allreduce-fusion \
   $EVAL_CONTEXT_ARGS > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
+# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 run_benchmark_serving \
@@ -67,14 +60,16 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --trust-remote-code \
-    --use-chat-template
+    --trust-remote-code
 
+# After throughput, run evaluation only if RUN_EVAL is true
+# Server accepts glm-5-fp8 (--served-model-name); lm-eval must use that model name
 if [ "${RUN_EVAL}" = "true" ]; then
     export MODEL_NAME=glm-5-fp8
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
+# Stop GPU monitoring
 stop_gpu_monitor
 set +x

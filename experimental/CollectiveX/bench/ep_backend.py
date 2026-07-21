@@ -61,11 +61,15 @@ class EPBackend(abc.ABC):
     Subclasses implement the transport (create_buffer, dispatch, stage,
     combine, recv_tokens, inspect_dispatch, combine_transformed);
     everything the driver and the oracles need beyond that is provided here.
-    Dispatch and combine are fixed BF16, so no adapter selects a precision codec.
+    Combine is always BF16; an adapter that supports FP8 dispatch overrides
+    SUPPORTED_PRECISIONS and the semantic_payload/_encode_dispatch hooks.
     """
 
     name: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
+    # Dispatch precisions the adapter realizes. BF16 is the universal control; an
+    # adapter that also sends an FP8-quantized dispatch payload widens this.
+    SUPPORTED_PRECISIONS: tuple = ("bf16",)
     stage_device_work = False
     combine_needs_redispatch = False
     dispatch_needs_combine_cleanup = False
@@ -73,6 +77,15 @@ class EPBackend(abc.ABC):
     # the complete local weighted expert sum in the activation tensor.
     combine_weight_semantics = "unweighted-rank-sum"
     roundtrip_only = False
+    # Realized wire formats recorded in the artifact. Combine is always BF16;
+    # dispatch_dtype is overridden per-run by an FP8 adapter (e.g. "fp8-e4m3fn").
+    dispatch_dtype = "bf16"
+    combine_dtype = "bf16"
+    # Logical byte model for one dispatched copy: bytes per activation value and
+    # per-copy scale bytes. BF16 moves 2 bytes/value with no scale payload; an FP8
+    # adapter sends 1 byte/value plus (for a blockwise codec) per-block FP32 scales.
+    dispatch_value_bytes = 2
+    dispatch_scale_bytes_per_copy = 0
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -90,6 +103,11 @@ class EPBackend(abc.ABC):
         self.mode = args.mode
         if self.mode not in self.SUPPORTED_MODES:
             raise ValueError(f"{self.name} does not support mode {self.mode!r}")
+        self.precision = args.precision
+        if self.precision not in self.SUPPORTED_PRECISIONS:
+            raise ValueError(
+                f"{self.name} does not support precision {self.precision!r}"
+            )
 
     # ---- Abstract transport contract -------------------------------------------------
 
@@ -179,17 +197,44 @@ class EPBackend(abc.ABC):
             global_weights=w_g,
         )
 
+    def semantic_payload(self, x):
+        """The BF16 values the oracle should expect for a dispatched payload.
+
+        Identity for a backend that sends x unchanged. An FP8 backend overrides this
+        to apply the exact quant->dequant round-trip the kernel transports, so the
+        dispatched-payload compare stays bit-exact and the combine gate stays tight.
+        """
+        return x
+
+    def _encode_dispatch(self, x):
+        """Return (dispatch_payload, oracle_semantic) for the source activations x.
+
+        Base identity: send x, no separate oracle payload (BF16). An FP8 adapter
+        returns the caller-prequantized dispatch payload and the dequantized BF16 the
+        oracle must expect after the backend's own dequant.
+        """
+        return x, None
+
     def make_problem(self, T, idx, weights, x):
-        """Assemble the per-shape problem namespace (BF16 dispatch sends x directly)."""
+        """Assemble the per-shape problem namespace.
+
+        dispatch_x is the payload actually sent (x itself in BF16; the caller-
+        prequantized encoding under FP8). oracle_x, when set, is the dequantized BF16
+        the combine oracle must expect, so the tight gate needs no tolerance change.
+        """
         import torch
 
-        return types.SimpleNamespace(
+        dispatch_x, oracle_semantic = self._encode_dispatch(x)
+        problem = types.SimpleNamespace(
             T=T,
             x=x,
-            dispatch_x=x,
+            dispatch_x=dispatch_x,
             topk_idx=idx.to(self._topk_idx_dtype()),
             topk_weights=weights.to(torch.float32),
         )
+        if oracle_semantic is not None:
+            problem.oracle_x = oracle_semantic
+        return problem
 
     def _topk_idx_dtype(self):
         """Integer dtype the backend's kernels expect for top-k routing indices."""

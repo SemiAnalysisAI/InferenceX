@@ -137,6 +137,7 @@ def main():
         "single_node": defaultdict(list),
         "multi_node": defaultdict(list),
         "evals": [],
+        "agentic_evals": [],
         "multinode_evals": [],
         "changelog_metadata": {
             "base_ref": args.base_ref,
@@ -271,7 +272,18 @@ def main():
             seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
-    final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]
+    # Agentic eval rows go to their own bucket so run-sweep.yml can dispatch
+    # them with agentic inputs (scenario-type, kv-offloading, ...) instead of
+    # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have.
+    single_node_evals = [e for e in all_eval_results if e.get("prefill") is None]
+    final_results["evals"] = [
+        e for e in single_node_evals
+        if e.get("scenario-type") != "agentic-coding"
+    ]
+    final_results["agentic_evals"] = [
+        e for e in single_node_evals
+        if e.get("scenario-type") == "agentic-coding"
+    ]
     final_results["multinode_evals"] = [e for e in all_eval_results if e.get("prefill") is not None]
 
     # Validate final results structure

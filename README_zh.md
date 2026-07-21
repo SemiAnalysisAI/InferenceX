@@ -59,6 +59,7 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 | MI300X | ✅ |
 | H200 | ✅ |
 | H100 | ✅ |
+| TPUv7x Ironwood Ghostfish | Coming Soon 🔜 |
 | MI455 UALoE72 | Coming Soon 🔜 |
 | Vera Rubin NVL72 | Coming Soon 🔜 |
 | Rubin NVL8 | Coming Soon 🔜 |

@@ -34,7 +34,7 @@ NODELIST="${COLLX_NODELIST:-}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  mori) ;;
+  mori | uccl-ep) ;;
   *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
 esac
 
@@ -61,6 +61,11 @@ collx_log "runner=$RUNNER nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BEN
 # ---- repository-stage: compute-visible copy of the checkout -----------------
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
+# UCCL builds from source (mori ships in the image); stage the pinned tree pre-allocation.
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  collx_prepare_uccl_source "$MOUNT_SRC" || collx_die "cannot stage the pinned UCCL source"
+  export COLLX_BACKEND_SOURCE_ROOT=/ix/experimental/CollectiveX/.collx_sources
+fi
 collx_select_image "$IMAGE"
 
 # ---- scheduler-allocation + container-import: retry until nodes validate ----
@@ -118,6 +123,15 @@ for allocation_attempt in 1 2 3; do
 done
 unset COLLX_SALLOC_ATTEMPT COLLX_NETWORK_VALIDATION_ATTEMPT
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
+# uccl-ep builds from source, so give it the same cross-allocation backend cache the single-slurm
+# launcher provides (built once per arch/image/commit under /cx-cache, reused each allocation).
+# mori ships in the image and needs no cache, so its mounts are left untouched.
+if [ "$COLLX_BENCH" = uccl-ep ]; then
+  collx_prepare_backend_cache "$SQUASH_DIR" \
+    || collx_die "cannot prepare the isolated backend cache"
+  CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
+  export COLLX_BACKEND_CACHE_ROOT=/cx-cache
+fi
 
 # ---- container-launch -> artifact-collection (shared tail) ------------------
 COLLX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)

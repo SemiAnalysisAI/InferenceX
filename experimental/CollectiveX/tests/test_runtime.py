@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 
 
@@ -142,7 +143,7 @@ class ConfigTests(unittest.TestCase):
     def test_operator_config_registry_only_emits_image_for_secret_fed_sku(self) -> None:
         # A SKU without tracked operator settings still gets its public image
         # configuration; private scheduler values can arrive through the overlay.
-        payload = self._emit_registry_only("mi325x")
+        payload = self._emit_registry_only("mi325x-tw")
         self.assertIn(b"COLLX_IMAGE\0rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701\0", payload)
         self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/amd64\0", payload)
 
@@ -322,14 +323,15 @@ class StageContract(unittest.TestCase):
 # here instead of on a GPU allocation.
 class CaseArgvContract(unittest.TestCase):
     CASE = {
-        "backend": "deepep-v2", "mode": "normal", "phase": "decode",
+        "backend": "deepep-v2", "mode": "normal", "precision": "bf16",
+        "phase": "decode",
         "routing": "uniform", "ep": 16, "nodes": 2, "gpus_per_node": 8,
         "scale_up_domain": 8, "scope": "scale-out",
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
         "ladder": "1 2 4", "timing": "8:256:32",
-        "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform",
+        "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform-bf16",
         "suite": "ep-core", "workload": "deepseek-v3",
     }
 
@@ -338,7 +340,7 @@ class CaseArgvContract(unittest.TestCase):
         # Mirror of the parser bench/run_ep.py builds in main().
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--backend", required=True, choices=["deepep-v2", "mori"]
+            "--backend", required=True, choices=["deepep-v2", "mori", "uccl-ep"]
         )
         ep_harness.add_common_args(parser)
         return parser
@@ -348,10 +350,10 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(parts[-1], b"")
         return [part.decode() for part in parts[:-1]]
 
-    def _case_argv(self, placement: list) -> list:
+    def _case_argv(self, placement: list, case: dict | None = None) -> list:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "shard.json"
-            path.write_text(json.dumps({"version": 1, "cases": [self.CASE]}))
+            path.write_text(json.dumps({"version": 1, "cases": [case or self.CASE]}))
             result = subprocess.run(
                 [sys.executable, str(RUNTIME / "config.py"), "case-args",
                  str(path), "0", "h200-dgxc", "TS", *placement],
@@ -366,6 +368,7 @@ class CaseArgvContract(unittest.TestCase):
             (args.backend, args.mode, args.phase, args.routing, args.scope),
             ("deepep-v2", "normal", "decode", "uniform", "scale-out"),
         )
+        self.assertEqual(args.precision, "bf16")
         self.assertEqual((args.hidden, args.topk, args.experts), (7168, 8, 256))
         self.assertEqual((args.gpus_per_node, args.scale_up_domain), (8, 8))
         self.assertEqual(args.tokens_ladder, "1 2 4")
@@ -374,11 +377,178 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.version, 1)
         self.assertEqual(args.seed, self.CASE["seed"])
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
-        self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_decode_TS-c000.json")
+        self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_bf16_decode_TS-c000.json")
 
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
+
+    def test_low_latency_case_round_trips_through_the_run_ep_parser(self) -> None:
+        # A low-latency decode EP8 case flows through the same codec; run_ep's --mode
+        # choices must accept "low-latency" or the leg dies before allocation.
+        ll_case = {
+            **self.CASE,
+            "mode": "low-latency", "phase": "decode",
+            "ep": 8, "nodes": 1, "gpus_per_node": 8, "scale_up_domain": 8,
+            "scope": "scale-up", "scale_up_transport": "nvlink",
+            "scale_out_transport": "", "transport": "nvlink",
+            "topology_class": "h200-nvlink-island", "ladder": "1 2 4 8",
+            "case_id": "h200-dgxc-deepep-v2-deepseek-v3-low-latency-decode-ep8-uniform-bf16",
+        }
+        argv = self._case_argv(["8", "1", "8", "8"], case=ll_case)
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual((args.mode, args.phase, args.scope), ("low-latency", "decode", "scale-up"))
+        self.assertEqual(args.case_id, ll_case["case_id"])
+
+    def test_uccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
+        # A uccl-ep case flows through the same generic codec; run_ep's --backend choices
+        # must accept "uccl-ep" and the result filename must carry the backend token so a
+        # uccl-ep leg never collides with the deepep-v2/mori legs of the same cell.
+        uccl_case = {
+            **self.CASE,
+            "backend": "uccl-ep",
+            "case_id": "h200-dgxc-uccl-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
+        }
+        argv = self._case_argv(["16", "2", "8", "8"], case=uccl_case)
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual(args.backend, "uccl-ep")
+        self.assertEqual(args.case_id, uccl_case["case_id"])
+        self.assertEqual(args.out, "results/h200-dgxc_uccl-ep_bf16_decode_TS-c000.json")
+
+
+# logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
+# per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
+class LogicalByteProvenanceTests(unittest.TestCase):
+    def test_bf16_default_is_two_bytes_per_value_no_scales(self) -> None:
+        got = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
+        self.assertEqual(got["activation_data_bytes"], 10 * 7168 * 2)
+        self.assertEqual(got["scale_bytes"], 0)
+        self.assertEqual(got["total_logical_bytes"], 10 * 7168 * 2)
+
+    def test_fp8_blockwise_dispatch_is_one_byte_plus_per_copy_scales(self) -> None:
+        # DeepEP FP8 dispatch: 1 byte/value + ceil(hidden/128)*4 FP32 scale bytes/copy.
+        scale_per_copy = ((7168 + 127) // 128) * 4  # 224
+        got = ep_harness.logical_byte_provenance(
+            logical_copies=10, hidden=7168, value_bytes=1,
+            scale_bytes_per_copy=scale_per_copy,
+        )
+        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
+        self.assertEqual(got["scale_bytes"], 10 * scale_per_copy)
+        self.assertEqual(got["total_logical_bytes"], 10 * 7168 + 10 * scale_per_copy)
+
+    def test_fp8_direct_cast_dispatch_is_one_byte_no_scales(self) -> None:
+        # MoRI's scale-free e4m3 cast: 1 byte/value, no scale payload.
+        got = ep_harness.logical_byte_provenance(
+            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=0,
+        )
+        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
+        self.assertEqual(got["scale_bytes"], 0)
+
+    def test_roundtrip_is_the_per_field_sum_of_dispatch_and_combine(self) -> None:
+        # run_sweep assembles the roundtrip as the per-field sum of an FP8 dispatch and a
+        # BF16 combine; the direction bytes differ, so it is not 2x a single direction.
+        dispatch = ep_harness.logical_byte_provenance(
+            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=224,
+        )
+        combine = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
+        roundtrip = {field: dispatch[field] + combine[field] for field in dispatch}
+        self.assertEqual(roundtrip["activation_data_bytes"], 10 * 7168 * (1 + 2))
+        self.assertEqual(roundtrip["scale_bytes"], 10 * 224)
+        self.assertNotEqual(roundtrip["total_logical_bytes"], 2 * combine["total_logical_bytes"])
+
+    def test_guards_fail_closed(self) -> None:
+        for kwargs in (
+            {"logical_copies": -1, "hidden": 8},
+            {"logical_copies": 1, "hidden": -1},
+            {"logical_copies": 1, "hidden": 8, "value_bytes": 0},
+            {"logical_copies": 1, "hidden": 8, "value_bytes": -1},
+            {"logical_copies": 1, "hidden": 8, "scale_bytes_per_copy": -1},
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                ep_harness.logical_byte_provenance(**kwargs)
+
+
+class ModeSemanticsContract(unittest.TestCase):
+    # The combine contract is a backend fact, not a pure function of mode: DeepEP's
+    # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is
+    # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
+    def test_mode_allowed_semantics(self) -> None:
+        self.assertEqual(
+            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
+        )
+        self.assertEqual(
+            ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],
+            {"weighted-kernel-sum", "unweighted-rank-sum"},
+        )
+
+
+try:
+    import torch as _torch
+except Exception:  # torch is absent in the CPU test image; these checks run on GPU CI
+    _torch = None
+
+
+@unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
+class WeightedCombineSemanticsTests(unittest.TestCase):
+    """Pin the semantic distinction between the two combine contracts, independent of any
+    GPU backend. Normal mode folds the gate weight INTO the staged transform (kernel
+    sums); low-latency stages the UNWEIGHTED transform and the kernel applies the gate."""
+
+    def _problem(self, weight_scale: float = 1.0):
+        torch = _torch
+        x = torch.randn(4, 64, dtype=torch.bfloat16)
+        idx = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]], dtype=torch.int64)
+        weights = (torch.rand(4, 2, dtype=torch.float32) + 0.1) * weight_scale
+        return types.SimpleNamespace(x=x, topk_idx=idx, topk_weights=weights)
+
+    def test_transform_drops_the_gate_under_weighted_kernel_sum(self):
+        torch = _torch
+        payload = torch.randn(3, 64, dtype=torch.bfloat16)
+        ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
+        low = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.2), "weighted-kernel-sum"
+        )
+        high = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.9), "weighted-kernel-sum"
+        )
+        # Unit coefficient: the staged value cannot depend on the gate magnitude.
+        self.assertTrue(torch.equal(low, high))
+
+    def test_transform_folds_the_gate_under_unweighted_rank_sum(self):
+        torch = _torch
+        payload = torch.randn(3, 64, dtype=torch.bfloat16)
+        ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
+        low = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.2), "unweighted-rank-sum"
+        )
+        high = ep_harness._expert_transform(
+            torch, payload, ids, torch.full((3, 2), 0.9), "unweighted-rank-sum"
+        )
+        # The gate IS in the transform here, so a larger weight changes the staged value.
+        self.assertFalse(torch.equal(low, high))
+
+    def test_expected_combine_is_linear_in_the_gate_under_weighted_kernel_sum(self):
+        torch = _torch
+        p = self._problem(1.0)
+        p2 = types.SimpleNamespace(
+            x=p.x, topk_idx=p.topk_idx, topk_weights=p.topk_weights * 2
+        )
+        base = ep_harness._expected_transformed_combine(
+            torch, p, 4, 8, "weighted-kernel-sum"
+        )
+        doubled = ep_harness._expected_transformed_combine(
+            torch, p2, 4, 8, "weighted-kernel-sum"
+        )
+        # Same routing/activations, gate x2 -> expected x2 (the kernel applies the gate).
+        self.assertTrue(torch.allclose(doubled, base * 2, atol=1e-3, rtol=1e-3))
+
+    def test_unknown_semantics_fail_closed(self):
+        torch = _torch
+        with self.assertRaises(ValueError):
+            ep_harness._expected_transformed_combine(
+                torch, self._problem(), 4, 8, "made-up"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

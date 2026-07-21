@@ -583,3 +583,59 @@ def test_agentic_only_all_evals_does_not_suppress_later_fixed_evals(
     assert "--all-evals" not in commands[2]
     assert _scenario_values(commands[2]) == ["fixed-seq-len"]
     json.loads(capsys.readouterr().out)
+
+
+def test_eval_rows_split_into_fixed_and_agentic_buckets(
+    monkeypatch,
+    capsys,
+):
+    """Realistic eval rows must pass final validation and land in the bucket
+    matching their dispatch job: fixed-seq-len rows in `evals`, agentic
+    (SWE-bench) rows in `agentic_evals`."""
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Mixed fixed-seq-len and agentic eval selection
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+    common = {
+        "image": "vllm/vllm-openai:v0.11.0",
+        "model": "deepseek-ai/DeepSeek-V4-Pro", "model-prefix": "dsv4",
+        "precision": "fp4", "framework": "vllm", "spec-decoding": "mtp",
+        "runner": "cluster:b300-nv", "tp": 8, "pp": 1, "dcp-size": 1,
+        "pcp-size": 1, "ep": 8, "dp-attn": True, "conc": 224,
+        "run-eval": True, "eval-only": True,
+    }
+    fixed_eval_row = {
+        **common, "isl": 8192, "osl": 1024, "max-model-len": 10240,
+        "disagg": False, "exp-name": "fixed_eval",
+    }
+    agentic_eval_row = {
+        **common, "kv-offloading": "none", "total-cpu-dram-gb": 0,
+        "duration": 3600, "scenario-type": "agentic-coding",
+        "exp-name": "agentic_eval",
+    }
+
+    monkeypatch.setattr(
+        process_changelog, "get_added_lines", lambda *_: added_yaml)
+    monkeypatch.setattr(
+        process_changelog, "load_config_files", lambda _: {"test-config": {}})
+
+    def fake_run(command, **kwargs):
+        is_evals = "--evals-only" in command
+        rows = [fixed_eval_row, agentic_eval_row] if is_evals else []
+        return SimpleNamespace(stdout=json.dumps(rows))
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py", "--base-ref", "base", "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+    ])
+
+    process_changelog.main()
+
+    output = json.loads(capsys.readouterr().out)
+    assert [r["exp-name"] for r in output["evals"]] == ["fixed_eval"]
+    assert [r["exp-name"] for r in output["agentic_evals"]] == ["agentic_eval"]
+    assert output["multinode_evals"] == []
