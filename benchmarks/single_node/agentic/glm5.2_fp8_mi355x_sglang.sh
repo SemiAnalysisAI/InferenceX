@@ -169,7 +169,13 @@ fi
 # max-running-requests is 2*CONC (subagent fan-out headroom); the CUDA-graph
 # range covers it up to the cookbook high-throughput cap of 256.
 if [ "$CONC" -le 16 ]; then
-    CHUNKED_PREFILL_SIZE=131072
+    # 65536, not the cookbook's 131072: FP8 weights leave only ~12 GiB of
+    # dynamic headroom above the 0.80 static pool, and a 131k-token chunk's
+    # ~10 GiB activation burst OOMs on allocator fragmentation about every
+    # other run ("Tried to allocate 9.91 GiB ... 11.93 GiB is free", 2/3 CI
+    # failures at conc 16). Halving the chunk halves the burst; the MXFP4
+    # sibling keeps 131072 (its smaller weights leave ~40 GiB more slack).
+    CHUNKED_PREFILL_SIZE=65536
     MEM_FRACTION_STATIC=0.80
 else
     CHUNKED_PREFILL_SIZE=32768
