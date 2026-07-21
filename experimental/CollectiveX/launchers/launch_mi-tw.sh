@@ -72,7 +72,6 @@ collx_log "runner=$RUNNER nodes=1 x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH im
 # rm root-owned files under the job root (that reds an otherwise-green leg). /tmp is outside
 # cleanup's scope and lets a second leg on the same node reuse the build. The AMD build applies
 # the CDNA managed->pinned-host-memory patch (see prepare_backend.sh).
-UCCL_PFX_HOST="/tmp/collx-uccl-pfx-$COLLX_UCCL_COMMIT"
 UCCL_PFX_MOUNT=()
 if [ "$COLLX_BENCH" = uccl-ep ]; then
   REPO_ROOT="$(cd "$COLLX_DIR/../.." && pwd)"
@@ -82,30 +81,50 @@ import json, sys
 print(json.load(open(sys.argv[1]))["platforms"][sys.argv[2]]["arch"])
 PY
 )"
-  mkdir -p "$UCCL_PFX_HOST"
+  # Cache key = pinned UCCL commit + the image's CONTENT id + GPU arch. Torch/ROCm are baked into
+  # the image, so its content id (not the mutable tag) captures an ABI change even under a
+  # re-pushed tag, and the arch captures a cross-SKU reuse hazard. Keying on the commit alone (as
+  # before) would let a bumped image or a different arch silently reuse an ABI-stale build.
+  UCCL_IMAGE_ID="$("${DOCKER[@]}" image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null \
+    || printf '%s' "$IMAGE")"
+  UCCL_CACHE_KEY="$(printf '%s\0%s\0%s' "$COLLX_UCCL_COMMIT" "$UCCL_IMAGE_ID" "$UCCL_ARCH" \
+    | sha1sum | cut -c1-16)"
+  UCCL_PFX_HOST="/tmp/collx-uccl-pfx-$UCCL_CACHE_KEY"
   UCCL_PFX_MOUNT=(-v "$UCCL_PFX_HOST:/uccl_pfx")
-  if [ ! -d "$UCCL_PFX_HOST/deep_ep" ]; then
-    collx_log "uccl-ep: one-time from-source build (arch=$UCCL_ARCH, USE_DMABUF, host-atomic path)"
-    "${DOCKER[@]}" run --rm \
-      --device /dev/kfd --device /dev/dri --group-add video --group-add render \
-      --ipc host --shm-size 32g --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
-      -v "$COLLX_DIR:/cx" -v "$UCCL_PFX_HOST:/uccl_pfx" -w /cx "$IMAGE" \
-      bash -c '
-        set -e
-        { pip install -q nanobind || pip install -q --break-system-packages nanobind; } >&2
-        rm -rf /tmp/ub && cp -R "/cx/.collx_sources/uccl-'"$COLLX_UCCL_COMMIT"'" /tmp/ub
-        # gfx942/gfx950 lack usable managed memory; swap UCCL'"'"'s cudaMallocManaged CPU-proxy
-        # handles to pinned host memory (coherent + device-accessible on CDNA).
-        sed -i "s/cudaMallocManaged/cudaMallocHost/g" /tmp/ub/ep/src/uccl_ep.cc /tmp/ub/ep/src/uccl_proxy.cpp
-        cd /tmp/ub/ep && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 PYTORCH_ROCM_ARCH="'"$UCCL_ARCH"'" python3 setup.py install >&2
-        # --no-deps: the wrapper install_requires=["uccl"] pulls the PyPI uccl->uccl-cu12 wheel
-        # (absent on ROCm); our from-source ep build already provides uccl.ep in site-packages.
-        cd /tmp/ub/ep/deep_ep_wrapper && { pip install -q --no-deps . || pip install -q --no-deps --break-system-packages . ; } >&2
-        SP="$(python3 -c "import site;print(site.getsitepackages()[0])")"
-        rm -rf /uccl_pfx/* && cp -R "$SP"/deep_ep* "$SP"/uccl* /uccl_pfx/
-        python3 -c "import torch,sys; sys.path.insert(0,\"/uccl_pfx\"); import deep_ep; from deep_ep import Buffer; assert hasattr(Buffer,\"get_dispatch_layout\")" >&2
-      ' >&2 \
-      || collx_die "uccl-ep from-source build failed"
+  # Readiness is a `.ready` marker written LAST (only after the in-container import verification
+  # passes), never the mere existence of deep_ep/: an interrupted copy or a failed import must not
+  # leave a half-populated cache a later job reuses blind. Build into a private temp dir, then
+  # publish atomically with `mv -T` (a concurrent leg that loses the rename just drops its temp).
+  if [ ! -f "$UCCL_PFX_HOST/.ready" ]; then
+    collx_log "uccl-ep: one-time from-source build (arch=$UCCL_ARCH, key=$UCCL_CACHE_KEY, USE_DMABUF, host-atomic path)"
+    rm -rf "$UCCL_PFX_HOST"   # clear any partial/aborted prior attempt (no .ready)
+    uccl_build_tmp="$(mktemp -d /tmp/collx-uccl-pfx.XXXXXX)" || collx_die "uccl-ep: mktemp failed"
+    if "${DOCKER[@]}" run --rm \
+        --device /dev/kfd --device /dev/dri --group-add video --group-add render \
+        --ipc host --shm-size 32g --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
+        -v "$COLLX_DIR:/cx" -v "$uccl_build_tmp:/uccl_pfx" -w /cx "$IMAGE" \
+        bash -c '
+          set -e
+          { pip install -q nanobind || pip install -q --break-system-packages nanobind; } >&2
+          rm -rf /tmp/ub && cp -R "/cx/.collx_sources/uccl-'"$COLLX_UCCL_COMMIT"'" /tmp/ub
+          # gfx942/gfx950 lack usable managed memory; swap UCCL'"'"'s cudaMallocManaged CPU-proxy
+          # handles to pinned host memory (coherent + device-accessible on CDNA).
+          sed -i "s/cudaMallocManaged/cudaMallocHost/g" /tmp/ub/ep/src/uccl_ep.cc /tmp/ub/ep/src/uccl_proxy.cpp
+          cd /tmp/ub/ep && env USE_DMABUF=1 PER_EXPERT_BATCHING=1 PYTORCH_ROCM_ARCH="'"$UCCL_ARCH"'" python3 setup.py install >&2
+          # --no-deps: the wrapper install_requires=["uccl"] pulls the PyPI uccl->uccl-cu12 wheel
+          # (absent on ROCm); our from-source ep build already provides uccl.ep in site-packages.
+          cd /tmp/ub/ep/deep_ep_wrapper && { pip install -q --no-deps . || pip install -q --no-deps --break-system-packages . ; } >&2
+          SP="$(python3 -c "import site;print(site.getsitepackages()[0])")"
+          rm -rf /uccl_pfx/* && cp -R "$SP"/deep_ep* "$SP"/uccl* /uccl_pfx/
+          python3 -c "import torch,sys; sys.path.insert(0,\"/uccl_pfx\"); import deep_ep; from deep_ep import Buffer; assert hasattr(Buffer,\"get_dispatch_layout\")" >&2
+          touch /uccl_pfx/.ready   # publish gate: written only after the import check succeeds
+        ' >&2; then
+      mv -T "$uccl_build_tmp" "$UCCL_PFX_HOST" 2>/dev/null || rm -rf "$uccl_build_tmp"
+    else
+      rm -rf "$uccl_build_tmp"
+      collx_die "uccl-ep from-source build failed"
+    fi
+    [ -f "$UCCL_PFX_HOST/.ready" ] || collx_die "uccl-ep: build did not publish a ready cache"
     collx_log "uccl-ep: build persisted to $UCCL_PFX_HOST"
   else
     collx_log "uccl-ep: reusing persisted build at $UCCL_PFX_HOST"

@@ -134,12 +134,15 @@ collx_require_vars() {
 
 collx_export_gid_index_for_link_layer() {
   local link_layer="$1"
-  unset NVSHMEM_IB_GID_INDEX NCCL_IB_GID_INDEX
+  unset NVSHMEM_IB_GID_INDEX NCCL_IB_GID_INDEX UCCL_IB_GID_INDEX
   [ -n "${COLLX_IB_GID_INDEX:-}" ] || return 0
   case "$link_layer" in
     roce)
       export NVSHMEM_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
       export NCCL_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
+      # UCCL-EP reads only its own UCCL_IB_GID_INDEX (it does NOT consult NCCL_IB_GID_INDEX), so
+      # RoCE runs must set it here or the CPU proxies fall back to GID 0 and mis-address the fabric.
+      export UCCL_IB_GID_INDEX="$COLLX_IB_GID_INDEX"
       ;;
     infiniband) ;;
     *) collx_die "unsupported RDMA link layer" ;;
@@ -196,9 +199,12 @@ collx_apply_network_profile() {
   fi
   export NCCL_IB_HCA="=$COLLX_RDMA_DEVICES"
   export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
-  # UCCL-EP's CPU proxies read UCCL_* selectors but fall back to NCCL_IB_HCA / NCCL_IB_GID_INDEX
-  # (set above / by the link-layer helper) for the device list and GID, so only the socket iface
-  # and, on AMD, the strict Pollara/Broadcom flow control + CDNA host-atomic path need setting.
+  # UCCL-EP's CPU proxies read ONLY the UCCL_* selectors; they do NOT consult NCCL_IB_HCA /
+  # NCCL_IB_GID_INDEX. So the device list and GID must come through UCCL's own vars: the HCA list
+  # here, and the GID index via collx_export_gid_index_for_link_layer (RoCE, called at the end of
+  # this function). The socket iface and, on AMD, the strict Pollara/Broadcom flow control + CDNA
+  # host-atomic path are likewise UCCL_* vars.
+  export UCCL_IB_HCA="$rdma_names"
   export UCCL_SOCKET_IFNAME="${COLLX_SOCKET_IFNAME:-}"
   if [ "${COLLX_VENDOR:-nvidia}" = amd ]; then
     export UCCL_IB_MAX_INFLIGHT_BYTES="${UCCL_IB_MAX_INFLIGHT_BYTES:-2097152}"

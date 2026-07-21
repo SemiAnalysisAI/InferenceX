@@ -17,9 +17,11 @@ path, which is ~1:1 reusable here):
   low-latency -> low_latency_dispatch/low_latency_combine; per-expert padded recv, source-side
                  weighted-kernel-sum combine.
 
-FP8 dispatch is caller-prequantized (blockwise e4m3fn, e4m3fnuz on gfx942), combine is BF16 — the
-oracle applies the identical per-token cast round-trip via semantic_payload/oracle_x, so the tight
-combine gate (COMBINE_REL_TOL = 8*2^-8) is preserved, not loosened.
+FP8 dispatch is caller-prequantized in normal mode (blockwise e4m3fn, e4m3fnuz on gfx942); in
+low-latency mode the caller sends BF16 and the decode kernel quantizes to e4m3 internally
+(``use_fp8``). Combine is always BF16 — the oracle applies the identical per-token cast round-trip
+via semantic_payload/oracle_x in both modes, so the tight combine gate (COMBINE_REL_TOL = 8*2^-8)
+is preserved, not loosened.
 """
 from __future__ import annotations
 
@@ -96,9 +98,8 @@ def _ll_dequant_static(fp8, scales):
 
 
 # Normal-mode legacy Config launch parameters (DeepEP-legacy Config(num_sms, chunk, nvl_buffer)).
-# Bring-up-tunable; these mirror UCCL's own intranode bench (nvl_buffer_size=256) and the DeepEP
-# normal default SM budget. num_nvl_bytes is a generous fixed reservation as in UCCL's bench.
-_NORMAL_NUM_SMS = 24
+# These mirror UCCL's own intranode bench (nvl_buffer_size=256); num_nvl_bytes is a generous fixed
+# reservation as in that bench. The SM budget is vendor-keyed (see _normal_num_sms).
 _NORMAL_NVL_BUFFER_SIZE = 256
 _NORMAL_NVL_BYTES = int(2e9)
 # Internode (EP16) buffer-sizing Config, straight from UCCL's own test_internode bench
@@ -110,6 +111,14 @@ _INTERNODE_SIZE_CFG = (8, 512, 16, 512)
 def _align_buffer_bytes(size, margin=1.2, alignment=128):
     """Safety margin + alignment for a buffer-size hint (mirrors the UCCL bench helper)."""
     return ((int(size * margin) + alignment - 1) // alignment) * alignment
+
+
+def _normal_num_sms() -> int:
+    """Intranode normal-mode SM budget, keyed by vendor exactly as UCCL's own bench does
+    (ep/bench/test_intranode.py: ``num_sms = 24 if torch.version.cuda else 64``): 24 on CUDA,
+    64 on HIP/ROCm. A flat 24 would materially understate AMD, whose wider CU count wants the
+    larger grid — the same reason upstream branches on the vendor."""
+    return 24 if torch.version.cuda else 64
 
 
 class UCCLEPBackend(EPBackend):
@@ -200,7 +209,8 @@ class UCCLEPBackend(EPBackend):
             return
         # Intranode (EP8) scale-up: validated recipe — one fixed ~2 GB NVLink buffer, no RDMA, a
         # single QP, and the legacy 3-arg Config (rdma-chunked params unused with no RDMA path).
-        self.config = Config(_NORMAL_NUM_SMS, 8, _NORMAL_NVL_BUFFER_SIZE)
+        # SM budget is vendor-keyed (24 CUDA / 64 HIP), matching UCCL's intranode bench.
+        self.config = Config(_normal_num_sms(), 8, _NORMAL_NVL_BUFFER_SIZE)
         self.dispatch_config = self.config
         self.combine_config = self.config
         self.buffer = Buffer(
