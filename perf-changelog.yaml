@@ -5016,3 +5016,4 @@
   description:
     - "Switch image to rocm/pytorch-private:sglang-rocm720-mi35x_dsv4_mlpnopad for MLP no-pad kernel evaluation on DSv4"
     - "Disable non-DPA, full-DPA, and HiCache sweep arms; keep only DPA no-offload conc [48, 64]"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2297
