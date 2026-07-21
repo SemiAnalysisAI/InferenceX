@@ -1587,9 +1587,10 @@ glm5.2-fp8-mi355x-sglang-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [16, 32, 64] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mori }, conc-list: [16, 32, 64] }
+      # TEMPORARY single-point matrix while cluster capacity is constrained
+      # (2026-07-21): full lists were hicache [1-64], mooncake/mori [16,32,64].
+      # Restore before merge.
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16] }
 
 # GLM-5.2 MXFP4 (amd/GLM-5.2-MXFP4) MI355X frontier: the FP8 sibling above is
 # prefill-starved (TTFT p50 ~390 s at conc 16) because ROCm DSA defaults to
@@ -1620,7 +1621,10 @@ glm5.2-fp4-mi355x-sglang-agentic:
       # (short prompts work; the hang is prefill-load-specific). The
       # benchmark script keeps dormant DEP support for when upstream fixes
       # it; until then the TP arm extends to conc 64 for high-conc coverage.
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [1, 2, 4, 8, 16, 24, 32, 48, 64] }
+      # TEMPORARY single-point matrix while cluster capacity is constrained
+      # (2026-07-21): full list was [1, 2, 4, 8, 16, 24, 32, 48, 64].
+      # Restore before merge.
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [8] }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
