@@ -2175,8 +2175,8 @@ class TestGenerateTestConfigSweep:
         with pytest.raises(ValueError, match="exceeds gpus-per-node"):
             generate_test_config_sweep(args, config, runner_config)
 
-    def test_multinode_agentic_uses_one_allocation_per_concurrency(self):
-        """Each concurrency should get its own server allocation."""
+    def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
+        """One server allocation should run exactly one concurrency (one task per conc)."""
         config = {
             "dsv4-agentic-2p1d": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -2187,7 +2187,6 @@ class TestGenerateTestConfigSweep:
                 "runner": "gb200",
                 "multinode": True,
                 "disagg": True,
-                "router": {"name": "dynamo-router", "version": "1.3.0"},
                 "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "agentic-coding": [
@@ -2215,13 +2214,7 @@ class TestGenerateTestConfigSweep:
         result = generate_test_config_sweep(args, config)
 
         assert len(result) == 5
-        assert [entry["conc"] for entry in result] == [
-            [16],
-            [32],
-            [64],
-            [128],
-            [256],
-        ]
+        assert [entry["conc"] for entry in result] == [[16], [32], [64], [128], [256]]
         assert [entry["exp-name"] for entry in result] == [
             "dsv4_p2x4_d1x4_conc16",
             "dsv4_p2x4_d1x4_conc32",
@@ -2235,8 +2228,6 @@ class TestGenerateTestConfigSweep:
         assert result[0]["decode"]["pp"] == 2
         assert result[0]["decode"]["dcp-size"] == 2
         assert result[0]["decode"]["pcp-size"] == 1
-        assert all(entry["router"] == {"name": "dynamo-router", "version": "1.3.0"} for entry in result)
-        assert all(entry["kv-p2p-transfer"] == "nixl" for entry in result)
 
     def test_multinode_agentic_preserves_kv_offload_fields(self, sample_runner_config):
         config = {

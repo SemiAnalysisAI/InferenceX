@@ -24,8 +24,7 @@ seq_len_stoi = {
 
 MIN_EVAL_CONC = 16
 # Bound how many multinode agentic conc points share one server allocation.
-# One task/Slurm allocation per concurrency gives each benchmark point a
-# fresh server deployment, matching single-node agentic sweep isolation.
+# 1 = one task/SLURM allocation per concurrency (matches single-node agentic).
 MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
