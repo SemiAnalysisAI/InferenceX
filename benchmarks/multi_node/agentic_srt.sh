@@ -29,6 +29,17 @@ done
 resolve_trace_source
 install_agentic_deps
 
+if [[ "${AGENTIC_LITERAL_1M_CANARY:-0}" == "1" ]]; then
+    "$AIPERF_PYTHON" \
+        "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/literal_context_canary.py" \
+        --url "http://localhost:${PORT}" \
+        --model "$MODEL" \
+        --tokenizer "${AGENTIC_CANARY_TOKENIZER:-$MODEL}" \
+        --target-prompt-tokens "${AGENTIC_CANARY_PROMPT_TOKENS:-1040000}" \
+        --max-output-tokens "${AGENTIC_CANARY_OUTPUT_TOKENS:-512}" \
+        --timeout-seconds "${AGENTIC_CANARY_TIMEOUT_SECONDS:-7200}"
+fi
+
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
