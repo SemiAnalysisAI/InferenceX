@@ -1551,6 +1551,81 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
       - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
 
+# GLM-5.2 MI355X FP8 AgentX frontier from the SGLang cookbook MI355X FP8
+# single-node recipes (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2):
+# TP8 with DSA tilelang prefill/decode backends, STP only (MTP/EAGLE is not
+# yet validated on ROCm gfx950). The cookbook's low-latency / balanced /
+# high-throughput strategies differ only in batch-shaping levers, which the
+# benchmark script derives from CONC, so a single TP8 arm traces the frontier.
+glm5.2-fp8-mi355x-sglang-agentic:
+  # Image: pinned to the build the DSv4 MI355X agentic recipe runs green on
+  # (same DSA architecture family, same harness/corpus/cluster). The
+  # cookbook-verified v0.5.13.post1-...-20260618 build segfaults in AITER's
+  # gemm_a8w8_blockscale_bpreshuffle under the agentic corpus (GLM-5.2 gfx950
+  # tuned configs are not upstream yet - ROCm/aiter#4243). Builds >= v0.5.14
+  # default the DSA indexer to the topk v2 kernel, whose JIT source includes
+  # the CUDA-only cooperative_groups.h and cannot build for gfx950; the
+  # benchmark script forces the precompiled-HIP v1 path with
+  # SGLANG_OPT_USE_TOPK_V2=false (mirroring upstream's own MI355X CI).
+  # KV offloading (all arms layer on HiCache; sizing rationale in the
+  # benchmark script): the device pool holds only 1.335M tokens against
+  # 131k-token mean prompts, so the radix-cache cliff bites around conc
+  # 10-16 - much earlier than the B300 sibling - and host tiers are what
+  # extend the frontier past it. Three backends are traced: hicache
+  # (L2 host pool only), mooncake (L2 + Mooncake store as HiCache L3),
+  # and mori (L2 + AMD MORI UMBP as HiCache L3). The primary hicache arm
+  # runs the full conc list; the storage arms sample the post-cliff band
+  # where the L3 tier actually engages.
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # TEMPORARY single-point matrix while cluster capacity is constrained
+      # (2026-07-21): full lists were hicache [1-64], mooncake/mori [16,32,64].
+      # Restore before merge.
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16] }
+
+# GLM-5.2 MXFP4 (amd/GLM-5.2-MXFP4) MI355X frontier: the FP8 sibling above is
+# prefill-starved (TTFT p50 ~390 s at conc 16) because ROCm DSA defaults to
+# bf16 KV and TP-mode DSA replicates the pool on every rank (1.335M tokens
+# aggregate vs 131k-token mean prompts). MXFP4 halves the weight bytes,
+# growing the pool to 1.96M tokens/rank, and the DP-attention arm at conc
+# >= 32 un-replicates it (~15.7M tokens aggregate at dp8). All points run
+# HiCache + Mooncake-store L3 at ratio 1 (cookbook's ratio 2 pins 2.9 TB of
+# host KV before the 40.33 GB/rank DSA indexer sidecars and OOMs the 3 TB
+# nodes; rationale in the benchmark script).
+glm5.2-fp4-mi355x-sglang-agentic:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # DP-attention arm (tp8/dp8/ep8, conc >= 32) is BLOCKED upstream: the
+      # DSA DP path hangs a collective under long-context prefill on ROCm
+      # v0.5.14 - 0/96 storm completions until the watchdog kills the
+      # scheduler, reproduced on two nodes with hicache ratios 1.5/1/0.5,
+      # with the DSv4 DP collective envs, and with hicache fully disabled
+      # (short prompts work; the hang is prefill-load-specific). The
+      # benchmark script keeps dormant DEP support for when upstream fixes
+      # it; until then the TP arm extends to conc 64 for high-conc coverage.
+      # TEMPORARY single-point matrix while cluster capacity is constrained
+      # (2026-07-21): full list was [1, 2, 4, 8, 16, 24, 32, 48, 64].
+      # Restore before merge.
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: mooncake }, conc-list: [8] }
+
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
