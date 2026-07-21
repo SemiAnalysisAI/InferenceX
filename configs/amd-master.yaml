@@ -1147,61 +1147,25 @@ dsv4-fp4-mi355x-sglang-disagg:
     - isl: 8192
       osl: 1024
       search-space:
-      # 2P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
+      # non-MTP configurations
+      # 1P1D pure TP8  (mori KV transfer)
       - spec-decoding: "none"
-        conc-list: [ 256 ]
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
         prefill:
-          num-worker: 2
+          num-worker: 1
           tp: 8
-          ep: 8
-          dp-attn: true
+          ep: 1
+          dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=2"
+          - "PREFILL_NODES=1"
         decode:
           num-worker: 1
           tp: 8
-          ep: 8
-          dp-attn: true
+          ep: 1
+          dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
-          
-      - spec-decoding: "none"
-        conc-list: [ 512 ]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-      
-      - spec-decoding: "none"
-        conc-list: [ 1024 ]
-        prefill:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=2"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
       # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
       - spec-decoding: "none"
         conc-list: [ 256 ]
@@ -1238,24 +1202,7 @@ dsv4-fp4-mi355x-sglang-disagg:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
-      
-      - spec-decoding: "none"
-        conc-list: [ 1024 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
+
 
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
