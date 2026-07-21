@@ -335,7 +335,17 @@ fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
-export VLLM_SPEC_CONFIG="${VLLM_SPEC_CONFIG:-{\"model\": \"lightseekorg/kimi-k2.6-eagle3.1-mla\", \"method\": \"eagle3\", \"num_speculative_tokens\": 3}}"
+DEFAULT_VLLM_SPEC_CONFIG=$(cat <<'EOF'
+{
+  "method": "eagle3",
+  "model": "lightseekorg/kimi-k2.6-eagle3.1-mla",
+  "num_speculative_tokens": 4,
+  "rejection_sample_method": "synthetic",
+  "synthetic_acceptance_length": 3.24
+}
+EOF
+)
+export VLLM_SPEC_CONFIG="${VLLM_SPEC_CONFIG:-$DEFAULT_VLLM_SPEC_CONFIG}"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
