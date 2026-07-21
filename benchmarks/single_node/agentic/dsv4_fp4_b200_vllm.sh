@@ -335,6 +335,8 @@ VLLM_CMD=(
     --no-enable-flashinfer-autotune
     --tokenizer-mode deepseek_v4
     --reasoning-parser deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
     --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
     --no-disable-hybrid-kv-cache-manager
     --disable-uvicorn-access-log

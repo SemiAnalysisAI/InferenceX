@@ -5003,3 +5003,13 @@
     - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; --enable-cumem-allocator dropped on the lmcache arm only (cuMem/VMM allocations cannot be CUDA-IPC-exported to the LMCache server)"
     - "LMCache TP8 points mirror the vllm-simple ladder (conc [8, 12, 16]); LMCache DEP8 points mirror the Mooncake ladder (conc [12, 20, 28, 36, 44, 52, 60, 68, 76]) for a like-for-like backend comparison; the PR #2231 bring-up sweep validated the recipe across DEP8 conc 8-80 (peak ~25.7k total tok/s/GPU at conc 72, 96-98% cache hit)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2231
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Eval-only follow-up to PR #2231: restore the official DeepSeek-V4 vLLM tool-calling frontend flags --tool-call-parser deepseek_v4 and --enable-auto-tool-choice"
+    - "Re-run the dedicated AgentX SWE-bench eval to verify tool definitions are accepted instead of failing with 'tool parsing is disabled by frontend configuration'"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2231
+  evals-only: true
