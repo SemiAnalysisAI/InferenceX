@@ -1,0 +1,200 @@
+name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-agentic"
+
+# One DEP8 prefill worker feeding one DEP8 decode worker, with attention DP8 /
+# expert EP8 and hybrid load balancing on both roles.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
+  precision: "fp4"
+
+dynamo:
+  hash: "1f74ef8c204ed6e283c22374f2b8c5cc83bf7b52"
+  install: true
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  prefill_nodes: 2
+  decode_nodes: 2
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    router-mode: "kv"
+    router-temperature: 0.0
+    router-queue-threshold: 65536
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+    tokenizer: "fastokens"
+
+backend:
+  type: vllm
+  dp_launch_mode: per_node
+  connector: null
+  kv_events_config:
+    prefill: true
+  mooncake_kv_store:
+    store_config:
+      metadata_server: "P2PHANDSHAKE"
+      global_segment_size: "150GB"
+      local_buffer_size: "4GB"
+      protocol: "rdma"
+      # Pin to the IB compute fabric. device_name: "" auto-discovers RoCE/link-local
+      # NICs (mlx5_2/mlx5_5) that can not route cross-node and hang mooncake setup.
+      device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+      mode: "embedded"
+      enable_offload: false
+  prefill_environment:
+    # dynamo's primary etcd lease defaults to a 10s TTL. A brief etcd stall
+    # during the CPU/memory/IO-heavy cold start (~380s weight load, etcd
+    # co-located with a worker) then revokes every worker's lease at once, so
+    # registration fails with "requested lease not found" and workers never go
+    # ready (health check times out at 2h). 600s rides through transient etcd
+    # stalls; longer TTL only delays dead-worker cleanup, handled independently.
+    ETCD_LEASE_TTL: "600"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
+    TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
+    VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_TLS: "rc,cuda_copy"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    # MC_STORE_CLIENT_METRIC: "1"
+    # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    # MC_TE_METRIC: "0"
+  decode_environment:
+    # See prefill_environment: raise dynamo's primary etcd lease TTL from the
+    # 10s default so the lease survives the CPU-saturated cold start.
+    ETCD_LEASE_TTL: "600"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
+    TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_TLS: "rc,cuda_copy"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    # MC_STORE_CLIENT_METRIC: "1"
+    # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    # MC_TE_METRIC: "0"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      enable-cumem-allocator: true
+      moe-backend: "deep_gemm_amxf4_mega_moe"
+      numa-bind: true
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
+      max-model-len: 1048576
+      max-num-seqs: 128
+      max-num-batched-tokens: 8192
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      gpu-memory-utilization: 0.9
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+    decode:
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      enable-cumem-allocator: true
+      moe-backend: "deep_gemm_amxf4_mega_moe"
+      numa-bind: true
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
+      max-model-len: 1048576
+      max-num-seqs: 64
+      max-num-batched-tokens: 256
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      max-cudagraph-capture-size: 64
+      gpu-memory-utilization: 0.95
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+
+sbatch_directives:
+  cpus-per-task: "72"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    # Off: aiperf emits nvext.session_control, rejected by current dynamo (see benchmark_lib.sh).
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
