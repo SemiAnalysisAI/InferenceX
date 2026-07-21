@@ -5028,3 +5028,13 @@
     - "Topologies: 1p4d-dep4-tep8 (conc 4/24), 1p5d-dep4-tep4 (conc 5/30/60/115/195), 1p1d-dep4-dep8 (conc 308), 2p1d-dep4-dep8 (conc 615), 3p1d-dep4-dep8 (conc 1127), 4p1d-dep4-dep8 (conc 2151)"
     - "Runner updated to clone srt-slurm at sa-submission-q2-2026 and copy local recipes into recipes/trtllm/kimi-k25-nvfp4/b200-fp4/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d-dep8-dep8
+  description:
+    - "Add GB200 Dynamo-vLLM AgentX aggregate TP8 and four disaggregated recipe/config definitions; limit this validation sweep to aggregate TP8 at conc [16] and representative 1P/1D DEP8/DEP8 at conc [256]."
+    - "Retain the additional tuned PD definitions for future sweeps: 1P/1D DEP8/DEP12 at [384,512], 2P/1D DEP8/DEP12 at [640,720,768], and 3P/1D DEP8/DEP16 at [800,960,1024,1280]."
+    - "Use NVIDIA/srt-slurm main with its upstream per-node DP, Dynamo health-count, and Mooncake master fixes; retain the unmerged multi-node TP VLLM_PORT fix. TP8 uses FlashInfer all-reduce and disables vLLM custom all-reduce."
+    - "Image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2260
