@@ -35,6 +35,7 @@ SWEEP_BACKENDS = tuple(dict.fromkeys(
 BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
+    "uccl-ep": ("bf16", "fp8"),
 }
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".

@@ -9,8 +9,8 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16]},
-      "ll_backends": {"deepep-v2": [8]},
+      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 2x200GbE", "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"},
       "operator": {
         "partition": "hpc-gpu-1",
@@ -33,8 +33,8 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16]},
-      "ll_backends": {"deepep-v2": [8]},
+      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
       "operator": {
         "partition": "main",
@@ -53,8 +53,8 @@
       "scale_up_domain": 8,
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
-      "backends": {"deepep-v2": [8, 16]},
-      "ll_backends": {"deepep-v2": [8]},
+      "backends": {"deepep-v2": [8, 16], "uccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 400GbE", "switch": "Whitebox Tomahawk3 leaf + Tomahawk4 (RoCE)"},
       "operator": {
         "partition": "gpu-2",
@@ -138,7 +138,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-tw",
-      "backends": {"mori": [8]},
+      "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
     },
@@ -151,7 +151,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-tw",
-      "backends": {"mori": [8]},
+      "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
       "fabric": {"nic": "n/a (single-node scale-up)", "switch": "n/a (single-node scale-up)"}
     },
@@ -164,7 +164,7 @@
       "scale_up_domain": 8,
       "scale_up_transport": "xgmi",
       "launcher": "mi-amds",
-      "backends": {"mori": [8]},
+      "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
       "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},
       "network": {
