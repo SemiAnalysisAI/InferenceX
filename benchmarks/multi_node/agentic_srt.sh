@@ -40,6 +40,22 @@ if [[ "${AGENTIC_LITERAL_1M_CANARY:-0}" == "1" ]]; then
         --timeout-seconds "${AGENTIC_CANARY_TIMEOUT_SECONDS:-7200}"
 fi
 
+if [[ "${AGENTIC_ACCURACY_CANARY:-0}" == "1" ]]; then
+    accuracy_dir="${BASE_RESULT_DIR}/accuracy_canary"
+    mkdir -p "$accuracy_dir"
+    export EVAL_FRAMEWORK=lm-eval
+    export EVAL_TASKS_DIR="${AGENTIC_ACCURACY_TASKS:-utils/evals/gsm8k.yaml}"
+    export EVAL_LIMIT="${AGENTIC_ACCURACY_LIMIT:-200}"
+    export EVAL_CONCURRENT_REQUESTS="${AGENTIC_ACCURACY_CONCURRENCY:-16}"
+    export EVAL_MAX_MODEL_LEN="${AGENTIC_ACCURACY_MAX_MODEL_LEN:-16384}"
+    export EVAL_RESULT_DIR="$accuracy_dir"
+    run_eval --framework lm-eval --port "$PORT"
+    "$AIPERF_PYTHON" \
+        "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/validate_accuracy_canary.py" \
+        --results-dir "$accuracy_dir" \
+        --minimum-score "${AGENTIC_ACCURACY_MIN_SCORE:-0.90}"
+fi
+
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
