@@ -342,7 +342,7 @@ def test_default_graded_eval_suite_is_registered():
     )
 
 
-def test_agentic_eval_workflow_forwards_framework_override():
+def test_eval_workflow_forwards_framework_and_task_overrides():
     repo_root = BENCHMARK_LIB.parents[1]
     e2e_workflow = (repo_root / ".github/workflows/e2e-tests.yml").read_text()
     benchmark_workflow = (
@@ -350,7 +350,9 @@ def test_agentic_eval_workflow_forwards_framework_override():
     ).read_text()
 
     assert "eval-framework: ${{ inputs.eval-framework }}" in e2e_workflow
+    assert "eval-tasks: ${{ inputs.eval-tasks }}" in e2e_workflow
     assert "EVAL_FRAMEWORK: ${{ inputs.eval-framework }}" in benchmark_workflow
+    assert "EVAL_TASKS_DIR: ${{ inputs.eval-tasks }}" in benchmark_workflow
 
 
 def test_swebench_single_shot_registers_task_yaml():

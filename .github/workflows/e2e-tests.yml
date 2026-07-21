@@ -31,6 +31,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            eval-tasks:
+                description: "Explicit comma-separated lm-eval task override"
+                required: false
+                type: string
+                default: ""
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -62,6 +67,11 @@ on:
                 default: ""
             eval-framework:
                 description: "Explicit eval framework override (for example, lm-eval on an agentic recipe)"
+                required: false
+                type: string
+                default: ""
+            eval-tasks:
+                description: "Explicit comma-separated lm-eval task override"
                 required: false
                 type: string
                 default: ""
@@ -291,6 +301,7 @@ jobs:
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
             eval-framework: ${{ inputs.eval-framework }}
+            eval-tasks: ${{ inputs.eval-tasks }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
@@ -418,6 +429,7 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
+            eval-tasks: ${{ inputs.eval-tasks }}
             ref: ${{ inputs.ref }}
 
     collect-results:
