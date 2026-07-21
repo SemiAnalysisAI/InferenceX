@@ -94,27 +94,9 @@ Seen on: #1460 (dsv4-fp8-h200-sglang+mtp).
 
 ## 4. Upstream sglang v0.5.12 B300 regressions
 
-Three distinct upstream regressions on NVIDIA B300 (Blackwell Ultra, `sm_103` — compute capability 10.3) shipped in `lmsysorg/sglang:v0.5.12-cu130`. (sm_120 is for *consumer* Blackwell / RTX 50 series, not B300 — don't propagate that.)
+Upstream regressions on NVIDIA B300 (Blackwell Ultra, `sm_103` — compute capability 10.3) shipped in `lmsysorg/sglang:v0.5.12-cu130`. (sm_120 is for *consumer* Blackwell / RTX 50 series, not B300 — don't propagate that.)
 
-### 4a. DeepGemm TMA-descriptor crash (GLM-5-FP8)
-**Symptom:** CUDA graph capture aborts with `CUDA_ERROR_ILLEGAL_ADDRESS (700)` at `/deepgemm/csrc/.../runtime_utils.hpp:143` on the **first batch size** for **every TP rank**. Server never serves a prompt.
-
-**Workarounds (any one):**
-1. `--fp8-gemm-runner-backend cutlass` to bypass DeepGemm via CUTLASS.
-2. `export SGL_ENABLE_JIT_DEEPGEMM=0` before `python -m sglang.launch_server` to skip JIT DeepGemm.
-3. Pin recipe to `lmsysorg/sglang:v0.5.11-cu130`.
-
-Filed upstream: sgl-project/sglang#25551. Seen on #1421.
-
-### 4b. trtllm GEMM bug at bs=128 + MTP / EAGLE (GLM-5-NVFP4)
-**Symptom:** EAGLE draft CUDA graph capture crashes immediately at the largest batch size with `RuntimeError ... trtllm_batched_gemm_runner.cu:276 ... numBatches=256, GemmMNK 128x1024x6144`. The target model captures fine; only the draft model crashes.
-
-**Workarounds:**
-1. Cap `--cuda-graph-max-bs` and `--max-running-requests` to 64 in the launch script to avoid the bs=128 trigger.
-2. Comment out the MTP/EAGLE scenarios on B300 in the recipe.
-3. Pin to v0.5.11-cu130.
-
-Filed upstream: sgl-project/sglang#25563. Seen on #1420.
+> **Breadcrumb (deprecated recipes):** two earlier B300 regressions here hit the **GLM-5/5.1** recipes deprecated in #2276 (archived under `configs/deprecated/`), kept only in case those recipes are revived: DeepGemm TMA-descriptor `ILLEGAL_ADDRESS` on GLM-5-FP8 (sglang#25551 — workaround `--fp8-gemm-runner-backend cutlass`, `SGL_ENABLE_JIT_DEEPGEMM=0`, or pin `v0.5.11-cu130`); and a trtllm GEMM bs=128 crash on GLM-5-NVFP4 MTP/EAGLE (sglang#25563 — cap `--cuda-graph-max-bs`/`--max-running-requests` to 64, or pin `v0.5.11-cu130`).
 
 ### 4c. flash_attn SM-arch assertion (qwen3.5-bf16)
 **Symptom:** All 4 TP workers AssertionError on first forward pass:
@@ -230,7 +212,7 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Add the `full-sweep-enabled` label so a canary-gated full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-enabled`). Use `non-canary-full-sweep-enabled` instead only when the single-node canary is flaky or unrepresentative; it runs the full sweep without the canary gate. Without one of the sweep labels, the sweep is mostly SKIPPED.
+- Add a full-sweep label so the sweep actually runs — without one it is mostly SKIPPED. **`full-sweep-fail-fast` is the recommended default** (`gh api -X POST ... labels[]=full-sweep-fail-fast`); see AGENTS.md § Pull Request Sweep Labels for the full label set and when each applies.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body` — `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint; it handles the `perf-changelog.yaml` auto-append.
 
