@@ -859,29 +859,37 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # request #1 -> lm_eval gave up -> 0 result files -> "Verify eval scores" failed.
         # Gate the benchmark on ONE successful generation THROUGH the router so the eval
         # never starts against a router whose prefill path is not yet actually serving.
-        if [[ "${ROUTER_READINESS_CANARY:-1}" == "1" ]]; then
-            CANARY_URL="http://${NODE0_ADDR}:30000/v1/chat/completions"
-            CANARY_MODEL="${MODEL_DIR}/${MODEL_NAME}"
-            canary_ok=0
-            canary_deadline=$(( $(date +%s) + ${ROUTER_CANARY_TIMEOUT:-600} ))
+        #
+        # Run the poll loop under wait_or_die (like the barriers above) rather than
+        # inline: the canary is the FIRST real generation through prefill, so a
+        # prefill crash right after /readiness passes is plausible. Without
+        # wait_or_die watching prefill0_pid, that just looks like repeated 503s and
+        # the loop burns the full ROUTER_CANARY_TIMEOUT (default 600s) instead of
+        # detecting the dead pid and aborting in ~5s.
+        run_router_canary() {
+            local canary_url="http://${NODE0_ADDR}:30000/v1/chat/completions"
+            local canary_model="${MODEL_DIR}/${MODEL_NAME}"
+            local canary_deadline=$(( $(date +%s) + ${ROUTER_CANARY_TIMEOUT:-600} ))
+            local canary_code
             while [ "$(date +%s)" -lt "$canary_deadline" ]; do
                 canary_code=$(curl -s -o /tmp/router_canary.out -w '%{http_code}' \
                     -m "${ROUTER_CANARY_REQ_TIMEOUT:-120}" \
-                    -X POST "$CANARY_URL" -H 'Content-Type: application/json' \
-                    -d "{\"model\":\"${CANARY_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1,\"temperature\":0}" 2>/dev/null)
+                    -X POST "$canary_url" -H 'Content-Type: application/json' \
+                    -d "{\"model\":\"${canary_model}\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1,\"temperature\":0}" 2>/dev/null)
                 if [ "$canary_code" = "200" ] && \
                    ! grep -qE "circuits open|server_selection_failed|No available" /tmp/router_canary.out 2>/dev/null; then
-                    canary_ok=1; break
+                    echo "Router readiness canary passed (end-to-end generation OK)"
+                    return 0
                 fi
                 echo "Router readiness canary not ready yet (http=${canary_code}); retrying in 5s . . ."
                 sleep 5
             done
-            if [ "$canary_ok" -ne 1 ]; then
-                echo "ERROR: router readiness canary failed after ${ROUTER_CANARY_TIMEOUT:-600}s -- the router cannot complete a generation through a prefill worker (all circuits open/unhealthy). Refusing to start the eval against a non-serving router."
-                head -c 800 /tmp/router_canary.out 2>/dev/null
-                exit 1
-            fi
-            echo "Router readiness canary passed (end-to-end generation OK)"
+            echo "ERROR: router readiness canary failed after ${ROUTER_CANARY_TIMEOUT:-600}s -- the router cannot complete a generation through a prefill worker (all circuits open/unhealthy). Refusing to start the eval against a non-serving router."
+            head -c 800 /tmp/router_canary.out 2>/dev/null
+            return 1
+        }
+        if [[ "${ROUTER_READINESS_CANARY:-1}" == "1" ]]; then
+            wait_or_die "$prefill0_pid" run_router_canary || exit 1
         fi
 
         echo "Router is ready for benchmarking"
