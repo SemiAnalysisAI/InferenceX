@@ -8,8 +8,8 @@ name: "svf-vllm-disagg-gb200-mid-curve-megamoe"
 # 256/512/1024 with no CPU/NVMe offload.
 #
 # Local deltas vs upstream:
-#   * model.path alias renamed deepseekv4-fp4 -> deepseek-v4-pro to match
-#     SRT_SLURM_MODEL_PREFIX in runners/launch_gb200-nv.sh.
+#   * model.path uses the deepseek-v4-pro-mxfp4 alias from
+#     runners/launch_gb200-nv.sh.
 #   * model.container set to vllm/vllm-openai:v0.20.0-ubuntu2404 to
 #     match nvidia-master.yaml image (which the launch script registers as
 #     the alias key in srtslurm.yaml). Upstream variants ship either the
@@ -17,15 +17,15 @@ name: "svf-vllm-disagg-gb200-mid-curve-megamoe"
 #   * slurm.time_limit + health_check set to 8h / 1440 attempts to
 #     absorb cold-cache /mnt/numa1 model loads.
 model:
-  path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+  path: "deepseek-v4-pro-mxfp4"
+  container: "vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
   precision: "fp4"
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260426"
+  wheel: "1.3.0.dev1"
 
-setup_script: vllm-container-deps.sh
+setup_script: vllm-container-deps-deepgemm-timeout.sh
 
 slurm:
   time_limit: "8:00:00"
@@ -48,11 +48,14 @@ infra:
 
 frontend:
   type: dynamo
-  enable_multiple_frontends: false
+  enable_multiple_frontends: true
+  env:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
 backend:
   type: vllm
   connector: null
   prefill_environment:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -70,6 +73,7 @@ backend:
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
+    DYN_REQUEST_PLANE_CODEC: "msgpack"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -147,9 +151,9 @@ benchmark:
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
-    revision: "0366e4e064385807ea86b088a5c6c878ff23343b"
+    revision: "b5968e9190ef611bbf34a7229255be88a0e937c1"
   container:
-    image: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+    image: "vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
   frameworks:
-    dynamo: "1.2.0.dev20260426"
-    vllm: "0.20.0"
+    dynamo: "1.3.0.dev1"
+    vllm: "0.1.dev18219+g4ba0a72a4"

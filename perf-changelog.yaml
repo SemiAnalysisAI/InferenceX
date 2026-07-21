@@ -4974,3 +4974,11 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Update the GB200 DeepSeek-V4-Pro Dynamo-vLLM stack to Dynamo 1.3.0.dev1, vLLM 0.1.dev18219+g4ba0a72a4, and the MXFP4 checkpoint"
+    - "Enable multiple frontends and MessagePack request-plane encoding, and reduce 1P4D decode GPU memory utilization to 0.85"
+    - "Use NVIDIA/srt-slurm v1.0.31 with the DeepGEMM NVLink barrier timeout setup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2139
