@@ -769,6 +769,10 @@ compute_eval_context_length() {
     native_max=$(get_native_max_context_length "$model")
     native_max="${native_max:-0}"
 
+    if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
+        benchmark_ctx="${native_max:-0}"
+    fi
+
     # Fixed-sequence benchmark windows are often too short for reasoning evals.
     # In eval-only mode, raise the context budget without changing recipe configs
     # or throughput runs.
@@ -778,9 +782,6 @@ compute_eval_context_length() {
         benchmark_ctx="$eval_min"
     fi
 
-    if [ "$benchmark_ctx" -eq 0 ] 2>/dev/null; then
-        benchmark_ctx="${native_max:-0}"
-    fi
     local eval_ctx=$(( benchmark_ctx * 1 ))
     if [ "$native_max" -gt 0 ] 2>/dev/null && [ "$eval_ctx" -gt "$native_max" ]; then
         eval_ctx="$native_max"
@@ -868,11 +869,17 @@ run_lm_eval() {
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
     MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
 
-    # Cap output tokens: must fit within context window (leave room for input),
-    # and avoid excessive KV cache reservation per request on TRT.
+    # Leave enough room for long reasoning traces while bounding worst-case KV
+    # reservation. AgentX recipes use native context; fixed-sequence recipes use
+    # the eval-only context floor above.
     local max_output_tokens=$(( eval_context_len > 4096 ? eval_context_len - 4096 : eval_context_len / 2 ))
-    if [ "$max_output_tokens" -gt 16384 ]; then
-        max_output_tokens=16384
+    local max_output_cap="${EVAL_MAX_OUTPUT_TOKENS:-65536}"
+    if ! [[ "$max_output_cap" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: EVAL_MAX_OUTPUT_TOKENS must be a positive integer" >&2
+        return 2
+    fi
+    if [ "$max_output_tokens" -gt "$max_output_cap" ]; then
+        max_output_tokens="$max_output_cap"
     fi
     echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
 

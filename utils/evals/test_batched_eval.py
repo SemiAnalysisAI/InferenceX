@@ -205,6 +205,9 @@ export EVAL_MIN_MODEL_LEN=32768
 export NATIVE_MAX=100000
 printf 'eval=%s\n' "$(compute_eval_context_length test-model 9472)"
 
+export NATIVE_MAX=100000
+printf 'agentx-native=%s\n' "$(compute_eval_context_length test-model 0)"
+
 export NATIVE_MAX=16000
 printf 'native-cap=%s\n' "$(compute_eval_context_length test-model 9472)"
 
@@ -223,6 +226,7 @@ printf 'throughput=%s\n' "$(compute_eval_context_length test-model 9472)"
 
     assert result.stdout.splitlines() == [
         "eval=32768",
+        "agentx-native=100000",
         "native-cap=16000",
         "throughput=9472",
     ]

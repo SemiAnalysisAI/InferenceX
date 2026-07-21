@@ -146,17 +146,29 @@ PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999 2>&1
 '''
 
 
-def _run_lm_eval_cmdline(*, eval_limit=None) -> str:
+def _run_lm_eval_cmdline(
+    *,
+    eval_limit=None,
+    context_len: int = 16384,
+    output_cap: int | None = None,
+) -> str:
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
         "KV_OFFLOADING": "none",
     }
     env.pop("EVAL_LIMIT", None)
+    env.pop("EVAL_MAX_OUTPUT_TOKENS", None)
     if eval_limit is not None:
         env["EVAL_LIMIT"] = str(eval_limit)
+    if output_cap is not None:
+        env["EVAL_MAX_OUTPUT_TOKENS"] = str(output_cap)
+    script = _EVAL_LIMIT_SCRIPT.replace(
+        "EVAL_MAX_MODEL_LEN=16384",
+        f"EVAL_MAX_MODEL_LEN={context_len}",
+    )
     res = subprocess.run(
-        ["bash", "-c", _EVAL_LIMIT_SCRIPT],
+        ["bash", "-c", script],
         env=env,
         text=True,
         capture_output=True,
@@ -173,6 +185,14 @@ def test_eval_limit_appended_when_set():
 def test_eval_limit_absent_when_unset():
     out = _run_lm_eval_cmdline(eval_limit=None)
     assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
+
+
+def test_eval_output_tokens_allow_long_reasoning_with_configurable_cap():
+    out = _run_lm_eval_cmdline(context_len=100000)
+    assert "max_tokens=65536" in out
+
+    capped_out = _run_lm_eval_cmdline(context_len=100000, output_cap=32768)
+    assert "max_tokens=32768" in capped_out
 
 
 
