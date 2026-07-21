@@ -346,7 +346,6 @@ VLLM_CMD=(
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.90
     --trust-remote-code
-    --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
     --speculative-config "$VLLM_SPEC_CONFIG"
     "${PREFIX_CACHE_ARGS[@]}"
