@@ -5011,3 +5011,13 @@
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
   
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-hisparse-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 FP8 full-context H200 AgentX with one PCP8 prefill worker and one TP8/DPA decode worker across two H200 nodes"
+    - "Use SGLang HiSparse to retain the full KV cache in pinned host DRAM while a sparse decode working set remains in HBM; this replaces the TP16 HiCache design that could not restore literal 1M-token prefixes reliably"
+    - "Run the complete concurrency curve [1, 2, 3, 4, 5, 6, 7, 8]; workflow run 29820102138 completed all eight points with zero benchmark errors, peaking at 312.63 total tok/s/GPU at concurrency 4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2275
+  
