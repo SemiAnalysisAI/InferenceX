@@ -95,7 +95,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
-        --enable-prefill-delayer
+        --enable-dp-attention-local-control-broadcast
     )
 fi
 
