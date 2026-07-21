@@ -558,17 +558,18 @@ kimik2.7-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    # TP8, 3600s. Best-config sweep on the agentic trace, one KV tier per regime:
-    # GPU-only (none) is only viable at low conc [4,8] (peaks ~26.7 tok/s/GPU at
-    # c8, then collapses at the KV-capacity wall); LMCache DRAM offload carries the
-    # high-conc side and holds throughput where none thrashes, so it is swept at
-    # c16 (the crossover where it overtakes none). Mooncake and c32/48 dropped:
-    # they added no throughput headroom over this best-config envelope.
+    # TP4, GPU-only (none) + prefix caching, 3600s. TP4 is ~2x more per-GPU
+    # efficient than TP8 on this KV-bound trace (none peaks ~49.6 tok/s/GPU at c8
+    # vs 26.8 at TP8), and GPU-only avoids the CPU/DRAM-offload interactivity
+    # penalty (lmcache cells sit at 13-15 tok/s/user; none c4 is ~48). Swept
+    # [1,2,4,8]: c8 is the last stable point before the GPU-KV-capacity wall
+    # (GPU-KV ~74%), c1/c2/c4 trace the low-latency frontier. none collapses past
+    # c8 (c16 dropped), and the DRAM-offload tiers only lose per-GPU throughput
+    # here, so TP8 and the lmcache/mooncake arms are dropped.
     - dram-utilization: 0.80
       duration: 3600
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [4, 8] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [16] }
+      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8] }
 
 
 kimik2.5-fp4-mi355x-atom:
