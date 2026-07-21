@@ -1557,9 +1557,21 @@ run_eval() {
 
     local eval_rc=0
     case "$framework" in
-        lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
-        swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
-        *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
+        lm-eval|lm_eval)
+            run_lm_eval "${forwarded[@]}" || eval_rc=$?
+            ;;
+        swebench)
+            if [ "$scenario_is_agentic" != "1" ]; then
+                echo "ERROR: SWE-bench is only supported on agentic scenarios" >&2
+                eval_rc=1
+            else
+                run_swebench_eval "${forwarded[@]}" || eval_rc=$?
+            fi
+            ;;
+        *)
+            echo "Unknown framework '${framework}'"
+            eval_rc=1
+            ;;
     esac
 
     # Agentic eval-only recipes have no separate staging step.

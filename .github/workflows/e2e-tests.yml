@@ -26,11 +26,6 @@ on:
                 required: false
                 type: string
                 default: ""
-            eval-framework:
-                description: "Explicit eval framework override (for example, lm-eval on an agentic recipe)"
-                required: false
-                type: string
-                default: ""
             eval-tasks:
                 description: "Explicit comma-separated lm-eval task override"
                 required: false
@@ -62,11 +57,6 @@ on:
                 default: ""
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
-                required: false
-                type: string
-                default: ""
-            eval-framework:
-                description: "Explicit eval framework override (for example, lm-eval on an agentic recipe)"
                 required: false
                 type: string
                 default: ""
@@ -300,12 +290,49 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
-            eval-framework: ${{ inputs.eval-framework }}
-            eval-tasks: ${{ inputs.eval-tasks }}
+            eval-framework: swebench
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
+    test-sweep-agentic-lm-evals:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: agentic lm-eval /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
+            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
+            isl: '0'
+            osl: '0'
+            max-model-len: '0'
+            spec-decoding: 'none'
+            disagg: 'false'
+            run-eval: true
+            eval-only: true
+            eval-limit: ${{ inputs.eval-limit }}
+            eval-framework: lm-eval
+            eval-tasks: ${{ inputs.eval-tasks }}
+            scenario-type: agentic-coding
+            ref: ${{ inputs.ref }}
     test-sweep-multi-node-agentic:
         needs: get-jobs
         if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
@@ -441,8 +468,8 @@ jobs:
             result-prefix: "bmk"
 
     collect-evals:
-        needs: [test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals]
-        if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped') }}
+        needs: [test-sweep-evals, test-sweep-multi-node-evals, test-sweep-agentic-evals, test-sweep-agentic-lm-evals]
+        if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped' || needs.test-sweep-agentic-evals.result != 'skipped' || needs.test-sweep-agentic-lm-evals.result != 'skipped') }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 

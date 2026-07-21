@@ -6,6 +6,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
 
 _SCRIPT = r'''
@@ -42,7 +44,9 @@ def _dispatch(*, is_agentic: str = "0", eval_only: str = "false", cli_fw=None, e
 
 
 def test_agentic_scenario_defaults_to_swebench():
-    assert "DISPATCH=swebench" in _dispatch(is_agentic="1")
+    out = _dispatch(is_agentic="1")
+    assert "DISPATCH=swebench" in out
+    assert "DISPATCH=lm-eval" not in out
 
 
 def test_fixed_seqlen_scenario_defaults_to_lm_eval():
@@ -65,8 +69,9 @@ def test_env_framework_overrides_scenario():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1", env_fw="lm-eval")
 
 
-def test_env_can_force_swebench_on_fixed_seqlen():
-    assert "DISPATCH=swebench" in _dispatch(is_agentic="0", env_fw="swebench")
+def test_fixed_seqlen_rejects_swebench():
+    with pytest.raises(subprocess.CalledProcessError):
+        _dispatch(is_agentic="0", env_fw="swebench")
 
 
 def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
@@ -342,17 +347,20 @@ def test_default_graded_eval_suite_is_registered():
     )
 
 
-def test_eval_workflow_forwards_framework_and_task_overrides():
+def test_eval_workflow_separates_agentic_lm_eval_and_swebench():
     repo_root = BENCHMARK_LIB.parents[1]
     e2e_workflow = (repo_root / ".github/workflows/e2e-tests.yml").read_text()
     benchmark_workflow = (
         repo_root / ".github/workflows/benchmark-tmpl.yml"
     ).read_text()
 
-    assert "eval-framework: ${{ inputs.eval-framework }}" in e2e_workflow
+    assert "test-sweep-agentic-lm-evals:" in e2e_workflow
+    assert "eval-framework: lm-eval" in e2e_workflow
+    assert "eval-framework: swebench" in e2e_workflow
     assert "eval-tasks: ${{ inputs.eval-tasks }}" in e2e_workflow
     assert "EVAL_FRAMEWORK: ${{ inputs.eval-framework }}" in benchmark_workflow
     assert "EVAL_TASKS_DIR: ${{ inputs.eval-tasks }}" in benchmark_workflow
+    assert "EVAL_ARTIFACT_SUFFIX:" in benchmark_workflow
 
 
 def test_swebench_single_shot_registers_task_yaml():

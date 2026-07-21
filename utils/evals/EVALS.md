@@ -155,6 +155,11 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_MIN_MODEL_LEN` | `32768` | Minimum context for eval-only reasoning tasks; capped at the model's native maximum and does not affect throughput runs |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
+### Scenario coverage
+
+- Fixed-sequence evals run GSM8K, GPQA Diamond, and AIME26 through lm-eval. They never run SWE-bench.
+- Agentic configs launch separate lm-eval (GSM8K, GPQA Diamond, AIME26) and SWE-bench jobs. `EVAL_TASKS_DIR` can narrow diagnostic lm-eval runs without changing recipe configs.
+
 
 ### Score validation
 `utils/evals/validate_scores.py` checks full-split eval results against thresholds in `utils/evals/thresholds.yaml`. The workflow installs the pinned PyYAML dependency before validation. First-N smoke slices skip the quality gate because their scores are not statistically representative. Validation runs after artifact upload so full-run results are preserved even if the gate fails.
