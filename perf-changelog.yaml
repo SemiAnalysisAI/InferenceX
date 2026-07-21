@@ -4974,3 +4974,11 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Convert the high-throughput arm to DEP: add ep: 8 to the TP8/DP8 attention-DP arm so the MoE layers run expert-parallel across all 8 ranks (--ep-size 8) instead of TP-sharded (the arm previously left ep unset -> EP_SIZE=1). Attention stays data-parallel behind sglang-router consistent hashing; the recipe already passes --ep-size EP_SIZE unconditionally, so only the master-config search space changes"
+    - "DEP arm runs conc-list [48] only (was [48, 64, 96, 128, 192, 256, 512]): conc 48 is the frontier peak (163 tok/s/gpu out, ttft 2.8s); conc >=64 overflows the HBM+host radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is strictly dominated"
+    - "Low-latency TP8 arm (conc [1, 2, 4, 8, 16, 32], fp8 KV + cutedsl bf16 GEMM) unchanged; DEP mirrors the proven dsv4-fp4-b300-sglang tp8/ep8/dp-attn DEP arm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2281
