@@ -345,7 +345,6 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.90
-    --block-size=1
     --trust-remote-code
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
