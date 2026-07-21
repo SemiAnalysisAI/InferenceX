@@ -1,4 +1,4 @@
-"""Descriptive fixed-window diagnostics for AgentX request records."""
+"""Within-run stability diagnostics for AgentX request records."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from .aggregation_common import percentile, to_float
 
 
 OBSERVED_WINDOW_SECONDS = 600.0
+CONVERGENCE_CHECKPOINT_SECONDS = 300.0
+CONVERGENCE_TOLERANCE_RATIO = 0.05
+CONVERGENCE_MIN_CONFIRMATION_SECONDS = 1200.0
 _PERCENTILES = (75, 90)
 
 
@@ -86,19 +89,154 @@ def _latency_ranges(
     return output
 
 
+def _convergence_summary(
+    checkpoints: list[dict[str, float | int]],
+    *,
+    tolerance_ratio: float,
+    min_confirmation_seconds: float,
+) -> dict[str, float | int] | None:
+    """Return the earliest retrospectively stable suffix of a checkpoint series.
+
+    The ratio test is performed in log space. This makes the tolerance
+    symmetric under reciprocals: a latency series and its interactivity
+    reciprocal stabilize at the same checkpoint.
+    """
+    if not checkpoints:
+        return None
+
+    final_value = float(checkpoints[-1]["value"])
+    horizon_seconds = float(checkpoints[-1]["seconds"])
+    if not math.isfinite(final_value) or final_value <= 0:
+        return None
+
+    log_tolerance = math.log1p(tolerance_ratio)
+    boundary_epsilon = 1e-12
+    for index, checkpoint in enumerate(checkpoints):
+        checkpoint_seconds = float(checkpoint["seconds"])
+        if horizon_seconds - checkpoint_seconds < min_confirmation_seconds:
+            continue
+
+        suffix = checkpoints[index:]
+        values = [float(item["value"]) for item in suffix]
+        if any(not math.isfinite(value) or value <= 0 for value in values):
+            continue
+        if any(
+            abs(math.log(value / final_value)) > log_tolerance + boundary_epsilon
+            for value in values
+        ):
+            continue
+
+        return {
+            "time_seconds": checkpoint["seconds"],
+            "requests": checkpoint["requests"],
+            "min": min(values),
+            "max": max(values),
+            "max_relative_deviation": max(
+                abs(value / final_value - 1.0) for value in values
+            ),
+        }
+    return None
+
+
+def _cumulative_convergence(
+    timed: list[tuple[int, dict[str, Any]]],
+    *,
+    horizon_seconds: float,
+    checkpoint_seconds: float,
+    tolerance_ratio: float,
+    min_confirmation_seconds: float,
+) -> dict[str, dict[str, dict[str, float | int] | None]]:
+    """Compute retrospective convergence from cumulative request prefixes."""
+    output: dict[str, dict[str, dict[str, float | int] | None]] = {
+        "ttft": {f"p{p}": None for p in _PERCENTILES},
+        "e2el": {f"p{p}": None for p in _PERCENTILES},
+        "intvty": {f"p{p}": None for p in _PERCENTILES},
+    }
+    if not timed or horizon_seconds <= 0:
+        return output
+
+    origin_ns = min(timestamp for timestamp, _ in timed)
+    sorted_timed = sorted(timed, key=lambda item: item[0])
+    metric_keys = {
+        "ttft": "time_to_first_token",
+        "e2el": "request_latency",
+        "itl": "inter_token_latency",
+    }
+    values: dict[str, list[float]] = {name: [] for name in metric_keys}
+    series: dict[str, dict[int, list[dict[str, float | int]]]] = {
+        "ttft": {p: [] for p in _PERCENTILES},
+        "e2el": {p: [] for p in _PERCENTILES},
+        "intvty": {p: [] for p in _PERCENTILES},
+    }
+
+    cursor = 0
+    checkpoint_count = int(horizon_seconds // checkpoint_seconds)
+    for checkpoint_index in range(1, checkpoint_count + 1):
+        elapsed_seconds = checkpoint_index * checkpoint_seconds
+        cutoff_ns = origin_ns + elapsed_seconds * 1e9
+        while cursor < len(sorted_timed) and sorted_timed[cursor][0] < cutoff_ns:
+            timestamp, record = sorted_timed[cursor]
+            if timestamp >= origin_ns:
+                for name, key in metric_keys.items():
+                    value_ms = _metric_value(record, key)
+                    if value_ms is not None and value_ms > 0:
+                        values[name].append(value_ms / 1000.0)
+            cursor += 1
+
+        for p in _PERCENTILES:
+            for name in ("ttft", "e2el"):
+                if values[name]:
+                    series[name][p].append(
+                        {
+                            "seconds": elapsed_seconds,
+                            "requests": len(values[name]),
+                            "value": percentile(values[name], p),
+                        }
+                    )
+            if values["itl"]:
+                itl_percentile = percentile(values["itl"], p)
+                if itl_percentile > 0:
+                    series["intvty"][p].append(
+                        {
+                            "seconds": elapsed_seconds,
+                            "requests": len(values["itl"]),
+                            "value": 1.0 / itl_percentile,
+                        }
+                    )
+
+    for name in output:
+        for p in _PERCENTILES:
+            checkpoint_series = series[name][p]
+            output[name][f"p{p}"] = _convergence_summary(
+                checkpoint_series,
+                tolerance_ratio=tolerance_ratio,
+                min_confirmation_seconds=min_confirmation_seconds,
+            )
+    return output
+
+
 def compute_stability_metrics(
     records: list[dict[str, Any]],
     *,
     benchmark_duration_s: float | None,
     window_seconds: float = OBSERVED_WINDOW_SECONDS,
+    checkpoint_seconds: float = CONVERGENCE_CHECKPOINT_SECONDS,
+    tolerance_ratio: float = CONVERGENCE_TOLERANCE_RATIO,
+    min_confirmation_seconds: float = CONVERGENCE_MIN_CONFIRMATION_SECONDS,
 ) -> dict[str, Any]:
-    """Summarize realized workload coverage and non-overlapping time windows.
+    """Summarize workload coverage, window drift, and cumulative convergence.
 
-    These are descriptive diagnostics for one run. They deliberately do not
+    These are retrospective diagnostics for one run. They deliberately do not
     claim to be confidence intervals or estimates of rerun reproducibility.
     """
     if window_seconds <= 0:
         raise ValueError("window_seconds must be positive")
+    if checkpoint_seconds <= 0:
+        raise ValueError("checkpoint_seconds must be positive")
+    if tolerance_ratio < 0:
+        raise ValueError("tolerance_ratio must be non-negative")
+    if min_confirmation_seconds < 0:
+        raise ValueError("min_confirmation_seconds must be non-negative")
 
     timed: list[tuple[int, dict[str, Any]]] = []
     for record in records:
@@ -118,6 +256,11 @@ def compute_stability_metrics(
         int(configured_duration // window_seconds)
         if configured_duration is not None and configured_duration > 0
         else 0
+    )
+    convergence_horizon = (
+        math.floor(configured_duration / checkpoint_seconds) * checkpoint_seconds
+        if configured_duration is not None and configured_duration > 0
+        else 0.0
     )
 
     blocks: dict[int, list[dict[str, Any]]] = defaultdict(list)
@@ -139,4 +282,17 @@ def compute_stability_metrics(
         "root_trajectory_kish_effective_count": kish_effective,
         "root_trajectory_largest_share": largest_share,
         "observed_ranges": _latency_ranges(blocks) if len(blocks) >= 2 else {},
+        "convergence": {
+            "checkpoint_seconds": checkpoint_seconds,
+            "tolerance_ratio": tolerance_ratio,
+            "min_confirmation_seconds": min_confirmation_seconds,
+            "horizon_seconds": convergence_horizon,
+            "metrics": _cumulative_convergence(
+                timed,
+                horizon_seconds=convergence_horizon,
+                checkpoint_seconds=checkpoint_seconds,
+                tolerance_ratio=tolerance_ratio,
+                min_confirmation_seconds=min_confirmation_seconds,
+            ),
+        },
     }

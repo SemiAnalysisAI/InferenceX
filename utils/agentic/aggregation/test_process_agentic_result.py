@@ -142,6 +142,14 @@ REQUEST_STABILITY_KEYS = {
     "root_trajectory_kish_effective_count",
     "root_trajectory_largest_share",
     "observed_ranges",
+    "convergence",
+}
+REQUEST_CONVERGENCE_KEYS = {
+    "checkpoint_seconds",
+    "tolerance_ratio",
+    "min_confirmation_seconds",
+    "horizon_seconds",
+    "metrics",
 }
 
 
@@ -164,6 +172,7 @@ def _assert_stable_request_metrics_schema(agg: dict) -> None:
     assert set(request_metrics["throughput"]) == REQUEST_THROUGHPUT_KEYS
     assert set(request_metrics["cache"]) == REQUEST_CACHE_KEYS
     assert set(request_metrics["stability"]) == REQUEST_STABILITY_KEYS
+    assert set(request_metrics["stability"]["convergence"]) == REQUEST_CONVERGENCE_KEYS
 
 
 def _flat_request_keys(result_dir: Path) -> set[str]:
