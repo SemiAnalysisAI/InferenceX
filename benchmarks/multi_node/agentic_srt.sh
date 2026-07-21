@@ -29,6 +29,30 @@ done
 resolve_trace_source
 install_agentic_deps
 
+# NVIDIA/srt-slurm PR #276 supplies authoritative logical-worker endpoints to
+# custom benchmarks. Keep the local reconstruction as a fallback for tagged
+# upstream releases, and log the selected path so the live validation proves
+# which implementation produced the endpoint list.
+if [ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]; then
+    echo "Using AIPerf worker metrics endpoints supplied by srt-slurm: $AIPERF_SERVER_METRICS_URLS"
+elif [ -n "${AIPERF_SRT_WORKER_NODE_COUNTS:-}" ]; then
+    check_env_vars AIPERF_SRT_INFRA_NODE_COUNT AIPERF_SRT_SYSTEM_PORT_BASE
+    slurm_job_nodelist="${SLURM_JOB_NODELIST:-${SLURM_NODELIST:-}}"
+    if [ -z "$slurm_job_nodelist" ]; then
+        echo "ERROR: SLURM_JOB_NODELIST or SLURM_NODELIST is required to discover worker metrics" >&2
+        exit 1
+    fi
+    export AIPERF_SERVER_METRICS_URLS
+    AIPERF_SERVER_METRICS_URLS=$(
+        "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/srt_metrics_endpoints.py" \
+            --nodelist "$slurm_job_nodelist" \
+            --worker-node-counts "$AIPERF_SRT_WORKER_NODE_COUNTS" \
+            --infra-node-count "$AIPERF_SRT_INFRA_NODE_COUNT" \
+            --system-port-base "$AIPERF_SRT_SYSTEM_PORT_BASE"
+    )
+    echo "Discovered AIPerf SGLang worker metrics endpoints: $AIPERF_SERVER_METRICS_URLS"
+fi
+
 wait_for_agentic_servers_idle() {
     local timeout_seconds="${AIPERF_DRAIN_TIMEOUT_SECONDS:-1800}"
     local poll_seconds="${AIPERF_DRAIN_POLL_SECONDS:-10}"
@@ -77,6 +101,8 @@ while time.monotonic() < deadline:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+            worker_active += metric_sum(worker_metrics, "sglang:num_running_reqs")
+            worker_active += metric_sum(worker_metrics, "sglang:num_queue_reqs")
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",
