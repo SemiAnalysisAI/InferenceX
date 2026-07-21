@@ -4976,6 +4976,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
 
 - config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Convert the high-throughput arm to DEP: add ep: 8 to the TP8/DP8 attention-DP arm so the MoE layers run expert-parallel across all 8 ranks (--ep-size 8) instead of TP-sharded (the arm previously left ep unset -> EP_SIZE=1). Attention stays data-parallel behind sglang-router consistent hashing; the recipe already passes --ep-size EP_SIZE unconditionally, so only the master-config search space changes"
+    - "DEP arm runs conc-list [48] only (was [48, 64, 96, 128, 192, 256, 512]): conc 48 is the frontier peak (163 tok/s/gpu out, ttft 2.8s); conc >=64 overflows the HBM+host radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is strictly dominated"
+    - "Low-latency TP8 arm (conc [1, 2, 4, 8, 16, 32], fp8 KV + cutedsl bf16 GEMM) unchanged; DEP mirrors the proven dsv4-fp4-b300-sglang tp8/ep8/dp-attn DEP arm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2281
+
+- config-keys:
     - dsv4-fp4-b300-vllm-agentic
   scenario-type:
     - agentic-coding
@@ -4984,4 +4992,4 @@
     - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153/#2231; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; PYTORCH_ALLOC_CONF=expandable_segments:True dropped on the lmcache arms only (VMM allocations cannot be CUDA-IPC-exported to the LMCache server, same failure mode as cuMem on B200); gpu-memory-utilization 0.92 on lmcache DEP8 (matches the official DEP8 derate) and 0.94 on lmcache TP4/DEP4 (at 0.96 the PR #2232 bring-up sweeps hit torch-pool, DeepGEMM-JIT, and cuBLAS-workspace OOMs; 23 lmcache points validated green in runs 29463061871/29535333851 after the derate)"
     - "LMCache ladders offset the official arms: TP4 +4 conc [32, 36, 40, 44] vs SimpleCPU [28, 32, 36, 40]; DEP4 +4 conc [36, 44, 52, 60, 68, 76] vs SimpleCPU [32, 40, 48, 56, 64, 72]; DEP8 +8 conc capped at 208 [72, 104, 120, 136, 152, 168, 184, 200] vs GPU-resident [64, 96, 112, 128, 144, 160, 176, 192, 224]"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2232
-
+  
