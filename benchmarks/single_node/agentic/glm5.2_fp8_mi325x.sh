@@ -89,6 +89,8 @@ PROFILE=low-latency
 CHUNKED_PREFILL_ARGS=(--chunked-prefill-size 131072)
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$MAX_RUNNING_REQUESTS")
+DSA_PREFILL_BACKEND=tilelang
+DSA_DECODE_BACKEND=tilelang
 if [ "$DP_ATTENTION" = "true" ]; then
     PROFILE=high-throughput
     USE_SGLANG_ROUTER=true
@@ -109,10 +111,12 @@ if [ "$DP_ATTENTION" = "true" ]; then
     )
     CHUNKED_PREFILL_ARGS=()
     MAX_RUNNING_REQUESTS=256
-    # TileLang's DPA DSA kernel needs 115,200 bytes of dynamic shared memory
-    # during graph capture, above gfx942's 65,536-byte limit. Keep the DPA
-    # topology in eager mode; the non-DPA profiles still use CUDA graphs.
-    CUDA_GRAPH_ARGS=(--disable-cuda-graph)
+    # TileLang's DPA DSA kernel needs 115,200 bytes of dynamic shared memory,
+    # above gfx942's 65,536-byte per-block limit even in eager mode. AITER is
+    # SGLang's alternate ROCm DSA backend and avoids that kernel.
+    DSA_PREFILL_BACKEND=aiter
+    DSA_DECODE_BACKEND=aiter
+    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs 256)
 elif [ "$EP_SIZE" -gt 1 ]; then
     PROFILE=balanced
     CHUNKED_PREFILL_ARGS=(--chunked-prefill-size 32768)
@@ -134,8 +138,8 @@ SGLANG_CMD=(
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    --dsa-prefill-backend tilelang
-    --dsa-decode-backend tilelang
+    --dsa-prefill-backend "$DSA_PREFILL_BACKEND"
+    --dsa-decode-backend "$DSA_DECODE_BACKEND"
     --dsa-topk-backend torch
     --kv-cache-dtype bfloat16
     --tool-call-parser glm47
