@@ -5019,3 +5019,11 @@
     - "Add a Mooncake KV-offload backend to the recipe (embedded MooncakeStoreConnector store). Built from source for ROCm via Mooncake's build_wheel.sh and pip-installed so the mooncake package lands in site-packages and is importable from the vLLM worker subprocesses (a bare make install left workers unable to import it)"
     - "Adds optional per-scenario 'duration' override to the agentic-coding config schema (defaults to 3600s when unset)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2126
+
+- config-keys:
+    - kimik2.7-fp4-mi355x-vllm-agentic
+  description:
+    - "Settle on TP4 GPU-only (none) + prefix caching as the shipped config, swept conc [1,2,4,8] (3600s trace replay); drop the TP8 arms and the dram/LMCache + dram/Mooncake offload tiers"
+    - "TP4 is ~2x more per-GPU efficient than TP8 on this KV-bound agentic trace (none peaks ~49.6 tok/s/GPU at c8 vs 26.8 at TP8, from the 3600s TP4/TP8 sweeps), and GPU-only avoids the CPU/DRAM-offload interactivity penalty (LMCache cells sat at ~13-15 tok/s/user vs ~48 for none c4)"
+    - "conc capped at 8: c8 is the last stable point before the GPU-KV-capacity wall (GPU-KV ~74%); none collapses past c8 and the DRAM-offload tiers only lose per-GPU throughput at this scale, so they add no headroom"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2126
