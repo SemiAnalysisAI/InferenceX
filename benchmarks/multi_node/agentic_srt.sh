@@ -29,13 +29,13 @@ done
 resolve_trace_source
 install_agentic_deps
 
-# Upstream srt-slurm passes benchmark.env through to custom commands, but only
-# its built-in AIPerf runners discover worker metrics endpoints. Reconstruct
-# the same endpoint mapping here from the full job allocation. The recipe
-# provides one node count per logical worker in upstream topology order; srt-
-# slurm assigns DYN_SYSTEM_PORT sequentially to every physical worker process,
-# so each logical leader's port is base + its first physical-process offset.
-if [ -z "${AIPERF_SERVER_METRICS_URLS:-}" ] && [ -n "${AIPERF_SRT_WORKER_NODE_COUNTS:-}" ]; then
+# NVIDIA/srt-slurm PR #276 supplies authoritative logical-worker endpoints to
+# custom benchmarks. Keep the local reconstruction as a fallback for tagged
+# upstream releases, and log the selected path so the live validation proves
+# which implementation produced the endpoint list.
+if [ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]; then
+    echo "Using AIPerf worker metrics endpoints supplied by srt-slurm: $AIPERF_SERVER_METRICS_URLS"
+elif [ -n "${AIPERF_SRT_WORKER_NODE_COUNTS:-}" ]; then
     check_env_vars AIPERF_SRT_INFRA_NODE_COUNT AIPERF_SRT_SYSTEM_PORT_BASE
     slurm_job_nodelist="${SLURM_JOB_NODELIST:-${SLURM_NODELIST:-}}"
     if [ -z "$slurm_job_nodelist" ]; then

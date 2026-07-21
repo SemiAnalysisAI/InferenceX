@@ -139,15 +139,19 @@ SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm v1.0.10 has the nginx
-    # client_max_body_size fix (>1 MiB agentic warmup bodies), the
-    # session-affinity frontend, and the BenchmarkType.CUSTOM / extra_mount
-    # schema these recipes need. Keep this checkout byte-for-byte upstream;
-    # agentic_srt.sh derives custom-benchmark metrics endpoints from the Slurm
-    # allocation and recipe-provided logical worker widths.
+    # Directly validate NVIDIA/srt-slurm PR #276, which exposes authoritative
+    # logical worker metrics endpoints to custom benchmarks. Fetch the PR
+    # through NVIDIA's pull ref and verify its immutable head before checkout;
+    # no downstream patch or custom-fork clone is applied.
+    SRT_ENDPOINTS_PR_HEAD="3fe550861fee69d8d3823c9a06aa7c2da2916b82"
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.10
+    git fetch origin pull/276/head
+    if [[ "$(git rev-parse FETCH_HEAD)" != "$SRT_ENDPOINTS_PR_HEAD" ]]; then
+        echo "ERROR: NVIDIA/srt-slurm PR #276 head changed; refusing to test an unreviewed commit" >&2
+        exit 1
+    fi
+    git checkout --detach "$SRT_ENDPOINTS_PR_HEAD"
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
