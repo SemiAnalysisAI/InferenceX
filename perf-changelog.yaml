@@ -4982,3 +4982,12 @@
     - "DEP arm runs conc-list [48] only (was [48, 64, 96, 128, 192, 256, 512]): conc 48 is the frontier peak (163 tok/s/gpu out, ttft 2.8s); conc >=64 overflows the HBM+host radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is strictly dominated"
     - "Low-latency TP8 arm (conc [1, 2, 4, 8, 16, 32], fp8 KV + cutedsl bf16 GEMM) unchanged; DEP mirrors the proven dsv4-fp4-b300-sglang tp8/ep8/dp-attn DEP arm"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2281
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM disaggregated MTP benchmark (spec-decoding=mtp, num-speculative-tokens=3 via DECODE_MTP_SIZE)"
+    - "Config-only: mirrors dsv4-fp4-mi355x-atom-disagg topology (2P1D DPA+TP8 conc 256-2048, 1P1D TP8 conc 4-128) and reuses benchmarks/multi_node/dsv4_fp4_mi355x_atom-disagg.sh; MTP is driven by models_atom.yaml mtp_flags + DECODE_MTP_SIZE in the decode additional-settings"
+    - "Draft depth 3 on both arms (matches single-node dsv4_fp4_mi355x_atom_mtp.sh); high-conc depth may be reduced later per the dsr1-fp4-mi355x-sglang-disagg-mtp concurrency taper once results land"
+    - "Image rocm/atom-dev:nightly_202607201550 (bumped from the base config's stale 2026-06-10 nightly): verified on-node it carries the dsv4 mtp path (deepseek_v4 -> deepseek_v4_mtp -> DeepseekV4MTPModel) and the atomesh disagg router"
+  pr-link: XXX
