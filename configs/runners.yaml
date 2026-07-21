@@ -126,6 +126,12 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
+    - mi355x-amds_12
+    - mi355x-amds_14
+    - mi355x-amds_16
+    - mi355x-amds_17
+    - mi355x-amds_18
+    - mi355x-amds_19
   gb200:
     - gb200-nv_0
     - gb200-nv_1
@@ -301,7 +307,7 @@ hardware:
     available-cpu-dram-mib: 1_472_512
     gpus-per-node: 8
   cluster:b200-dgxc:
-    available-cpu-dram-mib: 3_774_874
+    available-cpu-dram-mib: 3_095_781
     gpus-per-node: 8
   cluster:b300-nv:
     available-cpu-dram-mib: 2_964_436
