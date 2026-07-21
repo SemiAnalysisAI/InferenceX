@@ -122,7 +122,7 @@ SERVER_PROMPT_SOURCE_KEYS = {
     "computed",
     "raw",
 }
-REQUEST_METRICS_KEYS = {"qps", "latency", "tokens", "throughput", "cache"}
+REQUEST_METRICS_KEYS = {"qps", "latency", "tokens", "throughput", "cache", "stability"}
 REQUEST_LATENCY_KEYS = {"ttft", "e2el", "itl", "tpot", "intvty"}
 REQUEST_TOKEN_KEYS = {"input", "output_actual", "output_expected"}
 REQUEST_THROUGHPUT_KEYS = {
@@ -133,6 +133,16 @@ REQUEST_THROUGHPUT_KEYS = {
     "per_gpu",
 }
 REQUEST_CACHE_KEYS = {"theoretical_cache_hit_rate"}
+REQUEST_STABILITY_KEYS = {
+    "window_seconds",
+    "expected_window_count",
+    "observed_window_count",
+    "min_window_requests",
+    "root_trajectory_count",
+    "root_trajectory_kish_effective_count",
+    "root_trajectory_largest_share",
+    "observed_ranges",
+}
 
 
 def _assert_stable_server_metrics_schema(agg: dict) -> None:
@@ -153,6 +163,7 @@ def _assert_stable_request_metrics_schema(agg: dict) -> None:
     assert set(request_metrics["tokens"]) == REQUEST_TOKEN_KEYS
     assert set(request_metrics["throughput"]) == REQUEST_THROUGHPUT_KEYS
     assert set(request_metrics["cache"]) == REQUEST_CACHE_KEYS
+    assert set(request_metrics["stability"]) == REQUEST_STABILITY_KEYS
 
 
 def _flat_request_keys(result_dir: Path) -> set[str]:
@@ -288,7 +299,7 @@ def _write_fixture(tmp_path: Path) -> Path:
         json.dump(
             {
                 "request_count": len(records),
-                "benchmark_duration": 4.1,
+                "benchmark_duration": {"avg": 4.1, "unit": "sec"},
                 "request_latency": {"avg": 1090.0, "unit": "ms"},
                 "metadata": {
                     "dataset": {
@@ -450,6 +461,50 @@ def test_processor_latency_units_are_seconds(tmp_path: Path):
     assert "mean_ttft" not in agg
     assert "p50_ttft" not in agg
     assert "p90_itl" not in agg
+
+
+def test_request_metrics_reads_aiperf_benchmark_duration_shape() -> None:
+    records = [
+        _make_record(
+            conv_id="trace-A",
+            turn_index=0,
+            isl=100,
+            osl=20,
+            ttft_ms=100,
+            e2e_ms=1000,
+            itl_ms=20,
+            start_ns=1_000_000_000,
+            end_ns=2_000_000_000,
+        ),
+        _make_record(
+            conv_id="trace-B",
+            turn_index=0,
+            isl=100,
+            osl=20,
+            ttft_ms=200,
+            e2e_ms=2000,
+            itl_ms=40,
+            start_ns=602_000_000_000,
+            end_ns=604_000_000_000,
+        ),
+    ]
+
+    _, nested = compute_request_metrics(
+        records,
+        {
+            # The observed wall time can land just below a clean boundary;
+            # fixed-window count must follow the configured run duration.
+            "benchmark_duration": {"avg": 1199.9, "unit": "sec"},
+            "input_config": {"loadgen": {"benchmark_duration": 1200}},
+        },
+    )
+
+    stability = nested["stability"]
+    assert stability["expected_window_count"] == 2
+    assert stability["observed_window_count"] == 2
+    assert stability["observed_ranges"]["ttft"]["p90"] == pytest.approx(
+        {"min": 0.1, "max": 0.2}
+    )
 
 
 def test_processor_derives_interactivity_from_matching_itl_percentile(
