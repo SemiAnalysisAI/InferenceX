@@ -38,6 +38,19 @@ install_agentic_deps
 
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+SERVER_PID=""
+ROUTER_PID=""
+
+cleanup() {
+    local pid
+    for pid in "$ROUTER_PID" "$SERVER_PID"; do
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill -TERM "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+}
+trap cleanup EXIT
 
 CACHE_ARGS=()
 if require_agentic_kv_offload_backend hicache; then
@@ -93,7 +106,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
-        --enable-two-batch-overlap
     )
     CHUNKED_PREFILL_ARGS=()
     MAX_RUNNING_REQUESTS=256

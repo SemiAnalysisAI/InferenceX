@@ -32,6 +32,21 @@ export TRITON_CACHE_DIR="/tmp/triton-cache-$JOB_ID"
 
 trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
+# A terminated enroot step can leave its background SGLang process outside the
+# completed Slurm step. Because each allocation owns all eight GPUs on its node,
+# remove only stale SGLang/router processes before starting the next server.
+# This prevents an old 200-GB/GPU model instance from poisoning later jobs.
+srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c '
+    mapfile -t stale_pids < <(pgrep -f "[s]glang.launch_server|[s]glang_router.launch_router" || true)
+    if [ "${#stale_pids[@]}" -gt 0 ]; then
+        echo "Cleaning stale SGLang processes: ${stale_pids[*]}"
+        kill -TERM "${stale_pids[@]}" 2>/dev/null || sudo -n kill -TERM "${stale_pids[@]}" 2>/dev/null || true
+        sleep 5
+        mapfile -t stale_pids < <(pgrep -f "[s]glang.launch_server|[s]glang_router.launch_router" || true)
+        [ "${#stale_pids[@]}" -eq 0 ] || sudo -n kill -KILL "${stale_pids[@]}" 2>/dev/null || true
+    fi
+'
+
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
     set -euo pipefail
