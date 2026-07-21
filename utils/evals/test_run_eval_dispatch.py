@@ -358,6 +358,8 @@ def test_eval_workflow_separates_agentic_lm_eval_and_swebench():
     assert "eval-framework: lm-eval" in e2e_workflow
     assert "eval-framework: swebench" in e2e_workflow
     assert "eval-tasks: ${{ inputs.eval-tasks }}" in e2e_workflow
+    assert "inputs.agentic-eval-mode != 'lm-eval'" in e2e_workflow
+    assert "inputs.agentic-eval-mode != 'swebench'" in e2e_workflow
     assert "EVAL_FRAMEWORK: ${{ inputs.eval-framework }}" in benchmark_workflow
     assert "EVAL_TASKS_DIR: ${{ inputs.eval-tasks }}" in benchmark_workflow
     assert "EVAL_ARTIFACT_SUFFIX:" in benchmark_workflow

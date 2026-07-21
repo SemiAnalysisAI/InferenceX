@@ -31,6 +31,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            agentic-eval-mode:
+                description: "Agentic eval jobs to launch (all | lm-eval | swebench)"
+                required: false
+                type: string
+                default: "all"
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -65,6 +70,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            agentic-eval-mode:
+                description: "Agentic eval jobs to launch (all | lm-eval | swebench)"
+                required: false
+                type: string
+                default: "all"
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -258,7 +268,7 @@ jobs:
 
     test-sweep-agentic-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' && inputs.agentic-eval-mode != 'lm-eval' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
@@ -297,7 +307,7 @@ jobs:
 
     test-sweep-agentic-lm-evals:
         needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' }}
+        if: ${{ needs.get-jobs.outputs.agentic-eval-config != '[]' && inputs.agentic-eval-mode != 'swebench' }}
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic lm-eval /
         strategy:
