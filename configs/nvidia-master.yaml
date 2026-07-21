@@ -8044,9 +8044,9 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-pp-canary:
           ep: 1
           dp-attn: true
 
-# Unofficial AgentX Pareto campaign. The PP arms above fail at literal 1M;
-# HiSparse completes the full prefill but currently misreports API usage.
-glm5.2-fp8-h200-dynamo-sglang-agentic-pp-pareto:
+# Complete unofficial AgentX HiSparse Pareto campaign. The PP arms above fail
+# at literal 1M; HiSparse completes the full prefill but misreports API usage.
+glm5.2-fp8-h200-dynamo-sglang-agentic-hisparse-pareto:
   image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
@@ -8062,7 +8062,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-pp-pareto:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: none
-        conc-list: [2, 4, 8]
+        conc-list: [1, 2, 3, 4, 5, 6, 7, 8]
         kv-offloading: dram
         kv-offload-backend: { name: hisparse }
         prefill:
