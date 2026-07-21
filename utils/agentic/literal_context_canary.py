@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import requests
@@ -27,13 +28,25 @@ def parse_args() -> argparse.Namespace:
 def chat_token_count(tokenizer: Any, content: str) -> int:
     """Return the exact chat-template prompt length for one user message."""
     messages = [{"role": "user", "content": content}]
-    return len(
-        tokenizer.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-        )
+    tokenized = tokenizer.apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=True,
     )
+    input_ids = (
+        tokenized.get("input_ids") if isinstance(tokenized, Mapping) else tokenized
+    )
+    if input_ids is None:
+        raise RuntimeError("Chat template result does not contain input_ids")
+    if hasattr(input_ids, "shape"):
+        return int(input_ids.shape[-1])
+    if not isinstance(input_ids, Sequence):
+        raise RuntimeError(f"Unsupported input_ids type: {type(input_ids).__name__}")
+    if input_ids and isinstance(input_ids[0], Sequence):
+        if len(input_ids) != 1:
+            raise RuntimeError("Expected one tokenized chat prompt")
+        return len(input_ids[0])
+    return len(input_ids)
 
 
 def build_prompt(tokenizer: Any, target_tokens: int) -> tuple[str, int]:
