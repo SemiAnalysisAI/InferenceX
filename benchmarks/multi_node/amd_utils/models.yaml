@@ -395,15 +395,6 @@ DeepSeek-V4-Pro:
     dp:
       max_running_requests: 1024
       cuda_graph_bs_range: "1-128"
-      # Must match prefill.context_length. In PD-disagg the decode admits requests
-      # against its own context length; if left unset it defaults to the model's
-      # (huge) config value, so a request whose input exceeds prefill's 9217 budget
-      # is accepted by decode (pre-allocated, waiting for KV) but rejected by prefill
-      # (never sends KV) -> the request hangs to the client timeout (the 8k1k
-      # conc-500 straggler tail). Keeping decode symmetric with prefill makes such
-      # over-length requests fail fast at admission instead.
-      context_length: 9217
     no_dp:
       max_running_requests: 128
       cuda_graph_bs_range: "1-128"
-      context_length: 9217
