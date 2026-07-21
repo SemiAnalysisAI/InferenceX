@@ -186,6 +186,12 @@ if [[ "$IS_AGENTIC" == "true" ]]; then
     # AgentX sends structured chat messages to /v1/chat/completions, so the
     # target checkpoint's native chat template is applied by the server.
     build_replay_cmd "$RESULT_DIR"
+    # TP4 can take several minutes to finish a long response that was already
+    # admitted near the end of the measurement window. The AIPerf default is
+    # only 30 seconds, which cancelled the sole profiling request in the TP4
+    # smoke while the healthy server was still decoding it. Bound the drain at
+    # 30 minutes without extending the measured request-admission window.
+    REPLAY_CMD+=" --benchmark-grace-period 1800"
     REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 else
