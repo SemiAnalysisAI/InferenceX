@@ -4966,3 +4966,13 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+  description:
+    - "Retune the non-MTP 8k1k disagg search space: drop the 2P1D DEP8 sweep (conc 128/256/512/1024 across 2 prefill nodes) and the 1P1D DEP8 conc=1024 point"
+    - "Add 1P1D DEP8 (TP8/EP8 + dp-attention, 1 prefill node) at conc 256/512, and a new 1P1D pure-TP8 (no EP, no DP-attention) scenario sweeping conc [1, 2, 4, 8, 16, 32, 64, 128]"
+    - "Fix 2P1D eval 503s: speed up router circuit-breaker recovery (--cb-timeout-duration-secs 15 --retry-max-retries 3) and gate benchmarking on an end-to-end router readiness canary (one real generation through the router), so the eval no longer starts against a router whose prefill path isn't actually serving yet"
+    - "Fix the 8k1k conc-500 straggler tail: decode now derives its admission context_length from models.yaml (falling back to prefill's value when unset) so decode and prefill reject over-length requests symmetrically instead of decode hanging on a KV transfer prefill never sends"
+    - "Bump DeepSeek-V4-Pro prefill max_total_tokens from 262144 to 2097152 to match the model's actual KV budget"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2293
