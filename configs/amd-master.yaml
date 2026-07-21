@@ -2055,9 +2055,11 @@ minimaxm3-fp8-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=1"
 
-# GLM-5.2 FP8 full-context AgentX curve on one MI325X node. The qualification
-# run used about 35% of the explicit 1,048,576-token BF16 KV pool at concurrency
-# 1, so sample densely around the expected concurrency 3-4 capacity knee.
+# GLM-5.2 FP8 full-context AgentX curves on one MI325X node. Every arm retains
+# context-length=1,048,576 and max-total-tokens=1,048,576. The TP8 baseline
+# establishes the low-latency knee; EP8 uses the cookbook balanced batch shape;
+# EP8+DP8 uses its high-throughput shape; HiCache tests whether spilling cold
+# prefixes to the 3 TB host tier restores the cache-hit collapse above conc 3.
 glm5.2-fp8-mi325x-sglang-agentic:
   image: lmsysorg/sglang:v0.5.15.post1-rocm720-mi30x
   model: zai-org/GLM-5.2-FP8
@@ -2068,8 +2070,12 @@ glm5.2-fp8-mi325x-sglang-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.80
+      search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8] }
+      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 8, 10, 12, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [4, 6, 8, 12, 16, 24, 32], router: { name: sglang-router, version: "0.3.2" } }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [3, 4, 5, 6, 8, 10, 12, 16] }
 
 # GLM-5.2 FP8 full-context AgentX disaggregation on MI325X. Follow the
 # DeepSeek-V4-Pro AgentX convention: keep each engine/topology to at most four

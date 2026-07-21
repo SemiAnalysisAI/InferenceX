@@ -4979,8 +4979,8 @@
     - glm5.2-fp8-mi325x-sglang-agentic
     - glm5.2-fp8-mi325x-sglang-disagg-agentic
   description:
-    - "Add a GLM-5.2 FP8 MI325X SGLang single-node AgentX full-context curve at concurrency [1, 2, 3, 4, 5, 6, 8] around the measured KV-capacity knee"
-    - "Run TP8/EP1 STP with an explicit 1,048,576-token context and BF16 GPU KV pool against the complete unfiltered AgentX corpus"
+    - "Add four GLM-5.2 FP8 MI325X SGLang single-node AgentX full-context curves: TP8 low-latency, TP8/EP8 balanced, TP8/EP8/DP8 high-throughput, and TP8 HiCache DRAM offload"
+    - "Keep every arm at an explicit 1,048,576-token request context and 1,048,576-token BF16 GPU KV pool against the complete unfiltered AgentX corpus, with dense concurrency coverage from 1 through 32"
     - "Add TP8 SGLang disaggregated AgentX sweeps for balanced 1P1D, decode-heavy 1P2D, and prefill-heavy 2P1D topologies, with at most four concurrency points per server allocation"
     - "Keep EP and DP attention disabled because MoRI all-to-all remains unstable on the MI325X Broadcom bnxt_re fleet"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2273
