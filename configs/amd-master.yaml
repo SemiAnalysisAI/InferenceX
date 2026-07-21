@@ -549,7 +549,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [16, 24, 32, 40] }
 
 kimik2.7-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:v0.24.0
+  image: vllm/vllm-openai-rocm:nightly-f25953cc59f9b4ba9b04b16228d2b86dcfbcbdb1
   model: amd/Kimi-K2.7-Code-MXFP4
   model-prefix: kimik2.7
   runner: cluster:mi355x-amds

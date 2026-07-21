@@ -339,9 +339,9 @@ DEFAULT_VLLM_SPEC_CONFIG=$(cat <<'EOF'
 {
   "method": "eagle3",
   "model": "lightseekorg/kimi-k2.6-eagle3.1-mla",
-  "num_speculative_tokens": 4,
+  "num_speculative_tokens": 3,
   "rejection_sample_method": "synthetic",
-  "synthetic_acceptance_length": 3.24
+  "synthetic_acceptance_length": 2.88
 }
 EOF
 )
@@ -357,6 +357,9 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.90
     --trust-remote-code
     --mm-encoder-tp-mode data
+    --block-size=1
+    --max-num-seqs "$CONC"
+    --max-model-len auto
     --speculative-config "$VLLM_SPEC_CONFIG"
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
