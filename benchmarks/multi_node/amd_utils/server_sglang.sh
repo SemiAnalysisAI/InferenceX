@@ -765,12 +765,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # decode worker fed evenly. cache_threshold / balance_*_threshold tune the
     # cache_aware load-balancing (router defaults are 0.5 / 64 / 1.5). Override any
     # of these via env.
-    ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-cache_aware}"
+    ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-consistent_hashing}"
     ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
     ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
     ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
     ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
-    ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --prefill-policy ${ROUTER_PREFILL_POLICY} --decode-policy ${ROUTER_DECODE_POLICY} --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+    ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
 
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
@@ -906,8 +906,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
                       DISAGG IS_MULTINODE \
                       TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
-                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
-                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
+                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_ENABLE_DP PREFILL_HARDWARE \
+                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_ENABLE_DP DECODE_HARDWARE \
                       KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA TOTAL_CPU_DRAM_GB KV_P2P_TRANSFER \
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
                       AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
