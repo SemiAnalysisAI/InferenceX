@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori]
+        options: [all, deepep-v2, mori, uccl-ep]
       only_sku:
         description: Restrict to one GHA runner pool; blank = all
         type: string
@@ -84,10 +84,12 @@ jobs:
     if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
-      # Fixed global cap; real throttling is each SKU pool's runner count and its
-      # cluster's Slurm partition. setup interleaves shards across SKUs, so the
-      # first jobs under this cap spread over pools instead of queuing on one.
-      max-parallel: 10
+      # Global cap; real throttling is each SKU pool's runner count and its cluster's
+      # Slurm partition. setup interleaves shards across SKUs so the cap spreads over
+      # pools instead of queuing on one. Kept above the total per-pool runner count so a
+      # saturated pool's dispatched-but-waiting legs cannot starve pools that have free
+      # runners (10 was too low when the shared fleet is busy with concurrent sweeps).
+      max-parallel: 30
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.sku }}
     timeout-minutes: 350
