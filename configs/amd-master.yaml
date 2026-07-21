@@ -770,8 +770,9 @@ kimik2.5-int4-mi300x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-mi355x-vllm:
-  # TODO: replace with the official vLLM ROCm image containing AITER #3832.
-  image: TBD
+  # rocm/vllm-dev:nightly_cdna4 ships AITER 0.1.19.dev (>= v0.1.16.post5 from
+  # vllm-project/vllm#48683) which includes the ROCm/aiter#3832 gfx950 MXFP4 MoE backend.
+  image: rocm/vllm-dev:nightly_cdna4
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
