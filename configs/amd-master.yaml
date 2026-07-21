@@ -1536,7 +1536,7 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=1"
 
 dsv4-fp4-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  image: rocm/pytorch-private:sglang-rocm720-mi35x_dsv4_mlpnopad
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1547,9 +1547,10 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8] }
-      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
-      - { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
+      #- { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8] }
+      #- { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 32, 48, 64] }
+      #- { tp: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64] }
+      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [48, 64] }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5

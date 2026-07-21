@@ -5010,4 +5010,9 @@
     - "Add MTP speculative-decoding for the B300 vLLM AgentX recipe as a separate config-key, so the existing dsv4-fp4-b300-vllm-agentic aggregate is not re-run."
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
-  
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache
+  description:
+    - "Switch image to rocm/pytorch-private:sglang-rocm720-mi35x_dsv4_mlpnopad for MLP no-pad kernel evaluation on DSv4"
+    - "Disable non-DPA, full-DPA, and HiCache sweep arms; keep only DPA no-offload conc [48, 64]"
