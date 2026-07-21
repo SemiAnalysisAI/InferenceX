@@ -638,6 +638,11 @@ class AgenticCodingConfig(BaseModel):
     dram_utilization: Optional[float] = Field(
         default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
     )
+    # Per-scenario trace-replay duration override (seconds). Falls back to
+    # DEFAULT_AGENTIC_DURATION_SECONDS in the sweep generator when unset.
+    duration: Optional[int] = Field(
+        default=None, alias=Fields.DURATION.value, gt=0
+    )
 
     @model_validator(mode='after')
     def validate_dram_offload_capacity(self):

@@ -575,10 +575,33 @@ class TestAgenticMatrixEntries:
                 }],
             })
 
-    def test_duration_is_not_a_master_config_field(self):
+    def test_duration_is_an_optional_master_config_field(self):
+        # Per-scenario duration override (falls back to the default 3600s in the
+        # sweep generator when unset). Used for shorter agentic smoke sweeps.
+        cfg = AgenticCodingConfig(**{
+            "duration": 1800,
+            "search-space": [{
+                "tp": 8,
+                "kv-offloading": "none",
+                "conc-list": [16],
+            }],
+        })
+        assert cfg.duration == 1800
+
+    def test_duration_defaults_to_none_when_unset(self):
+        cfg = AgenticCodingConfig(**{
+            "search-space": [{
+                "tp": 8,
+                "kv-offloading": "none",
+                "conc-list": [16],
+            }],
+        })
+        assert cfg.duration is None
+
+    def test_duration_must_be_positive(self):
         with pytest.raises(Exception, match="duration"):
             AgenticCodingConfig(**{
-                "duration": 1800,
+                "duration": 0,
                 "search-space": [{
                     "tp": 8,
                     "kv-offloading": "none",
