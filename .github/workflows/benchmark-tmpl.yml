@@ -249,6 +249,13 @@ jobs:
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
 
+          if [ "${{ inputs.eval-only }}" = "true" ]; then
+            # Keep in-progress per-task results on the mounted workspace so a
+            # later task failure or cancellation cannot erase completed tasks.
+            export EVAL_RESULT_DIR=eval_out
+            mkdir -p "$EVAL_RESULT_DIR"
+          fi
+
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 
           if [ "${{ inputs.eval-only }}" = "true" ]; then
@@ -296,7 +303,7 @@ jobs:
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}${{ env.EVAL_ARTIFACT_SUFFIX }}
@@ -346,10 +353,11 @@ jobs:
             predictions.jsonl
             swebench_report_*.json
             *.traj*
-          if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
+            eval_out/**
+          if-no-files-found: warn
 
       - name: Verify eval scores
-        if: ${{ (success() || failure()) && inputs.eval-only && (inputs.eval-limit == '' || inputs.eval-limit == 'full' || inputs.eval-limit == '0') }}
+        if: ${{ success() && inputs.eval-only && (inputs.eval-limit == '' || inputs.eval-limit == 'full' || inputs.eval-limit == '0') }}
         run: |
           python3 -m venv "$RUNNER_TEMP/eval-validation-venv"
           "$RUNNER_TEMP/eval-validation-venv/bin/pip" install 'PyYAML==6.0.3'
@@ -361,6 +369,9 @@ jobs:
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
+          if [ -d eval_out ]; then
+            rm -rf --one-file-system eval_out
+          fi
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           

@@ -151,6 +151,7 @@ def _run_lm_eval_cmdline(
     eval_limit=None,
     context_len: int = 16384,
     output_cap: int | None = None,
+    concurrent_requests: int | None = None,
 ) -> str:
     env = {
         **os.environ,
@@ -159,10 +160,13 @@ def _run_lm_eval_cmdline(
     }
     env.pop("EVAL_LIMIT", None)
     env.pop("EVAL_MAX_OUTPUT_TOKENS", None)
+    env.pop("EVAL_CONCURRENT_REQUESTS", None)
     if eval_limit is not None:
         env["EVAL_LIMIT"] = str(eval_limit)
     if output_cap is not None:
         env["EVAL_MAX_OUTPUT_TOKENS"] = str(output_cap)
+    if concurrent_requests is not None:
+        env["EVAL_CONCURRENT_REQUESTS"] = str(concurrent_requests)
     script = _EVAL_LIMIT_SCRIPT.replace(
         "EVAL_MAX_MODEL_LEN=16384",
         f"EVAL_MAX_MODEL_LEN={context_len}",
@@ -193,6 +197,14 @@ def test_eval_output_tokens_allow_long_reasoning_with_configurable_cap():
 
     capped_out = _run_lm_eval_cmdline(context_len=100000, output_cap=32768)
     assert "max_tokens=32768" in capped_out
+
+
+def test_eval_concurrency_is_stable_across_recipe_throughput_settings():
+    default_out = _run_lm_eval_cmdline()
+    assert "num_concurrent=64" in default_out
+
+    override_out = _run_lm_eval_cmdline(concurrent_requests=16)
+    assert "num_concurrent=16" in override_out
 
 
 
@@ -362,9 +374,66 @@ def test_default_graded_eval_suite_is_registered():
     assert "--include_path utils/evals" in out, (
         f"Expected repo-local eval tasks to be registered:\n{out}"
     )
-    assert "--tasks gsm8k gpqa_diamond_cot_n_shot aime26" in out, (
-        f"Expected all graded eval tasks in the default suite:\n{out}"
+    task_flags = [
+        "--tasks gsm8k",
+        "--tasks gpqa_diamond_cot_n_shot",
+        "--tasks aime26",
+    ]
+    assert all(flag in out for flag in task_flags), (
+        f"Expected each graded task to run independently:\n{out}"
     )
+    assert [out.index(flag) for flag in task_flags] == sorted(
+        out.index(flag) for flag in task_flags
+    ), f"Expected deterministic task order:\n{out}"
+
+
+def test_default_suite_stages_one_result_per_task(tmp_path):
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    python_shim = shim_dir / "python3"
+    python_shim.write_text(
+        r"""#!/usr/bin/env bash
+set -e
+task=
+output_path=
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tasks) task="$2"; shift 2 ;;
+        --output_path) output_path="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+mkdir -p "$output_path"
+printf '{"results":{"%s":{}}}\n' "$task" > "$output_path/results_${task}.json"
+printf '{"task":"%s"}\n' "$task" > "$output_path/samples_${task}.jsonl"
+"""
+    )
+    python_shim.chmod(python_shim.stat().st_mode | stat.S_IXUSR)
+    script = r'''
+source "$BENCHMARK_LIB"
+export EVAL_MAX_MODEL_LEN=16384
+export EVAL_RESULT_DIR="$PWD/eval_out"
+export MODEL=test-model
+export MODEL_NAME=test-model
+export OPENAI_API_KEY=EMPTY
+export INFERENCEX_LM_EVAL_RUNTIME_READY=true
+PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999
+append_lm_eval_summary
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "SHIM_DIR": str(shim_dir),
+        "KV_OFFLOADING": "none",
+    }
+    subprocess.run(["bash", "-c", script], cwd=tmp_path, env=env, check=True)
+
+    assert {path.name for path in tmp_path.glob("results_*.json")} == {
+        "results_gsm8k.json",
+        "results_gpqa_diamond_cot_n_shot.json",
+        "results_aime26.json",
+    }
+    assert not (tmp_path / "eval_out").exists()
 
 
 def test_eval_workflow_separates_agentic_lm_eval_and_swebench():
@@ -383,6 +452,9 @@ def test_eval_workflow_separates_agentic_lm_eval_and_swebench():
     assert "EVAL_FRAMEWORK: ${{ inputs.eval-framework }}" in benchmark_workflow
     assert "EVAL_TASKS_DIR: ${{ inputs.eval-tasks }}" in benchmark_workflow
     assert "EVAL_ARTIFACT_SUFFIX:" in benchmark_workflow
+    assert "eval_out/**" in benchmark_workflow
+    assert "if-no-files-found: warn" in benchmark_workflow
+    assert "success() && inputs.eval-only" in benchmark_workflow
 
 
 def test_swebench_single_shot_registers_task_yaml():

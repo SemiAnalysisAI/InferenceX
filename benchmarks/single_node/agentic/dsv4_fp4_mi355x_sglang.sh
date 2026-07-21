@@ -131,7 +131,7 @@ SGLANG_CMD=(
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    --attention-backend compressed
+    --attention-backend dsv4
     --cuda-graph-max-bs-decode "$CUDA_GRAPH_MAX_BS"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
@@ -157,6 +157,11 @@ printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
     env | grep -E '^SGLANG_' | sort
     echo "==================================="
 } | tee "$SERVER_LOG"
+
+# Capture GPU power, clock, thermal, and utilization data for both startup and
+# evaluation. The EXIT trap preserves metrics on engine or client failures.
+start_gpu_monitor
+trap stop_gpu_monitor EXIT
 
 echo "Starting SGLang server for MI355X..."
 "${SGLANG_CMD[@]}" >> "$SERVER_LOG" 2>&1 &
@@ -192,3 +197,6 @@ else
     REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
+
+stop_gpu_monitor
+trap - EXIT

@@ -810,7 +810,7 @@ run_lm_eval() {
     local eval_context_len="${EVAL_MAX_MODEL_LEN:-16384}"
     local temperature=0
     local top_p=1
-    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-64}"
     # Repo-local task YAMLs are discovered through --include_path. Full-dataset
     # runs remain the default; --limit is passed only when EVAL_LIMIT explicitly
     # requests a smaller smoke-test slice.
@@ -885,18 +885,32 @@ run_lm_eval() {
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
+    local eval_exit=0
+    local eval_task task_slug task_results_dir task_exit
     set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      ${include_path:+--include_path "$include_path"} \
-      --tasks "${eval_tasks[@]}" \
-      --output_path "${results_dir}" \
-      --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
-      --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}" \
-      ${eval_limit:+--limit "$eval_limit"}
-    local eval_exit=$?
+    for eval_task in "${eval_tasks[@]}"; do
+        task_slug="${eval_task//\//_}"
+        task_slug="${task_slug// /_}"
+        task_results_dir="${results_dir}/${task_slug}"
+        mkdir -p "$task_results_dir"
+        echo "Running lm-eval task: ${eval_task}"
+        task_exit=0
+        python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+          ${include_path:+--include_path "$include_path"} \
+          --tasks "$eval_task" \
+          --output_path "$task_results_dir" \
+          --log_samples \
+          --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+          --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}" \
+          ${eval_limit:+--limit "$eval_limit"} \
+          || task_exit=$?
+        if [ "$task_exit" -ne 0 ]; then
+            echo "ERROR: lm-eval task '${eval_task}' failed with exit code ${task_exit}" >&2
+            eval_exit="$task_exit"
+        fi
+    done
     set +x
-    return $eval_exit
+    return "$eval_exit"
 }
 
 _stage_lm_eval_artifacts() {

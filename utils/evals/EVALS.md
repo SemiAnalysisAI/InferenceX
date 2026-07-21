@@ -149,17 +149,17 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
-| `EVAL_TASKS_DIR` | `gsm8k,gpqa_diamond_cot_n_shot,aime26` | Comma-separated lm-eval task names, or one task YAML path |
-| `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
+| `EVAL_TASKS_DIR` | `gsm8k,gpqa_diamond_cot_n_shot,aime26` | Ordered comma-separated lm-eval task names, each executed and saved independently against the same live engine; or one task YAML path |
+| `EVAL_RESULT_DIR` | temporary directory | Output directory for eval results; eval-only CI uses workspace-backed `eval_out` so completed task files survive a later failure or cancellation |
 | `EVAL_MAX_MODEL_LEN` | computed | Max context passed to the eval client and, where supported, the serving engine; AgentX uses the model-native value |
 | `EVAL_MIN_MODEL_LEN` | `32768` | Minimum context for fixed-sequence eval-only reasoning tasks; capped at the model's native maximum and does not affect throughput runs |
 | `EVAL_MAX_OUTPUT_TOKENS` | `65536` | Maximum generated tokens per lm-eval request; also bounded by the available context window |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Eval client concurrency, independent of recipe throughput concurrency; an explicit space-separated list runs sequential concurrency batches against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
 ### Scenario coverage
 
-- Fixed-sequence evals run GSM8K, GPQA Diamond, and AIME26 through lm-eval. They never run SWE-bench.
-- Agentic configs launch separate lm-eval (GSM8K, GPQA Diamond, AIME26) and SWE-bench jobs. `EVAL_TASKS_DIR` can narrow diagnostic lm-eval runs without changing recipe configs.
+- Fixed-sequence evals run GSM8K, GPQA Diamond, and AIME26 independently, in that order, against one live lm-eval server. They never run SWE-bench.
+- Agentic configs launch separate lm-eval and SWE-bench jobs. The lm-eval job runs GSM8K, GPQA Diamond, and AIME26 independently against one live server; `EVAL_TASKS_DIR` can narrow diagnostic runs without changing recipe configs.
 
 
 ### Score validation
