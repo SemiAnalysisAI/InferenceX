@@ -5031,10 +5031,9 @@
 
 - config-keys:
     - dsv4-fp4-gb200-dynamo-vllm-agentic-agg
-    - dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d-dep8-dep8
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-3p1d-dep8-dep16
   description:
-    - "Add GB200 Dynamo-vLLM AgentX aggregate TP8 and four disaggregated recipe/config definitions; limit this validation sweep to aggregate TP8 at conc [16] and representative 1P/1D DEP8/DEP8 at conc [256]."
-    - "Retain the additional tuned PD definitions for future sweeps: 1P/1D DEP8/DEP12 at [384,512], 2P/1D DEP8/DEP12 at [640,720,768], and 3P/1D DEP8/DEP16 at [800,960,1024,1280]."
+    - "Add GB200 Dynamo-vLLM AgentX aggregate TP8 at conc [16] and disaggregated 3P/1D DEP8/DEP16 at conc [1536]."
     - "Use NVIDIA/srt-slurm main with its upstream per-node DP, Dynamo health-count, and Mooncake master fixes; retain the unmerged multi-node TP VLLM_PORT fix. TP8 uses FlashInfer all-reduce and disables vLLM custom all-reduce."
     - "Image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2260
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2300
