@@ -39,12 +39,15 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 SERVER_PID=""
+SERVER_PGID=""
 
 cleanup() {
-    if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+    if [[ -n "$SERVER_PGID" ]]; then
+        kill -TERM -- "-$SERVER_PGID" 2>/dev/null || true
+    elif [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
         kill -TERM "$SERVER_PID" 2>/dev/null || true
-        wait "$SERVER_PID" 2>/dev/null || true
     fi
+    [[ -z "$SERVER_PID" ]] || wait "$SERVER_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -124,8 +127,11 @@ printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
 
 echo "Starting SGLang server for MI325X..."
-"${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+# Keep the launcher and its renamed sglang::scheduler TP children in one
+# process group so teardown cannot leave a 200-GB/GPU child behind.
+setsid "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
+SERVER_PGID=$SERVER_PID
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
