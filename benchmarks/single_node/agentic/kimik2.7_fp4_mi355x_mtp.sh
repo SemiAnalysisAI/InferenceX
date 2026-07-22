@@ -393,7 +393,10 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+# ---- Run benchmark / eval ---------------------------------------------------
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
