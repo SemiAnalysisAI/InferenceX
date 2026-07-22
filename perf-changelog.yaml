@@ -4752,6 +4752,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2137
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM image to nightly-9e57de7197f234f9d9187715d96e07e007048c0f, which carries the merged AITER page-16 sparse paged-attention path (vllm-project/vllm#47287)"
+    - "Enable AITER page-16 sparse PA (VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1, with VLLM_ROCM_USE_AITER=1 and fp8 KV cache on TP4 where num_kv_heads == 1 per rank): AITER derives page-16 K/V views from the page-128 KV cache and routes decode/prefill through AITER Gluon paged attention over MiniMax-M3's top-k 128-token sparse blocks. Kernel-level speedup of the same computation, no FLOP reduction"
+    - "Concurrency-gate the fast path to the long-context high-concurrency tail (isl>=8192 && conc>=64). Sparse PA is a long-context/high-batch optimization and adds overhead at short context (1k1k) or low concurrency, so both VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT and --linear-backend emulation are enabled only in that regime; everything else (all 1k1k, and 8k1k conc<64) falls back to the prior #2003 path (non-shuffled Triton attention + native linear). Net effect vs #2003: 8k1k tput/gpu conc128 +3.3%, conc256 +2.5%, conc512 +4.7% (peak), neutral elsewhere"
+    - "Switch quick all-reduce quantization to INT4 for all concurrencies (#2003 used INT6); accuracy is guarded by the 8k1k evals. In the high-conc fast path also apply the AITER tuning knobs VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256"
+    - "Deliberately do NOT pass the #47269 --hf-overrides use_index_cache/index_topk_freq cross-layer indexer-skip override: it reduces model-architecture FLOPs, which is disallowed by docs/PR_REVIEW_CHECKLIST.md"
+    - "Serving flags are otherwise unchanged (--block-size 128, --language-model-only, --moe-backend aiter, --kv-cache-dtype fp8, --attention-backend TRITON_ATTN, minimax_m3 parsers); TP4 conc 1-512 sweep at 1k1k and 8k1k unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2187
+
+- config-keys:
     - kimik2.5-fp4-mi355x-atom-disagg
   description:
     - "Add Kimi-K2.5-MXFP4 entry to models_atom.yaml for ATOM disaggregated inference"
@@ -4983,6 +4994,16 @@
     - "Low-latency TP8 arm (conc [1, 2, 4, 8, 16, 32], fp8 KV + cutedsl bf16 GEMM) unchanged; DEP mirrors the proven dsv4-fp4-b300-sglang tp8/ep8/dp-attn DEP arm"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2281
 
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+  description:
+    - "Retune the non-MTP 8k1k disagg search space: drop the 2P1D DEP8 sweep (conc 128/256/512/1024 across 2 prefill nodes) and the 1P1D DEP8 conc=1024 point"
+    - "Add 1P1D DEP8 (TP8/EP8 + dp-attention, 1 prefill node) at conc 256/512, and a new 1P1D pure-TP8 (no EP, no DP-attention) scenario sweeping conc [1, 2, 4, 8, 16, 32, 64, 128]"
+    - "Fix 2P1D eval 503s: speed up router circuit-breaker recovery (--cb-timeout-duration-secs 15 --retry-max-retries 3) and gate benchmarking on an end-to-end router readiness canary (one real generation through the router), so the eval no longer starts against a router whose prefill path isn't actually serving yet"
+    - "Fix the 8k1k conc-500 straggler tail: decode now derives its admission context_length from models.yaml (falling back to prefill's value when unset) so decode and prefill reject over-length requests symmetrically instead of decode hanging on a KV transfer prefill never sends"
+    - "Bump DeepSeek-V4-Pro prefill max_total_tokens from 262144 to 2097152 to match the model's actual KV budget"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2293
+  
 - config-keys:
     - dsv4-fp4-b300-vllm-agentic
   scenario-type:
