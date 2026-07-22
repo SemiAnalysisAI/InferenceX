@@ -287,6 +287,8 @@ jobs:
         with:
             exp-name: ${{ matrix.config.exp-name }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
