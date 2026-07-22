@@ -298,17 +298,10 @@ fi
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
 if [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm:main. The per-node DP launcher,
-    # matching Dynamo health counts, and Mooncake master compatibility are all
-    # upstream; keep only the still-unmerged multi-node TP port fix below.
+    # matching Dynamo health counts, multi-node TP VLLM_PORT handling, and
+    # Mooncake master compatibility are all upstream.
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
-
-    # NVIDIA/srt-slurm#243 gives each srt process a private VLLM_PORT range, but
-    # a multi-node TP process still passes that one range to all of its local
-    # vLLM children. Unset it only for multi-node non-DP workers, matching the
-    # still-unmerged NVIDIA/srt-slurm commit de1a4f0257dae5bf871881dc4696e35389c37483.
-    # Keep the upstream allocation for per-node DP and co-located endpoints.
-    git apply "$GITHUB_WORKSPACE/runners/patches/srt-slurm-vllm-multinode-tp-port.patch" || exit 1
 
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
