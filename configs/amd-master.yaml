@@ -8,11 +8,6 @@ dsr1-fp4-mi355x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -29,10 +24,6 @@ dsr1-fp4-mi355x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -48,11 +39,6 @@ dsr1-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -70,11 +56,6 @@ dsr1-fp4-mi355x-atom-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -91,10 +72,6 @@ dsr1-fp8-mi300x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -110,10 +87,6 @@ dsr1-fp8-mi325x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -137,10 +110,6 @@ dsv4-fp8-mi300x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -162,10 +131,6 @@ dsv4-fp8-mi300x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -184,10 +149,6 @@ dsr1-fp8-mi355x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -204,10 +165,6 @@ dsr1-fp8-mi355x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -223,10 +180,6 @@ qwen3.5-bf16-mi355x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -242,10 +195,6 @@ qwen3.5-bf16-mi355x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -261,10 +210,6 @@ qwen3.5-bf16-mi300x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -280,10 +225,6 @@ qwen3.5-bf16-mi325x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -299,10 +240,6 @@ qwen3.5-fp8-mi325x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -318,10 +255,6 @@ qwen3.5-fp8-mi355x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -337,10 +270,6 @@ qwen3.5-fp8-mi355x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -369,12 +298,6 @@ qwen3.5-fp8-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, ep: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -392,11 +315,6 @@ qwen3.5-fp8-mi355x-atom-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -416,28 +334,6 @@ qwen3.5-fp8-mi355x-sglang-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # Matches qwen3.5-fp8-mi355x-sglang TP8/EP1 low-concurrency sweep
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -479,11 +375,6 @@ qwen3.5-fp4-mi355x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -500,11 +391,6 @@ qwen3.5-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -521,11 +407,6 @@ qwen3.5-fp4-mi355x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-      - { tp: 4, conc-start: 4, conc-end: 16, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -545,28 +426,6 @@ qwen3.5-fp4-mi355x-sglang-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # 1P1D TP8/EP1, dp-attn false; MoRI conn.py overlay via job.slurm.
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -598,172 +457,10 @@ qwen3.5-fp8-mi300x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
-
-glm5-fp8-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256 }
-
-glm5-fp8-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi355x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
-
-glm5-fp8-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi355x-disagg
-  precision: fp8
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # 1P+1D TP8/EP1 CI smoke sweep (aligned with glm5-fp8-mi355x-sglang conc range)
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-    - isl: 8192
-      osl: 1024
-      search-space:
-      # 1P+1D TP8/EP1 CI smoke sweep; dp-attn false (NSA / MoRI path)
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-glm5-fp8-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi355x
-  precision: fp8
-  framework: atom
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256 }
-      - { tp: 8, conc-start: 4, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256 }
-      - { tp: 8, conc-start: 4, conc-end: 256 }
-
-glm5.1-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
-  model: amd/GLM-5.1-MXFP4
-  model-prefix: glm5.1
-  runner: mi355x
-  precision: fp4
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
-
-glm5.1-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
-  model: amd/GLM-5.1-MXFP4
-  model-prefix: glm5.1
-  runner: mi355x
-  precision: fp4
-  framework: atom
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 256 }
 
 kimik2.5-int4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.24.0
@@ -775,11 +472,6 @@ kimik2.5-int4-mi355x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -796,10 +488,6 @@ kimik2.5-int4-mi325x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -815,10 +503,6 @@ kimik2.5-int4-mi300x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -834,11 +518,6 @@ kimik2.5-fp4-mi355x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -879,10 +558,6 @@ kimik2.5-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -952,10 +627,6 @@ dsr1-fp8-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -971,10 +642,6 @@ dsr1-fp8-mi355x-atom-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -993,87 +660,6 @@ dsr1-fp8-mi355x-sglang-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # non-MTP configurations
-      # "Top of curve" (1 prefill workers each at DEP8 and 1 decode workers at DEP16)
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # "Middle of curve" (1 prefill workers each at TP8 and 2 decode workers at DEP8)
-      - spec-decoding: "none"
-        conc-list: [ 1536, 1024, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
-      - spec-decoding: "none"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      - spec-decoding: "none"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -1149,87 +735,6 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # MTP configurations
-      # "Top of curve" (1 prefill worker at DEP8 and 1 decode worker at DEP16)
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # "Middle of curve" (1 prefill worker at TP8 and 2 decode workers each at DEP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 1536, 1024, 512, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=1"
-
-      # "Bottom of curve" (1 prefill worker at TEP8 and 2 decode workers at TEP8)
-      - spec-decoding: "mtp"
-        conc-list: [ 256, 128, 64, 32, 16, 8, 4 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      - spec-decoding: "mtp"
-        conc-list: [ 64, 32, 16, 8, 4, 2, 1 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -1305,27 +810,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # 1P2D: 1 prefill node (co-located with proxy) + 2 decode nodes = 3 nodes total 
-      - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -1359,105 +843,6 @@ dsr1-fp4-mi355x-sglang-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # non-MTP configurations
-      # 1P1D TP8
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none"
-        conc-list: [ 2, 4, 8, 16, 32 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP8
-      - spec-decoding: "none" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-
-      # 1P2D TP4
-      - spec-decoding: "none" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=0"
-    
-      # 1*DEP4+ 1*DEP8
-      - spec-decoding: "none"
-        conc-list: [ 1024, 2048, 4096 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -1575,118 +960,6 @@ dsr1-fp4-mi355x-sglang-disagg:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
-
-dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
-  model: amd/DeepSeek-R1-0528-MXFP4-v2
-  model-prefix: dsr1
-  runner: mi355x-disagg
-  precision: fp4
-  framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
-  kv-p2p-transfer: mori
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # MTP configurations
-      # 1P1D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp" 
-        conc-list: [ 2, 4, 8, 16, 32 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      # 1P2D TP4
-      - spec-decoding: "mtp" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      # 1*DEP4+ 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
 
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
@@ -1924,12 +1197,6 @@ dsv4-fp4-mi355x-sglang:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
-      - { tp: 4, dp-attn: true, conc-start: 16, conc-end: 128 }
-      - { tp: 4, dp-attn: false, conc-start: 1 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -1953,11 +1220,6 @@ dsv4-fp4-mi355x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048, spec-decoding: mtp }
-      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -1993,10 +1255,6 @@ dsv4-fp4-mi355x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2020,10 +1278,6 @@ dsv4-fp4-mi355x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2039,14 +1293,6 @@ dsv4-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-        # conc4-64, TP8
-        # conc128-512, DPA
-        # conc1024-2048, DPA TBO
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 1, dp-attn: true, conc-start: 64, conc-end: 2048 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2067,10 +1313,6 @@ dsv4-fp4-mi355x-atom-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1024, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2086,10 +1328,6 @@ qwen3.5-bf16-mi325x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2105,10 +1343,6 @@ dsr1-fp8-mi325x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2124,59 +1358,10 @@ qwen3.5-fp8-mi325x-sglang-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-
-glm5-fp8-mi325x-sglang:
-  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi325x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-
-glm5-fp8-mi325x-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
-  model: zai-org/GLM-5-FP8
-  model-prefix: glm5
-  runner: mi325x
-  precision: fp8
-  framework: sglang
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-
-# ============================================================================
-# Net-new agentic recipes from chore/agentx-v0.3 (no overlap with main entries).
-# Recipes that ALREADY existed on main were intentionally left at main's version
-# to preserve main behavior; PR-branch modifications to those recipes are NOT
-# brought in here.
-# ============================================================================
 
 qwen3.5-fp8-mi355x-sglang-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
@@ -2232,105 +1417,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # MTP configurations
-      # 1P1D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp" 
-        conc-list: [ 2, 4, 8, 16, 32 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      # 1P2D TP4
-      - spec-decoding: "mtp" 
-        conc-list: [ 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=2"
-
-      # 1*DEP4+ 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
-
     - isl: 8192
       osl: 1024
       search-space:
@@ -2481,7 +1567,6 @@ dsv4-fp4-mi355x-atom-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-      # 1P1D DPA+TP8
     - isl: 8192
       osl: 1024
       search-space:
@@ -2518,28 +1603,6 @@ dsv4-fp4-mi355x-atom-disagg:
           additional-settings:
           - "DECODE_NODES=1"
       # 1P1D TP8
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [ 4, 8, 16, 32, 64, 128, 256, 512, 1024 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-
-# MiniMax-M3 MXFP8 MI355X recipe:
-# https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
-# MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -2550,10 +1613,6 @@ minimaxm3-fp8-mi355x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2579,10 +1638,6 @@ minimaxm3-fp8-mi355x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2653,15 +1708,6 @@ minimaxm3-fp4-mi355x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
-      - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2684,14 +1730,6 @@ minimaxm3-fp4-mi355x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2713,10 +1751,6 @@ minimaxm3-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2732,10 +1766,6 @@ minimaxm3-fp4-mi355x-atom-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2751,10 +1781,6 @@ minimaxm3-fp8-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2770,10 +1796,6 @@ minimaxm3-fp8-mi355x-atom-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2830,27 +1852,6 @@ minimaxm3-fp8-mi355x-atom-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
       # 1P1D TP4
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # 1P1D TP4
-      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
 minimaxm3-fp4-mi355x-atom-disagg:
   image: rocm/atom-dev:nightly_202607011530
   model: amd/MiniMax-M3-MXFP4
@@ -2902,35 +1903,6 @@ minimaxm3-fp4-mi355x-atom-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
       # 1P1D TP4
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # 1P1D TP4
-      - conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-
-# MiniMax-M3 MXFP8 MI300X day-zero recipe. Reuse the dedicated ROCm image and
-# MI355X serving shape, but retain the default BF16 KV cache because this
-# checkpoint lacks calibrated ROCm FP8 attention scales. TP8-only, plain
-# (non-expert-parallel) search space across the full conc range: EP8
-# (--enable-expert-parallel) produces garbage/incoherent output on this
-# MXFP8+gfx942 combination (confirmed locally: TP8/EP8 returns garbled tokens
-# even on trivial prompts, TP8/EP1 answers correctly), and was already the
-# lower-throughput topology where measured.
 minimaxm3-fp8-mi300x-vllm:
   image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -2941,10 +1913,6 @@ minimaxm3-fp8-mi300x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2967,11 +1935,6 @@ minimaxm3-fp8-mi300x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -2991,14 +1954,6 @@ minimaxm3-fp8-mi325x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 128, conc-end: 256 }
-      - { tp: 8, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 256, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -3027,14 +1982,6 @@ minimaxm3-fp8-mi325x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 128, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -3069,52 +2016,6 @@ minimaxm3-fp8-mi355x-vllm-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    # 1k1k is decode-bound (1024-token prefill, then 1024 decode steps): pair the
-    # balanced layout with a decode-heavy 1P/2D layout to lift high-concurrency
-    # throughput. Evals do not run at 1k1k, so concurrency is free to run high.
-    - isl: 1024
-      osl: 1024
-      search-space:
-      # Balanced 1P TP4 + 1D TP4 (2 nodes) across the full curve.
-      - spec-decoding: "none"
-        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-      # Decode-heavy 1P TP4 + 2D TP4 (3 nodes): double the decode engines to
-      # absorb the decode-bound 1k1k tail at high concurrency.
-      - spec-decoding: "none"
-        conc-list: [ 256, 512, 1024, 2048 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-    # 8k1k is prefill-bound (8192-token prompts vs 1024 decode steps): pair the
-    # balanced layout with a prefill-heavy 2P/1D layout. Concurrency is capped at
-    # 512 so the multi-node eval policy (8k1k + conc >= 16, highest eligible conc)
-    # marks lm-eval at conc 512 — matching the range NVIDIA's aggregated 8k1k
-    # sweep tops out at and keeping the lm-eval async client stable.
     - isl: 8192
       osl: 1024
       search-space:
@@ -3200,6 +2101,73 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96], router: { name: vllm-router, version: "0.1.14" } }
 
+dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2,4,8,16,32 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          # Node-0 sibling client: run the aiperf trace-replay in its own sibling
+          # container on node 0 (via the host docker socket) instead of inside the
+          # server container. Reuse the (publicly pullable) server image so
+          # upstream CI can fetch it; aiperf is built on the fly from
+          # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
+          # selects the sibling-container mode.
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+      # - spec-decoding: "none"
+      #   conc-list: [ 64, 128 ]
+      #   kv-offloading: dram
+      #   kv-offload-backend: { name: hicache }
+      #   prefill:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: true
+      #     additional-settings:
+      #     - "PREFILL_NODES=1"
+      #     # Node-0 sibling client: run the aiperf trace-replay in its own sibling
+      #     # container on node 0 (via the host docker socket) instead of inside the
+      #     # server container. Reuse the (publicly pullable) server image so
+      #     # upstream CI can fetch it; aiperf is built on the fly from
+      #     # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
+      #     # selects the sibling-container mode.
+      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+      #   decode:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: true
+      #     additional-settings:
+      #     - "DECODE_NODES=1"
+      #     - "DECODE_MTP_SIZE=0"
+
 # DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
 # EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no
 # gfx942 build of the dsv4 nvfp4 MoE / TileLang-MLA kernels, so vLLM runs the
@@ -3219,10 +2187,6 @@ dsv4-fp8-mi325x-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -3245,10 +2209,6 @@ dsv4-fp8-mi325x-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
