@@ -269,7 +269,7 @@ jobs:
             osl: '0'
             max-model-len: '0'
             spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: 'false'
+            disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
@@ -306,7 +306,7 @@ jobs:
             osl: '0'
             max-model-len: '0'
             spec-decoding: 'none'
-            disagg: 'false'
+            disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}

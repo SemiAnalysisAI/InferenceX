@@ -79,7 +79,6 @@ on:
       run-eval:
         type: boolean
         required: true
-        default: false
       eval-only:
         description: "Run only evals (skip throughput benchmark)"
         type: boolean
