@@ -1738,7 +1738,7 @@
     - "TP=2 and TP=4, concurrency 4-256 for 1k1k and 8k1k sequence lengths"
     - "Add --gpu-memory-utilization 0.9 to server launch"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1133
-  
+
 
 - config-keys:
     - dsv4-fp8-h200-vllm
@@ -1860,7 +1860,7 @@
     - "Image pinned to lmsysorg/sglang:deepseek-v4-b300@sha256:26e116bd211e300dbb76924d56c5cbe6cc3ee5ee2fe314859cb8774f5bc070f3"
     - "DP-attention path enables SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1 for better SWA eviction behavior"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1185
-  
+
 
 - config-keys:
     - dsv4-fp4-b200-sglang
@@ -1882,7 +1882,7 @@
   description:
     - "Update GPTOSS-120B FP4 MI355X Atom benchmark (rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1195
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-vllm
@@ -1990,7 +1990,7 @@
     - "Add conc=8192 recipe for 1k1k: deepep mega_moe backend with cuda-graph-max-bs 1088, max-running-requests 8192, mem-fraction-static 0.80, swa-full-tokens-ratio 0.3, tokenizer-worker-num 16"
     - "conc=8192 enables SGLANG_OPT_USE_ONLINE_COMPRESS=1 and --stream-interval 30"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1209
-  
+
 
 - config-keys:
     - dsv4-fp4-b300-vllm
@@ -4974,6 +4974,70 @@
     - "Run 29651235293 showed the 1M-context corpus working set outgrowing the HBM KV pool past conc 8 (TP8) / conc 64 (DP8): gpu_kv_cache_usage pinned at 1.0 and the radix hit rate collapsed from a ~0.97 theoretical ceiling to 0.04-0.06, so every post-knee turn re-prefilled its full history and throughput fell together with interactivity"
     - "HiCache spills evicted prefixes to host DRAM and restores them at C2C bandwidth instead of recomputing; sizing follows the qwen3.5-fp8-b300-sglang-agentic-hicache recipe (GLM-5.2 is plain GQA: one host pool per rank, GB-based --hicache-size)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2280
+
+- config-keys:
+    - glm5.2-fp4-b300-sglang-agentic
+  description:
+    - "Convert the high-throughput arm to DEP: add ep: 8 to the TP8/DP8 attention-DP arm so the MoE layers run expert-parallel across all 8 ranks (--ep-size 8) instead of TP-sharded (the arm previously left ep unset -> EP_SIZE=1). Attention stays data-parallel behind sglang-router consistent hashing; the recipe already passes --ep-size EP_SIZE unconditionally, so only the master-config search space changes"
+    - "DEP arm runs conc-list [48] only (was [48, 64, 96, 128, 192, 256, 512]): conc 48 is the frontier peak (163 tok/s/gpu out, ttft 2.8s); conc >=64 overflows the HBM+host radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is strictly dominated"
+    - "Low-latency TP8 arm (conc [1, 2, 4, 8, 16, 32], fp8 KV + cutedsl bf16 GEMM) unchanged; DEP mirrors the proven dsv4-fp4-b300-sglang tp8/ep8/dp-attn DEP arm"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2281
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+  description:
+    - "Retune the non-MTP 8k1k disagg search space: drop the 2P1D DEP8 sweep (conc 128/256/512/1024 across 2 prefill nodes) and the 1P1D DEP8 conc=1024 point"
+    - "Add 1P1D DEP8 (TP8/EP8 + dp-attention, 1 prefill node) at conc 256/512, and a new 1P1D pure-TP8 (no EP, no DP-attention) scenario sweeping conc [1, 2, 4, 8, 16, 32, 64, 128]"
+    - "Fix 2P1D eval 503s: speed up router circuit-breaker recovery (--cb-timeout-duration-secs 15 --retry-max-retries 3) and gate benchmarking on an end-to-end router readiness canary (one real generation through the router), so the eval no longer starts against a router whose prefill path isn't actually serving yet"
+    - "Fix the 8k1k conc-500 straggler tail: decode now derives its admission context_length from models.yaml (falling back to prefill's value when unset) so decode and prefill reject over-length requests symmetrically instead of decode hanging on a KV transfer prefill never sends"
+    - "Bump DeepSeek-V4-Pro prefill max_total_tokens from 262144 to 2097152 to match the model's actual KV budget"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2293
+  
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add LMCache 0.5.1 DRAM KV-offload arms to the official B300 AgentX config from PR #2241 (sparse DSV4 FlashInfer attention, AMXF4 mega-MoE, FULL_DECODE_ONLY CUDA graphs, image vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec), so LMCache is benchmarked in the same sweep as the SimpleCPU and GPU-resident arms"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153/#2231; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; PYTORCH_ALLOC_CONF=expandable_segments:True dropped on the lmcache arms only (VMM allocations cannot be CUDA-IPC-exported to the LMCache server, same failure mode as cuMem on B200); gpu-memory-utilization 0.92 on lmcache DEP8 (matches the official DEP8 derate) and 0.94 on lmcache TP4/DEP4 (at 0.96 the PR #2232 bring-up sweeps hit torch-pool, DeepGEMM-JIT, and cuBLAS-workspace OOMs; 23 lmcache points validated green in runs 29463061871/29535333851 after the derate)"
+    - "LMCache ladders offset the official arms: TP4 +4 conc [32, 36, 40, 44] vs SimpleCPU [28, 32, 36, 40]; DEP4 +4 conc [36, 44, 52, 60, 68, 76] vs SimpleCPU [32, 40, 48, 56, 64, 72]; DEP8 +8 conc capped at 208 [72, 104, 120, 136, 152, 168, 184, 200] vs GPU-resident [64, 96, 112, 128, 144, 160, 176, 192, 224]"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2232
+  
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add LMCache 0.5.1 DRAM KV-offload arm to the official B200 AgentX sweep alongside the vllm-simple and Mooncake arms, on the same tuned recipe and image (vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec) from PR #2224"
+    - "LMCache MP server (lmcache_driven transfer mode) + LMCacheMPConnector per PR #2153; L1 pool derated to 75% of TOTAL_CPU_DRAM_GB; --enable-cumem-allocator dropped on the lmcache arm only (cuMem/VMM allocations cannot be CUDA-IPC-exported to the LMCache server)"
+    - "LMCache TP8 points mirror the vllm-simple ladder (conc [8, 12, 16]); LMCache DEP8 points mirror the Mooncake ladder (conc [12, 20, 28, 36, 44, 52, 60, 68, 76]) for a like-for-like backend comparison; the PR #2231 bring-up sweep validated the recipe across DEP8 conc 8-80 (peak ~25.7k total tok/s/GPU at conc 72, 96-98% cache hit)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2231
+  
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  description:
+    - "Add MTP speculative-decoding for the B300 vLLM AgentX recipe as a separate config-key, so the existing dsv4-fp4-b300-vllm-agentic aggregate is not re-run."
+    - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
+  
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Add MTP speculative-decoding for the B200 vLLM AgentX recipe as a separate config-key, so the existing dsv4-fp4-b200-vllm-agentic aggregate is not re-run."
+    - "dsv4-fp4-b200-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms -- TP8 GPU-resident, TP8 SimpleCPU, DEP8 SimpleCPU, DEP8 Mooncake, each mirroring its non-MTP conc-list; routed via spec-decoding=mtp to dsv4_fp4_b200_vllm_mtp.sh."
+    - "MTP capture sizes are in TOKENS: --max-cudagraph-capture-size scaled to MAX_NUM_SEQS*(1+num_speculative_tokens) (= MAX_NUM_SEQS*4) so FULL_DECODE_ONLY covers the largest decode batches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2259
+
+- config-keys:
+    - kimik2.5-fp4-b200-dynamo-trt
+  description:
+    - "Add Kimi K2.5 NVFP4 B200 disaggregated TRT-LLM benchmarks via Dynamo (11 STP configs, ISL 8k OSL 1k)"
+    - "Container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21 with Dynamo installed from source (hash 4025cb6a8992d19fd19eead36065e08ea5301f35)"
+    - "Topologies: 1p4d-dep4-tep8 (conc 4/24), 1p5d-dep4-tep4 (conc 5/30/60/115/195), 1p1d-dep4-dep8 (conc 308), 2p1d-dep4-dep8 (conc 615), 3p1d-dep4-dep8 (conc 1127), 4p1d-dep4-dep8 (conc 2151)"
+    - "Runner updated to clone srt-slurm at sa-submission-q2-2026 and copy local recipes into recipes/trtllm/kimi-k25-nvfp4/b200-fp4/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
 
 - config-keys:
     - minimaxm2.7-fp4-b200-sglang-eagle
