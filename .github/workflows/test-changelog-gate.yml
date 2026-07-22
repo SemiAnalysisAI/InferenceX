@@ -10,7 +10,6 @@ on:
       - ".github/workflows/benchmark-tmpl.yml"
       - ".github/workflows/benchmark-multinode-tmpl.yml"
       - ".github/workflows/collectivex-sweep.yml"
-      - ".github/workflows/priority-scheduler-canary.yml"
       - ".github/workflows/profile.yml"
       - ".github/workflows/e2e-tests.yml"
       - ".github/workflows/run-sweep.yml"
