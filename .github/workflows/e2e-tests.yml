@@ -92,7 +92,6 @@ jobs:
                 path: .ci-priority
                 persist-credentials: false
 
-
             - id: get-jobs
               env:
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}

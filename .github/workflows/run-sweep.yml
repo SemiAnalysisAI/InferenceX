@@ -162,7 +162,6 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-
     setup:
         needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest

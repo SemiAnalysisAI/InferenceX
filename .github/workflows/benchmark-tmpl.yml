@@ -78,7 +78,7 @@ on:
         type: string
       run-eval:
         type: boolean
-        required: false
+        required: true
         default: false
       eval-only:
         description: "Run only evals (skip throughput benchmark)"

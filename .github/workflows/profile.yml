@@ -57,7 +57,6 @@ jobs:
           path: .ci-priority
           persist-credentials: false
 
-
       - id: gen
         name: Generate matrix via script
         run: |

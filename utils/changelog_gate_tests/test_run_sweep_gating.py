@@ -2,10 +2,10 @@
 
 The simulation jobs in `.github/workflows/test-changelog-gate.yml` hand-copy
 two of the gating `if` conditions and exercise two scenarios. This test parses
-the real `check-changelog` -> `reuse-sweep-gate` / `classify-priority` ->
-`setup` conditions out of `run-sweep.yml` and evaluates them with a minimal
-GitHub Actions expression engine, so it cannot drift from production and covers
-every distinct skip/run decision.
+the real `check-changelog` -> `reuse-sweep-gate` -> `setup` conditions out of
+`run-sweep.yml` and evaluates them with a minimal GitHub Actions expression
+engine, so it cannot drift from production and covers every distinct skip/run
+decision.
 """
 
 from __future__ import annotations
@@ -196,7 +196,7 @@ def _eval(expr: str, ctx: dict) -> bool:
 
 
 # --------------------------------------------------------------------------
-# DAG evaluation: check-changelog -> reuse-sweep-gate / classify-priority -> setup
+# DAG evaluation: check-changelog -> reuse-sweep-gate -> setup
 # --------------------------------------------------------------------------
 def _ctx(sc: dict) -> dict:
     return {
