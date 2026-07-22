@@ -232,9 +232,7 @@ jobs:
 
             - name: Classify priority criteria with Fable
               id: fable
-              if: >-
-                github.event_name == 'pull_request' &&
-                vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
               continue-on-error: true
               uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
               with:
@@ -248,7 +246,11 @@ jobs:
                       --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
                       --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
                   prompt: |
-                      Inspect this PR's diff against its base branch.
+                      Inspect this Actions run's change range.
+
+                      - For a pull request, compare the head against its base branch.
+                      - For a push, compare `${{ github.event.before }}` to `${{ github.sha }}`.
+                      - Do not return `checklist-complete` for a push: it is PR-only.
 
                       Return every matching priority criterion:
 
@@ -270,10 +272,7 @@ jobs:
 
             - name: Normalize priority classification
               id: priority-criteria
-              if: >-
-                github.event_name == 'pull_request' &&
-                vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-                always()
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && always()
               env:
                   OUTPUT: ${{ steps.fable.outputs.structured_output || '{}' }}
               run: |

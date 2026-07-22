@@ -373,17 +373,19 @@ def test_trigger_types_enable_gated_events() -> None:
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
-def test_priority_classifier_only_runs_when_scheduler_is_enabled() -> None:
+def test_priority_classifier_runs_for_enabled_actions() -> None:
     scenario = {
         **_PR,
         "action": "synchronize",
         "labels": ["full-sweep-enabled"],
     }
     disabled = _ctx({**scenario, "scheduler_enabled": "false"})
-    enabled = _ctx({**scenario, "scheduler_enabled": "true"})
+    enabled_pr = _ctx({**scenario, "scheduler_enabled": "true"})
+    enabled_push = _ctx({"event": "push", "scheduler_enabled": "true"})
 
     assert not _eval(FABLE_IF, disabled)
-    assert _eval(FABLE_IF, enabled)
+    assert _eval(FABLE_IF, enabled_pr)
+    assert _eval(FABLE_IF, enabled_push)
 
 def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
     jobs = _WF["jobs"]
