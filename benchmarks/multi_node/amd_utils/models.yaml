@@ -368,7 +368,7 @@ DeepSeek-V4-Pro-AgentX:
   dp_flags: "--enable-dp-attention --enable-prefill-delayer"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
-    mem_fraction_static: 0.75
+    mem_fraction_static: 0.72
     disable_radix_cache: false
     disable_cuda_graph: true
     dp:
