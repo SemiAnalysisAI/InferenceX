@@ -2123,7 +2123,6 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
   runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang-disagg
-  router: { name: sglang-router, version: "0.3.2" }
   kv-p2p-transfer: mori
   multinode: true
   disagg: true
