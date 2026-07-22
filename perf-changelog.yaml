@@ -5014,8 +5014,8 @@
 - config-keys:
     - kimik2.5-fp4-mi355x-vllm
   description:
-    - "Set the vLLM ROCm image to the immutable rocm/vllm-dev:nightly_cdna4_main_torch_2.11.0_rocm7.14.0a20260623_0721_b101 build (the nightly_cdna4 pin), which ships AITER 0.1.19.dev (>= v0.1.16.post5 from vllm-project/vllm#48683) including the ROCm/aiter#3832 gfx950 MXFP4 MoE backend"
-    - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, and the AITER BF16 GEMM path"
+    - "Set the vLLM ROCm image to the rocm/vllm-dev:nightly_cdna4 tag, which now ships AITER 0.1.19.dev (>= v0.1.16.post5 from vllm-project/vllm#48683) including the ROCm/aiter#3832 gfx950 MXFP4 MoE backend"
+    - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
