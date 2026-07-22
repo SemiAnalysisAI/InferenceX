@@ -5022,3 +5022,20 @@
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
   
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Add MTP speculative-decoding for the B200 vLLM AgentX recipe as a separate config-key, so the existing dsv4-fp4-b200-vllm-agentic aggregate is not re-run."
+    - "dsv4-fp4-b200-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms -- TP8 GPU-resident, TP8 SimpleCPU, DEP8 SimpleCPU, DEP8 Mooncake, each mirroring its non-MTP conc-list; routed via spec-decoding=mtp to dsv4_fp4_b200_vllm_mtp.sh."
+    - "MTP capture sizes are in TOKENS: --max-cudagraph-capture-size scaled to MAX_NUM_SEQS*(1+num_speculative_tokens) (= MAX_NUM_SEQS*4) so FULL_DECODE_ONLY covers the largest decode batches."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2259
+
+- config-keys:
+    - kimik2.5-fp4-b200-dynamo-trt
+  description:
+    - "Add Kimi K2.5 NVFP4 B200 disaggregated TRT-LLM benchmarks via Dynamo (11 STP configs, ISL 8k OSL 1k)"
+    - "Container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21 with Dynamo installed from source (hash 4025cb6a8992d19fd19eead36065e08ea5301f35)"
+    - "Topologies: 1p4d-dep4-tep8 (conc 4/24), 1p5d-dep4-tep4 (conc 5/30/60/115/195), 1p1d-dep4-dep8 (conc 308), 2p1d-dep4-dep8 (conc 615), 3p1d-dep4-dep8 (conc 1127), 4p1d-dep4-dep8 (conc 2151)"
+    - "Runner updated to clone srt-slurm at sa-submission-q2-2026 and copy local recipes into recipes/trtllm/kimi-k25-nvfp4/b200-fp4/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
