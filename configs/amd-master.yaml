@@ -2113,8 +2113,7 @@ minimaxm3-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [1, 4] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8, 16, 32] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16, 32] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
