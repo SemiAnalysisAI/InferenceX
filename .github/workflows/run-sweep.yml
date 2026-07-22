@@ -170,9 +170,29 @@ jobs:
             github.event_name == 'pull_request' &&
             vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
             !github.event.pull_request.draft &&
+            needs.check-changelog.result == 'success' &&
+            needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
             (
-              needs.check-changelog.result == 'success' ||
-              needs.check-changelog.result == 'skipped'
+              contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
+            ) &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only' ||
+              github.event.label.name == 'skip_queue' ||
+              github.event.label.name == 'ci-patchwork' ||
+              github.event.label.name == 'engine-patch' ||
+              github.event.label.name == 'ci-patchwork-waived' ||
+              github.event.label.name == 'ci-checklist-complete'
             )
         permissions:
             contents: read

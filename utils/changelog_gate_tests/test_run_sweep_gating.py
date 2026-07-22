@@ -373,7 +373,7 @@ def test_trigger_types_enable_gated_events() -> None:
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
-def test_priority_classifier_only_runs_when_scheduler_is_enabled() -> None:
+def test_priority_classifier_matches_sweep_eligibility() -> None:
     scenario = {
         **_PR,
         "action": "synchronize",
@@ -381,11 +381,28 @@ def test_priority_classifier_only_runs_when_scheduler_is_enabled() -> None:
     }
     disabled = _ctx({**scenario, "scheduler_enabled": "false"})
     enabled = _ctx({**scenario, "scheduler_enabled": "true"})
-    disabled["needs.check-changelog.result"] = "success"
-    enabled["needs.check-changelog.result"] = "success"
+    for ctx in (disabled, enabled):
+        ctx["needs.check-changelog.result"] = "success"
+        ctx["needs.check-changelog.outputs.skip-pr-sweep"] = "false"
 
     assert not _eval(CLASSIFY_IF, disabled)
     assert _eval(CLASSIFY_IF, enabled)
+
+    skipped_sweep = _ctx({**scenario, "msg": "fix: defer [skip-sweep]"})
+    skipped_sweep["needs.check-changelog.result"] = "success"
+    skipped_sweep["needs.check-changelog.outputs.skip-pr-sweep"] = "true"
+    assert not _eval(CLASSIFY_IF, skipped_sweep)
+
+    unrelated_label = _ctx(
+        {
+            **scenario,
+            "action": "labeled",
+            "label_name": "documentation",
+        }
+    )
+    unrelated_label["needs.check-changelog.result"] = "skipped"
+    unrelated_label["needs.check-changelog.outputs.skip-pr-sweep"] = "false"
+    assert not _eval(CLASSIFY_IF, unrelated_label)
 
 
 def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
