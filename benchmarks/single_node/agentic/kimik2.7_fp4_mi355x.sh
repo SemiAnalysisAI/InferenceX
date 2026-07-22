@@ -335,6 +335,10 @@ fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
+# Headroom fix: c4/c8 OOM'd at engine init (~255/288 GiB, <256 MiB free) on a
+# fragmented/co-tenanted node. expandable_segments reclaims reserved-but-unallocated
+# blocks; see run 29846131109 server.log.
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -343,7 +347,7 @@ VLLM_CMD=(
     --port "$VLLM_BACKEND_PORT"
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization 0.85
     --block-size=1
     --trust-remote-code
     --max-num-seqs "$CONC"
