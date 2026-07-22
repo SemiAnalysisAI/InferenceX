@@ -213,7 +213,11 @@ def test_classifier_schema_matches_the_policy_vocabulary():
             Path(__file__).parents[1] / ".github" / "workflows" / "run-sweep.yml"
         ).read_text()
     )
-    classifier = workflow["jobs"]["classify-priority"]["steps"][1]
+    classifier = next(
+        step
+        for step in workflow["jobs"]["setup"]["steps"]
+        if step.get("id") == "fable"
+    )
     arguments = shlex.split(classifier["with"]["claude_args"])
     schema = json.loads(arguments[arguments.index("--json-schema") + 1])
     schema_criteria = schema["properties"]["criteria"]["items"]["enum"]

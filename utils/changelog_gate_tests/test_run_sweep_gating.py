@@ -25,7 +25,9 @@ _WF = yaml.load(
 )
 CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
-CLASSIFY_IF = _WF["jobs"]["classify-priority"]["if"]
+FABLE_IF = next(
+    step["if"] for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "fable"
+)
 SETUP_IF = _WF["jobs"]["setup"]["if"]
 PR_TYPES = set(_WF["on"]["pull_request"]["types"])
 
@@ -231,8 +233,6 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
     ctx["needs.reuse-sweep-gate.result"] = gate_result
     ctx["needs.reuse-sweep-gate.outputs.skip-pr-sweep"] = skip
 
-    classify_result = "success" if _eval(CLASSIFY_IF, ctx) else "skipped"
-    ctx["needs.classify-priority.result"] = classify_result
 
     setup = "RUN" if _eval(SETUP_IF, ctx) else "SKIP"
     return check_result, gate_result, setup
@@ -373,7 +373,7 @@ def test_trigger_types_enable_gated_events() -> None:
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
-def test_priority_classifier_matches_sweep_eligibility() -> None:
+def test_priority_classifier_only_runs_when_scheduler_is_enabled() -> None:
     scenario = {
         **_PR,
         "action": "synchronize",
@@ -381,29 +381,9 @@ def test_priority_classifier_matches_sweep_eligibility() -> None:
     }
     disabled = _ctx({**scenario, "scheduler_enabled": "false"})
     enabled = _ctx({**scenario, "scheduler_enabled": "true"})
-    for ctx in (disabled, enabled):
-        ctx["needs.check-changelog.result"] = "success"
-        ctx["needs.check-changelog.outputs.skip-pr-sweep"] = "false"
 
-    assert not _eval(CLASSIFY_IF, disabled)
-    assert _eval(CLASSIFY_IF, enabled)
-
-    skipped_sweep = _ctx({**scenario, "msg": "fix: defer [skip-sweep]"})
-    skipped_sweep["needs.check-changelog.result"] = "success"
-    skipped_sweep["needs.check-changelog.outputs.skip-pr-sweep"] = "true"
-    assert not _eval(CLASSIFY_IF, skipped_sweep)
-
-    unrelated_label = _ctx(
-        {
-            **scenario,
-            "action": "labeled",
-            "label_name": "documentation",
-        }
-    )
-    unrelated_label["needs.check-changelog.result"] = "skipped"
-    unrelated_label["needs.check-changelog.outputs.skip-pr-sweep"] = "false"
-    assert not _eval(CLASSIFY_IF, unrelated_label)
-
+    assert not _eval(FABLE_IF, disabled)
+    assert _eval(FABLE_IF, enabled)
 
 def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
     jobs = _WF["jobs"]

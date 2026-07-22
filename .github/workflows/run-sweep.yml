@@ -162,101 +162,9 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-    classify-priority:
-        needs: check-changelog
-        runs-on: ubuntu-latest
-        if: >-
-            always() &&
-            github.event_name == 'pull_request' &&
-            vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
-            !github.event.pull_request.draft &&
-            needs.check-changelog.result == 'success' &&
-            needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
-            (
-              contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
-            ) &&
-            (
-              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-              github.event.label.name == 'sweep-enabled' ||
-              github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
-              github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
-              github.event.label.name == 'all-evals' ||
-              github.event.label.name == 'evals-only' ||
-              github.event.label.name == 'skip_queue' ||
-              github.event.label.name == 'ci-patchwork' ||
-              github.event.label.name == 'engine-patch' ||
-              github.event.label.name == 'ci-patchwork-waived' ||
-              github.event.label.name == 'ci-checklist-complete'
-            )
-        permissions:
-            contents: read
-            pull-requests: read
-        outputs:
-            criteria: ${{ steps.result.outputs.criteria }}
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-              with:
-                  fetch-depth: 0
-
-            - name: Classify priority criteria with Fable
-              id: fable
-              continue-on-error: true
-              uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
-              with:
-                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-                  track_progress: false
-                  settings: |
-                      {"fastMode": true}
-                  claude_args: |
-                      --model 'claude-fable-5'
-                      --max-turns 8
-                      --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
-                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
-                  prompt: |
-                      Inspect this PR's diff against its base branch.
-
-                      Return every matching priority criterion:
-
-                      - multi-node: separate prefill and decode workers
-                      - agentic: agentic-coding or AgentX workload
-                      - eval-only: evaluation without throughput measurement
-                      - fp4: FP4 precision
-                      - mtp, eagle, eagle3: speculative decoding method
-                      - sglang, vllm, dynamo-vllm: runtime framework
-                      - model criterion: matching configured model family
-                      - checklist-complete: PR checklist is satisfied
-                      - patchwork: modified upstream engine or runtime source
-
-                      Patchwork includes patch files, git apply, source mutation,
-                      monkey-patching, local engine builds, forks, or images
-                      containing unmerged engine changes.
-
-                      Return a concise reason grounded in the diff.
-
-            - name: Normalize classification
-              id: result
-              if: always()
-              env:
-                  OUTPUT: ${{ steps.fable.outputs.structured_output || '{}' }}
-              run: |
-                  if jq -e 'type == "object" and (.criteria | type == "array")' \
-                    >/dev/null <<<"$OUTPUT"; then
-                      criteria=$(jq -c '.criteria' <<<"$OUTPUT")
-                  else
-                      criteria='["patchwork"]'
-                  fi
-                  echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
-                  echo "Fable priority criteria: $criteria"
 
     setup:
-        needs: [check-changelog, reuse-sweep-gate, classify-priority]
+        needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest
         permissions:
             actions: read
@@ -275,10 +183,6 @@ jobs:
                 needs.reuse-sweep-gate.result == 'success' &&
                 needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
               )
-            ) &&
-            (
-              needs.classify-priority.result == 'success' ||
-              needs.classify-priority.result == 'skipped'
             ) &&
             (
               (
@@ -326,11 +230,67 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Classify priority criteria with Fable
+              id: fable
+              if: >-
+                github.event_name == 'pull_request' &&
+                vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              continue-on-error: true
+              uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
+              with:
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  track_progress: false
+                  settings: |
+                      {"fastMode": true}
+                  claude_args: |
+                      --model 'claude-fable-5'
+                      --max-turns 8
+                      --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                  prompt: |
+                      Inspect this PR's diff against its base branch.
+
+                      Return every matching priority criterion:
+
+                      - multi-node: separate prefill and decode workers
+                      - agentic: agentic-coding or AgentX workload
+                      - eval-only: evaluation without throughput measurement
+                      - fp4: FP4 precision
+                      - mtp, eagle, eagle3: speculative decoding method
+                      - sglang, vllm, dynamo-vllm: runtime framework
+                      - model criterion: matching configured model family
+                      - checklist-complete: PR checklist is satisfied
+                      - patchwork: modified upstream engine or runtime source
+
+                      Patchwork includes patch files, git apply, source mutation,
+                      monkey-patching, local engine builds, forks, or images
+                      containing unmerged engine changes.
+
+                      Return a concise reason grounded in the diff.
+
+            - name: Normalize priority classification
+              id: priority-criteria
+              if: >-
+                github.event_name == 'pull_request' &&
+                vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+                always()
+              env:
+                  OUTPUT: ${{ steps.fable.outputs.structured_output || '{}' }}
+              run: |
+                  if jq -e 'type == "object" and (.criteria | type == "array")' \
+                    >/dev/null <<<"$OUTPUT"; then
+                      criteria=$(jq -c '.criteria' <<<"$OUTPUT")
+                  else
+                      criteria='["patchwork"]'
+                  fi
+                  echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
+                  echo "Fable priority criteria: $criteria"
+
             - id: setup
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  FABLE_CRITERIA: ${{ needs.classify-priority.outputs.criteria }}
+                  FABLE_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
