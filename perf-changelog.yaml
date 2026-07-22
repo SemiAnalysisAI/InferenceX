@@ -5026,4 +5026,4 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.15.post1-rocm700-mi35x-20260721"
     - "Patch aiter tuned/untuned FMoE CSV configs, shuffle.py, and sglang fp8.py at runtime from gist"
     - "Comment out non-DP-attention and HiCache sweep rows to focus on DP-attention conc 16-64"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2298
