@@ -96,8 +96,8 @@ jobs:
               env:
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
               run: |
-                  pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
+                  CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                    ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
                   PRIORITY_ROOT="${GITHUB_WORKSPACE}"
                   if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
@@ -105,7 +105,7 @@ jobs:
                   fi
                   score_matrix() {
                     local family="$1"
-                    python3 "${PRIORITY_ROOT}/utils/ci_priority.py" \
+                    uv run --no-project --with pyyaml --python 3.12 "${PRIORITY_ROOT}/utils/ci_priority.py" \
                       --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
                       --event-name "${{ github.event_name }}" \
                       --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}:${family}" \

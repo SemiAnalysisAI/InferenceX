@@ -127,7 +127,8 @@ jobs:
               "spec-decoding": "mtp"
             }]')
           scored=$(printf '%s' "$entry" |
-            python3 utils/ci_priority.py \
+            uv run --no-project --with pyyaml --python 3.12 \
+              utils/ci_priority.py \
               --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
           echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
           echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"

@@ -305,7 +305,6 @@ jobs:
                         contains(github.event.pull_request.labels.*.name, 'evals-only')
                       }}
               run: |
-                  pip install pydantic
 
                   if [ "${{ github.event_name }}" == "pull_request" ]; then
                       BASE_REF="origin/${{ github.base_ref }}"
@@ -316,7 +315,8 @@ jobs:
                   fi
 
                   CMD=(
-                      python3 "${GITHUB_WORKSPACE}/utils/process_changelog.py"
+                      uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                      "${GITHUB_WORKSPACE}/utils/process_changelog.py"
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$BASE_REF"
                       --head-ref "$HEAD_REF"
@@ -332,7 +332,7 @@ jobs:
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
-                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
                     "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
                     --event-name "${{ github.event_name }}" \
                     --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \

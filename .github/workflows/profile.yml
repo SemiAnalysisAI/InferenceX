@@ -60,14 +60,13 @@ jobs:
       - id: gen
         name: Generate matrix via script
         run: |
-          pip install pydantic
           CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
-          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           PRIORITY_ROOT="${GITHUB_WORKSPACE}"
           if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
             PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
           fi
-          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | python3 \
+          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
             "${PRIORITY_ROOT}/utils/ci_priority.py" \
             --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
             --event-name "${{ github.event_name }}" \
