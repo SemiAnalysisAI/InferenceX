@@ -60,6 +60,14 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
+elif [[ $MODEL_PREFIX == "minimaxm2.7" && $PRECISION == "fp4" ]]; then
+    # Public NVFP4 target and EAGLE3 draft are staged in the runner-writable
+    # shared model tree by the benchmark's revision-pinned preflight.
+    export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M2.7-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m2.7-nvfp4"
+    # Covers the one-hour AgentX measurement plus setup and warmup while still
+    # allowing Slurm to backfill this experiment ahead of large reservations.
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-150}"
 elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
     export SRT_SLURM_MODEL_PREFIX="gptoss"
@@ -403,6 +411,12 @@ else
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
     # MODEL is a local path.
     export MODEL="$MODEL_PATH"
+    MODEL_MOUNT_SPEC="$MODEL_PATH:$MODEL_PATH"
+    if [[ "$MODEL_PREFIX" == "minimaxm2.7" ]]; then
+        MODEL_ROOT=$(dirname "$MODEL_PATH")
+        mkdir -p "$MODEL_PATH" "$MODEL_ROOT/MiniMax-M2.7-EAGLE3-draft-vocab200k"
+        MODEL_MOUNT_SPEC="$MODEL_ROOT:$MODEL_ROOT"
+    fi
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -426,10 +440,9 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    # b200-dgxc cluster was re-partitioned to gpu-1 / gpu-2; the prior gpu-10
-    # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
-    # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
-    # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
+    # b200-dgxc is partitioned into gpu-1 / gpu-2; the prior gpu-10 and gpu-15
+    # names no longer exist. sa-shared's benchmark association currently has
+    # only gpu-2_qos, so idle gpu-1 nodes cannot accept these jobs.
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
@@ -453,7 +466,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_MOUNT_SPEC,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
