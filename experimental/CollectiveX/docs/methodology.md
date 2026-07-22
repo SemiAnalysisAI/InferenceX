@@ -21,8 +21,11 @@ It does not predict serving throughput without a separate correlation study.
 
 The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16;
-dispatch precision is a swept dimension — a BF16 control and a caller-prequantized FP8 dispatch
-(`bf16`, `fp8`). Every case uses the normal `layout-and-dispatch-v1` semantics.
+dispatch precision is a swept dimension — a BF16 control and an FP8 dispatch (`bf16`, `fp8`),
+caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
+DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). `normal`-mode cases use the
+`layout-and-dispatch-v1` semantics; `low-latency` cases use each backend's decode-kernel semantics
+(detailed below).
 
 - `ep-core`: uniform routing over the workload's token ladders — for `deepseek-v3`, decode
   T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
@@ -51,7 +54,11 @@ x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; EP16 uses pinned
 InterNodeV1 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external
-input. Those throughput kernels run across the full token ladder in the `normal` mode.
+input. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
+`dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
+`libibverbs` — no NVSHMEM/IBGDA — with software message ordering, atomics, and flow control; its
+scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
+never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. Those throughput kernels run across the full token ladder in the `normal` mode.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
@@ -66,8 +73,10 @@ rank-sum combine as the throughput `IntraNode` kernel, so it differs only by ker
 does not fit the single-call dispatch/combine contract). Low latency is a decode-phase-only addition
 whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
 cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs; it is
-currently enabled for DeepEP V2 EP8 on H100/H200/B200 and MoRI
-EP8 on MI300X/MI325X/MI355X. Whether a given SKU/backend/EP/mode cell is attempted is a capability
+currently enabled for DeepEP V2 EP8 on H100/H200/B200, MoRI
+EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency
+kernels over UCCL's CPU-proxy transport; the AMD SKUs keep UCCL-EP normal mode but drop LL, whose
+kernel trips a warp-group assertion on AMD's CU count). Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact; whether it succeeded is decided only by the emitted artifact.
 
 ## Workload Identity
@@ -117,8 +126,8 @@ Logical payload bandwidth is:
 
 Payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
 padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale payload; an FP8
-dispatch moves 1 byte per value, plus per-128-block FP32 scales for DeepEP's blockwise codec (none
-for MoRI's plain e4m3 cast), while combine stays BF16 — so the dispatch and combine directions can carry
+dispatch moves 1 byte per value, plus per-128-block FP32 scales for DeepEP's and UCCL-EP's blockwise
+codec (none for MoRI's plain e4m3 cast), while combine stays BF16 — so the dispatch and combine directions can carry
 different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
 for the normal-mode layout; the low-latency layout sends one copy per (token, expert) assignment
 rather than per (token, rank), so for a token whose experts share a destination rank this logical

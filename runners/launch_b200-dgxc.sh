@@ -135,6 +135,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout a98738de9b2233459b5456e9ed71af09ce893f92
         mkdir -p recipes/sglang/dsr1/b200-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
+    elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout v1.0.29
+        mkdir -p recipes/trtllm/kimi-k25-nvfp4/b200-fp4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/kimi-k2.5/disagg/trtllm_dynamo/b200-fp4" recipes/trtllm/kimi-k25-nvfp4/b200-fp4
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
