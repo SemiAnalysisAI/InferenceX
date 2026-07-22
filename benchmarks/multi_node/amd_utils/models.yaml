@@ -409,12 +409,12 @@ DeepSeek-V4-Pro-DI:
       max_running_requests: 1024
       chunked_prefill_size: 131072
       context_length: 9217
-      max_total_tokens: 262144
+      max_total_tokens: 2097152
     no_dp:
       max_running_requests: 128
       chunked_prefill_size: 131072
       context_length: 9217
-      max_total_tokens: 262144
+      max_total_tokens: 2097152
   decode:
     mem_fraction_static: 0.85
     prefill_round_robin_balance: true
