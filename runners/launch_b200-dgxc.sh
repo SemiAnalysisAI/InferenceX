@@ -115,6 +115,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
+        git checkout srt-slurm-placement
         mkdir -p recipes/vllm/minimax-m3/b200-fp4
         cp -rT \
             "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b200-fp4" \
