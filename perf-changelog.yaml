@@ -5068,4 +5068,4 @@
     - "Add GB200 Dynamo-vLLM AgentX aggregate TP8 at conc [16] and disaggregated 3P/1D DEP8/DEP16 at conc [1536]."
     - "Use NVIDIA/srt-slurm main with its upstream per-node DP, multi-node TP VLLM_PORT, Dynamo health-count, and Mooncake master fixes. TP8 uses FlashInfer all-reduce and disables vLLM custom all-reduce."
     - "Image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2300
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
