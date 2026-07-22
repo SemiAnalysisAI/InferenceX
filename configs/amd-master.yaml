@@ -2102,7 +2102,7 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96], router: { name: vllm-router, version: "0.1.14" } }
 
 minimaxm3-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
+  image: vllm/vllm-openai-rocm:nightly-dcfebf93f4eccf30f71872283331eee757915daf
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
