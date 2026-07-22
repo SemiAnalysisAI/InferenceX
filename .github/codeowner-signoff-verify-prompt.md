@@ -121,7 +121,7 @@ For the commit that passed Check 1, confirm the eval numbers are real and meet t
   the same inference-engine image as this PR's config. FAIL if evals are
   skipped/failed/empty/below bar, or the image differs — say exactly which.
 
-## Check 3 — Recipe linked AND complete (SINGLE-NODE recipes only)
+## Check 3 — Recipe linked, MERGED, AND complete (SINGLE-NODE recipes only)
 APPLICABILITY — read this first: the recipe-link requirement covers SINGLE-NODE
 recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
 cookbook) publish single-node serve commands. Disaggregated / multi-node
@@ -134,23 +134,31 @@ exclusively multi-node/disagg — files under `benchmarks/multi_node/**` (includ
 single-node recipes only` and DO NOT fail it. A sign-off note like "this is a
 disagg submission, no recipe update required" is a legitimate statement of that
 fact, not a violation. If the PR touches BOTH single-node and multi-node recipes,
-apply (a)/(b) below to the single-node portion only.
+apply (a)/(b)/(c) below to the single-node portion only.
 
 The InferenceX "recipe" for this PR = the files it changes under
 `benchmarks/single_node/**` plus its entry in `configs/*-master.yaml`. The merge
-standard is: the community must be able to reproduce this benchmark from a public
-recipe.
+standard is: the community must be able to reproduce this benchmark from merged,
+public upstream documentation.
 - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
-  the corresponding recipe — a PR/commit in
+  the corresponding merged recipe PR in
   `https://github.com/vllm-project/recipes` or
   `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
   published recipe page (`https://recipes.vllm.ai/` or
   `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
-- (b) MAJOR SERVER ARGS MATCH: Fetch the linked recipe (use the `fetch` MCP tool or
-  WebFetch; for a recipe PR, read its diff via `gh pr diff` against that repo if
-  accessible) and compare it to this PR's launch command. The recipe only needs to
-  match the MAJOR, deployment-defining server args — NOT every flag, and explicitly
-  NOT the knobs that are specific to InferenceX benchmark/harness tuning.
+- (b) UPSTREAM CHANGE MERGED: For a linked GitHub PR, query the upstream repository
+  directly (for example, `gh pr view <URL> --json state,mergedAt,url`) and require
+  `state: MERGED` with a non-null `mergedAt`. An open PR, draft PR, closed-unmerged
+  PR, bare branch, or bare commit does NOT pass. A published recipe/cookbook page
+  containing the required recipe counts as merged upstream documentation. If the
+  linked artifact's merge/publication status cannot be verified, FAIL; never infer
+  that it merged from an approval, a green check, or the sign-off author's claim.
+- (c) MAJOR SERVER ARGS MATCH: Fetch the merged or published recipe (use the `fetch`
+  MCP tool or WebFetch; for a merged recipe PR, read its diff via `gh pr diff` against
+  that repo if accessible) and compare it to this PR's launch command. The recipe
+  only needs to match the MAJOR, deployment-defining server args — NOT every flag,
+  and explicitly NOT the knobs that are specific to InferenceX benchmark/harness
+  tuning.
     MAJOR (must match — these define the model, parallelism, precision, and which
     kernels run, so they determine the perf profile):
       - model / model-path, hardware/SKU
@@ -165,13 +173,14 @@ recipe.
     `--scheduler-recv-interval`, `--chunked-prefill-size`, `--disable-piecewise-cuda-graph`,
     `SGLANG_RADIX_FORCE_MISS` and similar env toggles, concurrency / sequence-length
     sweep ranges, ports, result filenames, and image tag/version.
-  FAIL only if a MAJOR arg in this PR is missing from (or contradicts) the recipe;
-  list exactly those. Treat the InferenceX-specific diffs as expected and mention them
-  only as a brief informational note, not as blockers. If a flag's effect is
-  equivalent to a recipe default (e.g. quantization auto-detected from an FP4 model),
-  say so and do not count it against the recipe.
+  FAIL if a MAJOR arg in this PR is missing from (or contradicts) the merged/published
+  recipe; list exactly those. Treat the InferenceX-specific diffs as expected and
+  mention them only as a brief informational note, not as blockers. If a flag's effect
+  is equivalent to a recipe default (e.g. quantization auto-detected from an FP4
+  model), say so and do not count it against the recipe.
 - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
-  link does not pass this workflow's standard — a link is required.
+  link to merged/published upstream documentation does not pass this workflow's
+  standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
 The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`),
