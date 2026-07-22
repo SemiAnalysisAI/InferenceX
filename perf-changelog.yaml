@@ -5019,3 +5019,11 @@
     - "dsv4-fp4-b200-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms -- TP8 GPU-resident, TP8 SimpleCPU, DEP8 SimpleCPU, DEP8 Mooncake, each mirroring its non-MTP conc-list; routed via spec-decoding=mtp to dsv4_fp4_b200_vllm_mtp.sh."
     - "MTP capture sizes are in TOKENS: --max-cudagraph-capture-size scaled to MAX_NUM_SEQS*(1+num_speculative_tokens) (= MAX_NUM_SEQS*4) so FULL_DECODE_ONLY covers the largest decode batches."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2259
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-agentic-hicache
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.15.post1-rocm700-mi35x-20260721"
+    - "Patch aiter tuned/untuned FMoE CSV configs, shuffle.py, and sglang fp8.py at runtime from gist"
+    - "Comment out non-DP-attention and HiCache sweep rows to focus on DP-attention conc 16-64"
+  pr-link: TBD

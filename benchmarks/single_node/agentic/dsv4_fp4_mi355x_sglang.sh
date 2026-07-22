@@ -123,6 +123,17 @@ export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 METRICS_ARGS=(--enable-metrics)
 SPEC_ARGS=()
 
+# ---- Temp patch (TODO:remove) ----------------------------------------------------------
+GIST_BASE="https://gist.githubusercontent.com/seungrokj/9911b69be4c6b0f70ebca5dc03b5fc5d/raw"
+curl -LsSf "$GIST_BASE/df54b1879567807bbfc92e5ad004b74c90d030cb/dsv4_fp8fp4_tuned_fmoe.csv" \
+    -o /sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_tuned_fmoe.csv
+curl -LsSf "$GIST_BASE/4a79f11bca8607b6b9438e9fd37af16a2534e3fb/dsv4_fp8fp4_untuned_fmoe.csv" \
+    -o /sgl-workspace/aiter/aiter/configs/model_configs/dsv4_fp8fp4_untuned_fmoe.csv
+curl -LsSf "$GIST_BASE/bc4ba01751f2576d6ff099ffd2167d2a76fe85b6/shuffle.py" \
+    -o /sgl-workspace/aiter/aiter/ops/shuffle.py
+curl -LsSf "$GIST_BASE/741d6e90dceac4ed21284c8bfc6f2c25d9442649/fp8.py" \
+    -o /sgl-workspace/sglang/python/sglang/srt/layers/quantization/fp8.py
+
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
