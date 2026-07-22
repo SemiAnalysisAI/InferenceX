@@ -25,8 +25,8 @@ _WF = yaml.load(
 )
 CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
-FABLE_IF = next(
-    step["if"] for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "fable"
+CLASSIFIER_IF = next(
+    step["if"] for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "classify"
 )
 SETUP_IF = _WF["jobs"]["setup"]["if"]
 PR_TYPES = set(_WF["on"]["pull_request"]["types"])
@@ -383,9 +383,9 @@ def test_priority_classifier_runs_for_enabled_actions() -> None:
     enabled_pr = _ctx({**scenario, "scheduler_enabled": "true"})
     enabled_push = _ctx({"event": "push", "scheduler_enabled": "true"})
 
-    assert not _eval(FABLE_IF, disabled)
-    assert _eval(FABLE_IF, enabled_pr)
-    assert _eval(FABLE_IF, enabled_push)
+    assert not _eval(CLASSIFIER_IF, disabled)
+    assert _eval(CLASSIFIER_IF, enabled_pr)
+    assert _eval(CLASSIFIER_IF, enabled_push)
 
 def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
     jobs = _WF["jobs"]

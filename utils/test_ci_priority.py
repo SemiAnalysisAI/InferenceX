@@ -115,7 +115,7 @@ def test_patchwork_label_forces_bottom_priority_without_waiver():
     ) > Decimal("0.000")
 
 
-def test_fable_criteria_drive_all_configured_adjustments():
+def test_priority_criteria_drive_all_configured_adjustments():
     criteria = frozenset({"multi-node", "agentic", "fp4", "mtp", "vllm", "dsr1"})
     equivalent_entry = {
         "prefill": {},
@@ -153,7 +153,7 @@ def test_checklist_label_applies_alongside_classifier_criteria():
     ) == Decimal("1.250")
 
 
-def test_fable_criteria_reject_unknown_values_and_allow_mixed_jobs():
+def test_priority_criteria_reject_unknown_values_and_allow_mixed_jobs():
     entry = {"runner": "h100", "framework": "vllm"}
 
     with pytest.raises(ValueError, match="Unknown CI priority criteria"):
@@ -216,7 +216,7 @@ def test_classifier_schema_matches_the_policy_vocabulary():
     classifier = next(
         step
         for step in workflow["jobs"]["setup"]["steps"]
-        if step.get("id") == "fable"
+        if step.get("id") == "classify"
     )
     arguments = shlex.split(classifier["with"]["claude_args"])
     schema = json.loads(arguments[arguments.index("--json-schema") + 1])

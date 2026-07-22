@@ -229,8 +229,8 @@ jobs:
               with:
                   fetch-depth: 0
 
-            - name: Classify priority criteria with Fable
-              id: fable
+            - name: Classify priority criteria
+              id: classify
               if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
               continue-on-error: true
               uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
@@ -273,7 +273,7 @@ jobs:
               id: priority-criteria
               if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && always()
               env:
-                  OUTPUT: ${{ steps.fable.outputs.structured_output || '{}' }}
+                  OUTPUT: ${{ steps.classify.outputs.structured_output || '{}' }}
               run: |
                   if jq -e 'type == "object" and (.criteria | type == "array")' \
                     >/dev/null <<<"$OUTPUT"; then
@@ -282,13 +282,13 @@ jobs:
                       criteria='["patchwork"]'
                   fi
                   echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
-                  echo "Fable priority criteria: $criteria"
+                  echo "Priority criteria: $criteria"
 
             - id: setup
               env:
                   GH_TOKEN: ${{ github.token }}
                   PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-                  FABLE_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
+                  PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -338,7 +338,7 @@ jobs:
                     --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
                     --labels-json "$PR_LABELS" \
                     --pr-number "${{ github.event.pull_request.number || 0 }}" \
-                    --criteria-json "$FABLE_CRITERIA")
+                    --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \

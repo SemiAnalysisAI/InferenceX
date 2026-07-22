@@ -323,7 +323,7 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     assert "classify-priority" not in jobs
     assert jobs["setup"]["needs"] == ["check-changelog", "reuse-sweep-gate"]
     classifier = next(
-        step for step in jobs["setup"]["steps"] if step.get("id") == "fable"
+        step for step in jobs["setup"]["steps"] if step.get("id") == "classify"
     )
     assert classifier["if"] == "vars.PRIORITY_SCHEDULER_ENABLED == 'true'"
     assert (
