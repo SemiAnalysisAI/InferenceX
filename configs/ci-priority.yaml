@@ -1,0 +1,44 @@
+version: 1
+
+# Higher scores run first. Scores are uncapped and remain human-readable in
+# `ci-job-<score>-<hash>` workflow labels; `ci-attempt-<run-attempt>` prevents
+# stale runner labels from matching partial reruns.
+base-score: 1.0
+
+adjustments:
+  event:
+    push: 2.0
+  multi-node: 1.25
+  agentic: 1.0
+  eval-only: 0.0
+  precision:
+    fp4: 0.75
+  spec-decoding:
+    mtp: 0.75
+    eagle: 0.75
+    eagle3: 0.75
+  framework-prefix:
+    sglang: 0.5
+    vllm: 0.5
+    dynamo-sglang: 0.5
+    dynamo-vllm: 0.5
+  model-prefix:
+    glm5: 0.75
+    glm5.1: 0.75
+    kimik2.5: 0.75
+    dsv4: 0.75
+    minimaxm3: 0.75
+    qwen3.5: 0.75
+    dsr1: 0.75
+
+labels:
+  # inferencex-ci-tracker verifies the active actor with INFX_CI_SCHEDULER_PAT.
+  skip-queue:
+    name: skip_queue
+  checklist-complete:
+    names: [ci-checklist-complete]
+    adjustment: 0.25
+  patchwork:
+    names: [ci-patchwork, engine-patch]
+    score: 0.0
+    waived-by: [ci-patchwork-waived]
