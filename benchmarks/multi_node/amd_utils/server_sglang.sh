@@ -765,8 +765,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # decode worker fed evenly. cache_threshold / balance_*_threshold tune the
     # cache_aware load-balancing (router defaults are 0.5 / 64 / 1.5). Override any
     # of these via env.
-    ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-consistent_hashing}"
-    ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+    ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
+    # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
     ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
     ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
     ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
