@@ -1580,7 +1580,7 @@ dsv4-fp4-mi355x-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [4, 8, 16, 32, 48], spec-decoding: mtp }
+      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [4, 8, 16, 32], spec-decoding: mtp }
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
