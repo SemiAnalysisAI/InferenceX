@@ -38,9 +38,16 @@ jobs:
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       n: ${{ steps.gen.outputs.n }}
+      priority: ${{ steps.score.outputs.priority }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - id: score
+        run: |
+          scored=$(printf '%s' '[{"runner":"collectivex","framework":"collectivex"}]' |
+            uv run --no-project --with pyyaml --python 3.12 utils/ci_priority.py)
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
       - id: gen
         working-directory: experimental/CollectiveX
         env:
@@ -49,6 +56,8 @@ jobs:
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
           INPUT_MODES: ${{ inputs.modes }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           set -euo pipefail
           args=(--backend "$INPUT_BACKEND")
@@ -58,12 +67,18 @@ jobs:
           [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
           python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           python3 - "$GITHUB_OUTPUT" <<'PY'
+          import hashlib
           import json
+          import os
           import pathlib
           import sys
 
           matrix = json.loads(pathlib.Path("matrix_full.json").read_text())
           cells = matrix["include"]
+          for index, cell in enumerate(cells):
+              canonical = json.dumps(cell, sort_keys=True, separators=(",", ":"))
+              material = f"{os.environ['RUN_ID']}:{os.environ['RUN_ATTEMPT']}:{index}:{canonical}".encode()
+              cell["queue-token"] = hashlib.sha256(material).hexdigest()[:32]
           slim = {"include": cells}
           with open(sys.argv[1], "a", encoding="utf-8") as output:
               output.write(f"matrix={json.dumps(slim, separators=(',', ':'))}\n")
@@ -91,7 +106,22 @@ jobs:
       # runners (10 was too low when the shared fleet is busy with concurrent sweeps).
       max-parallel: 30
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    runs-on: ${{ matrix.sku }}
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format(
+          '["self-hosted",{0},{1},{2}]',
+          toJSON(matrix.sku),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            needs.setup.outputs.priority,
+            matrix.queue-token
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
+        ) ||
+        format('[{0}]', toJSON(matrix.sku))
+      ) }}
+    name: p${{ needs.setup.outputs.priority }} | ${{ matrix.sku }} ${{ matrix.backend }} shard ${{ matrix.id }}
     timeout-minutes: 350
     env:
       COLLX_BENCH: ${{ matrix.backend }}
