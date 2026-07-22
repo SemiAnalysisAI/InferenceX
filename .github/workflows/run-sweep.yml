@@ -229,6 +229,7 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
             - name: Classify priority criteria
               id: classify
               if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
