@@ -68,6 +68,14 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-FP8
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    # Disaggregated multi-node: the weights must live on shared NFS (/data),
+    # visible to every prefill + decode node — /scratch is node-local and would
+    # only expose the checkpoint on whichever node downloaded it.
+    # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5.2-fp4") in the
+    # glm5.2 recipe YAMLs.
+    export MODEL_PATH=/data/home/sa-shared/models/GLM-5.2-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="glm-5.2-fp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -91,7 +99,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.2-fp4, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -149,6 +157,16 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
+    # GLM-5.2 GB300 sglang agentic disagg: same srt-slurm v1.0.10 as the DSv4
+    # agentic path (nginx client_max_body_size fix for >1 MiB warmup bodies,
+    # session-affinity frontend, BenchmarkType.CUSTOM/extra_mount schema).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.10
+    mkdir -p recipes/sglang/glm5.2/gb300-fp4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic" \
+        recipes/sglang/glm5.2/gb300-fp4/agentic
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
     # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
@@ -188,6 +206,14 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/gb200-dsv4-recipes
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
+    # GLM-5.2 NVFP4 disagg recipes are version-controlled in-repo; overlay them
+    # onto NVIDIA/srt-slurm:main (same branch the GLM-5 gb300-fp4 recipes use).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
+    mkdir -p recipes/sglang/glm5.2/gb300-fp4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4" recipes/sglang/glm5.2/gb300-fp4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
