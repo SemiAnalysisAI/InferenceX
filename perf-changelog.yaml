@@ -5021,6 +5021,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2259
 
 - config-keys:
+    - kimik2.5-fp4-b200-dynamo-trt
+  description:
+    - "Add Kimi K2.5 NVFP4 B200 disaggregated TRT-LLM benchmarks via Dynamo (11 STP configs, ISL 8k OSL 1k)"
+    - "Container: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21 with Dynamo installed from source (hash 4025cb6a8992d19fd19eead36065e08ea5301f35)"
+    - "Topologies: 1p4d-dep4-tep8 (conc 4/24), 1p5d-dep4-tep4 (conc 5/30/60/115/195), 1p1d-dep4-dep8 (conc 308), 2p1d-dep4-dep8 (conc 615), 3p1d-dep4-dep8 (conc 1127), 4p1d-dep4-dep8 (conc 2151)"
+    - "Runner updated to clone srt-slurm at sa-submission-q2-2026 and copy local recipes into recipes/trtllm/kimi-k25-nvfp4/b200-fp4/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
+
+- config-keys:
     - kimik2.7-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Add Kimi-K2.7-Code-MXFP4 agentic-coding MTP config on MI355X via vLLM nightly-f25953cc59f9b4ba9b04b16228d2b86dcfbcbdb1, using EAGLE3 speculative decoding with lightseekorg/kimi-k2.6-eagle3.1-mla"
