@@ -1,0 +1,224 @@
+name: "disagg-gb300-4p4d-dep8-dep16-c256-mtp-kvoffload"
+
+# GLM-5.2 NVFP4 agentic-coding SGLang disaggregated recipe on GB300
+# (1P x DEP8 [2 nodes] / 1D x DEP16 [4 nodes], EAGLE/MTP + hierarchical-cache
+# DRAM KV offload), tuned for concurrency 256.
+#
+# Structure mirrors the DSv4-Pro gb300 agentic disagg recipe
+# (../deepseek-v4/agentic/disagg-gb300-2p4d-dep8-dep16-c256-mtp-kvoffload.yaml):
+# dedicated etcd/nats node, session-affinity dynamo frontend, mooncake KV
+# transfer, custom agentic_srt.sh benchmark, wide-EP decode. The model-identity,
+# quantization, DSA/MoE backends, parsers, MTP and hicache tuning are GLM-5.2's
+# (grafted from benchmarks/single_node/agentic/glm5.2_fp4_b300_sglang.sh and the
+# GLM-5 wide-EP decode): deepep (not DSv4 megamoe), glm47/glm45 parsers,
+# hicache-ratio 0.75 (GLM-5.2 OOMs above this), real EAGLE MTP (not simulated).
+# Concurrency is exported into agentic_srt.sh from the master-config conc-list.
+
+model:
+  path: "glm-5.2-fp4"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  # >= 1.2.1 required: older dynamo minijinja rejects GLM-5.2's chat-template
+  # `.0` dot-index. 1.3.0.dev1 matches the DSv4 gb300 agentic recipe.
+  wheel: "1.3.0.dev1"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  prefill_nodes: 4
+  decode_nodes: 4
+  prefill_workers: 2
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 16
+
+infra:
+  etcd_nats_dedicated_node: true
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Correlation-ID
+  enable_multiple_frontends: true
+  num_additional_frontends: 4
+  env:
+    DYN_ROUTER_TEMPERATURE: "10000000"
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  args:
+    router-mode: "kv"
+    router-reset-states: true
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    # AIPerf keeps a 300s client-side keep-alive pool; uvicorn's default 5s
+    # closes sockets mid-session -> ECONNRESET kills the agentic warmup. Outlast
+    # the client pool (see project_agentic_warmup_econnreset_race).
+    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PYTHONUNBUFFERED: '1'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+    SGLANG_MOE_NVFP4_DISPATCH: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    MC_FORCE_MNNVL: '1'
+    NCCL_TIMEOUT: '100000'
+    NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+
+  decode_environment:
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PYTHONUNBUFFERED: '1'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+    SGLANG_MOE_NVFP4_DISPATCH: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    MC_FORCE_MNNVL: '1'
+    NCCL_TIMEOUT: '100000'
+    NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+
+  sglang_config:
+    prefill:
+      host: 0.0.0.0
+      served-model-name: GLM-5.2-FP4
+      model-path: /model/
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      watchdog-timeout: 86400
+      stream-interval: 60
+      # GLM-5.2 tool-call / reasoning parsers (required for agentic tool calls)
+      tool-call-parser: glm47
+      reasoning-parser: glm45
+      # Parallelism: TP8 / EP8 attention-DP prefill
+      tp-size: 8
+      dp-size: 8
+      ep-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      moe-a2a-backend: deepep
+      moe-runner-backend: flashinfer_cutedsl
+      deepep-mode: auto
+      deepep-config: /configs/deepep_config.json
+      # DSA / GEMM backends (GLM-5.2)
+      nsa-decode-backend: trtllm
+      nsa-prefill-backend: trtllm
+      fp4-gemm-backend: flashinfer_cutlass
+      # Disaggregation
+      disaggregation-transfer-backend: mooncake
+      disaggregation-mode: prefill
+      load-balance-method: total_tokens
+      mem-fraction-static: 0.85
+      max-running-requests: 256
+      cuda-graph-max-bs: 256
+      chunked-prefill-size: 32768
+      max-prefill-tokens: 8192
+      model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+      # MTP (EAGLE, GLM-5.2 built-in nextn head)
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      # Hierarchical-cache DRAM KV offload (hicache-ratio 0.75: GLM-5.2 OOMs above)
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-ratio: 0.75
+      hicache-io-backend: direct
+      hicache-mem-layout: page_first_direct
+
+    decode:
+      host: 0.0.0.0
+      served-model-name: GLM-5.2-FP4
+      model-path: /model/
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      watchdog-timeout: 86400
+      stream-interval: 60
+      tool-call-parser: glm47
+      reasoning-parser: glm45
+      # Parallelism: wide-EP TP16 / EP16 attention-DP decode
+      tp-size: 16
+      dp-size: 16
+      ep-size: 16
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      moe-a2a-backend: deepep
+      moe-runner-backend: flashinfer_cutedsl
+      deepep-mode: auto
+      deepep-config: /configs/deepep_config.json
+      ep-num-redundant-experts: 32
+      ep-dispatch-algorithm: static
+      nsa-decode-backend: trtllm
+      nsa-prefill-backend: trtllm
+      fp4-gemm-backend: flashinfer_cutlass
+      disaggregation-transfer-backend: mooncake
+      disaggregation-mode: decode
+      load-balance-method: total_tokens
+      mem-fraction-static: 0.75
+      max-running-requests: 3072
+      cuda-graph-max-bs: 64
+      model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "144"
+
+srun_options:
+  mem: "0"
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
