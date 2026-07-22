@@ -1113,7 +1113,7 @@ _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
     _patch_swebench_agent || \
-        echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
+        echo "WARN: mini-swe-agent/swe-rex patches failed; sandbox cleanup, submission fallback, or non-interactive stdin handling may be degraded" >&2
 }
 
 _patch_swebench_agent() {
