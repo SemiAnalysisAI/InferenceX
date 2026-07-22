@@ -1119,6 +1119,7 @@ def test_processor_normalizes_sglang_server_metrics(tmp_path: Path):
     _assert_stable_server_metrics_schema(agg)
     assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.4)
     assert agg["server_metrics"]["cache"]["cpu_cache_hit_rate"] == pytest.approx(0.1)
+    assert agg["server_metrics"]["cache"]["external_cache_hit_rate"] == pytest.approx(0.1)
     assert agg["server_metrics"]["cache"]["overall_cache_hit_rate"] == pytest.approx(0.5)
     assert agg["server_metrics"]["kv_cache"]["gpu_usage_pct"] == pytest.approx(0.75)
     assert agg["server_metrics"]["kv_cache"]["cpu_usage_pct"] == pytest.approx(0.3)

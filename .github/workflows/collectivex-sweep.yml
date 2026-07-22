@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori]
+        options: [all, deepep-v2, mori, uccl-ep]
       only_sku:
         description: Restrict to one GHA runner pool; blank = all
         type: string
@@ -21,6 +21,10 @@ on:
         default: ''
       ep_sizes:
         description: Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
+        type: string
+        default: ''
+      modes:
+        description: "Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
         type: string
         default: ''
 concurrency:
@@ -50,6 +54,7 @@ jobs:
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
+          INPUT_MODES: ${{ inputs.modes }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
@@ -58,6 +63,7 @@ jobs:
           [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
+          [ -n "$INPUT_MODES" ] && args+=(--modes "$INPUT_MODES")
           python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           python3 - "$GITHUB_OUTPUT" <<'PY'
           import hashlib
@@ -92,10 +98,12 @@ jobs:
     if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
-      # Fixed global cap; real throttling is each SKU pool's runner count and its
-      # cluster's Slurm partition. setup interleaves shards across SKUs, so the
-      # first jobs under this cap spread over pools instead of queuing on one.
-      max-parallel: 10
+      # Global cap; real throttling is each SKU pool's runner count and its cluster's
+      # Slurm partition. setup interleaves shards across SKUs so the cap spreads over
+      # pools instead of queuing on one. Kept above the total per-pool runner count so a
+      # saturated pool's dispatched-but-waiting legs cannot starve pools that have free
+      # runners (10 was too low when the shared fleet is busy with concurrent sweeps).
+      max-parallel: 30
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: >-
       ${{ fromJSON(
@@ -123,10 +131,10 @@ jobs:
       COLLX_SHARD_SKU: ${{ matrix.sku }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      # Consolidated shards run one bounded build-group in one Slurm allocation.
-      # MI300X's compute partition has a 180-minute ceiling; the other production
-      # pools accept 300 minutes. Allocations release as soon as the shard finishes.
-      COLLX_TIME: ${{ matrix.sku == 'mi300x' && '180' || '300' }}
+      # Consolidated shards run one bounded build-group in one Slurm allocation;
+      # every production pool accepts 300 minutes. Allocations release as soon as
+      # the shard finishes.
+      COLLX_TIME: '300'
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
       COLLX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
       COLLX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}

@@ -59,6 +59,7 @@ This pace of software advancement creates a challenge: benchmarks conducted at a
 | MI300X | ✅ |
 | H200 | ✅ |
 | H100 | ✅ |
+| TPUv7x Ironwood Ghostfish | Coming Soon 🔜 |
 | MI455 UALoE72 | Coming Soon 🔜 |
 | Vera Rubin NVL72 | Coming Soon 🔜 |
 | Rubin NVL8 | Coming Soon 🔜 |
