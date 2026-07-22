@@ -39,16 +39,12 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 SERVER_PID=""
-ROUTER_PID=""
 
 cleanup() {
-    local pid
-    for pid in "$ROUTER_PID" "$SERVER_PID"; do
-        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-            kill -TERM "$pid" 2>/dev/null || true
-            wait "$pid" 2>/dev/null || true
-        fi
-    done
+    if [[ -n "$SERVER_PID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+        kill -TERM "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
@@ -77,9 +73,6 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 export SGLANG_DSA_FUSE_TOPK=false
 export SGLANG_OPT_USE_TOPK_V2=false
 
-USE_SGLANG_ROUTER=false
-SGLANG_BACKEND_PORT="$PORT"
-ROUTER_LOG="$RESULT_DIR/router.log"
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
 
 # Keep the cookbook profiles as separate topology/cache series so the AgentX
@@ -89,35 +82,7 @@ PROFILE=low-latency
 CHUNKED_PREFILL_ARGS=(--chunked-prefill-size 131072)
 MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_ARGS=(--cuda-graph-max-bs "$MAX_RUNNING_REQUESTS")
-DSA_PREFILL_BACKEND=tilelang
-DSA_DECODE_BACKEND=tilelang
-if [ "$DP_ATTENTION" = "true" ]; then
-    PROFILE=high-throughput
-    USE_SGLANG_ROUTER=true
-    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
-    SGLANG_BACKEND_PORT=$((PORT + 1))
-    SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
-
-    export SGLANG_SHARED_EXPERT_TP1=1
-    export SGLANG_DP_SHARED_EXPERT_LOCAL=1
-    export SGLANG_DP_USE_GATHERV=1
-    export SGLANG_DP_USE_REDUCE_SCATTER=1
-    export GPU_MAX_HW_QUEUES=5
-
-    PARALLEL_ARGS+=(
-        --dp "$TP"
-        --enable-dp-attention
-        --enable-prefill-delayer
-    )
-    CHUNKED_PREFILL_ARGS=()
-    MAX_RUNNING_REQUESTS=256
-    # TileLang's DPA DSA kernel needs 115,200 bytes of dynamic shared memory,
-    # above gfx942's 65,536-byte per-block limit even in eager mode. AITER is
-    # SGLang's alternate ROCm DSA backend and avoids that kernel.
-    DSA_PREFILL_BACKEND=aiter
-    DSA_DECODE_BACKEND=aiter
-    CUDA_GRAPH_ARGS=(--cuda-graph-max-bs 256)
-elif [ "$EP_SIZE" -gt 1 ]; then
+if [ "$EP_SIZE" -gt 1 ]; then
     PROFILE=balanced
     CHUNKED_PREFILL_ARGS=(--chunked-prefill-size 32768)
     MAX_RUNNING_REQUESTS=80
@@ -135,11 +100,11 @@ SGLANG_CMD=(
     --model-path "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
-    --port "$SGLANG_BACKEND_PORT"
+    --port "$PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    --dsa-prefill-backend "$DSA_PREFILL_BACKEND"
-    --dsa-decode-backend "$DSA_DECODE_BACKEND"
+    --dsa-prefill-backend tilelang
+    --dsa-decode-backend tilelang
     --dsa-topk-backend torch
     --kv-cache-dtype bfloat16
     --tool-call-parser glm47
@@ -163,33 +128,13 @@ echo "Starting SGLang server for MI325X..."
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-if [ "$USE_SGLANG_ROUTER" = "true" ]; then
-    echo "Starting SGLang router on port $PORT for $TP DP ranks..."
-    python3 -m sglang_router.launch_router \
-        --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
-        --request-id-headers x-correlation-id \
-        --dp-aware \
-        --host 0.0.0.0 \
-        --port "$PORT" \
-        --prometheus-host 127.0.0.1 \
-        --prometheus-port "$SGLANG_ROUTER_METRICS_PORT" \
-        --connect-timeout-secs 900 \
-        --request-timeout-secs 14400 \
-        --disable-health-check \
-        --disable-retries > "$ROUTER_LOG" 2>&1 &
-    ROUTER_PID=$!
-    echo "Router PID: $ROUTER_PID"
-    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
-fi
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 if [[ "${EVAL_ONLY}" == "true" ]]; then
     export SWEBENCH_AGENT_STEP_LIMIT=150
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
-    REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
+    REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
