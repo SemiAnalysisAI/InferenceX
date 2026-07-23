@@ -1,0 +1,172 @@
+# Qwen3.5 FP8 GB300 disaggregated MTP 3P1D DEP4/DEP16 configuration.
+
+name: "qwen3.5-fp8-gb300-mtp-8k1k-3p1d-dep4-dep16"
+
+sbatch_directives:
+  mem: "0"
+
+dynamo:
+  hash: 46520ca59afe992fb5ef61b3197b2316f8df9b2b
+  install: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 2
+  nginx_container: nginx
+
+model:
+  path: "qwen3.5-fp8"
+  container: "lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3"
+  precision: "fp8"
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 3
+  decode_nodes: 4
+  prefill_workers: 3
+  decode_workers: 1
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+    SGLANG_ENABLE_SPEC_V2: "1"
+    NO_COLOR: "1"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "3600"
+    TORCH_NCCL_WATCHDOG_TIMEOUT_SEC: "3600"
+    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: "3600"
+    PYTHONUNBUFFERED: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DG_CACHE_DIR: "/configs/deepgemm-cache"
+    FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    SGLANG_HEALTH_STARTING_OK: "1"
+    SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
+
+  decode_environment:
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "0"
+    SGLANG_ENABLE_SPEC_V2: "1"
+    NO_COLOR: "1"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "3600"
+    TORCH_NCCL_WATCHDOG_TIMEOUT_SEC: "3600"
+    TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC: "3600"
+    PYTHONUNBUFFERED: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    MC_FORCE_MNNVL: "1"
+    MC_TE_METRIC: "true"
+    SGLANG_DG_CACHE_DIR: "/tmp/deepgemm-cache"
+    FLASHINFER_WORKSPACE_BASE: "/configs/flashinfer-cache"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    SGLANG_HACK_SEQ_BOOTSTRAP_ROOM: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "512"
+    SGLANG_HEALTH_CHECK_TIMEOUT: "1800"
+    SGLANG_HEALTH_STARTING_OK: "1"
+    SGLANG_ENABLE_HEALTH_ENDPOINT_GENERATION: "0"
+
+  sglang_config:
+    prefill:
+      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
+      model-path: "/model/"
+      random-seed: 42
+      quantization: "fp8"
+      kv-cache-dtype: "fp8_e4m3"
+      trust-remote-code: true
+
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+
+      mamba-scheduler-strategy: "no_buffer"
+      mamba-track-interval: 2048
+      mamba-ssm-dtype: "bfloat16"
+      disaggregation-mode: "prefill"
+      disable-radix-cache: true
+      disaggregation-bootstrap-port: 31000
+      mem-fraction-static: 0.7
+      chunked-prefill-size: 65536
+      max-prefill-tokens: 16384
+      load-balance-method: "round_robin"
+      watchdog-timeout: 1000000
+      disable-cuda-graph: true
+      log-level: "info"
+      page-size: 64
+      attention-backend: "trtllm_mha"
+      moe-runner-backend: "flashinfer_trtllm"
+
+    decode:
+      served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
+      model-path: "/model/"
+      random-seed: 42
+      trust-remote-code: true
+      quantization: "fp8"
+      kv-cache-dtype: "fp8_e4m3"
+
+      tensor-parallel-size: 16
+      data-parallel-size: 16
+      expert-parallel-size: 16
+      moe-dense-tp-size: 1
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      prefill-round-robin-balance: true
+
+      mamba-scheduler-strategy: "no_buffer"
+      mamba-track-interval: 128
+      mamba-ssm-dtype: "bfloat16"
+
+      speculative-algorithm: "EAGLE"
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+
+      disaggregation-mode: "decode"
+      disable-radix-cache: true
+      disaggregation-bootstrap-port: 31000
+
+      chunked-prefill-size: 4096
+      context-length: 16384
+      mem-fraction-static: 0.7
+      max-mamba-cache-size: 1024
+      max-running-requests: 1024
+      cuda-graph-max-bs: 128
+      watchdog-timeout: 1000000
+
+      page-size: 64
+      attention-backend: "trtllm_mha"
+      moe-runner-backend: "deep_gemm"
+      moe-a2a-backend: "deepep"
+      deepep-mode: "low_latency"
+      ep-dispatch-algorithm: "static"
+      eplb-algorithm: "deepseek"
+
+      decode-log-interval: 1
+      stream-interval: 50
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  req_rate: "inf"
+  num_prompts_mult: 20
+  num_warmup_mult: 2
+  random_range_ratio: 0.8
+  concurrencies: "480"
