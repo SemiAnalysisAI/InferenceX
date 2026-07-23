@@ -1224,6 +1224,87 @@ dsv4-fp4-mi355x-sglang-disagg:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
 
+# MTP variant of dsv4-fp4-mi355x-sglang-disagg (base run 29821778206). Mirrors
+# the base disagg search space and topologies exactly (same 20260701 image,
+# mori KV transfer + MoE a2a, sglang-router --pd-disaggregation) and enables
+# DeepSeek-V4 built-in MTP on the decode side via spec-decoding: mtp — the same
+# enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp. Following that
+# precedent, DECODE_MTP_SIZE=2 on the pure-TP8 (bottom-of-curve) arm and
+# DECODE_MTP_SIZE=1 on the DEP8 (top-of-curve) arms. The dsv4 ROCm MTP
+# CUDA-graph fix (sgl-project/sglang#26383, merged 2026-05-27) is already
+# present in the pinned 20260701 nightly, so no image bump is needed.
+dsv4-fp4-mi355x-sglang-disagg-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # MTP configurations
+      # 1P1D pure TP8  (mori KV transfer)
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=2"
+      # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
+      - spec-decoding: "mtp"
+        conc-list: [ 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+
+      - spec-decoding: "mtp"
+        conc-list: [ 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+
 
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706

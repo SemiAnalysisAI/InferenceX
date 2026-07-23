@@ -5060,3 +5060,12 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-mtp
+  description:
+    - "Add MTP variant of dsv4-fp4-mi355x-sglang-disagg (new config-key dsv4-fp4-mi355x-sglang-disagg-mtp)"
+    - "Clones the base disagg search space and topologies exactly (same image lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701, mori KV transfer + MoE a2a, sglang-router --pd-disaggregation on :30000); enables DeepSeek-V4 built-in MTP on decode via spec-decoding: mtp, same enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp"
+    - "Topologies: 1P1D pure-TP8/EP1 (conc 1-128) at DECODE_MTP_SIZE=2; 1P1D DEP8 (TP8/EP8 + dp-attention) conc 256 and conc 512 at DECODE_MTP_SIZE=1"
+    - "No launcher change: the disagg path already threads DECODE_MTP_SIZE (base arms use 0). MTP CUDA-graph fix sgl-project/sglang#26383 (merged 2026-05-27) is present in the pinned 20260701 nightly"
+  pr-link: XXX
