@@ -6918,7 +6918,7 @@ minimaxm3-fp4-b300-dynamo-vllm-8k1k-legacy-max-tput:
           dp-attn: false
 
 minimaxm3-fp4-b300-dynamo-vllm-mtp:
-  image: vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -7004,6 +7004,23 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp:
           tp: 4
           ep: 1
           dp-attn: false
+
+minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4:
+  image: vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: b300
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260710" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
       - spec-decoding: "mtp"
         conc-list: [256, 512]
         prefill:
