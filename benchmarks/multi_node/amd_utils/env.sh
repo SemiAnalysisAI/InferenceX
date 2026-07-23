@@ -293,7 +293,7 @@ else
     # event is queried during capture. CUDA graph stays fully enabled.
     export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
     export NCCL_BLOCKING_WAIT="${NCCL_BLOCKING_WAIT:-1}"
-    export NCCL_DEBUG="${NCCL_DEBUG:-INFO}"
+    # export NCCL_DEBUG="${NCCL_DEBUG:-INFO}"
 
     # =========================================================================
     # DeepSeek-V4-Pro PD recipe overrides
