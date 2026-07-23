@@ -62,6 +62,20 @@ set +x
 
 export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 
+# Inter-node NCCL over this bnxt_re RoCE fabric. Only matters for multi-node TP/EP
+# workers (e.g. decode TP16 over 2 nodes); inert for the single-node-worker tests
+# (1-4), which do no inter-node NCCL.
+#   NCCL_IB_GID_INDEX=3: use the routable RoCEv2 GID (fd93:16d3:59b6:012*). Without
+#     it NCCL falls back to RoCEv1 (GID idx 0, link-local) and cross-node comm init
+#     hangs.
+#   NCCL_IB_TC=104 / NCCL_IB_SL=3: put NCCL's own RDMA on the PFC-protected lossless
+#     class (DSCP 24 / priority 3). Without it, NCCL's connection handshake can be
+#     dropped on the lossy default queue for some node pairs, hanging ncclCommInitRank.
+# Override for a cluster with a different GID layout / PFC class.
+export NCCL_IB_GID_INDEX="${NCCL_IB_GID_INDEX:-3}"
+export NCCL_IB_TC="${NCCL_IB_TC:-104}"
+export NCCL_IB_SL="${NCCL_IB_SL:-3}"
+
 # =============================================================================
 # MoRI-specific environment
 # =============================================================================
@@ -76,7 +90,12 @@ export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
 # QoS/DSCP configuration
 # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
 if [[ -n "$MORI_RDMA_TC" ]]; then
-    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
+    # Derive matching SL from TC; bnxt_re rejects inconsistent DSCP/SL pairs and
+    # silently downgrades to the lossy queue (RETRY_EXC_ERR / stalled KV under load).
+    [[ -z "${MORI_RDMA_SL:-}" ]] && export MORI_RDMA_SL=$(( MORI_RDMA_TC >> 5 ))
+    export MORI_IO_TC="${MORI_IO_TC:-$MORI_RDMA_TC}"
+    export MORI_IO_SL="${MORI_IO_SL:-$MORI_RDMA_SL}"
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC MORI_RDMA_SL=$MORI_RDMA_SL MORI_IO_TC=$MORI_IO_TC MORI_IO_SL=$MORI_IO_SL (set by runner or environment)"
 elif command -v nicctl &> /dev/null; then
     ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
     ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
@@ -253,7 +272,9 @@ else
     export SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS=32
 
     export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
-    export MORI_MAX_DISPATCH_TOKENS_DECODE=512
+    # 512 undersizes the decode MoRI MoE dispatch buffer for conc-32/EP16, where the
+    # cross-node all-to-all stalls under load.
+    export MORI_MAX_DISPATCH_TOKENS_DECODE=4096
 
     export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=32768
     export MORI_MOE_MAX_INPUT_TOKENS_DECODE=2703

@@ -142,7 +142,7 @@ DeepSeek-R1-0528:
   dp_flags: "--enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
-    mem_fraction_static: 0.8
+    mem_fraction_static: 0.9
     disable_radix_cache: true
     dp:
       max_running_requests: 24

@@ -240,14 +240,24 @@ fi
 
 # When both DP and EP are enabled, override max-running-requests and dispatch tokens
 if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; then
-    decode_max_running_requests=$BENCH_MAX_CONC_VALUE
     decode_dp_ranks=$DECODE_TP_SIZE
-    MORI_MAX_DISPATCH_TOKENS_DECODE=$((BENCH_MAX_CONC_VALUE / decode_dp_ranks))
-    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
-    # Update derived variable
-    SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
-    export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
-    echo "[DP+EP override] Decode: max-running-requests=$decode_max_running_requests, DISPATCH_TOKENS=$MORI_MAX_DISPATCH_TOKENS_DECODE, MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_DECODE, INTER_KERNEL_SWITCH=$SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD"
+    # max-running-requests is split across DP ranks (sglang's req_to_token_pool is
+    # per-rank = max_running_requests // dp_ranks). It must be >= dp_ranks, else the
+    # per-rank pool floors to 0 and get_batch_sizes_to_capture collapses capture_bs
+    # to [0] (AssertionError). This happens when bench concurrency < dp_ranks.
+    # Old heuristic set max_running=BENCH_MAX_CONC (=conc) and then shrank the MoRI
+    # dispatch tokens to max_running/dp_ranks (=2 at conc32/DP16). That gives each DP
+    # rank only ~2 request slots and a 2-token MoE all-to-all dispatch buffer, which
+    # starves the cross-node EP path under load (TTFT ~11s, mass timeouts). The patch
+    # reference instead keeps a generous per-rank pool (conc*TP) and the env.sh MoRI
+    # dispatch / MOE token sizes (4096 / 2703). Floor at dp_ranks to keep capture_bs>0.
+    decode_max_running_requests=$((BENCH_MAX_CONC_VALUE * decode_dp_ranks))
+    if (( decode_max_running_requests < decode_dp_ranks )); then
+        decode_max_running_requests=$decode_dp_ranks
+    fi
+    # Keep MORI_MAX_DISPATCH_TOKENS_DECODE / MOE_MAX_INPUT / INTER_KERNEL_SWITCH from
+    # env.sh (do NOT shrink them to max_running/dp_ranks).
+    echo "[DP+EP override] Decode: max-running-requests=$decode_max_running_requests, DISPATCH_TOKENS=$MORI_MAX_DISPATCH_TOKENS_DECODE (env), MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_DECODE (env)"
 fi
 
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
