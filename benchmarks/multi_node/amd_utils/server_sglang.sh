@@ -530,6 +530,12 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # per-node DRAM budget computed by the sweep generator (enforcement); fall
     # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
     # provided, keeping configs that predate the budget unchanged.
+    # FORCE_HICACHE_RATIO lets a recipe opt into ratio-based sizing without
+    # unsetting TOTAL_CPU_DRAM_GB — that var is also the shared client-side
+    # gate (benchmark_lib.sh requires it whenever KV_OFFLOADING=dram) and is
+    # forwarded verbatim into client.env below, so unsetting it here would
+    # make the aiperf client container fail its own env validation before
+    # ever sending a request.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
     # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
@@ -537,7 +543,9 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
     # server_args.hicache_size > 0):
     # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
-    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+    # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
+    # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
+    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
         # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
         # offloads KV to CPU DRAM today); --hicache-size is per rank per host
         # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total

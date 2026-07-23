@@ -83,8 +83,20 @@ if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; t
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-  # HiCache ratio (host pool = ratio * GPU KV pool). Default derived in server_sglang.sh.
-  export HICACHE_RATIO="${HICACHE_RATIO:-}"
+  # HiCache ratio (host pool = ratio * GPU KV pool).
+  export HICACHE_RATIO="${HICACHE_RATIO:-4}"
+  # server_sglang.sh prefers an absolute --hicache-size (derived from
+  # TOTAL_CPU_DRAM_GB, the sweep generator's per-node DRAM budget) over
+  # --hicache-ratio whenever TOTAL_CPU_DRAM_GB is set. DSv4 wants the
+  # ratio-based pool instead. Use FORCE_HICACHE_RATIO to opt out of the
+  # --hicache-size path rather than unsetting TOTAL_CPU_DRAM_GB itself:
+  # that var is also the shared client-side gate (benchmark_lib.sh requires
+  # it to be a positive integer whenever KV_OFFLOADING=dram) and gets
+  # forwarded into the aiperf sibling container's client.env, so unsetting
+  # it here made the client fail its own env validation before benchmarking
+  # ("DRAM KV offloading requires a positive configured TOTAL_CPU_DRAM_GB
+  # capacity") even though the servers came up fine.
+  export FORCE_HICACHE_RATIO=1
 
   # ── HiCache layout/backend by tier ──
   #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake

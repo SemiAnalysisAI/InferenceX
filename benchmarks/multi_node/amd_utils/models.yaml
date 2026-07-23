@@ -365,19 +365,19 @@ DeepSeek-R1-0528-MXFP4-v2:
 
 DeepSeek-V4-Pro-AgentX:
   base_flags: "--watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori --log-level info --log-level-http error"
-  dp_flags: "--enable-dp-attention --enable-prefill-delayer --enable-two-batch-overlap"
+  dp_flags: "--enable-dp-attention --enable-prefill-delayer"
   ep_flags: "--ep-dispatch-algorithm fake --moe-a2a-backend mori --deepep-mode normal"
   prefill:
-    mem_fraction_static: 0.8
+    mem_fraction_static: 0.72
     disable_radix_cache: false
-    disable_cuda_graph: false
+    disable_cuda_graph: true
     dp:
       max_running_requests: 1024
       chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"  # dsv4 compressor kernel uint16 token cap (255*256)
       context_length: 1048576
       # max_total_tokens: 1048576
     no_dp:
-      max_running_requests: 128
+      max_running_requests: 64
       # Small prefill chunks interleave long-context agentic prefills across
       # requests instead of letting one ~100K-token prefill monopolize the
       # engine (the conc>=16 queue-saturation / decode-stall failure mode).
@@ -388,6 +388,7 @@ DeepSeek-V4-Pro-AgentX:
       context_length: 1048576
   decode:
     mem_fraction_static: 0.85
+    disable_cuda_graph: false
     prefill_round_robin_balance: true
     disagg_decode_enable_radix_cache: false
     dp:
