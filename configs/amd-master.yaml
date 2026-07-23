@@ -1236,7 +1236,7 @@ dsv4-fp4-mi355x-sglang-disagg:
 # CUDA-graph fix (sgl-project/sglang#26383, merged 2026-05-27) is already
 # present in the pinned 20260701 nightly, so no image bump is needed.
 dsv4-fp4-mi355x-sglang-disagg-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x-disagg
