@@ -5060,3 +5060,11 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Refresh the six existing MiniMax-M3 NVFP4 B300 8k1k disaggregated Dynamo-vLLM EAGLE3 recipes from vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2 to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
+    - "Remove the deprecated VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm override from prefill and decode environments, matching the image compatibility adjustment established by PR #2120"
+    - "Preserve the six existing 8k1k EAGLE3 topologies, speculative-token settings, chat template, random range ratio, and 12 total concurrency points"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2314
