@@ -125,6 +125,8 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 # ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
+    export SWEBENCH_AGENT_STEP_LIMIT=100
+    export SWEBENCH_AGENT_TIMEOUT=21600
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
