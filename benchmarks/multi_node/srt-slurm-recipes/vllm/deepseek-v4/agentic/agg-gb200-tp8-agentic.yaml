@@ -1,0 +1,159 @@
+name: "svf-vllm-agg-gb200-tp8-agentic"
+
+# AgentX low-concurrency aggregate recipe for DeepSeek-V4-Pro on GB200. One
+# TP8 vLLM worker spans two four-GPU nodes and serves both prefill and decode.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
+  precision: "fp4"
+
+dynamo:
+  hash: "1f74ef8c204ed6e283c22374f2b8c5cc83bf7b52"
+  install: true
+
+setup_script: vllm-container-deps.sh
+
+environment:
+  # The frontend shares Grace CPU capacity with the long TP8 cold start. Keep
+  # Dynamo discovery alive until the outer two-hour health check expires.
+  ETCD_LEASE_TTL: "7200"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    router-mode: "kv"
+    router-temperature: 0.0
+    router-queue-threshold: 65536
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: vllm
+  connector: null
+  mooncake_kv_store:
+    store_config:
+      metadata_server: "P2PHANDSHAKE"
+      global_segment_size: "150GB"
+      local_buffer_size: "4GB"
+      protocol: "rdma"
+      # Pin to the IB compute fabric. device_name: "" auto-discovers RoCE/link-local
+      # NICs (mlx5_2/mlx5_5) that can not route cross-node and hang mooncake setup.
+      device_name: "mlx5_0,mlx5_1,mlx5_3,mlx5_4"
+      mode: "embedded"
+      enable_offload: false
+  aggregated_environment:
+    DYN_REQUEST_PLANE: "tcp"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "600000"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    # Off: the c188b96 container's CUDA-graph capture path enters vLLM's
+    # nccl_symm_mem_context without set_graph_pool_id, so capture asserts
+    # "graph_pool_id is not set under graph capture". Re-enable once this recipe
+    # moves to a container built from a vLLM with the cuda_graph.py fix.
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+    VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
+    VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    NCCL_P2P_LEVEL: NVL
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    # MC_STORE_CLIENT_METRIC: "1"
+    # MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    # MC_TE_METRIC: "0"
+
+  vllm_config:
+    aggregated:
+      kv-transfer-config: '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_offload":false}}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+      disable-custom-all-reduce: true
+      enable-cumem-allocator: true
+      # numa-bind disabled: srt-slurm's cpus-per-task/cgroup already constrains
+      # CPU affinity, so vLLM's auto-NUMA detection bails and --numa-bind hard-
+      # errors ("could not detect the GPU-to-NUMA topology"). Re-enable only with
+      # an explicit --numa-bind-nodes mapping for this cluster.
+      # numa-bind: true
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
+      max-model-len: 1048576
+      # AgentX session fan-out can exceed the configured live-session
+      # concurrency; retain scheduler/graph headroom for subagent bursts.
+      max-num-seqs: 32
+      max-num-batched-tokens: 8192
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      max-cudagraph-capture-size: 32
+      gpu-memory-utilization: 0.95
+      kv-cache-memory: 37580963840  # 35 GiB
+      stream-interval: 10
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+
+sbatch_directives:
+  cpus-per-task: "72"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    # One aggregate worker owns all eight GPUs. Use the aggregate accounting
+    # path instead of summing independent prefill and decode allocations.
+    # Aggregate (IS_MULTINODE=false) uses the single-node topology labels below
+    # directly (num_gpus = TP), so they are set here rather than CI-injected.
+    IS_MULTINODE: "false"
+    TP: "8"
+    EP_SIZE: "1"
+    DP_ATTENTION: "false"
+    # Off: aiperf emits nvext.session_control, rejected by current dynamo (see benchmark_lib.sh).
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

@@ -5060,3 +5060,12 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-agg
+    - dsv4-fp4-gb200-dynamo-vllm-agentic-3p1d-dep8-dep16
+  description:
+    - "Add GB200 Dynamo-vLLM AgentX aggregate TP8 at conc [16] and disaggregated 3P/1D DEP8/DEP16 at conc [1536]."
+    - "Use NVIDIA/srt-slurm main with its upstream per-node DP, multi-node TP VLLM_PORT, Dynamo health-count, and Mooncake master fixes. TP8 uses FlashInfer all-reduce and disables vLLM custom all-reduce."
+    - "Image: vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-c188b96"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
