@@ -7,12 +7,19 @@ on:
       - main
     paths:
       - ".claude/commands/recover-failed-ingest.md"
+      - ".github/workflows/benchmark-tmpl.yml"
       - ".github/workflows/benchmark-multinode-tmpl.yml"
+      - ".github/workflows/collectivex-sweep.yml"
+      - ".github/workflows/profile.yml"
       - ".github/workflows/e2e-tests.yml"
       - ".github/workflows/run-sweep.yml"
+      - ".github/workflows/speedbench-al.yml"
       - ".github/workflows/test-changelog-gate.yml"
       - "benchmarks/benchmark_lib.sh"
+      - "configs/ci-priority.yaml"
       - "benchmarks/multi_node/amd_utils/job.slurm"
+      - "utils/ci_priority.py"
+      - "utils/test_ci_priority.py"
       - "utils/find_reusable_sweep_run.py"
       - "utils/test_find_reusable_sweep_run.py"
       - "utils/process_changelog.py"
@@ -71,6 +78,7 @@ jobs:
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
+            utils/test_ci_priority.py \
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \

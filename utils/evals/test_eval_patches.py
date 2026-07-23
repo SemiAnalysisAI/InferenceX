@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import runpy
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -40,6 +41,67 @@ def test_agent_patch_is_atomic_and_idempotent(tmp_path):
     assert patched == "patched-alpha\npatched-beta\n"
     assert agent_patch._patch(str(target), replacements, "test")
     assert target.read_text() == patched
+
+
+def test_agent_patch_closes_inherited_stdin(tmp_path):
+    target = tmp_path / "swerex_modal.py"
+    target.write_text(
+        """import json
+import subprocess
+
+class Environment:
+    def execute(self, action):
+        command = action.get("command", "") if isinstance(action, dict) else action
+        try:
+            result = subprocess.run(
+                command,
+                shell=True,
+                timeout=0.2,
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+        except subprocess.TimeoutExpired:
+            return {"returncode": -1, "output": "timed out"}
+        return {"returncode": result.returncode, "output": result.stdout}
+
+environment = Environment()
+commands = ["cat", "printf 'pipe-ok\\\\n' | cat"]
+print(json.dumps([environment.execute({"command": command}) for command in commands]))
+"""
+    )
+
+    assert agent_patch._patch_swerex_environment(str(target))
+    patched = target.read_text()
+    assert agent_patch._patch_swerex_environment(str(target))
+    assert target.read_text() == patched
+
+    process = subprocess.Popen(
+        [sys.executable, str(target)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert process.wait(timeout=2) == 0
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+        assert process.stdin is not None
+        process.stdin.close()
+
+    assert process.stdout is not None
+    assert process.stderr is not None
+    output = process.stdout.read()
+    errors = process.stderr.read()
+    process.stdout.close()
+    process.stderr.close()
+    assert not errors
+    assert json.loads(output) == [
+        {"returncode": 0, "output": ""},
+        {"returncode": 0, "output": "pipe-ok\n"},
+    ]
 
 
 def test_scoring_patch_is_atomic_and_idempotent(tmp_path):
