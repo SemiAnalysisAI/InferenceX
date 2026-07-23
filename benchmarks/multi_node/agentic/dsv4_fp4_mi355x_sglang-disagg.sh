@@ -134,7 +134,7 @@ export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
 export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-32768}"
 
 # ── SGLang PD router policy + server metrics ──
-export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-cache_aware}"
+export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
 # ── MTP ──
