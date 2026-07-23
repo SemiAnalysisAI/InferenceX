@@ -7,6 +7,11 @@ HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/var/lib/inferencex/hf-hub-cache}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/mnt/hf_hub_cache/}"
 PORT="${PORT:-8888}"
 
+# NCCL 2.28.9 segfaults while probing this node's bnxt_re RDMA devices.
+# These jobs are single-node, so default to the socket transport while
+# preserving an explicit caller override.
+export NCCL_IB_DISABLE="${NCCL_IB_DISABLE:-1}"
+
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
 : "${IMAGE:?IMAGE must be set}"
 : "${EXP_NAME:?EXP_NAME must be set}"
@@ -126,6 +131,7 @@ docker run \
     --env PORT="$PORT" \
     --env CUDA_DEVICE_ORDER=PCI_BUS_ID \
     --env CUDA_VISIBLE_DEVICES \
+    --env NCCL_IB_DISABLE \
     --entrypoint=/bin/bash \
     "$DOCKER_IMAGE" \
     "$BENCH_SCRIPT"
