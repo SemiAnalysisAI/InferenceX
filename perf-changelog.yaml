@@ -5060,3 +5060,16 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - qwen3.5-fp4-rtx6000pro-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 single-node vLLM benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both TP4 and TEP4 (TP4 attention with EP4 MoE, without DP attention)"
+    - "Pin vLLM v0.25.1 by digest so the mixed-dtype all-reduce/RMSNorm correctness fix is present without a runtime patch"
+    - "Use Marlin NVFP4 MoE and Triton attention on SM120, with language-model-only serving, FP8 KV cache, prefix caching disabled, and CUDA graph capture capped to each tested concurrency"
+    - "Use standard NCCL collectives on the PCIe topology and disable IB/RoCE probing to avoid the node's NCCL 2.28.9 bnxt_re initialization crash while preserving local CUDA P2P/SHM"
+    - "Validated over SSH: exact 8192/1024 generation passed on both TP4 and TEP4, and the TEP4 concurrency-64 envelope captured all graph sizes and completed 64/64 simultaneous requests without OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
