@@ -4,6 +4,10 @@
 # This is the PCIe/SM120 counterpart to minimaxm3_fp4_b200.sh. It keeps
 # the ModelOpt NVFP4, FP8 KV-cache, and MSA block-size settings while using
 # NCCL collectives instead of the B200-tuned FlashInfer/TRT-LLM all-reduce.
+#
+# The pinned vLLM image predates the MiniMax-M3 Marlin fixes tracked by
+# vLLM PRs #45836 and #48929. Apply the narrow compatibility patch covered
+# by docs/waiver/2306.md before importing vLLM.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -54,6 +58,16 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 start_gpu_monitor
 
+VLLM_SITE_PACKAGES="$(
+    python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])'
+)"
+VLLM_MARLIN_PATCH=/workspace/benchmarks/patches/vllm/minimax_m3_nvfp4_marlin.patch
+if ! patch --batch --forward --fuzz=0 -p1 -d "$VLLM_SITE_PACKAGES" \
+    < "$VLLM_MARLIN_PATCH"; then
+    echo "Failed to apply the pinned MiniMax-M3 Marlin compatibility patch" >&2
+    exit 1
+fi
+
 set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
@@ -63,6 +77,8 @@ vllm serve "$MODEL" --port "$PORT" \
     --kv-cache-dtype fp8 \
     --block-size 128 \
     --language-model-only \
+    --attention-backend TRITON_ATTN \
+    --moe-backend marlin \
     --max-cudagraph-capture-size 2048 \
     --max-num-batched-tokens "$((ISL * 2))" \
     --stream-interval 20 \
