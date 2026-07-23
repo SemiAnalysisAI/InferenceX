@@ -1228,9 +1228,11 @@ dsv4-fp4-mi355x-sglang-disagg:
 # the base disagg search space and topologies exactly (same 20260701 image,
 # mori KV transfer + MoE a2a, sglang-router --pd-disaggregation) and enables
 # DeepSeek-V4 built-in MTP on the decode side via spec-decoding: mtp — the same
-# enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp. Following that
-# precedent, DECODE_MTP_SIZE=2 on the pure-TP8 (bottom-of-curve) arm and
-# DECODE_MTP_SIZE=1 on the DEP8 (top-of-curve) arms. The dsv4 ROCm MTP
+# enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp. DECODE_MTP_SIZE=1 (draft
+# depth 1) on every arm. Depth 2 was tried on the pure-TP8 (bottom-of-curve) arm,
+# but this 20260701 build's 2-step EAGLE verification is lossy: greedy gsm8k fell
+# to ~0.85 (below the 0.91 dsv4 floor), while depth 1 is lossless (~0.96, matching
+# the spec-none base). So all arms use depth 1. The dsv4 ROCm MTP
 # CUDA-graph fix (sgl-project/sglang#26383, merged 2026-05-27) is already
 # present in the pinned 20260701 nightly, so no image bump is needed.
 dsv4-fp4-mi355x-sglang-disagg-mtp:
@@ -1267,7 +1269,7 @@ dsv4-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=2"
+          - "DECODE_MTP_SIZE=1"
       # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
       - spec-decoding: "mtp"
         conc-list: [ 256 ]

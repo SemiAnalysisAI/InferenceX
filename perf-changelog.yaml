@@ -5066,7 +5066,8 @@
   description:
     - "Add MTP variant of dsv4-fp4-mi355x-sglang-disagg (new config-key dsv4-fp4-mi355x-sglang-disagg-mtp)"
     - "Clones the base disagg search space and topologies exactly (same image lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701, mori KV transfer + MoE a2a, sglang-router --pd-disaggregation on :30000); enables DeepSeek-V4 built-in MTP on decode via spec-decoding: mtp, same enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp"
-    - "Topologies: 1P1D pure-TP8/EP1 (conc 1-128) at DECODE_MTP_SIZE=2; 1P1D DEP8 (TP8/EP8 + dp-attention) conc 256 and conc 512 at DECODE_MTP_SIZE=1"
+    - "Topologies: 1P1D pure-TP8/EP1 (conc 1-128); 1P1D DEP8 (TP8/EP8 + dp-attention) conc 256 and conc 512. All arms at DECODE_MTP_SIZE=1 (draft depth 1)"
+    - "Draft depth 1 on all arms: depth 2 was tried on the pure-TP8/EP1 arm but this 20260701 build's 2-step EAGLE verification is lossy (greedy gsm8k ~0.85, below the 0.91 dsv4 floor), while depth 1 is lossless (~0.96, matching the spec-none base); accepted depth-2 tokens diverge from the target so their throughput is not meaningful"
     - "Recipe fix: adds mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to the DeepSeek-V4-Pro-DI models.yaml entry (the key non-agentic disagg resolves to). Without it, DECODE_MTP_SIZE>0 made build_server_config emit --speculative-num-steps/--speculative-num-draft-tokens with no --speculative-algorithm, so sglang never enabled spec decoding and MTP arms ran identical plain-autoregressive decode to the spec-none base. No-op for the spec-none base scenario (DECODE_MTP_SIZE=0). Uses the EAGLE spec path with eagle-topk 1 (in-checkpoint draft, no draft-model-path), matching the sglang dsv4 recipes; NEXTN (the V3/R1 keyword) crashes the dsv4 decode server at init"
     - "MTP CUDA-graph fix sgl-project/sglang#26383 (merged 2026-05-27) is present in the pinned 20260701 nightly"
   pr-link: XXX
