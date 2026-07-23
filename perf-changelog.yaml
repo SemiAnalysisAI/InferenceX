@@ -5060,3 +5060,13 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Upgrade Dynamo from 1.3.0.dev1 to 1.3.0.dev20260718 so router queueing is disabled by default at high concurrency"
+    - "Pin AIPerf to PR #17 (6c84373b) and migrate AgentX session affinity from nvext.session_control to X-Dynamo-Session-ID headers with a 3600-second router TTL"
+    - "Remove the DYN_ROUTER_TEMPERATURE=10000000 override and restore Dynamo's deterministic 0.0 default"
+    - "Upgrade SGLang from nightly-dev-cu13-20260711-7de33ce8 to nightly-dev-cu13-20260719-99f5a6f4, the latest nightly before the scheduler WAR-barrier regression in SGLang #31687"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

@@ -7882,13 +7882,13 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
+  image: lmsysorg/sglang:nightly-dev-cu13-20260719-99f5a6f4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260718" }
   multinode: true
   disagg: false
   scenarios:
@@ -7916,13 +7916,13 @@ dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
           dp-attn: false
 
 dsv4-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
+  image: lmsysorg/sglang:nightly-dev-cu13-20260719-99f5a6f4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260718" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
