@@ -5067,7 +5067,7 @@
     - fixed-seq-len
   description:
     - "Add MiniMax-M3 NVFP4 single-node vLLM benchmarking on the 8x RTX PRO 6000 Blackwell Latitude runner"
-    - "Start with a GPU-resident TP8 8k/1k concurrency-1 canary using FP8 KV cache, MSA block size 128, and NCCL collectives for the PCIe-only topology"
+    - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both GPU-resident TP8 and DEP8 (DP attention with expert parallelism), using FP8 KV cache, MSA block size 128, and NCCL collectives for the PCIe-only topology"
     - "Pin the CUDA 13.0.1 MiniMax-M3 performance image by digest and force the non-FlashInfer Marlin MoE backend on SM120"
     - "Apply the narrow vLLM adapter fixes tracked by upstream PRs #45836 and #48929 so Marlin preserves MiniMax-M3's SwiGLU clamp, alpha, and beta; documented by docs/waiver/2306.md"
     - "Use Triton attention because MiniMax-M3 requires block size 128, which the image's default SM120 FlashInfer attention backend does not accept"

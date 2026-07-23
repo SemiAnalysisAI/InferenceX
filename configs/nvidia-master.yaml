@@ -7362,7 +7362,8 @@ minimaxm3-fp4-rtx6000pro-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-list: [1] }
+      - { tp: 8, conc-list: [1, 4, 16, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, conc-list: [1, 4, 16, 64] }
 
 # MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM — FP4 variant
 # of minimaxm3-fp8-b300-vllm. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm
