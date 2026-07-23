@@ -5032,6 +5032,13 @@
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
   
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Set the vLLM ROCm image to the immutable vllm/vllm-openai-rocm:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 build (the latest official ROCm nightly, commit-pinned), which ships the AITER MXFP4 MoE bump (>= v0.1.16.post5 from vllm-project/vllm#48683) including the ROCm/aiter#3832 gfx950 MXFP4 MoE backend"
+    - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
+    - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic-mtp
