@@ -48,7 +48,7 @@ mkdir -p "$RESULT_DIR"
 OFFLOAD_ARGS=(--no-enable-prefix-caching)
 
 case "$KV_OFFLOAD_BACKEND" in
-    native)
+    vllm-simple)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
