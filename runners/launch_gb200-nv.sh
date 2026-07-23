@@ -156,11 +156,15 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # The FP4 checkpoint is staged on compute-visible Lustre. The former
-        # /mnt/numa1 path is no longer present on watchtower compute nodes;
-        # the lowercase Lustre sibling is the FP8 checkpoint, so keep the
-        # NVFP4 path explicit here.
-        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4/"
+        # FP4 checkpoint on compute-visible Lustre (the /mnt/numa1 path is gone
+        # on watchtower compute nodes). Use the base DeepSeek-V4-Pro checkpoint,
+        # NOT the -NVFP4 re-quant: the recipe's served identity is plain
+        # deepseek-ai/DeepSeek-V4-Pro and the pinned v0.20.1 container's
+        # deepseek_v4 loader doesn't define the NVFP4 export's extra quant
+        # params (e.g. ffn.experts.w13_input_scale), which KeyErrors at load.
+        # The lowercase Lustre sibling is the FP8 checkpoint, so name the
+        # CamelCase FP4 path explicitly (Linux is case-sensitive).
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
@@ -184,8 +188,12 @@ NGINX_IMAGE="nginx:1.27.4"
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
         minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
-        *) return 1 ;;
     esac
+    # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
+    # needs the srt-slurm workspace/outputs on a compute-visible shared FS
+    # (the runner home is not cross-mounted to compute nodes).
+    [[ "$FRAMEWORK" == "dynamo-vllm" && "$MODEL_PREFIX" == "dsv4" ]] && return 0
+    return 1
 }
 
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
