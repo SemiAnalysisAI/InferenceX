@@ -7348,6 +7348,22 @@ minimaxm3-fp8-b300-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
 
+# MiniMax-M3 NVFP4 single-node vLLM bring-up on 8x RTX PRO 6000.
+minimaxm3-fp4-rtx6000pro-vllm:
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41@sha256:6af4be7ae69a5f424de85b3d514ac79778bdcf4a9d05f93ec908a4095e0f1253
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: rtx6000pro-lat
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-list: [1] }
+
 # MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM — FP4 variant
 # of minimaxm3-fp8-b300-vllm. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm
 # PR #46380) is baked into the perf container image, so no runtime patch is

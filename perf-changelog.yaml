@@ -5060,3 +5060,13 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - minimaxm3-fp4-rtx6000pro-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add MiniMax-M3 NVFP4 single-node vLLM benchmarking on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Start with a GPU-resident TP8 8k/1k concurrency-1 canary using FP8 KV cache, MSA block size 128, and NCCL collectives for the PCIe-only topology"
+    - "Pin the CUDA 13.0.1 MiniMax-M3 performance image by digest; it includes MiniMax-M3 ModelOpt NVFP4 support and SM120/121 FlashInfer FP4 kernels"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
