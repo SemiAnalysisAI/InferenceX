@@ -5070,4 +5070,4 @@
     - "启用 EAGLE 投机解码，并为基准测试请求使用聊天模板"
     - "Use the writable /data/models/GLM-5.1-FP8 cache when the model is not pre-staged"
     - "模型未预置时，使用可写的 /data/models/GLM-5.1-FP8 缓存"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2321
