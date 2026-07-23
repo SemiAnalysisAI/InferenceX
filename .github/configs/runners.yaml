@@ -138,7 +138,6 @@ mi355x:
 - 'mi355x-amds_07'
 - 'mi355x-amds_08'
 mi355x-disagg:
-- 'mi355x-amds_06'
 - 'mi355x-amds_07'
 - 'mi355x-amds_08'
 gb200:

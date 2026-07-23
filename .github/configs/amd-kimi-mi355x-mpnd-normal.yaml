@@ -1,0 +1,78 @@
+kimik2.5-fp4-mi355x-vllm-disagg-mpnd-normal:
+  # Single-point bring-up for the MI355X Kimi MPND curve.
+  # Keep only one active matrix entry while MoRIIO+vLLM stability is being
+  # debugged; the wider 8k/1k curve is recorded in the disagg roadmap.
+  image: vllm/vllm-openai-rocm:nightly
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # conc=16: low-concurrency decode replication, pure TP baseline.
+      - spec-decoding: "none"
+        conc-list: [ 16 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+
+      # conc=64: prefill DTP4 (DP-attn + TP, no EP) with replicated TP8 decode.
+      # Trigger separately while debugging DP-attn-prefill -> TP-decode metadata.
+      - spec-decoding: "none"
+        conc-list: [ 64 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+
+      # conc=128: keep the same validated 1P2D heterogeneous TP shape and
+      # increase pressure before moving to 1P4D / 2P2D.
+      - spec-decoding: "none"
+        conc-list: [ 128 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"

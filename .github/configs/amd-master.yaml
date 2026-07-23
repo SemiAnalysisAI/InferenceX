@@ -1313,7 +1313,8 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  # Use the latest ROCm vLLM nightly while validating DP-attention + MoRIIO.
+  image: vllm/vllm-openai-rocm:nightly
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1326,28 +1327,49 @@ kimik2.5-fp4-mi355x-vllm-disagg:
     - isl: 1024
       osl: 1024
       search-space:
-      # 1P2D: 1 prefill node (co-located with proxy) + 2 decode nodes = 3 nodes total 
+      # Debug-only: run DP-attn + EP against the latest vLLM nightly.
+      # dp-attn:true makes server_vllm.sh rewrite TP8 -> DP8+TP1 and drop fp8 KV.
       - spec-decoding: "none"
-        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        conc-list: [ 256 ]
         prefill:
           num-worker: 1
           tp: 8
-          ep: 1
-          dp-attn: false
+          ep: 8
+          dp-attn: true
           additional-settings:
           - "PREFILL_NODES=1"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
-          num-worker: 2
+          num-worker: 1
           tp: 8
           ep: 8
-          dp-attn: false
+          dp-attn: true
           additional-settings:
-          - "DECODE_NODES=2"
+          - "DECODE_NODES=1"
 
     - isl: 8192
       osl: 1024
       search-space:
+      # NP:MD sweep. 8k1k is prefill-heavy, so also sweep 2P1D (more prefill).
+      # 1P1D
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+      # 1P2D
       - spec-decoding: "none"
         conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
         prefill:
@@ -1365,6 +1387,44 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
+      # 2P1D
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+      # DP-attn 1P1D (high-conc: DP+EP beats TP8 at >=512 per ROCm guidance).
+      # dp-attn:true makes server_vllm.sh rewrite TP8 -> DP8+TP1 and drop fp8 KV
+      # (the fp8 DP-attn qh64 MLA kernel faults at capture on MI355X).
+      - spec-decoding: "none"
+        conc-list: [ 256, 512, 1024 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
 
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519

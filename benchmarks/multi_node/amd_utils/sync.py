@@ -143,10 +143,12 @@ def cmd_barrier(args):
             time.sleep(30)
 
     if args.enable_port:
-        # Keep the port open long enough for slow nodes to pass their barrier.
-        # The previous 30s was too short when setup times vary by minutes.
-        grace = max(60, args.timeout // 2) if args.timeout > 0 else 300
-        time.sleep(grace)
+        # Once every node has observed the full barrier, peers only need a short
+        # overlap window to finish their current poll cycle. Keeping the port
+        # open for timeout/2 delays all ranks before server launch.
+        grace = int(getattr(args, "close_grace", 10))
+        if grace > 0:
+            time.sleep(grace)
         close_port()
 
 
@@ -179,6 +181,8 @@ def main():
     bp.add_argument("--node-ports", required=True, help="Comma-separated list of ports to check.")
     bp.add_argument("--timeout", type=int, default=600,
                     help="Timeout in seconds (default: 600). Set to 0 for no timeout.")
+    bp.add_argument("--close-grace", type=int, default=10,
+                    help="Seconds to keep the local barrier port open after success.")
     bp.add_argument("--wait-for-all-ports", action="store_true",
                     help="Wait until all node ports are open (TCP).")
     bp.add_argument("--wait-for-all-health", action="store_true",

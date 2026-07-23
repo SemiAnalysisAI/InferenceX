@@ -168,14 +168,44 @@ fi
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
+if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--all2all-backend'; then
+    PREFILL_SERVER_CONFIG+=" --all2all-backend mori_high_throughput"
+fi
+if [[ "${PREFILL_ENABLE_EP:-false}" != "true" ]]; then
+    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/[[:space:]]*--enable-expert-parallel//g; s/[[:space:]]*--all2all-backend[[:space:]]+[^[:space:]]+//g")
+fi
+# vLLM DP-attention: convert "TP n" -> "DP n + TP 1" (one DP rank per GPU; MLA
+# attention runs data-parallel, MoE stays expert-parallel via
+# --enable-expert-parallel). vLLM has no --enable-dp-attention (that is SGLang);
+# it uses --data-parallel-size. Also strip fp8 KV: the fp8-KV DP-attn (qh64)
+# AITER MLA decode kernel (mla_a8w8_qh64_*) faults at cudagraph capture on MI355X,
+# so DP-attention runs auto/bf16 KV.
+if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--data-parallel-size'; then
+    _pdp="${PREFILL_TP_SIZE:-8}"
+    if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--data-parallel-size ${_pdp} --tensor-parallel-size 1/")
+    else
+        PREFILL_SERVER_CONFIG+=" --data-parallel-size ${_pdp} --tensor-parallel-size 1"
+    fi
+    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/[[:space:]]*--kv-cache-dtype[[:space:]]+fp8//")
 fi
 if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    DECODE_SERVER_CONFIG+=" --enable-dp-attention"
+if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--all2all-backend'; then
+    DECODE_SERVER_CONFIG+=" --all2all-backend mori_high_throughput"
+fi
+if [[ "${DECODE_ENABLE_EP:-false}" != "true" ]]; then
+    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/[[:space:]]*--enable-expert-parallel//g; s/[[:space:]]*--all2all-backend[[:space:]]+[^[:space:]]+//g")
+fi
+if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--data-parallel-size'; then
+    _ddp="${DECODE_TP_SIZE:-8}"
+    if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--data-parallel-size ${_ddp} --tensor-parallel-size 1/")
+    else
+        DECODE_SERVER_CONFIG+=" --data-parallel-size ${_ddp} --tensor-parallel-size 1"
+    fi
+    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/[[:space:]]*--kv-cache-dtype[[:space:]]+fp8//")
 fi
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
@@ -217,10 +247,77 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
+# vLLM nightly no longer honors the legacy VLLM_MORIIO_* environment variables
+# directly; pass MoRIIO runtime knobs through kv_connector_extra_config.
+make_moriio_kv_transfer_config() {
+    local kv_role="$1"
+    MORIIO_KV_ROLE="$kv_role" python3 - <<'PY'
+import json
+import os
+
+
+def _bool_env(name: str, default: str = "1") -> bool:
+    return str(os.environ.get(name, default)).strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _int_env(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    return default if value in (None, "") else int(value)
+
+
+def _float_env(name: str, default: float) -> float:
+    value = os.environ.get(name)
+    return default if value in (None, "") else float(value)
+
+
+extra_config = {
+    "proxy_ip": os.environ["NODE0_ADDR"],
+    "proxy_ping_port": str(os.environ.get("PROXY_PING_PORT", "36367")),
+    "http_port": str(os.environ.get("SERVER_PORT", "2584")),
+    "handshake_port": _int_env("VLLM_MORIIO_HANDSHAKE_PORT", 6301),
+    "notify_port": _int_env("VLLM_MORIIO_NOTIFY_PORT", 61005),
+    "read_mode": _bool_env("VLLM_MORIIO_CONNECTOR_READ_MODE", "1"),
+    "transfer_timeout": _float_env("VLLM_MORIIO_TRANSFER_TIMEOUT", 120.0),
+    "defer_timeout": _float_env("VLLM_MORIIO_DEFER_TIMEOUT", 120.0),
+    "qp_per_transfer": _int_env("VLLM_MORIIO_QP_PER_TRANSFER", 4),
+    "post_batch_size": _int_env("VLLM_MORIIO_POST_BATCH_SIZE", -1),
+    "num_workers": _int_env("VLLM_MORIIO_NUM_WORKERS", 4),
+}
+
+backend = os.environ.get("VLLM_MORIIO_BACKEND")
+if backend:
+    extra_config["backend"] = backend
+
+host_ip = os.environ.get("VLLM_MORIIO_HOST_IP")
+if host_ip:
+    extra_config["host_ip"] = host_ip
+
+print(
+    json.dumps(
+        {
+            "kv_connector": "MoRIIOConnector",
+            "kv_role": os.environ["MORIIO_KV_ROLE"],
+            "kv_connector_extra_config": extra_config,
+        },
+        separators=(",", ":"),
+    )
+)
+PY
+}
+
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
     export VLLM_NIXL_SIDE_CHANNEL_PORT=5600
+    # MoRIIO uses this address for service discovery and RDMA handshakes.
+    # Prefer the routable RDMA IP; the management IP can register successfully
+    # but later fail or hang during cross-node KV transfer.
+    export VLLM_MORIIO_HOST_IP="${VLLM_MORIIO_HOST_IP:-${rdma_ip}}"
     for env_pair in ${MODEL_ENVS}; do
         export "$env_pair"
     done
@@ -252,11 +349,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Using external vllm-router container (started by job.slurm on this node)"
 
     SERVED_MODEL="${MODEL_NAME}"
+    PREFILL_KV_TRANSFER_CONFIG="$(make_moriio_kv_transfer_config kv_producer)"
+    echo "PREFILL_KV_TRANSFER_CONFIG: $PREFILL_KV_TRANSFER_CONFIG"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '${PREFILL_KV_TRANSFER_CONFIG}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -273,11 +372,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
     else
-        python3 $WS_PATH/sync.py barrier \
+        if ! python3 $WS_PATH/sync.py barrier \
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout 1800; then
+            echo "ERROR: prefill/decode server ports did not become ready within timeout" >&2
+            exit 1
+        fi
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -293,7 +395,56 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
-        eval "$HEALTH_BARRIER_CMD"
+        if ! eval "$HEALTH_BARRIER_CMD"; then
+            echo "ERROR: router health endpoint did not become ready within timeout" >&2
+            exit 1
+        fi
+        echo "MoRI-IO proxy health endpoint is up"
+
+        ROUTER_READY_PROMPT="${ROUTER_READY_PROMPT:-}"
+        ROUTER_READY_MAX_TOKENS="${ROUTER_READY_MAX_TOKENS:-}"
+        if [[ -z "$ROUTER_READY_PROMPT" ]]; then
+            if [[ "$MODEL_NAME" == "Kimi-K2.5-MXFP4" ]]; then
+                # Kimi's MoRIIO PD path can leave a 1-token readiness request
+                # without decode-side block allocation. Use a short real prompt
+                # that exercises the same transfer path as throughput runs.
+                ROUTER_READY_PROMPT="$(printf 'ping %.0s' {1..256})"
+                ROUTER_READY_MAX_TOKENS="${ROUTER_READY_MAX_TOKENS:-4}"
+            else
+                ROUTER_READY_PROMPT="ping"
+                ROUTER_READY_MAX_TOKENS="${ROUTER_READY_MAX_TOKENS:-1}"
+            fi
+        fi
+        ROUTER_READY_MAX_TOKENS="${ROUTER_READY_MAX_TOKENS:-1}"
+        ROUTER_READY_PAYLOAD="$(python3 - <<PY
+import json
+print(json.dumps({
+    "model": "${SERVED_MODEL}",
+    "prompt": ${ROUTER_READY_PROMPT@Q},
+    "max_tokens": int("${ROUTER_READY_MAX_TOKENS}"),
+    "temperature": 0,
+}))
+PY
+)"
+        ROUTER_READY=false
+        for _attempt in $(seq 1 30); do
+            rm -f /tmp/vllm_router_ready.json
+            if curl -sf --max-time 60 \
+                -H 'Content-Type: application/json' \
+                -d "$ROUTER_READY_PAYLOAD" \
+                "http://0.0.0.0:${ROUTER_PORT}/v1/completions" >/tmp/vllm_router_ready.json; then
+                ROUTER_READY=true
+                break
+            fi
+            echo "Router completion readiness attempt ${_attempt} failed; retrying in 10s..."
+            cat /tmp/vllm_router_ready.json 2>/dev/null || true
+            sleep 10
+        done
+        if [[ "$ROUTER_READY" != "true" ]]; then
+            echo "ERROR: router is healthy but did not route a test completion to prefill/decode workers" >&2
+            cat /tmp/vllm_router_ready.json 2>/dev/null || true
+            exit 1
+        fi
         echo "MoRI-IO proxy is ready for benchmarking"
     fi
 
@@ -302,7 +453,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
+    PREFILL_BENCH_GPUS=$((PREFILL_TP_SIZE * xP))
+    DECODE_BENCH_GPUS=$((DECODE_TP_SIZE * yD))
+    echo "Benchmark GPU accounting: prefill=${PREFILL_BENCH_GPUS} decode=${DECODE_BENCH_GPUS} (TP-sized workers)"
+    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} ${PREFILL_BENCH_GPUS} ${DECODE_BENCH_GPUS} \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
@@ -418,11 +572,13 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     setup_vllm_env
 
     SERVED_MODEL="${MODEL_NAME}"
+    PREFILL_KV_TRANSFER_CONFIG="$(make_moriio_kv_transfer_config kv_producer)"
+    echo "PREFILL_KV_TRANSFER_CONFIG: $PREFILL_KV_TRANSFER_CONFIG"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '${PREFILL_KV_TRANSFER_CONFIG}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -474,11 +630,13 @@ else
     done
 
     SERVED_MODEL="${MODEL_NAME}"
+    DECODE_KV_TRANSFER_CONFIG="$(make_moriio_kv_transfer_config kv_consumer)"
+    echo "DECODE_KV_TRANSFER_CONFIG: $DECODE_KV_TRANSFER_CONFIG"
     DECODE_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '${DECODE_KV_TRANSFER_CONFIG}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then

@@ -57,6 +57,11 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export VLLM_SERVER_DEV_MODE=0
     export VLLM_DISABLE_REQUEST_ID_RANDOMIZATION=1
 
+    # MI355X is gfx950.  The vLLM ROCm image can default MoRI JIT to
+    # "gfx942;gfx950"; MoRI picks the first entry for shmem kernels, producing
+    # gfx942 hsaco that fails to load on MI355X during DP-attn+EP startup.
+    export MORI_GPU_ARCHS="${MORI_GPU_ARCHS:-gfx950}"
+
     set -x
 
     # UCX_NET_DEVICES: Use the first tw-eth interface for UCX TCP transport
@@ -116,7 +121,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     fi
 
     set +x
-    echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
+    echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}  MORI_GPU_ARCHS=${MORI_GPU_ARCHS:-unset}"
 
 else
     # =========================================================================

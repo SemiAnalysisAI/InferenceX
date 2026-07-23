@@ -316,7 +316,7 @@ SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
 # vLLM external router container
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260511-e667ebb}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
@@ -392,6 +392,9 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     DOCKER_ENV_ENGINE=(
         -e VLLM_WS_PATH=${WS_PATH}
         -e MODEL_PATH=$DOCKER_MODEL_PATH
+        -e ROUTER_PORT=${ROUTER_PORT:-30000}
+        -e PROXY_PING_PORT=${PROXY_PING_PORT:-36367}
+        -e SERVER_PORT=${SERVER_PORT:-2584}
         -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
         -e UCX_SOCKADDR_TLS_PRIORITY=tcp
         -e UCX_MEMTYPE_CACHE=y
@@ -400,8 +403,18 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e UCX_ROCM_IPC_MIN_ZCOPY=0
         -e UCX_LOG_LEVEL=warn
         -e HSA_ENABLE_SDMA=1
+        -e MORI_GPU_ARCHS=\${MORI_GPU_ARCHS:-gfx950}
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
         -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
+        -e VLLM_MORIIO_HANDSHAKE_PORT=\${VLLM_MORIIO_HANDSHAKE_PORT:-6301}
+        -e VLLM_MORIIO_NOTIFY_PORT=\${VLLM_MORIIO_NOTIFY_PORT:-61005}
+        -e VLLM_MORIIO_TRANSFER_TIMEOUT=\${VLLM_MORIIO_TRANSFER_TIMEOUT:-120}
+        -e VLLM_MORIIO_DEFER_TIMEOUT=\${VLLM_MORIIO_DEFER_TIMEOUT:-120}
+        -e VLLM_MORIIO_QP_PER_TRANSFER=\${VLLM_MORIIO_QP_PER_TRANSFER:-4}
+        -e VLLM_MORIIO_POST_BATCH_SIZE=\${VLLM_MORIIO_POST_BATCH_SIZE:--1}
+        -e VLLM_MORIIO_NUM_WORKERS=\${VLLM_MORIIO_NUM_WORKERS:-4}
+        -e VLLM_MORIIO_BACKEND=\${VLLM_MORIIO_BACKEND:-}
+        -e VLLM_MORIIO_HOST_IP=\${VLLM_MORIIO_HOST_IP:-}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
@@ -440,6 +453,19 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 # Per-node docker privilege detection
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
+
+# Role-local GPU visibility. The allocation can still be whole-node, but MPND
+# prefill workers such as TP4 should only see four GPUs inside the container.
+_ROLE_TP_SIZE=\"\$DECODE_TP_SIZE\"
+if (( SLURM_PROCID < xP )); then
+    _ROLE_TP_SIZE=\"\$PREFILL_TP_SIZE\"
+fi
+if (( _ROLE_TP_SIZE < 1 || _ROLE_TP_SIZE > GPUS_PER_NODE )); then
+    echo \"ERROR: role TP size \$_ROLE_TP_SIZE must be in [1, \$GPUS_PER_NODE] on \$(hostname)\" >&2
+    exit 1
+fi
+_ROLE_VISIBLE_DEVICES=\"\$(seq -s, 0 \$(( _ROLE_TP_SIZE - 1 )))\"
+echo \"[gpu-visible] rank=\$SLURM_PROCID role_tp_size=\$_ROLE_TP_SIZE visible_devices=\$_ROLE_VISIBLE_DEVICES\"
 
 # Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
 RDMA_MOUNTS=()
@@ -537,6 +563,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
             --port ${ROUTER_PORT} \
             --host 0.0.0.0 \
+            --prometheus-port ${ROUTER_PROMETHEUS_PORT:-$((ROUTER_PORT + 7000))} \
             --policy consistent_hash \
             --prefill-policy consistent_hash \
             --decode-policy consistent_hash \
@@ -587,11 +614,16 @@ fi
     \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
+    -e HIP_VISIBLE_DEVICES=\"\$_ROLE_VISIBLE_DEVICES\" \
+    -e ROCR_VISIBLE_DEVICES=\"\$_ROLE_VISIBLE_DEVICES\" \
+    -e CUDA_VISIBLE_DEVICES=\"\$_ROLE_VISIBLE_DEVICES\" \
     --name \"$DOCKER_CONT_NAME\" \
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         set -o pipefail
-        mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        mkdir -p /benchmark_logs/logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        rm -rf /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        ln -s /benchmark_logs/logs/slurm_job-'\"\$SLURM_JOB_ID\"' /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 

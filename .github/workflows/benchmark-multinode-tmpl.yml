@@ -184,6 +184,19 @@ jobs:
             done
           fi
 
+      - name: Workspace cleanup (pre-checkout)
+        run: |
+          # Self-hosted runners keep workspaces across jobs. Previous Docker
+          # or Slurm runs can leave root-owned files that make checkout's
+          # clean step fail before repo scripts are available.
+          sudo rm -rf "$GITHUB_WORKSPACE/LOGS" || true
+          sudo rm -rf "$GITHUB_WORKSPACE/benchmark_logs" || true
+          sudo rm -rf "$GITHUB_WORKSPACE/benchmark_artifacts" || true
+          sudo rm -f "$GITHUB_WORKSPACE"/results*.json || true
+          sudo rm -f "$GITHUB_WORKSPACE"/samples*.jsonl || true
+          sudo rm -f "$GITHUB_WORKSPACE"/meta_env.json || true
+          sudo chown -R "$USER":"$USER" "$GITHUB_WORKSPACE" || true
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
@@ -277,6 +290,14 @@ jobs:
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           path: multinode_server_logs.tar.gz
+          if-no-files-found: ignore
+
+      - name: Upload Slurm logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: multinode_slurm_logs_${{ env.RESULT_FILENAME }}
+          path: benchmark_artifacts/slurm_job-*.*
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result

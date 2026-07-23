@@ -60,6 +60,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
             mkdir -p "$art_dir"
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+            if [[ -d "$BENCHMARK_LOGS_DIR/logs" ]]; then
+                sudo tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$BENCHMARK_LOGS_DIR/logs" . 2>/dev/null || true
+            elif [[ -d "$BENCHMARK_LOGS_DIR" ]]; then
+                sudo tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                    -C "$BENCHMARK_LOGS_DIR" . 2>/dev/null || true
+            fi
+            sudo chown "$(id -u)":"$(id -g)" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" 2>/dev/null || true
         fi
         # Print .err inline so failures are visible in CI output
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
@@ -172,8 +180,11 @@ PY
             shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
                 [ -f "$eval_file" ] || continue
-                cp "$eval_file" "$GITHUB_WORKSPACE/"
-                echo "Copied eval artifact: $(basename "$eval_file")"
+                if cp "$eval_file" "$GITHUB_WORKSPACE/"; then
+                    echo "Copied eval artifact: $(basename "$eval_file")"
+                else
+                    echo "WARN: failed to copy eval artifact: $eval_file" >&2
+                fi
             done
             shopt -u nullglob
         else
