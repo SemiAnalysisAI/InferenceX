@@ -171,18 +171,285 @@ fi
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
-fi
 if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    DECODE_SERVER_CONFIG+=" --enable-dp-attention"
+
+# DEP8 on ROCm vLLM (mori-0625): TP1 + data-parallel-size + EP, not --enable-dp-attention
+# (same as benchmarks/single_node/fixed_seq_len/minimaxm3_fp4_mi355x_vllm.sh).
+apply_vllm_dp_config() {
+    local cfg="$1"
+    local tp_size="$2"
+    local enable_dp="${3:-false}"
+
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--enable-dp-attention//g')
+    cfg=$(echo "$cfg" | sed -E 's/[[:space:]]*--data-parallel-size[[:space:]]+[0-9]+//g')
+
+    if [[ "$enable_dp" != "true" ]]; then
+        echo "$cfg"
+        return
+    fi
+
+    if echo "$cfg" | grep -q -- '--tensor-parallel-size'; then
+        echo "$cfg" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size 1 --data-parallel-size ${tp_size}/"
+    else
+        echo "$cfg --tensor-parallel-size 1 --data-parallel-size ${tp_size}"
+    fi
+}
+
+PREFILL_SERVER_CONFIG="$(apply_vllm_dp_config "$PREFILL_SERVER_CONFIG" "${PREFILL_TP_SIZE:-8}" "${PREFILL_ENABLE_DP:-false}")"
+DECODE_SERVER_CONFIG="$(apply_vllm_dp_config "$DECODE_SERVER_CONFIG" "${DECODE_TP_SIZE:-8}" "${DECODE_ENABLE_DP:-false}")"
+
+apply_gpu_memory_utilization() {
+    local cfg="$1"
+    local gmu="${GPU_MEMORY_UTILIZATION:-}"
+    if [[ -z "$gmu" ]]; then
+        echo "$cfg"
+        return
+    fi
+    if echo "$cfg" | grep -q -- '--gpu-memory-utilization'; then
+        echo "$cfg" | sed -E "s/--gpu-memory-utilization[[:space:]]+[0-9.]+/--gpu-memory-utilization ${gmu}/g"
+    else
+        echo "$cfg --gpu-memory-utilization ${gmu}"
+    fi
+}
+
+if [[ -n "${GPU_MEMORY_UTILIZATION:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_gpu_memory_utilization "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_gpu_memory_utilization "$DECODE_SERVER_CONFIG")"
+    echo "Applied GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION}"
 fi
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
+
+apply_max_model_len() {
+    local cfg="$1"
+    if [[ -n "${MAX_MODEL_LEN:-}" && "${MAX_MODEL_LEN}" != "0" ]]; then
+        if echo "$cfg" | grep -q -- '--max-model-len'; then
+            echo "$cfg" | sed -E "s/--max-model-len[[:space:]]+[0-9]+/--max-model-len ${MAX_MODEL_LEN}/g"
+        else
+            echo "$cfg --max-model-len ${MAX_MODEL_LEN}"
+        fi
+    else
+        echo "$cfg"
+    fi
+}
+
+enable_prefix_caching=false
+if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+    enable_prefix_caching=true
+fi
+if [[ "${ENABLE_PREFIX_CACHING:-0}" == "1" || "${ENABLE_PREFIX_CACHING:-}" == "true" ]]; then
+    enable_prefix_caching=true
+fi
+if [[ "$enable_prefix_caching" == "true" ]]; then
+    PREFILL_SERVER_CONFIG="${PREFILL_SERVER_CONFIG//--no-enable-prefix-caching/--enable-prefix-caching}"
+    DECODE_SERVER_CONFIG="${DECODE_SERVER_CONFIG//--no-enable-prefix-caching/--enable-prefix-caching}"
+fi
+if [[ -n "${MAX_MODEL_LEN:-}" && "${MAX_MODEL_LEN}" != "0" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_max_model_len "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_max_model_len "$DECODE_SERVER_CONFIG")"
+    echo "Applied MAX_MODEL_LEN=${MAX_MODEL_LEN}"
+fi
+if [[ "$enable_prefix_caching" == "true" || -n "${MAX_MODEL_LEN:-}" ]]; then
+    echo "PREFILL_SERVER_CONFIG (overrides): $PREFILL_SERVER_CONFIG"
+    echo "DECODE_SERVER_CONFIG (overrides): $DECODE_SERVER_CONFIG"
+fi
+
+install_mooncake_rocm() {
+    local mooncake_tag="v0.3.11.post1"
+    local mooncake_src="/tmp/Mooncake-$mooncake_tag"
+    local mooncake_stage="/tmp/mooncake-stage-$mooncake_tag"
+    local build_jobs cache_root cache_key cache_archive cache_tmp engine_path
+    local os_version python_abi rocm_version
+
+    build_jobs=$(nproc)
+    if ((build_jobs > 32)); then
+        build_jobs=32
+    fi
+
+    os_version=$(. /etc/os-release && printf '%s-%s' "$ID" "$VERSION_ID")
+    python_abi=$(python3 -c 'import sys; print(f"cp{sys.version_info.major}{sys.version_info.minor}")')
+    rocm_version=$(sed -n '1p' /opt/rocm/.info/version 2>/dev/null || true)
+    if [[ -z "$rocm_version" ]]; then
+        rocm_version=$(hipconfig --version)
+    fi
+    rocm_version=${rocm_version//[^[:alnum:]._-]/_}
+    local hf_hub_cache="${HF_HUB_CACHE:-${MODEL_DIR}/.cache/huggingface/hub}"
+    cache_root="${hf_hub_cache}/inferencex/mooncake"
+    cache_key="${mooncake_tag}-${os_version}-${python_abi}-${rocm_version}-$(uname -m)-hip"
+    cache_archive="$cache_root/$cache_key.tar.gz"
+    mkdir -p "$cache_root"
+
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential cmake git libasio-dev libboost-dev libcurl4-openssl-dev \
+        libgflags-dev libgoogle-glog-dev libibverbs-dev libjsoncpp-dev \
+        libnuma-dev libpython3-dev libssl-dev libunwind-dev liburing-dev \
+        libxxhash-dev libyaml-cpp-dev libzstd-dev ninja-build pybind11-dev
+
+    exec 9>"$cache_archive.lock"
+    flock -w 1800 9
+    if [[ -f "$cache_archive" ]] && ! tar -tzf "$cache_archive" >/dev/null 2>&1; then
+        rm -f "$cache_archive"
+    fi
+    if [[ ! -f "$cache_archive" ]]; then
+        echo "[Mooncake] Building HIP cache artifact: $cache_archive"
+        rm -rf "$mooncake_src" "$mooncake_stage"
+        git clone --depth 1 --branch "$mooncake_tag" --recurse-submodules \
+            --shallow-submodules https://github.com/kvcache-ai/Mooncake.git "$mooncake_src"
+        cmake -S "$mooncake_src/extern/yalantinglibs" \
+            -B "$mooncake_src/extern/yalantinglibs/build" \
+            -DBUILD_EXAMPLES=OFF -DBUILD_BENCHMARK=OFF -DBUILD_UNIT_TESTS=OFF
+        cmake --build "$mooncake_src/extern/yalantinglibs/build" -j "$build_jobs"
+        cmake --install "$mooncake_src/extern/yalantinglibs/build"
+        cmake -S "$mooncake_src" -B "$mooncake_src/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=OFF -DUSE_HIP=ON \
+            -DWITH_EP=OFF -DWITH_STORE=ON -DWITH_STORE_RUST=OFF \
+            -DWITH_RUST_EXAMPLE=OFF -DBUILD_EXAMPLES=OFF -DBUILD_UNIT_TESTS=OFF
+        cmake --build "$mooncake_src/build" -j "$build_jobs"
+        mkdir -p "$mooncake_stage"
+        DESTDIR="$mooncake_stage" cmake --install "$mooncake_src/build"
+        cache_tmp=$(mktemp "$cache_root/$cache_key.tmp.XXXXXX")
+        tar -C "$mooncake_stage" -czf "$cache_tmp" .
+        mv -f "$cache_tmp" "$cache_archive"
+    else
+        echo "[Mooncake] Using HIP cache artifact: $cache_archive"
+    fi
+    tar -C / -xzf "$cache_archive"
+    engine_path=$(python3 -c 'import mooncake.engine; print(mooncake.engine.__file__)')
+    ldd "$engine_path" | grep -q 'libamdhip64.so'
+    exec 9>&-
+}
+
+# MiniMax-M3 agentic DRAM offload: per-node mooncake_master + MooncakeStoreConnector.
+# MoRIIOConnector still handles P/D transfer via vLLM MultiConnector.
+ensure_mooncake_kv_offload() {
+    local tp_size="$1"
+    if [[ "${KV_OFFLOADING:-none}" != "dram" || "${KV_OFFLOAD_BACKEND:-}" != "mooncake" ]]; then
+        return 0
+    fi
+    if [[ -n "${MOONCAKE_SETUP_DONE:-}" ]]; then
+        return 0
+    fi
+    if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: KV_OFFLOADING=dram with KV_OFFLOAD_BACKEND=mooncake requires positive TOTAL_CPU_DRAM_GB" >&2
+        exit 1
+    fi
+    if ! python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null 2>&1; then
+        install_mooncake_rocm
+    fi
+    python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+
+    local per_rank_gb=$((TOTAL_CPU_DRAM_GB / tp_size))
+    MOONCAKE_MASTER_PORT=$((SERVER_PORT + 12000))
+    MOONCAKE_CONFIG_PATH="/run_logs/slurm_job-${SLURM_JOB_ID}/mooncake_config_${host_name}.json"
+    mkdir -p "$(dirname "$MOONCAKE_CONFIG_PATH")"
+    cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:${MOONCAKE_MASTER_PORT}",
+  "global_segment_size": "${per_rank_gb}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "tcp",
+  "device_name": "",
+  "enable_offload": false
+}
+EOF
+    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576
+    export MC_TCP_ENABLE_CONNECTION_POOL=1
+
+    local transfer_batch_keys_log="off"
+    local mc_workers_log="default"
+    if [[ -n "${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}" ]]; then
+        export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-4}"
+        transfer_batch_keys_log="${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS}"
+        mc_workers_log="${MC_WORKERS_PER_CTX}"
+
+        MOONCAKE_BATCH_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_mooncake_transfer_batches.py"
+        if [[ ! -f "$MOONCAKE_BATCH_PATCH_SCRIPT" ]]; then
+            echo "ERROR: Mooncake transfer batch patch missing: $MOONCAKE_BATCH_PATCH_SCRIPT" >&2
+            exit 1
+        fi
+        python3 "$MOONCAKE_BATCH_PATCH_SCRIPT"
+    fi
+
+    local mooncake_master_cmd="mooncake_master --port ${MOONCAKE_MASTER_PORT} --default_kv_lease_ttl=120s --eviction_high_watermark_ratio=0.80 --eviction_ratio=0.10"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: $mooncake_master_cmd"
+    else
+        MOONCAKE_MASTER_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/mooncake_master_${host_name}.log"
+        $mooncake_master_cmd > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        kill -0 "$MOONCAKE_MASTER_PID"
+    fi
+
+    echo "Applied Mooncake DRAM KV offload on ${host_name}: TOTAL_CPU_DRAM_GB=${TOTAL_CPU_DRAM_GB} tp=${tp_size} per_rank=${per_rank_gb}GB master_port=${MOONCAKE_MASTER_PORT} transfer_batch_keys=${transfer_batch_keys_log} mc_workers_per_ctx=${mc_workers_log}"
+    MOONCAKE_SETUP_DONE=1
+}
+
+build_kv_transfer_config_json() {
+    local mori_role="$1"
+    if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
+        NODE0_ADDR="$NODE0_ADDR" PROXY_PING_PORT="$PROXY_PING_PORT" SERVER_PORT="$SERVER_PORT" \
+            MORI_KV_ROLE="$mori_role" python3 -c '
+import json, os
+
+mori_extra = {
+    "proxy_ip": os.environ["NODE0_ADDR"],
+    "proxy_ping_port": os.environ["PROXY_PING_PORT"],
+    "http_port": os.environ["SERVER_PORT"],
+    "read_mode": True,
+}
+print(json.dumps({
+    "kv_connector": "MultiConnector",
+    "kv_role": "kv_both",
+    "kv_connector_extra_config": {
+        "connectors": [
+            {
+                "kv_connector": "MoRIIOConnector",
+                "kv_role": os.environ["MORI_KV_ROLE"],
+                "kv_load_failure_policy": "fail",
+                "kv_connector_extra_config": mori_extra,
+            },
+            {
+                "kv_connector": "MooncakeStoreConnector",
+                "kv_role": "kv_both",
+                "kv_connector_extra_config": {
+                    "load_async": True,
+                    "lookup_async": True,
+                },
+            },
+        ],
+    },
+}))
+'
+        return
+    fi
+
+    cat <<EOF
+{"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "read_mode": true}}
+EOF
+}
+
+if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "native" ]]; then
+    echo "ERROR: KV_OFFLOAD_BACKEND=native is not supported for vLLM disagg (use mooncake for MiniMax-M3 agentic DRAM offload)" >&2
+    exit 1
+fi
+
+# vLLM #46240: skip stale KV xfer completions instead of assert-killing EngineCore.
+# https://github.com/vllm-project/vllm/issues/46240
+if [[ "${VLLM_PATCH_46240:-${KV_OFFLOADING:-none}}" == "dram" || "${VLLM_PATCH_46240:-}" == "1" ]]; then
+    PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_46240_scheduler_patch.py"
+    if [[ ! -f "$PATCH_SCRIPT" ]]; then
+        echo "ERROR: VLLM_PATCH_46240 enabled but missing $PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$PATCH_SCRIPT"
+fi
 
 # =============================================================================
 # Container Synchronization
@@ -217,6 +484,23 @@ done
 echo "Prefill node IPs: ${PREFILL_ARGS}"
 echo "Decode  node IPs: ${DECODE_ARGS}"
 
+# Per-worker Prometheus /metrics and cache-flush base URLs for agentic replay.
+# vLLM workers listen on SERVER_PORT; the vllm-router on ROUTER_PORT does not
+# expose Prometheus or fan out cache resets.
+SERVER_METRICS_URLS=()
+SERVER_FLUSH_URLS=()
+for ((i=0; i<xP && i<${#IP_ARRAY[@]}; i++)); do
+    SERVER_METRICS_URLS+=("http://${IP_ARRAY[$i]}:${SERVER_PORT}/metrics")
+    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$i]}:${SERVER_PORT}")
+done
+for ((i=0; i<yD; i++)); do
+    idx=$((xP + i))
+    if (( idx < ${#IP_ARRAY[@]} )); then
+        SERVER_METRICS_URLS+=("http://${IP_ARRAY[$idx]}:${SERVER_PORT}/metrics")
+        SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$idx]}:${SERVER_PORT}")
+    fi
+done
+
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
@@ -250,6 +534,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
 
     setup_vllm_env
+    ensure_mooncake_kv_offload "$PREFILL_TP_SIZE"
+    KV_TRANSFER_JSON=$(build_kv_transfer_config_json kv_producer)
 
     # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
     echo "Using external vllm-router container (started by job.slurm on this node)"
@@ -259,7 +545,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config '${KV_TRANSFER_JSON}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -305,10 +591,31 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
-    BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+
+    # IS_AGENTIC=1/true  → agentic trace replay (trace_replay.sh)
+    # IS_AGENTIC unset/0 → fixed-seq-len throughput benchmark (bench.sh)
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        if [[ "${ENABLE_METRICS:-0}" == "1" && "${#SERVER_METRICS_URLS[@]}" -gt 0 ]]; then
+            AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${SERVER_METRICS_URLS[*]}")
+            export AIPERF_SERVER_METRICS_URLS
+            echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
+        fi
+        if [[ "${#SERVER_FLUSH_URLS[@]}" -gt 0 ]]; then
+            SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
+            export SERVER_FLUSH_URLS_CSV
+            echo "SERVER_FLUSH_URLS_CSV=${SERVER_FLUSH_URLS_CSV}"
+        fi
+        export ENGINE="${FRAMEWORK:-vllm-disagg}"
+        BENCH_CMD="bash $WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
+    else
+        BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -419,13 +726,15 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
+    ensure_mooncake_kv_offload "$PREFILL_TP_SIZE"
+    KV_TRANSFER_JSON=$(build_kv_transfer_config_json kv_producer)
 
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config '${KV_TRANSFER_JSON}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -470,6 +779,8 @@ else
     echo "Using decode config: $DECODE_SERVER_CONFIG"
 
     setup_vllm_env
+    ensure_mooncake_kv_offload "$DECODE_TP_SIZE"
+    KV_TRANSFER_JSON=$(build_kv_transfer_config_json kv_consumer)
 
     for env_pair in ${DECODE_MODEL_ENVS}; do
         export "$env_pair"
@@ -481,7 +792,7 @@ else
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\", \"read_mode\": true}}' \
+        --kv-transfer-config '${KV_TRANSFER_JSON}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then

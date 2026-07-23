@@ -5028,3 +5028,10 @@
     - "Topologies: 1p4d-dep4-tep8 (conc 4/24), 1p5d-dep4-tep4 (conc 5/30/60/115/195), 1p1d-dep4-dep8 (conc 308), 2p1d-dep4-dep8 (conc 615), 3p1d-dep4-dep8 (conc 1127), 4p1d-dep4-dep8 (conc 2151)"
     - "Runner updated to clone srt-slurm at sa-submission-q2-2026 and copy local recipes into recipes/trtllm/kimi-k25-nvfp4/b200-fp4/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-disagg-agentic
+  description:
+    - "Add MiniMax-M3 MXFP4 MI355X vLLM disaggregated agentic recipe (1P1D TP8, Mooncake DRAM KV offload, batch32 transfer patch)"
+    - "Image: rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625; Mooncake v0.3.11.post1 at runtime (server_vllm.sh); conc-list [2, 4, 8, 16, 32]; VLLM_PATCH_46240 + INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
