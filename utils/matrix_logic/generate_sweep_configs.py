@@ -1,3 +1,4 @@
+import copy
 import fnmatch
 import json
 import argparse
@@ -826,6 +827,74 @@ def generate_full_sweep(args, all_config_data, runner_data):
     return matrix_values
 
 
+# Curated "full sweep" target set. The ClusterMAX dashboard charts are the
+# source of truth: the production full sweep must run EXACTLY the
+# model x engine x node-type combinations the charts render, and nothing else.
+# The dashboard keeps only two active tabs, so the curated sweep is the union of
+# two passes, mapped to the concrete framework values in nvidia-master.yaml:
+#   - kimik2.5 single-node -> framework `vllm`
+#   - dsv4     multi-node  -> frameworks `dynamo-vllm` + `llmd-vllm` (the chart's
+#     dsv4 multinode is vLLM-only; llmd-vllm emits vllm-prefixed metrics so it
+#     renders as vLLM). `dynamo-sglang` and `dynamo-trt` are EXCLUDED.
+# Every `qwen3.5-*` config and all TensorRT (`trt`/`dynamo-trt`) are excluded.
+#
+# Deprecated / deselected chart scenarios (their configs stay in the master
+# config for one-off dispatches, but the curated sweep no longer selects them):
+#   - dsr1 single-node (SGLang): deprecated tab, removed from the harness sweep.
+#   - gptoss120b single-node: has NO active master config (lives only under
+#     configs/deprecated/), so it cannot be swept from nvidia-master.yaml anyway.
+# The charts keep these from other/legacy data; that is out of scope here.
+#
+# The generator's --model-prefix/--framework/--single-node/--multi-node filters
+# combine with AND within a single invocation, so each chart scenario needs its
+# own pass; the curated sweep composes them here so the harness has a single
+# entrypoint.
+CURATED_SWEEP_PASSES = [
+    {"model-prefix": ["kimik2.5"], "framework": ["vllm"], "single-node": True},
+    {
+        "model-prefix": ["dsv4"],
+        "framework": ["dynamo-vllm", "llmd-vllm"],
+        "single-node": False,
+    },
+]
+
+
+def _curated_pass_args(base_args, *, model_prefix, framework, single_node):
+    """Clone base args, pinning the dimensions the curated sweep fixes."""
+    passed = copy.copy(base_args)
+    passed.model_prefix = model_prefix
+    passed.framework = framework
+    passed.single_node = single_node
+    passed.multi_node = not single_node
+    return passed
+
+
+def generate_curated_full_sweep(args, all_config_data, runner_data):
+    """Generate the canonical production full sweep.
+
+    Composes the `generate_full_sweep` passes in CURATED_SWEEP_PASSES so the
+    result is EXACTLY the two active dashboard chart scenarios: kimi single-node
+    on vLLM, and dsv4 multi-node on dynamo-vllm/llmd-vllm. qwen3.5, TensorRT,
+    dynamo-sglang, dsr1 single-node (deprecated), and gptoss (no active master
+    config) are all excluded. Optional filters on `args` (--seq-lens,
+    --min-conc/--max-conc, --step-size, --runner-type, etc.) apply to every pass,
+    so trimming for a smoke run stays possible without widening the target set.
+    """
+    matrix_values = []
+    for sweep_pass in CURATED_SWEEP_PASSES:
+        matrix_values += generate_full_sweep(
+            _curated_pass_args(
+                args,
+                model_prefix=sweep_pass["model-prefix"],
+                framework=sweep_pass["framework"],
+                single_node=sweep_pass["single-node"],
+            ),
+            all_config_data,
+            runner_data,
+        )
+    return matrix_values
+
+
 def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter: str | None) -> list[str]:
     if not runner_node_filter:
         return [runner]
@@ -1304,6 +1373,75 @@ def main():
         help='Show this help message and exit'
     )
 
+    # Subcommand: curated-full-sweep
+    curated_parser = subparsers.add_parser(
+        'curated-full-sweep',
+        parents=[parent_parser],
+        add_help=False,
+        help=(
+            'Generate the canonical production full sweep matching the '
+            'ClusterMAX dashboard charts: kimik2.5 single-node vLLM + dsv4 '
+            'multi-node dynamo-vllm/llmd-vllm, excluding TensorRT, '
+            'dynamo-sglang, dsr1 single-node (deprecated) and all qwen3.5 '
+            'configs. Model/framework/node-type are fixed by the curated target '
+            'set; only trimming filters are exposed.'
+        )
+    )
+    curated_parser.add_argument(
+        '--precision',
+        nargs='+',
+        required=False,
+        help='Precision(s) to filter by (e.g., fp4, fp8) (optional, can specify multiple)'
+    )
+    curated_parser.add_argument(
+        '--runner-type',
+        nargs='+',
+        required=False,
+        help='Runner type(s) to filter by (e.g., h200, gb200) (optional, can specify multiple)'
+    )
+    curated_parser.add_argument(
+        '--seq-lens',
+        nargs='+',
+        choices=list(seq_len_stoi.keys()),
+        required=False,
+        help=f"Sequence length configurations to include: {', '.join(seq_len_stoi.keys())}. If not specified, all sequence lengths are included."
+    )
+    curated_parser.add_argument(
+        '--step-size',
+        type=int,
+        default=2,
+        help='Step size for concurrency values (default: 2)'
+    )
+    curated_parser.add_argument(
+        '--min-conc',
+        type=int,
+        required=False,
+        help='Minimum concurrency value to include (filters out lower concurrency values)'
+    )
+    curated_parser.add_argument(
+        '--max-conc',
+        type=int,
+        required=False,
+        help='Maximum concurrency value to include (filters out higher concurrency values)'
+    )
+    curated_parser.add_argument(
+        '--max-tp',
+        type=int,
+        required=False,
+        help='Maximum tensor parallelism value to include (single-node only)'
+    )
+    curated_parser.add_argument(
+        '--max-ep',
+        type=int,
+        required=False,
+        help='Maximum expert parallelism value to include (single-node only)'
+    )
+    curated_parser.add_argument(
+        '-h', '--help',
+        action='help',
+        help='Show this help message and exit'
+    )
+
     # Subcommand: test-config
     test_config_keys_parser = subparsers.add_parser(
         'test-config',
@@ -1339,10 +1477,10 @@ def main():
 
     args = parser.parse_args()
     apply_node_type_defaults(args)
-    if args.command == 'full-sweep' and args.step_size <= 1:
+    if args.command in ('full-sweep', 'curated-full-sweep') and args.step_size <= 1:
         parser.error("--step-size must be greater than 1")
     if (
-        args.command == 'full-sweep'
+        args.command in ('full-sweep', 'curated-full-sweep')
         and args.min_conc is not None
         and args.max_conc is not None
         and args.min_conc > args.max_conc
@@ -1358,6 +1496,8 @@ def main():
     # Route to appropriate function based on subcommand
     if args.command == 'full-sweep':
         matrix_values = generate_full_sweep(args, all_config_data, runner_data)
+    elif args.command == 'curated-full-sweep':
+        matrix_values = generate_curated_full_sweep(args, all_config_data, runner_data)
     elif args.command == 'test-config':
         matrix_values = generate_test_config_sweep(args, all_config_data, runner_data)
     else:

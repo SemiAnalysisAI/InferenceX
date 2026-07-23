@@ -2708,3 +2708,168 @@ class TestE2EConfigSplitting:
         assert all('prefill' in x for x in multi)
         assert all('prefill' not in x for x in single)
         assert all('prefill' not in x for x in evals)
+
+
+# =============================================================================
+# Guard test: curated production full sweep target set
+# =============================================================================
+
+import argparse as _argparse
+from pathlib import Path as _Path
+
+from generate_sweep_configs import (
+    CURATED_SWEEP_PASSES,
+    generate_curated_full_sweep,
+)
+from validation import load_config_files, load_runner_file
+
+_REPO_ROOT = _Path(__file__).resolve().parents[2]
+_NVIDIA_MASTER = _REPO_ROOT / "configs" / "nvidia-master.yaml"
+_RUNNERS = _REPO_ROOT / "configs" / "runners.yaml"
+
+# Independently-encoded expectation (NOT imported from the generator) so the
+# guard cross-checks intent rather than echoing the implementation constants.
+# The ClusterMAX dashboard charts are the source of truth; the dashboard keeps
+# only two active tabs, so the curated sweep must render exactly:
+#   - kimik2.5 single-node -> vllm
+#   - dsv4     multi-node  -> dynamo-vllm / llmd-vllm
+# dsr1 single-node (deprecated) and gptoss120b (no active master config) are
+# absent from the generated set; their configs stay in the master config.
+_ALLOWED_MODEL_PREFIXES = {"kimik2.5", "dsv4"}
+_ALLOWED_FRAMEWORKS = {"vllm", "dynamo-vllm", "llmd-vllm"}
+_FORBIDDEN_FRAMEWORKS = {"dynamo-trt", "trt", "dynamo-sglang"}
+
+
+def _curated_base_args():
+    """Args mirroring the `curated-full-sweep` subcommand with no trimming."""
+    args = _argparse.Namespace()
+    args.precision = None
+    args.runner_type = None
+    args.seq_lens = None
+    args.step_size = 2
+    args.min_conc = None
+    args.max_conc = None
+    args.max_tp = None
+    args.max_ep = None
+    args.runner_node_filter = None
+    args.scenario_type = None
+    return args
+
+
+@pytest.fixture(scope="module")
+def curated_entries():
+    all_config_data = load_config_files([str(_NVIDIA_MASTER)])
+    runner_data = load_runner_file(str(_RUNNERS))
+    return generate_curated_full_sweep(
+        _curated_base_args(), all_config_data, runner_data
+    )
+
+
+class TestCuratedFullSweepTargetSet:
+    """Guard the canonical production full sweep against the real master config.
+
+    Runs `curated-full-sweep` over configs/nvidia-master.yaml and asserts the
+    generated set is EXACTLY the two active dashboard chart scenarios: kimi
+    single-node on vLLM, and dsv4 multi-node on dynamo-vllm / llmd-vllm. qwen3.5,
+    TensorRT, dynamo-sglang, dsr1 single-node (deprecated), and gptoss are all
+    excluded.
+    """
+
+    def test_generates_a_non_empty_sweep(self, curated_entries):
+        assert curated_entries, "curated full sweep unexpectedly empty"
+
+    def test_every_model_prefix_is_in_target_set(self, curated_entries):
+        prefixes = {e["model-prefix"] for e in curated_entries}
+        assert prefixes <= _ALLOWED_MODEL_PREFIXES, (
+            f"unexpected model-prefix(es): {prefixes - _ALLOWED_MODEL_PREFIXES}"
+        )
+
+    def test_no_qwen_entries(self, curated_entries):
+        assert not any(
+            str(e["model-prefix"]).startswith("qwen") for e in curated_entries
+        ), "qwen configs must be fully excluded from the curated full sweep"
+
+    def test_no_gptoss_entries(self, curated_entries):
+        # gptoss120b is a chart scenario but has no active master config
+        # (deprecated-only), so it cannot appear in the generated set.
+        assert not any(
+            str(e["model-prefix"]).startswith("gptoss") for e in curated_entries
+        ), "gptoss has no active master config and must not appear"
+
+    def test_every_framework_is_in_target_set(self, curated_entries):
+        frameworks = {e["framework"] for e in curated_entries}
+        assert frameworks <= _ALLOWED_FRAMEWORKS, (
+            f"unexpected framework(s): {frameworks - _ALLOWED_FRAMEWORKS}"
+        )
+
+    def test_no_forbidden_frameworks(self, curated_entries):
+        assert not any(
+            e["framework"] in _FORBIDDEN_FRAMEWORKS for e in curated_entries
+        ), "trt/dynamo-trt/dynamo-sglang must be excluded from the curated full sweep"
+
+    def test_kimi_entries_are_single_node_vllm(self, curated_entries):
+        kimi = [e for e in curated_entries if e["model-prefix"] == "kimik2.5"]
+        assert kimi, "expected kimi single-node entries in the curated sweep"
+        for e in kimi:
+            assert "prefill" not in e, "kimi entries must be single-node"
+            assert e["framework"] == "vllm", "kimi must run on framework vllm"
+
+    def test_no_dsr1_entries(self, curated_entries):
+        # dsr1 single-node is a deprecated tab; it is deselected from the curated
+        # sweep (its configs remain in the master config for one-off dispatch).
+        assert not any(
+            str(e["model-prefix"]).startswith("dsr1") for e in curated_entries
+        ), "dsr1 is deprecated and must not appear in the curated full sweep"
+
+    def test_dsv4_entries_are_multi_node_vllm_engines(self, curated_entries):
+        dsv4 = [e for e in curated_entries if e["model-prefix"] == "dsv4"]
+        assert dsv4, "expected dsv4 multi-node entries in the curated sweep"
+        for e in dsv4:
+            assert "prefill" in e, "dsv4 entries must be multi-node"
+            assert e["framework"] in {"dynamo-vllm", "llmd-vllm"}, (
+                "dsv4 multi-node must be vLLM-only (dynamo-vllm / llmd-vllm)"
+            )
+
+    def test_dsv4_multinode_vllm_engines_are_represented(self, curated_entries):
+        dsv4_frameworks = {
+            e["framework"] for e in curated_entries if e["model-prefix"] == "dsv4"
+        }
+        assert {"dynamo-vllm", "llmd-vllm"} <= dsv4_frameworks, (
+            f"missing dsv4 engine(s): {{'dynamo-vllm', 'llmd-vllm'}} - {dsv4_frameworks}"
+        )
+
+    def test_master_config_actually_contains_excluded_configs(self):
+        """Sanity: the exclusions are meaningful because qwen, dynamo-trt,
+        dynamo-sglang, and dsr1 single-node configs really exist in the master
+        config being filtered. Their absence from the curated sweep is
+        deselection, NOT deletion — the entries are preserved in the master
+        config for one-off dispatches."""
+        all_config_data = load_config_files([str(_NVIDIA_MASTER)])
+        keys = list(all_config_data.keys())
+        assert any(k.startswith("qwen3.5") for k in keys), "expected qwen3.5 configs to exist"
+        assert any("dynamo-trt" in k for k in keys), "expected dynamo-trt configs to exist"
+        assert any("dynamo-sglang" in k for k in keys), "expected dynamo-sglang configs to exist"
+        # dsr1 single-node (sglang, multinode=False) must still exist in the
+        # master config even though the curated sweep no longer selects it.
+        dsr1_single_node = [
+            k
+            for k, v in all_config_data.items()
+            if k.startswith("dsr1")
+            and v.get("framework") == "sglang"
+            and not v.get("multinode", False)
+        ]
+        assert dsr1_single_node, (
+            "expected dsr1 single-node sglang configs to still exist in master "
+            "(deselected from curated sweep, not deleted)"
+        )
+
+    def test_curated_constants_match_intent(self):
+        """The generator passes must encode the documented chart target set."""
+        assert CURATED_SWEEP_PASSES == [
+            {"model-prefix": ["kimik2.5"], "framework": ["vllm"], "single-node": True},
+            {
+                "model-prefix": ["dsv4"],
+                "framework": ["dynamo-vllm", "llmd-vllm"],
+                "single-node": False,
+            },
+        ]
