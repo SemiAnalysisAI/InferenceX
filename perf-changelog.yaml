@@ -5030,7 +5030,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
 
 - config-keys:
+    - minimaxm3-fp4-b200-vllm
+    - minimaxm3-fp4-b200-vllm-mtp
     - minimaxm3-fp4-b300-vllm
+    - minimaxm3-fp4-b300-vllm-mtp
   description:
-    - "Update vllm image, remove setting trtllm allreduce backend, use fp8 indexer cache dtype"
+    - "Update vllm image, remove setting trtllm allreduce backend"
+    - "Use fp8 indexer cache dtype for the B200/B300 non-eagle configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2120
