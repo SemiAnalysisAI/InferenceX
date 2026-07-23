@@ -3,13 +3,13 @@
 Covers:
   - NVIDIA CSV (nvidia-smi --query-gpu format with "X W" power cells)
   - AMD CSV (amd-smi --csv with ISO/epoch timestamps and bare numeric power)
-  - Window filtering (samples outside [start, end] are excluded)
-  - Multi-GPU per-sample aggregation (sum across GPUs at each timestamp,
-    then mean over samples — yields per-GPU mean)
+  - Backward-compatible arithmetic aggregation
+  - Per-device trapezoidal integration over the formal benchmark window
+  - Expected/observed GPU validation, window coverage, and sampling gaps
   - Missing / empty / malformed CSV: returns None, no exception
-  - End-to-end run(): patches agg JSON with avg_power_w + joules_per_output_token
-    + joules_per_total_token
-  - Missing bench window keys: skips gracefully without patching
+  - Whole-deployment power/energy/J-query/J-token metric semantics
+  - Best-effort invalid results and REQUIRE_POWER strict failures
+  - Atomic aggregate and validation artifacts
 """
 from __future__ import annotations
 
@@ -27,6 +27,8 @@ from aggregate_power import (  # noqa: E402
     _parse_power,
     _parse_timestamp,
     aggregate_power,
+    integrate_power,
+    main,
     patch_agg_result,
     run,
 )
@@ -292,6 +294,7 @@ def _write_bench_result(
     duration: float,
     total_output: int,
     total_input: int = 0,
+    completed: int = 1,
 ) -> None:
     path.write_text(
         json.dumps(
@@ -299,6 +302,7 @@ def _write_bench_result(
                 "benchmark_start_time_unix": start,
                 "benchmark_end_time_unix": end,
                 "duration": duration,
+                "completed": completed,
                 "total_output_tokens": total_output,
                 "total_input_tokens": total_input,
             }
@@ -307,20 +311,269 @@ def _write_bench_result(
     )
 
 
-def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
-    base = 1_700_000_000.0
+def _write_constant_window_samples(
+    path: Path,
+    *,
+    start: float,
+    end: float,
+    watts_per_gpu: float,
+    num_gpus: int,
+) -> None:
+    """Write samples that bracket the formal benchmark window."""
+    duration = int(end - start)
+    timestamps = [start - 1.0]
+    timestamps.extend(start + offset for offset in range(duration + 1))
+    timestamps.append(end + 1.0)
+    _write_nvidia_csv(
+        path,
+        [
+            (timestamp, gpu, watts_per_gpu)
+            for timestamp in timestamps
+            for gpu in range(num_gpus)
+        ],
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Validated per-device integration contract
+# --------------------------------------------------------------------------- #
+
+
+def test_integrate_power_uses_per_device_trapezoidal_integration(tmp_path: Path):
+    """Irregular samples are integrated in time per GPU, not averaged by row."""
     csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
     _write_nvidia_csv(
         csv,
         [
-            (base + 1 + sample_idx, gpu, 500.0)
-            for sample_idx in range(2)
-            for gpu in range(8)
+            # Both devices are linear in time. Boundary values at t=0 and
+            # t=10 must be interpolated from samples outside the window.
+            (base - 1, 0, 100.0),
+            (base + 1, 0, 140.0),
+            (base + 3.5, 0, 190.0),
+            (base + 6, 0, 240.0),
+            (base + 8.5, 0, 290.0),
+            (base + 11, 0, 340.0),
+            (base - 1, 1, 200.0),
+            (base + 1, 1, 240.0),
+            (base + 3.5, 1, 290.0),
+            (base + 6, 1, 340.0),
+            (base + 8.5, 1, 390.0),
+            (base + 11, 1, 440.0),
         ],
+    )
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    # GPU 0: average 220 W over 10s = 2200 J.
+    # GPU 1: average 320 W over 10s = 3200 J.
+    assert result.per_gpu_energy_j == pytest.approx({"0": 2200.0, "1": 3200.0})
+    assert result.total_gpu_energy_j == pytest.approx(5400.0)
+    assert result.avg_total_gpu_power_w == pytest.approx(540.0)
+    assert result.avg_power_w == pytest.approx(270.0)
+
+
+def test_integrate_power_rejects_expected_gpu_count_mismatch(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=2,
+    )
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=4,
+    )
+
+    assert result.power_valid is False
+    assert "expected_gpu_count_mismatch" in result.invalid_reasons
+    assert result.expected_num_gpus == 4
+    assert result.observed_num_gpus == 2
+
+
+def test_integrate_power_requires_every_gpu_to_bracket_window(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    _write_nvidia_csv(
+        csv,
+        [
+            (base - 1, 0, 500.0),
+            (base + 1, 0, 500.0),
+            (base + 3, 0, 500.0),
+            (base + 5, 0, 500.0),
+            (base + 7, 0, 500.0),
+            (base + 9, 0, 500.0),
+            (base + 11, 0, 500.0),
+            # GPU 1 starts after the formal benchmark start.
+            (base + 1, 1, 500.0),
+            (base + 3, 1, 500.0),
+            (base + 5, 1, 500.0),
+            (base + 7, 1, 500.0),
+            (base + 9, 1, 500.0),
+            (base + 11, 1, 500.0),
+        ],
+    )
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=2,
+    )
+
+    assert result.power_valid is False
+    assert "benchmark_window_not_bracketed" in result.invalid_reasons
+    assert result.device_issues == {"1": ["benchmark_window_not_bracketed"]}
+
+
+def test_integrate_power_rejects_sampling_gap(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    _write_nvidia_csv(
+        csv,
+        [
+            (base - 1, 0, 500.0),
+            (base + 1, 0, 500.0),
+            # The 8-second gap makes a 1 Hz telemetry stream unusable.
+            (base + 9, 0, 500.0),
+            (base + 11, 0, 500.0),
+        ],
+    )
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=1,
+    )
+
+    assert result.power_valid is False
+    assert "sampling_gap_exceeded" in result.invalid_reasons
+    assert result.device_issues == {"0": ["sampling_gap_exceeded"]}
+
+
+def test_integrate_power_ignores_invalid_samples_far_outside_window(tmp_path: Path):
+    """Warmup/eval corruption must not invalidate the formal benchmark slice."""
+    csv = tmp_path / "gpu_metrics.csv"
+    base = 1_700_000_000.0
+    samples = [
+        # Far-outside negative and conflicting duplicate samples are irrelevant.
+        (base - 100, 0, -1.0),
+        (base + 100, 0, 100.0),
+        (base + 100, 0, 200.0),
+    ]
+    samples.extend((base + offset, 0, 500.0) for offset in range(-1, 12))
+    _write_nvidia_csv(csv, samples)
+
+    result = integrate_power(
+        csv,
+        start_unix=base,
+        end_unix=base + 10,
+        expected_num_gpus=1,
+    )
+
+    assert result.power_valid is True
+    assert result.invalid_reasons == ()
+    assert result.total_gpu_energy_j == pytest.approx(5_000.0)
+
+
+@pytest.mark.parametrize(
+    ("malformed_row", "expected_reason"),
+    [
+        ("not-a-timestamp, 0, 500 W", "invalid_timestamp_sample"),
+        ("{timestamp}, 0, [N/A]", "invalid_power_sample"),
+    ],
+    ids=["timestamp", "power"],
+)
+def test_run_rejects_malformed_telemetry_inside_window(
+    tmp_path: Path,
+    malformed_row: str,
+    expected_reason: str,
+):
+    """A rejected 1 Hz row must not be interpolated into valid energy metrics."""
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    rows = ["timestamp, index, power.draw [W]"]
+    for offset in range(-1, 12):
+        timestamp = _nvidia_ts(base + offset)
+        if offset == 5:
+            rows.append(malformed_row.format(timestamp=timestamp))
+        else:
+            rows.append(f"{timestamp}, 0, 500 W")
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=1,
+        total_input=1_000,
+        total_output=1_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(
+        csv,
+        bench,
+        agg,
+        expected_num_gpus=1,
+        validation_result=validation,
+    )
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert patched["power_valid"] == 0
+    for metric in (
+        "avg_power_w",
+        "avg_total_gpu_power_w",
+        "total_gpu_energy_j",
+        "joules_per_successful_query",
+        "joules_per_input_token",
+        "joules_per_output_token",
+        "joules_per_total_token",
+    ):
+        assert metric not in patched
+    audit = json.loads(validation.read_text())
+    assert audit["reasons"] == [expected_reason]
+
+
+def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=8,
     )
     bench = tmp_path / "bench.json"
     agg = tmp_path / "agg.json"
-    _write_bench_result(bench, start=base, end=base + 10, duration=10.0, total_output=20_000)
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        total_output=20_000,
+        total_input=20_000,
+    )
     agg.write_text(json.dumps({"hw": "h200", "conc": 64}), encoding="utf-8")
 
     exit_code = run(csv, bench, agg)
@@ -334,8 +587,8 @@ def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
     assert patched["avg_power_w"] == pytest.approx(500.0)
     # J/output_token = 500W × 8 GPUs × 10s / 20_000 tokens = 2.0
     assert patched["joules_per_output_token"] == pytest.approx(2.0)
-    # No input tokens were supplied -> J/total_token falls back to J/output_token.
-    assert patched["joules_per_total_token"] == pytest.approx(2.0)
+    # J/total_token = 40_000 J / (20_000 input + 20_000 output).
+    assert patched["joules_per_total_token"] == pytest.approx(1.0)
 
 
 def test_run_computes_j_per_total_token_with_input_tokens(tmp_path: Path):
@@ -346,13 +599,12 @@ def test_run_computes_j_per_total_token_with_input_tokens(tmp_path: Path):
     """
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"
-    _write_nvidia_csv(
+    _write_constant_window_samples(
         csv,
-        [
-            (base + 1 + sample_idx, gpu, 500.0)
-            for sample_idx in range(2)
-            for gpu in range(8)
-        ],
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=8,
     )
     bench = tmp_path / "bench.json"
     agg = tmp_path / "agg.json"
@@ -397,7 +649,10 @@ def test_run_skips_when_bench_window_missing(tmp_path: Path):
 
     patched = json.loads(agg.read_text())
     assert "avg_power_w" not in patched
-    assert patched == {"hw": "h200"}
+    assert patched == {
+        "hw": "h200",
+        "power_valid": 0,
+    }
 
 
 def test_run_skips_when_csv_missing(tmp_path: Path):
@@ -445,3 +700,195 @@ def test_patch_agg_result_is_atomic_via_tempfile(tmp_path: Path):
     assert data["joules_per_total_token"] == 0.5
     # No .tmp leftover.
     assert not (tmp_path / "agg.json.tmp").exists()
+
+
+def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=8,
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=10,
+        total_input=10_000,
+        total_output=2_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(
+        csv,
+        bench,
+        agg,
+        expected_num_gpus=8,
+        validation_result=validation,
+    )
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert type(patched["power_valid"]) is int
+    assert patched["power_valid"] == 1
+    assert "power_invalid_reasons" not in patched
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+    assert patched["avg_total_gpu_power_w"] == pytest.approx(4_000.0)
+    assert patched["total_gpu_energy_j"] == pytest.approx(40_000.0)
+    assert patched["joules_per_successful_query"] == pytest.approx(4_000.0)
+    assert patched["joules_per_input_token"] == pytest.approx(4.0)
+    assert patched["joules_per_output_token"] == pytest.approx(20.0)
+    assert patched["joules_per_total_token"] == pytest.approx(40_000 / 12_000)
+
+    audit = json.loads(validation.read_text())
+    assert audit["schema_version"] == 1
+    assert audit["power_valid"] is True
+    assert audit["reasons"] == []
+    assert audit["expected_gpu_count"] == 8
+    assert audit["observed_gpu_count"] == 8
+    assert audit["benchmark_window"]["start_time_unix"] == base
+    assert audit["benchmark_window"]["end_time_unix"] == base + 10
+    assert audit["benchmark_window"]["integration_duration_s"] == 10.0
+    assert audit["integration_method"] == (
+        "per_device_trapezoidal_with_linear_boundary_interpolation"
+    )
+
+
+def test_run_best_effort_marks_invalid_power_and_preserves_benchmark(tmp_path: Path):
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=1_700_000_000.0,
+        end=1_700_000_010.0,
+        duration=10.0,
+        completed=10,
+        total_input=10_000,
+        total_output=2_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200", "conc": 4}), encoding="utf-8")
+
+    exit_code = run(
+        tmp_path / "missing.csv",
+        bench,
+        agg,
+        expected_num_gpus=8,
+        validation_result=validation,
+    )
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert patched["hw"] == "h200"
+    assert patched["conc"] == 4
+    assert type(patched["power_valid"]) is int
+    assert patched["power_valid"] == 0
+    assert "power_invalid_reasons" not in patched
+    for metric in (
+        "avg_power_w",
+        "avg_total_gpu_power_w",
+        "total_gpu_energy_j",
+        "joules_per_successful_query",
+        "joules_per_input_token",
+        "joules_per_output_token",
+        "joules_per_total_token",
+    ):
+        assert metric not in patched
+
+    audit = json.loads(validation.read_text())
+    assert audit["power_valid"] is False
+    assert audit["reasons"] == ["telemetry_file_missing"]
+
+
+def test_run_strict_mode_fails_after_writing_validation(tmp_path: Path):
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=1_700_000_000.0,
+        end=1_700_000_010.0,
+        duration=10.0,
+        completed=10,
+        total_input=10_000,
+        total_output=2_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(
+        tmp_path / "missing.csv",
+        bench,
+        agg,
+        expected_num_gpus=8,
+        validation_result=validation,
+        require_power=True,
+    )
+
+    assert exit_code == 1
+    assert json.loads(agg.read_text())["power_valid"] == 0
+    assert json.loads(validation.read_text())["reasons"] == ["telemetry_file_missing"]
+
+
+def test_run_invalid_benchmark_denominator_is_auditable(tmp_path: Path):
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=1,
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=0,
+        total_input=10_000,
+        total_output=2_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(
+        csv,
+        bench,
+        agg,
+        expected_num_gpus=1,
+        validation_result=validation,
+    )
+
+    assert exit_code == 0
+    assert json.loads(agg.read_text())["power_valid"] == 0
+    assert json.loads(validation.read_text())["reasons"] == [
+        "invalid_successful_query_count"
+    ]
+
+
+def test_cli_requires_expected_gpu_count(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "aggregate_power.py",
+            "--bench-result",
+            "bench.json",
+            "--agg-result",
+            "agg.json",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
