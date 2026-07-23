@@ -14,6 +14,11 @@ dynamo:
 
 setup_script: vllm-container-deps.sh
 
+environment:
+  # The frontend shares Grace CPU capacity with the long TP8 cold start. Keep
+  # Dynamo discovery alive until the outer two-hour health check expires.
+  ETCD_LEASE_TTL: "7200"
+
 slurm:
   time_limit: "8:00:00"
 
@@ -59,7 +64,6 @@ backend:
       enable_offload: false
   aggregated_environment:
     DYN_REQUEST_PLANE: "tcp"
-    ETCD_LEASE_TTL: "600"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     TILELANG_CLEANUP_TEMP_FILES: "1"
