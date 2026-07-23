@@ -966,6 +966,66 @@ stop_gpu_monitor
         assert "--format=csv,noheader" in args_log.read_text()
         assert "2026/07/23 12:00:11.000, 0, 500.00 W" in metrics.read_text()
 
+    def test_stop_gpu_monitor_drops_truncated_row_before_final_sample(self, tmp_path):
+        """A killed monitor cannot concatenate its partial row with the final sample."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_nvidia_smi = fake_bin / "nvidia-smi"
+        final_sample = (
+            "2026/07/23 12:00:11.000, 0, 500.00 W, "
+            "65, 1000, 1000, 90 %, 10 %"
+        )
+        fake_nvidia_smi.write_text(
+            "#!/usr/bin/env bash\n"
+            f"printf '%s\\n' {final_sample!r}\n"
+        )
+        fake_nvidia_smi.chmod(0o755)
+
+        header = (
+            "timestamp, index, power.draw [W], temperature.gpu, "
+            "clocks.current.sm [MHz], clocks.current.memory [MHz], "
+            "utilization.gpu [%], utilization.memory [%]"
+        )
+        complete_sample = (
+            "2026/07/23 12:00:09.000, 0, 490.00 W, "
+            "64, 990, 990, 89 %, 9 %"
+        )
+        truncated_sample = "2026/07/23 12:00:10.000, 0, 52"
+        metrics = tmp_path / "gpu_metrics.csv"
+        metrics.write_text(
+            f"{header}\n{complete_sample}\n{truncated_sample}"
+        )
+
+        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        script = f"""
+source {str(benchmark_lib)!r}
+kill() {{ return 0; }}
+wait() {{ return 0; }}
+GPU_MONITOR_PID=999
+GPU_MONITOR_VENDOR=nvidia
+GPU_METRICS_CSV={str(metrics)!r}
+stop_gpu_monitor
+"""
+        env = {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+        result = subprocess.run(
+            ["bash", "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert metrics.read_text().splitlines() == [
+            header,
+            complete_sample,
+            final_sample,
+        ]
+
 
 # =============================================================================
 # Static CI/artifact contract

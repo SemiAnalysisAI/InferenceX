@@ -165,9 +165,24 @@ stop_gpu_monitor() {
         # version, so strict AMD lifecycle validation remains follow-up work.
         case "$GPU_MONITOR_VENDOR" in
             nvidia)
-                nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
-                    --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
-                    echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
+                local append_final_nvidia_sample=true
+                local repaired_metrics="${GPU_METRICS_CSV}.repair.$$"
+                if [[ -s "$GPU_METRICS_CSV" ]] &&
+                    ! tail -c 1 "$GPU_METRICS_CSV" | grep -q '^$'; then
+                    if sed '$d' "$GPU_METRICS_CSV" > "$repaired_metrics" &&
+                        mv "$repaired_metrics" "$GPU_METRICS_CSV"; then
+                        echo "[GPU Monitor] Dropped truncated trailing sample"
+                    else
+                        rm -f "$repaired_metrics"
+                        append_final_nvidia_sample=false
+                        echo "[GPU Monitor] Warning: could not repair truncated trailing sample" >&2
+                    fi
+                fi
+                if [[ "$append_final_nvidia_sample" == true ]]; then
+                    nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
+                        --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
+                        echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
+                fi
                 ;;
         esac
         echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
