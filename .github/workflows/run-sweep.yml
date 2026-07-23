@@ -13,6 +13,11 @@ concurrency:
           github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
           github.event.label.name != 'all-evals' &&
           github.event.label.name != 'evals-only' &&
+          github.event.label.name != 'skip_queue' &&
+          github.event.label.name != 'ci-patchwork' &&
+          github.event.label.name != 'engine-patch' &&
+          github.event.label.name != 'ci-patchwork-waived' &&
+          github.event.label.name != 'ci-checklist-complete' &&
           github.run_id ||
           'active'
         }}
@@ -49,7 +54,12 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
               github.event.label.name == 'all-evals' ||
-              github.event.label.name == 'evals-only'
+              github.event.label.name == 'evals-only' ||
+              github.event.label.name == 'skip_queue' ||
+              github.event.label.name == 'ci-patchwork' ||
+              github.event.label.name == 'engine-patch' ||
+              github.event.label.name == 'ci-patchwork-waived' ||
+              github.event.label.name == 'ci-checklist-complete'
             )
         outputs:
             skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
@@ -155,6 +165,11 @@ jobs:
     setup:
         needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest
+        permissions:
+            actions: read
+            contents: read
+            issues: read
+            pull-requests: read
         if: >-
             always() &&
             (
@@ -188,7 +203,12 @@ jobs:
                   github.event.label.name == 'full-sweep-fail-fast' ||
                   github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
                   github.event.label.name == 'all-evals' ||
-                  github.event.label.name == 'evals-only'
+                  github.event.label.name == 'evals-only' ||
+                  github.event.label.name == 'skip_queue' ||
+                  github.event.label.name == 'ci-patchwork' ||
+                  github.event.label.name == 'engine-patch' ||
+                  github.event.label.name == 'ci-patchwork-waived' ||
+                  github.event.label.name == 'ci-checklist-complete'
                 )
               ) ||
               (
@@ -209,9 +229,67 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+            - name: Classify priority criteria
+              id: classify
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true'
+              continue-on-error: true
+              uses: anthropics/claude-code-action@12531344451323133b0493233c759991ac61da12 # v1.0.174
+              with:
+                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  track_progress: false
+                  settings: |
+                      {"fastMode": true}
+                  claude_args: |
+                      --model 'claude-fable-5'
+                      --max-turns 8
+                      --allowedTools "Read,Glob,Grep,Bash(git diff:*)"
+                      --json-schema '{"type":"object","properties":{"criteria":{"type":"array","items":{"type":"string","enum":["multi-node","agentic","eval-only","fp4","mtp","eagle","eagle3","sglang","vllm","dynamo-sglang","dynamo-vllm","glm5","glm5.1","kimik2.5","dsv4","minimaxm3","qwen3.5","dsr1","checklist-complete","patchwork"]},"uniqueItems":true},"reason":{"type":"string"}},"required":["criteria","reason"]}'
+                  prompt: |
+                      Inspect this Actions run's change range.
+
+                      - For a pull request, compare the head against its base branch.
+                      - For a push, compare `${{ github.event.before }}` to `${{ github.sha }}`.
+                      - Do not return `checklist-complete` for a push: it is PR-only.
+
+                      Return every matching priority criterion:
+
+                      - multi-node: separate prefill and decode workers
+                      - agentic: agentic-coding or AgentX workload
+                      - eval-only: evaluation without throughput measurement
+                      - fp4: FP4 precision
+                      - mtp, eagle, eagle3: speculative decoding method
+                      - sglang, vllm, dynamo-vllm: runtime framework
+                      - model criterion: matching configured model family
+                      - checklist-complete: PR checklist is satisfied
+                      - patchwork: modified upstream engine or runtime source
+
+                      Patchwork includes patch files, git apply, source mutation,
+                      monkey-patching, local engine builds, forks, or images
+                      containing unmerged engine changes.
+
+                      Return a concise reason grounded in the diff.
+
+            - name: Normalize priority classification
+              id: priority-criteria
+              if: vars.PRIORITY_SCHEDULER_ENABLED == 'true' && always()
+              env:
+                  OUTPUT: ${{ steps.classify.outputs.structured_output || '{}' }}
+              run: |
+                  if jq -e 'type == "object" and (.criteria | type == "array")' \
+                    >/dev/null <<<"$OUTPUT"; then
+                      criteria=$(jq -c '.criteria' <<<"$OUTPUT")
+                  else
+                      criteria='["patchwork"]'
+                  fi
+                  echo "criteria=$criteria" >> "$GITHUB_OUTPUT"
+                  echo "Priority criteria: $criteria"
+
             - id: setup
               env:
                   GH_TOKEN: ${{ github.token }}
+                  PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  PRIORITY_CRITERIA: ${{ steps.priority-criteria.outputs.criteria || '' }}
                   TRIM_CONC: >-
                       ${{
                         github.event_name == 'pull_request' &&
@@ -228,7 +306,6 @@ jobs:
                         contains(github.event.pull_request.labels.*.name, 'evals-only')
                       }}
               run: |
-                  pip install pydantic
 
                   if [ "${{ github.event_name }}" == "pull_request" ]; then
                       BASE_REF="origin/${{ github.base_ref }}"
@@ -239,7 +316,8 @@ jobs:
                   fi
 
                   CMD=(
-                      python3 "${GITHUB_WORKSPACE}/utils/process_changelog.py"
+                      uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                      "${GITHUB_WORKSPACE}/utils/process_changelog.py"
                       --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
                       --base-ref "$BASE_REF"
                       --head-ref "$HEAD_REF"
@@ -255,6 +333,13 @@ jobs:
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
+                  CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
+                    "${GITHUB_WORKSPACE}/utils/ci_priority.py" \
+                    --event-name "${{ github.event_name }}" \
+                    --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
+                    --labels-json "$PR_LABELS" \
+                    --pr-number "${{ github.event.pull_request.number || 0 }}" \
+                    --criteria-json "$PRIORITY_CRITERIA")
 
                   echo "search-space-config=$CONFIG_JSON" >> "$GITHUB_OUTPUT"
                   python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
@@ -325,6 +410,9 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -365,6 +453,9 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -441,6 +532,9 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -499,6 +593,9 @@ jobs:
         with:
             exp-name: ${{ matrix.config.exp-name }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -549,6 +646,9 @@ jobs:
             osl: '0'
             max-model-len: '0'
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -581,6 +681,7 @@ jobs:
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -609,6 +710,9 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -627,6 +731,61 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
+
+    # Agentic (SWE-bench) eval rows carry the agentic input shape, so they are
+    # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
+    # inputs (isl/osl/max-model-len, which agentic rows don't have).
+    sweep-agentic-evals:
+        needs: [setup, canary-select, canary-sweep]
+        if: >-
+            ${{
+              !cancelled() &&
+              needs.setup.result == 'success' &&
+              needs.setup.outputs.reuse-enabled != 'true' &&
+              (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != '[]' &&
+              toJson(fromJson(needs.setup.outputs.search-space-config).agentic_evals) != 'null'
+            }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: agentic eval /
+        strategy:
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') || contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary') }}
+            matrix:
+                config: ${{ fromJson(needs.setup.outputs.search-space-config).agentic_evals }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            router: ${{ matrix.config.router && toJson(matrix.config.router) || '' }}
+            kv-p2p-transfer: ${{ matrix.config['kv-p2p-transfer'] || '' }}
+            tp: ${{ matrix.config.tp }}
+            pp: ${{ matrix.config.pp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
+            kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
+            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
+            duration: ${{ matrix.config.duration }}
+            isl: '0'
+            osl: '0'
+            max-model-len: '0'
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ 'false' }}
+            run-eval: true
+            eval-only: true
+            scenario-type: agentic-coding
 
     sweep-multi-node-evals:
         needs: [setup, canary-select, canary-sweep]
@@ -652,6 +811,9 @@ jobs:
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
             runner: ${{ matrix.config.runner }}
+            priority: ${{ matrix.config.priority }}
+            queue-token: ${{ matrix.config['queue-token'] }}
+            skip-queue-pr: ${{ matrix.config['skip-queue-pr'] || '' }}
             image: ${{ matrix.config.image }}
             model: ${{ matrix.config.model }}
             model-prefix: ${{ matrix.config.model-prefix }}
@@ -714,8 +876,8 @@ jobs:
             result-prefix: "bmk"
 
     collect-evals:
-        needs: [sweep-evals, sweep-multi-node-evals, setup]
-        if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped') }}
+        needs: [sweep-evals, sweep-agentic-evals, sweep-multi-node-evals, setup]
+        if: ${{ always() && needs.setup.result != 'skipped' && (needs.sweep-evals.result != 'skipped' || needs.sweep-agentic-evals.result != 'skipped' || needs.sweep-multi-node-evals.result != 'skipped') }}
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 

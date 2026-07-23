@@ -103,10 +103,56 @@ env:
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      priority: ${{ steps.score.outputs.priority }}
+      queue-token: ${{ steps.score.outputs.queue-token }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with: { clean: true, persist-credentials: false }
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+      - id: score
+        env:
+          RUNNER: ${{ inputs.runner }}
+          MODEL_PREFIX: ${{ inputs.model-prefix }}
+        run: |
+          entry=$(jq -cn \
+            --arg runner "$RUNNER" \
+            --arg model_prefix "$MODEL_PREFIX" \
+            '[{
+              runner: $runner,
+              framework: "vllm",
+              "model-prefix": $model_prefix,
+              precision: "fp4",
+              "spec-decoding": "mtp"
+            }]')
+          scored=$(printf '%s' "$entry" |
+            uv run --no-project --with pyyaml --python 3.12 \
+              utils/ci_priority.py \
+              --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}")
+          echo "priority=$(jq -r '.[0].priority' <<<"$scored")" >> "$GITHUB_OUTPUT"
+          echo "queue-token=$(jq -r '.[0]["queue-token"]' <<<"$scored")" >> "$GITHUB_OUTPUT"
+
   collect-al:
-    runs-on: ${{ inputs.runner }}
+    needs: setup
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format(
+          '["self-hosted",{0},{1},{2}]',
+          toJSON(inputs.runner),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            needs.setup.outputs.priority,
+            needs.setup.outputs.queue-token
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
+        ) ||
+        format('[{0}]', toJSON(inputs.runner))
+      ) }}
     timeout-minutes: 600
-    name: "SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    name: "p${{ needs.setup.outputs.priority }} | SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
