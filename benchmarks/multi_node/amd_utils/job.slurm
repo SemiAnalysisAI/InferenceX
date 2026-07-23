@@ -336,6 +336,8 @@ export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
 export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS="${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}"
+export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -460,12 +462,18 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
     -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-}
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
+    -e GPU_MEMORY_UTILIZATION=\${GPU_MEMORY_UTILIZATION:-}
+    -e ENABLE_PREFIX_CACHING=\${ENABLE_PREFIX_CACHING:-0}
     -e DURATION=\${DURATION:-1800}
     -e IS_AGENTIC=\${IS_AGENTIC:-0}
     -e KV_OFFLOADING=\${KV_OFFLOADING:-none}
     -e KV_OFFLOAD_BACKEND=\${KV_OFFLOAD_BACKEND:-}
     -e KV_OFFLOAD_BACKEND_METADATA=\"\${KV_OFFLOAD_BACKEND_METADATA:-}\"
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
+    -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}
+    -e INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=\${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}
+    -e MC_WORKERS_PER_CTX=\${MC_WORKERS_PER_CTX:-}
+    -e VLLM_PATCH_46240=\${VLLM_PATCH_46240:-}
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}
@@ -481,6 +489,8 @@ DOCKER_ENV_COMMON=(
     -e DECODE_DP_ATTN=\${DECODE_DP_ATTN:-false}
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
+    -e IBDEVICES=\${IBDEVICES:-}
+    -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
     -e DRY_RUN=\${DRY_RUN:-0}
     # SWE-bench agentic eval runs inside this container and needs Modal/HF
     # credentials to launch sandboxes and download datasets.
@@ -598,9 +608,11 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts on MI355X ionic/bnxt nodes. Required for
+# atom-disagg (mooncake) and vllm-disagg (MoRIIO MultiConnector); container bundled
+# libibverbs/libionic may be ABI-incompatible with the host kernel drivers.
 RDMA_MOUNTS=()
-if [[ "$ENGINE" == "atom-disagg" ]]; then
+if [[ "$ENGINE" == "atom-disagg" || "$ENGINE" == "vllm-disagg" ]]; then
 
 # When the container base OS differs from the host (e.g. Ubuntu 24.04 image
 # on a 22.04 host), the container's bundled libibverbs/libionic may be
@@ -674,7 +686,7 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
-fi  # end: if ENGINE == atom-disagg
+fi  # end: if ENGINE needs host RDMA bind-mounts
 
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.
