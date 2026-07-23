@@ -5067,4 +5067,4 @@
     - "Add Qwen3.5-397B-A17B-FP8 GB300 disaggregated Dynamo-SGLang MTP configurations for 8k/1k."
     - "Cover 1P1D TP4/TP4, 1P1D TEP8/TEP8, and 3P/4P/6P/7P/8P DEP4/DEP16 topologies."
     - "Use Mooncake KV transfer and lmsysorg/sglang:v0.5.14-cu130."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2316
