@@ -798,7 +798,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.24.0
+  image: vllm/vllm-openai-rocm:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -810,22 +810,43 @@ kimik2.5-fp4-mi355x-vllm-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
+    # All workers TP4 (real-weight sweep: TP8 decode is no better than TP4).
+    # Split across P/D topologies: 1D is stable at low conc; the high-conc tail
+    # runs on 2D so decode load is spread across two engines.
     - isl: 8192
       osl: 1024
       search-space:
+      # 1P(TP4) 1D(TP4) = 2 nodes. Low concurrency only.
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+      # 1P(TP4) 2D(TP4) = 3 nodes. High concurrency (decode KV/load spread over 2D).
       - spec-decoding: "none"
         conc-list: [ 8, 16, 32, 64, 128, 256, 512 ]
         prefill:
           num-worker: 1
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
         decode:
           num-worker: 2
-          tp: 8
-          ep: 8
+          tp: 4
+          ep: 1
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
@@ -1621,7 +1642,7 @@ dsv4-fp4-mi355x-atom-disagg:
           - "DECODE_NODES=1"
       # 1P1D TP8
 minimaxm3-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  image: vllm/vllm-openai-rocm:nightly-9e57de7197f234f9d9187715d96e07e007048c0f
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
