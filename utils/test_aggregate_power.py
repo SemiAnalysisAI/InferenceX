@@ -490,6 +490,70 @@ def test_integrate_power_ignores_invalid_samples_far_outside_window(tmp_path: Pa
     assert result.total_gpu_energy_j == pytest.approx(5_000.0)
 
 
+@pytest.mark.parametrize(
+    ("malformed_row", "expected_reason"),
+    [
+        ("not-a-timestamp, 0, 500 W", "invalid_timestamp_sample"),
+        ("{timestamp}, 0, [N/A]", "invalid_power_sample"),
+    ],
+    ids=["timestamp", "power"],
+)
+def test_run_rejects_malformed_telemetry_inside_window(
+    tmp_path: Path,
+    malformed_row: str,
+    expected_reason: str,
+):
+    """A rejected 1 Hz row must not be interpolated into valid energy metrics."""
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    rows = ["timestamp, index, power.draw [W]"]
+    for offset in range(-1, 12):
+        timestamp = _nvidia_ts(base + offset)
+        if offset == 5:
+            rows.append(malformed_row.format(timestamp=timestamp))
+        else:
+            rows.append(f"{timestamp}, 0, 500 W")
+    csv.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=1,
+        total_input=1_000,
+        total_output=1_000,
+    )
+    agg.write_text(json.dumps({"hw": "h200"}), encoding="utf-8")
+
+    exit_code = run(
+        csv,
+        bench,
+        agg,
+        expected_num_gpus=1,
+        validation_result=validation,
+    )
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert patched["power_valid"] == 0
+    for metric in (
+        "avg_power_w",
+        "avg_total_gpu_power_w",
+        "total_gpu_energy_j",
+        "joules_per_successful_query",
+        "joules_per_input_token",
+        "joules_per_output_token",
+        "joules_per_total_token",
+    ):
+        assert metric not in patched
+    audit = json.loads(validation.read_text())
+    assert audit["reasons"] == [expected_reason]
+
+
 def test_run_patches_agg_with_power_and_joules(tmp_path: Path):
     base = 1_700_000_000.0
     csv = tmp_path / "gpu_metrics.csv"

@@ -311,9 +311,10 @@ def integrate_power(
 ) -> PowerIntegration:
     """Validate and integrate per-device GPU power over the formal window.
 
-    A valid stream must expose stable GPU identities, match the expected
-    topology when supplied, bracket both window boundaries for every device,
-    and have no in-window sampling gap larger than ``max_sample_gap_s``.
+    A valid stream must contain parseable timestamps and power values, expose
+    stable GPU identities, match the expected topology when supplied, bracket
+    both window boundaries for every device, and have no in-window sampling gap
+    larger than ``max_sample_gap_s``.
     """
     reasons: list[str] = []
     if (
@@ -383,6 +384,7 @@ def integrate_power(
             for row in reader:
                 timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip())
                 if timestamp is None or not math.isfinite(timestamp):
+                    _append_reason(reasons, "invalid_timestamp_sample")
                     continue
                 # Only the formal window and its possible boundary neighbors
                 # can affect integration. Bad warmup/eval rows farther away
@@ -396,6 +398,7 @@ def integrate_power(
                 power = _parse_power((row.get(power_col) or "").strip())
                 gpu_id = (row.get(gpu_col) or "").strip()
                 if power is None:
+                    _append_reason(reasons, "invalid_power_sample")
                     continue
                 if not math.isfinite(power) or power < 0:
                     _append_reason(reasons, "invalid_power_sample")
