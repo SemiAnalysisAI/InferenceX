@@ -4939,6 +4939,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2241
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Update the server configuration for Kimi-K2.5-MXFP4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2203
+
+- config-keys:
     - qwen3.5-fp8-mi355x-sglang-disagg
   description:
     - "Bump Qwen3.5-FP8 MI355X SGLang disagg image from lmsysorg/sglang-rocm:v0.5.11-rocm700-mi35x-20260511 to lmsysorg/sglang:v0.5.14-rocm720-mi35x (ROCm 7.0 → 7.2, sglang v0.5.11 → v0.5.14)."
