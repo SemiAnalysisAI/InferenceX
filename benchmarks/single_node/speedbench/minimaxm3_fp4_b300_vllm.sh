@@ -11,12 +11,16 @@
 # acceptance; the synthetic value is injected downstream by the throughput
 # recipe, not here.
 #
-# EAGLE3 draft model: Inferact/MiniMax-M3-EAGLE3. The EAGLE3 head is MHA and
-# must use FLASH_ATTN as the attention backend (FlashInfer only supports page
-# size 128 through its trtllm-gen kernel requiring GQA/MQA). The target model
-# keeps its default FlashInfer backend; --block-size 128 is mandatory for MSA
-# sparse/index cache. The benchmark is text-only, so --language-model-only
-# frees the vision encoder's VRAM.
+# EAGLE3 draft model: Inferact/MiniMax-M3-EAGLE3-GQA (override via DRAFT_MODEL).
+# This is the grouped-query-attention (GQA, num_key_value_heads=4) EAGLE3 head
+# that supersedes the original MHA head (Inferact/MiniMax-M3-EAGLE3); GQA gives a
+# 16x smaller draft KV cache and matches the target's attention. We keep
+# FLASH_ATTN as the draft attention backend: it supports GQA and keeps the AL
+# measurement on the same kernel path as the prior head (backend choice does not
+# change the numerical AL). The target model keeps its default FlashInfer
+# backend; --block-size 128 is mandatory for MSA sparse/index cache. The
+# benchmark is text-only, so --language-model-only frees the vision encoder's
+# VRAM.
 #
 # Filename *_fp4_* is ONLY a naming convention required by speedbench-al.yml
 # (benchmarks/single_node/speedbench/${model-prefix}_fp4_b300_vllm.sh); it does
@@ -45,6 +49,8 @@
 #   bash benchmarks/single_node/speedbench/minimaxm3_fp4_b300_vllm.sh
 #
 # Tunables (env):
+#   DRAFT_MODEL       EAGLE3 draft head (default Inferact/MiniMax-M3-EAGLE3-GQA;
+#                     set to Inferact/MiniMax-M3-EAGLE3-GQA-NVFP4 for the NVFP4 head)
 #   MTP_LIST          space-separated EAGLE3 spec-token levels (default "1 2 3 4 5 6 7 8")
 #   THINKING_MODES    space-separated: off|on       (default "off on")
 #   CATEGORY          SPEED-Bench category          (default coding)
@@ -62,14 +68,18 @@ EP_SIZE="${EP_SIZE:-1}"
 PORT="${PORT:-8888}"
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 
-DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+DRAFT_MODEL="${DRAFT_MODEL:-Inferact/MiniMax-M3-EAGLE3-GQA}"
 
 MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
 THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
+# AL is a per-draft acceptance property and is largely invariant to concurrency,
+# so we batch multiple SPEED-Bench prompts to cut wall-clock. Kept at 16 (the
+# max-concurrency the GQA head was characterized at) to avoid vLLM auto-disabling
+# spec decode under large batches, which would zero out drafts.
+CONCURRENCY="${CONCURRENCY:-16}"
 # Official MiniMax-M3 sampling: temperature 1.0, top_p 0.95, top_k 40.
 TEMPERATURE="${TEMPERATURE:-1.0}"
 TOP_P="${TOP_P:-0.95}"
