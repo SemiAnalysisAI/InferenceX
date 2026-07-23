@@ -1794,16 +1794,23 @@ build_replay_cmd() {
     REPLAY_CMD+=" --use-server-token-count"
     # Dynamo's KV router needs an explicit conversation session binding to
     # keep later turns on the prefill worker that owns their prefix blocks.
-    # X-Correlation-ID is useful tracing metadata but does not establish that
-    # binding by itself. AIPerf emits nvext.session_control bind/close actions
-    # keyed by the stable conversation correlation ID when this flag is set.
+    # New Dynamo deployments use X-Dynamo-Session-ID headers, while existing
+    # pinned deployments retain the nvext.session_control behavior by default.
     if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
-        REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
-        # The upstream 300s affinity TTL is shorter than an overloaded
-        # high-concurrency agentic request. Keep bindings alive across long
-        # prefills, generation, and capped inter-turn delay. This controls the
-        # router's inactivity lease; it does not relax HTTP/request failures.
-        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+        case "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID:-false}" in
+            true|True|TRUE|1)
+                # AIPerf PR #17's environment setting is inherited directly
+                # from benchmark.env and needs no routing CLI flag.
+                ;;
+            *)
+                # Existing Dynamo recipes retain the legacy nvext behavior.
+                REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+                # The upstream 300s affinity TTL is shorter than an overloaded
+                # high-concurrency agentic request. Keep bindings alive across
+                # long prefills, generation, and capped inter-turn delay.
+                REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+                ;;
+        esac
     fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
