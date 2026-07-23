@@ -357,6 +357,9 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.90
     --trust-remote-code
     --mm-encoder-tp-mode data
+    --tool-call-parser kimi_k2
+    --enable-auto-tool-choice
+    --reasoning-parser kimi_k2
     --block-size=1
     --max-num-seqs "$CONC"
     --max-model-len auto
