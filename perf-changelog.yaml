@@ -5051,6 +5051,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
 
 - config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"
+    - "All-TP4 prefill/decode (drop TP8): a real-weight sweep showed TP8 decode is no better than TP4 on tok/s/GPU; expert parallelism off (ep:1, single-node TP8 sweep showed EP -14% to -27% slower than dense)"
+    - "Split the 8k/1k P/D topology by concurrency: low conc (1,2,4) on 1P(TP4)/1D(TP4); high conc (8,16,32,64,128,256,512) on 1P(TP4)/2D(TP4) so decode load/KV is spread across two decode engines (the single-decode engine is unstable in the high-conc tail)"
+    - "Sync per-worker vLLM serve flags/env with the single-node recipe: --kv-cache-dtype fp8, --max-model-len 32768, --max-num-seqs 256, --max-num-batched-tokens 32768; VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, HSA_NO_SCRATCH_RECLAIM=1, AITER defaults; drop the --compilation-config PIECEWISE pin (use vLLM default FULL_AND_PIECEWISE)"
+    - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
+    - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
     - kimik2.7-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Add Kimi-K2.7-Code-MXFP4 agentic-coding MTP config on MI355X via vLLM nightly-f25953cc59f9b4ba9b04b16228d2b86dcfbcbdb1, using EAGLE3 speculative decoding with lightseekorg/kimi-k2.6-eagle3.1-mla"
