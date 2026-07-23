@@ -5074,4 +5074,4 @@
   description:
     - "Refresh the six non-speculative MiniMax-M3 NVFP4 B200 8k1k disaggregated Dynamo-vLLM recipes from vllm/vllm-openai:cu129-nightly-8e981630c9336233ca9de91452f68918bddbc4e2 to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9."
     - "Keep the existing DEP2-prefill/TP4-decode topology, Dynamo version, and concurrency sweep unchanged."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2311
