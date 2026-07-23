@@ -109,7 +109,9 @@ unset _benchmark_caller
 # --------------------------------
 
 GPU_MONITOR_PID=""
+GPU_MONITOR_VENDOR=""
 GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
 
 # Start background GPU monitoring that logs metrics every second to CSV.
@@ -131,11 +133,13 @@ start_gpu_monitor() {
     export GPU_METRICS_CSV
 
     if command -v nvidia-smi &>/dev/null; then
-        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+        GPU_MONITOR_VENDOR="nvidia"
+        nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
             --format=csv -l "$interval" > "$output" 2>/dev/null &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
+        GPU_MONITOR_VENDOR="amd"
         # Use amd-smi native watch mode (-w) which includes timestamps automatically.
         # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
         amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
@@ -143,6 +147,7 @@ start_gpu_monitor() {
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
+        GPU_MONITOR_VENDOR=""
         echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
         return 0
     fi
@@ -153,6 +158,18 @@ stop_gpu_monitor() {
     if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
         kill "$GPU_MONITOR_PID" 2>/dev/null
         wait "$GPU_MONITOR_PID" 2>/dev/null || true
+        # benchmark_end_time_unix is recorded shortly before the benchmark
+        # process exits. For the NVIDIA PR1 canary, append one post-exit sample
+        # so boundary interpolation is deterministic even when the run ends
+        # between 1 Hz monitor ticks. AMD one-shot CSV schemas vary by amd-smi
+        # version, so strict AMD lifecycle validation remains follow-up work.
+        case "$GPU_MONITOR_VENDOR" in
+            nvidia)
+                nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
+                    --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
+                    echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
+                ;;
+        esac
         echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
         if [[ -f "$GPU_METRICS_CSV" ]]; then
             local lines
@@ -161,6 +178,7 @@ stop_gpu_monitor() {
         fi
     fi
     GPU_MONITOR_PID=""
+    GPU_MONITOR_VENDOR=""
 }
 
 # Return success only while a PID exists and is not a zombie waiting to be

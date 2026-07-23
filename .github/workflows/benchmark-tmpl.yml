@@ -129,6 +129,11 @@ on:
         required: false
         type: string
         default: '3600'
+      require-power:
+        description: "Fail fixed-sequence result processing when GPU power is invalid"
+        required: false
+        type: boolean
+        default: false
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -174,6 +179,7 @@ env:
   KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
@@ -351,6 +357,18 @@ jobs:
         with:
           name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
           path: gpu_metrics.csv
+          if-no-files-found: ignore
+
+      - name: Upload power audit bundle
+        if: ${{ always() && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: power_audit_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.RESULT_FILENAME }}.json
+            agg_${{ env.RESULT_FILENAME }}.json
+            gpu_metrics.csv
+            power_validation_${{ env.RESULT_FILENAME }}.json
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

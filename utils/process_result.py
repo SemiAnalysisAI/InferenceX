@@ -1,6 +1,6 @@
-import sys
 import json
 import os
+import sys
 from pathlib import Path
 
 
@@ -38,6 +38,73 @@ def get_optional_component_metadata(env_var):
     if not all(isinstance(metadata[key], str) and metadata[key] for key in metadata):
         raise ValueError(f"{env_var} name and version must be non-empty strings")
     return metadata
+
+
+def record_power_internal_error(
+    *,
+    csv_path,
+    bench_result,
+    agg_result,
+    validation_result,
+    expected_num_gpus,
+    error,
+):
+    """Preserve an auditable invalid result when aggregation fails unexpectedly."""
+    reason = "aggregation_internal_error"
+    try:
+        agg_data = json.loads(agg_result.read_text(encoding="utf-8"))
+        for key in (
+            "avg_power_w",
+            "avg_total_gpu_power_w",
+            "total_gpu_energy_j",
+            "joules_per_successful_query",
+            "joules_per_input_token",
+            "joules_per_output_token",
+            "joules_per_total_token",
+        ):
+            agg_data.pop(key, None)
+        agg_data["power_valid"] = 0
+        agg_data.pop("power_invalid_reasons", None)
+        agg_tmp = agg_result.with_suffix(agg_result.suffix + ".tmp")
+        agg_tmp.write_text(json.dumps(agg_data, indent=2), encoding="utf-8")
+        agg_tmp.replace(agg_result)
+
+        validation_data = {
+            "schema_version": 1,
+            "power_valid": False,
+            "reasons": [reason],
+            "telemetry_source": str(csv_path),
+            "benchmark_result": str(bench_result),
+            "benchmark_window": None,
+            "integration_method": (
+                "per_device_trapezoidal_with_linear_boundary_interpolation"
+            ),
+            "expected_gpu_count": expected_num_gpus,
+            "observed_gpu_count": 0,
+            "observed_gpu_ids": [],
+            "per_gpu_sample_counts": {},
+            "per_gpu_max_sample_gap_s": {},
+            "per_gpu_energy_j": {},
+            "device_issues": {},
+            "metrics": {},
+            "internal_error": {
+                "type": type(error).__name__,
+                "message": str(error)[:500],
+            },
+        }
+        validation_tmp = validation_result.with_suffix(
+            validation_result.suffix + ".tmp"
+        )
+        validation_tmp.write_text(
+            json.dumps(validation_data, indent=2), encoding="utf-8"
+        )
+        validation_tmp.replace(validation_result)
+    except (OSError, json.JSONDecodeError) as fallback_error:
+        print(
+            f"[process_result] failed to preserve power validation fallback: "
+            f"{fallback_error}",
+            file=sys.stderr,
+        )
 
 
 # Base required env vars
@@ -204,16 +271,23 @@ for key, value in bmk_result.items():
         data[key.replace('_ms', '').replace(
             'tpot', 'intvty')] = 1000.0 / float(value)
 
-print(json.dumps(data, indent=2))
-
 agg_path = Path(f'agg_{result_filename}.json')
 with open(agg_path, 'w') as f:
     json.dump(data, f, indent=2)
 
-# Best-effort: patch measured power into the agg JSON. Never fails the run.
-try:
-    from aggregate_power import run as _aggregate_power_run
-
+# Single-node measured power is best-effort by default. Power studies can set
+# REQUIRE_POWER=1 to fail closed after the validation sidecar has been written.
+_require_power = os.environ.get('REQUIRE_POWER', '').lower() in {'1', 'true', 'yes'}
+_power_status = 0
+if is_multinode:
+    if _require_power:
+        print(
+            '[process_result] Power validation failed: PR1 supports only '
+            'single-node non-disaggregated telemetry',
+            file=sys.stderr,
+        )
+        _power_status = 1
+else:
     _csv_candidates = [
         os.environ.get('GPU_METRICS_CSV'),
         'gpu_metrics.csv',
@@ -221,13 +295,36 @@ try:
     ]
     _csv_path = next(
         (Path(p) for p in _csv_candidates if p and Path(p).is_file()),
-        None,
+        Path(next(p for p in _csv_candidates if p)),
     )
-    if _csv_path is not None:
-        _aggregate_power_run(
+    _bench_path = Path(f'{result_filename}.json')
+    _validation_path = Path(f'power_validation_{result_filename}.json')
+    try:
+        from aggregate_power import run as _aggregate_power_run
+
+        _power_status = _aggregate_power_run(
             csv_path=_csv_path,
-            bench_result=Path(f'{result_filename}.json'),
+            bench_result=_bench_path,
             agg_result=agg_path,
+            expected_num_gpus=num_gpus,
+            validation_result=_validation_path,
+            require_power=_require_power,
         )
-except Exception as exc:  # noqa: BLE001 — never block on telemetry
-    print(f'[process_result] power aggregation skipped: {exc}', file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 — preserve ordinary benchmark behavior
+        print(f'[process_result] power aggregation failed: {exc}', file=sys.stderr)
+        record_power_internal_error(
+            csv_path=_csv_path,
+            bench_result=_bench_path,
+            agg_result=agg_path,
+            validation_result=_validation_path,
+            expected_num_gpus=num_gpus,
+            error=exc,
+        )
+        if _require_power:
+            _power_status = 1
+
+with open(agg_path) as f:
+    print(json.dumps(json.load(f), indent=2))
+
+if _power_status:
+    raise SystemExit(_power_status)
