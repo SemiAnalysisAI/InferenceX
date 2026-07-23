@@ -1,7 +1,7 @@
 name: "minimax-m3-vllm-disagg-b200-4p2d-fp4-dep2-tp4-c1024-8k1k"
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
-  container: "vllm/vllm-openai:cu129-nightly-8e981630c9336233ca9de91452f68918bddbc4e2"
+  container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: "fp4"
 resources:
   gpu_type: "b200"
@@ -43,7 +43,7 @@ backend:
     VLLM_NIXL_SIDE_CHANNEL_PORT: '5600'
     VLLM_NIXL_ABORT_REQUEST_TIMEOUT: '300'
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: cuda_ipc,cuda_copy,rc
+    UCX_TCP_AF_PRIO: "inet"
   decode_environment:
     VLLM_USE_DEEP_GEMM: '1'
     VLLM_SKIP_P2P_CHECK: '1'
@@ -60,13 +60,12 @@ backend:
     VLLM_USE_FLASHINFER_MOE_FP4: '1'
     VLLM_USE_TRTLLM_RAGGED_DEEPSEEK_PREFILL: '0'
     VLLM_USE_NCCL_SYMM_MEM: '1'
-    UCX_IB_ROCE_REACHABILITY_MODE: local_subnet
     VLLM_NIXL_SIDE_CHANNEL_PORT: '5600'
     VLLM_NIXL_ABORT_REQUEST_TIMEOUT: '300'
     VLLM_MOE_DP_CHUNK_SIZE: '384'
     VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD: '8192'
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: cuda_ipc,cuda_copy,rc
+    UCX_TCP_AF_PRIO: "inet"
   vllm_config:
     prefill:
       tensor-parallel-size: 1
