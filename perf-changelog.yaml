@@ -5051,6 +5051,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2249
 
 - config-keys:
+    - minimaxm3-fp4-b200-dynamo-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 B200 Dynamo-vLLM disaggregated benchmarks at 8k/1k."
+    - "Use configurations from concurrency 1 through 1024 with spread worker placement for CI transport validation."
+    - "Image: vllm/vllm-openai:cu129-nightly-8e981630c9336233ca9de91452f68918bddbc4e2; Dynamo: 1.3.0.dev20260710."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2230
+
+- config-keys:
     - kimik2.5-fp4-mi355x-vllm-disagg
   description:
     - "Bump image to vllm/vllm-openai-rocm:nightly-2afa3f7e950264bb179d030c23a1ed1f46558fd9"

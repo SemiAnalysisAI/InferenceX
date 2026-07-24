@@ -1,49 +1,30 @@
-name: "minimax-m3-vllm-disagg-b300-2p3d-dep2-tp4-fp4-8k1k-eagle3"
-
+name: "minimax-m3-vllm-disagg-b200-1p1d-fp4-dep2-tp4-8k1k"
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
   container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
-  precision: fp4
-
+  precision: "fp4"
 resources:
-  gpu_type: b300
+  gpu_type: "b200"
   gpus_per_node: 8
   prefill_nodes: 1
   decode_nodes: 1
-  prefill_workers: 2
-  decode_workers: 3
+  prefill_workers: 1
+  decode_workers: 1
   gpus_per_prefill: 2
   gpus_per_decode: 4
-
-dynamo:
-  install: true
-  version: 1.3.0.dev20260710
-
-frontend:
-  type: dynamo
-  enable_multiple_frontends: false
-
+dynamo: {install: true, version: 1.3.0.dev20260710}
+frontend: {type: dynamo, enable_multiple_frontends: false}
 backend:
   type: vllm
   connector: null
   allow_prefill_decode_colocation: true
-  allow_prefill_decode_colocation_across_nodes: true
-
-  prefill_environment:
-    VLLM_FLOAT32_MATMUL_PRECISION: high
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
-    UCX_TCP_AF_PRIO: "inet"
-
-  decode_environment:
-    VLLM_FLOAT32_MATMUL_PRECISION: high
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
-    UCX_TCP_AF_PRIO: "inet"
-
+  prefill_environment: {VLLM_FLOAT32_MATMUL_PRECISION: high, UCX_TCP_AF_PRIO: "inet"}
+  decode_environment: {VLLM_FLOAT32_MATMUL_PRECISION: high, UCX_TCP_AF_PRIO: "inet"}
   vllm_config:
     prefill:
+      served-model-name: nvidia/MiniMax-M3-NVFP4
       no-enable-flashinfer-autotune: true
       tensor-parallel-size: 1
-      pipeline-parallel-size: 1
       data-parallel-size: 2
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
@@ -51,44 +32,31 @@ backend:
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      kv-cache-dtype: fp8
       block-size: 128
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.90
       max-model-len: 9472
       language-model-only: true
-      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":1,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 16384
-
     decode:
+      served-model-name: nvidia/MiniMax-M3-NVFP4
       no-enable-flashinfer-autotune: true
       tensor-parallel-size: 4
-      pipeline-parallel-size: 1
       enable-expert-parallel: false
       trust-remote-code: true
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      kv-cache-dtype: fp8
       block-size: 128
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.90
       max-model-len: 9472
       language-model-only: true
-      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
       max-num-seqs: 1024
       max-num-batched-tokens: 16384
       max-cudagraph-capture-size: 2048
-
-health_check:
-  max_attempts: 360
-  interval_seconds: 10
-
-benchmark:
-  type: sa-bench
-  isl: 8192
-  osl: 1024
-  req_rate: inf
-  num_warmup_mult: 0
-  random_range_ratio: 0.8
-  use_chat_template: true
-  concurrencies: "192"
+health_check: {max_attempts: 360, interval_seconds: 10}
+benchmark: {type: "sa-bench", isl: 8192, osl: 1024, random_range_ratio: 0.8, concurrencies: "1x4x8x16", req_rate: "inf"}

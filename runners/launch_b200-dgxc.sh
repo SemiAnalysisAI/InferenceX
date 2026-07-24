@@ -69,9 +69,8 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
-    # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
     export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"
@@ -113,6 +112,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        mkdir -p recipes/vllm/minimax-m3/b200-fp4
+        cp -rT \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b200-fp4" \
+            recipes/vllm/minimax-m3/b200-fp4
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
