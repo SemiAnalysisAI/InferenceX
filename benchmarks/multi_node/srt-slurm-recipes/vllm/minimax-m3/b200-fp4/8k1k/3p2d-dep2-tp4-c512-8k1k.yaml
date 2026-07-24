@@ -11,7 +11,7 @@ resources:
   gpus_per_prefill: 2
   decode_nodes: 2
   decode_workers: 2
-  spread_decode_workers: true
+  spread_workers: true
   gpus_per_decode: 4
   gpus_per_node: 8
 dynamo: {install: true, version: 1.3.0.dev20260710}
