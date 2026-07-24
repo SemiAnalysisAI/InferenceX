@@ -25,11 +25,11 @@ check_env_vars \
 SERVED_MODEL_NAME="$MODEL"
 TARGET_MODEL_PATH="${MODEL_PATH:-$MODEL}"
 if [[ "$TARGET_MODEL_PATH" != /* ]]; then
-    TARGET_MODEL_PATH="$(hf download "$TARGET_MODEL_PATH")"
+    hf download "$TARGET_MODEL_PATH"
 fi
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
-DRAFT_MODEL_PATH="$(hf download "$DRAFT_MODEL")"
+hf download "$DRAFT_MODEL"
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -89,7 +89,7 @@ fi
 
 SPECULATIVE_CONFIG="$(
     printf '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"draft_tensor_parallel_size":%d,"attention_backend":"TRITON_ATTN"}' \
-        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$DRAFT_TP"
+        "$DRAFT_MODEL" "$NUM_SPEC_TOKENS" "$DRAFT_TP"
 )"
 
 set -x
