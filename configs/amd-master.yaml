@@ -1732,6 +1732,52 @@ minimaxm3-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+
+# MiniMax-M3 MXFP4 MI355X vLLM disaggregated agentic (1P1D TP8, Mooncake DRAM KV offload).
+# Mooncake v0.3.11.post1 is installed at job runtime by server_vllm.sh (not baked into image).
+minimaxm3-fp4-mi355x-vllm-disagg-agentic:
+  image: rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm-disagg
+  router: { name: vllm-router, version: "0.1.14" }
+  kv-p2p-transfer: moriio
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "GPU_MEMORY_UTILIZATION=0.9"
+          - "VLLM_PATCH_46240=1"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+          - "MC_WORKERS_PER_CTX=4"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "VLLM_PATCH_46240=1"
+          - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
+          - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
+          - "MC_WORKERS_PER_CTX=4"
+
 # MiniMax-M3 MXFP4 MI355X vLLM recipe. The pinned nightly includes upstream
 # MiniMax-M3 Quark MXFP4 support (vllm-project/vllm#45794). Use the text-only
 # language-model path and mirror the MXFP8 MI355X search space for a direct
