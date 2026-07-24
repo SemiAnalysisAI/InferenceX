@@ -1,7 +1,8 @@
 kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
-  # Single-point bring-up for the MI355X Kimi MPND curve.
-  # Keep only one active matrix entry while MoRIIO+vLLM stability is being
-  # debugged; the wider 8k/1k curve is recorded in the disagg roadmap.
+  # Focused three-point MPND sweep. B200/GB200 wins by keeping 4-GPU
+  # prefill/decode workers efficient and only scaling replicas at high
+  # concurrency; avoid low-concurrency TP8 decode points that inflate the
+  # GPU denominator without filling the workers.
   image: vllm/vllm-openai-rocm:nightly
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
@@ -15,9 +16,11 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
     - isl: 8192
       osl: 1024
       search-space:
-      # conc=16: low-concurrency decode replication, pure TP baseline.
+      # conc=512: reproduce the best current MI355X disagg shape on the latest
+      # image/patch.  This was near single-node 8k1k TP4 per-GPU throughput in
+      # the earlier PR sweep.
       - spec-decoding: "none"
-        conc-list: [ 16 ]
+        conc-list: [ 512 ]
         prefill:
           num-worker: 1
           tp: 4
@@ -28,49 +31,51 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
 
-      # conc=64: prefill DTP4 (DP-attn + TP, no EP) with replicated TP8 decode.
-      # Trigger separately while debugging DP-attn-prefill -> TP-decode metadata.
+      # conc=1024: same efficient 4-GPU worker shape, higher pressure.  This is
+      # the most likely point to cross the single-node TP4 per-GPU frontier
+      # without introducing a new mode.
       - spec-decoding: "none"
-        conc-list: [ 64 ]
+        conc-list: [ 1024 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
-          dp-attn: true
+          dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=2"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
 
-      # conc=128: keep the same validated 1P2D heterogeneous TP shape and
-      # increase pressure before moving to 1P4D / 2P2D.
+      # conc=1024: add prefill replicas for 8k1k.  This is the MI355X analogue
+      # of the B200 high-concurrency move from 1P to multi-P, but keeps each
+      # worker at TP4 instead of using inefficient TP8 decode as a DEP substitute.
       - spec-decoding: "none"
-        conc-list: [ 128 ]
+        conc-list: [ 1024 ]
         prefill:
-          num-worker: 1
+          num-worker: 2
           tp: 4
           ep: 1
-          dp-attn: true
+          dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=1"
+          - "PREFILL_NODES=2"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
-          tp: 8
+          tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
