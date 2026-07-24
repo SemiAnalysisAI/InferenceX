@@ -5032,6 +5032,14 @@
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
   
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Close the high-concurrency gap vs the ATOM recipe on MiniMax-M3 MXFP4 MI355X single-node vLLM STP. Bump image to latest nightly vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1."
+    - "Add INT4 quantized all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0, VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256) and fp8 KV cache (--kv-cache-dtype fp8). No --hf-overrides indexer-skipping knobs (disallowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)."
+    - "Simplify search space to a single TP4 conc 1-512 sweep for 8k1k (drop TP8, TP4/EP4, TP2/EP2, and dp-attn variants), matching minimaxm3-fp8-mi355x-vllm (#2003); 1k1k deprecated per #2263."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2104
+  
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic-mtp

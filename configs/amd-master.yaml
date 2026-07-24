@@ -1737,7 +1737,7 @@ minimaxm3-fp4-mi355x-vllm-disagg:
 # language-model path and mirror the MXFP8 MI355X search space for a direct
 # precision comparison.
 minimaxm3-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -1749,10 +1749,7 @@ minimaxm3-fp4-mi355x-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 512 }
 
 # EAGLE3 speculative-decoding variant of minimaxm3-fp4-mi355x-vllm. Pair the
 # amd/MiniMax-M3-MXFP4 target with Inferact/MiniMax-M3-EAGLE3 and three draft
