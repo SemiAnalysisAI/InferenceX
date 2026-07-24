@@ -37,6 +37,12 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi 
 
+# max_req=conc only for mid/high concurrency (conc>=64). Low conc uses the ATOM
+# default: dev shows default is on-par or ~4% better at very low conc (e.g. c2).
+if [ "$CONC" -ge 64 ]; then
+    PARALLEL_ARGS+=(--max-num-seqs "$CONC")
+fi
+
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -60,7 +66,6 @@ python3 -m atom.entrypoints.openai_server \
     --trust-remote-code \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --no-enable_prefix_caching \
-    --max-num-seqs "$CONC" \
     --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
     > "$SERVER_LOG" 2>&1 &
 
