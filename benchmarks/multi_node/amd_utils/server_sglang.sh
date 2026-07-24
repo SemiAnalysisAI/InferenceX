@@ -530,6 +530,12 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # per-node DRAM budget computed by the sweep generator (enforcement); fall
     # back to --hicache-ratio (relative to the GPU KV pool) when no budget is
     # provided, keeping configs that predate the budget unchanged.
+    # FORCE_HICACHE_RATIO lets a recipe opt into ratio-based sizing without
+    # unsetting TOTAL_CPU_DRAM_GB — that var is also the shared client-side
+    # gate (benchmark_lib.sh requires it whenever KV_OFFLOADING=dram) and is
+    # forwarded verbatim into client.env below, so unsetting it here would
+    # make the aiperf client container fail its own env validation before
+    # ever sending a request.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
     # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
@@ -537,7 +543,9 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
     # server_args.hicache_size > 0):
     # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
-    if [[ -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+    # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
+    # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
+    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
         # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
         # offloads KV to CPU DRAM today); --hicache-size is per rank per host
         # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
@@ -776,12 +784,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # across the agentic trace; round_robin decode keeps the single decode worker
         # fed evenly. Override via ROUTER_RESILIENCE_FLAGS / ROUTER_POLICY_FLAGS.
         ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
-        ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-cache_aware}"
-        ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+        # server_sglang.sh previously read ROUTER_PREFILL_POLICY, but the recipe
+        # scripts export PREFILL_ROUTER_POLICY, so the recipe's policy override was
+        # silently ignored and the router always fell back to this hardcoded
+        # default. Also comment out ROUTER_DECODE_POLICY for now (superseded by
+        # --dp-aware below).
+        ROUTER_PREFILL_POLICY="${PREFILL_ROUTER_POLICY:-consistent_hashing}"
+        # ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
         ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
         ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
         ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
-        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --prefill-policy ${ROUTER_PREFILL_POLICY} --decode-policy ${ROUTER_DECODE_POLICY} --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+        ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --dp-aware --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
     else
         # DI router config (8k1k branch, run 28696443568): with defaults the per-worker
         # circuit stays OPEN for cb-timeout-duration-secs=60 before a half-open retrial.
@@ -975,8 +988,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       ENABLE_METRICS IS_AGENTIC CLEAR_CACHE_BETWEEN_CONC \
                       DISAGG IS_MULTINODE \
                       TP EP_SIZE DP_ATTENTION DCP_SIZE PCP_SIZE \
-                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_HARDWARE \
-                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_HARDWARE \
+                      PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN PREFILL_ENABLE_DP PREFILL_HARDWARE \
+                      DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN DECODE_ENABLE_DP DECODE_HARDWARE \
                       KV_OFFLOADING KV_OFFLOAD_BACKEND KV_OFFLOAD_BACKEND_METADATA TOTAL_CPU_DRAM_GB KV_P2P_TRANSFER \
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
                       AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
