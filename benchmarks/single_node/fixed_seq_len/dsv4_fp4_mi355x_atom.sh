@@ -27,11 +27,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
     else #DPA+TP
-        #DPA+TP+TBO
-        if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
-            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
-            export GPU_MAX_HW_QUEUES=5
-        elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
+        #DPA+TP+TBO (opt: TBO on for dp-attn cells at conc>=64, no per-scenario gate)
+        if [ "$CONC" -ge 64 ]; then
             PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
             export GPU_MAX_HW_QUEUES=5
         else
@@ -39,6 +36,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
         fi
     fi
 fi 
+
+# max_req=conc for every dp-on cell (mandatory: dp-attention keeps a full KV pool
+# per rank, so the large default max_num_seqs OOMs even at low conc like c16/c32)
+# and for mid/high conc (conc>=64). dp-off low conc uses the ATOM default
+# (dev: default is on-par or ~4% better at very low conc, e.g. c2).
+if [ "$DP_ATTENTION" = "true" ] || [ "$CONC" -ge 64 ]; then
+    PARALLEL_ARGS+=(--max-num-seqs "$CONC")
+fi
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 
