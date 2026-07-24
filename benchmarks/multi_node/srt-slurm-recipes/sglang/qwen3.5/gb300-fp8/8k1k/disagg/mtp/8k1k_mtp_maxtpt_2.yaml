@@ -170,3 +170,4 @@ benchmark:
   num_warmup_mult: 2
   random_range_ratio: 0.8
   concurrencies: "1280"
+  use_chat_template: true
