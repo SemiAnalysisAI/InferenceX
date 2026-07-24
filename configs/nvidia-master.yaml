@@ -7800,6 +7800,22 @@ minimaxm3-fp8-h200-vllm-agentic:
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
+minimaxm3-fp4-b300-vllm-agentic-mtp:
+  image: vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 16] }
+      - { tp: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [2] }
+
 dsv4-fp4-b200-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
   model: deepseek-ai/DeepSeek-V4-Pro
