@@ -417,11 +417,15 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
-export EVAL_LIMIT=10 MODEL_NAME=test-model SWEBENCH_SANDBOX_SWEEP=0 SWEBENCH_WATCHDOG_POLL=1
+export EVAL_LIMIT=10 MODEL_NAME=amd/Kimi-K2.7-Code-MXFP4 MODEL_PREFIX=kimik2.7 SWEBENCH_SANDBOX_SWEEP=0 SWEBENCH_WATCHDOG_POLL=1
+export SWEBENCH_AGENT_TOOL_CHOICE=auto SWEBENCH_AGENT_PARALLEL_TOOL_CALLS=false
 _run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
 [ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
 grep -q 'api_base: http://0.0.0.0:8899/v1' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
-grep -q 'openai/test-model' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
+grep -q 'openai/amd/Kimi-K2.7-Code-MXFP4' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
+grep -q 'tool_choice: auto' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_TOOL_CHOICE; exit 1; }
+grep -q 'parallel_tool_calls: false' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PARALLEL_TOOLS; exit 1; }
+grep -q 'Kimi-native tool-call markers' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_KIMI_GUIDANCE; exit 1; }
 grep -q 'additional_critical_guidance' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_GUIDANCE; exit 1; }
 grep -q 'BEFORE submitting you MUST run the test' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_VERIFY_RULE; exit 1; }
 grep -q 'runtime_timeout: 3600' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_RUNTIME_TIMEOUT; exit 1; }
