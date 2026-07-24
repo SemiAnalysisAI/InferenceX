@@ -5068,4 +5068,4 @@
     - "Add seven SGLang recipes for TP4, TEP8, and DEP4/DEP16 prefill/decode topologies with EAGLE speculative decoding and Mooncake KV transfer."
     - "Enable chat-formatted benchmark inputs for every MTP recipe."
     - "Use a digest-pinned SGLang v0.5.14-cu130 image and validate Enroot imports before publishing shared squash files."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2324
