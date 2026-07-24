@@ -81,6 +81,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml ]]; then
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout c1b6b5c97f323baefad577d70c4e8392b6f537d9
+    mkdir -p recipes/vllm/minimax-m3
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -199,12 +205,12 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-# The TP1 8k1k recipes use a newer srt-slurm revision whose preflight checks
+# The MTP and TP1 8k1k recipes use newer srt-slurm revisions whose preflight checks
 # model.path on this GHA login host. MiniMax-M3 NVFP4 is intentionally staged
 # under compute-node-local /scratch (as in the original B300 submission), so
 # the login host cannot stat it even though workers can. Keep this bypass
-# scoped to the new recipe set; runtime model loading still validates the path.
-if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ]]; then
+# scoped to those recipe sets; runtime model loading still validates the path.
+if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
@@ -385,6 +391,7 @@ else
         Kimi-K2.5
         Kimi-K2.5-NVFP4
         Kimi-K2.6
+        Kimi-K2.6-NVFP4
         MiniMax-M2.5
         MiniMax-M2.5-NVFP4
         MiniMax-M2.7

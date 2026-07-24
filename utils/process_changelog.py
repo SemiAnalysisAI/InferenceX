@@ -137,6 +137,7 @@ def main():
         "single_node": defaultdict(list),
         "multi_node": defaultdict(list),
         "evals": [],
+        "agentic_evals": [],
         "multinode_evals": [],
         "changelog_metadata": {
             "base_ref": args.base_ref,
@@ -150,7 +151,7 @@ def main():
     # Track benchmark coverage per scenario so overlapping changelog entries
     # with disjoint scenario filters do not suppress each other.
     benchmark_scenarios_seen = defaultdict(set)
-    eval_configs_seen = set()
+    eval_scenarios_seen = defaultdict(set)
 
     master_config = load_config_files(MASTER_CONFIGS)
     resolved_entries = []
@@ -214,14 +215,20 @@ def main():
                     raise
                 all_benchmark_results.extend(json.loads(result.stdout))
 
-        # Evals only apply to fixed-sequence scenarios. Do not mark a config as
-        # seen when an agentic-only entry generates no eval matrix.
-        if "fixed-seq-len" not in entry_scenarios:
-            continue
+        eval_groups = defaultdict(list)
+        for config in all_configs:
+            unseen_scenarios = tuple(
+                scenario for scenario in SCENARIO_TYPES
+                if (
+                    scenario in entry_scenarios
+                    and scenario not in eval_scenarios_seen[config]
+                )
+            )
+            if unseen_scenarios:
+                eval_scenarios_seen[config].update(unseen_scenarios)
+                eval_groups[unseen_scenarios].append(config)
 
-        eval_configs = [c for c in all_configs if c not in eval_configs_seen]
-        if eval_configs:
-            eval_configs_seen.update(eval_configs)
+        for scenarios, eval_configs in eval_groups.items():
             eval_flags = ["--evals-only"]
             if expand_all_evals:
                 eval_flags.append("--all-evals")
@@ -235,7 +242,7 @@ def main():
                 *MASTER_CONFIGS,
                 *eval_flags,
                 "--scenario-type",
-                "fixed-seq-len",
+                *scenarios,
             ]
             try:
                 eval_result = subprocess.run(
@@ -265,7 +272,18 @@ def main():
             seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
-    final_results["evals"] = [e for e in all_eval_results if e.get("prefill") is None]
+    # Agentic eval rows go to their own bucket so run-sweep.yml can dispatch
+    # them with agentic inputs (scenario-type, kv-offloading, ...) instead of
+    # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have.
+    single_node_evals = [e for e in all_eval_results if e.get("prefill") is None]
+    final_results["evals"] = [
+        e for e in single_node_evals
+        if e.get("scenario-type") != "agentic-coding"
+    ]
+    final_results["agentic_evals"] = [
+        e for e in single_node_evals
+        if e.get("scenario-type") == "agentic-coding"
+    ]
     final_results["multinode_evals"] = [e for e in all_eval_results if e.get("prefill") is not None]
 
     # Validate final results structure

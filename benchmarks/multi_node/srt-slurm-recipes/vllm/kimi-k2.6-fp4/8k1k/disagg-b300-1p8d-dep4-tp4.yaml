@@ -6,7 +6,6 @@ model:
 dynamo:
   version: 1.2.0.dev20260529
   install: true
-setup_script: vllm-container-deps.sh
 resources:
   gpu_type: b300
   gpus_per_node: 8

@@ -47,7 +47,7 @@ TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  deepep-v2) ;;
+  deepep-v2 | uccl-ep) ;;
   *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
 esac
 
@@ -76,10 +76,15 @@ collx_select_image "$IMAGE"
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "${COLLX_STAGE_DIR:-}")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-# ---- backend-setup: pinned DeepEP source + isolated build cache -------------
-# The backend case above admits only deepep-v2, so its staging is unconditional.
-collx_prepare_deepep_source "$MOUNT_SRC" \
-  || collx_die "cannot stage the pinned backend source"
+# ---- backend-setup: pinned backend source + isolated build cache -------------
+# Stage the pinned source for the selected from-source backend before allocation (the
+# submit host has network; compute nodes may not).
+case "$COLLX_BENCH" in
+  deepep-v2) collx_prepare_deepep_source "$MOUNT_SRC" \
+    || collx_die "cannot stage the pinned DeepEP source" ;;
+  uccl-ep) collx_prepare_uccl_source "$MOUNT_SRC" \
+    || collx_die "cannot stage the pinned UCCL source" ;;
+esac
 export COLLX_BACKEND_SOURCE_ROOT=/ix/experimental/CollectiveX/.collx_sources
 collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
   || collx_die "cannot prepare the isolated backend cache"
