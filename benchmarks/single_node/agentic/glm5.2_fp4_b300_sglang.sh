@@ -8,7 +8,8 @@ set -x
 # (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2), STP only:
 # the cookbook's EAGLE MTP variants are intentionally not wired up yet.
 #   DP_ATTENTION=false -> low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM)
-#   DP_ATTENTION=true  -> high-throughput arm (TP8 + DP8 attention-DP)
+#   DP_ATTENTION=true  -> high-throughput DEP arm (TP8 + DP8 attention-DP +
+#                         EP_SIZE expert-parallel MoE via --ep-size)
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -105,11 +106,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     # while KV usage sat at ~0.01). Use the cookbook's own dp8 lever from
     # the B200 cells (32768 = ~4096/rank).
     CHUNKED_PREFILL_SIZE=32768
-    # At conc 512 the saturation working set outlives the default 1800s
-    # warmup drain grace: the drain converges healthily (~0.45 req/s, zero
-    # errors) but needs ~2500s end to end. 3600 is a maximum wait, not a
-    # fixed sleep — lower-conc DPA points still finish as fast as they drain.
-    export AGENTIC_WARMUP_GRACE_PERIOD=3600
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention

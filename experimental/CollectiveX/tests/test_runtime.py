@@ -340,7 +340,7 @@ class CaseArgvContract(unittest.TestCase):
         # Mirror of the parser bench/run_ep.py builds in main().
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--backend", required=True, choices=["deepep-v2", "mori"]
+            "--backend", required=True, choices=["deepep-v2", "mori", "uccl-ep"]
         )
         ep_harness.add_common_args(parser)
         return parser
@@ -399,6 +399,21 @@ class CaseArgvContract(unittest.TestCase):
         args = self._run_ep_parser().parse_args(argv)
         self.assertEqual((args.mode, args.phase, args.scope), ("low-latency", "decode", "scale-up"))
         self.assertEqual(args.case_id, ll_case["case_id"])
+
+    def test_uccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
+        # A uccl-ep case flows through the same generic codec; run_ep's --backend choices
+        # must accept "uccl-ep" and the result filename must carry the backend token so a
+        # uccl-ep leg never collides with the deepep-v2/mori legs of the same cell.
+        uccl_case = {
+            **self.CASE,
+            "backend": "uccl-ep",
+            "case_id": "h200-dgxc-uccl-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
+        }
+        argv = self._case_argv(["16", "2", "8", "8"], case=uccl_case)
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual(args.backend, "uccl-ep")
+        self.assertEqual(args.case_id, uccl_case["case_id"])
+        self.assertEqual(args.out, "results/h200-dgxc_uccl-ep_bf16_decode_TS-c000.json")
 
 
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
