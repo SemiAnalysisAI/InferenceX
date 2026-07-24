@@ -5034,4 +5034,4 @@
   description:
     - "Add MiniMax-M3 MXFP4 MI355X vLLM disaggregated agentic recipe (1P1D TP8, Mooncake DRAM KV offload, batch32 transfer patch)"
     - "Image: rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625; Mooncake v0.3.11.post1 at runtime (server_vllm.sh); conc-list [2, 4, 8, 16, 32]; VLLM_PATCH_46240 + INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2326
