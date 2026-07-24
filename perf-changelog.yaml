@@ -2,7 +2,7 @@
     - dsv4-fp4-mi355x-atom
   description:
     - "Re-sweep dsv4-fp4-mi355x-atom on latest atom-dev nightly (nightly_202607231538, was 202606161823). Recipe: max_num_seqs=conc + TBO on dp-attn cells at conc>=64 (was per-scenario gate 256/1024). Add 1k1k scenario; 8k1k grid adds tp8 dp-off low-conc redundancy to recheck the crossover on the new image."
-  pr-link: PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2325
 
 - config-keys:
     - 70b-fp8-*-vllm
