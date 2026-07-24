@@ -5060,3 +5060,19 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - minimaxm3-fp4-rtx6000pro-vllm
+    - minimaxm3-fp4-rtx6000pro-vllm-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add MiniMax-M3 NVFP4 single-node vLLM benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both GPU-resident TP4 and TEP4 (TP4 attention with EP4 MoE, without DP attention), using FP8 KV cache, MSA block size 128, and NCCL collectives for the PCIe-only topology"
+    - "Pin the CUDA 13.0.1 MiniMax-M3 performance image by digest and force the non-FlashInfer Marlin MoE backend on SM120"
+    - "Apply the narrow vLLM adapter fixes tracked by upstream PRs #45836 and #48929 so Marlin preserves MiniMax-M3's SwiGLU clamp, alpha, and beta; documented by docs/waiver/2306.md"
+    - "Use Triton attention because MiniMax-M3 requires block size 128, which the image's default SM120 FlashInfer attention backend does not accept"
+    - "Add an EAGLE3 MTP twin using Inferact/MiniMax-M3-EAGLE3 with three speculative tokens, Triton attention for the SM120 draft, chat-formatted prompts, and the same TP4/TEP4 concurrency sweep"
+    - "Right-size max-num-seqs to benchmark concurrency for both recipes; size the MTP CUDA-graph token cap to concurrency times four so the draft does not reserve the previous 2048-token graph envelope"
+    - "Disable NCCL IB/RoCE discovery on this single-node runner to avoid an NCCL 2.28.9 bnxt_re initialization segfault"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2306
