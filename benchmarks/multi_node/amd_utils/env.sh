@@ -275,6 +275,26 @@ else
     # FIXME: WA for latest upstream 0305 image
     export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
+    # Decode CUDA-graph capture crash on ROCm 7.2.0 (TP8+EP8, mori a2a).
+    # Symptom: during decode cuda-graph capture, the torch ProcessGroupNCCL
+    # *watchdog* thread calls hipEventQuery() to poll in-flight NCCL work.
+    # ROCm <= 7.2.0's HIP runtime does NOT honor cudaStreamCaptureModeThreadLocal,
+    # so the watchdog's cross-thread query touches the main thread's active
+    # capture and invalidates it -> "HIP error: operation not permitted on an
+    # event last recorded in a capturing stream (hipErrorCapturedEvent)" ->
+    # watchdog aborts -> "Rank 0 scheduler died during initialization" (-6).
+    # This is a HIP runtime bug, not OOM and not a mori/deepep-mode bug (it
+    # fires for --deepep-mode normal and auto alike; EP8+mori just adds NCCL
+    # PGs that make the watchdog race fire). Refs: sgl-project/sglang#29235,
+    # #24011; ROCm/hip#3876; pytorch/pytorch#176251.
+    # Real fix = ROCm 7.2.2+ (honors THREAD_LOCAL). Until the base image is
+    # bumped, TORCH_NCCL_BLOCKING_WAIT=true makes NCCL work completion use a
+    # blocking wait instead of the async watchdog hipEventQuery poll, so no
+    # event is queried during capture. CUDA graph stays fully enabled.
+    export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
+    export NCCL_BLOCKING_WAIT="${NCCL_BLOCKING_WAIT:-1}"
+    # export NCCL_DEBUG="${NCCL_DEBUG:-INFO}"
+
     # =========================================================================
     # DeepSeek-V4-Pro PD recipe overrides
     # Placed at the end of the SGLang env block so it wins over the global

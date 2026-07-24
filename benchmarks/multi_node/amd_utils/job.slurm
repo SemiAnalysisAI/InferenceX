@@ -345,6 +345,29 @@ export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
+# =============================================================================
+# RDMA QoS / DCQCN Pre-flight Check
+# =============================================================================
+# Gate the run on NIC QoS (PFC/DSCP) and DCQCN config on every node before
+# any container/GPU time is spent. Runs on the bare host (nicctl is a host
+# tool). See rdma_check.sh for details.
+RDMA_CHECK_SCRIPT="$(pwd)/helpers/rdma_check.sh"
+if [[ "${SKIP_RDMA_CHECK:-0}" == "1" ]]; then
+    echo "[INFO] SKIP_RDMA_CHECK=1 set; skipping RDMA QoS/DCQCN pre-flight check"
+elif [[ -f "$RDMA_CHECK_SCRIPT" ]]; then
+    echo "Checking RDMA QoS/DCQCN configuration on all $NUM_NODES allocated node(s)..."
+    srun --nodelist="$SELECTED_NODELIST_SRUN" --ntasks=$NUM_NODES bash "$RDMA_CHECK_SCRIPT"
+    RDMA_CHECK_RC=$?
+    if [[ $RDMA_CHECK_RC -ne 0 ]]; then
+        echo "FATAL: RDMA QoS/DCQCN pre-flight check failed on one or more nodes (see [FAIL] lines above)."
+        echo "       Set SKIP_RDMA_CHECK=1 to bypass (not recommended -- MoRI cross-node transfers would run unprotected by PFC/DCQCN)."
+        exit 1
+    fi
+    echo "RDMA QoS/DCQCN pre-flight check passed on all $NUM_NODES node(s)"
+else
+    echo "[WARN] $RDMA_CHECK_SCRIPT not found; skipping RDMA QoS/DCQCN pre-flight check"
+fi
+
 cleanup() {
   echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
   # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
@@ -494,6 +517,7 @@ fi
 HICACHE_MC_CONFIG="${BENCHMARK_LOGS_DIR}/hicache_mc_${SLURM_JOB_ID}.env"
 cat > "$HICACHE_MC_CONFIG" <<EOF
 HICACHE_RATIO=${HICACHE_RATIO:-}
+FORCE_HICACHE_RATIO=${FORCE_HICACHE_RATIO:-}
 HICACHE_HOST_POOL_COUNT=${HICACHE_HOST_POOL_COUNT:-}
 HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-}
 HICACHE_IO_BACKEND=${HICACHE_IO_BACKEND:-}
@@ -634,6 +658,12 @@ fi  # end: if ENGINE == atom-disagg
 # Pre-clean (idempotent)
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
 \$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+
+# GPU sanity gate: containers are stopped, so any remaining VRAM use is a bare
+# (non-containerized) process hogging the GPU -- fail fast (and name it)
+# instead of OOMing in model load ~30 min later. set -e + --kill-on-bad-exit
+# tears down the whole job on non-zero exit.
+bash \"$DI_REPO_DIR/benchmarks/multi_node/amd_utils/helpers/gpu_sanity.sh\"
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
