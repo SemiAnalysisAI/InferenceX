@@ -183,7 +183,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5|qwen3.5) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -191,12 +191,62 @@ uses_watchtower_shared_fs() {
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
+# Enroot 3.x does not parse Docker's tag@digest syntax. For digest-pinned
+# images, use its explicit registry syntax and pass the digest as the
+# manifest reference so the import remains immutable.
+enroot_uri_for_image() {
+    local image="$1"
+    local image_without_digest="$image"
+    local digest=""
+    local first_component registry repository repository_dir repository_name
+
+    if [[ "$image" == *@sha256:* ]]; then
+        image_without_digest="${image%@*}"
+        digest="${image##*@}"
+    fi
+
+    first_component="${image_without_digest%%/*}"
+    if [[ "$image_without_digest" == */* && ( "$first_component" == *.* || "$first_component" == *:* || "$first_component" == "localhost" ) ]]; then
+        registry="$first_component"
+        repository="${image_without_digest#*/}"
+    else
+        registry="registry-1.docker.io"
+        repository="$image_without_digest"
+    fi
+
+    if [[ -z "$digest" ]]; then
+        if [[ "$registry" == "registry-1.docker.io" ]]; then
+            printf 'docker://%s\n' "$image"
+        else
+            printf 'docker://%s#%s\n' "$registry" "$repository"
+        fi
+        return
+    fi
+
+    repository_dir="${repository%/*}"
+    repository_name="${repository##*/}"
+    repository_name="${repository_name%%:*}"
+    if [[ "$repository" == */* ]]; then
+        repository="${repository_dir}/${repository_name}"
+    else
+        repository="$repository_name"
+    fi
+    if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
+        repository="library/$repository"
+    fi
+
+    printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
+}
+
 # Concurrent matrix jobs import to the same shared-FS squash path.
 # Serialize imports and atomically replace invalid images so readers never
 # observe a partially written squash file.
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
+    local tmp="${squash}.tmp.$$"
+    local enroot_uri
+    enroot_uri=$(enroot_uri_for_image "$image") || exit 1
     (
         exec 9>"$lock"
         flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
@@ -204,8 +254,17 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash"
         else
             rm -f "$squash" "$squash".tmp.*
-            enroot import -o "${squash}.tmp.$$" "docker://$image"
-            mv -f "${squash}.tmp.$$" "$squash"
+            if ! enroot import -o "$tmp" "$enroot_uri"; then
+                rm -f "$tmp"
+                echo "Error: enroot import failed for $enroot_uri" >&2
+                exit 1
+            fi
+            if ! unsquashfs -l "$tmp" > /dev/null 2>&1; then
+                rm -f "$tmp"
+                echo "Error: enroot import produced an invalid squash file: $tmp" >&2
+                exit 1
+            fi
+            mv -f "$tmp" "$squash" || exit 1
         fi
     ) || exit 1
 }
