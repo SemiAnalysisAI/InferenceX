@@ -6664,7 +6664,7 @@ qwen3.5-fp8-h100-sglang-agentic:
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
 minimaxm3-fp4-b200-dynamo-vllm:
-  image: vllm/vllm-openai:cu129-nightly-8e981630c9336233ca9de91452f68918bddbc4e2
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b200-multinode
