@@ -37,9 +37,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi 
 
-# max_req=conc only for mid/high concurrency (conc>=64). Low conc uses the ATOM
-# default: dev shows default is on-par or ~4% better at very low conc (e.g. c2).
-if [ "$CONC" -ge 64 ]; then
+# max_req=conc for every dp-on cell (mandatory: dp-attention keeps a full KV pool
+# per rank, so the large default max_num_seqs OOMs even at low conc like c16/c32)
+# and for mid/high conc (conc>=64). dp-off low conc uses the ATOM default
+# (dev: default is on-par or ~4% better at very low conc, e.g. c2).
+if [ "$DP_ATTENTION" = "true" ] || [ "$CONC" -ge 64 ]; then
     PARALLEL_ARGS+=(--max-num-seqs "$CONC")
 fi
 
