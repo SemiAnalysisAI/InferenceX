@@ -5,6 +5,19 @@ on:
       runner:
         required: true
         type: string
+      priority:
+        description: "Higher-is-sooner CI priority score"
+        required: true
+        type: string
+      queue-token:
+        description: "One-shot queue token generated for this job"
+        required: true
+        type: string
+      skip-queue-pr:
+        description: "Requested skip_queue PR number"
+        required: false
+        type: string
+        default: ''
       image:
         required: true
         type: string
@@ -179,10 +192,30 @@ permissions:
 
 jobs:
   benchmark:
-    runs-on: ${{ inputs.runner }}
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        (
+          inputs.skip-queue-pr != '' &&
+          format(
+            '["self-hosted",{0},{1},{2},{3}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt)),
+            toJSON(format('ci-skip-queue-pr-{0}', inputs.skip-queue-pr))
+          ) ||
+          format(
+            '["self-hosted",{0},{1},{2}]',
+            toJSON(inputs.runner),
+            toJSON(format('ci-job-{0}-{1}', inputs.priority, inputs.queue-token)),
+            toJSON(format('ci-attempt-{0}', github.run_attempt))
+          )
+        ) ||
+        format('[{0}]', toJSON(inputs.runner))
+      ) }}
     timeout-minutes: 500
     name: >-
-      ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
+      p${{ inputs.priority }} | ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       TP${{ inputs.tp }}${{ inputs.pp != '' && inputs.pp != '1' && format('/PP{0}', inputs.pp) || '' }}${{ inputs.dcp-size != '' && inputs.dcp-size != '1' && format('/DCP{0}', inputs.dcp-size) || '' }}${{ inputs.pcp-size != '' && inputs.pcp-size != '1' && format('/PCP{0}', inputs.pcp-size) || '' }}${{ inputs.ep != '' && inputs.ep != '1' && format('/EP{0}', inputs.ep) || '' }}${{ inputs.dp-attn && '/DPA' || '' }}
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}

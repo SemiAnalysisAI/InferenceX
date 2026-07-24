@@ -174,7 +174,8 @@ Source rewrites are anchor-checked, idempotent, and atomic.
   compatibility (no `{"type": "text"}` injection for non-HF tokenizers).
   Copied into a temp dir as `sitecustomize.py` on `PYTHONPATH`.
 - `patch_swebench_agent.py` (`_patch_swebench_agent`): mini-swe-agent/swe-rex
-  sandbox lifecycle cleanup + budget-exhaustion submission fallback.
+  sandbox lifecycle cleanup, budget-exhaustion submission fallback, and the
+  [SWE-ReX #281](https://github.com/SWE-agent/SWE-ReX/pull/281) closed-stdin fix.
 - `patch_swebench_scoring.py` (`_patch_swebench_scoring`): swebench Modal
   scorer reserved-CPU reduction + sandbox termination on instance completion.
 
@@ -199,8 +200,9 @@ append_lm_eval_summary
   local endpoint, each instance's shell running in a Modal sandbox via swe-rex — the real
   SWE-bench setting) or `single-shot` (lm-eval, one prompt per instance — a ~10% floor baseline,
   kept only as an explicit debugging escape hatch). Agentic knobs: `SWEBENCH_AGENT_WORKERS`
-  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (75), `SWEBENCH_AGENT_TIMEOUT`
-  (4h), `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), `SWEBENCH_MODAL_APP_NAME`
+  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (250),
+  `SWEBENCH_AGENT_CMD_TIMEOUT` (per command, 300s), `SWEBENCH_AGENT_TIMEOUT` (6h),
+  `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), and `SWEBENCH_MODAL_APP_NAME`
   (`infx-evals-swe`).
 - Run size: `EVAL_LIMIT` empty runs the full ~300-instance split; a positive integer runs the
   first N as an explicit smoke-test slice. `EVAL_LIMIT=full` (or `0`) also selects the full split.
