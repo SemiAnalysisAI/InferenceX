@@ -233,7 +233,7 @@ class TestMarkEvalEntries:
         assert len(marked) == 1
         assert marked[0]["conc"] == 64
 
-    def test_default_mode_does_not_mark_agentic(self):
+    def test_default_mode_marks_agentic(self):
         matrix_values = [
             {
                 "scenario-type": "agentic-coding",
@@ -250,9 +250,10 @@ class TestMarkEvalEntries:
         result = mark_eval_entries(matrix_values)
 
         marked = [e for e in result if e.get("run-eval")]
-        assert len(marked) == 0, (
-            f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
+        assert len(marked) == 1, (
+            f"Expected 1 agentic entry marked run-eval in default mode, got {len(marked)}"
         )
+        assert marked[0]["conc"] == 64
 
     def test_single_node_skips_eval_entries_below_min_conc(self):
         """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""

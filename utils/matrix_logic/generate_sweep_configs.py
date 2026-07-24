@@ -235,7 +235,7 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
     ))
 
 
-def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
+def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = True) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
@@ -247,7 +247,8 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
-    - Agentic evals are opt-in to preserve default throughput coverage.
+    - Agentic evals run by default: the highest-conc single-node agentic entry
+      per (model, runner, framework, precision) group is marked.
     """
     from collections import defaultdict
 
@@ -310,7 +311,6 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Default sweeps preserve every agentic throughput result.
     if include_agentic:
         ag_sn_groups = defaultdict(list)
         for i, entry in enumerate(matrix_values):
@@ -783,6 +783,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -816,6 +817,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                     + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -1081,6 +1083,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -1113,6 +1116,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                     + (f"_spec-{spec_decoding}" if spec_decoding != "none" else "")
                                 ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
+                                Fields.RUN_EVAL.value: False,
                             }
                             if kv_offload_backend is not None:
                                 entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
@@ -1365,7 +1369,7 @@ def main():
         
     # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
+        matrix_values = mark_eval_entries(matrix_values)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 

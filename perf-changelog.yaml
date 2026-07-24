@@ -5060,3 +5060,13 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic
+  description:
+    - "Bump LMCache source build from pinned commit 9229067 to the v0.5.1 release tag (CXX=hipcc BUILD_WITH_HIP=1)"
+    - "Add --no-separate-object-group to the LMCache MP server launch command"
+    - "Bump image from vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa (rotated off Docker Hub retention, 404s) to the stable vllm/vllm-openai-rocm:v0.25.1 release tag"
+    - "Drop the lmcache DRAM arm from TP8 to TP4 (conc-list [32, 40, 48] unchanged): halves the LMCache L1 pool partition (TOTAL_CPU_DRAM_GB / (8/TP)) so the MP server comes up inside the healthcheck window"
+    - "generate_sweep_configs.py: agentic evals now default-on in mark_eval_entries (include_agentic=True) — the highest-conc single-node agentic entry per (model, runner, framework, precision) group is marked run-eval in default test-config/full-sweep invocations, matching the --evals-only/--all-evals behavior"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2216

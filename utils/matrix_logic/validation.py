@@ -334,6 +334,8 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+    run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
+    eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
 
     @model_validator(mode='after')
     def validate_worker_hardware_pair(self):
