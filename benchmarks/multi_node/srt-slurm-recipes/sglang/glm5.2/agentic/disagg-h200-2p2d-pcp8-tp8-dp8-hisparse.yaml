@@ -72,7 +72,7 @@ backend:
       enable-dsa-cache-layer-split: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
-      kv-cache-dtype: bfloat16
+      kv-cache-dtype: fp8_e4m3
       context-length: 1048576
       max-total-tokens: 1048576
       chunked-prefill-size: 32768
@@ -95,8 +95,8 @@ backend:
       enable-dp-attention: true
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: decode
-      kv-cache-dtype: bfloat16
-      dsa-decode-backend: flashmla_sparse
+      kv-cache-dtype: fp8_e4m3
+      dsa-decode-backend: flashmla_kv
       context-length: 1048576
       max-total-tokens: 1048576
       mem-fraction-static: 0.85
@@ -128,5 +128,4 @@ benchmark:
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
-
 
