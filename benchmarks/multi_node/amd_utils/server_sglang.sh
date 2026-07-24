@@ -398,7 +398,13 @@ build_server_config() {
     local ep_config=""
     local specific_config=""
 
-    # MTP config (only if MTP is enabled and mode is decode)
+    # MTP config (only if MTP is enabled). SGLang's PD-disaggregated KV/state
+    # transfer registers a matching set of state descriptors on both ends of
+    # the connection; the prefill server must be launched with identical
+    # --speculative-* flags to decode (same as every upstream SGLang PD+EAGLE
+    # example), or prefill never registers the extra MTP/EAGLE draft state
+    # component and decode's PD state transfer fails with
+    # "state component count mismatch" as soon as a transfer is attempted.
     if [ "$decode_mtp_size" -gt 0 ]; then
         mtp_config="${MODEL_MTP_FLAGS} --speculative-num-steps ${decode_mtp_size} --speculative-num-draft-tokens $((decode_mtp_size + 1))"
     fi
@@ -422,7 +428,7 @@ build_server_config() {
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + ep config + mtp config (decode only) + dp config + specific config
+    # Combine: parallel args + base config + ep config + mtp config (both prefill and decode) + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
@@ -430,7 +436,7 @@ build_server_config() {
     if [[ -n "$ep_config" ]]; then
         full_config="$full_config $ep_config"
     fi
-    if [[ -n "$mtp_config" ]] && [[ "$mode" == "decode" ]]; then
+    if [[ -n "$mtp_config" ]]; then
         full_config="$full_config $mtp_config"
     fi
     if [[ -n "$dp_config" ]]; then
