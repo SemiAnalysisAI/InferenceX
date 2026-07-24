@@ -8,8 +8,8 @@ export HF_HUB_CACHE="${HF_HUB_CACHE:-/mnt/hf_hub_cache/}"
 PORT="${PORT:-8888}"
 
 # NCCL 2.28.9 segfaults while probing this node's bnxt_re RDMA devices.
-# These jobs are single-node, so default to the socket transport while
-# preserving an explicit caller override.
+# These jobs are single-node, so disable only the IB/RoCE transport while
+# preserving CUDA P2P and shared-memory transports plus a caller override.
 export NCCL_IB_DISABLE="${NCCL_IB_DISABLE:-1}"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}"
