@@ -27,11 +27,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
     else #DPA+TP
-        #DPA+TP+TBO
-        if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
-            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
-            export GPU_MAX_HW_QUEUES=5
-        elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
+        #DPA+TP+TBO (opt: TBO on for dp-attn cells at conc>=64, no per-scenario gate)
+        if [ "$CONC" -ge 64 ]; then
             PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
             export GPU_MAX_HW_QUEUES=5
         else
@@ -63,6 +60,7 @@ python3 -m atom.entrypoints.openai_server \
     --trust-remote-code \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --no-enable_prefix_caching \
+    --max-num-seqs "$CONC" \
     --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
     > "$SERVER_LOG" 2>&1 &
 
