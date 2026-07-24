@@ -468,6 +468,31 @@ fi
 echo "SYNC_BARRIER_TIMEOUT=${SYNC_BARRIER_TIMEOUT}s (model=${MODEL_NAME:-unset})"
 
 # =============================================================================
+# EAGLE greedy-verify TP-broadcast fix (backport of sgl-project/sglang#31478,
+# issue #31071) — scoped to DeepSeek-V4 MTP only.
+#
+# On AMD/HIP eagle_sample() always takes the greedy branch, which — unlike the
+# sampling branch — does NOT broadcast the accept decision across TP ranks. With
+# TP>1 and no dp-attention (the pure-TP8/EP1 decode topology) the per-rank argmax
+# diverges on near-tied logits: ranks accept different draft counts, seq_lens/
+# batch shapes diverge, and the next TP collective either deadlocks (server hang)
+# or commits divergent tokens (greedy gsm8k 0.9613 -> 0.8855@d1 / 0.8529@d2). The
+# patch is inert on DEP8 (attn_tp world_size 1 -> broadcast skipped), which is why
+# the DEP8 MTP arms were already correct. Idempotent + no-op if a future image
+# already ships the fix. Kept out of the shared path for non-dsv4 scenarios.
+# =============================================================================
+case "${MODEL_NAME}" in
+    *DeepSeek-V4*)
+        if [[ "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+            if ! python3 "$SGLANG_WS_PATH/patch_eagle_verify.py"; then
+                echo "FATAL: eagle_utils greedy-verify TP-broadcast patch could not be applied (sglang#31478 backport); refusing to launch a lossy/deadlock-prone dsv4 MTP server. If the image now ships the fix upstream, the patcher would have reported 'already present' — investigate the installed eagle_utils.py shape." >&2
+                exit 1
+            fi
+        fi
+        ;;
+esac
+
+# =============================================================================
 # Optional KV cache offloading (HiCache) — enabled when
 # KV_OFFLOADING != none AND KV_OFFLOAD_BACKEND == hicache.
 # HiCache extends RadixAttention, so radix cache MUST stay on (drop
