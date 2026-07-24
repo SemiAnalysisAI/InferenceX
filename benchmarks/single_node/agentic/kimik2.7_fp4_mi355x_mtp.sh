@@ -398,6 +398,10 @@ fi
 
 # ---- Run benchmark / eval ---------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
+    # Kimi's forced-tool path currently trips vLLM/xgrammar; keep auto tool
+    # choice and rely on Kimi-specific agent guidance to select the bash tool.
+    export SWEBENCH_AGENT_TOOL_CHOICE="${SWEBENCH_AGENT_TOOL_CHOICE:-auto}"
+    export SWEBENCH_AGENT_PARALLEL_TOOL_CALLS="${SWEBENCH_AGENT_PARALLEL_TOOL_CALLS:-false}"
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"

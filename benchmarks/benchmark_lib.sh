@@ -1192,6 +1192,15 @@ default_path, out_path = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(default_path)) or {}
 d.setdefault("agent", {})
 step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "75"))
+model_name = os.environ.get("MODEL_NAME") or os.environ.get("MODEL", "")
+model_prefix = os.environ.get("MODEL_PREFIX", "")
+kimi_tool_guidance = ""
+if model_prefix.startswith("kimik") or "Kimi" in model_name:
+    kimi_tool_guidance = """
+- This model uses Kimi-native tool-call markers behind the OpenAI tool API. Do not answer in prose only.
+- Every assistant turn must call the bash tool through the provided tool interface. Use exactly one bash tool call per turn.
+- If you emit native Kimi markers, the tool id must be `functions.bash:<n>` and the arguments must be valid JSON for the bash tool. Do not invent other tool names.
+- After each observation, continue with another bash tool call until the patch is ready. A response without a tool call is a format error and scores ZERO."""
 guidance = f"""
 
 <additional_critical_guidance>
@@ -1200,6 +1209,7 @@ guidance = f"""
 - The scoring harness re-runs tests in its own clean environment. If the package fails to BUILD or IMPORT after 2-3 attempts, do NOT keep fixing the environment -- apply your source-code fix and submit it. A local build is not required for your patch to score.
 - `git diff` alone is NOT a submission. Submitting requires the exact final command sequence described above.
 - When unsure how code behaves, write and RUN a short script instead of reasoning about it at length in prose.
+{kimi_tool_guidance}
 </additional_critical_guidance>"""
 it = d["agent"].get("instance_template", "")
 d["agent"]["instance_template"] = it.rstrip() + guidance + "\n"
@@ -1218,16 +1228,22 @@ agent_cpu = os.environ.get("SWEBENCH_AGENT_SANDBOX_CPU", "")
 if agent_cpu:
     env["modal_sandbox_kwargs"] = {"cpu": float(agent_cpu)}
 d["environment"] = env
-model_name = os.environ.get("MODEL_NAME") or os.environ.get("MODEL", "")
+model_kwargs = {
+    "api_base": f"http://0.0.0.0:{os.environ['SWEBENCH_AGENT_PORT']}/v1",
+    "api_key": "dummy",
+    "custom_llm_provider": "openai",
+    "temperature": 0.0,
+}
+tool_choice = os.environ.get("SWEBENCH_AGENT_TOOL_CHOICE", "")
+if tool_choice:
+    model_kwargs["tool_choice"] = tool_choice
+parallel_tool_calls = os.environ.get("SWEBENCH_AGENT_PARALLEL_TOOL_CALLS", "")
+if parallel_tool_calls:
+    model_kwargs["parallel_tool_calls"] = parallel_tool_calls.lower() not in {"0", "false", "no", "off"}
 d["model"] = {
     "model_name": f"openai/{model_name}",
     "cost_tracking": "ignore_errors",
-    "model_kwargs": {
-        "api_base": f"http://0.0.0.0:{os.environ['SWEBENCH_AGENT_PORT']}/v1",
-        "api_key": "dummy",
-        "custom_llm_provider": "openai",
-        "temperature": 0.0,
-    },
+    "model_kwargs": model_kwargs,
 }
 yaml.safe_dump(d, open(out_path, "w"), default_flow_style=False, sort_keys=False)
 PYGEN

@@ -558,16 +558,12 @@ kimik2.7-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    # TP8, 3600s. Best-config sweep on the agentic trace, one KV tier per regime:
-    # GPU-only (none) is only viable at low conc [4,8] (peaks ~26.7 tok/s/GPU at
-    # c8, then collapses at the KV-capacity wall); LMCache DRAM offload carries the
-    # high-conc side and holds throughput where none thrashes, so it is swept at
-    # c16 (the crossover where it overtakes none). Mooncake and c32/48 dropped:
-    # they added no throughput headroom over this best-config envelope.
+    # TP4, 3600s. Sweep LMCache DRAM across the agentic concurrency ladder and
+    # keep a single GPU-only MTP point for comparison.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [4, 8], spec-decoding: mtp }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [16], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [1, 2, 4, 8, 16, 32, 64, 128], spec-decoding: mtp }
+      - { tp: 4, kv-offloading: none, conc-list: [4], spec-decoding: mtp }
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539
