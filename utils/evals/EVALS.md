@@ -200,8 +200,8 @@ append_lm_eval_summary
   local endpoint, each instance's shell running in a Modal sandbox via swe-rex — the real
   SWE-bench setting) or `single-shot` (lm-eval, one prompt per instance — a ~10% floor baseline,
   kept only as an explicit debugging escape hatch). Agentic knobs: `SWEBENCH_AGENT_WORKERS`
-  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (75),
-  `SWEBENCH_AGENT_CMD_TIMEOUT` (per command, 300s), `SWEBENCH_AGENT_TIMEOUT` (4h),
+  (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (250),
+  `SWEBENCH_AGENT_CMD_TIMEOUT` (per command, 300s), `SWEBENCH_AGENT_TIMEOUT` (6h),
   `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), and `SWEBENCH_MODAL_APP_NAME`
   (`infx-evals-swe`).
 - Run size: `EVAL_LIMIT` empty runs the full ~300-instance split; a positive integer runs the
