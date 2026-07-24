@@ -53,8 +53,13 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && $FRAMEWORK == "dy
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
+elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    # Node-local NVMe path; only exists on compute nodes, so srtctl apply
+    # runs with --no-preflight for this model (see SRTCTL_APPLY_ARGS below).
+    export MODEL_PATH="/scratch/models/Kimi-K2.6-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm, kimik2.6-fp4 with dynamo-vllm"
     exit 1
 fi
 
@@ -104,6 +109,13 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECIS
             "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
             "configs/$SRTCTL_SETUP_SCRIPT"
     fi
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    # Pin srt-slurm main so upstream movement does not change behavior
+    git checkout b959ff7d78c396f3f47bb88a115d8a492326aafe
+    mkdir -p recipes/vllm/kimi-k2.6-fp4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6-fp4" recipes/vllm/kimi-k2.6-fp4
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -203,6 +215,13 @@ if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION 
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
     SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
+fi
+if [[ "$MODEL_PREFIX" == "kimik2.6" ]]; then
+    # MODEL_PATH lives on compute-node-local NVMe (/scratch/models), which is
+    # not mounted on the runner invoking srtctl, so skip the Python-level
+    # model-path preflight. vLLM still fails loudly at runtime if the path is
+    # genuinely missing on the compute node.
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
