@@ -29,7 +29,7 @@ for _ in $(seq "$GPU_DRAIN_TRIES"); do
     if [ "$busy_gb" -lt "$GPU_BUSY_GB" ]; then
         exit 0
     fi
-    sleep 5
+    sleep 30
 done
 
 echo "FATAL: $(hostname) GPU still has ${busy_gb}GB used after stopping all containers" >&2
