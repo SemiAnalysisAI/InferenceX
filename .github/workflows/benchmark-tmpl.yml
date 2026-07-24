@@ -202,6 +202,14 @@ jobs:
             done
           fi
 
+          # MI325X AgentX artifacts can occupy hundreds of MB per job. They have
+          # already been uploaded when this anchor runs post-job; removing the
+          # prior workspace copy pre-job also recovers interrupted-run output.
+          if [[ "$RUNNER_NAME" == mi325x-amds_* ]]; then
+            echo "[MI325X] Cleaning benchmark workspace results ..."
+            rm -rf -- "$GITHUB_WORKSPACE/results"
+          fi
+
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."

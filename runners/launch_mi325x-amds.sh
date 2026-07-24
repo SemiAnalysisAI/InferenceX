@@ -30,7 +30,20 @@ export PORT=$(( 40000 + (JOB_ID % 10000) ))
 export XDG_CACHE_HOME="/tmp/xdg-cache-$JOB_ID"
 export TRITON_CACHE_DIR="/tmp/triton-cache-$JOB_ID"
 
-trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
+cleanup_allocation() {
+    local rc=$?
+
+    # AgentX restores a multi-GB mmap dataset under XDG_CACHE_HOME. Remove this
+    # allocation's cache and compiled kernels so repeated sweeps cannot fill the
+    # worker's local disk. The paths include the resolved Slurm job ID and are
+    # therefore isolated from other allocations.
+    srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" \
+        bash -c 'rm -rf -- "$XDG_CACHE_HOME" "$TRITON_CACHE_DIR"' \
+        2>/dev/null || true
+    scancel "$JOB_ID" 2>/dev/null || true
+    exit "$rc"
+}
+trap cleanup_allocation EXIT
 
 # A terminated enroot step can leave its background SGLang process outside the
 # completed Slurm step. Because each allocation owns all eight GPUs on its node,
