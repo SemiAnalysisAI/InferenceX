@@ -3,7 +3,7 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
   # prefill/decode workers efficient and only scaling replicas at high
   # concurrency; avoid low-concurrency TP8 decode points that inflate the
   # GPU denominator without filling the workers.
-  image: vllm/vllm-openai-rocm:nightly
+  image: vllm/vllm-openai-rocm:nightly-67fe73b2b47e2927af1e5ec6fb91e16e3b075940
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg

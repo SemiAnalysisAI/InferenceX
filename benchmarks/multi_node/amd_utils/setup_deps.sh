@@ -80,6 +80,67 @@ install_amd_quark() {
 }
 
 # ---------------------------------------------------------------------------
+# 6c. AITER MXFP4 MoE backend bridge for Kimi-K2.5-MXFP4 on MI355X.
+#     Mirrors PR #2266 until vllm-project/vllm#48683 reaches the official ROCm
+#     nightly image.  The pinned vLLM nightly can still ship AITER post3, which
+#     has Kimi FP4 tuning rows but not the RadeonFlow MXFP4 MoE backend files.
+# ---------------------------------------------------------------------------
+ensure_aiter_mxfp4_moe_backend() {
+    if [[ "${MODEL_NAME:-}" != "Kimi-K2.5-MXFP4" ]]; then
+        return 0
+    fi
+
+    if python3 - <<'PY'
+import site
+from pathlib import Path
+
+roots = [Path(p) for p in site.getsitepackages()]
+required = [
+    "aiter/ops/moe_mxfp4_aux.py",
+    "aiter/aot/flydsl/mxfp4_moe.py",
+]
+raise SystemExit(
+    0 if any(all((root / rel).exists() for rel in required) for root in roots)
+    else 1
+)
+PY
+    then
+        echo "[SETUP] AITER MXFP4 MoE backend already present"
+        return 0
+    fi
+
+    local aiter_branch="${AITER_RUNTIME_BUMP_VERSION:-v0.1.16.post4}"
+    local aiter_version="${aiter_branch#v}"
+    local aiter_repo="${AITER_RUNTIME_BUMP_REPO:-https://github.com/ROCm/aiter.git}"
+    local aiter_src="/tmp/aiter-${aiter_branch}"
+    local wheel_cache="${AITER_RUNTIME_WHEEL_CACHE:-/workspace/.cache/aiter-wheels}"
+
+    mkdir -p "$wheel_cache"
+    python3 -m pip install --quiet flydsl==0.2.2
+
+    if compgen -G "$wheel_cache/amd_aiter-${aiter_version}-*.whl" >/dev/null; then
+        echo "[SETUP] Installing cached AITER ${aiter_branch} wheel from $wheel_cache"
+        python3 -m pip install --quiet --force-reinstall --no-deps \
+            "$wheel_cache"/amd_aiter-"${aiter_version}"-*.whl
+        _SETUP_INSTALLED+=("aiter-${aiter_version}-cached")
+        return 0
+    fi
+
+    echo "[SETUP] Building AITER ${aiter_branch} wheel for RadeonFlow MXFP4 MoE backend"
+    rm -rf "$aiter_src" /tmp/aiter-dist
+    git clone --recursive --depth 1 --branch "$aiter_branch" "$aiter_repo" "$aiter_src"
+    python3 -m pip install --quiet pyyaml
+    (
+        cd "$aiter_src"
+        AITER_USE_SYSTEM_TRITON=1 GPU_ARCHS=gfx950 \
+            python3 setup.py bdist_wheel --dist-dir=/tmp/aiter-dist
+    )
+    cp /tmp/aiter-dist/*.whl "$wheel_cache"/
+    python3 -m pip install --quiet --force-reinstall --no-deps /tmp/aiter-dist/*.whl
+    _SETUP_INSTALLED+=("aiter-${aiter_version}-built")
+}
+
+# ---------------------------------------------------------------------------
 # 8. Patch vLLM MoRI-IO save_kv_layer busy-spin (C128 tail-batch deadlock)
 #    In WRITE mode, save_kv_layer spins forever waiting for the handshake
 #    callback to set write_ready_flags. This blocks the model worker thread,
@@ -1628,6 +1689,7 @@ install_transformers_glm5() {
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_recipe_deps
     install_amd_quark
+    ensure_aiter_mxfp4_moe_backend
     patch_moriio_save_kv_timeout
     patch_moriio_transfer_timeout
     patch_moriio_load_kv_timeout

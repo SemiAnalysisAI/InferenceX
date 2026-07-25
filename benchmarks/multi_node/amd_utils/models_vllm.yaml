@@ -30,9 +30,9 @@ Kimi-K2.5-MXFP4:
   # ~255 GiB free at startup, which fails vLLM's requested-memory check at 0.90.
   prefill_flags: "--tensor-parallel-size 8 --moe-backend aiter --max-model-len 9472 --max-num-batched-tokens 16384 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --kv-cache-dtype fp8 --block-size 16 --gpu-memory-utilization 0.85 --mm-encoder-tp-mode data"
   decode_flags: "--tensor-parallel-size 8 --moe-backend aiter --max-model-len 9472 --max-num-batched-tokens 16384 --compilation-config '{\"cudagraph_mode\":\"PIECEWISE\"}' --no-enable-prefix-caching --kv-cache-dtype fp8 --block-size 16 --gpu-memory-utilization 0.85 --mm-encoder-tp-mode data"
-  # MoRI all2all (EP) is incompatible with the AITER fused shared-expert kernel.
-  # Force it off whenever EP is enabled; TP-only entries do not use MoRI all2all.
-  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=1 VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  # Mirrors the validated single-node MI355X Kimi FP4 AITER/RadeonFlow path from
+  # PR #2266. Current MPND sweep keeps EP off, so FSE can stay enabled.
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_PAGED_ATTN=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_USE_AITER_TRITON_SILU_MUL=1 VLLM_ROCM_USE_AITER_LINEAR=true VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=true AITER_MXFP4_INTERMEDIATE=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
 MiniMax-M2.5:
