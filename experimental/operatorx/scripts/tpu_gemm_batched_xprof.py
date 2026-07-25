@@ -97,13 +97,16 @@ def _profile_all_shapes(
                 annotation_name,
                 profile_iterations=profile_iters,
             ):
-                outputs = []
                 for _ in range(profile_iters):
                     impl.kernel(record["context"])
-                    outputs.append(record["context"]["out"])
-                # This synchronization is the boundary that makes sequential
-                # run_id grouping unambiguous in the final parse.
-                jax.block_until_ready(outputs)
+                    # Synchronize each dispatch instead of retaining every
+                    # output until the end of the shape. Large GEMMs can have
+                    # multi-GiB outputs, so queueing ``profile_iters`` results
+                    # makes memory scale with the sample count and can OOM
+                    # even when one invocation fits comfortably. XProf still
+                    # measures the device module duration; the host-side
+                    # synchronization only separates consecutive samples.
+                    jax.block_until_ready(record["context"]["out"])
     return groups
 
 

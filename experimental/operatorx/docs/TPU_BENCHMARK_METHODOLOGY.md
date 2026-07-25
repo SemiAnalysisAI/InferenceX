@@ -275,7 +275,9 @@ PYTHONPATH=.. \
 
 The script compiles, warms up, and validates every shape before opening the profiler.
 Inside the single trace it dispatches one uniquely annotated shape block at a time
-and synchronizes the device between blocks. Host annotations and TPU events are on
+and synchronizes each sampled dispatch. Per-sample synchronization keeps memory
+independent of `profile_iters`; retaining 21 multi-GiB outputs can otherwise OOM even
+when one invocation fits. Host annotations and TPU events are on
 different timelines, so the parser does not use annotation timestamp windows.
 Instead, it requires the exact total event count and assigns monotonically increasing
 XLA `run_id` groups in the declared shape order. Each row records its assigned run
@@ -285,6 +287,49 @@ All prepared inputs and compiled contexts stay resident until the single capture
 finishes. For a testlist that approaches chiplet HBM capacity, split it into several
 testlists and run one batch per testlist; each batch still amortizes one XProf startup
 across all shapes it contains.
+
+### Build the workload-derived BF16 corpus
+
+`testlists/gemm.json` is a historical union of InferenceX-derived GEMMs. The corpus
+builder converts every valid unique `(M,N,K)` to BF16, applies the current
+kernel-local chunked-prefill ceiling `M <= 32768`, gives every row a stable unique
+name, and best-fit-packs rows into memory-bounded XProf manifests:
+
+```bash
+cd ~/InferenceX/.worktrees/tpu-exploration/experimental/operatorx
+
+CORPUS_DIR=/tmp/operatorx-all-current
+
+~/SimulatorX/.venv/bin/python scripts/build_tpu_gemm_corpus.py \
+  --source testlists/gemm.json \
+  --output-dir "$CORPUS_DIR" \
+  --max-m 32768 \
+  --batch-memory-gib 12
+```
+
+On the 2026-07-25 checkout this produces 3,117 benchmark shapes in 37 batches. It
+records 2,172 unique shapes above the kernel-local M ceiling and 24 invalid
+non-positive source entries in `excluded.json`; exclusions are explicit rather than
+silently treated as hardware measurements. Regenerating directly from the current
+master matrices is preferable once the InferenceX matrix configuration and runner
+metadata are mutually consistent.
+
+Run one batch at a time, using a distinct artifact directory:
+
+```bash
+mkdir -p "$CORPUS_DIR/results" "$CORPUS_DIR/artifacts"
+
+for MANIFEST in "$CORPUS_DIR"/chunks/chunk-*.json; do
+  CHUNK="$(basename "$MANIFEST" .json)"
+  PYTHONPATH=.. ~/SimulatorX/.venv/bin/python \
+    scripts/tpu_gemm_batched_xprof.py \
+      --testlist "$MANIFEST" \
+      --profile-iters 21 \
+      --artifacts-dir "$CORPUS_DIR/artifacts/$CHUNK" \
+      --profile-retention perfetto \
+      --json-out "$CORPUS_DIR/results/$CHUNK.json"
+done
+```
 
 To run the same testlist through the current standard OperatorX entrypoint:
 
