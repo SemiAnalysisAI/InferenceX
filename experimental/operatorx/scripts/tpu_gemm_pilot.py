@@ -187,6 +187,7 @@ def _capture_xprof(
     profile_dir: Path,
     annotation_name: str,
     profile_iters: int,
+    profile_retention: str,
 ) -> dict[str, Any]:
     from operatorx.runners.tpu.xprof import (
         find_perfetto_trace,
@@ -217,12 +218,23 @@ def _capture_xprof(
             jax.block_until_ready(outputs)
 
     trace_path = find_perfetto_trace(profile_dir)
-    return parse_xla_module_durations(
+    summary = parse_xla_module_durations(
         trace_path,
         module_name="jit_dot",
         expected_samples=profile_iters,
         annotation_name=annotation_name,
     )
+    if profile_retention in {"perfetto", "summary"}:
+        for artifact in profile_dir.rglob("*"):
+            if not artifact.is_file():
+                continue
+            if profile_retention == "perfetto" and artifact == trace_path:
+                continue
+            artifact.unlink()
+    if profile_retention == "summary":
+        summary["trace_path"] = None
+    summary["profile_retention"] = profile_retention
+    return summary
 
 
 def _load_pilot_shapes(path: Path) -> list[dict[str, Any]]:
@@ -250,6 +262,7 @@ def _measure_shape(
     artifacts_dir: Path | None,
     profile: bool,
     profile_iters: int,
+    profile_retention: str,
     jax_backend: Any,
 ) -> dict[str, Any]:
     op = op_cls(
@@ -289,6 +302,7 @@ def _measure_shape(
                 profile_dir=artifacts_dir / "profiles" / shape["name"],
                 annotation_name=f"operatorx_{shape['name']}",
                 profile_iters=profile_iters,
+                profile_retention=profile_retention,
             )
 
     synchronized_us: list[float] = []
@@ -385,6 +399,15 @@ def main() -> int:
     )
     parser.add_argument("--profile-iters", type=int, default=5)
     parser.add_argument(
+        "--profile-retention",
+        choices=("all", "perfetto", "summary"),
+        default="all",
+        help=(
+            "all keeps XSpace and Perfetto files; perfetto removes larger "
+            "redundant artifacts; summary removes raw profiles after parsing"
+        ),
+    )
+    parser.add_argument(
         "--chiplet-peak-tflops",
         type=float,
         default=1153.5,
@@ -405,9 +428,16 @@ def main() -> int:
     impl = next(candidate for candidate in jax_backend.IMPLS if candidate.op_type == "gemm")
     shapes = _load_pilot_shapes(args.testlist)
 
+    rows = []
     with jax.default_device(jax.devices()[0]):
-        rows = [
-            _measure_shape(
+        for index, shape in enumerate(shapes, start=1):
+            print(
+                f"[{index}/{len(shapes)}] validating {shape['name']} "
+                f"M={shape['args']['m']} N={shape['args']['n']} "
+                f"K={shape['args']['k']}",
+                flush=True,
+            )
+            row = _measure_shape(
                 jax=jax,
                 op_cls=Op,
                 impl=impl,
@@ -420,10 +450,16 @@ def main() -> int:
                 artifacts_dir=args.artifacts_dir,
                 profile=args.profile,
                 profile_iters=args.profile_iters,
+                profile_retention=args.profile_retention,
                 jax_backend=jax_backend,
             )
-            for shape in shapes
-        ]
+            rows.append(row)
+            device_us = row.get("device_execution_us", {}).get("p50")
+            device_text = f"{device_us:.2f} us" if device_us is not None else "n/a"
+            print(
+                f"  passed correctness/placement/HLO; XProf p50={device_text}",
+                flush=True,
+            )
 
     print(
         "name                 shape              dispatch_p50_us  "

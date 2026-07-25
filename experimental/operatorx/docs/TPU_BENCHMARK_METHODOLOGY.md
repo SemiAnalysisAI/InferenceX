@@ -86,6 +86,21 @@ For the skinny shape, a synchronized steady-state call was about 155 µs, roughl
 These measurements justify the queued proxy for a fast pilot, but they do not yet
 justify replacing the canonical device measurement for every TPU operation.
 
+## Twenty-shape calibration sweep
+
+The expanded testlist `testlists/tpu_gemm_sweep.json` covers 20 BF16 GEMMs: decode
+and prefill M values at hidden sizes 4096 and 8192, square GEMMs from 1024 through
+8192, and 8192↔28672 feed-forward projections. Every row passed the correctness,
+single-device placement, StableHLO, optimized-HLO, and exact XProf event-count gates.
+
+The checked-in compact dataset `data/tpu7x_gemm_sweep_20260725.json` uses 21
+module-level XProf samples per shape. Across the sweep, the median
+`(p90-p10)/p50` spread is 0.91% and the maximum is 3.58%. In contrast, the queued
+proxy overstates device duration by 303% for `16×4096×4096`, 222% for
+`256×4096×4096`, 133% for `2048³`, and 826% for `1024³`; it converges to below 1%
+only for the largest kernels. Therefore **XProf module duration, not queued
+throughput, is the canonical value for cross-shape cost-model calibration**.
+
 ## Validation gates
 
 The pilot can produce a self-contained validation bundle. A shape is accepted only
@@ -197,6 +212,47 @@ python -m operatorx.runners.tpu.xprof \
   --module-name jit_dot \
   --expected-samples 5 \
   --annotation-name operatorx_tpu-gemm-skinny
+```
+
+Run the calibrated 20-shape sweep and retain only the compact Perfetto trace from
+each profile:
+
+```bash
+cd ~/InferenceX/.worktrees/tpu-exploration/experimental/operatorx
+
+SWEEP_DIR="$(mktemp -d /tmp/operatorx-tpu-gemm-sweep.XXXXXX)"
+
+PYTHONPATH=.. \
+~/SimulatorX/.venv/bin/python scripts/tpu_gemm_pilot.py \
+  --testlist testlists/tpu_gemm_sweep.json \
+  --sync-iters 5 \
+  --batches 3 \
+  --batch-iters 16 \
+  --artifacts-dir "$SWEEP_DIR" \
+  --profile \
+  --profile-iters 21 \
+  --profile-retention perfetto \
+  --json-out "$SWEEP_DIR/results.json"
+
+PYTHONPATH=.. \
+~/SimulatorX/.venv/bin/python scripts/compact_tpu_gemm_results.py \
+  "$SWEEP_DIR/results.json" \
+  /tmp/tpu7x-gemm-sweep-compact.json
+```
+
+The compactor preserves validation, aggregate timing, device, and compiler-plan
+evidence while removing the hostname, command-line paths, raw XProf samples,
+sharding representations, and artifact paths. Inspect the canonical measurements:
+
+```bash
+jq '.rows[] | {
+  name,
+  shape,
+  xprof_p50_us: .device_execution_us.p50,
+  xprof_samples: .device_execution_us.samples,
+  queued_proxy_error_pct,
+  compiler_algorithm: .hlo.compiler_algorithm
+}' /tmp/tpu7x-gemm-sweep-compact.json
 ```
 
 To run the same testlist through the current standard OperatorX entrypoint:

@@ -77,6 +77,20 @@ XProf 测得约 883 TFLOP/s，相当于单 chiplet BF16 峰值的 76.6%。
 这些数据支持在快速试点中使用排队代理值，但还不足以证明它可以替代所有 TPU 算子的标准设备
 测量。
 
+## 二十形状校准扫描
+
+扩展后的 `testlists/tpu_gemm_sweep.json` 包含 20 个 BF16 GEMM：隐藏维度
+4096 和 8192 下的解码与预填充 M 值、从 1024 到 8192 的方形 GEMM，以及
+8192↔28672 的前馈投影。每一行都通过了正确性、单设备放置、StableHLO、优化后 HLO
+和 XProf 事件数完全匹配等门槛。
+
+仓库中的紧凑数据集 `data/tpu7x_gemm_sweep_20260725.json` 对每个形状使用 21 个
+module 级 XProf 样本。整个扫描的 `(p90-p10)/p50` 中位数为 0.91%，最大值为
+3.58%。相比之下，排队代理值对 `16×4096×4096` 高估 303%，对
+`256×4096×4096` 高估 222%，对 `2048³` 高估 133%，对 `1024³` 高估
+826%；只有最大的一批 kernel 才收敛到 1% 以内。因此，跨形状成本模型校准必须以
+**XProf module 时长为标准值，而不能使用排队吞吐代理值**。
+
 ## 验证门槛
 
 试点可以生成一套自包含的验证产物。每个形状只有通过以下全部检查才算有效：
@@ -183,6 +197,45 @@ python -m operatorx.runners.tpu.xprof \
   --module-name jit_dot \
   --expected-samples 5 \
   --annotation-name operatorx_tpu-gemm-skinny
+```
+
+运行已校准的 20 形状扫描，并且每个 profile 只保留紧凑的 Perfetto trace：
+
+```bash
+cd ~/InferenceX/.worktrees/tpu-exploration/experimental/operatorx
+
+SWEEP_DIR="$(mktemp -d /tmp/operatorx-tpu-gemm-sweep.XXXXXX)"
+
+PYTHONPATH=.. \
+~/SimulatorX/.venv/bin/python scripts/tpu_gemm_pilot.py \
+  --testlist testlists/tpu_gemm_sweep.json \
+  --sync-iters 5 \
+  --batches 3 \
+  --batch-iters 16 \
+  --artifacts-dir "$SWEEP_DIR" \
+  --profile \
+  --profile-iters 21 \
+  --profile-retention perfetto \
+  --json-out "$SWEEP_DIR/results.json"
+
+PYTHONPATH=.. \
+~/SimulatorX/.venv/bin/python scripts/compact_tpu_gemm_results.py \
+  "$SWEEP_DIR/results.json" \
+  /tmp/tpu7x-gemm-sweep-compact.json
+```
+
+压缩脚本保留验证结果、聚合计时、设备和编译器方案证据，同时删除主机名、命令行路径、原始
+XProf 样本、sharding 表示和产物路径。查看标准测量值：
+
+```bash
+jq '.rows[] | {
+  name,
+  shape,
+  xprof_p50_us: .device_execution_us.p50,
+  xprof_samples: .device_execution_us.samples,
+  queued_proxy_error_pct,
+  compiler_algorithm: .hlo.compiler_algorithm
+}' /tmp/tpu7x-gemm-sweep-compact.json
 ```
 
 通过当前标准 OperatorX 入口运行同一 testlist：

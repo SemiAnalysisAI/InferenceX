@@ -1,0 +1,3012 @@
+{
+  "run": {
+    "software": {
+      "python": "3.12.3",
+      "jax": "0.11.0",
+      "jaxlib": "0.11.0",
+      "libtpu": "0.0.44"
+    },
+    "backend": "tpu",
+    "device_count": 8,
+    "devices": [
+      {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      {
+        "id": 1,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 1,
+        "description": "TPU_1(process=0,(0,0,0,1))"
+      },
+      {
+        "id": 2,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          1,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_2(process=0,(1,0,0,0))"
+      },
+      {
+        "id": 3,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          1,
+          0,
+          0
+        ],
+        "core_on_chip": 1,
+        "description": "TPU_3(process=0,(1,0,0,1))"
+      },
+      {
+        "id": 4,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          1,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_4(process=0,(0,1,0,0))"
+      },
+      {
+        "id": 5,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          1,
+          0
+        ],
+        "core_on_chip": 1,
+        "description": "TPU_5(process=0,(0,1,0,1))"
+      },
+      {
+        "id": 6,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          1,
+          1,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_6(process=0,(1,1,0,0))"
+      },
+      {
+        "id": 7,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          1,
+          1,
+          0
+        ],
+        "core_on_chip": 1,
+        "description": "TPU_7(process=0,(1,1,0,1))"
+      }
+    ],
+    "timing_contracts": {
+      "device_execution_us": "XProf TRACE_ONLY_XLA module critical path",
+      "queued_throughput_us": "retained-output batch completion per op",
+      "dispatch_to_ready_us": "host dispatch through device readiness"
+    },
+    "residency": "steady_state"
+  },
+  "rows": [
+    {
+      "name": "h4096-m16",
+      "shape": {
+        "m": 16,
+        "n": 4096,
+        "k": 4096
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.410247802734375,
+        "max_rel_error": 0.0025969333946704865
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "31349",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "2",
+              "11"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "1",
+              "1",
+              "3"
+            ],
+            "kernel_window_bounds": [
+              "176",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "2",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "23592960"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 200.90699999999998,
+        "p50": 213.801,
+        "p90": 460.18179999999995,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 50.58475,
+        "p50": 52.806,
+        "p90": 56.439350000000005,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 41.27375
+      },
+      "achieved_tflops": 10.166854372609174,
+      "queued_achieved_tflops": 10.166854372609174,
+      "pct_of_chiplet_peak": 0.8813917964984113,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(5057476387729810209)"
+        ],
+        "p10": 12.997599,
+        "p50": 13.109244,
+        "p90": 13.328932,
+        "samples": 21,
+        "annotation": "operatorx_h4096-m16",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            536870912
+          ],
+          "raw_bytes_accessed": [
+            33816576
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 40.95361349594225,
+      "device_pct_of_chiplet_peak": 3.550378283133268,
+      "queued_proxy_error_pct": 302.8149907042694
+    },
+    {
+      "name": "h4096-m256",
+      "shape": {
+        "m": 256,
+        "n": 4096,
+        "k": 4096
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.410247802734375,
+        "max_rel_error": 0.002502612303942442
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "38595",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "32",
+              "8"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "1",
+              "1",
+              "4"
+            ],
+            "kernel_window_bounds": [
+              "128",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "32",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "25690112"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 185.411,
+        "p50": 214.775,
+        "p90": 361.22,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 48.7421875,
+        "p50": 53.4494375,
+        "p90": 57.5823875,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 42.8253125
+      },
+      "achieved_tflops": 160.7114123885775,
+      "queued_achieved_tflops": 160.7114123885775,
+      "pct_of_chiplet_peak": 13.932502157657344,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(13732201553175497606)"
+        ],
+        "p10": 16.495798,
+        "p50": 16.579832,
+        "p90": 16.70108,
+        "samples": 21,
+        "annotation": "operatorx_h4096-m256",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            8589934592
+          ],
+          "raw_bytes_accessed": [
+            37748736
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 518.0953939702165,
+      "device_pct_of_chiplet_peak": 44.9150753333521,
+      "queued_proxy_error_pct": 222.37623095336554
+    },
+    {
+      "name": "h8192-m1",
+      "shape": {
+        "m": 1,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 3,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.2212066650390625,
+        "max_rel_error": 0.0020058858208358288
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "102428",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "1",
+              "13"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "2",
+              "1",
+              "5"
+            ],
+            "kernel_window_bounds": [
+              "208",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "1",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "27426816"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 231.9836,
+        "p50": 250.983,
+        "p90": 533.9234,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 55.4536875,
+        "p50": 56.6131875,
+        "p90": 59.9748875,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 38.835125
+      },
+      "achieved_tflops": 2.3707855700582128,
+      "queued_achieved_tflops": 2.3707855700582128,
+      "pct_of_chiplet_peak": 0.20552974166087673,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(1040877254531564016)"
+        ],
+        "p10": 42.392557,
+        "p50": 43.110444,
+        "p90": 43.602641,
+        "samples": 21,
+        "annotation": "operatorx_h8192-m1",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            134217728
+          ],
+          "raw_bytes_accessed": [
+            134250496
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 3.1133459910549752,
+      "device_pct_of_chiplet_peak": 0.2699042905119181,
+      "queued_proxy_error_pct": 31.321281450963482
+    },
+    {
+      "name": "h8192-m4",
+      "shape": {
+        "m": 4,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.22119140625,
+        "max_rel_error": 0.0027933521196246147
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "102444",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "1",
+              "13"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "2",
+              "1",
+              "5"
+            ],
+            "kernel_window_bounds": [
+              "208",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "1",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "27459584"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 214.3354,
+        "p50": 242.131,
+        "p90": 385.0606,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 54.21031250000001,
+        "p50": 55.9845625,
+        "p90": 60.5988125,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 40.319
+      },
+      "achieved_tflops": 9.589624139690295,
+      "queued_achieved_tflops": 9.589624139690295,
+      "pct_of_chiplet_peak": 0.8313501638223056,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(2424815729359396339)"
+        ],
+        "p10": 42.434574,
+        "p50": 43.081633,
+        "p90": 43.513806,
+        "samples": 21,
+        "annotation": "operatorx_h8192-m4",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            536870912
+          ],
+          "raw_bytes_accessed": [
+            134348800
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 12.461712210398339,
+      "device_pct_of_chiplet_peak": 1.0803391599825174,
+      "queued_proxy_error_pct": 29.94995454327371
+    },
+    {
+      "name": "h8192-m16",
+      "shape": {
+        "m": 16,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.22119140625,
+        "max_rel_error": 0.002889730501919985
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "102728",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "2",
+              "13"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "2",
+              "1",
+              "5"
+            ],
+            "kernel_window_bounds": [
+              "208",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "2",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "27787264"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 220.7138,
+        "p50": 234.175,
+        "p90": 382.6634,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 54.78005,
+        "p50": 57.0575,
+        "p90": 63.4946,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 41.39725
+      },
+      "achieved_tflops": 37.637184384173864,
+      "queued_achieved_tflops": 37.637184384173864,
+      "pct_of_chiplet_peak": 3.2628681737471923,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(2876816858313439649)"
+        ],
+        "p10": 43.061224,
+        "p50": 43.333733,
+        "p90": 44.170468,
+        "samples": 21,
+        "annotation": "operatorx_h8192-m16",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            2147483648
+          ],
+          "raw_bytes_accessed": [
+            134742016
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 49.556857887133795,
+      "device_pct_of_chiplet_peak": 4.29621654851615,
+      "queued_proxy_error_pct": 31.669939444173885
+    },
+    {
+      "name": "h8192-m64",
+      "shape": {
+        "m": 64,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.22119140625,
+        "max_rel_error": 0.0027933521196246147
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "104232",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "8",
+              "13"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "2",
+              "1",
+              "5"
+            ],
+            "kernel_window_bounds": [
+              "208",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "8",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "29532160"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 231.9224,
+        "p50": 261.221,
+        "p90": 547.1740000000001,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 57.152150000000006,
+        "p50": 58.03275,
+        "p90": 60.228100000000005,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 37.793125
+      },
+      "achieved_tflops": 148.01874100400207,
+      "queued_achieved_tflops": 148.01874100400207,
+      "pct_of_chiplet_peak": 12.832140529172264,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(18041921415422006045)"
+        ],
+        "p10": 44.202881,
+        "p50": 44.829532,
+        "p90": 45.806723,
+        "samples": 21,
+        "annotation": "operatorx_h8192-m64",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            8589934592
+          ],
+          "raw_bytes_accessed": [
+            136314880
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 191.61330062513255,
+      "device_pct_of_chiplet_peak": 16.61146949502666,
+      "queued_proxy_error_pct": 29.452054061148797
+    },
+    {
+      "name": "h8192-m256",
+      "shape": {
+        "m": 256,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.22119140625,
+        "max_rel_error": 0.0027933521196246147
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "119939",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "32",
+              "16"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "3",
+              "1",
+              "4"
+            ],
+            "kernel_window_bounds": [
+              "256",
+              "22"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "32",
+              "22"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "29868032"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 224.9856,
+        "p50": 251.865,
+        "p90": 432.37,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 63.1337625,
+        "p50": 64.0758125,
+        "p90": 64.5010625,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 36.60825
+      },
+      "achieved_tflops": 536.2357031055986,
+      "queued_achieved_tflops": 536.2357031055986,
+      "pct_of_chiplet_peak": 46.48770724799295,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(7390903640007919112)"
+        ],
+        "p10": 52.022809,
+        "p50": 52.158463,
+        "p90": 52.731092,
+        "samples": 21,
+        "annotation": "operatorx_h8192-m256",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            34359738368
+          ],
+          "raw_bytes_accessed": [
+            142606336
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 658.7567269380619,
+      "device_pct_of_chiplet_peak": 57.10938248271018,
+      "queued_proxy_error_pct": 22.848352529099643
+    },
+    {
+      "name": "h8192-m1024",
+      "shape": {
+        "m": 1024,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.37884521484375,
+        "max_rel_error": 0.0027933521196246147
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "289033",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "128",
+              "64"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "16",
+              "1",
+              "1"
+            ],
+            "kernel_window_bounds": [
+              "1024",
+              "4"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "128",
+              "4"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "18874368"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 330.9516,
+        "p50": 356.323,
+        "p90": 474.8826,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 159.0638125,
+        "p50": 159.1270625,
+        "p90": 159.6331125,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 32.9416875
+      },
+      "achieved_tflops": 863.7057161285813,
+      "queued_achieved_tflops": 863.7057161285813,
+      "pct_of_chiplet_peak": 74.876958485356,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(17176036966465405576)"
+        ],
+        "p10": 147.615846,
+        "p50": 147.80072,
+        "p90": 148.020408,
+        "samples": 21,
+        "annotation": "operatorx_h8192-m1024",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            137438953472
+          ],
+          "raw_bytes_accessed": [
+            167772160
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 929.8936667696883,
+      "device_pct_of_chiplet_peak": 80.6149689440562,
+      "queued_proxy_error_pct": 7.663252587673443
+    },
+    {
+      "name": "square-1024",
+      "shape": {
+        "m": 1024,
+        "n": 1024,
+        "k": 1024
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.10833358764648438,
+        "max_rel_error": 0.003347934689372778
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "14004",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "128",
+              "8"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "1",
+              "1",
+              "1"
+            ],
+            "kernel_window_bounds": [
+              "128",
+              "8"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "128",
+              "8"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "6144000"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 183.8514,
+        "p50": 223.329,
+        "p90": 362.8646,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 51.386625,
+        "p50": 51.591625,
+        "p90": 57.598625,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 40.7425
+      },
+      "achieved_tflops": 41.624656094860356,
+      "queued_achieved_tflops": 41.624656094860356,
+      "pct_of_chiplet_peak": 3.6085527607161128,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(11622914124911327334)"
+        ],
+        "p10": 5.47539,
+        "p50": 5.57383,
+        "p90": 5.635054,
+        "samples": 21,
+        "annotation": "operatorx_square-1024",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            2147483648
+          ],
+          "raw_bytes_accessed": [
+            6291456
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 385.27971753713337,
+      "device_pct_of_chiplet_peak": 33.40092913195781,
+      "queued_proxy_error_pct": 825.604566339483
+    },
+    {
+      "name": "square-2048",
+      "shape": {
+        "m": 2048,
+        "n": 2048,
+        "k": 2048
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.07188034057617188,
+        "max_rel_error": 0.0028294397052377462
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "45748",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "256",
+              "16"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "4",
+              "1",
+              "1"
+            ],
+            "kernel_window_bounds": [
+              "256",
+              "4"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "256",
+              "4"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "12574720"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 194.9202,
+        "p50": 228.047,
+        "p90": 441.65540000000004,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 52.1340375,
+        "p50": 52.7166875,
+        "p90": 56.339287500000005,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 38.8610625
+      },
+      "achieved_tflops": 325.89052914221895,
+      "queued_achieved_tflops": 325.89052914221895,
+      "pct_of_chiplet_peak": 28.25232155545895,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(16083637961522489707)"
+        ],
+        "p10": 22.545018,
+        "p50": 22.673469,
+        "p90": 22.867947,
+        "samples": 21,
+        "annotation": "operatorx_square-2048",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            17179869184
+          ],
+          "raw_bytes_accessed": [
+            25165824
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 757.7080147726842,
+      "device_pct_of_chiplet_peak": 65.68773426724614,
+      "queued_proxy_error_pct": 132.50384623543928
+    },
+    {
+      "name": "square-4096",
+      "shape": {
+        "m": 4096,
+        "n": 4096,
+        "k": 4096
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.410247802734375,
+        "max_rel_error": 0.0024952690582722425
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "324772",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "64",
+              "32"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "4",
+              "8",
+              "1"
+            ],
+            "kernel_window_bounds": [
+              "512",
+              "8"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "64",
+              "8"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "31297536"
+            }
+          ],
+          "cross_program_prefetch": false
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 328.371,
+        "p50": 371.403,
+        "p90": 622.502,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 166.5766625,
+        "p50": 167.3660625,
+        "p90": 168.2764625,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 38.96375
+      },
+      "achieved_tflops": 821.1877092585603,
+      "queued_achieved_tflops": 821.1877092585603,
+      "pct_of_chiplet_peak": 71.19095875670224,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(8130961917434373736)"
+        ],
+        "p10": 154.822329,
+        "p50": 155.187275,
+        "p90": 155.72389,
+        "samples": 21,
+        "annotation": "operatorx_square-4096",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            137438953472
+          ],
+          "raw_bytes_accessed": [
+            100663296
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 885.6328811237906,
+      "device_pct_of_chiplet_peak": 76.77788306231388,
+      "queued_proxy_error_pct": 7.847800343166023
+    },
+    {
+      "name": "square-8192",
+      "shape": {
+        "m": 8192,
+        "n": 8192,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.22119140625,
+        "max_rel_error": 0.0027933521196246147
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "2604600",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "256",
+              "8"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "8",
+              "4",
+              "8"
+            ],
+            "kernel_window_bounds": [
+              "128",
+              "8"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "256",
+              "8"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "33427456"
+            }
+          ],
+          "cross_program_prefetch": false
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 1432.1108,
+        "p50": 1453.001,
+        "p90": 1581.7487999999998,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 1254.034175,
+        "p50": 1254.287875,
+        "p90": 1255.133225,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 31.8060625
+      },
+      "achieved_tflops": 876.6022933738398,
+      "queued_achieved_tflops": 876.6022933738398,
+      "pct_of_chiplet_peak": 75.99499725824359,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(6337916587315446599)"
+        ],
+        "p10": 1242.960384,
+        "p50": 1243.208884,
+        "p90": 1243.379352,
+        "samples": 21,
+        "annotation": "operatorx_square-8192",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            1099511627776
+          ],
+          "raw_bytes_accessed": [
+            402653184
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 884.414229922765,
+      "device_pct_of_chiplet_peak": 76.6722349304521,
+      "queued_proxy_error_pct": 0.8911608614276993
+    },
+    {
+      "name": "ffn-up-m16",
+      "shape": {
+        "m": 16,
+        "n": 28672,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.42132568359375,
+        "max_rel_error": 0.0030403356067836285
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "347788",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "2",
+              "13"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "7",
+              "1",
+              "5"
+            ],
+            "kernel_window_bounds": [
+              "208",
+              "32"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "2",
+              "32"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "27787264"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 309.0476,
+        "p50": 356.075,
+        "p90": 500.1402,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 153.2012625,
+        "p50": 153.2640625,
+        "p90": 153.9616125,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 33.246125
+      },
+      "achieved_tflops": 49.040803469502194,
+      "queued_achieved_tflops": 49.040803469502194,
+      "pct_of_chiplet_peak": 4.251478410880121,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(18023233034072982367)"
+        ],
+        "p10": 142.130852,
+        "p50": 142.214886,
+        "p90": 142.528211,
+        "samples": 21,
+        "annotation": "operatorx_ffn-up-m16",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            7516192768
+          ],
+          "raw_bytes_accessed": [
+            470941696
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 52.850956600984794,
+      "device_pct_of_chiplet_peak": 4.581790775984811,
+      "queued_proxy_error_pct": 7.769352991641104
+    },
+    {
+      "name": "ffn-up-m256",
+      "shape": {
+        "m": 256,
+        "n": 28672,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.42132568359375,
+        "max_rel_error": 0.0030403356067836285
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "400370",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "32",
+              "8"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "6",
+              "1",
+              "8"
+            ],
+            "kernel_window_bounds": [
+              "128",
+              "38"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "32",
+              "38"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "30359552"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 355.56179999999995,
+        "p50": 387.823,
+        "p90": 621.2024,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 188.3637375,
+        "p50": 188.8926875,
+        "p90": 189.3330875,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 37.28625
+      },
+      "achieved_tflops": 636.65293707042,
+      "queued_achieved_tflops": 636.65293707042,
+      "pct_of_chiplet_peak": 55.19314582318336,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(2473387495346675995)"
+        ],
+        "p10": 176.846339,
+        "p50": 177.170468,
+        "p90": 178.458583,
+        "samples": 21,
+        "annotation": "operatorx_ffn-up-m256",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            120259084288
+          ],
+          "raw_bytes_accessed": [
+            488636416
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 678.7761281298867,
+      "device_pct_of_chiplet_peak": 58.8449179132975,
+      "queued_proxy_error_pct": 6.616350700162961
+    },
+    {
+      "name": "ffn-up-m1024",
+      "shape": {
+        "m": 1024,
+        "n": 28672,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.42132568359375,
+        "max_rel_error": 0.0030403356067836285
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "985353",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "128",
+              "64"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "56",
+              "1",
+              "1"
+            ],
+            "kernel_window_bounds": [
+              "1024",
+              "4"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "128",
+              "4"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "18874368"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 685.1278,
+        "p50": 694.477,
+        "p90": 875.7606,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 516.6558375,
+        "p50": 516.7556875,
+        "p90": 517.2088875000001,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 28.84225
+      },
+      "achieved_tflops": 930.8776831836999,
+      "queued_achieved_tflops": 930.8776831836999,
+      "pct_of_chiplet_peak": 80.70027595870826,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(301318658978059047)"
+        ],
+        "p10": 504.744298,
+        "p50": 505.106843,
+        "p90": 505.462185,
+        "samples": 21,
+        "annotation": "operatorx_ffn-up-m1024",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            481036337152
+          ],
+          "raw_bytes_accessed": [
+            545259520
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 952.3457142155567,
+      "device_pct_of_chiplet_peak": 82.56139698444358,
+      "queued_proxy_error_pct": 2.3062139548166836
+    },
+    {
+      "name": "ffn-up-m4096",
+      "shape": {
+        "m": 4096,
+        "n": 28672,
+        "k": 8192
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.42132568359375,
+        "max_rel_error": 0.0030403356067836285
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "4550544",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "256",
+              "8"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "28",
+              "2",
+              "8"
+            ],
+            "kernel_window_bounds": [
+              "128",
+              "8"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "256",
+              "8"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "33427456"
+            }
+          ],
+          "cross_program_prefetch": false
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 2355.9157999999998,
+        "p50": 2390.591,
+        "p90": 2598.3356000000003,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 2183.1338,
+        "p50": 2183.268,
+        "p90": 2183.8116999999997,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 28.60875
+      },
+      "achieved_tflops": 881.3143180809685,
+      "queued_achieved_tflops": 881.3143180809685,
+      "pct_of_chiplet_peak": 76.40349528226862,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(4026371913967294435)"
+        ],
+        "p10": 2171.501801,
+        "p50": 2171.755102,
+        "p90": 2171.968788,
+        "samples": 21,
+        "annotation": "operatorx_ffn-up-m4096",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            1924145348608
+          ],
+          "raw_bytes_accessed": [
+            771751936
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 885.9863374263641,
+      "device_pct_of_chiplet_peak": 76.8085251344919,
+      "queued_proxy_error_pct": 0.5301195327869869
+    },
+    {
+      "name": "ffn-down-m16",
+      "shape": {
+        "m": 16,
+        "n": 8192,
+        "k": 28672
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.4940185546875,
+        "max_rel_error": 0.0037566241808235645
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "339220",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "2",
+              "25"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "4",
+              "1",
+              "9"
+            ],
+            "kernel_window_bounds": [
+              "400",
+              "16"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "2",
+              "16"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "26497024"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 313.3274,
+        "p50": 328.636,
+        "p90": 476.75780000000003,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 150.23695,
+        "p50": 150.3705,
+        "p90": 150.68975,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 32.6294375
+      },
+      "achieved_tflops": 49.98449009612923,
+      "queued_achieved_tflops": 49.98449009612923,
+      "pct_of_chiplet_peak": 4.333289128403054,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(4218621953981604664)"
+        ],
+        "p10": 138.506603,
+        "p50": 138.831933,
+        "p90": 139.166867,
+        "samples": 21,
+        "annotation": "operatorx_ffn-down-m16",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            7516192768
+          ],
+          "raw_bytes_accessed": [
+            470941696
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 54.138789294246884,
+      "device_pct_of_chiplet_peak": 4.693436436432327,
+      "queued_proxy_error_pct": 8.3111765072089
+    },
+    {
+      "name": "ffn-down-m256",
+      "shape": {
+        "m": 256,
+        "n": 8192,
+        "k": 28672
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.4940185546875,
+        "max_rel_error": 0.0037566241808235645
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "363025",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "32",
+              "28"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "5",
+              "1",
+              "8"
+            ],
+            "kernel_window_bounds": [
+              "448",
+              "13"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "32",
+              "13"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "29048832"
+            }
+          ],
+          "cross_program_prefetch": true
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 353.01840000000004,
+        "p50": 379.6,
+        "p90": 511.4494000000001,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 179.3386375,
+        "p50": 180.5631875,
+        "p90": 180.64518749999996,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 34.8525625
+      },
+      "achieved_tflops": 666.0221607352828,
+      "queued_achieved_tflops": 666.0221607352828,
+      "pct_of_chiplet_peak": 57.739242369768775,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(71588006621342973)"
+        ],
+        "p10": 167.677071,
+        "p50": 168.031212,
+        "p90": 168.714286,
+        "samples": 21,
+        "annotation": "operatorx_ffn-down-m256",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            120259084288
+          ],
+          "raw_bytes_accessed": [
+            488636416
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 715.6949167753429,
+      "device_pct_of_chiplet_peak": 62.045506439128125,
+      "queued_proxy_error_pct": 7.458123613367727
+    },
+    {
+      "name": "ffn-down-m1024",
+      "shape": {
+        "m": 1024,
+        "n": 8192,
+        "k": 28672
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.4940185546875,
+        "max_rel_error": 0.0037566241808235645
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "1071612",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "128",
+              "8"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "4",
+              "1",
+              "28"
+            ],
+            "kernel_window_bounds": [
+              "128",
+              "16"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "128",
+              "16"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "31612928"
+            }
+          ],
+          "cross_program_prefetch": false
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 679.3524,
+        "p50": 701.437,
+        "p90": 978.2144000000001,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 548.23995,
+        "p50": 548.258,
+        "p90": 548.5794500000001,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 25.6470625
+      },
+      "achieved_tflops": 877.3904569600443,
+      "queued_achieved_tflops": 877.3904569600443,
+      "pct_of_chiplet_peak": 76.06332526745075,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(1753075639308757304)"
+        ],
+        "p10": 538.072029,
+        "p50": 538.476591,
+        "p90": 538.816327,
+        "samples": 21,
+        "annotation": "operatorx_ffn-down-m1024",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            481036337152
+          ],
+          "raw_bytes_accessed": [
+            545259520
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 893.3282248327115,
+      "device_pct_of_chiplet_peak": 77.44501298939849,
+      "queued_proxy_error_pct": 1.8164966060706718
+    },
+    {
+      "name": "ffn-down-m4096",
+      "shape": {
+        "m": 4096,
+        "n": 8192,
+        "k": 28672
+      },
+      "dtype": "bf16",
+      "backend": "jax",
+      "device": {
+        "id": 0,
+        "platform": "tpu",
+        "device_kind": "TPU7x",
+        "process_index": 0,
+        "coords": [
+          0,
+          0,
+          0
+        ],
+        "core_on_chip": 0,
+        "description": "TPU_0(process=0,(0,0,0,0))"
+      },
+      "placement": {
+        "validated": true,
+        "array_device_ids": {
+          "A": [
+            0
+          ],
+          "B": [
+            0
+          ],
+          "out": [
+            0
+          ]
+        }
+      },
+      "correctness": {
+        "validated": true,
+        "reference": "numpy_fp32_sampled_dot",
+        "sampled_elements": 9,
+        "rtol": 0.01,
+        "atol": 0.5,
+        "max_abs_error": 0.4940185546875,
+        "max_rel_error": 0.0037566241808235645
+      },
+      "hlo": {
+        "validated": true,
+        "stablehlo_contains": "stablehlo.dot_general",
+        "optimized_module": "jit_dot",
+        "compiler_algorithm": {
+          "optimized_opcode": "convolution",
+          "emitter": "EmitAllBatchInSublanes",
+          "window_config": {
+            "buffering_level": "2",
+            "cost_model_type": "COST_MODEL_TYPE_CLASSIC",
+            "estimated_bundle_count": "0",
+            "estimated_cycles": "5775736",
+            "estimated_scoped_vmem_bytes": "0",
+            "estimated_vmem_bytes": "0",
+            "input_window_bounds": [
+              "128",
+              "9"
+            ],
+            "is_mask": false,
+            "iteration_bounds": [
+              "8",
+              "4",
+              "25"
+            ],
+            "kernel_window_bounds": [
+              "144",
+              "8"
+            ],
+            "ml_estimated_microseconds": 0,
+            "output_window_bounds": [
+              "128",
+              "8"
+            ],
+            "pad_input_on_minor_dim": "0",
+            "pad_output_on_minor_dim": "0"
+          },
+          "used_scoped_memory_configs": [
+            {
+              "memory_space": "1",
+              "offset": "0",
+              "size": "18006016"
+            }
+          ],
+          "cross_program_prefetch": false
+        }
+      },
+      "residency": "steady_state",
+      "dispatch_to_ready_us": {
+        "p10": 2654.099,
+        "p50": 2660.686,
+        "p90": 2836.6368,
+        "samples": 5
+      },
+      "queued_throughput_us": {
+        "p10": 2524.2700250000003,
+        "p50": 2525.118875,
+        "p90": 2527.660025,
+        "batches": 3,
+        "iterations_per_batch": 16
+      },
+      "enqueue_us_per_op": {
+        "p50": 29.476375
+      },
+      "achieved_tflops": 762.0018873796585,
+      "queued_achieved_tflops": 762.0018873796585,
+      "pct_of_chiplet_peak": 66.05998156737395,
+      "device_execution_us": {
+        "module_name": "jit_dot",
+        "event_names": [
+          "jit_dot(93490794906942032)"
+        ],
+        "p10": 2513.813926,
+        "p50": 2515.236495,
+        "p90": 2516.715486,
+        "samples": 21,
+        "annotation": "operatorx_ffn-down-m4096",
+        "child_hlo": {
+          "diagnostic_only": true,
+          "note": "Child HLO events may overlap; do not sum their durations.",
+          "event_names": [
+            "fusion"
+          ],
+          "events": 21,
+          "hlo_categories": [
+            "convolution fusion"
+          ],
+          "model_flops": [
+            1924145348608
+          ],
+          "raw_bytes_accessed": [
+            771751936
+          ]
+        },
+        "profile_retention": "perfetto"
+      },
+      "device_achieved_tflops": 764.9957975852287,
+      "device_pct_of_chiplet_peak": 66.31953165021488,
+      "queued_proxy_error_pct": 0.3929006286146469
+    }
+  ],
+  "dataset": {
+    "format": "operatorx_tpu_gemm_validation_summary",
+    "machine_identity_removed": true,
+    "raw_artifact_paths_removed": true,
+    "raw_xprof_samples_removed": true
+  }
+}
