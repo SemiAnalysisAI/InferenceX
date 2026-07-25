@@ -373,6 +373,15 @@ def test_trigger_types_enable_gated_events() -> None:
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
+def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/e2e-tests.yml").read_text()
+
+    assert "trigger-agentic-ingest" not in workflow
+    assert "ingest-agentic-results" not in workflow
+    assert "InferenceX-app/dispatches" not in workflow
+    assert "INFX_FRONTEND_PAT" not in workflow
+
+
 def test_priority_classifier_runs_for_enabled_actions() -> None:
     scenario = {
         **_PR,
