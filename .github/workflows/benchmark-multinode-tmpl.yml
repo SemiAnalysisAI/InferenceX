@@ -287,6 +287,23 @@ jobs:
             done
           fi
 
+      - name: Reclaim root-owned workspace leftovers (pre-checkout)
+        run: |
+          # Prior containers run as root and can leave root-owned files in the
+          # persistent runner workspace (observed: .cache/aiter-wheels/*.whl). The
+          # unprivileged runner user then cannot delete them, so the next
+          # actions/checkout `git clean -ffdx` dies with
+          #   EACCES: permission denied, rmdir '.../.cache/aiter-wheels'
+          # and the whole job fails at checkout before the launch script (which
+          # already chowns its own root-owned outputs; see runners/launch_*.sh)
+          # ever runs. Passwordless sudo is available on these runners, so hand
+          # workspace ownership back to the runner user BEFORE checkout; git clean
+          # can then remove the leftovers normally. Non-destructive (ownership
+          # only); clean: true still does the actual cleaning.
+          if [ -n "${GITHUB_WORKSPACE}" ] && [ -d "${GITHUB_WORKSPACE}" ]; then
+            sudo chown -R "$(id -un):$(id -gn)" "${GITHUB_WORKSPACE}" 2>/dev/null || true
+          fi
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
