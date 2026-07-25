@@ -2,6 +2,7 @@
 import pytest
 import argparse
 import copy
+from pathlib import Path
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
     seq_len_stoi,
@@ -172,6 +173,72 @@ def full_sweep_args_multi_node():
     args.single_node = False
     args.multi_node = True
     return args
+
+
+@pytest.fixture
+def dsv4flash_h200_config():
+    """Unofficial DeepSeek-V4-Flash H200 proposal config."""
+    return {
+        "dsv4flash-fp8-h200-sglang-mtp": {
+            "image": "lmsysorg/sglang:v0.5.15.post1@sha256:289cf51da1e5fd6f8eb3231f0202d46800c2e241ecf28f68a5a51507ed928e31",
+            "model": "deepseek-ai/DeepSeek-V4-Flash",
+            "model-prefix": "dsv4flash",
+            "runner": "h200-dgxc",
+            "precision": "fp8",
+            "framework": "sglang",
+            "multinode": False,
+            "scenarios": {
+                "fixed-seq-len": [{
+                    "isl": 8192,
+                    "osl": 1024,
+                    "search-space": [{
+                        "tp": 4, "ep": 1, "conc-start": 1, "conc-end": 128,
+                        "spec-decoding": "mtp",
+                    }],
+                }],
+            },
+        },
+    }
+
+
+def test_dsv4flash_h200_proposal_generates_full_8k1k_sweep(
+    dsv4flash_h200_config, sample_runner_config, full_sweep_args_single_node
+):
+    """Proposal keeps exact model identity, topology, and c1..128 matrix."""
+    result = generate_full_sweep(
+        full_sweep_args_single_node, dsv4flash_h200_config, sample_runner_config
+    )
+
+    assert [entry["conc"] for entry in result] == [1, 2, 4, 8, 16, 32, 64, 128]
+    assert {entry["model"] for entry in result} == {"deepseek-ai/DeepSeek-V4-Flash"}
+    assert {entry["model-prefix"] for entry in result} == {"dsv4flash"}
+    assert {entry["precision"] for entry in result} == {"fp8"}
+    assert {entry["framework"] for entry in result} == {"sglang"}
+    assert {entry["isl"] for entry in result} == {8192}
+    assert {entry["osl"] for entry in result} == {1024}
+    assert {entry["tp"] for entry in result} == {4}
+    assert {entry["ep"] for entry in result} == {1}
+    assert {entry["spec-decoding"] for entry in result} == {"mtp"}
+    # The image must stay digest-pinned so an Unofficial proposal is reproducible.
+    assert all("@sha256:" in entry["image"] for entry in result)
+
+
+def test_dsv4flash_h200_proposal_benchmark_script_exists(dsv4flash_h200_config):
+    """The H200 launchers derive the script path from the generated fields.
+
+    launch_h200-dgxc-slurm.sh builds
+    benchmarks/single_node/fixed_seq_len/<model-prefix>_<precision>_h200_<framework>_mtp.sh,
+    so renaming the config key or precision without renaming the script silently
+    breaks the sweep at launch time rather than at validation time.
+    """
+    config = dsv4flash_h200_config["dsv4flash-fp8-h200-sglang-mtp"]
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/single_node/fixed_seq_len"
+        / f"{config['model-prefix']}_{config['precision']}_h200_{config['framework']}_mtp.sh"
+    )
+
+    assert script.is_file(), f"missing benchmark script: {script}"
 
 
 # =============================================================================
