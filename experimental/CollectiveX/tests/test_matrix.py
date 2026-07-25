@@ -213,8 +213,14 @@ class MatrixTests(unittest.TestCase):
         #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),
         #     so EP16 works over MNNVL where the RDMA-GIN path walls.
         #   * AMD SKUs: no rows (NCCL EP is NVIDIA-only; AMD runs mori).
-        # LL (decode) EP8 on the four RDMA SKUs only (Device-API LSA path; b300 works despite deepep-v2's
-        # IBGDA blocker) — NOT on GB (LL over MNNVL crashes in comm teardown, gb ll_backends omitted).
+        #   * LOW-LATENCY: no rows on ANY SKU. The wheel's LL count/flag protocol consumes stale
+        #     double-buffer signals (values carry no generation, so a signal from two calls earlier is
+        #     bit-identical at a repeating workload); a rank that slips one parity cycle gets lapped and
+        #     the pipeline wedges on dispatch/combine receive timeouts, ending in cudaErrorLaunchFailure.
+        #     Reported as NVIDIA/nccl#2303, fixed by NVIDIA/nccl#2306, unfixable here (we install the
+        #     published wheel). Observed first on GB, then reproduced on every x86 SKU — 5/5 over SSH and
+        #     4/4 in sweep 30155842613 — so ll_backends carries no nccl-ep row anywhere until a fixed
+        #     wheel ships. Restore per-SKU rows only alongside a spec bump that contains the fix.
         # BF16 only — no FP8 case (NCCL EP FP8 unsupported this release).
         document = matrix(backend="all")
         runnable = {
@@ -249,14 +255,14 @@ class MatrixTests(unittest.TestCase):
             },
             {"bf16"},
         )
-        # Low-latency (decode) EP8 on the four RDMA SKUs only — not GB.
+        # Low-latency: no nccl-ep case on any SKU while the wheel carries the stale-signal wedge.
         ll = {
             (item["sku"], item["case"]["ep"])
             for item in document["requested_cases"]
             if item["case"]["backend"] == "nccl-ep"
             and item["case"]["mode"] == "low-latency"
         }
-        self.assertEqual(ll, {(sku, 8) for sku in rdma_skus})
+        self.assertEqual(ll, set())
 
     def test_invalid_filters_fail_closed(self):
         for options in (
