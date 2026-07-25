@@ -422,7 +422,7 @@ build_server_config() {
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + ep config + mtp config (decode only) + dp config + specific config
+    # Combine: parallel args + base config + ep config + mtp config + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
@@ -430,7 +430,15 @@ build_server_config() {
     if [[ -n "$ep_config" ]]; then
         full_config="$full_config $ep_config"
     fi
-    if [[ -n "$mtp_config" ]] && [[ "$mode" == "decode" ]]; then
+    # [scratch fix under test] Apply MTP/EAGLE flags to BOTH prefill and decode.
+    # Previously gated `&& [[ "$mode" == "decode" ]]` → prefill never allocated the
+    # nextn (MTP draft) KV layer, so on a disagg MTP run prefill registered 3 PD
+    # state components and decode 4. v0.5.15 hard-fails this (mori conn.py:1046
+    # "state component count mismatch local=3 remote=4"); v0.5.14 tolerates it but
+    # decode's nextn state is never seeded from prefill → suspected pure-TP8/EP1
+    # accuracy regression. Giving prefill the same nextn allocation makes both
+    # sides register 4 components and transfer the nextn state. NOT for the PR branch.
+    if [[ -n "$mtp_config" ]]; then
         full_config="$full_config $mtp_config"
     fi
     if [[ -n "$dp_config" ]]; then
