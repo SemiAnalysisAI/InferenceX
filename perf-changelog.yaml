@@ -5060,3 +5060,15 @@
     - "Re-pin VLLM_ROUTER_IMAGE to vllm/vllm-router:nightly-20260716-1fbcde7 (previous nightly-20260629-e667ebb was garbage-collected from Docker Hub)"
     - "Exclude known-bad nodes mia1-p01-g09,g14 from the disagg node pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-hisparse-pareto
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add GLM-5.2 FP8 full-context H200 AgentX with PCP8 prefill and TP8/DPA decode, covering the complete 1P1D concurrency curve [1, 2, 3, 4, 5, 6, 7, 8] plus the non-dominated 1P2D concurrency-4 scale point"
+    - "Use FP8 KV cache, flashmla_kv, 32K chunked prefill, and SGLang HiSparse top_k=2048/device_buffer_size=4096 to retain full KV in pinned host DRAM while a sparse decode working set remains in HBM"
+    - "Literal 1.04M-token canaries and GSM8K gates passed on the selected HiSparse configuration; TP8/DCP4 and TP8/DCP8 decode failed in SGLang attn_mqa_for_dcp_decode, while prefill-only HiCache, BF16 KV, 64K chunking, and alternate HiSparse buffers were slower or failed"
+    - "Unofficial full curves 29881640438 and 29882624421 completed with zero benchmark errors; the selected 1P1D c4 point reached 546.33 total tok/s/GPU at 11.05s mean TTFT, while scale run 30104463995 reached 567.82 total tok/s/GPU at 3.89s mean TTFT on 1P2D c4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2275
+  
