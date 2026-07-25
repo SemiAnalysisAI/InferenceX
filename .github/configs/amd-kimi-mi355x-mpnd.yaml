@@ -29,6 +29,8 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
           additional-settings:
           - "PREFILL_NODES=1"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "VLLM_SERVER_READY_TIMEOUT=3600"
+          - "VLLM_ROUTER_READY_TIMEOUT=3600"
         decode:
           num-worker: 2
           tp: 4
@@ -37,6 +39,8 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
           additional-settings:
           - "DECODE_NODES=2"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "VLLM_SERVER_READY_TIMEOUT=3600"
+          - "VLLM_ROUTER_READY_TIMEOUT=3600"
 
       # conc=1024: same efficient 4-GPU worker shape, higher pressure.  This is
       # the most likely point to cross the single-node TP4 per-GPU frontier
@@ -51,6 +55,8 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
           additional-settings:
           - "PREFILL_NODES=1"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "VLLM_SERVER_READY_TIMEOUT=3600"
+          - "VLLM_ROUTER_READY_TIMEOUT=3600"
         decode:
           num-worker: 2
           tp: 4
@@ -59,25 +65,32 @@ kimik2.5-fp4-mi355x-vllm-disagg-mpnd:
           additional-settings:
           - "DECODE_NODES=2"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "VLLM_SERVER_READY_TIMEOUT=3600"
+          - "VLLM_ROUTER_READY_TIMEOUT=3600"
 
-      # conc=1024: add prefill replicas for 8k1k.  This is the MI355X analogue
-      # of the B200 high-concurrency move from 1P to multi-P, but keeps each
-      # worker at TP4 instead of using inefficient TP8 decode as a DEP substitute.
+      # conc=3072: MI355X analogue of the NV 8k1k high-concurrency
+      # 6P DEP4 -> D DEP16 point.  Use 6 prefill TP4 workers and 4 decode TP4
+      # workers so the total is also 40 GPUs while keeping each worker on the
+      # efficient TP4 path.
       - spec-decoding: "none"
-        conc-list: [ 1024 ]
+        conc-list: [ 3072 ]
         prefill:
-          num-worker: 2
+          num-worker: 6
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "PREFILL_NODES=2"
+          - "PREFILL_NODES=6"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "VLLM_SERVER_READY_TIMEOUT=3600"
+          - "VLLM_ROUTER_READY_TIMEOUT=3600"
         decode:
-          num-worker: 2
+          num-worker: 4
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=2"
+          - "DECODE_NODES=4"
           - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "VLLM_SERVER_READY_TIMEOUT=3600"
+          - "VLLM_ROUTER_READY_TIMEOUT=3600"

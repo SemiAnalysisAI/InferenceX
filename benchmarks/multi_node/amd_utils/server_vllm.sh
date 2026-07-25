@@ -42,6 +42,8 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 SERVER_PORT="${SERVER_PORT:-2584}"
 ENGINE_ID="${ENGINE_ID:-${MODEL_NAME}-pd-run}"
+VLLM_SERVER_READY_TIMEOUT="${VLLM_SERVER_READY_TIMEOUT:-1800}"
+VLLM_ROUTER_READY_TIMEOUT="${VLLM_ROUTER_READY_TIMEOUT:-${VLLM_SERVER_READY_TIMEOUT}}"
 
 # Prefer MODEL_PATH from job.slurm (handles HF cache snapshot resolution)
 MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
@@ -376,7 +378,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800; then
+            --timeout "${VLLM_SERVER_READY_TIMEOUT}"; then
             echo "ERROR: prefill/decode server ports did not become ready within timeout" >&2
             exit 1
         fi
@@ -390,7 +392,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-health \
         --health-endpoint /health \
-        --timeout 1800"
+        --timeout ${VLLM_ROUTER_READY_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
@@ -596,7 +598,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout ${VLLM_ROUTER_READY_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -654,7 +656,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout ${VLLM_ROUTER_READY_TIMEOUT}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
