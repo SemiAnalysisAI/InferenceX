@@ -10,7 +10,9 @@ name: "disagg-gb300-2p1d-dep8-tp4-c8-mtp-kvoffload"
 # transfer, custom agentic_srt.sh benchmark, wide-EP decode. The model-identity,
 # quantization, DSA/MoE backends, parsers, MTP and hicache tuning are GLM-5.2's
 # (grafted from benchmarks/single_node/agentic/glm5.2_fp4_b300_sglang.sh and the
-# GLM-5 wide-EP decode): deepep (not DSv4 megamoe), glm47/glm45 parsers,
+# GLM-5 wide-EP decode): flashinfer_trtllm NVFP4 prefill MoE (not DSv4 megamoe)
+# and, on this low-concurrency arm alone, a plain TP4/EP1 decode with no EP
+# all-to-all backend, glm47/glm45 parsers,
 # hicache-ratio 0.75 (GLM-5.2 OOMs above this), real EAGLE MTP (not simulated).
 # Concurrency is exported into agentic_srt.sh from the master-config conc-list.
 
@@ -77,7 +79,6 @@ backend:
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
     SGLANG_MOE_NVFP4_DISPATCH: '1'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
@@ -99,7 +100,6 @@ backend:
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
     SGLANG_MOE_NVFP4_DISPATCH: '1'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
@@ -132,10 +132,20 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
       moe-dense-tp-size: 1
-      moe-a2a-backend: deepep
-      moe-runner-backend: flashinfer_cutedsl
-      deepep-mode: auto
-      deepep-config: /configs/deepep_config.json
+      # NVFP4 MoE: flashinfer_trtllm, and deliberately no EP all-to-all backend
+      # on the prefill role. The only ("deepep", *) NVFP4 MoE fused func SGLang
+      # registers (flashinfer_cutedsl, still true in v0.5.16) consumes the
+      # 6-field low-latency DeepEPLLDispatchOutput, while `deepep-mode: auto`
+      # resolves to `normal` on every extend batch and hands it the 5-field
+      # DeepEPNormalDispatchOutput -> "ValueError: not enough values to unpack
+      # (expected 6, got 5)" on the first prefill forward (run 29925753943).
+      # DeepEP low_latency is not an option either: it asserts
+      # num_max_dispatch_tokens_per_rank <= 1024 and chunked prefill puts
+      # 32768/dp8 = 4096 tokens on a rank. flashinfer_trtllm is the prefill
+      # runner of both proven in-repo NVFP4 disagg families:
+      # ../../../qwen3.5/gb300-fp4 (maxtpt) and
+      # ../../../dsr1/b200-fp4/1k1k/disagg/mtp.
+      moe-runner-backend: flashinfer_trtllm
       # DSA / GEMM backends (GLM-5.2)
       nsa-decode-backend: trtllm
       nsa-prefill-backend: trtllm

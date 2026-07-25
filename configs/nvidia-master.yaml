@@ -7881,7 +7881,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           dp-attn: true
 
 glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
-  image: lmsysorg/sglang:v0.5.15.post1-cu130
+  image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:gb300-nv
@@ -7895,8 +7895,11 @@ glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
   # dynamo-sglang, modeled on dsv4-fp4-gb300-dynamo-sglang-agentic-disagg (run
   # 29385297092): EAGLE/MTP + DRAM hierarchical-cache KV offload, mooncake KV
   # transfer, wide-EP decode (TP16/EP16/DPA), TP8/EP8/DPA prefill workers scaling
-  # 1->6. GLM-5.2 serve flags (glm47/glm45 parsers, deepep, hicache-ratio 0.75)
-  # grafted onto the DSv4 agentic disagg machinery. Recipes:
+  # 1->6. GLM-5.2 serve flags (glm47/glm45 parsers, hicache-ratio 0.75) grafted
+  # onto the DSv4 agentic disagg machinery. NVFP4 MoE: flashinfer_trtllm on
+  # prefill (no EP a2a) + FlashInfer MNNVL a2a with flashinfer_cutedsl on the
+  # wide-EP decode; DeepEP is unusable for NVFP4 outside low-latency decode.
+  # Recipes:
   # benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic/
   scenarios:
     agentic-coding:

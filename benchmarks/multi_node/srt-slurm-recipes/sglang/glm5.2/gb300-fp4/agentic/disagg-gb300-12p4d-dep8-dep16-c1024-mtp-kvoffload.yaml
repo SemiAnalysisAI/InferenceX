@@ -10,7 +10,8 @@ name: "disagg-gb300-12p4d-dep8-dep16-c1024-mtp-kvoffload"
 # transfer, custom agentic_srt.sh benchmark, wide-EP decode. The model-identity,
 # quantization, DSA/MoE backends, parsers, MTP and hicache tuning are GLM-5.2's
 # (grafted from benchmarks/single_node/agentic/glm5.2_fp4_b300_sglang.sh and the
-# GLM-5 wide-EP decode): deepep (not DSv4 megamoe), glm47/glm45 parsers,
+# GLM-5 wide-EP decode): flashinfer MNNVL a2a wide-EP decode (not DSv4
+# megamoe), flashinfer_trtllm NVFP4 prefill MoE, glm47/glm45 parsers,
 # hicache-ratio 0.75 (GLM-5.2 OOMs above this), real EAGLE MTP (not simulated).
 # Concurrency is exported into agentic_srt.sh from the master-config conc-list.
 
@@ -77,7 +78,6 @@ backend:
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
     SGLANG_MOE_NVFP4_DISPATCH: '1'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
@@ -99,7 +99,10 @@ backend:
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
+    # Sizes the FlashInfer MoE A2A recv buffer (tokens per EP rank). Decode
+    # peaks at max-running-requests/dp_size * speculative-num-draft-tokens =
+    # 3072/16 * 4 = 768 tokens per rank, inside this default.
+    SGLANG_FLASHINFER_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
     SGLANG_MOE_NVFP4_DISPATCH: '1'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
@@ -132,10 +135,20 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
       moe-dense-tp-size: 1
-      moe-a2a-backend: deepep
-      moe-runner-backend: flashinfer_cutedsl
-      deepep-mode: auto
-      deepep-config: /configs/deepep_config.json
+      # NVFP4 MoE: flashinfer_trtllm, and deliberately no EP all-to-all backend
+      # on the prefill role. The only ("deepep", *) NVFP4 MoE fused func SGLang
+      # registers (flashinfer_cutedsl, still true in v0.5.16) consumes the
+      # 6-field low-latency DeepEPLLDispatchOutput, while `deepep-mode: auto`
+      # resolves to `normal` on every extend batch and hands it the 5-field
+      # DeepEPNormalDispatchOutput -> "ValueError: not enough values to unpack
+      # (expected 6, got 5)" on the first prefill forward (run 29925753943).
+      # DeepEP low_latency is not an option either: it asserts
+      # num_max_dispatch_tokens_per_rank <= 1024 and chunked prefill puts
+      # 32768/dp8 = 4096 tokens on a rank. flashinfer_trtllm is the prefill
+      # runner of both proven in-repo NVFP4 disagg families:
+      # ../../../qwen3.5/gb300-fp4 (maxtpt) and
+      # ../../../dsr1/b200-fp4/1k1k/disagg/mtp.
+      moe-runner-backend: flashinfer_trtllm
       # DSA / GEMM backends (GLM-5.2)
       nsa-decode-backend: trtllm
       nsa-prefill-backend: trtllm
@@ -181,12 +194,32 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
       moe-dense-tp-size: 1
-      moe-a2a-backend: deepep
+      # Wide-EP decode MoE: FlashInfer MNNVL all-to-all feeding the CuteDSL
+      # NVFP4 masked kernels -- the ("flashinfer", "flashinfer_cutedsl") fused
+      # func. Unlike the deepep one it takes a StandardDispatchOutput, so it
+      # also survives the extend-shaped EAGLE target-verify batch that MTP runs
+      # on the decode engine. server_args requires dp_size == tp_size with
+      # attention-DP and ep_size == tp_size -- all true here (16/16/16).
+      # Matches the decode role of ../../../qwen3.5/gb300-fp4 (maxtpt).
+      #
+      # ep-num-redundant-experts / ep-dispatch-algorithm are intentionally
+      # dropped with DeepEP: the FlashInfer a2a dispatcher takes
+      # num_local_experts as "Unused" and plumbs no expert map, so redundant
+      # experts had no effect on this path. Revisit as a tuning follow-up.
+      moe-a2a-backend: flashinfer
       moe-runner-backend: flashinfer_cutedsl
-      deepep-mode: auto
-      deepep-config: /configs/deepep_config.json
-      ep-num-redundant-experts: 32
-      ep-dispatch-algorithm: static
+      # GLM-5.2-NVFP4 leaves the MTP/nextn layer unquantized -- hf_quant_config
+      # excludes `model.layers.78*` -- so the EAGLE draft's MoE is bf16 and its
+      # UnquantizedFusedMoEMethod forces the triton runner core no matter what
+      # moe-runner-backend says. Left to inherit the target model's FlashInfer
+      # a2a it dies at init with "Pre-permute function for flashinfer to triton
+      # is not registered" (job 17402), because no ("flashinfer","triton")
+      # permute exists. SGLang already fixes this for fp4 checkpoints with a
+      # bf16 nextn layer in _deepseek_spec_moe_resolution -- but that hook is
+      # gated on is_hip(), so on CUDA the draft silently inherits instead.
+      # These are upstream's own ROCm values, set explicitly.
+      speculative-moe-a2a-backend: none
+      speculative-moe-runner-backend: triton
       nsa-decode-backend: trtllm
       nsa-prefill-backend: trtllm
       fp4-gemm-backend: flashinfer_cutlass
