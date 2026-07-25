@@ -5062,6 +5062,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
 
 - config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
     - dsv4-fp4-mi355x-atom
   description:
     - "Re-sweep dsv4-fp4-mi355x-atom on latest atom-dev nightly (nightly_202607231538, was 202606161823). Recipe: max_num_seqs=conc for all dp-on cells (avoids dp-attn OOM) and conc>=64; TBO on dp-attn cells at conc>=64 (was per-scenario gate 256/1024). 8k1k grid adds tp8 dp-off low-conc redundancy to recheck the crossover on the new image."
