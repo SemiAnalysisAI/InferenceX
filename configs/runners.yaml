@@ -164,6 +164,10 @@ labels:
     - gb300-nv_0
     - gb300-nv_1
     - gb300-nv_2
+  rtx6000pro:
+    - rtx6000pro-lat_00
+  rtx6000pro-lat:
+    - rtx6000pro-lat_00
   cluster:h100-cw:
     - h100-cw_00
     - h100-cw_01
@@ -251,6 +255,8 @@ labels:
     - gb300-nv_0
     - gb300-nv_1
     - gb300-nv_2
+  cluster:rtx6000pro-lat:
+    - rtx6000pro-lat_00
   cluster:mi300x-amds:
     - mi300x-amds_00
     - mi300x-amds_01
@@ -315,6 +321,9 @@ hardware:
   cluster:gb200-nv:
     available-cpu-dram-mib: 860_160
     gpus-per-node: 4
+  cluster:rtx6000pro-lat:
+    available-cpu-dram-mib: 1_500_000
+    gpus-per-node: 8
   cluster:mi300x-amds:
     available-cpu-dram-mib: 2_321_924
     gpus-per-node: 8

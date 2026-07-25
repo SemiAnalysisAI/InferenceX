@@ -5066,3 +5066,12 @@
   description:
     - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
+    - glm5.2-fp4-rtx6000pro-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a normal-decoding GLM-5.2 NVFP4 AgentX sweep on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Run TP8/DCP4 at concurrency [1, 2, 4] and TP8/DCP4/EP8 at concurrency [8, 16, 32], with GPU-resident FP8 KV cache and the B12X SM120 runtime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2332
