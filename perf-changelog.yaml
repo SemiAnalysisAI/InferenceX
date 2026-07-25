@@ -5122,4 +5122,4 @@
   description:
     - "Proposal only (Unofficial): add DeepSeek-V4-Flash on 4xH200 with SGLang TP4, Marlin W4A16 MoE runner, and EAGLE 3 steps / top-k 1 / 4 draft tokens; stock checkpoint revision 60d8d70770c6776ff598c94bb586a859a38244f1 and image digest sha256:289cf51da1e5fd6f8eb3231f0202d46800c2e241ecf28f68a5a51507ed928e31 are pinned"
     - "Preserve InferenceX 8k1k semantics and the intended full concurrency sweep [1, 2, 4, 8, 16, 32, 64, 128]; upstream H200 sweep/evals, NVIDIA CODEOWNER sign-off, and authorized /reuse-sweep-run remain required"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PR_NUMBER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2329
