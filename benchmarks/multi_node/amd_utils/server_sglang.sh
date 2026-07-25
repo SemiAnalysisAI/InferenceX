@@ -902,7 +902,35 @@ if [ "$NODE_RANK" -eq 0 ]; then
             return 1
         }
         if [[ "${ROUTER_READINESS_CANARY:-1}" == "1" ]]; then
-            wait_or_die "$prefill0_pid" run_router_canary || exit 1
+            if ! wait_or_die "$prefill0_pid" run_router_canary; then
+                # DIAGNOSTIC (scratch only -- NOT for the PR branch): the router/
+                # prefill never became serviceable on this image. The prefill and
+                # router server logs are tee'd to THIS node's local /run_logs
+                # (= host /tmp) and are only uploaded as an artifact on the SUCCESS
+                # path, so on a canary-fail they are otherwise lost. Cat them to
+                # STDOUT so they land in the GH Actions job log (node-0 stdout is
+                # captured). The decode log lives on node1's local /tmp and is not
+                # reachable from here, but the failure is specifically "cannot reach
+                # a PREFILL worker (circuits open)", so prefill + router are exactly
+                # the logs that explain it. This run is expected to hang on
+                # multi-node teardown afterward (node1/decode does not exit on
+                # node0's abort); cancel the GH run once this dump prints.
+                _ld="/run_logs/slurm_job-${SLURM_JOB_ID}"
+                echo "===================== CANARY-FAIL SERVER LOG DUMP (scratch diagnostic) ====================="
+                echo "[dump] host=${host_name} log_dir=${_ld}"
+                ls -la "${_ld}" 2>/dev/null || echo "[dump] log dir missing"
+                for _f in "${_ld}"/prefill_*.log "${_ld}"/router_*.log "${_ld}"/mooncake_master_*.log; do
+                    [ -f "$_f" ] || continue
+                    echo "----- BEGIN ${_f} ($(wc -l < "$_f" 2>/dev/null) lines) -----"
+                    echo "--- grep: error / unhealthy signatures ---"
+                    grep -nEi "error|traceback|exception|assert|runtimeerror|fatal|abort|core dumped|segfault|segmentation|killed|out of memory|oom|hip[a-z]*error|rccl|nccl|unsupported|not supported|invalid|no kernel|no attribute|importerror|modulenotfound|circuit|unhealthy|readiness|refused|timed out|cannot|unable|failed" "$_f" 2>/dev/null | tail -n 120
+                    echo "--- tail -n 180 ---"
+                    tail -n 180 "$_f" 2>/dev/null
+                    echo "----- END ${_f} -----"
+                done
+                echo "===================== END CANARY-FAIL SERVER LOG DUMP ====================="
+                exit 1
+            fi
         fi
 
         echo "Router is ready for benchmarking"
