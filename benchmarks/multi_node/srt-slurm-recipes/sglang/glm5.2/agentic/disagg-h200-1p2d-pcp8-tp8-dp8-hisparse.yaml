@@ -1,4 +1,4 @@
-name: "disagg-h200-1p1d-pcp8-tp8-dp8-hisparse"
+name: "disagg-h200-1p2d-pcp8-tp8-dp8-hisparse"
 
 # HiSparse decode keeps full KV in pinned host memory while a fixed sparse
 # working set remains in HBM.
@@ -19,9 +19,9 @@ resources:
   gpu_type: h200
   gpus_per_node: 8
   prefill_nodes: 1
-  decode_nodes: 1
+  decode_nodes: 2
   prefill_workers: 1
-  decode_workers: 1
+  decode_workers: 2
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
