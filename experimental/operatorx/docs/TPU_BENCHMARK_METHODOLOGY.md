@@ -86,6 +86,49 @@ For the skinny shape, a synchronized steady-state call was about 155 µs, roughl
 These measurements justify the queued proxy for a fast pilot, but they do not yet
 justify replacing the canonical device measurement for every TPU operation.
 
+## Validation gates
+
+The pilot can produce a self-contained validation bundle. A shape is accepted only
+when all of these checks pass:
+
+1. **Semantics:** sample nine output cells and compare them with an independent NumPy
+   FP32 dot over the corresponding BF16 input rows and columns.
+2. **Placement:** assert A, B, and the output are all on the selected single JAX
+   device, and record the compiled input/output shardings.
+3. **Logical program:** save StableHLO and require `stablehlo.dot_general` with the
+   requested input and output dimensions.
+4. **Compiled program:** save the exact compiled executable's optimized HLO and
+   require the `jit_dot` module. Record the TPU emitter, window configuration, scoped
+   memory allocation, and cross-program prefetch decision.
+5. **Device timing:** capture one profile per shape with `TRACE_ONLY_XLA`, one chip
+   profiled, host tracing limited to the named annotation, and Python tracing off.
+   Parse the module-level `jit_dot(<fingerprint>)` events and require exactly the
+   requested sample count.
+
+The parser treats the module event as the executable critical path. It records child
+HLO events for diagnostics but never adds their durations because they can overlap.
+XProf's `raw_bytes_accessed` is a compiler/profiler access count; matching logical
+tensor bytes does not prove that all accesses reached HBM.
+
+On the validation host, both shapes passed all gates on
+`TPU_0(process=0,(0,0,0,0))`, which is `TPU7x` chiplet 0:
+
+| Shape | Sampled max relative error | XProf p50 | Queued p50 | Proxy error |
+|---|---:|---:|---:|---:|
+| `16×8192×8192` | 0.289% | 43.34 µs | 46.99 µs | +8.42% |
+| `8192×8192×8192` | 0.279% | 1243.34 µs | 1246.82 µs | +0.28% |
+
+StableHLO preserves the requested BF16 dot and contracting dimensions `[1] × [0]`.
+The optimized TPU HLO represents both GEMMs as convolution fusions using
+`EmitAllBatchInSublanes`, but chooses different window configurations. The skinny
+shape uses cross-program prefetch while the square shape does not. XProf reports the
+expected logical work:
+
+| Shape | Model FLOPs | Raw bytes accessed |
+|---|---:|---:|
+| `16×8192×8192` | 2,147,483,648 | 134,742,016 |
+| `8192×8192×8192` | 1,099,511,627,776 | 402,653,184 |
+
 ## Reproduce the pilot
 
 From the OperatorX directory in the InferenceX worktree:
@@ -110,6 +153,50 @@ jq '.rows[] | {
   achieved_tflops,
   pct_of_chiplet_peak
 }' /tmp/operatorx-tpu-gemm-pilot.json
+```
+
+Run the complete correctness, placement, HLO, and XProf validation:
+
+```bash
+cd ~/InferenceX/.worktrees/tpu-exploration/experimental/operatorx
+
+VALIDATION_DIR="$(mktemp -d /tmp/operatorx-tpu-validation.XXXXXX)"
+
+PYTHONPATH=.. \
+python scripts/tpu_gemm_pilot.py \
+  --artifacts-dir "$VALIDATION_DIR" \
+  --profile \
+  --profile-iters 5 \
+  --json-out "$VALIDATION_DIR/results.json"
+
+echo "$VALIDATION_DIR"
+```
+
+Inspect the validation summary:
+
+```bash
+jq '.rows[] | {
+  name,
+  device,
+  correctness,
+  placement,
+  compiler_algorithm: .hlo.compiler_algorithm,
+  device_execution_us,
+  queued_proxy_error_pct,
+  device_achieved_tflops,
+  device_pct_of_chiplet_peak
+}' "$VALIDATION_DIR/results.json"
+```
+
+Reparse either saved Perfetto trace independently:
+
+```bash
+PYTHONPATH=.. \
+python -m operatorx.runners.tpu.xprof \
+  "$VALIDATION_DIR/profiles/tpu-gemm-skinny" \
+  --module-name jit_dot \
+  --expected-samples 5 \
+  --annotation-name operatorx_tpu-gemm-skinny
 ```
 
 To run the same testlist through the current standard OperatorX entrypoint:

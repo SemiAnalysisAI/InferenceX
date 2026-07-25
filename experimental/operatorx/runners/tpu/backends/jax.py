@@ -47,6 +47,11 @@ def _resolve(dtype: str) -> jnp.dtype:
 _gemm_jit = jax.jit(jnp.dot)
 
 
+def lower_gemm(a, b):
+    """Return the lowering used by the JAX GEMM backend for validation."""
+    return _gemm_jit.lower(a, b)
+
+
 def _prepare_gemm(op: Op) -> dict:
     # TPU v6e MXU is natively bf16; fp8 has no hardware path on Trillium and would
     # silently upcast to bf16, so we don't expose an fp8 gemm here.
