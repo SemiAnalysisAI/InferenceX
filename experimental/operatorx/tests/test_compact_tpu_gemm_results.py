@@ -4,7 +4,6 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-
 SCRIPT = (
     Path(__file__).resolve().parents[1]
     / "scripts"
@@ -24,6 +23,10 @@ class CompactTpuGemmResultsTest(unittest.TestCase):
                     "hostname": "machine",
                     "argv": ["script.py", "--output", "/tmp/results.json"],
                     "software": {"jax": "0.11.0"},
+                },
+                "profile_batch": {
+                    "trace_path": "/tmp/profile/perfetto_trace.json.gz",
+                    "total_module_events": 3,
                 },
                 "rows": [
                     {
@@ -48,6 +51,10 @@ class CompactTpuGemmResultsTest(unittest.TestCase):
         )
 
         self.assertEqual(compact["run"], {"software": {"jax": "0.11.0"}})
+        self.assertEqual(
+            compact["profile_batch"],
+            {"total_module_events": 3},
+        )
         row = compact["rows"][0]
         self.assertNotIn("input_shardings", row["placement"])
         self.assertNotIn("output_shardings", row["placement"])

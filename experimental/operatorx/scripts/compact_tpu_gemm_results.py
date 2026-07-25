@@ -15,6 +15,9 @@ def compact_results(results: dict[str, Any]) -> dict[str, Any]:
     run = compact.get("run", {})
     run.pop("hostname", None)
     run.pop("argv", None)
+    profile_batch = compact.get("profile_batch")
+    if profile_batch:
+        profile_batch.pop("trace_path", None)
     for row in compact["rows"]:
         placement = row.get("placement", {})
         placement.pop("input_shardings", None)

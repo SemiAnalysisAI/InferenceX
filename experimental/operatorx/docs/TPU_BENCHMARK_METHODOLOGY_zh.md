@@ -238,6 +238,33 @@ jq '.rows[] | {
 }' /tmp/tpu7x-gemm-sweep-compact.json
 ```
 
+为了在多个形状之间摊销 profiler 启动和转换开销，可以在同一个 XProf session 中采集
+整个 testlist，并在所有形状结束后只解析一次 Perfetto trace：
+
+```bash
+cd ~/InferenceX/.worktrees/tpu-exploration/experimental/operatorx
+
+BATCH_DIR="$(mktemp -d /tmp/operatorx-tpu-gemm-batch.XXXXXX)"
+
+PYTHONPATH=.. \
+~/SimulatorX/.venv/bin/python scripts/tpu_gemm_batched_xprof.py \
+  --testlist testlists/tpu_gemm_sweep.json \
+  --profile-iters 21 \
+  --artifacts-dir "$BATCH_DIR" \
+  --profile-retention perfetto \
+  --json-out "$BATCH_DIR/results.json"
+```
+
+脚本会在启动 profiler 前完成每个形状的编译、预热和验证。在单个 trace 内，它按顺序提交
+带有唯一 annotation 的形状区块，并在区块之间同步设备。主机 annotation 与 TPU 事件
+使用不同的时间线，因此解析器不会按 annotation 时间窗口分组。它会要求总事件数完全匹配，
+再按照声明的形状顺序分配单调递增的 XLA `run_id` 组。每一行都会记录所分配的 run ID、
+module fingerprint 和时间范围重叠的子 HLO 诊断信息。
+
+所有已准备的输入和编译上下文都会一直驻留到单次采集结束。如果某个 testlist 接近 chiplet
+的 HBM 容量，应把它拆成多个 testlist，并分别执行一个 batch；每个 batch 仍然可以让其中
+所有形状共同摊销一次 XProf 启动成本。
+
 通过当前标准 OperatorX 入口运行同一 testlist：
 
 ```bash

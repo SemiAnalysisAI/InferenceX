@@ -255,6 +255,37 @@ jq '.rows[] | {
 }' /tmp/tpu7x-gemm-sweep-compact.json
 ```
 
+To amortize profiler startup and conversion overhead across many shapes, capture the
+whole testlist in one XProf session and parse the Perfetto trace only after every
+shape finishes:
+
+```bash
+cd ~/InferenceX/.worktrees/tpu-exploration/experimental/operatorx
+
+BATCH_DIR="$(mktemp -d /tmp/operatorx-tpu-gemm-batch.XXXXXX)"
+
+PYTHONPATH=.. \
+~/SimulatorX/.venv/bin/python scripts/tpu_gemm_batched_xprof.py \
+  --testlist testlists/tpu_gemm_sweep.json \
+  --profile-iters 21 \
+  --artifacts-dir "$BATCH_DIR" \
+  --profile-retention perfetto \
+  --json-out "$BATCH_DIR/results.json"
+```
+
+The script compiles, warms up, and validates every shape before opening the profiler.
+Inside the single trace it dispatches one uniquely annotated shape block at a time
+and synchronizes the device between blocks. Host annotations and TPU events are on
+different timelines, so the parser does not use annotation timestamp windows.
+Instead, it requires the exact total event count and assigns monotonically increasing
+XLA `run_id` groups in the declared shape order. Each row records its assigned run
+IDs, module fingerprint, and overlapping child-HLO diagnostics.
+
+All prepared inputs and compiled contexts stay resident until the single capture
+finishes. For a testlist that approaches chiplet HBM capacity, split it into several
+testlists and run one batch per testlist; each batch still amortizes one XProf startup
+across all shapes it contains.
+
 To run the same testlist through the current standard OperatorX entrypoint:
 
 ```bash
