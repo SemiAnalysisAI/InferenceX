@@ -323,6 +323,11 @@ setup_vllm_env() {
     for env_pair in ${MODEL_ENVS}; do
         export "$env_pair"
     done
+    # MoRI EP/all2all is not compatible with the AITER fused shared-expert
+    # kernel used by the pure-TP PR2266 path.
+    if [[ "${PREFILL_ENABLE_EP:-false}" == "true" || "${DECODE_ENABLE_EP:-false}" == "true" ]]; then
+        export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
+    fi
 }
 
 # =============================================================================
