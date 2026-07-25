@@ -1,0 +1,151 @@
+name: "svf-vllm-agg-gb300-tp8-mtp-agentic"
+
+# Validated GB300 AgentX aggregate topology: one TP8 worker spans two
+# four-GPU nodes and serves both prefill and decode at concurrency 4.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "deepseek-ai/DeepSeek-V4-Pro"
+  container:
+    image: "inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e"
+  frameworks:
+    dynamo: "1.2.1"
+
+dynamo:
+  wheel: "1.2.1"
+  install: true
+
+environment:
+  DYNAMO_WHEEL_DIRS: "/srtctl-wheels"
+  # The frontend shares Grace CPU capacity with the long TP8 cold start.
+  ETCD_LEASE_TTL: "7200"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 2160
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    router-mode: "kv"
+    router-reset-states: true
+    router-temperature: 0.0
+    router-queue-threshold: 65536
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+    tokenizer: "fastokens"
+
+backend:
+  type: vllm
+  connector: null
+  mooncake_kv_store:
+    store_config:
+      metadata_server: "P2PHANDSHAKE"
+      global_segment_size: "150GB"
+      local_buffer_size: "4GB"
+      protocol: "rdma"
+      device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+      mode: "embedded"
+      enable_offload: false
+  aggregated_environment:
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_V2_WARMUP_MAX_NUM_SEQS: "32"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "0"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "auto"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+    UCX_TLS: "rc,cuda_copy"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    NCCL_P2P_LEVEL: "NVL"
+    MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
+    MC_STORE_CLIENT_METRIC: "1"
+    MC_STORE_CLIENT_METRIC_INTERVAL: "5"
+    MC_TE_METRIC: "0"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-agg-mtp-{job_id}"
+  vllm_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+      disable-custom-all-reduce: true
+      enable-cumem-allocator: true
+      attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+      max-model-len: 1048576
+      max-num-seqs: 32
+      max-num-batched-tokens: 8192
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      max-cudagraph-capture-size: 128
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      gpu-memory-utilization: 0.90
+      stream-interval: 10
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: "deepseek_v4"
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "false"
+    TP: "8"
+    EP_SIZE: "1"
+    DP_ATTENTION: "false"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_AGENTIC_CACHE_WARMUP_DURATION: "600"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
