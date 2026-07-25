@@ -468,29 +468,17 @@ fi
 echo "SYNC_BARRIER_TIMEOUT=${SYNC_BARRIER_TIMEOUT}s (model=${MODEL_NAME:-unset})"
 
 # =============================================================================
-# DIAGNOSTIC ISOLATION (scratch only): force the in-repo Triton sparse
-# paged-prefill (extend) kernel by disabling the compiled AITER OPUS path, to
-# test whether the pure-TP8/EP1 dsv4 MTP greedy accuracy regression
-# (gsm8k 0.9613 base -> 0.8855@d1 / 0.8529@d2) is the AITER pa_sparse_prefill_opus
-# kernel mishandling the combined prefix+extend path at H = n_local_heads = 16.
-# Only MTP TARGET_VERIFY reaches the extend kernel on a disagg decode node (base
-# decode uses the decode kernel only), so this changes ONLY the suspect and holds
-# everything else constant. Recovers to ~0.96 -> OPUS extend kernel is the root
-# cause + Triton is a deployable fix; stays ~0.85 -> extend kernel exonerated,
-# drop the arm. Scoped to DeepSeek-V4 MTP. NOT for the PR branch.
-# (The falsified sglang#31478 TP-broadcast patch stays in patch_eagle_verify.py
-# but is no longer invoked — it was a proven no-op on accuracy.)
+# DIAGNOSTIC (scratch only): local extend-kernel/TP-broadcast patches DISABLED.
+# Both hypotheses were falsified on the v0.5.14 image (extend kernel: Triton
+# forced == OPUS, 0.8908 vs 0.8855; sglang#31478 TP-broadcast: 0.8772 == 0.8855).
+# The pure-TP8/EP1 dsv4 MTP greedy loss is a systematic upstream spec-verify
+# defect, not reachable by patching this image. This run tests the CLEAN,
+# UNPATCHED upstream v0.5.15 build (which fixed related MTP/dispatch bugs) to
+# see whether it clears the arm to >=0.91. Do NOT re-enable the patchers here —
+# a patched run would not answer the upstream question. Scripts kept on disk
+# (patch_force_triton_extend.py, patch_eagle_verify.py) but intentionally not
+# invoked. NOT for the PR branch.
 # =============================================================================
-case "${MODEL_NAME}" in
-    *DeepSeek-V4*)
-        if [[ "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
-            if ! python3 "$SGLANG_WS_PATH/patch_force_triton_extend.py"; then
-                echo "FATAL: could not force the Triton extend kernel (patch_force_triton_extend.py); refusing to launch — the diagnostic run would be meaningless if the OPUS path is still active. Investigate the installed paged_prefill.py shape." >&2
-                exit 1
-            fi
-        fi
-        ;;
-esac
 
 # =============================================================================
 # Optional KV cache offloading (HiCache) — enabled when
