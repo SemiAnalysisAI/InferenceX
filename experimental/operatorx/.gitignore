@@ -10,6 +10,7 @@ venv/
 
 # Runtime / caches
 logs/
+results/
 *.log
 .pytest_cache/
 .triton/

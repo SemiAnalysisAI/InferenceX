@@ -31,8 +31,8 @@ from operatorx.clusters import CLUSTER_PLATFORMS
 from operatorx.runtime import runtime_snapshot, utc_now_iso
 
 
-# Repo root (directory containing testlists/ and results/), one level above the package.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+# OperatorX project root (directory containing testlists/ and results/).
+_REPO_ROOT = Path(__file__).resolve().parent
 
 
 TESTLIST_DIR = _REPO_ROOT / "testlists"

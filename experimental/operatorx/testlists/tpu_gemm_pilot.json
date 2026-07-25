@@ -1,0 +1,26 @@
+[
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 8192,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "tpu-gemm-skinny"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "tpu-gemm-square"
+  }
+]
