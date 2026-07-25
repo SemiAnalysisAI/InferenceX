@@ -308,6 +308,12 @@ for MANIFEST in "$CORPUS_DIR"/chunks/chunk-*.json; do
 done
 ```
 
+3,117 个形状的运行已完成：共 37 个 batch，每个形状包含 21 个 module 样本。
+成功 batch 的累计耗时为 13,798.4 秒（3 小时 49 分 58 秒）。对于 643 个非规则
+形状，优化后的 TPU executable 会填充维度，因此 XProf 的 `model_flops` 和
+`raw_bytes_accessed` 与逻辑工作量不同。这两个字段是编译器物理工作量的诊断信息，
+不能作为通用的逻辑工作量验证门槛。batch 结果会同时记录逻辑值、编译器值和相等标志。
+
 通过当前标准 OperatorX 入口运行同一 testlist：
 
 ```bash

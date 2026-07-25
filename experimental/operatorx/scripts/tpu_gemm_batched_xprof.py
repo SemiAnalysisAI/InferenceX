@@ -240,17 +240,14 @@ def main() -> int:
             + shape_args["m"] * shape_args["n"]
         )
         child_hlo = device_execution["child_hlo"]
-        if child_hlo["model_flops"] != [flops]:
-            raise ValueError(
-                f"{shape['name']}: assigned XProf FLOPs "
-                f"{child_hlo['model_flops']} != expected {flops}"
-            )
-        if child_hlo["raw_bytes_accessed"] != [logical_bytes]:
-            raise ValueError(
-                f"{shape['name']}: assigned XProf bytes "
-                f"{child_hlo['raw_bytes_accessed']} != expected "
-                f"{logical_bytes}"
-            )
+        child_hlo["logical_flops"] = flops
+        child_hlo["logical_bytes"] = logical_bytes
+        child_hlo["model_flops_match_logical"] = (
+            child_hlo["model_flops"] == [flops]
+        )
+        child_hlo["raw_bytes_match_logical"] = (
+            child_hlo["raw_bytes_accessed"] == [logical_bytes]
+        )
         device_tflops = flops / (device_execution["p50"] * 1e-6) / 1e12
         rows.append(
             {

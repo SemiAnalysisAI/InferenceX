@@ -331,6 +331,13 @@ for MANIFEST in "$CORPUS_DIR"/chunks/chunk-*.json; do
 done
 ```
 
+The 3,117-shape run completed in 37 batches with 21 module samples per shape.
+Summed successful batch time was 13,798.4 seconds (3h49m58s). XProf
+`model_flops` and `raw_bytes_accessed` differ from logical work for 643 irregular
+shapes because the optimized TPU executable pads dimensions. These fields are
+compiler-work diagnostics, not universal logical-work validation gates. The batch
+result records both logical and compiler values plus equality flags.
+
 To run the same testlist through the current standard OperatorX entrypoint:
 
 ```bash
