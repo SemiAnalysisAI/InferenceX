@@ -5066,3 +5066,18 @@
   description:
     - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b300-vllm-mtp
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-dynamo-vllm
+    - minimaxm3-fp8-gb300-dynamo-vllm
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Bump all NVIDIA fp8 MiniMax-M3 configs (B200, B300, GB200, GB300) to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
+    - "Non-eagle configs (b200-vllm, b300-vllm, b300-dynamo-vllm, gb200-dynamo-vllm, gb300-dynamo-vllm): add stream-interval: 32"
+    - "Eagle configs (b200-vllm-mtp, b300-vllm-mtp): add speculative-config (method=eagle3, model=Inferact/MiniMax-M3-EAGLE3-GQA, num_speculative_tokens=1, attention_backend=FLASH_ATTN) and attention-config (backend=FLASHINFER, use_trtllm_attention=true, indexer_kv_dtype=fp8)"
+    - "Disagg recipe files (b300-fp8/8k1k, gb300-fp8/8k1k, gb200-fp8/8k1k): bump container image to match"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2334
