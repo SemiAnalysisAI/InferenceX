@@ -1269,7 +1269,7 @@ dsv4-fp4-mi355x-sglang-disagg-mtp:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=2"
       # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
       - spec-decoding: "mtp"
         conc-list: [ 256 ]
