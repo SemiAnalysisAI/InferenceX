@@ -5,14 +5,14 @@ name: "svf-vllm-disagg-gb300-1p1d-dep8-dep8-c384-mtp-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
     dynamo: "1.3.0.dev20260720"
 
@@ -53,13 +53,8 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
-    router-mode: "kv"
-    router-temperature: 0.0
-    router-queue-threshold: 65536
-    active-decode-blocks-threshold: "None"
-    active-prefill-tokens-threshold: "None"
-    active-prefill-tokens-threshold-frac: "None"
-    tokenizer: "fastokens"
+    router-mode: "random"
+    router-session-affinity-ttl-secs: 900
   env:
     DYN_ROUTER_ACTIVE_REQUEST_EXPIRY_SECS: "3600"
 
@@ -67,8 +62,6 @@ backend:
   type: vllm
   connector: null
   dp_launch_mode: per_node
-  kv_events_config:
-    prefill: true
   mooncake_kv_store:
     store_config:
       metadata_server: "P2PHANDSHAKE"
@@ -205,6 +198,7 @@ benchmark:
     PORT: "8000"
     IS_MULTINODE: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_AGENTIC_CACHE_WARMUP_DURATION: "600"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"

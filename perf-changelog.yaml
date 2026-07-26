@@ -5090,9 +5090,5 @@
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
   description:
-    - "Add GB300 Dynamo-vLLM AgentX MTP3 configurations: aggregate TP8 at conc [1, 4], 1P/1D DEP4/DEP8 at conc 128, and 1P/1D DEP8/DEP8 at conc 384."
-    - "Use inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e for all three configurations."
-    - "Use NVIDIA/srt-slurm main per PR #2302; disaggregated configurations use per-node data-parallel launch (which enables hybrid load balancing) with NIXL plus MooncakeStore."
-    - "Pin all disaggregated recipes and router metadata to Dynamo 1.3.0.dev20260720 with stable cross-node prefix hashes, a 3600-second active-request expiry, 72 CPUs per task, and a 600-second cache warmup; keep breakable-CUDA-graph and connector-prefetch settings prefill-only."
-    - "Match the PR #2269 CI GB300 rack fabric by pinning Mooncake, UCX, and NCCL to mlx5_0,mlx5_1,mlx5_2,mlx5_3; disaggregated decode workers use MooncakeStore as a synchronous KV consumer with lookup disabled."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2260
+    - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302

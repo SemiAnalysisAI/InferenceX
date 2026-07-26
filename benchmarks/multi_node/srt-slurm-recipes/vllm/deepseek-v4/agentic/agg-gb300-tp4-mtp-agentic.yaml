@@ -6,14 +6,14 @@ name: "svf-vllm-agg-gb300-tp4-mtp-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e"
+  container: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   precision: "fp4"
 
 identity:
   model:
     repo: "deepseek-ai/DeepSeek-V4-Pro"
   container:
-    image: "inferactinc/public:sprint-agentx-fast-arm64-cu13.0.1-bedf79e"
+    image: "vllm/vllm-openai:nightly-dev-arm64-cu13.0.1-426e59f"
   frameworks:
     dynamo: "1.2.1"
 
