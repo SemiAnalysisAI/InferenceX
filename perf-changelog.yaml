@@ -5072,3 +5072,4 @@
   description:
     - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-vllm-fixes.sh setup patch (shipped in the nightly image)"
     - "conc 4096: drop the 4p2d-dep2-tep4 arm; add a 3p2d-dep2-dep8 arm for conc [1024, 2048] (prefill 3xDEP2, decode 2xDEP8)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2338
