@@ -3,15 +3,15 @@
 # MiniMax-M3 MXFP8 B200 single-node vLLM recipe with EAGLE3 speculative
 # decoding — the repo's spec-decoding=mtp variant of minimaxm3_fp8_b200.sh
 # (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3). Adds the
-# Inferact/MiniMax-M3-EAGLE3 draft head via --speculative-config with 3
-# speculative tokens. Everything else keeps the non-MTP serve shape:
+# Inferact/MiniMax-M3-EAGLE3-GQA draft head via --speculative-config with 1
+# speculative token. Everything else keeps the non-MTP serve shape:
 # --block-size 128 is mandatory (MSA sparse_block_size is 128; the default 16
 # misaligns sparse indexing), and --language-model-only skips the vision
 # encoder for the text-only benchmark. dp-attn=true maps to DP×EP (DEP);
 # ep>1 maps to TP+EP (TEP).
 #
-# The target uses the FlashInfer TRT-LLM attention path. The EAGLE3 drafter is
-# pinned separately to TRITON_ATTN.
+# The target uses the FlashInfer TRT-LLM attention path. The EAGLE3-GQA drafter
+# is pinned separately to FLASH_ATTN.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -60,7 +60,7 @@ else:
     raise RuntimeError(f"Expected exactly one patch anchor in {target}")
 PYEOF
 
-DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -100,8 +100,8 @@ else
   PARALLEL_ARGS="--tensor-parallel-size=$TP"
 fi
 
-# use 3 speculative tokens for all configs for now
-NUM_SPEC_TOKENS=3
+# use 1 speculative token for all configs for now
+NUM_SPEC_TOKENS=1
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -116,14 +116,13 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
---attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true}' \
---attention-config.indexer_kv_dtype "fp8" \
+--attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}' \
 --kv-cache-dtype fp8 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
---speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}" \
---stream-interval 20 --no-enable-prefix-caching \
+--speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
+--stream-interval 32 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

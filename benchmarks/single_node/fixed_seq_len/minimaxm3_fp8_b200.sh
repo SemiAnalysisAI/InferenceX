@@ -100,7 +100,7 @@ $PARALLEL_ARGS \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
---stream-interval 20 --no-enable-prefix-caching \
+--stream-interval 32 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
