@@ -7328,7 +7328,7 @@ qwen3.5-fp4-b200-trt-mtp:
 # sparse/index cache alignment). Weights are NOT SRE-staged; b300 falls back
 # to writable /data/models (see launch_b300-nv.sh MODEL_PATH split).
 minimaxm3-fp8-b300-vllm:
-  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
@@ -7409,7 +7409,7 @@ minimaxm3-fp4-b300-vllm-mtp:
 # /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8 (pre-downloaded, see
 # launch_b200-dgxc.sh).
 minimaxm3-fp8-b200-vllm:
-  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b200-dgxc
