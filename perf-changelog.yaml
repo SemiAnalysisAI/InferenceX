@@ -5073,3 +5073,4 @@
   description:
     - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; consolidate --attention-config with indexer_kv_dtype fp8; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
     - "EAGLE3 draft head Inferact/MiniMax-M3-EAGLE3 -> Inferact/MiniMax-M3-EAGLE3-GQA; speculative attention_backend TRITON_ATTN -> FLASH_ATTN; num_speculative_tokens kept at 3"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2337
