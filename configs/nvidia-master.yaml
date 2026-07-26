@@ -7880,6 +7880,50 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           ep: 8
           dp-attn: true
 
+glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  multinode: true
+  disagg: false
+  # High-interactivity end of the GLM-5.2 GB300 agentic Pareto curve: a single
+  # aggregated TP4 worker on one node, EAGLE/MTP + hicache DRAM KV offload.
+  # The disagg arms below jump from conc 8 to conc 256, leaving the knee of the
+  # curve unsampled; this arm fills 1/4/8/16 on 4 GPUs. Each concurrency gets
+  # its own allocation (MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION was
+  # lowered from 4 to 1 in #2170, so unlike the reference run these no longer
+  # share one bring-up). Mirrors the arm the
+  # DSv4-Pro GB300 agentic family uses for the same purpose
+  # (dsv4-fp4-gb300-dynamo-sglang-agentic-agg, run 29385297092 -- which is why
+  # that reference curve has 9 points where our disagg-only set had 5).
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [1, 4, 8, 16]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/agg-gb300-tp4-mtp-kvoffload.yaml"
+        # Aggregated worker: prefill's GPUs also serve decode, so decode has no
+        # separate allocation (num-worker: 0). Deployment is recipe-driven
+        # (agg_workers: 1); this only makes GPU accounting count 4, not 4+4.
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/GLM-5.2-NVFP4

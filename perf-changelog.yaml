@@ -5077,3 +5077,11 @@
     - "NVFP4 MoE backends: flashinfer_trtllm with no EP all-to-all on prefill, and FlashInfer MNNVL a2a + flashinfer_cutedsl on the wide-EP decode. DeepEP cannot serve NVFP4 outside low-latency decode: the only (deepep, *) NVFP4 MoE fused func SGLang registers through v0.5.16 unpacks the 6-field DeepEPLLDispatchOutput, while deepep-mode auto resolves to normal on every extend batch and passes the 5-field DeepEPNormalDispatchOutput, so prefill died on its first forward with ValueError: not enough values to unpack (expected 6, got 5) in run 29925753943. ep-num-redundant-experts/ep-dispatch-algorithm dropped with DeepEP (the FlashInfer a2a dispatcher plumbs no expert map)"
     - "configs/runners.yaml: add cluster:gb300-nv hardware entry (available-cpu-dram-mib, gpus-per-node 4), required by the agentic DRAM-offload sizing for any cluster:gb300-nv agentic config (also unblocks the existing DSv4 gb300 agentic configs)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Add GLM-5.2 NVFP4 agentic-coding AGGREGATED benchmark on GB300 via dynamo-sglang (new config-key glm5.2-fp4-gb300-dynamo-sglang-agentic-agg): single aggregated TP4 worker on one node, EAGLE/MTP + hicache DRAM KV offload, conc-list 1/4/8/16"
+    - "Supplies the high-interactivity end of the GB300 agentic Pareto curve. The disagg arms jump from conc 8 to conc 256, leaving the knee of the curve unsampled; with this arm the curve has 9 points, matching the coverage of the DSv4-Pro GB300 agentic family (run 29385297092) whose equivalent agg arm this mirrors"
+    - "Recipe benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic/agg-gb300-tp4-mtp-kvoffload.yaml. Plain TP4 with no attention-DP and no EP, so there is no MoE all-to-all and the bf16 MTP/nextn layer takes the triton runner with a2a none; no speculative-moe-* override is needed here unlike the wide-EP decode. NVFP4 MoE runner flashinfer_trtllm, DSA backends trtllm, hicache-ratio 0.75 / write_back / direct / page_first_direct (GLM-5.2 OOMs above 0.75), image lmsysorg/sglang:v0.5.16-cu130, dynamo 1.3.0.dev1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
