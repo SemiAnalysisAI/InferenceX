@@ -5066,3 +5066,9 @@
   description:
     - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-gb200-vllm-fixes.sh setup patch (shipped in the nightly image)"
+    - "Collapse every 2xDEP8 decode into a single DEP16 worker (decode_workers 2->1, gpus_per_decode 8->16, data-parallel-size 8->16); recipes renamed Xp2d-dep4-dep8 -> Xp1d-dep4-dep16 (1p2d/2p2d/3p2d/5p2d)"

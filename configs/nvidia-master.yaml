@@ -7195,7 +7195,7 @@ qwen3.5-fp4-b200-trt:
 # All prefill DEP4 (TP1 DP4 EP, 4 GPU/worker). Decode: Marlin, TEP8, DEP8, TEP4.
 # 4 GPU/node (GB200 NVL72). FLASHINFER attention with FP8 KV cache.
 minimaxm3-fp8-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: gb200
@@ -7218,11 +7218,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 1p2d DEP4+TEP4, 3n: conc 4
@@ -7263,11 +7263,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/2p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/2p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 3p2d DEP4+DEP8, 7n: conc 4096
@@ -7278,11 +7278,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/3p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/3p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 5p2d DEP4+DEP8, 9n: conc 4096
@@ -7293,11 +7293,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/5p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/5p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
 qwen3.5-fp4-b200-trt-mtp:

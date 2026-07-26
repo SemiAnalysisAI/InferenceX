@@ -347,10 +347,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISIO
     git checkout sa-submission-q2-2026 || exit 1
     mkdir -p recipes/vllm/minimax-m3-gb200-fp8 || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb200-fp8" recipes/vllm/minimax-m3-gb200-fp8 || exit 1
-    SRTCTL_SETUP_SCRIPT="minimax-m3-gb200-vllm-fixes.sh"
-    cp \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
