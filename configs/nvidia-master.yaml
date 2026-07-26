@@ -6672,7 +6672,6 @@ minimaxm3-fp8-b300-dynamo-vllm:
   runner: b300
   precision: fp8
   framework: dynamo-vllm
-  stream-interval: 32
   router: { name: dynamo-router, version: "1.3.0.dev20260614" }
   kv-p2p-transfer: nixl
   multinode: true
@@ -7028,7 +7027,6 @@ minimaxm3-fp8-gb300-dynamo-vllm:
   runner: gb300-nv
   precision: fp8
   framework: dynamo-vllm
-  stream-interval: 32
   router: { name: dynamo-router, version: "1.3.0.dev20260614" }
   kv-p2p-transfer: nixl
   multinode: true
@@ -7203,7 +7201,6 @@ minimaxm3-fp8-gb200-dynamo-vllm:
   runner: gb200
   precision: fp8
   framework: dynamo-vllm
-  stream-interval: 32
   router: { name: dynamo-router, version: "1.3.0.dev20260614" }
   kv-p2p-transfer: nixl
   multinode: true
@@ -7338,7 +7335,6 @@ minimaxm3-fp8-b300-vllm:
   precision: fp8
   framework: vllm
   multinode: false
-  stream-interval: 32
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -7420,7 +7416,6 @@ minimaxm3-fp8-b200-vllm:
   precision: fp8
   framework: vllm
   multinode: false
-  stream-interval: 32
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -7473,8 +7468,6 @@ minimaxm3-fp8-b200-vllm-mtp:
   precision: fp8
   framework: vllm
   multinode: false
-  speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":1,"attention_backend":"FLASH_ATTN"}'
-  attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -7531,8 +7524,6 @@ minimaxm3-fp8-b300-vllm-mtp:
   precision: fp8
   framework: vllm
   multinode: false
-  speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":1,"attention_backend":"FLASH_ATTN"}'
-  attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
   scenarios:
     fixed-seq-len:
     - isl: 8192
