@@ -5070,11 +5070,8 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-mtp
   description:
-    - "Add MTP variant of dsv4-fp4-mi355x-sglang-disagg (new config-key dsv4-fp4-mi355x-sglang-disagg-mtp)"
-    - "Clones the base disagg search space and topologies exactly (image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713, mori KV transfer + MoE a2a, sglang-router --pd-disaggregation on :30000); enables DeepSeek-V4 built-in MTP via spec-decoding: mtp, same enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp"
+    - "Add MTP variant of dsv4-fp4-mi355x-sglang-disagg (new config-key dsv4-fp4-mi355x-sglang-disagg-mtp), Clones the base disagg search space and topologies exactly (image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713, mori KV transfer + MoE a2a, sglang-router --pd-disaggregation on :30000); enables DeepSeek-V4 built-in MTP via spec-decoding: mtp, same enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp"
     - "Topologies: 1P1D pure-TP8/EP1 (conc 1-128); 1P1D DEP8 (TP8/EP8 + dp-attention) conc 256 and conc 512. All arms at DECODE_MTP_SIZE=1 (draft depth 1)"
     - "Recipe fix (model): adds mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to the DeepSeek-V4-Pro-DI models.yaml entry; without it DECODE_MTP_SIZE>0 emitted --speculative-num-steps/--speculative-num-draft-tokens with no --speculative-algorithm, so sglang never engaged spec decoding. EAGLE with in-checkpoint draft (no draft-model-path); NEXTN (the V3/R1 keyword) crashes the dsv4 decode server at init"
     - "Recipe fix (launcher): build_server_config appended the speculative flags to the decode server only, so prefill never allocated the nextn (MTP draft) KV layer -- prefill registered 3 PD state components, decode 4. SGLang PD-disaggregation requires matching speculative config on both roles (the draft/MTP layers participate in both prefill KV computation and decode verification): v0.5.15 hard-fails the mismatch (mori 'state component count mismatch'), while v0.5.14 tolerated it silently but decode's nextn state was never seeded from prefill, corrupting greedy EAGLE verification (gsm8k 0.96 -> 0.88, worse at depth 2). Fix: apply the speculative flags to both prefill and decode"
-    - "With both fixes, greedy EAGLE MTP (depth 1) is lossless: pure-TP8/EP1 gsm8k strict 0.9636 / flexible 0.9629 at conc 128, matching the spec-none base (strict 0.9613) as greedy speculative decoding must"
-    - "MTP CUDA-graph fix sgl-project/sglang#26383 (merged 2026-05-27) present in the pinned nightly"
-  pr-link: XXX
+  pr-link: 2305
