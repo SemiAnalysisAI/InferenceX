@@ -5081,3 +5081,4 @@
     - "Eagle configs (b200-vllm-mtp, b300-vllm-mtp): add speculative-config (method=eagle3, model=Inferact/MiniMax-M3-EAGLE3-GQA, num_speculative_tokens=1, attention_backend=FLASH_ATTN) and attention-config (backend=FLASHINFER, use_trtllm_attention=true, indexer_kv_dtype=fp8)"
     - "Disagg recipe files (b300-fp8/8k1k, gb300-fp8/8k1k, gb200-fp8/8k1k): bump container image to match"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2334
+
