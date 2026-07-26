@@ -5066,3 +5066,11 @@
   description:
     - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 in benchmarks/single_node/fixed_seq_len/minimaxm3_fp4_mi355x_vllm.sh; it defaults to NONE so QuickReduce was off entirely, while the ATOM reference recipe for the same model runs AITER_QUICK_REDUCE_QUANTIZATION=INT4"
+    - "Add VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=1 to override the built-in threshold table (2 MB for FP16/TP4/INT4 with the default BF16->FP16 cast) so prefill-sized all-reduces qualify"
+    - "Draft: local off-repo A/B showed +4.5% at conc 64 and +7.0% at conc 256, but two env vars moved between those runs and the local stack differs from this recipe; INT4 quantizes the residual stream so the eval result is the deciding signal"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2333
