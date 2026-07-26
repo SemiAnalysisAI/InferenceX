@@ -5102,3 +5102,13 @@
     - "Removes speculative-moe-a2a-backend/speculative-moe-runner-backend from the wide-EP decode blocks: those existed solely to keep GLM-5.2-NVFP4's unquantized bf16 MTP/nextn layer (hf_quant_config excludes model.layers.78*) off the FlashInfer a2a path, and without speculative decoding there is no draft model to route. Supersedes the speculative-moe-* note in the agg entry above"
     - "Recipes renamed *-mtp-kvoffload.yaml -> *-stp-kvoffload.yaml with CONFIG_FILE paths updated to match; the FlashInfer a2a recv-buffer sizing note now reflects the STP peak of max-running-requests/dp_size = 3072/16 = 192 tokens per rank rather than the MTP figure of 768"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Align hicache and collective tuning with run 29385297092 after the agg arm hung: sweep 30205318938 served 112 warmup requests then stalled 600s in a 48 MiB TP ALLREDUCE (8192 tokens x 6144 hidden, one prefill chunk) and the NCCL watchdog aborted the scheduler, surfacing to AIPerf as 'Stream ended before generation completed (500)' on 20 of 112 requests"
+    - "Agg arm hicache write_back/direct/page_first_direct -> write_through/kernel with mem-layout unset, matching the reference agg arm. write_back defers the host copy and the direct backend performs it on the critical path, which can stall one TP rank long enough to desync a collective. The disagg arms keep write_back/direct because the reference disagg prefill uses exactly that and it is proven there - a separate prefill role does not share the decode critical path"
+    - "Agg arm also adopts the reference scalars: scheduler-recv-interval 30, disable-flashinfer-autotune true, cuda-graph-max-bs 128, stream-interval 50, watchdog-timeout 1000000, max-prefill-tokens unset. Disagg arms adopt disable-flashinfer-autotune on both roles and SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1 on prefill, the two knobs the reference sets that are relevant to an allreduce hang"
+    - "Two reference values deliberately NOT copied: hicache-ratio stays 0.75 rather than the reference 6, and mem-fraction-static stays 0.85/0.75 rather than 0.90. Both scale the host KV pool, and GLM-5.2 is DSA/MLA-family so every rank holds complete per-token KV; a larger host pool OOM-killed the node in run 29678598595"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299

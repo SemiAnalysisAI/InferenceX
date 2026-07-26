@@ -78,6 +78,9 @@ backend:
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+    # From run 29385297092's prefill role. The agg arm hung in a TP ALLREDUCE
+    # without it (sweep 30205318938).
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
     SGLANG_MOE_NVFP4_DISPATCH: '1'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
@@ -163,6 +166,8 @@ backend:
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: prefill
       load-balance-method: total_tokens
+      # Set on both roles in run 29385297092; skips a startup autotune pass.
+      disable-flashinfer-autotune: true
       mem-fraction-static: 0.85
       max-running-requests: 512
       cuda-graph-max-bs: 512
@@ -220,6 +225,8 @@ backend:
       disaggregation-transfer-backend: mooncake
       disaggregation-mode: decode
       load-balance-method: total_tokens
+      # Set on both roles in run 29385297092; skips a startup autotune pass.
+      disable-flashinfer-autotune: true
       mem-fraction-static: 0.75
       max-running-requests: 3072
       cuda-graph-max-bs: 64

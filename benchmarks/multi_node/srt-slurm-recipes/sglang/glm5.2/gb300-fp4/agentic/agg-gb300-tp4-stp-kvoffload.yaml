@@ -87,6 +87,9 @@ backend:
     SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
     SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+    # From run 29385297092. Directly relevant: the failure this recipe is being
+    # corrected for was a hung TP ALLREDUCE.
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
     NCCL_MNNVL_ENABLE: '1'
     NCCL_CUMEM_ENABLE: '1'
     NCCL_TIMEOUT: '100000'
@@ -111,8 +114,8 @@ backend:
       trust-remote-code: true
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
-      watchdog-timeout: 86400
-      stream-interval: 60
+      watchdog-timeout: 1000000
+      stream-interval: 50
       # GLM-5.2 tool-call / reasoning parsers (required for agentic tool calls)
       tool-call-parser: glm47
       reasoning-parser: glm45
@@ -126,25 +129,37 @@ backend:
       nsa-decode-backend: trtllm
       nsa-prefill-backend: trtllm
       fp4-gemm-backend: flashinfer_cutlass
+      # 0.85, not the reference's 0.90: mem-fraction-static scales the device KV
+      # pool and hicache-ratio scales the host pool off it, so raising this also
+      # grows the host pool that OOM-killed the node in run 29678598595.
       mem-fraction-static: 0.85
+      scheduler-recv-interval: 30
+      disable-flashinfer-autotune: true
       # dp-size 1, so this is the per-rank budget directly (no DP split).
       chunked-prefill-size: 8192
-      max-prefill-tokens: 8192
       # Sized for the top of this arm's conc-list (16); agentic concurrency
       # counts session trees, so allow subagent fan-out past CONC.
       max-running-requests: 128
-      cuda-graph-max-bs: 64
+      cuda-graph-max-bs: 128
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
-      # Hierarchical-cache DRAM KV offload. ratio 0.75 is the validated GLM-5.2
-      # ceiling: GLM-5.2 is DSA/MLA-family so every rank holds complete per-token
-      # KV, and a larger host pool OOM-kills the node (run 29678598595). Same
-      # values as the disagg recipes here, NOT DSv4's ratio 6 / write_through /
-      # kernel.
+      # Hierarchical-cache DRAM KV offload, tuned to run 29385297092's agg arm.
+      #
+      # write_through + kernel (not write_back + direct): write_back defers the
+      # host copy and the `direct` backend does it on the critical path, which
+      # stalled one TP rank long enough to desync a collective -- sweep
+      # 30205318938 served 112 warmup requests then hung 600 s in a 48 MiB
+      # ALLREDUCE (8192 tok x 6144 hidden, one prefill chunk) and the NCCL
+      # watchdog aborted the process. hicache-mem-layout is left unset for the
+      # same reason: the reference does not set it.
+      #
+      # ratio stays 0.75 and is deliberately NOT the reference's 6. GLM-5.2 is
+      # DSA/MLA-family so every rank holds complete per-token KV; its device pool
+      # dwarfs DSv4's, and a larger host pool OOM-killed the node in run
+      # 29678598595 (even DSv4's ratio=2 default pins ~2.7 TB here).
       enable-hierarchical-cache: true
-      hicache-write-policy: write_back
+      hicache-write-policy: write_through
       hicache-ratio: 0.75
-      hicache-io-backend: direct
-      hicache-mem-layout: page_first_direct
+      hicache-io-backend: kernel
 
 sbatch_directives:
   mem: "0"
