@@ -37,11 +37,7 @@ export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 # QuickReduce INT4, matching AITER_QUICK_REDUCE_QUANTIZATION=INT4 in the ATOM
 # recipe. Defaults to NONE, so QuickReduce was previously off entirely here.
-# The 1 MB gate overrides the built-in table (2 MB for FP16/TP4/INT4 once BF16
-# inputs are cast to FP16, which is the default) so prefill-sized all-reduces
-# qualify.
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=1
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context

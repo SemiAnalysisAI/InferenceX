@@ -5071,7 +5071,7 @@
     - minimaxm3-fp4-mi355x-vllm
   description:
     - "Set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 in benchmarks/single_node/fixed_seq_len/minimaxm3_fp4_mi355x_vllm.sh; it defaults to NONE so QuickReduce was off entirely, while the ATOM reference recipe for the same model runs AITER_QUICK_REDUCE_QUANTIZATION=INT4"
-    - "Add VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=1 to override the built-in threshold table (2 MB for FP16/TP4/INT4 with the default BF16->FP16 cast) so prefill-sized all-reduces qualify"
     - "Bump image from nightly-4559c43a95 to nightly-0ba2aa35a8 (32 commits, 2026-07-25), which picks up vllm-project/vllm#49704 'Support non-uniform page sizes in KVBlockZeroer' -- required before this config can ever set --kv-cache-dtype fp8, since the MiniMax-M3 indexer side cache and main KV cache have different page sizes"
     - "Narrow the fixed-seq-len search space to TP4/EP1 conc 1-256; drop the TP8, TP8/EP8 and TP8/EP8/DP-attn entries. The ATOM reference recipe this config is compared against runs TP4, and the TP8 variants were the only jobs failing the sweep."
+    - "Local single-variable A/B on a clean base (MI355X TP4 8k1k): +3.7% at conc 64 and +5.0% at conc 128, flat below ~c16. An earlier draft also set VLLM_ROCM_QUICK_REDUCE_MIN_SIZE_BYTES_MB=1; that was measured and dropped because it is neutral at conc 64 and 2.4% SLOWER at conc 128 than the shipped threshold table, which already gates at 2 MB for FP16/TP4/INT4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2333
