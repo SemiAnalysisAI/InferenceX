@@ -5066,3 +5066,19 @@
   description:
     - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
+    - glm5.2-fp4-rtx6000pro-sglang-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a GLM-5.2 NVFP4 SGLang AgentX sweep on the 8x RTX PRO 6000 Blackwell (SM120) Latitude runner, TP8/EP1 with GPU-resident FP8 KV cache at concurrency 1, 2, and 4"
+    - "Pin lmsysorg/sglang:v0.5.15.post1-cu130, the same image as the merged B300 GLM-5.2 SGLang recipe and the first release whose GlmMoeDsaForCausalLM support is present"
+    - "Force --disable-shared-experts-fusion: SGLang enables fusion for this config, but nvidia/GLM-5.2-NVFP4 stores the shared expert loose in BF16 while the routed experts are packed NVFP4, so the fused loader aborts weight load with a 3072-vs-6144 shape mismatch"
+    - "Run the Triton MLA attention fallback instead of the sparse DSA backend: SGLang builds DSA indexer paged-MQA-logits metadata through DeepGEMM only ('cutedsl' is gated to SM100), and DeepGEMM asserts 'Unsupported architecture' on SM120, so GLM-5.2's sparse-attention advantage is not realized on this GPU family"
+    - "Do not carry SGLang's DeepseekV4-only SM120 kernel fixups (FP8 weight-only GEMM, topk_v2, tilelang/DeepGEMM hidden-compression prenorm, torch paged-MQA logits): tested on-node, boot and generation are identical with and without them on this Triton fallback path"
+    - "Cap context at 256k and replay the 256k-capped trace corpus: the FP8 KV pool holds 464,768 tokens per rank at mem-fraction-static 0.85 (~51 KB/token across 78 layers), so the model's 1M context does not fit and conc >4 re-prefills continuously"
+    - "Raise the agentic warmup grace period to 3600s: dense-attention prefill measured 872 tok/s at 4.4k context falling to 418 tok/s at 244k, so long-history warmup snapshots need more than the shared 1800s default"
+    - "Validated over SSH: TP8 boot on the node (56.04 GB weights/GPU, 464,768-token KV pool/rank, CUDA graphs captured, /health 200), short-prompt correctness through the glm45/glm47 parsers, and exact needle retrieval at 45,394 / 155,552 / 220,029-token prompts with no NaN from the SM120 flashinfer_cutlass NVFP4 MoE path"
+    - "Record in the recipe why the sparse DSA path cannot be re-enabled by flag: patching SGLang to use its TileLang/torch paged-MQA-logits kernels clears the DeepGEMM abort and boots, but the TileLang sparse-MLA kernel needs bf16 KV, asks for 170,048 B of shared memory against SM120's ~100 KB, cannot be CUDA-graph captured, and is numerically wrong at the only tile size that fits"
+  pr-link: XXX

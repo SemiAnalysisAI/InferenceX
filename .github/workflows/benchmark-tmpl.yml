@@ -235,6 +235,13 @@ jobs:
             done
           fi
 
+          # The direct-host RTX runner mounts this checkout into a rootful
+          # container. Repair files left by an interrupted job before
+          # actions/checkout attempts its clean reset.
+          if [ "${{ runner.name }}" = "rtx6000pro-lat_00" ]; then
+            sudo -n chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE"
+          fi
+
           # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."

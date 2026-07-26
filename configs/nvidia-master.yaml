@@ -8097,3 +8097,35 @@ glm5.2-fp4-b300-sglang-agentic:
       # radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is
       # strictly dominated by conc 48 on both throughput and interactivity.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], router: { name: sglang-router, version: "0.3.2" } }
+
+# GLM-5.2 NVFP4 AgentX on the 8x RTX PRO 6000 Blackwell (SM120) Latitude node
+# with SGLang. Three SM120 facts shape this entry:
+#
+#   * TP8 only. The checkpoint is 433 GB (56 GB/GPU loaded), so pure TP across
+#     all eight 96 GB GPUs is the only layout that leaves room for a KV pool;
+#     TP4 cannot hold the weights, and attention-DP would replicate the pool
+#     per rank.
+#   * Sparse DSA attention is unavailable. SGLang's DSA backend builds its
+#     indexer paged-MQA-logits metadata through DeepGEMM (the only CUDA
+#     option; 'cutedsl' is gated to SM100), and DeepGEMM asserts "Unsupported
+#     architecture" on SM120, so the recipe runs the Triton MLA fallback with
+#     the sparse indexer bypassed. Prefill therefore scales superlinearly with
+#     context (measured on-node: 17.6k tokens 5.2 s -> 70.5k tokens 38.9 s).
+#   * Context is capped at 256k, not the model's 1M. The FP8 KV pool is
+#     464,768 tokens per rank at mem-fraction-static 0.85 (~51 KB/token across
+#     78 layers), so the recipe replays the 256k-capped trace corpus and stops
+#     at conc 4, where four full-length sessions already exceed the pool and
+#     start re-prefilling.
+glm5.2-fp4-rtx6000pro-sglang-agentic:
+  image: lmsysorg/sglang:v0.5.15.post1-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:rtx6000pro-lat
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4] }
