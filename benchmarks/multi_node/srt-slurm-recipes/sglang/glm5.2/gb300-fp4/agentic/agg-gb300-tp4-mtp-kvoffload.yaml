@@ -100,7 +100,13 @@ backend:
   sglang_config:
     aggregated:
       host: 0.0.0.0
-      served-model-name: GLM-5.2-FP4
+      # MUST equal the `model:` field of the nvidia-master.yaml config-key:
+      # benchmark_lib.sh sends `--model $MODEL` from it, and the dynamo
+      # frontend only registers this name. A mismatch is not a startup
+      # error -- the engine goes healthy and every benchmark request then
+      # 404s "Model not found", which AIPerf reports as a terminal warmup
+      # failure (run 30202683710).
+      served-model-name: nvidia/GLM-5.2-NVFP4
       model-path: /model/
       trust-remote-code: true
       quantization: modelopt_fp4

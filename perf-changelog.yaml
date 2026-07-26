@@ -5085,3 +5085,11 @@
     - "Supplies the high-interactivity end of the GB300 agentic Pareto curve. The disagg arms jump from conc 8 to conc 256, leaving the knee of the curve unsampled; with this arm the curve has 9 points, matching the coverage of the DSv4-Pro GB300 agentic family (run 29385297092) whose equivalent agg arm this mirrors"
     - "Recipe benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic/agg-gb300-tp4-mtp-kvoffload.yaml. Plain TP4 with no attention-DP and no EP, so there is no MoE all-to-all and the bf16 MTP/nextn layer takes the triton runner with a2a none; no speculative-moe-* override is needed here unlike the wide-EP decode. NVFP4 MoE runner flashinfer_trtllm, DSA backends trtllm, hicache-ratio 0.75 / write_back / direct / page_first_direct (GLM-5.2 OOMs above 0.75), image lmsysorg/sglang:v0.5.16-cu130, dynamo 1.3.0.dev1"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Fix served-model-name across all six GLM-5.2 GB300 agentic recipes: GLM-5.2-FP4 -> nvidia/GLM-5.2-NVFP4, matching the model: field of the nvidia-master.yaml config-keys"
+    - "benchmark_lib.sh builds the agentic replay command with --model $MODEL taken from the master-config model: field, while the dynamo frontend only registers the recipe served-model-name. The two disagreed, so every engine went healthy and then every benchmark request returned 404 Model not found; AIPerf reported it as a terminal warmup failure and aborted with 0 successful requests (run 30202683710, agg conc16 arm). The disagg arms carried the same mismatch but were fail-fast cancelled before reaching their benchmark. The DSv4 GB300 agentic family does not hit this because its served-model-name and model: field are byte-identical"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
