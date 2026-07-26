@@ -5074,4 +5074,5 @@
   description:
     - "Add a normal-decoding GLM-5.2 NVFP4 AgentX sweep on the 8x RTX PRO 6000 Blackwell Latitude runner"
     - "Run TP8/DCP4 at concurrency [1, 2, 4] and TP8/DCP4/EP8 at concurrency [8, 16, 32], with GPU-resident FP8 KV cache and the B12X SM120 runtime"
+    - "Apply a checksum-gated source patch to the installed vLLM package so B12X EP accepts the zero-expert sentinel produced after its source weights are intentionally released"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2332

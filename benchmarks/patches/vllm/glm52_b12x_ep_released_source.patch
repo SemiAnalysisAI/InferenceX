@@ -1,0 +1,24 @@
+diff --git a/vllm/model_executor/layers/fused_moe/b12x_ep_moe.py b/vllm/model_executor/layers/fused_moe/b12x_ep_moe.py
+index bac4fe096..67602847a 100644
+--- a/vllm/model_executor/layers/fused_moe/b12x_ep_moe.py
++++ b/vllm/model_executor/layers/fused_moe/b12x_ep_moe.py
+@@ -232,10 +232,17 @@ class B12xEPExperts(B12xExperts):
+                 "B12X EP workspace planning requires prepared weights; "
+                 "process_weights_after_loading must run first"
+             )
+-        if prepared.num_experts != int(local_num_experts):
++        metadata_num_experts = int(local_num_experts)
++        released_source_sentinel = (
++            self._source_parameters_released and metadata_num_experts == 0
++        )
++        if (
++            prepared.num_experts != metadata_num_experts
++            and not released_source_sentinel
++        ):
+             raise ValueError(
+                 "B12X EP local expert metadata does not match prepared weights: "
+-                f"metadata={int(local_num_experts)}, "
++                f"metadata={metadata_num_experts}, "
+                 f"prepared={prepared.num_experts}"
+             )
+         device = prepared.w1_fp4.device

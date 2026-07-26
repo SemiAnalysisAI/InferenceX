@@ -38,6 +38,65 @@ if [[ "$EP_SIZE" != "1" && "$EP_SIZE" != "$TP" ]]; then
     exit 1
 fi
 
+# Gilded Gnosis v20 releases the source B12X MoE parameters after preparing
+# its packed expert owner. The generic modular wrapper consequently reports
+# zero local experts during memory profiling, while the prepared owner retains
+# the authoritative count. Apply the narrowly scoped EP fix directly to the
+# installed vLLM package until the pinned image includes it.
+apply_glm52_b12x_ep_patch() {
+    local patch_file
+    local site_packages
+    local target
+    local current_sha256
+    local patch_sha256
+    local expected_patch_sha256=dd0fec7546830a403951e2a1780683f0157b3590192417eb799a9a2e291c95a3
+    local base_sha256=97619dfabe6e1a34017a328cf353a1a54988dce50c4b6040e4e6eb32d25599ae
+    local result_sha256=2df39f0be834abce3096ed1a09e8e1dd13addcf0e52ff4fdb099fd11ab610310
+
+    patch_file="$(
+        cd "$(dirname "$0")/../../patches/vllm"
+        pwd
+    )/glm52_b12x_ep_released_source.patch"
+    patch_sha256="$(sha256sum "$patch_file" | awk '{print $1}')"
+    if [[ "$patch_sha256" != "$expected_patch_sha256" ]]; then
+        echo "GLM-5.2 B12X EP patch file checksum mismatch: $patch_sha256" >&2
+        exit 1
+    fi
+
+    site_packages="$(
+        python3 -c \
+            'import importlib.util, pathlib; spec = importlib.util.find_spec("vllm"); assert spec and spec.origin; print(pathlib.Path(spec.origin).parent.parent)'
+    )"
+    target="$site_packages/vllm/model_executor/layers/fused_moe/b12x_ep_moe.py"
+    current_sha256="$(sha256sum "$target" | awk '{print $1}')"
+
+    case "$current_sha256" in
+        "$base_sha256")
+            patch --batch --forward --fuzz=0 -p1 -d "$site_packages" < "$patch_file"
+            ;;
+        "$result_sha256")
+            echo "GLM-5.2 B12X EP vLLM patch already applied"
+            ;;
+        *)
+            echo "Installed vLLM does not match the expected B12X EP source" >&2
+            echo "Expected: $base_sha256 or $result_sha256" >&2
+            echo "Actual:   $current_sha256" >&2
+            exit 1
+            ;;
+    esac
+
+    current_sha256="$(sha256sum "$target" | awk '{print $1}')"
+    if [[ "$current_sha256" != "$result_sha256" ]]; then
+        echo "GLM-5.2 B12X EP vLLM patch verification failed" >&2
+        exit 1
+    fi
+    python3 -m py_compile "$target"
+}
+
+if [[ "$EP_SIZE" -gt 1 ]]; then
+    apply_glm52_b12x_ep_patch
+fi
+
 SERVED_MODEL_NAME="$MODEL"
 MODEL_REVISION="${GLM52_MODEL_REVISION:-aec724e8c7b8ee9db3b48c01c320f63f9cdaf8aa}"
 TARGET_MODEL_PATH="${MODEL_PATH:-$MODEL}"
