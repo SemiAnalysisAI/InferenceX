@@ -5072,3 +5072,4 @@
     - minimaxm3-fp8-b300-vllm
   description:
     - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2336
