@@ -323,13 +323,19 @@ Verify BOTH:
     YAMLs, or exported before launch in benchmark scripts).
   - vLLM: the `--speculative-config` JSON contains BOTH
     `"rejection_sample_method": "synthetic"` and `"synthetic_acceptance_length": <AL>`.
+  - TRT-LLM: env var `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: <AL - 1>` in the
+    server/decode environment. The value counts accepted DRAFT tokens only and
+    EXCLUDES the bonus/verification token, so it must be the golden AL minus 1
+    (fractional values allowed — e.g. golden AL 3.5 -> 2.5).
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance — name the
   config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
   model in `golden_al_distribution/` (default-branch checkout; e.g. `qwen3.5_mtp.yaml`,
   `kimik2.5_eagle3.yaml`) and confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
-  qwen3.5 thinking_on with 3 speculative tokens -> 3.39). A submission may choose any
+  qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare
+  the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
+  golden AL (the env var excludes the bonus token). A submission may choose any
   supported draft length, but it may NOT substitute a different acceptance target.
   FAIL on a mismatch — name the config, the pinned value, and the expected golden
   value. If the model has no committed golden curve yet, do not guess: the sign-off's
