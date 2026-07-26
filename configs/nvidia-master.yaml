@@ -8105,7 +8105,7 @@ glm5.2-fp4-b300-sglang-agentic:
 # high-concurrency arm uses B12X's replicated-input EP8 path to shard experts.
 # Conc lists are disjoint between arms so exp-names stay unique.
 glm5.2-fp4-rtx6000pro-vllm-agentic:
-  image: voipmonitor/vllm:gilded-gnosis-v20-vllm2167295-si6a92bcc-fi801d57a-cu132-20260721@sha256:0eb4b6710200e22162ede859f49a5ef4f5ff7deadcb1ee02246d1a17d2325877
+  image: voipmonitor/vllm:gilded-gnosis-v20-vllm5517197-sibe0edca-fi801d57a-cu132-20260725@sha256:e7a8a8549c10b5d16899e0fb45ff7eeca09dd7c1d1a83eee13fb03930d8eb80a
   model: nvidia/GLM-5.2-NVFP4
   model-prefix: glm5.2
   runner: cluster:rtx6000pro-lat
