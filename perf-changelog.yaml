@@ -5091,4 +5091,4 @@
     - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
   description:
     - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2341
