@@ -156,10 +156,10 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
-        # Kimi K3's ~1.68 TB MXFP4 checkpoint must be pre-staged on the
-        # compute-visible shared Lustre filesystem. This alias matches
-        # model.path in the checked-in srt-slurm AgentX recipes.
-        export MODEL_PATH="/mnt/lustre01/models/kimi-k3"
+        # Load Kimi K3 from node-local NVMe for faster startup. The checkpoint
+        # must be pre-staged at this exact path on every allocated GB200 node.
+        # This alias matches model.path in the checked-in AgentX recipes.
+        export MODEL_PATH="/mnt/numa1/models/Kimi-K3"
         export SRT_SLURM_MODEL_PREFIX="kimi-k3"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         # The FP4 checkpoint is staged on compute-visible Lustre. The former
