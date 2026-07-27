@@ -422,7 +422,7 @@ build_server_config() {
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + ep config + mtp config (decode only) + dp config + specific config
+    # Combine: parallel args + base config + ep config + mtp config + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
@@ -430,7 +430,14 @@ build_server_config() {
     if [[ -n "$ep_config" ]]; then
         full_config="$full_config $ep_config"
     fi
-    if [[ -n "$mtp_config" ]] && [[ "$mode" == "decode" ]]; then
+    # MTP/speculative flags go to BOTH prefill and decode. In PD-disaggregation the
+    # draft (nextn) layers participate in prefill KV computation as well as decode
+    # verification, so the speculative config must match on both roles. Gating this to
+    # decode only left prefill without the nextn KV layer: prefill registered one fewer
+    # PD state component than decode, which newer sglang (v0.5.15+) rejects outright
+    # ("state component count mismatch") and older builds tolerated silently while
+    # feeding the decode's nextn verification uninitialized state (lossy greedy MTP).
+    if [[ -n "$mtp_config" ]]; then
         full_config="$full_config $mtp_config"
     fi
     if [[ -n "$dp_config" ]]; then
