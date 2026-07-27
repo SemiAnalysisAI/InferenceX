@@ -5109,3 +5109,11 @@
     - "TP4 is ~2x more per-GPU efficient than TP8 on this KV-bound agentic trace (none peaks ~49.6 tok/s/GPU at c8 vs 26.8 at TP8, from the 3600s TP4/TP8 sweeps), and GPU-only avoids the CPU/DRAM-offload interactivity penalty (LMCache cells sat at ~13-15 tok/s/user vs ~48 for none c4)"
     - "conc capped at 8: c8 is the last stable point before the GPU-KV-capacity wall (GPU-KV ~74%); none collapses past c8 and the DRAM-offload tiers only lose per-GPU throughput at this scale, so they add no headroom"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2126
+
+- config-keys:
+    - kimik2.7-fp4-mi355x-vllm-agentic
+  description:
+    - "Switch the KV cache to fp8 (--kv-cache-dtype fp8). The amd/Kimi-K2.7-Code-MXFP4 Quark checkpoint ships an empty kv_cache_quant_config, so vLLM's default `auto` was giving a bf16 KV cache; this trace is GPU-KV-capacity bound (c8 sits at ~74% KV usage on TP4), so halving bytes/token in the pool attacks the capacity wall directly instead of only adding headroom"
+    - "Brings the recipe in line with dsv4_fp4_mi355x_vllm.sh (same agentic scenario, same MI355X, same vLLM) and the kimik2.5 b200/b300/h100 recipes, all of which already pin --kv-cache-dtype fp8"
+    - "Drop PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True: expandable segments are VMM allocations and cannot be HIP-IPC-exported, so with VLLM_ALLREDUCE_USE_SYMM_MEM=0 every rank died at engine init in AITER custom all-reduce (hipIpcGetMemHandle -> HIP invalid argument). gpu-memory-utilization 0.85 is retained and is what carries the OOM headroom"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2126

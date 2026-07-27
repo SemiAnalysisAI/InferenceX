@@ -350,6 +350,12 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.85
+    # This trace is GPU-KV-capacity bound (c8 sits at ~74% KV usage on TP4), and
+    # the Quark checkpoint ships an empty kv_cache_quant_config, so the default
+    # `auto` gives a bf16 KV cache. fp8 halves bytes/token in the pool -- the one
+    # knob that moves the capacity wall rather than just adding headroom. Matches
+    # dsv4_fp4_mi355x_vllm.sh and every kimik2.5 recipe.
+    --kv-cache-dtype fp8
     --block-size=1
     --trust-remote-code
     --max-num-seqs "$CONC"
