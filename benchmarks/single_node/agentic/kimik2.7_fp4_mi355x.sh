@@ -335,10 +335,12 @@ fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
-# Headroom fix: c4/c8 OOM'd at engine init (~255/288 GiB, <256 MiB free) on a
-# fragmented/co-tenanted node. expandable_segments reclaims reserved-but-unallocated
-# blocks; see run 29846131109 server.log.
-export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+# Do NOT set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True here. With
+# VLLM_ALLREDUCE_USE_SYMM_MEM=0 (above) TP>1 goes through AITER custom
+# all-reduce, which exports its buffer with hipIpcGetMemHandle. Expandable
+# segments are VMM allocations and cannot be IPC-exported, so every rank dies at
+# engine init with "[HIP error](invalid argument)" (run 30225797082).
+# gpu-memory-utilization 0.85 below is what carries the c4/c8 OOM headroom.
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
