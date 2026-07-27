@@ -5100,3 +5100,16 @@
     - "Teach the RTX PRO 6000 launcher to prefer a framework-tagged benchmark script so vLLM and SGLang recipes for the same model can coexist"
     - "Validated on the node through the real launcher at all four corners of the sweep, every request successful: TEP4 concurrency 64 640/640 at 6198 tok/s, TP4 concurrency 64 640/640 at 5999 tok/s, TEP4 concurrency 1 10/10 at 672 tok/s, TP4 concurrency 1 10/10 at 658 tok/s"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+
+- config-keys:
+    - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add an MTP arm to the Qwen3.5-397B-A17B NVFP4 RTX PRO 6000 SGLang sweep, driving the checkpoint's built-in MTP draft head through SGLang's EAGLE path with 3 steps, top-k 1, and 4 draft tokens"
+    - "Sweep the same 8k/1k grid as the non-MTP config: concurrency 1, 4, 16, and 64 for both TP4 and TEP4"
+    - "Raise mem-fraction-static to 0.80 for this arm: the fraction bounds weights plus the KV and Mamba pools, so the 4.05 GiB per-rank draft head has to be paid for by raising it, not lowering it (0.65 and 0.75 both left the pools empty on this 96 GiB SKU, and 0.85 came up with only 4.56 GiB free per rank)"
+    - "Size max-running-requests to the tested concurrency instead of a fixed 128, since the client never opens more connections and the oversized Mamba state pool is what starved the draft head"
+    - "Pass --use-chat-template to the benchmark, as required for EAGLE-style speculative decoding"
+    - "Validated on the node through the real launcher, every request successful: TEP4 concurrency 64 640/640 at 6895 tok/s (11% above the non-MTP arm's 6198 tok/s, mean TTFT 27.2s to 9.6s), and TEP4 concurrency 1 10/10 at 1233 tok/s (83% above the non-MTP arm's 672 tok/s, mean TPOT 12.6ms to 6.5ms)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
