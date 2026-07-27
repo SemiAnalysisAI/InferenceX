@@ -85,6 +85,15 @@ export VLLM_ALLREDUCE_USE_FLASHINFER="${VLLM_ALLREDUCE_USE_FLASHINFER:-1}"
 export VLLM_USE_RUST_FRONTEND="${VLLM_USE_RUST_FRONTEND:-1}"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
+# VLLM_USE_RUST_FRONTEND also makes `vllm bench serve` delegate the CLIENT to
+# the Rust binary, whose flag surface is a subset of the Python one: it has no
+# --speed-bench-output-len (only --speed-bench-max-input-len), no --save-detailed
+# and no --chat-template-kwargs, so every cell dies before sending a request and
+# the whole matrix comes back N/A. Keep the Rust frontend on the SERVER (that is
+# the production recipe) and pin the benchmark client to the Python path. AL is
+# read from the server's /metrics, so the client choice does not affect it.
+BENCH_CLIENT_ENV=(env VLLM_USE_RUST_FRONTEND=0)
+
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
@@ -228,6 +237,21 @@ if [[ "$NEED_SHIM" == "1" ]]; then
     fi
 fi
 
+# ---- Preflight: the benchmark client must support the flags every cell uses ----
+# Cheap up front; without it a CLI mismatch is only visible as an all-N/A matrix
+# after eight full server starts (~1h of runner time).
+BENCH_HELP="$("${BENCH_CLIENT_ENV[@]}" vllm bench serve --help 2>&1)"
+for flag in --speed-bench-category --speed-bench-output-len --chat-template-kwargs --save-detailed; do
+    if [[ "$BENCH_HELP" != *"$flag"* ]]; then
+        echo "CRITICAL: 'vllm bench serve' in this image does not support $flag — aborting."
+        echo "  (If it delegated to the Rust binary, VLLM_USE_RUST_FRONTEND=0 did not stop it.)"
+        echo "--- vllm bench serve --help ---"
+        echo "$BENCH_HELP"
+        exit 1
+    fi
+done
+echo "=== Benchmark client flag preflight OK ==="
+
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
@@ -334,7 +358,7 @@ run_cell() {
     acc_before=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
     drf_before=$(fetch_metric "$PORT" "vllm:spec_decode_num_drafts_total")
 
-    vllm bench serve \
+    "${BENCH_CLIENT_ENV[@]}" vllm bench serve \
         --model "$SERVE_MODEL" \
         --port "$PORT" \
         --dataset-name speed_bench \
@@ -351,6 +375,10 @@ run_cell() {
         --temperature "$temperature" \
         --top-p "$TOP_P" \
         "${think_args[@]}"
+    local bench_rc=$?
+    if [[ $bench_rc -ne 0 ]]; then
+        echo "  -> benchmark client exited rc=$bench_rc (thinking=$mode dspark=$mtp); cell will be N/A"
+    fi
 
     acc_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
     drf_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_drafts_total")
@@ -412,3 +440,17 @@ echo "=========================================="
 echo "  SPEED-Bench AL matrix written to: $OUT_YAML"
 echo "=========================================="
 cat "$OUT_YAML"
+
+# A matrix where every cell is N/A is a failed collection, not a result: fail the
+# job so it is not mistaken for a curve worth reviewing.
+MEASURED=0
+for mode in $THINKING_MODES; do
+    for mtp in $MTP_LIST; do
+        [[ "${AL_RESULT[${mode}_${mtp}]:-N/A}" != "N/A" ]] && MEASURED=$((MEASURED + 1))
+    done
+done
+if [[ "$MEASURED" -eq 0 ]]; then
+    echo "CRITICAL: no cell produced an AL value — see the server logs and the"
+    echo "benchmark client output above."
+    exit 1
+fi
