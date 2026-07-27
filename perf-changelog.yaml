@@ -5199,4 +5199,4 @@
     - "Reference the official H200 recipe at https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200: latency-oriented multi-node TP16, balanced TEP16, and throughput-oriented DEP16"
     - "Launch aggregated vLLM directly under Slurm instead of srt-slurm/Dynamo; P/D disaggregation is intentionally deferred"
     - "Sweep AgentX concurrency 1-8 for latency, 4-32 for balanced, and 16-128 for throughput with prefix caching, the kimi_k3 tool/reasoning parsers, and the full 1M-token model context"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2353
