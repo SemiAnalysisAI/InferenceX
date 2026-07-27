@@ -1287,6 +1287,8 @@ else
     if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC:-0}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
         DSV4_GOLDEN_AL=""
         case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
+            *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
+            *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
             *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
         esac
         if [[ -n "$DSV4_GOLDEN_AL" ]]; then
