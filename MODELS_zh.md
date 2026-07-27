@@ -17,19 +17,18 @@
 
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
 |---|---|---|---|---|
-| GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码 | 单轮 1k1k、单轮 1k8k |
-| MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 单轮 8k1k、智能体编码 | 单轮 1k1k、单轮 1k8k |
-| DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 单轮 8k1k、智能体编码 | 单轮 1k1k、单轮 1k8k |
-| GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)）；GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | —（2026-07-18 退役，[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |
+| GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码 | —（加入时 1k1k/1k8k 已弃用） |
+| MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 单轮 8k1k、智能体编码 | 单轮 1k1k |
+| DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 单轮 8k1k、智能体编码 | 单轮 1k1k |
+| GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)）；GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | —（2026-07-18 退役，[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） | 单轮 1k1k、单轮 1k8k（仅 GLM-5）、单轮 8k1k |
 | MiniMax-M2.5 | `minimaxm2.5` | 2026-02-18（[#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)） | —（2026-06-20 退役，[#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k、智能体编码 |
 | Kimi-K2.5 | `kimik2.5` | 2026-02-17（[#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)） | 单轮 8k1k、智能体编码 | 单轮 1k1k、单轮 1k8k |
 | Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16（[#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)） | 单轮 8k1k、智能体编码 | 单轮 1k1k、单轮 1k8k |
 | gpt-oss-120b | `gptoss` | 2025-09-09 | —（2026-07-06 退役，[#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |
-| DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | 单轮 8k1k [^1] | 单轮 1k1k、单轮 1k8k |
-| Llama-3.1-70B-Instruct | `llama70b` | 2025-08-12 | —（2025-10-29 退役，[#149](https://github.com/SemiAnalysisAI/InferenceX/pull/149)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k [^2] |
+| DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | 单轮 8k1k | 单轮 1k1k、单轮 1k8k |
+| Llama-3.1-70B-Instruct | `llama70b` | 2025-08-12 | —（2025-10-29 退役，[#149](https://github.com/SemiAnalysisAI/InferenceX/pull/149)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k [^1] |
 
-[^1]: `dsr1` 在 `configs/nvidia-master.yaml` 中已有智能体编码配置，但因等待 `e2e-tests.yml` 产物命名修复而暂时停用。
-[^2]: `llama70b` 早于 master 配置体系；退役时其配置被直接删除，未归档到 `configs/deprecated/`。该模型最初以 workflow 模板形式随仓库首次导入（2025-08-12）。
+[^1]: `llama70b` 早于 master 配置体系；退役时其配置被直接删除，未归档到 `configs/deprecated/`。该模型最初以 workflow 模板形式随仓库首次导入（2025-08-12）。
 
 ## 说明
 
