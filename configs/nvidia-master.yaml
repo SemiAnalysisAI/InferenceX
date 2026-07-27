@@ -8352,10 +8352,8 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      # Single-concurrency smoke test for the bring-up; widen the conc curve
-      # once the topology is proven green.
       - spec-decoding: none
-        conc-list: [8]
+        conc-list: [1, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 8
