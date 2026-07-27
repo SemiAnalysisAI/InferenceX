@@ -5062,16 +5062,26 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
 
 - config-keys:
-    - qwen3.5-fp4-rtx6000pro-sglang
-  scenario-type:
-    - fixed-seq-len
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4
   description:
-    - "Add Qwen3.5-397B-A17B NVFP4 single-node SGLang benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
-    - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both TP4 and TEP4 (TP4 attention with EP4 MoE, without DP attention)"
-    - "Pin SGLang v0.5.16-cu130, the first tag whose auto backend resolution knows that trtllm-gen MoE is SM100-only and routes modelopt_fp4 experts to FlashInfer CUTLASS on SM120"
-    - "Use FlashInfer CUTLASS for both the NVFP4 GEMMs and the routed experts and the FlashInfer attention backend on SM120, with FP8 KV cache, bf16 Mamba SSM state, the no_buffer Mamba scheduler strategy, radix cache disabled, and decode CUDA graph capture capped to each tested concurrency"
-    - "Use standard NCCL collectives on the PCIe topology (custom all-reduce disabled explicitly) and disable IB/RoCE probing to avoid the node's NCCL 2.28.9 bnxt_re initialization crash while preserving local CUDA P2P/SHM"
-    - "Deviate from the B300 SGLang recipe where 96 GiB per GPU forces it: mem-fraction-static 0.7 with a 2-request prefill chunk (0.8 with a 32k chunk sized the KV pool at 2.2M tokens and OOM'd on the first 8k prefill), and a single tokenizer worker (the B300 recipe's six each pin a ~0.7 GiB CUDA context on GPU 0)"
-    - "Teach the RTX PRO 6000 launcher to prefer a framework-tagged benchmark script so vLLM and SGLang recipes for the same model can coexist"
-    - "Validated on the node through the real launcher at all four corners of the sweep, every request successful: TEP4 concurrency 64 640/640 at 6198 tok/s, TP4 concurrency 64 640/640 at 5999 tok/s, TEP4 concurrency 1 10/10 at 672 tok/s, TP4 concurrency 1 10/10 at 658 tok/s"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+    - "Refresh five MiniMax-M3 NVFP4 B300 8k1k disaggregated Dynamo-vLLM EAGLE3 recipes from vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2 to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
+    - "Remove the deprecated VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm override from the five refreshed prefill and decode environments, matching the image compatibility adjustment established by PR #2120"
+    - "Retain the 2P1D DEP4 recipe on its legacy image and all-reduce settings under a separate matrix key"
+    - "Preserve all six existing 8k1k EAGLE3 topologies, speculative-token settings, chat template, random range ratio, and 12 total concurrency points"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2314
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Add a Qwen3.5-397B-A17B-FP8 GB200 disaggregated Dynamo-SGLang MTP configuration for 8k/1k."
+    - "Add seven SGLang recipes for TP4, TEP8, and DEP4/DEP16 prefill/decode topologies with EAGLE speculative decoding and Mooncake KV transfer."
+    - "Enable chat-formatted benchmark inputs for every MTP recipe."
+    - "Use a digest-pinned SGLang v0.5.14-cu130 image and validate Enroot imports before publishing shared squash files."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2324
+
+- config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
