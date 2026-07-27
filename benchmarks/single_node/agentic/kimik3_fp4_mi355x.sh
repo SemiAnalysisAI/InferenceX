@@ -53,10 +53,12 @@ rocm-smi || true
 amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
-# No WEKA_LOADER_OVERRIDE: K3's native context is 1M tokens, so the default
-# selection picks the unfiltered 062126 v7 corpus, which the 1M --max-model-len
-# below can replay. If KV-cache allocation at TP=8 ever forces a lower cap, pin
-# the 256k-capped corpus via WEKA_LOADER_OVERRIDE (the minimaxm2.5 pattern).
+# No WEKA_LOADER_OVERRIDE. NOTE: resolve_trace_source selects the corpus from a
+# hardcoded MODEL_PREFIX allowlist (dsv4*|glm5.2*|minimaxm3* -> unfiltered), NOT
+# from the model's native context length as its comment suggests. model-prefix
+# kimik3 therefore falls through to the 256k-capped 062126 corpus, so
+# --max-model-len below is 256k to match what is actually replayed. To benchmark
+# K3's full 1M context, add kimik3* to that allowlist and raise the cap.
 resolve_trace_source
 install_agentic_deps
 
@@ -117,9 +119,16 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format auto
     --moe-backend auto
-    --gpu-memory-utilization 0.95
-    # K3's full native context; the default trace corpus is the unfiltered one.
-    --max-model-len 1048576
+    # 0.90, NOT the upstream recipe's 0.95: MI355X reports 287.98 GiB total but
+    # only ~271 GiB free at startup (~17 GiB driver/framework overhead), so 0.95
+    # (273.59 GiB) hard-fails before KV sizing with "Free memory on device cuda:N
+    # ... is less than desired GPU memory utilization". Measured on g17; 0.90 is
+    # also what every other MI355X recipe here uses.
+    --gpu-memory-utilization 0.90
+    # 256k, matching the corpus resolve_trace_source actually picks for the
+    # kimik3 prefix (the 256k-capped 062126 variant). Also keeps KV allocation
+    # well inside the ~271 GiB usable per GPU after ~195 GiB of weights.
+    --max-model-len 262144
     --max-num-seqs "$CONC"
     --max-num-batched-tokens 4096
     --mm-encoder-tp-mode data
