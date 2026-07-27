@@ -92,11 +92,12 @@ export MEM_FRAC_STATIC=0.9
 { set +x; } 2>/dev/null
 ATOM_CMD=(
     python3 -m atom.entrypoints.openai_server
-    --model "$MODEL_PATH" --served-model-name "$MODEL"
+    --model "$MODEL_PATH" 
     --server-port "$VLLM_BACKEND_PORT"
     "${PARALLEL_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     --kv_cache_dtype fp8
+    --trust-remote-code 
     --enable_prefix_caching
     --max-num-seqs "$MAX_NUM_SEQS"
     --gpu-memory-utilization "$MEM_FRAC_STATIC"
