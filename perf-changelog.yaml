@@ -5108,7 +5108,14 @@
   description:
     - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2341
+  
 
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
 - config-keys:
     - kimik3-fp4-mi355x-vllm-agentic
   description:
@@ -5120,4 +5127,3 @@
     - "launch_mi355x-amds.sh routes moonshotai/Kimi-K3* weights to the NFS HF hub cache (/it-share/hf-hub-cache) instead of the node-local /var/lib NVMe cache, which cannot hold 1.56 TB - same treatment as MiniMax-M3"
     - "VLLM_ENGINE_READY_TIMEOUT_S=7200 to cover loading ~1.56 TB of weights off NFS (the K2.5-class recipes load ~0.5 TB)"
   pr-link: TBD
-  
