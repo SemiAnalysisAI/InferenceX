@@ -641,11 +641,13 @@ kimik3-fp4-mi355x-vllm-agentic:
       # offload backend shipped here because it needs no KV block/hash alignment,
       # unlike OffloadingConnector, which constrains K3's hybrid KDA+MLA geometry.
       #
-      # conc 1/4/8/16 straddles the KV cliff for this corpus: measured on-GPU KV
-      # is 2,204,913 tokens, i.e. only 2.10x concurrency for a 1M-token request,
-      # so with the unfiltered 062126 corpus the host tier starts being exercised
-      # from roughly conc 3 upward. conc 1 is the offload-path-overhead baseline.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16] }
+      # conc 1/4/8/16/32 straddles the KV cliff for this corpus: measured on-GPU
+      # KV is 2,204,913 tokens, i.e. only 2.10x concurrency for a 1M-token
+      # request, so against the unfiltered 062126 corpus the host tier starts
+      # being exercised from roughly conc 3 upward. conc 1 is the
+      # offload-path-overhead baseline; conc 32 also matches the official
+      # recipe's fixed --max-num-seqs 32 exactly, since --max-num-seqs tracks CONC.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16, 32] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
