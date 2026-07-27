@@ -65,16 +65,14 @@ export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 # Inter-node NCCL over this bnxt_re RoCE fabric. Only matters for multi-node TP/EP
 # workers (e.g. decode TP16 over 2 nodes); inert for the single-node-worker tests
 # (1-4), which do no inter-node NCCL.
-#   NCCL_IB_GID_INDEX=3: use the routable RoCEv2 GID (fd93:16d3:59b6:012*). Without
-#     it NCCL falls back to RoCEv1 (GID idx 0, link-local) and cross-node comm init
-#     hangs.
-#   NCCL_IB_TC=104 / NCCL_IB_SL=3: put NCCL's own RDMA on the PFC-protected lossless
-#     class (DSCP 24 / priority 3). Without it, NCCL's connection handshake can be
-#     dropped on the lossy default queue for some node pairs, hanging ncclCommInitRank.
-# Override for a cluster with a different GID layout / PFC class.
+#
+# GID index 3 is the routable RoCEv2 entry (fd93:16d3:59b6:012*); without it NCCL
+# falls back to RoCEv1 (GID idx 0, link-local) and cross-node comm init hangs. This
+# selects a GID table entry rather than a QoS class, so it has no MoRI counterpart
+# and stays a standalone default. NCCL_IB_TC / NCCL_IB_SL are instead derived from
+# the detected MoRI QoS class further down, so both transports end up on the same
+# lossless class. Override for a cluster with a different GID layout.
 export NCCL_IB_GID_INDEX="${NCCL_IB_GID_INDEX:-3}"
-export NCCL_IB_TC="${NCCL_IB_TC:-104}"
-export NCCL_IB_SL="${NCCL_IB_SL:-3}"
 
 # =============================================================================
 # MoRI-specific environment
@@ -90,12 +88,7 @@ export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
 # QoS/DSCP configuration
 # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
 if [[ -n "$MORI_RDMA_TC" ]]; then
-    # Derive matching SL from TC; bnxt_re rejects inconsistent DSCP/SL pairs and
-    # silently downgrades to the lossy queue (RETRY_EXC_ERR / stalled KV under load).
-    [[ -z "${MORI_RDMA_SL:-}" ]] && export MORI_RDMA_SL=$(( MORI_RDMA_TC >> 5 ))
-    export MORI_IO_TC="${MORI_IO_TC:-$MORI_RDMA_TC}"
-    export MORI_IO_SL="${MORI_IO_SL:-$MORI_RDMA_SL}"
-    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC MORI_RDMA_SL=$MORI_RDMA_SL MORI_IO_TC=$MORI_IO_TC MORI_IO_SL=$MORI_IO_SL (set by runner or environment)"
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
 elif command -v nicctl &> /dev/null; then
     ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
     ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
@@ -145,6 +138,28 @@ else
         echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
         echo "       This is normal for clusters without QoS or outside Docker containers."
     fi
+fi
+
+# Fan the detected class out to every transport that touches this fabric. MoRI's KV
+# transfer and NCCL's own collectives have to request the same PFC-protected class,
+# or the lossless guarantee only covers half the inter-node traffic.
+#
+# SL is the 802.1p priority: TC is the IP ToS byte (DSCP<<2) and priority is DSCP>>3,
+# so SL = TC>>5 (e.g. TC=104 -> DSCP 26/AF31 -> SL 3). bnxt_re REJECTS inconsistent
+# DSCP/SL pairs ("Given DSCP N and/or SL M not mapping to lossless queue") and
+# SILENTLY downgrades to the best-effort queue, which surfaces under load as
+# RETRY_EXC_ERR / stalled KV transfers, so every path needs the SL filled in - not
+# just the runner-set one.
+#
+# When detection found nothing these stay unset: requesting a class the fabric does
+# not map to its lossless queue is worse than leaving the transports on the default.
+if [[ -n "${MORI_RDMA_TC:-}" ]]; then
+    [[ -z "${MORI_RDMA_SL:-}" ]] && export MORI_RDMA_SL=$(( MORI_RDMA_TC >> 5 ))
+    export MORI_IO_TC="${MORI_IO_TC:-$MORI_RDMA_TC}"
+    export MORI_IO_SL="${MORI_IO_SL:-$MORI_RDMA_SL}"
+    export NCCL_IB_TC="${NCCL_IB_TC:-$MORI_RDMA_TC}"
+    export NCCL_IB_SL="${NCCL_IB_SL:-$MORI_RDMA_SL}"
+    echo "[INFO] RDMA QoS: MORI_RDMA_TC=$MORI_RDMA_TC MORI_RDMA_SL=$MORI_RDMA_SL MORI_IO_TC=$MORI_IO_TC MORI_IO_SL=$MORI_IO_SL NCCL_IB_TC=$NCCL_IB_TC NCCL_IB_SL=$NCCL_IB_SL"
 fi
 
 # =============================================================================
