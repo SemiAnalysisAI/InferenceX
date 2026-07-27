@@ -648,6 +648,15 @@ kimik3-fp4-mi355x-vllm-agentic:
       # offload-path-overhead baseline; conc 32 also matches the official
       # recipe's fixed --max-num-seqs 32 exactly, since --max-num-seqs tracks CONC.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16, 32] }
+      # TEP8 (TP8 + expert parallelism, no DP-attention) at the two highest conc
+      # points, on top of the EP1 ladder so the same conc can be compared directly.
+      # Measured on real weights: EP8 buys only +1.9% GPU KV headroom
+      # (2,246,948 vs 2,204,913 tokens; 2.14x vs 2.10x for a 1M-token request),
+      # because at TP8 the MoE weights are already sharded across all ranks --
+      # EP changes the partition axis, not per-rank bytes. Any win must therefore
+      # come from the all-to-all vs all-reduce path and expert-kernel efficiency,
+      # which is exactly what these two points measure.
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [16, 32] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
