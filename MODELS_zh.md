@@ -2,7 +2,7 @@
 
 [English](MODELS.md) | 中文
 
-本文档记录 InferenceX 基准测试覆盖的所有模型：加入日期、当前启用的基准测试场景，以及已弃用的场景。启用场景的结果发布于 <https://inferencex.com/>。
+本文档记录 InferenceX-e2e 基准测试覆盖的所有模型：加入日期、当前启用的基准测试场景，以及已弃用的场景。启用场景的结果发布于 <https://inferencex.com/>。
 
 ## 场景
 

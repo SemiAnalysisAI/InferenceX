@@ -2,7 +2,7 @@
 
 English | [中文](MODELS_zh.md)
 
-This document tracks every model benchmarked by InferenceX: when it was added, which benchmark scenarios are currently active for it, and which scenarios are deprecated. Results for active scenarios are published to <https://inferencex.com/>.
+This document tracks every model benchmarked by InferenceX-e2e: when it was added, which benchmark scenarios are currently active for it, and which scenarios are deprecated. Results for active scenarios are published to <https://inferencex.com/>.
 
 ## Scenarios
 
