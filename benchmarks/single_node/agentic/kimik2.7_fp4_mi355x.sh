@@ -382,10 +382,10 @@ VLLM_CMD=(
     # knob that moves the capacity wall rather than just adding headroom. Matches
     # dsv4_fp4_mi355x_vllm.sh and every kimik2.5 recipe.
     --kv-cache-dtype fp8
-    # No --block-size: the default (16) measured ~+51% per-GPU throughput vs
-    # block_size=1 on this trace at c8. AITER-MLA is selected either way --
-    # block_size=1 only narrowed the candidate backend list, it did not change
-    # the winner, so forcing it cost paging efficiency for nothing.
+    # No --block-size: measured a wash against block_size=1 at c8 (273.0 vs
+    # 271.0 tok/s), so drop it and keep vLLM's default. AITER-MLA is selected
+    # either way -- block_size=1 only narrowed the candidate backend list, it
+    # never changed the winner, so pinning it bought nothing worth carrying.
     --trust-remote-code
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data

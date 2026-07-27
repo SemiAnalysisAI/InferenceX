@@ -5121,7 +5121,8 @@
 - config-keys:
     - kimik2.7-fp4-mi355x-vllm-agentic
   description:
-    - "Drop --block-size=1 and let vLLM use its default block size (16). Measured ~+51% per-GPU output throughput at c8 on the agentic trace with everything else held fixed. AITER-MLA is selected either way -- block_size=1 only narrowed the candidate backend list, it never changed the winner -- so forcing it was costing KV paging efficiency for no backend benefit"
-    - "Bump the image from vllm/vllm-openai-rocm:v0.24.0 to v0.26.0 and raise --gpu-memory-utilization from 0.85 to 0.9, the other two deltas of the best-measured config"
-    - "Config isolated on a standalone MI355X node over 3600s TP4 c8 runs (fp8 KV throughout), varying block-size, image version and gpu-memory-utilization independently; this combination was the strongest and reached it without MTP or any DRAM/LMCache offload tier"
+    - "Bump the image from vllm/vllm-openai-rocm:v0.24.0 to v0.26.0: this is what carries the gain, +20% aggregate output throughput at TP4 c8 on the agentic trace (328.5 vs 273.0 tok/s) with every other knob held fixed"
+    - "Drop --block-size=1 and let vLLM use its default (16). This is throughput-neutral -- measured 273.0 vs 271.0 tok/s at v0.24.0, inside noise -- but AITER-MLA is selected either way (block_size=1 only narrowed the candidate backend list, it never changed the winner), so the pin bought nothing and is not worth carrying"
+    - "Raise --gpu-memory-utilization from 0.85 to 0.9 for KV headroom on this capacity-bound trace"
+    - "Isolated on a standalone MI355X node over 3600s TP4 c8 runs (fp8 KV throughout), varying block-size and image version independently: block1/v0.24.0 271.0, block16/v0.24.0 273.0, block16/v0.26.0 328.5 tok/s. Reached without MTP or any DRAM/LMCache offload tier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2126
