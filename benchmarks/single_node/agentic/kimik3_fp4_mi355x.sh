@@ -102,10 +102,12 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # OffloadingConnector by default, and VLLM_USE_SIMPLE_KV_OFFLOAD=1 would
         # switch it. Left UNSET deliberately. --kv_offloading_size takes the
         # aggregate budget undivided.
+        # No --disable-hybrid-kv-cache-manager: that came from an MLA-uniform
+        # recipe. K3's KV specs are heterogeneous (KDA state + MLA latent) and
+        # cannot be promoted to one unified type, so the hybrid manager stays on.
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
             --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
-            --disable-hybrid-kv-cache-manager
         )
         ;;
     vllm-simple)
@@ -117,17 +119,20 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / SIMPLE_RANKS ))
         # Identical prefixes must hash to identical block keys across ranks.
         export PYTHONHASHSEED=42
-        # Plain TP (no DP-attention here) uses lazy offload, matching the dsv4
-        # plain-TP ladder; eager offload only buys cross-rank block-hash
-        # stability under DEP, which this recipe does not run.
+        # Keys taken verbatim from the official K3 recipe command:
+        # cpu_bytes_to_use_per_rank (NOT cpu_bytes_to_use) and lazy_offload
+        # "false" (eager). The official example hardcodes 236223201280 B
+        # (220 GiB/rank); we substitute the agentic budget instead, because
+        # benchmarks/single_node/agentic/README.md requires scripts to consume
+        # TOTAL_CPU_DRAM_GB rather than a model-specific constant, dividing it
+        # for per-rank backends.
         OFFLOAD_CONFIG=$(cat <<EOF
 {
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
-    "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
-    "enable_cross_layers_blocks": "true",
-    "lazy_offload": true
+    "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
+    "lazy_offload": "false"
   }
 }
 EOF
@@ -174,7 +179,18 @@ VLLM_CMD=(
     --max-num-seqs "$CONC"
     --max-num-batched-tokens 4096
     --mm-encoder-tp-mode data
+    --enable-auto-tool-choice
+    --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
+    # Prefix caching is MANDATORY here and passed explicitly, not left to the
+    # default: measured on gfx950, omitting it still trips
+    #   AssertionError: tokens_per_block=1048576 not divisible by
+    #   tokens_per_hash=3145728. Hybrid models (e.g. Mamba+Attention) need
+    #   --enable-prefix-caching to align block sizes.
+    # K3 is hybrid (69 KDA + 24 gated MLA), so the block/hash alignment only
+    # holds with prefix caching on. It is also the right measurement: agentic
+    # trace replay exists to exercise large shared prefixes.
+    --enable-prefix-caching
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )

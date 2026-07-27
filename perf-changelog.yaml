@@ -5131,4 +5131,4 @@
     - "--max-num-seqs tracks CONC per agentic convention rather than the upstream fixed 128"
     - "launch_mi355x-amds.sh routes moonshotai/Kimi-K3* weights to the NFS HF hub cache (/it-share/hf-hub-cache) instead of the node-local /var/lib NVMe cache, which cannot hold 1.56 TB - same treatment as MiniMax-M3"
     - "VLLM_ENGINE_READY_TIMEOUT_S=7200 to cover loading ~1.56 TB of weights off NFS (the K2.5-class recipes load ~0.5 TB)"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2351
