@@ -8343,8 +8343,10 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
   model-prefix: kimik3
   runner: cluster:b200-dgxc
   precision: fp4
+  # framework stays dynamo-vllm for launcher routing, but this variant serves
+  # DIRECTLY with vllm serve (srt-slurm PR #278 frontend.type: vllm + the
+  # InferenceX multinode patch) — no dynamo frontend/worker/router involved.
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.4.0-kimi-k3-dev.1" }
   multinode: true
   disagg: false
   scenarios:

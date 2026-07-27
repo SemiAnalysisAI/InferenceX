@@ -19,17 +19,12 @@ identity:
     repo: "moonshotai/Kimi-K3"
   container:
     image: "vllm/vllm-openai:kimi-k3"
-  frameworks:
-    dynamo: "1.4.0-kimi-k3-dev.1"
 
+# Direct vLLM serving (frontend.type: vllm, srt-slurm PR #278 + the
+# InferenceX multinode patch): `vllm serve` owns the OpenAI port itself, so
+# no Dynamo frontend/worker is involved and no dynamo install is needed.
 dynamo:
-  install: true
-  # Day-zero Kimi-K3 dynamo ("feat: Added support for Kimi-K3", tag
-  # v1.4.0-kimi-k3-dev.1 == this commit): adds the kimi_k3 tiktoken tokenizer
-  # to the rust frontend (dynamo <=1.2.1 only knows kimi/kimi_k2/kimi_k25/
-  # deepseek_v3, so the model never registers and every request 404s) and the
-  # kimi_k3 tool-call/reasoning parser worker args.
-  hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+  install: false
 
 # Patches the image's mamba_hybrid postprocess_state: torch index_fill_
 # requires an int64 index but the runner passes the int32 idx_mapping,
@@ -55,7 +50,11 @@ infra:
   nats_max_payload_mb: 32
 
 frontend:
-  type: dynamo
+  # Direct vLLM OpenAI server (srt-slurm PR #278): the vllm serve leader owns
+  # the public port; rank-1 runs a headless engine worker (vLLM-native
+  # multi-node TP8xPP2 via --master-addr/--nnodes/--node-rank, enabled by
+  # patches/srt-slurm-pr278-direct-vllm-multinode.patch).
+  type: vllm
   enable_multiple_frontends: false
 
 backend:
@@ -86,14 +85,13 @@ backend:
       moe-backend: auto
       gpu-memory-utilization: 0.95
       no-enable-flashinfer-autotune: true
-      # kimi_k3 parsers via dynamo's namespaced worker args (--dyn-*), which
-      # the day-zero K3 dynamo build pinned above provides. The vLLM
-      # OpenAI-frontend spellings (--enable-auto-tool-choice /
-      # --tool-call-parser) are rejected by the dynamo worker entrypoint as
-      # unrecognized arguments (different arg parser than `vllm serve`).
-      dyn-tool-call-parser: kimi_k3
+      # kimi_k3 parsers via the native vllm serve OpenAI-frontend flags —
+      # legitimate here because this recipe serves directly with vllm serve
+      # (frontend.type: vllm), not through the dynamo worker entrypoint that
+      # rejects them.
+      enable-auto-tool-choice: true
+      tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
-      dyn-reasoning-parser: kimi_k3
       # No explicit max-model-len: let vLLM derive the native 1M window from
       # the model config (agentic trajectories blow past any small cap, and
       # K3's KDA layers keep per-token KV small — only the 24 gated-MLA
