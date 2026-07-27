@@ -17,16 +17,16 @@ This document tracks every model benchmarked by InferenceX: when it was added, w
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
-| DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | Single-turn 8k1k [^1] | Single-turn 1k1k, Single-turn 1k8k |
-| DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
-| Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
-| Kimi-K2.5 | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
-| MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
-| Llama-3.1-70B-Instruct | `llama70b` | 2025-08-12 | — (retired 2025-10-29, [#149](https://github.com/SemiAnalysisAI/InferenceX/pull/149)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k [^2] |
-| gpt-oss-120b | `gptoss` | 2025-09-09 | — (retired 2026-07-06, [#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
-| MiniMax-M2.5 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | — (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k, Agentic coding |
+| MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
+| DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
 | GLM-5 / GLM-5.1 | `glm5`, `glm5.1` | 2026-03-06 ([#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)); GLM-5.1 added 2026-04-21 ([#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)) | — (retired 2026-07-18, [#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
+| MiniMax-M2.5 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | — (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k, Agentic coding |
+| Kimi-K2.5 | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
+| Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k, Single-turn 1k8k |
+| gpt-oss-120b | `gptoss` | 2025-09-09 | — (retired 2026-07-06, [#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
+| DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | Single-turn 8k1k [^1] | Single-turn 1k1k, Single-turn 1k8k |
+| Llama-3.1-70B-Instruct | `llama70b` | 2025-08-12 | — (retired 2025-10-29, [#149](https://github.com/SemiAnalysisAI/InferenceX/pull/149)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k [^2] |
 
 [^1]: An agentic-coding config for `dsr1` exists in `configs/nvidia-master.yaml` but is temporarily disabled pending an `e2e-tests.yml` artifact-name fix.
 [^2]: `llama70b` predates the master-config system; its configs were deleted on retirement rather than archived in `configs/deprecated/`. It first shipped as workflow templates in the initial repo import (2025-08-12).
