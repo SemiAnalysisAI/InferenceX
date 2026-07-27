@@ -634,17 +634,18 @@ kimik3-fp4-mi355x-vllm-agentic:
     - dram-utilization: 0.95
       search-space:
       # TP=8 only: the ~1.56 TB MXFP4 checkpoint needs ~195 GB/GPU of the
-      # 288 GB HBM, so the TP=4 rows the K2.5 agentic recipe carries cannot
-      # load here (TP=4 would need ~390 GB/GPU).
-      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
-      # DRAM offload only above the KV cliff: lower concurrencies fit entirely
-      # on-GPU (measured 2.21M on-GPU KV tokens at TP8), so paying the offload-path
-      # overhead there would just slow them down without measuring anything new.
-      # vllm-simple = SimpleCPUOffloadConnector, per-rank cpu_bytes_to_use_per_rank,
-      # eager offload. Chosen as the single offload backend: it needs no KV
-      # block/hash alignment, so unlike OffloadingConnector it works on K3's
-      # hybrid KDA+MLA geometry without extra constraints.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 40, 48, 56] }
+      # 288 GB HBM, so TP=4 (~390 GB/GPU) cannot load.
+      #
+      # DRAM offload on every point. vllm-simple = SimpleCPUOffloadConnector with
+      # per-rank cpu_bytes_to_use_per_rank and eager offload; it is the only
+      # offload backend shipped here because it needs no KV block/hash alignment,
+      # unlike OffloadingConnector, which constrains K3's hybrid KDA+MLA geometry.
+      #
+      # conc 1/4/8/16 straddles the KV cliff for this corpus: measured on-GPU KV
+      # is 2,204,913 tokens, i.e. only 2.10x concurrency for a 1M-token request,
+      # so with the unfiltered 062126 corpus the host tier starts being exercised
+      # from roughly conc 3 upward. conc 1 is the offload-path-overhead baseline.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
