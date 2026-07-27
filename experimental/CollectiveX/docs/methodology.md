@@ -21,9 +21,13 @@ It does not predict serving throughput without a separate correlation study.
 
 The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16;
-dispatch precision is a swept dimension — a BF16 control and an FP8 dispatch (`bf16`, `fp8`),
+dispatch precision is a swept dimension — a BF16 control and, on the backends whose FP8 dispatch is
+supported upstream (DeepEP V2, MoRI, UCCL-EP), an FP8 dispatch (`bf16`, `fp8`),
 caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
-DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). `normal`-mode cases use the
+DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). NCCL EP is BF16-only this release, so its
+cells carry the control alone; the per-backend precision set lives in `sweep_matrix.py`'s
+`BACKEND_PRECISIONS` and a backend never emits a case for a precision it does not support.
+`normal`-mode cases use the
 `layout-and-dispatch-v1` semantics; `low-latency` cases use each backend's decode-kernel semantics
 (detailed below).
 
@@ -58,7 +62,14 @@ input. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the leg
 `dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
 `libibverbs` — no NVSHMEM/IBGDA — with software message ordering, atomics, and flow control; its
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
-never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. Those throughput kernels run across the full token ladder in the `normal` mode.
+never MNNVL) and its EP16 scale-out uses the same per-SKU RDMA rails as the other backends. NCCL EP
+is NVIDIA's native MoE dispatch/combine on the NCCL Device API, driven through the `nccl4py`
+bindings; `normal` mode selects its `HIGH_THROUGHPUT` algorithm, whose FLAT `[N, hidden]` receive and
+unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same oracle applies. It is
+NVIDIA-only and CUDA 13 only, and runs EP8 scale-up on H100/H200/B200/B300 plus EP8 and EP16 on
+GB200/GB300, where EP16 stays inside the MNNVL scale-up domain; x86 EP16 scale-out is an unsupported
+coverage row, its cross-node GIN path faulting inside `nccl_ep.cc` identically on RoCE and IB across
+four SKUs — a GDAKI limit, not a fabric-selection one. Those throughput kernels run across the full token ladder in the `normal` mode.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
@@ -76,7 +87,12 @@ cell-by-cell from the registry's `ll_backends` map rather than assumed wherever 
 currently enabled for DeepEP V2 EP8 on H100/H200/B200, MoRI
 EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency
 kernels over UCCL's CPU-proxy transport; the AMD SKUs keep UCCL-EP normal mode but drop LL, whose
-kernel trips a warp-group assertion on AMD's CU count). Whether a given SKU/backend/EP/mode cell is attempted is a capability
+kernel trips a warp-group assertion on AMD's CU count). NCCL EP implements the mode — its
+`LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR receive with a source-side
+weighted-kernel-sum combine — but carries no `ll_backends` row on any SKU: the shipped decode kernels
+consume stale peer signals under a fixed workload and wedge
+([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)), so the cells stay out of the matrix
+until a fixed wheel ships. Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact; whether it succeeded is decided only by the emitted artifact.
 
 ## Workload Identity
