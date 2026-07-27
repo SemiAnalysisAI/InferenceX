@@ -5116,3 +5116,11 @@
   description:
     - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  description:
+    - "Add one H200 TP8 aggregated DeepSeek-V4-Pro AgentX recipe with MTP and HiCache."
+    - "Generate Pareto points by sweeping concurrency [1, 2, 4, 8, 16] while keeping the serving topology fixed."
+    - "Use Dynamo header-based session affinity and pin AIPerf to the merged PR #17 implementation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

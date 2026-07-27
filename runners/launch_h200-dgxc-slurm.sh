@@ -4,6 +4,8 @@ set -eo pipefail
 # System-specific configuration for H200 DGXC Slurm cluster
 SLURM_PARTITION="main"
 SLURM_ACCOUNT="sa-shared"
+HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/models/gharunners/hf-hub-cache}"
+AIPERF_MMAP_CACHE_HOST_PATH="${AIPERF_MMAP_CACHE_HOST_PATH:-/home/sa-shared/gharunners/ai-perf-cache}"
 
 set -x
 
@@ -13,7 +15,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+        if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp8" ]]; then
+            # The shared HF cache already contains the H200 FP8 checkpoint;
+            # default to that local path (overridable via DSV4_MODEL_PATH) so
+            # srtctl preflight finds the directory instead of trying to pull the
+            # hf: model ID, which fails on the compute node ("path is
+            # unavailable. Pull or register the model yourself").
+            export MODEL_PATH="${DSV4_MODEL_PATH:-${HF_HUB_CACHE_MOUNT}/DeepSeek-V4-Pro}"
+            export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+        elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         else
@@ -42,7 +52,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
+    if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+        # Overlay the single H200 aggregated recipe on the upstream release
+        # that provides custom benchmarks, Dynamo wheels, and affinity config.
+        git clone --branch v1.0.10 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        mkdir -p recipes/sglang/deepseek-v4/agentic
+        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml" \
+            recipes/sglang/deepseek-v4/agentic/
+    elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
     else
@@ -67,6 +85,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     echo "Configs available at: $SRT_REPO_DIR/"
 
     # Map container images to local squash files based on framework
+    NGINX_IMAGE="nginx:1.27.4"
     NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
@@ -77,6 +96,31 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    fi
+
+    if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+        # This path intentionally tracks a recent public SGLang image instead
+        # of assuming the H200 cluster has already cached it. Import on a
+        # compute node and serialize concurrent jobs that share the cache.
+        import_squash() {
+            local squash="$1" image="$2"
+            local lock="${squash}.lock"
+            srun -N 1 --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
+                --exclusive --time=180 bash -c "
+                exec 9>\"$lock\"
+                flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
+                if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
+                    echo 'Squash file already exists and is valid, skipping import: $squash'
+                else
+                    rm -f \"$squash\"
+                    enroot import -o \"$squash\" docker://$image
+                    unsquashfs -l \"$squash\" > /dev/null 2>&1
+                fi
+            "
+        }
+
+        import_squash "$SQUASH_FILE" "$IMAGE"
+        import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
     fi
 
     export ISL="$ISL"
@@ -98,6 +142,11 @@ gpus_per_node: 8
 network_interface: ""
 # Path to srtctl repo root (where the configs live)
 srtctl_root: "${SRTCTL_ROOT}"
+# Persistent AgentX dataset and Hugging Face caches mounted into every
+# server and benchmark container.
+default_mounts:
+  "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_MOUNT}": "/hf_hub_cache"
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
@@ -271,9 +320,6 @@ EOF
     find . -name '.nfs*' -delete 2>/dev/null || true
 
 else
-
-    HF_HUB_CACHE_MOUNT="/models/gharunners/hf-hub-cache"
-    AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
     SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Convert pyxis image format (nvcr.io#path) to docker format (nvcr.io/path) for enroot import
