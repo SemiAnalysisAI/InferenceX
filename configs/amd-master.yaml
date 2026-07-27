@@ -1439,8 +1439,9 @@ dsv4-fp4-mi355x-atom-mtp:
       search-space:
       # Aligns ATOM official DSv4 MTP (models.json): MTP3 dp-off at low-mid conc,
       # DPA MTP3 (dp-attn) at mid-high conc. dp-on starts at c32 (dp-attn helps from c32).
-      # prefill-only TBO on dp-attn cells at conc>=64 (mirrors non-MTP #2327): MTP-safe —
-      # only --enable-tbo all (decode-TBO) drops spec_decode_metadata, prefill-only doesn't.
+      # prefill-only TBO on dp-attn cells at conc>=256 (measured crossover: TBO hurts
+      # c64/c128 -10~14%, helps c256+ +8~14%; MTP removes low-conc latency so TBO there is
+      # pure overhead). MTP-safe — only decode-TBO (--enable-tbo all) drops spec metadata.
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 4,  conc-end: 256,  spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: true,  conc-start: 32, conc-end: 1024, spec-decoding: mtp }
 

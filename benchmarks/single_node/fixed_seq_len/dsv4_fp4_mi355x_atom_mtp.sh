@@ -44,9 +44,13 @@ fi
 # prefill-only TBO (--enable-tbo -> argparse const=prefill -> enable_tbo_decode=False):
 # MTP-compatible because it never touches decode. (--enable-tbo all / decode-TBO WOULD
 # drop MTP's spec_decode_metadata in UBatchWrapper -- that is the real incompatibility;
-# prefill-only does not.) Mirrors non-MTP dsv4_fp4_mi355x_atom.sh (#2327): TBO on
-# dp-attn cells at conc>=64, together with GPU_MAX_HW_QUEUES=5.
-if [ "$DP_ATTENTION" = "true" ] && [ "$CONC" -ge 64 ]; then
+# prefill-only does not.) Threshold is conc>=256 for MTP (NOT the non-MTP #2327 conc>=64):
+# measured crossover (TBO run 30257759947 vs non-TBO run 30238071409, same image/harness)
+# shows TBO HURTS at c64/c128 (-14%/-10% output tput) but HELPS at c256+ (+11/+8/+14%).
+# MTP already removes low-conc latency, so TBO overlap there is pure overhead; the win
+# only appears once high conc turns compute-bound. Matches ATOM models.json non-MTP
+# DPA-TBO 256-2048 band. Together with GPU_MAX_HW_QUEUES=5.
+if [ "$DP_ATTENTION" = "true" ] && [ "$CONC" -ge 256 ]; then
     PARALLEL_ARGS+=(--enable-tbo)
     export GPU_MAX_HW_QUEUES=5
 fi
