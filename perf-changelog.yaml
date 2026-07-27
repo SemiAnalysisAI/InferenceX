@@ -5094,3 +5094,10 @@
     - "Recipe fix (model): adds mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to the DeepSeek-V4-Pro-DI models.yaml entry; without it DECODE_MTP_SIZE>0 emitted --speculative-num-steps/--speculative-num-draft-tokens with no --speculative-algorithm, so sglang never engaged spec decoding. EAGLE with in-checkpoint draft (no draft-model-path); NEXTN (the V3/R1 keyword) crashes the dsv4 decode server at init"
     - "Recipe fix (launcher): build_server_config appended the speculative flags to the decode server only, so prefill never allocated the nextn (MTP draft) KV layer -- prefill registered 3 PD state components, decode 4. SGLang PD-disaggregation requires matching speculative config on both roles (the draft/MTP layers participate in both prefill KV computation and decode verification): v0.5.15 hard-fails the mismatch (mori 'state component count mismatch'), while v0.5.14 tolerated it silently but decode's nextn state was never seeded from prefill, corrupting greedy EAGLE verification (gsm8k 0.96 -> 0.88, worse at depth 2). Fix: apply the speculative flags to both prefill and decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2305/changes
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2201
