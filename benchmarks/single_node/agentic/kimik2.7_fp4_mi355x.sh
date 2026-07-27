@@ -341,6 +341,33 @@ export PYTHONNOUSERSITE=1
 # segments are VMM allocations and cannot be IPC-exported, so every rank dies at
 # engine init with "[HIP error](invalid argument)" (run 30225797082).
 
+# ---- Eval-only serve args ---------------------------------------------------
+# The SWE-bench harness (mini-swe-agent) drives the model with plain bash in a
+# markdown code block -- it sends no `tools`/`tool_choice` -- so vLLM never
+# builds a tool-call grammar on this path. Belt and braces anyway: if a grammar
+# ever does get requested, the default backend `auto` resolves to xgrammar,
+# which rejects Kimi's tool-call tokens ("Failed to advance FSM" ->
+# "grammar rejected tokens" -> HTTP 500 on every affected request). Pin the
+# backend off xgrammar when this image supports it. Probed rather than
+# hard-coded so an image without the flag (or without llguidance installed)
+# can't turn a working eval into a server that won't start.
+EVAL_SERVE_ARGS=()
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SO_BACKEND="${STRUCTURED_OUTPUTS_BACKEND:-guidance}"
+    if [ "$SO_BACKEND" != "auto" ] && python3 -c 'import llguidance' 2>/dev/null; then
+        VLLM_SERVE_HELP="$(vllm serve --help 2>/dev/null || true)"
+        if grep -q -- '--structured-outputs-config' <<<"$VLLM_SERVE_HELP"; then
+            EVAL_SERVE_ARGS+=(--structured-outputs-config "{\"backend\":\"$SO_BACKEND\"}")
+        elif grep -q -- '--guided-decoding-backend' <<<"$VLLM_SERVE_HELP"; then
+            EVAL_SERVE_ARGS+=(--guided-decoding-backend "$SO_BACKEND")
+        else
+            echo "WARN: no structured-outputs backend flag in this image; leaving the default in place" >&2
+        fi
+    else
+        echo "WARN: llguidance not importable (or backend forced to auto); leaving the default structured-outputs backend in place" >&2
+    fi
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -362,6 +389,7 @@ VLLM_CMD=(
     --trust-remote-code
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
+    "${EVAL_SERVE_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
@@ -394,7 +422,14 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+# ---- Run benchmark / eval ---------------------------------------------------
+# run-sweep auto-schedules an eval-only cell for every agentic-coding config key,
+# so this recipe has to answer to EVAL_ONLY. Without this branch the eval cell
+# ran the aiperf trace replay instead and the job failed at "no results*.json
+# found" (run 30233775090).
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
