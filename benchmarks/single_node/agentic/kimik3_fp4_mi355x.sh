@@ -105,9 +105,16 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # No --disable-hybrid-kv-cache-manager: that came from an MLA-uniform
         # recipe. K3's KV specs are heterogeneous (KDA state + MLA latent) and
         # cannot be promoted to one unified type, so the hybrid manager stays on.
+        #
+        # UNIT CONVERSION: --kv_offloading_size is GiB (vllm/config/vllm.py does
+        # cpu_bytes_to_use = kv_offloading_size * (1 << 30)), but
+        # TOTAL_CPU_DRAM_GB is DECIMAL GB (the agentic README divides bytes by
+        # 1e9). Passing it raw would over-request by ~7.4% and breach the
+        # 2,861,022 MiB agentic cap, so convert decimal GB -> GiB.
+        KV_OFFLOAD_GIB=$(( TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824 ))
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --kv_offloading_size "$KV_OFFLOAD_GIB"
         )
         ;;
     vllm-simple)
@@ -119,20 +126,24 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / SIMPLE_RANKS ))
         # Identical prefixes must hash to identical block keys across ranks.
         export PYTHONHASHSEED=42
-        # Keys taken verbatim from the official K3 recipe command:
-        # cpu_bytes_to_use_per_rank (NOT cpu_bytes_to_use) and lazy_offload
-        # "false" (eager). The official example hardcodes 236223201280 B
-        # (220 GiB/rank); we substitute the agentic budget instead, because
-        # benchmarks/single_node/agentic/README.md requires scripts to consume
-        # TOTAL_CPU_DRAM_GB rather than a model-specific constant, dividing it
-        # for per-rank backends.
+        # Keys from the official K3 recipe command: cpu_bytes_to_use_per_rank
+        # (which the connector honours as an explicit per-rank override of
+        # cpu_bytes_to_use/world_size). The official example hardcodes
+        # 236223201280 B (220 GiB/rank); we substitute the agentic budget
+        # instead, because benchmarks/single_node/agentic/README.md requires
+        # scripts to consume TOTAL_CPU_DRAM_GB, dividing it for per-rank backends.
+        #
+        # lazy_offload is a JSON BOOLEAN, not the official command's string
+        # "false": the connector does bool(extra_config.get("lazy_offload")),
+        # and bool("false") is True in Python, so the string silently selects
+        # LAZY. We pass false to actually get eager offload.
         OFFLOAD_CONFIG=$(cat <<EOF
 {
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
     "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
-    "lazy_offload": "false"
+    "lazy_offload": false
   }
 }
 EOF
