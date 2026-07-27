@@ -152,13 +152,15 @@ backend:
       # watchdog aborted the process. hicache-mem-layout is left unset for the
       # same reason: the reference does not set it.
       #
-      # ratio stays 0.75 and is deliberately NOT the reference's 6. GLM-5.2 is
-      # DSA/MLA-family so every rank holds complete per-token KV; its device pool
-      # dwarfs DSv4's, and a larger host pool OOM-killed the node in run
-      # 29678598595 (even DSv4's ratio=2 default pins ~2.7 TB here).
+      # ratio 1, not the reference agg arm's 6: at 0.75 the host tier retained
+      # nothing (0.13% of prefill batches saw a cache hit in sweep 30208485904,
+      # TTFT p50 684 s), but GLM-5.2 is DSA/MLA-family so every rank holds
+      # complete per-token KV and a larger host pool OOM-killed the node in run
+      # 29678598595. 1 is the reference's disagg-prefill value and stays under
+      # the ratio 2 that OOM'd.
       enable-hierarchical-cache: true
       hicache-write-policy: write_through
-      hicache-ratio: 0.75
+      hicache-ratio: 1
       hicache-io-backend: kernel
 
 sbatch_directives:

@@ -12,7 +12,7 @@ name: "disagg-gb300-2p4d-dep8-dep16-c256-stp-kvoffload"
 # (grafted from benchmarks/single_node/agentic/glm5.2_fp4_b300_sglang.sh and the
 # GLM-5 wide-EP decode): flashinfer MNNVL a2a wide-EP decode (not DSv4
 # megamoe), flashinfer_trtllm NVFP4 prefill MoE, glm47/glm45 parsers,
-# hicache-ratio 0.75 (GLM-5.2 OOMs above this). STP only: no speculative decoding.
+# hicache-ratio tuned on-node against host RSS. STP only: no speculative decoding.
 # Concurrency is exported into agentic_srt.sh from the master-config conc-list.
 
 model:
@@ -175,10 +175,19 @@ backend:
       max-prefill-tokens: 8192
       model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
-      # Hierarchical-cache DRAM KV offload (hicache-ratio 0.75: GLM-5.2 OOMs above)
+      # Hierarchical-cache DRAM KV offload.
+      # ratio 1 matches the reference disagg prefill (run 29385297092). It was
+      # 0.75 -- the ceiling the single-node GLM-5.2 recipe validated -- but at
+      # 0.75 the host tier is too small to retain anything on this corpus: sweep
+      # 30208485904 got cached tokens on 9 of 6726 prefill batches (0.13%), so
+      # every agentic turn re-prefilled its whole ~95k-token history and TTFT
+      # p50 hit 684 s against the reference's 17.9 ms. Raising this is the
+      # documented OOM direction (a larger host pool killed the node in run
+      # 29678598595) so it stops at the reference's 1, well under the ratio 2
+      # that OOM'd; watch host RSS on the first green run.
       enable-hierarchical-cache: true
       hicache-write-policy: write_back
-      hicache-ratio: 0.75
+      hicache-ratio: 1
       hicache-io-backend: direct
       hicache-mem-layout: page_first_direct
 

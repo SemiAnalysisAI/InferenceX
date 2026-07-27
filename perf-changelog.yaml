@@ -5147,3 +5147,12 @@
     - "Agg arm also adopts the reference scalars: scheduler-recv-interval 30, disable-flashinfer-autotune true, cuda-graph-max-bs 128, stream-interval 50, watchdog-timeout 1000000, max-prefill-tokens unset. Disagg arms adopt disable-flashinfer-autotune on both roles and SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1 on prefill, the two knobs the reference sets that are relevant to an allreduce hang"
     - "Two reference values deliberately NOT copied: hicache-ratio stays 0.75 rather than the reference 6, and mem-fraction-static stays 0.85/0.75 rather than 0.90. Both scale the host KV pool, and GLM-5.2 is DSA/MLA-family so every rank holds complete per-token KV; a larger host pool OOM-killed the node in run 29678598595"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Raise hicache-ratio from 0.75 to 1 on every GLM-5.2 GB300 agentic arm, matching the reference disagg prefill in run 29385297092. At 0.75 the host tier retained nothing on the agentic corpus: sweep 30208485904 saw cached tokens on 9 of 6726 prefill batches (0.13%), so every turn re-prefilled its whole ~95k-token history and TTFT p50 was 684 s against the reference 17.9 ms, leaving the AIPerf cache-warmup phase unable to drain"
+    - "Ceiling measured on-node (job 17768), not assumed: at ratio 1 each prefill rank allocates 133.23 GB host hierarchical KV plus 30.53 GB host DSA indexer against a 152.51 GB / 2965312-token device pool, i.e. 163.76 GB per rank and 655 GB of the 920 GB node across 4 ranks (71%). Ratio 1.25 would reach ~86% and 1.5 would exhaust the node, so ~1.2 is the practical maximum and 1 is the safe step; this is the direction that OOM-killed a node in run 29678598595"
+    - "Open question this does not settle: 2.96M device tokens is ~31 full agentic prompts, so a 0.13% hit rate may be prefix affinity rather than capacity. The arm that measured it was 2P with DYN_ROUTER_TEMPERATURE=10000000, which flattens KV-router placement toward random; single-prefill-worker arms cannot scatter and will discriminate"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
