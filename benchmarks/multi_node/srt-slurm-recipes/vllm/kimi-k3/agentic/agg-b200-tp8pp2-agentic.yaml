@@ -84,7 +84,12 @@ backend:
       trust-remote-code: true
       load-format: fastsafetensors
       moe-backend: auto
-      gpu-memory-utilization: 0.95
+      # 0.90, not 0.95: the flashinfer trtllm MXFP4 MoE kernel allocates a
+      # ~1.6 GiB runtime workspace OUTSIDE vLLM's memory pool on the first
+      # forward; at 0.95 a 178 GiB B200 has only ~1.35 GiB free and the first
+      # warmup request OOMs (seventh sweep attempt). 0.90 matches the
+      # GB200/GB300 agentic recipes.
+      gpu-memory-utilization: 0.90
       no-enable-flashinfer-autotune: true
       # No parser flags on the worker (parser-flag experiment variant C —
       # sibling PRs try dynamo's --dyn-* namespaced args and the plain vLLM
