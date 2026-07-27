@@ -53,12 +53,12 @@ rocm-smi || true
 amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
-# No WEKA_LOADER_OVERRIDE. NOTE: resolve_trace_source selects the corpus from a
-# hardcoded MODEL_PREFIX allowlist (dsv4*|glm5.2*|minimaxm3* -> unfiltered), NOT
-# from the model's native context length as its comment suggests. model-prefix
-# kimik3 therefore falls through to the 256k-capped 062126 corpus, so
-# --max-model-len below is 256k to match what is actually replayed. To benchmark
-# K3's full 1M context, add kimik3* to that allowlist and raise the cap.
+# No WEKA_LOADER_OVERRIDE needed: kimik3* is on resolve_trace_source's unfiltered
+# allowlist (benchmark_lib.sh), so this replays the full unfiltered 062126 v7
+# corpus rather than the 256k-capped variant. Note that allowlist is a hardcoded
+# MODEL_PREFIX match, NOT a native-context-length rule as its comment suggests --
+# kimik3 had to be added explicitly. --max-model-len below is K3's full 1M native
+# context so the unfiltered corpus can be replayed without truncation.
 resolve_trace_source
 install_agentic_deps
 
@@ -125,10 +125,9 @@ VLLM_CMD=(
     # ... is less than desired GPU memory utilization". Measured on g17; 0.90 is
     # also what every other MI355X recipe here uses.
     --gpu-memory-utilization 0.90
-    # 256k, matching the corpus resolve_trace_source actually picks for the
-    # kimik3 prefix (the 256k-capped 062126 variant). Also keeps KV allocation
-    # well inside the ~271 GiB usable per GPU after ~195 GiB of weights.
-    --max-model-len 262144
+    # K3's full 1M native context, matching the unfiltered corpus that
+    # resolve_trace_source now picks for kimik3*.
+    --max-model-len 1048576
     --max-num-seqs "$CONC"
     --max-num-batched-tokens 4096
     --mm-encoder-tp-mode data
