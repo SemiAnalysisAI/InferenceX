@@ -404,6 +404,122 @@ uccl_prepare() {
   collx_log "UCCL-EP ready ($COLLX_UCCL_COMMIT, deep_ep wrapper over uccl.ep CPU-proxy runtime)"
 }
 
+# ---- NCCL EP lifecycle ------------------------------------------------------
+
+# Slug of the pinned pip spec, safe as a cache-dir path component.
+nccl_ep_spec_slug() {
+  printf '%s' "$COLLX_NCCL4PY_SPEC" | tr -cs 'A-Za-z0-9_.-' '-'
+}
+
+# Cache root keyed by cpu + build arch + image + pinned wheel spec, under the shared /cx-cache
+# mount ($COLLX_BACKEND_CACHE_ROOT). Returns non-zero when no shared cache is mounted (manual
+# runs), so the caller falls back to a node-local install. Mirrors uccl_cache_root.
+nccl_ep_cache_root() {
+  local arch="$1" cpu base image slug
+  cpu="$(uname -m)"
+  [[ "$cpu" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  base="${COLLX_BACKEND_CACHE_ROOT:-}"
+  [[ "$base" = /* ]] || return 1
+  image="$(printf '%s' "${COLLECTIVEX_IMAGE:-manual}" | tr -cs 'A-Za-z0-9_.-' '-')"
+  arch="$(printf '%s' "$arch" | tr -cs 'A-Za-z0-9_.-' '-')"
+  slug="$(nccl_ep_spec_slug)"
+  printf '%s/nccl-ep-%s-%s-%s-%s' \
+    "$base" "$cpu" "${arch#-}" "${image#-}" "${slug#-}"
+}
+
+# Put the installed wheel ($root/site) on PYTHONPATH for the probe and rank tasks, and the
+# wheel-bundled NCCL runtime lib dir ahead of the image torch's older NCCL on the loader path
+# (nccl.ep needs NCCL >= 2.29.3's Device API + GIN; the image torch bundles an older NCCL). Both
+# PYTHONPATH and LD_LIBRARY_PATH are already carried to the ranks by write_rank_env.
+nccl_ep_activate() {
+  local root="$1" site="$1/site" nccl_lib
+  [ -d "$site" ] || { collx_log "ERROR: NCCL EP cache site is unavailable"; return 1; }
+  export PYTHONPATH="$site${PYTHONPATH:+:$PYTHONPATH}"
+  for nccl_lib in "$site"/nvidia/nccl*/lib; do
+    if [ -d "$nccl_lib" ]; then
+      export LD_LIBRARY_PATH="$nccl_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+      break
+    fi
+  done
+  # NCCL EP group creation gates on the NCCL Device API (LSA symmetric memory), which NCCL only
+  # advertises when cuMem allocation is enabled; without it ncclEpCreateGroup returns
+  # ncclInvalidUsage. Persisted here (already in RANK_ENV_VARS) so every rank has it, mirroring
+  # the launcher's process-wide export. Verified on h100 EP8 (2026-07-21).
+  export NCCL_CUMEM_ENABLE=1
+}
+
+nccl_ep_probe() {
+  # import torch FIRST so libc10/libnccl are resident before the nccl.ep extension dlopens; then
+  # nccl.core (libnccl.so) and nccl.ep (libnccl_ep.so JIT runtime). nccl.ep.__init__ runs its own
+  # libnccl/libnccl_ep CUDA-major consistency check on import and raises ImportError on mismatch.
+  python3 - <<'PY'
+import torch  # noqa: F401
+import nccl.core  # noqa: F401
+import nccl.ep  # noqa: F401
+PY
+}
+
+# Primary install: the published nccl4py[cu13] wheel + deps into $root/site via pip --target
+# (self-contained; the runtime imports it through PYTHONPATH, so cache-hit and cache-miss paths
+# import identically — mirrors uccl_install's copy-to-cache scheme). The from-source fallback
+# (OpenMPI + build NCCL + contrib/nccl_ep from COLLX_NCCL_EP_COMMIT, with a matching launcher
+# source-staging arm) is deferred until bring-up shows the wheel does not ship libnccl_ep.so.
+nccl_ep_install() {
+  local root="$1" site="$1/site"
+  if [ -e "$root" ] || [ -L "$root" ]; then
+    rm -rf "$root" || { collx_log "ERROR: incomplete NCCL EP cache-reset failed"; return 1; }
+  fi
+  mkdir -m 700 "$root" || { collx_log "ERROR: NCCL EP cache-create failed"; return 1; }
+  mkdir -p "$site" || { collx_log "ERROR: NCCL EP cache-site-create failed"; return 1; }
+  collx_log "NCCL EP: installing $COLLX_NCCL4PY_SPEC (pip --target)"
+  # --target installs into an isolated tree and does not touch the system env, so PEP 668 does
+  # not apply; torch is imported from the image at runtime (nccl.ep's torch interop resolver).
+  python3 -m pip install -q --disable-pip-version-check --no-input \
+      --target "$site" "$COLLX_NCCL4PY_SPEC" >&2 2>&1 \
+    || { collx_log "ERROR: NCCL EP nccl4py install failed"; return 1; }
+  nccl_ep_activate "$root" \
+    || { collx_log "ERROR: NCCL EP environment activation failed"; return 1; }
+  nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
+  : > "$root/.ready"
+}
+
+# NCCL EP lifecycle: install once per (arch, image, wheel-spec) into the shared /cx-cache behind
+# an flock + .ready marker, reused on every later allocation (mirrors uccl_prepare); fall back to
+# a node-local install when no shared cache is mounted (e.g. a manual run).
+nccl_ep_prepare() {
+  local arch root ready lock_path
+  command -v python3 >/dev/null || { collx_log "ERROR: python3 unavailable for NCCL EP"; return 1; }
+  arch="$(cuda_arch)" || return 1
+  if root="$(nccl_ep_cache_root "$arch")"; then
+    ready="$root/.ready"; lock_path="${root}.lock"
+    command -v flock >/dev/null \
+      || { collx_log "ERROR: flock is required for NCCL EP caching"; return 1; }
+    mkdir -p "${root%/*}" || return 1
+    collx_log "NCCL EP: preparing $COLLX_NCCL4PY_SPEC (shared cache $root)"
+    if ! (
+      [ ! -L "$lock_path" ] || { collx_log "ERROR: NCCL EP cache lock is unsafe"; exit 1; }
+      (umask 077; : >> "$lock_path") && chmod 600 "$lock_path" \
+        || { collx_log "ERROR: NCCL EP cache-lock-create failed"; exit 1; }
+      exec 9<>"$lock_path" || { collx_log "ERROR: NCCL EP cache-lock-open failed"; exit 1; }
+      flock 9 || { collx_log "ERROR: NCCL EP cache-lock-acquire failed"; exit 1; }
+      if [ ! -f "$ready" ] || [ ! -d "$root/site" ]; then
+        nccl_ep_install "$root" || exit 1
+      fi
+    ); then
+      collx_log "ERROR: shared NCCL EP environment is incomplete"; return 1
+    fi
+  else
+    root="/tmp/collectivex-nccl-ep-cache-$(nccl_ep_spec_slug)"
+    collx_log "NCCL EP: preparing $COLLX_NCCL4PY_SPEC (node-local $root; no shared cache mounted)"
+    if [ ! -f "$root/.ready" ] || [ ! -d "$root/site" ]; then
+      nccl_ep_install "$root" || return 1
+    fi
+  fi
+  nccl_ep_activate "$root" || return 1
+  nccl_ep_probe || { collx_log "ERROR: NCCL EP import probe failed"; return 1; }
+  collx_log "NCCL EP ready ($COLLX_NCCL4PY_SPEC; libnccl_ep.so JIT runtime, NCCL Device API LSA/GIN)"
+}
+
 # ---- container boundary ----------------------------------------------------
 
 write_rank_env() {
@@ -462,6 +578,7 @@ main() {
         || { collx_log "ERROR: MoRI backend import failed"; return 1; }
       ;;
     uccl-ep) uccl_prepare || return 1 ;;
+    nccl-ep) nccl_ep_prepare || return 1 ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1
