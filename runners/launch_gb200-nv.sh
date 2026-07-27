@@ -155,6 +155,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
+    elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+        # Kimi K3's ~1.68 TB MXFP4 checkpoint must be pre-staged on the
+        # compute-visible shared Lustre filesystem. This alias matches
+        # model.path in the checked-in srt-slurm AgentX recipes.
+        export MODEL_PATH="/mnt/lustre01/models/kimi-k3"
+        export SRT_SLURM_MODEL_PREFIX="kimi-k3"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         # The FP4 checkpoint is staged on compute-visible Lustre. The former
         # /mnt/numa1 path is no longer present on watchtower compute nodes;
@@ -172,7 +178,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
         export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, kimik3/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -183,7 +189,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5|qwen3.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5) return 0 ;;
         *) return 1 ;;
     esac
 }
@@ -364,9 +370,15 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout de59739b172e507e15ebf145bfe305f606e82fbf
-    mkdir -p recipes/vllm/deepseek-v4/agentic
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-        recipes/vllm/deepseek-v4/agentic
+    if [[ "$MODEL_PREFIX" == "kimik3" ]]; then
+        mkdir -p recipes/vllm/kimi-k3/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+            recipes/vllm/kimi-k3/agentic
+    else
+        mkdir -p recipes/vllm/deepseek-v4/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+            recipes/vllm/deepseek-v4/agentic
+    fi
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"

@@ -5116,3 +5116,12 @@
   description:
     - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  description:
+    - "Add Day-0 Kimi K3 MXFP4 GB200 AgentX support through checked-in srt-slurm aggregate recipes and the official vllm/vllm-openai:kimi-k3 image."
+    - "Reference the official GB200 command-builder profiles at https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200: latency-oriented multi-node TP8 on 2 nodes, balanced multi-node TEP8 on 2 nodes, and throughput-oriented multi-node DEP16 on 4 nodes. The upstream recipe is pre-release and does not yet mark GB200 as verified."
+    - "Run the text-only AgentX trace with Kimi K3's full 1M context, kimi_k3 tool-call and reasoning parsers, fastsafetensors loading, K3 latent-MoE tail fusion, FlashInfer TRT-LLM MoE for TP/TEP, and DeepGEMM mega-MoE plus one-sided FlashInfer all-to-all for DEP."
+    - "Teach launch_gb200-nv.sh to map kimik3/fp4 to the pre-staged /mnt/lustre01/models/kimi-k3 checkpoint, register the matching srt-slurm model alias, and overlay the checked-in Kimi K3 AgentX recipes into the pinned agentic srt-slurm checkout."
+  pr-link: TBD
