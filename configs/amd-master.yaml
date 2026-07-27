@@ -1444,10 +1444,9 @@ dsv4-fp4-mi355x-atom-mtp:
       # pure overhead). MTP-safe — only decode-TBO (--enable-tbo all) drops spec metadata.
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 4,  conc-end: 256,  spec-decoding: mtp }
       - { tp: 8, ep: 1, dp-attn: true,  conc-start: 32, conc-end: 1024, spec-decoding: mtp }
-      # tp4 low-conc exploration (mirrors non-MTP #2327): fewer TP ranks -> less TP comm,
-      # may win at low conc. dp-off c1-64 + dp-on c16-128. No TBO (conc<256).
-      - { tp: 4, ep: 1, dp-attn: false, conc-start: 1,  conc-end: 64,  spec-decoding: mtp }
-      - { tp: 4, ep: 1, dp-attn: true,  conc-start: 16, conc-end: 128, spec-decoding: mtp }
+      # tp4 removed: tp4+MTP+dp-on OOMs — 806G/4=201G/GPU weight leaves KV budget
+      # NEGATIVE (-10.98GB) even at gpu-mem-util 0.90 (run 30277221626). #2327 tp4
+      # works only because it's non-MTP (no draft KV layer). MTP stays tp8-only.
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
