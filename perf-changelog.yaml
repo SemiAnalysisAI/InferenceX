@@ -5123,4 +5123,4 @@
     - "Add DSV4 NVFP4 B300 disaggregated Dynamo SGLang STP configuration for 8k/1k"
     - "Use the shared srt-slurm recipe matrix from NVIDIA/srt-slurm#281 with chat-template inputs"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2362
