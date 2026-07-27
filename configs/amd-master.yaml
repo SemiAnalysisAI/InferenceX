@@ -640,10 +640,10 @@ kimik3-fp4-mi355x-vllm-agentic:
       # DRAM offload only above the KV cliff: lower concurrencies fit entirely
       # on-GPU (measured 2.21M on-GPU KV tokens at TP8), so paying the offload-path
       # overhead there would just slow them down without measuring anything new.
-      # Two backends over the same conc points so they compare directly:
-      # vllm-native = OffloadingConnector (aggregate budget, undivided)
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [32, 40, 48, 56] }
-      # vllm-simple = SimpleCPUOffloadConnector (per-rank cpu_bytes_to_use)
+      # vllm-simple = SimpleCPUOffloadConnector, per-rank cpu_bytes_to_use_per_rank,
+      # eager offload. Chosen as the single offload backend: it needs no KV
+      # block/hash alignment, so unlike OffloadingConnector it works on K3's
+      # hybrid KDA+MLA geometry without extra constraints.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 40, 48, 56] }
 
 dsr1-fp8-mi355x-atom:
