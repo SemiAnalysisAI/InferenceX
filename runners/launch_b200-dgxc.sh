@@ -109,14 +109,21 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
     if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+        # Agentic recipes use NVIDIA/srt-slurm v1.0.36, the upstream version
+        # validated in InferenceX PR #2302/#2341 for the vLLM agentic path
+        # (BenchmarkType.CUSTOM + benchmark.command/env, DynamoConfig.wheel,
+        # srun_options propagation, per-node DP, matching Dynamo health
+        # counts). Keep it pinned so sweeps are reproducible. Note the older
+        # cquil11/srt-slurm-nv cam/sa-submission-q2-2026 fork previously
+        # cloned here rejects newer recipe schema fields.
+        git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
         # Overlay InferenceX-staged agentic recipes onto the clone (cp -rT so
         # an upstream stub directory is merged rather than nested).
         if [[ $MODEL_PREFIX == "kimik3" ]]; then
-            mkdir -p recipes/vllm/kimi-k3/agentic
+            mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
             cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-                recipes/vllm/kimi-k3/agentic
+                recipes/vllm/kimi-k3/agentic || exit 1
         fi
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"

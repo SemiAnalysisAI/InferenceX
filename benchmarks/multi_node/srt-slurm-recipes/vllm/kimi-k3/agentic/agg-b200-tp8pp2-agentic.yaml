@@ -20,11 +20,11 @@ identity:
   container:
     image: "vllm/vllm-openai:kimi-k3"
   frameworks:
-    dynamo: "1.3.0.dev20260618"
+    dynamo: "1.2.1"
 
 dynamo:
+  wheel: "1.2.1"
   install: true
-  wheel: "1.3.0.dev20260618"
 
 slurm:
   time_limit: "8:00:00"
@@ -94,7 +94,6 @@ srun_options:
 
 benchmark:
   type: custom
-  aiperf_server_metrics: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
