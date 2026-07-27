@@ -315,6 +315,10 @@ hardware:
   cluster:gb200-nv:
     available-cpu-dram-mib: 860_160
     gpus-per-node: 4
+  cluster:gb300-nv:
+    # GB300 Grace node RealMemory is 920 GiB; leave OS/pinned headroom.
+    available-cpu-dram-mib: 880_000
+    gpus-per-node: 4
   cluster:mi300x-amds:
     available-cpu-dram-mib: 2_321_924
     gpus-per-node: 8

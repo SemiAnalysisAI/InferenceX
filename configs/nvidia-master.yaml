@@ -7897,6 +7897,161 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
           ep: 8
           dp-attn: true
 
+glm5.2-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  multinode: true
+  disagg: false
+  # High-interactivity end of the GLM-5.2 GB300 agentic Pareto curve: a single
+  # aggregated TP4 worker on one node, STP + hicache DRAM KV offload.
+  # The disagg arms below jump from conc 8 to conc 256, leaving the knee of the
+  # curve unsampled; this arm fills 1/4/8/16 on 4 GPUs. Each concurrency gets
+  # its own allocation (MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION was
+  # lowered from 4 to 1 in #2170, so unlike the reference run these no longer
+  # share one bring-up). Mirrors the arm the
+  # DSv4-Pro GB300 agentic family uses for the same purpose
+  # (dsv4-fp4-gb300-dynamo-sglang-agentic-agg, run 29385297092 -- which is why
+  # that reference curve has 9 points where our disagg-only set had 5).
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: none
+        conc-list: [1, 4, 8, 16]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/agg-gb300-tp4-stp-kvoffload.yaml"
+        # Aggregated worker: prefill's GPUs also serve decode, so decode has no
+        # separate allocation (num-worker: 0). Deployment is recipe-driven
+        # (agg_workers: 1); this only makes GPU accounting count 4, not 4+4.
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  # GLM-5.2 NVFP4 agentic-coding disaggregated (prefill/decode) sweep on GB300 via
+  # dynamo-sglang, modeled on dsv4-fp4-gb300-dynamo-sglang-agentic-disagg (run
+  # 29385297092): STP + DRAM hierarchical-cache KV offload, mooncake KV
+  # transfer, wide-EP decode (TP16/EP16/DPA), TP8/EP8/DPA prefill workers scaling
+  # 1->6. GLM-5.2 serve flags (glm47/glm45 parsers, hicache-ratio 0.75) grafted
+  # onto the DSv4 agentic disagg machinery. STP only (no speculative decoding). NVFP4 MoE: flashinfer_trtllm on
+  # prefill (no EP a2a) + FlashInfer MNNVL a2a with flashinfer_cutedsl on the
+  # wide-EP decode; DeepEP is unusable for NVFP4 outside low-latency decode.
+  # Recipes:
+  # benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic/
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # 1p1d. 3 nodes (2P @ DEP8 + 1D @ TP4). low concurrency.
+      - spec-decoding: none
+        conc-list: [8]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/disagg-gb300-2p1d-dep8-tp4-c8-stp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p1d wide-EP. 6 nodes (2P @ DEP8 + 4D @ DEP16).
+      - spec-decoding: none
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/disagg-gb300-2p4d-dep8-dep16-c256-stp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 2p1d wide-EP. 8 nodes (4P @ DEP8 + 4D @ DEP16).
+      - spec-decoding: none
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/disagg-gb300-4p4d-dep8-dep16-c256-stp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 3p1d wide-EP. 10 nodes (6P @ DEP8 + 4D @ DEP16).
+      - spec-decoding: none
+        conc-list: [512]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/disagg-gb300-6p4d-dep8-dep16-c512-stp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 6p1d wide-EP. 16 nodes (12P @ DEP8 + 4D @ DEP16).
+      - spec-decoding: none
+        conc-list: [1024]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 6
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/gb300-fp4/agentic/disagg-gb300-12p4d-dep8-dep16-c1024-stp-kvoffload.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
   model: deepseek-ai/DeepSeek-V4-Pro

@@ -5101,3 +5101,58 @@
     - "Recipe fix (model): adds mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to the DeepSeek-V4-Pro-DI models.yaml entry; without it DECODE_MTP_SIZE>0 emitted --speculative-num-steps/--speculative-num-draft-tokens with no --speculative-algorithm, so sglang never engaged spec decoding. EAGLE with in-checkpoint draft (no draft-model-path); NEXTN (the V3/R1 keyword) crashes the dsv4 decode server at init"
     - "Recipe fix (launcher): build_server_config appended the speculative flags to the decode server only, so prefill never allocated the nextn (MTP draft) KV layer -- prefill registered 3 PD state components, decode 4. SGLang PD-disaggregation requires matching speculative config on both roles (the draft/MTP layers participate in both prefill KV computation and decode verification): v0.5.15 hard-fails the mismatch (mori 'state component count mismatch'), while v0.5.14 tolerated it silently but decode's nextn state was never seeded from prefill, corrupting greedy EAGLE verification (gsm8k 0.96 -> 0.88, worse at depth 2). Fix: apply the speculative flags to both prefill and decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2305/changes
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add GLM-5.2 NVFP4 agentic-coding disaggregated (prefill/decode) benchmark on GB300 via dynamo-sglang (new config-key glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg)"
+    - "Modeled on dsv4-fp4-gb300-dynamo-sglang-agentic-disagg (run 29385297092): EAGLE/MTP + DRAM hierarchical-cache KV offload, mooncake KV transfer, dedicated etcd/nats node + session-affinity dynamo frontend, custom agentic_srt.sh benchmark. Wide-EP decode (1D TP16/EP16 attention-DP) fed by TP8/EP8 attention-DP prefill workers scaling 1->6; arms p1x8_d1x4 conc 8, p1x8/p2x8_d1x16 conc 256, p3x8_d1x16 conc 512, p6x8_d1x16 conc 1024 (3/6/8/10/16 nodes)"
+    - "GLM-5.2 serve flags (glm47/glm45 parsers, hicache-ratio 0.75, SGLANG_TIMEOUT_KEEP_ALIVE=900 for the AIPerf warmup race) grafted onto the DSv4 agentic disagg machinery. Image lmsysorg/sglang:v0.5.16-cu130, dynamo 1.3.0.dev1 (>=1.2.1 needed for GLM-5.2's chat-template .0 dot-index). Recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic/; launch_gb300-nv.sh gains an IS_AGENTIC glm5.2 dynamo-sglang branch (srt-slurm v1.0.10). Weights on shared NFS /data/home/sa-shared/models/GLM-5.2-NVFP4"
+    - "Wide-EP decode also pins the draft-model MoE with speculative-moe-a2a-backend none + speculative-moe-runner-backend triton. GLM-5.2-NVFP4 leaves the MTP/nextn layer unquantized (hf_quant_config excludes model.layers.78*), so the EAGLE draft MoE is bf16 and UnquantizedFusedMoEMethod pins it to the triton runner core; inheriting the target model's FlashInfer a2a then has no (flashinfer, triton) pre-permute and the decode engine dies at init with 'Pre-permute function for flashinfer to triton is not registered'. SGLang handles this in _deepseek_spec_moe_resolution but gates the hook on is_hip(), so on CUDA the draft silently inherits; these are upstream's own ROCm values set explicitly"
+    - "NVFP4 MoE backends: flashinfer_trtllm with no EP all-to-all on prefill, and FlashInfer MNNVL a2a + flashinfer_cutedsl on the wide-EP decode. DeepEP cannot serve NVFP4 outside low-latency decode: the only (deepep, *) NVFP4 MoE fused func SGLang registers through v0.5.16 unpacks the 6-field DeepEPLLDispatchOutput, while deepep-mode auto resolves to normal on every extend batch and passes the 5-field DeepEPNormalDispatchOutput, so prefill died on its first forward with ValueError: not enough values to unpack (expected 6, got 5) in run 29925753943. ep-num-redundant-experts/ep-dispatch-algorithm dropped with DeepEP (the FlashInfer a2a dispatcher plumbs no expert map)"
+    - "configs/runners.yaml: add cluster:gb300-nv hardware entry (available-cpu-dram-mib, gpus-per-node 4), required by the agentic DRAM-offload sizing for any cluster:gb300-nv agentic config (also unblocks the existing DSv4 gb300 agentic configs)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+  description:
+    - "Add GLM-5.2 NVFP4 agentic-coding AGGREGATED benchmark on GB300 via dynamo-sglang (new config-key glm5.2-fp4-gb300-dynamo-sglang-agentic-agg): single aggregated TP4 worker on one node, EAGLE/MTP + hicache DRAM KV offload, conc-list 1/4/8/16"
+    - "Supplies the high-interactivity end of the GB300 agentic Pareto curve. The disagg arms jump from conc 8 to conc 256, leaving the knee of the curve unsampled; with this arm the curve has 9 points, matching the coverage of the DSv4-Pro GB300 agentic family (run 29385297092) whose equivalent agg arm this mirrors"
+    - "Recipe benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.2/gb300-fp4/agentic/agg-gb300-tp4-mtp-kvoffload.yaml. Plain TP4 with no attention-DP and no EP, so there is no MoE all-to-all and the bf16 MTP/nextn layer takes the triton runner with a2a none; no speculative-moe-* override is needed here unlike the wide-EP decode. NVFP4 MoE runner flashinfer_trtllm, DSA backends trtllm, hicache-ratio 0.75 / write_back / direct / page_first_direct (GLM-5.2 OOMs above 0.75), image lmsysorg/sglang:v0.5.16-cu130, dynamo 1.3.0.dev1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Fix served-model-name across all six GLM-5.2 GB300 agentic recipes: GLM-5.2-FP4 -> nvidia/GLM-5.2-NVFP4, matching the model: field of the nvidia-master.yaml config-keys"
+    - "benchmark_lib.sh builds the agentic replay command with --model $MODEL taken from the master-config model: field, while the dynamo frontend only registers the recipe served-model-name. The two disagreed, so every engine went healthy and then every benchmark request returned 404 Model not found; AIPerf reported it as a terminal warmup failure and aborted with 0 successful requests (run 30202683710, agg conc16 arm). The disagg arms carried the same mismatch but were fail-fast cancelled before reaching their benchmark. The DSv4 GB300 agentic family does not hit this because its served-model-name and model: field are byte-identical"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Drop MTP from every GLM-5.2 GB300 agentic arm: spec-decoding mtp -> none, and remove speculative-algorithm/num-steps/eagle-topk/num-draft-tokens from all six recipes. These now measure single-token prediction only, matching the merged GLM-5.2 B300 single-node agentic recipe which is also STP (its EAGLE variants were never wired up)"
+    - "Removes speculative-moe-a2a-backend/speculative-moe-runner-backend from the wide-EP decode blocks: those existed solely to keep GLM-5.2-NVFP4's unquantized bf16 MTP/nextn layer (hf_quant_config excludes model.layers.78*) off the FlashInfer a2a path, and without speculative decoding there is no draft model to route. Supersedes the speculative-moe-* note in the agg entry above"
+    - "Recipes renamed *-mtp-kvoffload.yaml -> *-stp-kvoffload.yaml with CONFIG_FILE paths updated to match; the FlashInfer a2a recv-buffer sizing note now reflects the STP peak of max-running-requests/dp_size = 3072/16 = 192 tokens per rank rather than the MTP figure of 768"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Align hicache and collective tuning with run 29385297092 after the agg arm hung: sweep 30205318938 served 112 warmup requests then stalled 600s in a 48 MiB TP ALLREDUCE (8192 tokens x 6144 hidden, one prefill chunk) and the NCCL watchdog aborted the scheduler, surfacing to AIPerf as 'Stream ended before generation completed (500)' on 20 of 112 requests"
+    - "Agg arm hicache write_back/direct/page_first_direct -> write_through/kernel with mem-layout unset, matching the reference agg arm. write_back defers the host copy and the direct backend performs it on the critical path, which can stall one TP rank long enough to desync a collective. The disagg arms keep write_back/direct because the reference disagg prefill uses exactly that and it is proven there - a separate prefill role does not share the decode critical path"
+    - "Agg arm also adopts the reference scalars: scheduler-recv-interval 30, disable-flashinfer-autotune true, cuda-graph-max-bs 128, stream-interval 50, watchdog-timeout 1000000, max-prefill-tokens unset. Disagg arms adopt disable-flashinfer-autotune on both roles and SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1 on prefill, the two knobs the reference sets that are relevant to an allreduce hang"
+    - "Two reference values deliberately NOT copied: hicache-ratio stays 0.75 rather than the reference 6, and mem-fraction-static stays 0.85/0.75 rather than 0.90. Both scale the host KV pool, and GLM-5.2 is DSA/MLA-family so every rank holds complete per-token KV; a larger host pool OOM-killed the node in run 29678598595"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
+
+- config-keys:
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-agg
+    - glm5.2-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Raise hicache-ratio from 0.75 to 1 on every GLM-5.2 GB300 agentic arm, matching the reference disagg prefill in run 29385297092. At 0.75 the host tier retained nothing on the agentic corpus: sweep 30208485904 saw cached tokens on 9 of 6726 prefill batches (0.13%), so every turn re-prefilled its whole ~95k-token history and TTFT p50 was 684 s against the reference 17.9 ms, leaving the AIPerf cache-warmup phase unable to drain"
+    - "Ceiling measured on-node (job 17768), not assumed: at ratio 1 each prefill rank allocates 133.23 GB host hierarchical KV plus 30.53 GB host DSA indexer against a 152.51 GB / 2965312-token device pool, i.e. 163.76 GB per rank and 655 GB of the 920 GB node across 4 ranks (71%). Ratio 1.25 would reach ~86% and 1.5 would exhaust the node, so ~1.2 is the practical maximum and 1 is the safe step; this is the direction that OOM-killed a node in run 29678598595"
+    - "Open question this does not settle: 2.96M device tokens is ~31 full agentic prompts, so a 0.13% hit rate may be prefix affinity rather than capacity. The arm that measured it was 2P with DYN_ROUTER_TEMPERATURE=10000000, which flattens KV-router placement toward random; single-prefill-worker arms cannot scatter and will discriminate"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2299
