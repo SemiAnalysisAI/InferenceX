@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -26,20 +26,42 @@ PARALLEL_ARGS=(-tp "$TP") #TP
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
-    else #DP+TP
+    else #DPA+TP
         PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
     fi
-fi 
+fi
 
-SPEC_ARGS=(--method mtp --num-speculative-tokens 3 )
+SPEC_ARGS=(--method mtp --num-speculative-tokens 3)
 
-# Start GPU monitoring (power, temperature, clocks every second)
+# VERIFY (throwaway branch): TBO + MTP at conc>=128. ATOM owner says TBO now works
+# with MTP at high concurrency. dp-on cells at conc>=128 add --enable-tbo +
+# GPU_MAX_HW_QUEUES=5. MUST CONFIRM MTP is not silently dropped (ubatch_wrapper
+# sets spec_decode_metadata=None) — check server log for spec/MTP init + eval
+# accept-rate. If MTP is dropped, this image doesn't support the combo.
+if [ "$DP_ATTENTION" = "true" ] && [ "$CONC" -ge 128 ]; then
+    PARALLEL_ARGS+=(--enable-tbo)
+    export GPU_MAX_HW_QUEUES=5
+fi
+
+# max_num_seqs=conc for dp-on cells and conc>=64 (avoid OOM; MTP reserves q=mtp_k+1)
+if [ "$DP_ATTENTION" = "true" ] || [ "$CONC" -ge 64 ]; then
+    PARALLEL_ARGS+=(--max-num-seqs "$CONC")
+fi
+
+BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN
+fi
+
 start_gpu_monitor
 
 set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
+
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -47,19 +69,15 @@ python3 -m atom.entrypoints.openai_server \
     "${SPEC_ARGS[@]}" \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
-    > $SERVER_LOG 2>&1 &
+    --no-enable_prefix_caching \
+    > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
-# Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# --dsv4 routes prompts through encoding_dsv4.py (PR #1153), which emits the
-# <bos><User>...<Assistant><think> framing DeepSeek-V4-Pro expects. The DSv4-Pro
-# tokenizer ships without a jinja chat_template, so plain --use-chat-template
-# would crash; --dsv4 sidesteps that and satisfies the AGENTS.md rule that all
-# MTP scripts must benchmark against chat-formatted inputs (EAGLE acceptance
-# silently regresses on raw random tokens).
+# --dsv4: InferenceX bench (utils/bench_serving) uses encoding_dsv4.py; DSv4-Pro has
+# no jinja chat_template so plain --use-chat-template yields no result.
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -74,12 +92,10 @@ run_benchmark_serving \
     --trust-remote-code \
     --dsv4
 
-# After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary
 fi
 
-# Stop GPU monitoring
 stop_gpu_monitor
 set +x
