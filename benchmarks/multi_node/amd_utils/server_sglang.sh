@@ -1070,7 +1070,11 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
 
     # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
-        echo "Running lm-eval evaluation on Node 0..."
+        if [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+            echo "Running SWE-bench agentic evaluation on Node 0..."
+        else
+            echo "Running lm-eval evaluation on Node 0..."
+        fi
 
         # Health check: verify the router is still serving before running eval.
         # The throughput benchmark may have crashed/exhausted decode workers.
@@ -1086,6 +1090,64 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
 
         if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
             echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
+        elif [[ "$IS_AGENTIC_RUN" == "1" ]]; then
+            # Multi-node agentic (SWE-bench) eval-only. This mirrors the
+            # single-node agentic eval-only recipe
+            # (benchmarks/single_node/agentic/dsv4_fp4_mi355x_sglang.sh):
+            # run_eval() auto-selects the swebench framework via
+            # IS_AGENTIC/SCENARIO_TYPE and stages meta_env.json/results*.json
+            # itself (EVAL_ONLY=true + agentic), so there's no separate
+            # append_lm_eval_summary call here like the lm-eval path below.
+            pushd /workspace
+            source /workspace/benchmarks/benchmark_lib.sh
+
+            # Bridge the few metadata field names the workflow spells
+            # differently from what append_lm_eval_summary expects
+            # (PREFILL_DP_ATTN vs PREFILL_DP_ATTENTION), and fill in the
+            # single-engine TP/EP/DP fields from the prefill side, since
+            # disaggregated topologies have no single "TP" of their own.
+            export TP="${PREFILL_TP:-1}"
+            export EP_SIZE="${PREFILL_EP:-1}"
+            export DP_ATTENTION="${PREFILL_DP_ATTN:-false}"
+            export PREFILL_DP_ATTENTION="${PREFILL_DP_ATTN:-false}"
+            export DECODE_DP_ATTENTION="${DECODE_DP_ATTN:-false}"
+
+            # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
+            if [[ -n "${EVAL_CONC:-}" ]]; then
+                export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+            else
+                export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            fi
+
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo "DRY RUN: run_eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS})"
+            else
+                run_eval --port 30000
+                eval_rc=$?
+
+                if [[ $eval_rc -ne 0 ]]; then
+                    echo "ERROR: run_eval exited rc=$eval_rc; skipping eval artifact staging" >&2
+                    EVAL_FAILED=1
+                else
+                    # Files (meta_env.json, results*.json, sample*.jsonl, ...) are now in /workspace
+                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                    mkdir -p "$EVAL_COPY_DIR"
+                    for f in meta_env.json; do
+                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+                    done
+                    # Use find for glob patterns to avoid "no match" errors
+                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'agent_preds.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'predictions.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'swebench_report_*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name '*.traj*' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+
+                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                fi
+            fi
+
+            popd
         else
             # Must run from repo root so utils/evals/${task}.yaml resolves
             pushd /workspace

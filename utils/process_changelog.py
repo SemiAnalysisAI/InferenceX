@@ -156,6 +156,7 @@ def main():
         "evals": [],
         "agentic_evals": [],
         "multinode_evals": [],
+        "multinode_agentic_evals": [],
         "changelog_metadata": {
             "base_ref": args.base_ref,
             "head_ref": args.head_ref,
@@ -291,8 +292,11 @@ def main():
 
     # Agentic GSM8K eval rows go to their own bucket so run-sweep.yml can dispatch
     # them with agentic inputs (scenario-type, kv-offloading, ...) instead of
-    # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have.
+    # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have. Same
+    # split applies on the multi-node side (multinode_evals vs
+    # multinode_agentic_evals).
     single_node_evals = [e for e in all_eval_results if e.get("prefill") is None]
+    multi_node_evals = [e for e in all_eval_results if e.get("prefill") is not None]
     final_results["evals"] = [
         e for e in single_node_evals
         if e.get("scenario-type") != "agentic-coding"
@@ -301,7 +305,14 @@ def main():
         e for e in single_node_evals
         if e.get("scenario-type") == "agentic-coding"
     ]
-    final_results["multinode_evals"] = [e for e in all_eval_results if e.get("prefill") is not None]
+    final_results["multinode_evals"] = [
+        e for e in multi_node_evals
+        if e.get("scenario-type") != "agentic-coding"
+    ]
+    final_results["multinode_agentic_evals"] = [
+        e for e in multi_node_evals
+        if e.get("scenario-type") == "agentic-coding"
+    ]
 
     # Validate final results structure
     validated = ChangelogMatrixEntry.model_validate(final_results)

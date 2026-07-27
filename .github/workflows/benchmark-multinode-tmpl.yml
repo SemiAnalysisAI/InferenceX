@@ -138,6 +138,16 @@ on:
         type: string
         required: false
         default: ""
+      eval-limit:
+        description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
+        required: false
+        type: string
+        default: ""
+      swebench-gen-mode:
+        description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
+        required: false
+        type: string
+        default: ""
       # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
@@ -213,6 +223,12 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
+  EVAL_LIMIT: ${{ inputs.eval-limit }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
+  # GPU/multi-node runners lack Docker for SWE-bench scoring.
+  SWEBENCH_USE_MODAL: 'true'
+  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
@@ -422,6 +438,10 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
+            agent_preds.json
+            predictions.jsonl
+            swebench_report_*.json
+            *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
@@ -439,6 +459,7 @@ jobs:
           rm -f meta_env.json || true
           rm -f results*.json || true
           rm -f sample*.jsonl || true
+          rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
 
       - name: Slurm cleanup (post-run)
         if: always()
