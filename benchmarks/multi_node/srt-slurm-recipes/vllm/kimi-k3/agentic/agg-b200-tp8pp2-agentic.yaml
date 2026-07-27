@@ -68,6 +68,10 @@ backend:
     # 300-second model-execution default.
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    # Keep prefix-cache blocks alive across agentic turn gaps (same value as
+    # the GB200/GB300 AgentX recipes) — trajectory reuse is the point of the
+    # agentic scenario.
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     NCCL_CUMEM_ENABLE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
