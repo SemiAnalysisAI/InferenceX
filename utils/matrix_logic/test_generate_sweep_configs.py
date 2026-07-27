@@ -233,6 +233,66 @@ class TestMarkEvalEntries:
         assert len(marked) == 1
         assert marked[0]["conc"] == 64
 
+    def test_marks_multinode_agentic_entry_at_highest_eligible_conc(self):
+        """Multi-node agentic (SWE-bench) eval selection mirrors the
+        fixed-seq-len multi-node policy: one eval row per parallelism
+        topology, at its highest eligible (>= MIN_EVAL_CONC) concurrency.
+
+        Each concurrency is its own matrix entry (chunk size 1) whose
+        exp-name embeds that concurrency, unlike fixed-seq-len multi-node
+        rows where exp-name never varies with conc — the grouping key must
+        still treat these as the same topology.
+        """
+        common = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "b300", "framework": "sglang-disagg",
+            "precision": "fp4", "spec-decoding": "none", "disagg": True,
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        }
+        matrix_values = [
+            {**common, "conc": [8], "exp-name": "p1x8_d1x8_conc8"},
+            {**common, "conc": [16], "exp-name": "p1x8_d1x8_conc16"},
+            {**common, "conc": [32], "exp-name": "p1x8_d1x8_conc32"},
+        ]
+
+        result = mark_eval_entries(matrix_values, include_agentic=True)
+
+        marked = [e for e in result if e.get("run-eval")]
+        assert len(marked) == 1
+        assert marked[0]["conc"] == [32]
+        assert marked[0]["eval-conc"] == 32
+
+    def test_multinode_agentic_groups_are_independent_per_topology(self):
+        """Two distinct multi-node agentic topologies (e.g. differing by
+        prefill EP/DP) must each get their own eval row."""
+        base = {
+            "scenario-type": "agentic-coding",
+            "model": "m", "runner": "b300", "framework": "sglang-disagg",
+            "precision": "fp4", "spec-decoding": "none", "disagg": True,
+        }
+        topology_a = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+        }
+        topology_b = {
+            "prefill": {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True},
+            "decode": {"num-worker": 1, "tp": 8, "ep": 8, "dp-attn": True},
+        }
+        matrix_values = [
+            {**base, **topology_a, "conc": [16], "exp-name": "a_conc16"},
+            {**base, **topology_a, "conc": [32], "exp-name": "a_conc32"},
+            {**base, **topology_b, "conc": [64], "exp-name": "b_conc64"},
+            {**base, **topology_b, "conc": [96], "exp-name": "b_conc96"},
+        ]
+
+        result = mark_eval_entries(matrix_values, include_agentic=True)
+
+        marked = {e["exp-name"]: e for e in result if e.get("run-eval")}
+        assert set(marked) == {"a_conc32", "b_conc96"}
+        assert marked["a_conc32"]["eval-conc"] == 32
+        assert marked["b_conc96"]["eval-conc"] == 96
+
     def test_default_mode_does_not_mark_agentic(self):
         matrix_values = [
             {
@@ -677,6 +737,31 @@ class TestMarkAllEvalEntries:
 
         assert result[0]['run-eval'] is True
         assert 'eval-conc' not in result[0]
+
+    def test_marks_multinode_agentic_entries_for_swebench(self):
+        """Unlike fixed-seq-len multi-node (which batches every concurrency
+        into one lm-eval row via eval-all-concs), multi-node agentic rows for
+        the same topology are merged but only their highest conc is marked
+        via eval-conc, since SWE-bench doesn't support batched concurrencies."""
+        common = {
+            'scenario-type': 'agentic-coding',
+            'model': 'm', 'runner': 'r', 'framework': 'sglang-disagg',
+            'precision': 'fp4', 'spec-decoding': 'none', 'disagg': True,
+            'prefill': {'num-worker': 1, 'tp': 8, 'ep': 1, 'dp-attn': False},
+            'decode': {'num-worker': 1, 'tp': 8, 'ep': 1, 'dp-attn': False},
+        }
+        entries = [
+            {**common, 'conc': [2], 'exp-name': 'p1x8_d1x8_conc2'},
+            {**common, 'conc': [16], 'exp-name': 'p1x8_d1x8_conc16'},
+            {**common, 'conc': [32], 'exp-name': 'p1x8_d1x8_conc32'},
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert len(result) == 1
+        assert result[0]['run-eval'] is True
+        assert result[0]['conc'] == [2, 16, 32]
+        assert result[0]['eval-conc'] == 32
         assert 'eval-all-concs' not in result[0]
 
 

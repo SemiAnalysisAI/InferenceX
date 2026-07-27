@@ -11,6 +11,11 @@ from throughput; selection lives in `mark_eval_entries()` in
   runner, framework, precision, TP, and decoding configuration.
 - **Multi-node:** 8k1k only; one job per parallelism topology at its highest
   eligible concurrency. Rows differing only by concurrency share a topology.
+- **Agentic (SWE-bench), single-node:** highest-conc entry per (model,
+  runner, framework, precision) group.
+- **Agentic (SWE-bench), multi-node:** same policy as multi-node fixed-seq-len
+  above (highest eligible conc per parallelism topology), since SWE-bench
+  doesn't support batched concurrencies the way lm-eval does.
 
 Generator eval modes:
 
@@ -84,9 +89,16 @@ In eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MO
 ### Multi-node
 Multi-node evals support two hardware paths:
 
-**MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server.sh`
-- Skips `bench.sh` when `EVAL_ONLY=true`
-- Runs lm-eval via `run_eval` against the router on port 30000
+**MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server_sglang.sh`
+- Skips throughput when `EVAL_ONLY=true`
+- Fixed-seq-len: runs lm-eval via `run_eval --framework lm-eval` against the router on port 30000
+- Agentic-coding (disaggregated, `IS_AGENTIC=1`): runs SWE-bench via `run_eval --port 30000` (no
+  `--framework` override, same auto-selection as single-node agentic eval-only). Since there's no
+  single "TP" for a disaggregated topology, and the workflow spells a couple of metadata fields
+  differently (`PREFILL_DP_ATTN`/`DECODE_DP_ATTN`) than `append_lm_eval_summary` expects
+  (`PREFILL_DP_ATTENTION`/`DECODE_DP_ATTENTION`), the agentic branch bridges those before calling
+  `run_eval`; `append_lm_eval_summary` itself runs automatically inside `run_eval()` (same
+  `EVAL_ONLY=true && IS_AGENTIC` auto-staging as single-node), not as a separate call.
 - Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
 - Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
 - `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
@@ -102,11 +114,17 @@ Multi-node evals support two hardware paths:
 For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
 
 ### Workflow structure
-- `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
-- `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
-- Both use their respective benchmark templates with `eval-only: true`, `run-eval: true`
-- `collect-evals` depends on both eval jobs; `collect-results` only runs when benchmark jobs ran
-- `process_changelog.py` splits eval results into `evals` (single-node) and `multinode_evals`
+- `e2e-tests.yml`: `test-sweep-evals` (single-node fixed-seq-len), `test-sweep-multi-node-evals`
+  (multi-node fixed-seq-len), `test-sweep-agentic-evals` (single-node agentic), and
+  `test-sweep-multi-node-agentic-evals` (multi-node agentic)
+- `run-sweep.yml`: `sweep-evals`, `sweep-multi-node-evals`, `sweep-agentic-evals`, and
+  `sweep-multi-node-agentic-evals` (same four-way split)
+- All four use their respective benchmark templates (`benchmark-tmpl.yml` for single-node,
+  `benchmark-multinode-tmpl.yml` for multi-node) with `eval-only: true`, `run-eval: true`
+- `collect-evals` depends on all four eval jobs; `collect-results` only runs when benchmark jobs ran
+- `process_changelog.py` splits eval results by node count and scenario type into `evals`
+  (single-node fixed-seq-len), `agentic_evals` (single-node agentic), `multinode_evals`
+  (multi-node fixed-seq-len), and `multinode_agentic_evals` (multi-node agentic)
 
 ### Result collection
 
