@@ -152,9 +152,26 @@ case "$OFFLOAD_MODE" in
         # Build LMCache against ROCm if the connector isn't importable. Clone to
         # a container-local dir (NOT bind-mounted /workspace) so the next job's
         # checkout `clean: true` won't trip over root-owned build artifacts.
+        # The matrix passes kv-offload-backend as JSON in KV_OFFLOAD_BACKEND_METADATA
+        # (e.g. {"name":"lmcache","version":"<sha>"}). Honour its `version` as the
+        # build ref so a version A/B is a config change rather than a recipe edit;
+        # an explicit LMCACHE_GIT_REF still wins, and the pin below is the fallback.
+        LMCACHE_CFG_VERSION=""
+        if [ -n "${KV_OFFLOAD_BACKEND_METADATA:-}" ]; then
+            LMCACHE_CFG_VERSION=$(KV_META="$KV_OFFLOAD_BACKEND_METADATA" python3 -c '
+import json, os
+try:
+    d = json.loads(os.environ["KV_META"])
+    print(d.get("version", "") if isinstance(d, dict) else "")
+except Exception:
+    print("")
+' 2>/dev/null || true)
+        fi
+
         if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
             LMCACHE_SRC_DIR="${LMCACHE_SRC_DIR:-/opt/lmcache-src}"
-            LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-aaf7c0d3}"
+            LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-${LMCACHE_CFG_VERSION:-aaf7c0d3}}"
+            echo "Building LMCache at ref: $LMCACHE_GIT_REF"
             rm -rf "$LMCACHE_SRC_DIR"
             git clone https://github.com/LMCache/LMCache.git "$LMCACHE_SRC_DIR"
             ( cd "$LMCACHE_SRC_DIR"

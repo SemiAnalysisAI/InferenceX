@@ -598,6 +598,38 @@ kimik2.7-fp4-mi355x-vllm-agentic-tune:
       # own LMCACHE_GIT_REF default is the same commit.
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "aaf7c0d3" }, conc-list: [32] }
 
+# Second exploratory key: isolate concurrency from KV tier past the c16 knee, and
+# A/B the LMCache version. NOT shipped.
+#
+# The -tune key above compares c16 none against c32 LMCache, which moves two
+# variables at once, so it cannot separate "c32 is past the knee" from "LMCache
+# costs throughput". Running none and LMCache at the SAME conc (32 and 40) holds
+# the tier as the only variable at each point.
+#
+# Expectation on record: none should degrade badly here. The GPU KV pool is
+# ~3.75M tokens, and 32x ~90k-token contexts already consume ~2.9M of it, so
+# on-GPU prefix reuse collapses (measured 95.6% at c16 -> 2.5% at c32) and
+# without an external tier ~97% of a 95.9%-reusable trace has to be recomputed
+# rather than fetched. If that prediction is wrong, the pool model is wrong.
+#
+# LMCache here is pinned to dev HEAD (2026-07-27) rather than the aaf7c0d3 the
+# recipe defaults to, so the two keys together also give a version A/B at c32.
+kimik2.7-fp4-mi355x-vllm-agentic-tune2:
+  image: vllm/vllm-openai-rocm:v0.26.0
+  model: amd/Kimi-K2.7-Code-MXFP4
+  model-prefix: kimik2.7
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      duration: 3600
+      search-space:
+      - { tp: 4, kv-offloading: none, conc-list: [32, 40] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "20e87af0d7697fe6921dc724689634266335b5d3" }, conc-list: [32, 40] }
+
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_202607091539
