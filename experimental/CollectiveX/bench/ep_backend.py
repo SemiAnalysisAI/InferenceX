@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import os
 import types
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -86,6 +87,44 @@ class EPBackend(abc.ABC):
     # adapter sends 1 byte/value plus (for a blockwise codec) per-block FP32 scales.
     dispatch_value_bytes = 2
     dispatch_scale_bytes_per_copy = 0
+    # Handle attribute stage() populates with the tensor combine sends. Every adapter must
+    # point this at the tensor its combine() reads (NCCL EP names it differently).
+    combine_input_attr = "combine_input"
+    # Which production FP8 consumption path the chained roundtrip models.
+    #
+    #   native  (default) - the expert consumes the dispatched fp8 + per-128-block scales
+    #     DIRECTLY and emits BF16, so no standalone conversion pass sits between the two
+    #     collectives. This is what SGLang does (its DeepEP dispatcher contains no dequant at
+    #     all) and what vLLM does whenever the expert's block shape matches DeepEP's 128
+    #     (`block_k == DEEPEP_QUANT_BLOCK_SIZE` -> "DeepEP kernels did the quantization for
+    #     us", fp8 + scales returned untouched). deepseek-v3 block-fp8 -- the workload this
+    #     suite runs -- takes that branch.
+    #   dequant - vLLM's fallback for a quant-format MISMATCH: dequant_fp8() materialises the
+    #     full padded [experts, max_tokens, hidden] tensor to fp32, casts to the activation
+    #     dtype, then re-quantises for the expert. A real path, just not this workload's.
+    #
+    # `dequant` is a VERIFICATION HATCH, not a second metric: never a sweep axis, never a
+    # default. It is retained because it costs nothing (BF16 needs the same staged-is-None
+    # branch) and because it reproduces historical numbers exactly for regression checks --
+    # measured 302.0us against 302.5us in run 30177021271 at T=1.
+    #
+    # A second measured mode is unnecessary because the mismatched-config cost is DERIVABLE
+    # from what every run already emits:
+    #
+    #     dequant roundtrip  ~=  roundtrip + stage        (+2.4% .. -0.1%, b200 LL fp8 ladder)
+    #
+    # slightly high because chaining amortises launch overhead (median rt/(d+s+c) = 0.93
+    # across the corpus). The reverse does NOT hold -- reconstructing native as
+    # `dequant - stage` errs by -11.6% at T=1, -5% at T=64, and only converges by T=256,
+    # i.e. it is worst exactly in the decode regime the headline reports. So measure native
+    # and derive dequant, never the other way round.
+    #
+    # It matters because `stage` exists only for fp8 (stage_device_work = self._fp8), so
+    # charging it to the chained roundtrip compares fp8 and bf16 through structurally
+    # different pipelines. On run 30177021271 that inverted the fp8-vs-bf16 verdict in 39 of
+    # 51 comparisons. dispatch and combine were always measured stage-free; only the chained
+    # roundtrip mixed it in.
+    fp8_consume = os.environ.get("CX_FP8_CONSUME", "native")
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -269,10 +308,18 @@ class EPBackend(abc.ABC):
             self.combine(problem, handle)
             torch.cuda.synchronize()
 
-    def run_roundtrip(self, problem):
-        """One full dispatch -> stage -> combine round trip; returns combined activations."""
+    def run_roundtrip(self, problem, staged=None):
+        """One chained round trip; returns combined activations.
+
+        `staged` supplies a pre-materialised combine input so the conversion pass stays out of
+        the timed region (see `fp8_consume`). When it is None the stage runs inline, which is
+        both the BF16 path (stage is a no-op there) and the `dequant` fp8 model.
+        """
         handle = self.dispatch(problem)
-        self.stage(problem, handle)
+        if staged is None:
+            self.stage(problem, handle)
+        else:
+            setattr(handle, self.combine_input_attr, staged)
         return self.combine(problem, handle)
 
     def benchmark_component(self, component, problem, warmup, iters):
@@ -291,7 +338,19 @@ class EPBackend(abc.ABC):
         import torch
 
         self.warm(problem, warmup)
-        return time_us(torch, lambda p=problem: self.run_roundtrip(p), 0, iters)
+        staged = None
+        if self.stage_device_work and self.fp8_consume == "native":
+            # Materialise the expert-output stand-in ONCE, untimed. A native fp8 stack has no
+            # separate conversion between dispatch and combine, so the chained measurement
+            # must not contain one. Routing is fixed for a ladder point, so the same staged
+            # tensor is valid for every iteration (for MoRI it IS the registered combine
+            # buffer, already filled).
+            handle = self.dispatch(problem)
+            self.stage(problem, handle)
+            staged = getattr(handle, self.combine_input_attr)
+            self.combine(problem, handle)  # drain the pair backends require
+            torch.cuda.synchronize()
+        return time_us(torch, lambda p=problem: self.run_roundtrip(p, staged), 0, iters)
 
     def benchmark_dispatch(self, problem, warmup, iters):
         import torch
