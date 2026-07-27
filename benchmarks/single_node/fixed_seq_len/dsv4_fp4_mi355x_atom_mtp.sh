@@ -73,11 +73,12 @@ SERVER_PID=$!
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# --use-chat-template: DSv4-Pro's dsv4 message encoder ships with the model dir
-# (encoding/encoding_*.py); ATOM auto-discovers it and applies the same chat framing
-# on both server and bench, so AL stays aligned. (Replaces the removed --dsv4 flag.)
-# Chat-formatted inputs are required for MTP: EAGLE/MTP acceptance silently regresses
-# on raw random tokens (AGENTS.md).
+# --dsv4: InferenceX's bench (utils/bench_serving/benchmark_serving.py) uses the
+# DeepSeek-V4 chat encoder (encoding_dsv4.py) instead of the tokenizer's jinja
+# template. DSv4-Pro has NO jinja chat_template, so a plain --use-chat-template
+# produces empty/broken prompts (bench yields no result). --dsv4 implies
+# --use-chat-template. Chat-formatted inputs are required for MTP: EAGLE/MTP
+# acceptance silently regresses on raw random tokens (AGENTS.md).
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -90,7 +91,7 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
     --trust-remote-code \
-    --use-chat-template
+    --dsv4
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
