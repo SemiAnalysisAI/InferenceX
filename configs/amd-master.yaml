@@ -626,16 +626,25 @@ kimik3-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+      # 0.95 of the runner's available-cpu-dram-mib (3_095_781), which the matrix
+      # generator caps at the 2,861,022 MiB / 3 TB-decimal agentic limit -> 2849 GB
+      # aggregate at TP8, leaving ~397 GB host headroom. Not 1.0: the LMCache
+      # dsv4 recipe records that full-budget pinned pools OOM-killed the node,
+      # and pinned host memory is unswappable.
+    - dram-utilization: 0.95
       search-space:
       # TP=8 only: the ~1.56 TB MXFP4 checkpoint needs ~195 GB/GPU of the
       # 288 GB HBM, so the TP=4 rows the K2.5 agentic recipe carries cannot
       # load here (TP=4 would need ~390 GB/GPU).
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
       # DRAM offload only above the KV cliff: lower concurrencies fit entirely
-      # on-GPU, so paying the offload-path overhead there would just slow them
-      # down without measuring anything new.
+      # on-GPU (measured 2.21M on-GPU KV tokens at TP8), so paying the offload-path
+      # overhead there would just slow them down without measuring anything new.
+      # Two backends over the same conc points so they compare directly:
+      # vllm-native = OffloadingConnector (aggregate budget, undivided)
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [32, 40, 48, 56] }
+      # vllm-simple = SimpleCPUOffloadConnector (per-rank cpu_bytes_to_use)
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 40, 48, 56] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511

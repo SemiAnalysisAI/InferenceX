@@ -88,18 +88,61 @@ mkdir -p "$RESULT_DIR"
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
 
-if require_agentic_kv_offload_backend vllm-native; then
-    unset VLLM_USE_SIMPLE_KV_OFFLOAD
-    # vLLM's regular native KV-offload path (OffloadingConnector), NOT
-    # SimpleCPUOffloadConnector: the "vllm-native" backend resolves to
-    # OffloadingConnector by default, and VLLM_USE_SIMPLE_KV_OFFLOAD=1 would
-    # switch it. Left UNSET deliberately.
-    OFFLOAD_ARGS=(
-        --kv_offloading_backend native
-        --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
-        --disable-hybrid-kv-cache-manager
-    )
-fi
+# TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix generator
+# derives from dram-utilization and the runner's available-cpu-dram-mib, capped
+# at the 2,861,022 MiB (3 TB decimal) agentic limit. Per
+# benchmarks/single_node/agentic/README.md it must be consumed as given, never
+# replaced with a model-specific constant; backends with per-rank pools divide it.
+case "${KV_OFFLOAD_BACKEND:-}" in
+    vllm-native)
+        require_agentic_kv_offload_backend vllm-native
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        # vLLM's regular native KV-offload path (OffloadingConnector), NOT
+        # SimpleCPUOffloadConnector: the "vllm-native" backend resolves to
+        # OffloadingConnector by default, and VLLM_USE_SIMPLE_KV_OFFLOAD=1 would
+        # switch it. Left UNSET deliberately. --kv_offloading_size takes the
+        # aggregate budget undivided.
+        OFFLOAD_ARGS=(
+            --kv_offloading_backend native
+            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --disable-hybrid-kv-cache-manager
+        )
+        ;;
+    vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        # SimpleCPUOffloadConnector's cpu_bytes_to_use is PER RANK, so divide the
+        # aggregate budget by the rank count (single-node TP => GPU_COUNT, which
+        # the launcher exports; fall back to TP for stand-alone runs).
+        SIMPLE_RANKS="${GPU_COUNT:-$TP}"
+        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / SIMPLE_RANKS ))
+        # Identical prefixes must hash to identical block keys across ranks.
+        export PYTHONHASHSEED=42
+        # Plain TP (no DP-attention here) uses lazy offload, matching the dsv4
+        # plain-TP ladder; eager offload only buys cross-rank block-hash
+        # stability under DEP, which this recipe does not run.
+        OFFLOAD_CONFIG=$(cat <<EOF
+{
+  "kv_connector": "SimpleCPUOffloadConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "cpu_bytes_to_use": ${CPU_BYTES_PER_RANK},
+    "enable_cross_layers_blocks": "true",
+    "lazy_offload": true
+  }
+}
+EOF
+)
+        OFFLOAD_ARGS=(--kv-transfer-config "$OFFLOAD_CONFIG")
+        ;;
+    "")
+        # KV_OFFLOADING=none: assert the pairing and run fully GPU-resident.
+        require_agentic_kv_offload_backend none || true
+        ;;
+    *)
+        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' for this recipe" >&2
+        exit 1
+        ;;
+esac
 
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
