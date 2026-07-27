@@ -7,7 +7,7 @@ set -x
 # The benchmark configuration selects one of the official aggregate strategies:
 #   https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200
 #
-# The runner connector supplies node ranks, rendezvous, and local GPU count.
+# The runner supplies node ranks, rendezvous, and local GPU count.
 # This script only translates the requested TP/EP/DP topology into vLLM flags.
 
 # shellcheck disable=SC1091 # Resolved relative to this entrypoint at runtime.
@@ -21,51 +21,15 @@ check_env_vars \
     PREFILL_TP \
     PREFILL_EP \
     PREFILL_DP_ATTN \
-    DECODE_NUM_WORKERS \
     MULTINODE_NODE_COUNT \
     MULTINODE_GPUS_PER_NODE \
     MULTINODE_NODE_RANK \
     MULTINODE_MASTER_ADDR
 
-NODE_COUNT="$MULTINODE_NODE_COUNT"
-GPUS_PER_NODE="$MULTINODE_GPUS_PER_NODE"
-NODE_RANK="$MULTINODE_NODE_RANK"
-MASTER_ADDR="$MULTINODE_MASTER_ADDR"
-
-for topology_value in \
-    "$NODE_COUNT" \
-    "$GPUS_PER_NODE" \
-    "$NODE_RANK" \
-    "$PREFILL_TP" \
-    "$PREFILL_EP" \
-    "$DECODE_NUM_WORKERS"; do
-    if ! [[ "$topology_value" =~ ^[0-9]+$ ]]; then
-        echo "Invalid multi-node topology value: $topology_value" >&2
-        exit 1
-    fi
-done
-if [ "$NODE_COUNT" -eq 0 ] || [ "$GPUS_PER_NODE" -eq 0 ] || \
-   [ "$NODE_RANK" -ge "$NODE_COUNT" ]; then
-    echo "Invalid multi-node rank layout: rank=$NODE_RANK nodes=$NODE_COUNT GPUs/node=$GPUS_PER_NODE" >&2
-    exit 1
-fi
-if [ "$PREFILL_TP" -eq 0 ] || [ "$PREFILL_EP" -eq 0 ]; then
-    echo "PREFILL_TP and PREFILL_EP must be positive" >&2
-    exit 1
-fi
-WORLD_SIZE=$((NODE_COUNT * GPUS_PER_NODE))
-if [ "$DECODE_NUM_WORKERS" -ne 0 ]; then
-    echo "The aggregated Kimi K3 entrypoint does not accept decode workers" >&2
-    exit 1
-fi
-
+WORLD_SIZE=$((MULTINODE_NODE_COUNT * MULTINODE_GPUS_PER_NODE))
 read -r -a CONCURRENCIES <<< "$CONC_LIST"
 MAX_CONCURRENCY=0
 for concurrency in "${CONCURRENCIES[@]}"; do
-    if ! [[ "$concurrency" =~ ^[1-9][0-9]*$ ]]; then
-        echo "Invalid AgentX concurrency: $concurrency" >&2
-        exit 1
-    fi
     if [ "$concurrency" -gt "$MAX_CONCURRENCY" ]; then
         MAX_CONCURRENCY="$concurrency"
     fi
@@ -100,12 +64,11 @@ if [[ "${VLLM_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
 fi
 
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
-    DEPLOYMENT_ORIENTATION="throughput"
     VLLM_CMD+=(
         --data-parallel-size "$WORLD_SIZE"
-        --data-parallel-size-local "$GPUS_PER_NODE"
-        --data-parallel-address "$MASTER_ADDR"
-        --data-parallel-start-rank "$((NODE_RANK * GPUS_PER_NODE))"
+        --data-parallel-size-local "$MULTINODE_GPUS_PER_NODE"
+        --data-parallel-address "$MULTINODE_MASTER_ADDR"
+        --data-parallel-start-rank "$((MULTINODE_NODE_RANK * MULTINODE_GPUS_PER_NODE))"
         --data-parallel-hybrid-lb
     )
     if [ "$PREFILL_EP" -gt 1 ]; then
@@ -117,21 +80,19 @@ elif [[ "$PREFILL_DP_ATTN" == "false" ]]; then
         exit 1
     fi
 
-    DEPLOYMENT_ORIENTATION="latency"
     VLLM_CMD+=(
         --tensor-parallel-size "$PREFILL_TP"
-        --nnodes "$NODE_COUNT"
-        --node-rank "$NODE_RANK"
-        --master-addr "$MASTER_ADDR"
+        --nnodes "$MULTINODE_NODE_COUNT"
+        --node-rank "$MULTINODE_NODE_RANK"
+        --master-addr "$MULTINODE_MASTER_ADDR"
     )
     if [ "$PREFILL_EP" -gt 1 ]; then
-        DEPLOYMENT_ORIENTATION="balanced"
         VLLM_CMD+=(--enable-expert-parallel)
     fi
     if [[ "${VLLM_DISABLE_FUSED_ALLREDUCE_RMS:-0}" == "1" ]]; then
         VLLM_CMD+=(-cc.pass_config.fuse_allreduce_rms=False)
     fi
-    if [ "$NODE_RANK" -gt 0 ]; then
+    if [ "$MULTINODE_NODE_RANK" -gt 0 ]; then
         VLLM_CMD+=(--headless)
     fi
 else
@@ -139,7 +100,7 @@ else
     exit 1
 fi
 
-printf 'Kimi K3 %s-oriented rank %s command: ' "$DEPLOYMENT_ORIENTATION" "$NODE_RANK"
+printf 'Kimi K3 rank %s command: ' "$MULTINODE_NODE_RANK"
 printf '%q ' "${VLLM_CMD[@]}"
 printf '\n'
 

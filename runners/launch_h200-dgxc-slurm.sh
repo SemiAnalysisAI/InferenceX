@@ -7,13 +7,17 @@ SLURM_ACCOUNT="sa-shared"
 
 set -x
 
-# Native multi-node benchmarks opt into the reusable service connector by
-# providing in-container server and client entrypoints. This runner only maps
-# H200 DGXC storage, networking, and Slurm/Pyxis resources.
-if [[ "$IS_MULTINODE" == "true" && -n "${MULTINODE_SERVER_SCRIPT:-}" ]]; then
+# Native multi-node vLLM: keep Slurm/Pyxis on the host and pass only rank and
+# rendezvous information to the hardware-independent benchmark entrypoint.
+if [[ "$IS_MULTINODE" == "true" && "${NATIVE_MULTINODE:-0}" == "1" ]]; then
+    if [[ "${IS_AGENTIC:-0}" != "1" || "$FRAMEWORK" != "vllm" ]]; then
+        echo "Native multi-node H200 currently supports AgentX vLLM jobs" >&2
+        exit 1
+    fi
+
     case "$MODEL_PREFIX/$PRECISION" in
         kimik3/fp4)
-            export MODEL_HOST_PATH="/models/gharunners/hf-hub-cache/Kimi-K3"
+            model_host_path="/models/gharunners/hf-hub-cache/Kimi-K3"
             export MODEL_PATH="/models/hf-hub-cache/Kimi-K3"
             ;;
         *)
@@ -25,20 +29,140 @@ if [[ "$IS_MULTINODE" == "true" && -n "${MULTINODE_SERVER_SCRIPT:-}" ]]; then
     hf_cache_host_path="/models/gharunners/hf-hub-cache"
     hf_cache_container_path="/models/hf-hub-cache"
     aiperf_cache_host_path="/home/sa-shared/gharunners/ai-perf-cache"
-    mkdir -p "$aiperf_cache_host_path"
+    image_cache_dir="/data/gharunners/containers"
+    server_log_dir="$GITHUB_WORKSPACE/multinode_server_logs"
+    gpus_per_node=8
+    gpu_count=$((PREFILL_NUM_WORKERS * PREFILL_TP))
+    if (( gpu_count % gpus_per_node != 0 )); then
+        echo "Native multi-node GPU count ($gpu_count) must use full 8xH200 nodes" >&2
+        exit 1
+    fi
+    node_count=$((gpu_count / gpus_per_node))
+    server_script="benchmarks/multi_node/${SCENARIO_SUBDIR}${MODEL_PREFIX}_${PRECISION}_${FRAMEWORK}.sh"
+    client_script="benchmarks/multi_node/agentic_srt.sh"
+    squash_file="$image_cache_dir/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    lock_file="${squash_file}.lock"
+    container_mounts="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache"
+
+    if [[ ! -d "$model_host_path" || ! -f "$server_script" ]]; then
+        echo "Missing model or benchmark entrypoint: $model_host_path / $server_script" >&2
+        exit 1
+    fi
+    mkdir -p "$aiperf_cache_host_path" "$image_cache_dir" "$server_log_dir"
 
     export PORT="${PORT:-8888}"
     export HF_HUB_CACHE="$hf_cache_container_path"
     export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"
+    export INFMAX_CONTAINER_WORKSPACE="/workspace"
+    export RESULT_DIR="/workspace/LOGS/agentic"
     export GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-eth0}"
     export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-eth0}"
-    export SLURM_PYXIS_GPUS_PER_NODE=8
-    export SLURM_PYXIS_IMAGE_CACHE_DIR="/data/gharunners/containers"
-    export SLURM_PYXIS_CONTAINER_WORKDIR="/workspace"
-    export SLURM_PYXIS_CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache"
 
-    bash "$GITHUB_WORKSPACE/runners/connectors/slurm_pyxis.sh"
-    exit $?
+    salloc \
+        --partition="$SLURM_PARTITION" \
+        --account="$SLURM_ACCOUNT" \
+        --nodes="$node_count" \
+        --ntasks-per-node=1 \
+        --gres="gpu:$gpus_per_node" \
+        --exclusive \
+        --time=240 \
+        --no-shell \
+        --job-name="$RUNNER_NAME"
+    job_id=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | sed -n '1p')
+    if [[ -z "$job_id" ]]; then
+        echo "Failed to resolve native multi-node Slurm allocation" >&2
+        exit 1
+    fi
+
+    cleanup_native_multinode() {
+        local exit_code=$?
+        trap - EXIT INT TERM
+        kill "${server_step_pid:-}" 2>/dev/null || true
+        wait "${server_step_pid:-}" 2>/dev/null || true
+        tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+            -C "$server_log_dir" . 2>/dev/null || true
+        scancel "$job_id" 2>/dev/null || true
+        exit "$exit_code"
+    }
+    trap cleanup_native_multinode EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    allocated_nodelist=$(squeue -j "$job_id" -h -o %N)
+    head_node=$(scontrol show hostnames "$allocated_nodelist" | sed -n '1p')
+    if [[ -z "$head_node" ]]; then
+        echo "Failed to resolve native multi-node head node" >&2
+        exit 1
+    fi
+
+    srun --jobid="$job_id" --nodes=1 --ntasks=1 --nodelist="$head_node" bash -c "
+        export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
+        mkdir -p \$ENROOT_CACHE_PATH
+        exec 9>'$lock_file'
+        flock -w 1800 9
+        if ! unsquashfs -l '$squash_file' >/dev/null 2>&1; then
+            rm -f '$squash_file'
+            enroot import -o '$squash_file' 'docker://${IMAGE//#//}'
+        fi
+    "
+
+    export MULTINODE_NODE_COUNT="$node_count"
+    export MULTINODE_GPUS_PER_NODE="$gpus_per_node"
+    export MULTINODE_MASTER_ADDR="$head_node"
+
+    # shellcheck disable=SC2016 # SLURM_PROCID is created inside each srun task.
+    srun \
+        --jobid="$job_id" \
+        --nodes="$node_count" \
+        --ntasks="$node_count" \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        --container-image="$squash_file" \
+        --container-mounts="$container_mounts" \
+        --no-container-mount-home \
+        --container-remap-root \
+        --container-workdir=/workspace \
+        --no-container-entrypoint \
+        --export=ALL \
+        bash -c 'export MULTINODE_NODE_RANK="$SLURM_PROCID"; exec bash "$1"' \
+        bash "$server_script" \
+        >"$server_log_dir/combined.log" 2>&1 &
+    server_step_pid=$!
+
+    for ((attempt = 1; attempt <= 720; attempt++)); do
+        if curl --output /dev/null --silent --fail "http://$head_node:$PORT/health"; then
+            break
+        fi
+        if ! kill -0 "$server_step_pid" 2>/dev/null; then
+            echo "Native multi-node server exited before becoming ready" >&2
+            tail -n 200 "$server_log_dir/combined.log" >&2 || true
+            exit 1
+        fi
+        sleep 10
+    done
+    if (( attempt > 720 )); then
+        echo "Native multi-node server did not become ready within 7200 seconds" >&2
+        exit 1
+    fi
+
+    set +e
+    srun \
+        --jobid="$job_id" \
+        --overlap \
+        --nodes=1 \
+        --ntasks=1 \
+        --nodelist="$head_node" \
+        --container-image="$squash_file" \
+        --container-mounts="$container_mounts" \
+        --no-container-mount-home \
+        --container-remap-root \
+        --container-workdir=/workspace \
+        --no-container-entrypoint \
+        --export=ALL,MULTINODE_NODE_RANK=0 \
+        bash "$client_script"
+    client_rc=$?
+    set -e
+    exit "$client_rc"
 fi
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
