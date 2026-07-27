@@ -20,11 +20,16 @@ identity:
   container:
     image: "vllm/vllm-openai:kimi-k3"
   frameworks:
-    dynamo: "1.2.0.dev20260426"
+    dynamo: "1.4.0-kimi-k3-dev.1"
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260426"
+  # Day-zero Kimi-K3 dynamo ("feat: Added support for Kimi-K3", tag
+  # v1.4.0-kimi-k3-dev.1 == this commit): adds the kimi_k3 tiktoken tokenizer
+  # to the rust frontend (dynamo <=1.2.1 only knows kimi/kimi_k2/kimi_k25/
+  # deepseek_v3, so the model never registers and every request 404s) and the
+  # kimi_k3 tool-call/reasoning parser worker args.
+  hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
 slurm:
   time_limit: "8:00:00"
@@ -76,12 +81,12 @@ backend:
       moe-backend: auto
       gpu-memory-utilization: 0.95
       no-enable-flashinfer-autotune: true
-      # Note: --enable-auto-tool-choice / --tool-call-parser are NOT set on
-      # the worker. The dynamo-vllm worker entrypoint doesn't accept them
-      # (different arg parser than `vllm serve`; first sweep attempt died with
-      # "unrecognized arguments"). Chat parsing happens at the dynamo
-      # frontend, not at the worker — same convention as the DSv4 GB300
-      # agentic recipes. --reasoning-parser IS accepted by the worker.
+      # kimi_k3 parsers: the day-zero K3 dynamo build pinned above accepts
+      # these on the worker. Dynamo <=1.2.1 rejected --enable-auto-tool-choice
+      # / --tool-call-parser as unrecognized arguments (different arg parser
+      # than `vllm serve`).
+      enable-auto-tool-choice: true
+      tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
       # No explicit max-model-len: let vLLM derive the native 1M window from
       # the model config (agentic trajectories blow past any small cap, and
