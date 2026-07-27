@@ -81,14 +81,12 @@ backend:
       moe-backend: auto
       gpu-memory-utilization: 0.95
       no-enable-flashinfer-autotune: true
-      # kimi_k3 parsers via dynamo's namespaced worker args (--dyn-*), which
-      # the day-zero K3 dynamo build pinned above provides. The vLLM
-      # OpenAI-frontend spellings (--enable-auto-tool-choice /
-      # --tool-call-parser) are rejected by the dynamo worker entrypoint as
-      # unrecognized arguments (different arg parser than `vllm serve`).
-      dyn-tool-call-parser: kimi_k3
+      # kimi_k3 parsers via the plain vLLM spellings (parser-flag experiment
+      # variant B — sibling PRs try the --dyn-* namespaced args and no parser
+      # flags). Note dynamo <=1.2.1's worker rejected --tool-call-parser as
+      # unrecognized; the day-zero K3 dynamo pinned above may accept it.
+      tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
-      dyn-reasoning-parser: kimi_k3
       # No explicit max-model-len: let vLLM derive the native 1M window from
       # the model config (agentic trajectories blow past any small cap, and
       # K3's KDA layers keep per-token KV small — only the 24 gated-MLA
