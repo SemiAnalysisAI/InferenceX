@@ -1641,6 +1641,29 @@ dsr1-fp8-h200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
+# Unofficial DeepSeek-V4-Flash 4xH200 recipe on the stock checkpoint, adapted
+# from the public SGLang Hopper TP4 + Marlin + EAGLE (3/1/4) recommendation.
+# Precision is labelled fp8 to match the sibling dsv4-fp8-h200-sglang-mtp entry:
+# every H200 DeepSeek-V4 config in this file serves the stock checkpoint (which
+# declares quant_method fp8) through the Marlin W4A16 MoE runner. The SGLang
+# cookbook calls this same Hopper path "original FP4"; happy to rename the key
+# to dsv4flash-fp4-h200-sglang-mtp if maintainers prefer the cookbook taxonomy.
+# Proposal remains Unofficial pending maintainer scope confirmation and required gates.
+dsv4flash-fp8-h200-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.15.post1@sha256:289cf51da1e5fd6f8eb3231f0202d46800c2e241ecf28f68a5a51507ed928e31
+  model: deepseek-ai/DeepSeek-V4-Flash
+  model-prefix: dsv4flash
+  runner: h200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 128, spec-decoding: mtp }
+
 # DeepSeek-V4-Pro H200 recipe from https://vllm.ai/blog/deepseek-v4
 # Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
 # flag is omitted. Max-model-len is pinned at 800k per the recipe.
