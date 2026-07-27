@@ -5062,6 +5062,31 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
 
 - config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4
+  description:
+    - "Refresh five MiniMax-M3 NVFP4 B300 8k1k disaggregated Dynamo-vLLM EAGLE3 recipes from vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2 to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
+    - "Remove the deprecated VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm override from the five refreshed prefill and decode environments, matching the image compatibility adjustment established by PR #2120"
+    - "Retain the 2P1D DEP4 recipe on its legacy image and all-reduce settings under a separate matrix key"
+    - "Preserve all six existing 8k1k EAGLE3 topologies, speculative-token settings, chat template, random range ratio, and 12 total concurrency points"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2314
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang-mtp
+  description:
+    - "Add a Qwen3.5-397B-A17B-FP8 GB200 disaggregated Dynamo-SGLang MTP configuration for 8k/1k."
+    - "Add seven SGLang recipes for TP4, TEP8, and DEP4/DEP16 prefill/decode topologies with EAGLE speculative decoding and Mooncake KV transfer."
+    - "Enable chat-formatted benchmark inputs for every MTP recipe."
+    - "Use a digest-pinned SGLang v0.5.14-cu130 image and validate Enroot imports before publishing shared squash files."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2324
+
+- config-keys:
+    - dsr1-fp8-b300-sglang-mtp
+  description:
+    - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
