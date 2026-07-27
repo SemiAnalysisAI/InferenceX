@@ -287,9 +287,24 @@ else
     export SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS=32
 
     export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
-    # 512 undersizes the decode MoRI MoE dispatch buffer for conc-32/EP16, where the
-    # cross-node all-to-all stalls under load.
-    export MORI_MAX_DISPATCH_TOKENS_DECODE=4096
+    export MORI_MAX_DISPATCH_TOKENS_DECODE=512
+
+    # DeepSeek-R1-0528 on MI325X only: 512 undersizes the decode MoRI MoE dispatch
+    # buffer for the conc-32 DP+EP cross-node all-to-all, which stalls under load.
+    # Scoped to this model+SKU because the value also scales the decode
+    # --chunked-prefill-size (via the models.yaml formula) and the inter-kernel
+    # switch threshold below, so it must not move for other SKUs or models.
+    #
+    # RUNNER_TYPE is this repo's hardware identifier: configs/*-master.yaml declares
+    # it per entry ("runner: mi325x"), job.slurm forwards it into the container, and
+    # benchmark_lib.sh records it as the result "hw" field. Matched as a prefix so
+    # label variants such as mi325x-disagg are covered. Deliberately not RUNNER_NAME:
+    # that is the GitHub runner instance (mi325x-amds_00) used host-side to pick the
+    # launcher, and it is never forwarded into the container.
+    if [[ "$MODEL_NAME" == "DeepSeek-R1-0528" ]] && [[ "${RUNNER_TYPE:-}" == mi325x* ]]; then
+        export MORI_MAX_DISPATCH_TOKENS_DECODE=4096
+        echo "[INFO] $RUNNER_TYPE + $MODEL_NAME: MORI_MAX_DISPATCH_TOKENS_DECODE=$MORI_MAX_DISPATCH_TOKENS_DECODE (conc-32 DP+EP cross-node dispatch buffer)"
+    fi
 
     export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=32768
     export MORI_MOE_MAX_INPUT_TOKENS_DECODE=2703

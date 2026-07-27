@@ -186,6 +186,17 @@ print(f'DECODE_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 echo "Loaded model configuration for: $MODEL_NAME"
 
+# DeepSeek-R1-0528 on MI325X only: raised for the MI325X PD disagg tests (#22072).
+# Kept out of models.yaml because that entry is shared by every AMD SKU, and a higher
+# static fraction is the riskier setting on the smaller-HBM parts (MI300X 192GB vs
+# MI325X 256GB). Must be applied here rather than in env.sh: the models.yaml loader
+# above hard-assigns PREFILL_MEM_FRACTION_STATIC, clobbering anything env.sh sets.
+# RUNNER_TYPE is the declared hardware id, matched as a prefix (see env.sh).
+if [[ "$MODEL_NAME" == "DeepSeek-R1-0528" ]] && [[ "${RUNNER_TYPE:-}" == mi325x* ]]; then
+    PREFILL_MEM_FRACTION_STATIC=0.9
+    echo "[INFO] $RUNNER_TYPE + $MODEL_NAME: PREFILL_MEM_FRACTION_STATIC=$PREFILL_MEM_FRACTION_STATIC (overrides the models.yaml 0.8)"
+fi
+
 # Compute DP-dependent prefill parameters
 if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
     prefill_cuda_graph_bs=($PREFILL_CUDA_GRAPH_BS_DP)
