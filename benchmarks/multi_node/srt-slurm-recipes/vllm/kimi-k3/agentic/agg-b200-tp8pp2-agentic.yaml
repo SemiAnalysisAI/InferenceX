@@ -76,14 +76,19 @@ backend:
       moe-backend: auto
       gpu-memory-utilization: 0.95
       no-enable-flashinfer-autotune: true
-      enable-auto-tool-choice: true
-      tool-call-parser: kimi_k3
+      # Note: --enable-auto-tool-choice / --tool-call-parser are NOT set on
+      # the worker. The dynamo-vllm worker entrypoint doesn't accept them
+      # (different arg parser than `vllm serve`; first sweep attempt died with
+      # "unrecognized arguments"). Chat parsing happens at the dynamo
+      # frontend, not at the worker — same convention as the DSv4 GB300
+      # agentic recipes. --reasoning-parser IS accepted by the worker.
       reasoning-parser: kimi_k3
-      # Full native 1M context: the AgentX trace carries multi-hundred-k-token
-      # requests, and K3's KDA layers keep per-token KV small (only the 24
-      # gated-MLA layers hold cache). Cap prefill chunks so a single long
-      # request cannot OOM a pipeline stage; let vLLM pick max-num-seqs.
-      max-model-len: 1048576
+      # No explicit max-model-len: let vLLM derive the native 1M window from
+      # the model config (agentic trajectories blow past any small cap, and
+      # K3's KDA layers keep per-token KV small — only the 24 gated-MLA
+      # layers hold cache). Prefix caching stays on (default) for trajectory
+      # reuse. Cap prefill chunks so a single long request cannot OOM a
+      # pipeline stage; let vLLM pick max-num-seqs.
       max-num-batched-tokens: 8192
 
 sbatch_directives:
