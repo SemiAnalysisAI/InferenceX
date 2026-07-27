@@ -52,7 +52,6 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --language-model-only
-    --max-model-len 1048576
     --max-num-seqs "$MAX_CONCURRENCY"
 )
 

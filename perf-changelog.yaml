@@ -5198,5 +5198,5 @@
     - "Add Kimi K3 Day-0 AgentX support on two 8xH200 nodes with the official vllm/vllm-openai:kimi-k3 image and pre-staged 1.5 TB moonshotai/Kimi-K3 checkpoint"
     - "Reference the official H200 recipe at https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200: latency-oriented multi-node TP16, balanced TEP16, and throughput-oriented DEP16"
     - "Launch aggregated vLLM directly from the H200 runner with Slurm/Pyxis while passing only node rank, node count, local GPU count, and rendezvous address into the hardware-agnostic Kimi K3 benchmark entrypoint; P/D disaggregation is intentionally deferred"
-    - "Sweep AgentX concurrency 1-8 for latency, 4-32 for balanced, and 16-128 for throughput with prefix caching, the kimi_k3 tool/reasoning parsers, and the full 1M-token model context"
+    - "Sweep AgentX concurrency 1-8 for latency, 4-32 for balanced, and 16-128 for throughput with prefix caching and the kimi_k3 tool/reasoning parsers"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2353
