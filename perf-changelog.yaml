@@ -5085,3 +5085,10 @@
   description:
     - "Bump SGLang container image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.15.post1-cu130 (https://github.com/sgl-project/sglang/releases/tag/v0.5.15.post1)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-agentic-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM agentic-coding MTP benchmark serving via the ATOM openai_server entrypoint with speculative decoding (--method mtp --num-speculative-tokens 3), following the ROCm ATOM DeepSeek-V4-Agentic recipe (https://github.com/ROCm/ATOM/blob/main/recipes/DeepSeek-V4-Agentic-Benchmark.md)"
+    - "Register the dsv4-fp4-mi355x-atom-agentic-mtp config in configs/amd-master.yaml on rocm/atom-dev:nightly_202607211523 (TP8/EP1, conc list [1,2,4,8,16,32,48], spec-decoding mtp, no KV offload)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2346
