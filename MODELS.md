@@ -8,8 +8,8 @@ This document tracks every model benchmarked by InferenceX: when it was added, w
 
 | Scenario | ISL/OSL | Status |
 |---|---|---|
-| Single-turn 1k1k | 1024 / 1024 | **Deprecated for all models** since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)). Archived configs live in [`configs/deprecated/`](configs/deprecated/). |
-| Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)). Configs were removed, not archived. |
+| Single-turn 1k1k | 1024 / 1024 | **Deprecated for all models** since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs live in [`configs/deprecated/`](configs/deprecated/). |
+| Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
 | Single-turn 8k1k | 8192 / 1024 | Active — the primary fixed-sequence-length scenario. |
 | Agentic coding | trace replay | Active — trace-replay agentic-coding benchmark (see [`benchmarks/agentic/`](benchmarks/agentic/)). |
 
