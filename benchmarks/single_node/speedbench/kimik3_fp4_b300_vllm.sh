@@ -371,7 +371,7 @@ run_cell() {
         --max-model-len "$MAX_MODEL_LEN"
         --max-cudagraph-capture-size 256
         --attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
-        --speculative-config "{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $mtp, \"attention_backend\": \"FLASHINFER_MLA\"}"
+        --speculative-config "{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $mtp, \"attention_backend\": \"FLASHINFER_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
     )
 
     local server_log="$RESULTS_DIR/server_${mode}_mtp${mtp}.log"
