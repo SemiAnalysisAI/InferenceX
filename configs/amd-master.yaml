@@ -1438,10 +1438,11 @@ dsv4-fp4-mi355x-atom-mtp:
       osl: 1024
       search-space:
       # Aligns ATOM official DSv4 MTP (models.json): MTP3 dp-off at low-mid conc,
-      # DPA MTP3 (dp-attn) at mid-high conc. No TBO — TBO is incompatible with MTP
-      # (ATOM UBatchWrapper drops spec_decode_metadata; DPA MTP3 has no --enable-tbo).
+      # DPA MTP3 (dp-attn) at mid-high conc. dp-on starts at c32 (dp-attn helps from c32).
+      # prefill-only TBO on dp-attn cells at conc>=64 (mirrors non-MTP #2327): MTP-safe —
+      # only --enable-tbo all (decode-TBO) drops spec_decode_metadata, prefill-only doesn't.
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 4,  conc-end: 256,  spec-decoding: mtp }
-      - { tp: 8, ep: 1, dp-attn: true,  conc-start: 64, conc-end: 1024, spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: true,  conc-start: 32, conc-end: 1024, spec-decoding: mtp }
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x

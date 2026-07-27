@@ -31,9 +31,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi
 
-# MTP speculative decoding (ATOM self-draft). NO --enable-tbo: TBO is incompatible
-# with MTP in ATOM (UBatchWrapper sets spec_decode_metadata=None; official
-# models.json DPA MTP3 has no --enable-tbo).
+# MTP speculative decoding (ATOM self-draft).
 SPEC_ARGS=(--method mtp --num-speculative-tokens 3)
 
 # max_req=conc for dp-on cells (dp-attention keeps a full KV pool per rank, and MTP
@@ -41,6 +39,16 @@ SPEC_ARGS=(--method mtp --num-speculative-tokens 3)
 # OOMs) and for conc>=64. dp-off low conc uses the ATOM default.
 if [ "$DP_ATTENTION" = "true" ] || [ "$CONC" -ge 64 ]; then
     PARALLEL_ARGS+=(--max-num-seqs "$CONC")
+fi
+
+# prefill-only TBO (--enable-tbo -> argparse const=prefill -> enable_tbo_decode=False):
+# MTP-compatible because it never touches decode. (--enable-tbo all / decode-TBO WOULD
+# drop MTP's spec_decode_metadata in UBatchWrapper -- that is the real incompatibility;
+# prefill-only does not.) Mirrors non-MTP dsv4_fp4_mi355x_atom.sh (#2327): TBO on
+# dp-attn cells at conc>=64, together with GPU_MAX_HW_QUEUES=5.
+if [ "$DP_ATTENTION" = "true" ] && [ "$CONC" -ge 64 ]; then
+    PARALLEL_ARGS+=(--enable-tbo)
+    export GPU_MAX_HW_QUEUES=5
 fi
 
 BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
