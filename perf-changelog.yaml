@@ -5093,6 +5093,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2345
 
 - config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2336
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-mtp
   description:
     - "Add MTP variant of dsv4-fp4-mi355x-sglang-disagg (new config-key dsv4-fp4-mi355x-sglang-disagg-mtp), Clones the base disagg search space and topologies exactly (image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713, mori KV transfer + MoE a2a, sglang-router --pd-disaggregation on :30000); enables DeepSeek-V4 built-in MTP via spec-decoding: mtp, same enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp"
