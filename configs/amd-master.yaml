@@ -1368,7 +1368,7 @@ dsv4-fp4-mi355x-atom-agentic:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [8, 16, 32, 48] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48] }
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
