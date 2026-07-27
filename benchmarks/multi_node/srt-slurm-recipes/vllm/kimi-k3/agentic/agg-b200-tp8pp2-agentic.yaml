@@ -68,14 +68,7 @@ backend:
     # 300-second model-execution default.
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    # expandable_segments: the dynamo-frontend variants OOM'd on a 2.92 GiB
-    # MLA long-context prefill transient (kv_b_proj in
-    # _compute_prefill_context) while 3.39 GiB sat reserved-but-unallocated —
-    # allocator fragmentation, exactly the case this mode fixes (and what the
-    # torch OOM message recommends; the DSv4 recipes set it too).
-    # NCCL_CUMEM_ENABLE dropped at the same time to trim NCCL's share of
-    # non-PyTorch device memory.
-    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    NCCL_CUMEM_ENABLE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
