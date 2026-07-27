@@ -57,11 +57,9 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 # VLLM_PREFIX_CACHE_RETENTION_INTERVAL only applies to sliding-window/Mamba
 # models; this vLLM build raises ValueError if it is set for DSv4.
 
-# ---- Server config ----------------------------------------------------------
+# ---- LLM server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
-ROUTER_LOG="$RESULT_DIR/router.log"
-MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
-LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+VLLM_BACKEND_PORT="$PORT"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
