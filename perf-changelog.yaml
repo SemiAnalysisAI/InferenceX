@@ -5366,3 +5366,4 @@
     - "Re-enable the TP8/EP8/DPA (ep=8, dp-attn=true) hicache search-space arm at conc-list [64, 96, 128]."
     - "Add RDMA QoS/DCQCN and GPU-sanity pre-flight gates to job.slurm (helpers/rdma_check.sh, helpers/gpu_sanity.sh) to fail fast before burning GPU time on misconfigured NICs or GPU memory held by stale processes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2308
+  evals-only: true
