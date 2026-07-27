@@ -5062,14 +5062,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
 
 - config-keys:
-    - qwen3.5-fp4-rtx6000pro-vllm
+    - qwen3.5-fp4-rtx6000pro-sglang
   scenario-type:
     - fixed-seq-len
   description:
-    - "Add Qwen3.5-397B-A17B NVFP4 single-node vLLM benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Add Qwen3.5-397B-A17B NVFP4 single-node SGLang benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
     - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both TP4 and TEP4 (TP4 attention with EP4 MoE, without DP attention)"
-    - "Pin vLLM v0.25.1 by digest so the mixed-dtype all-reduce/RMSNorm correctness fix is present without a runtime patch"
-    - "Use Marlin NVFP4 MoE and Triton attention on SM120, with language-model-only serving, FP8 KV cache, prefix caching disabled, and CUDA graph capture capped to each tested concurrency"
-    - "Use standard NCCL collectives on the PCIe topology and disable IB/RoCE probing to avoid the node's NCCL 2.28.9 bnxt_re initialization crash while preserving local CUDA P2P/SHM"
-    - "Validated over SSH: exact 8192/1024 generation passed on both TP4 and TEP4, and the TEP4 concurrency-64 envelope captured all graph sizes and completed 64/64 simultaneous requests without OOM"
+    - "Pin SGLang v0.5.16-cu130, the first tag whose auto backend resolution knows that trtllm-gen MoE is SM100-only and routes modelopt_fp4 experts to FlashInfer CUTLASS on SM120"
+    - "Use FlashInfer CUTLASS for both the NVFP4 GEMMs and the routed experts and the FlashInfer attention backend on SM120, with FP8 KV cache, bf16 Mamba SSM state, the no_buffer Mamba scheduler strategy, radix cache disabled, and decode CUDA graph capture capped to each tested concurrency"
+    - "Use standard NCCL collectives on the PCIe topology (custom all-reduce disabled explicitly) and disable IB/RoCE probing to avoid the node's NCCL 2.28.9 bnxt_re initialization crash while preserving local CUDA P2P/SHM"
+    - "Deviate from the B300 SGLang recipe where 96 GiB per GPU forces it: mem-fraction-static 0.7 with a 2-request prefill chunk (0.8 with a 32k chunk sized the KV pool at 2.2M tokens and OOM'd on the first 8k prefill), and a single tokenizer worker (the B300 recipe's six each pin a ~0.7 GiB CUDA context on GPU 0)"
+    - "Teach the RTX PRO 6000 launcher to prefer a framework-tagged benchmark script so vLLM and SGLang recipes for the same model can coexist"
+    - "Validated on the node through the real launcher at all four corners of the sweep, every request successful: TEP4 concurrency 64 640/640 at 6198 tok/s, TP4 concurrency 64 640/640 at 5999 tok/s, TEP4 concurrency 1 10/10 at 672 tok/s, TP4 concurrency 1 10/10 at 658 tok/s"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312

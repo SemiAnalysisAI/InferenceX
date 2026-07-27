@@ -40,7 +40,14 @@ fi
 export SCENARIO_SUBDIR="${SCENARIO_SUBDIR:-fixed_seq_len/}"
 SCENARIO_SUBDIR="${SCENARIO_SUBDIR#/}"
 SCENARIO_SUBDIR="${SCENARIO_SUBDIR%/}/"
-BENCH_SCRIPT="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_rtx6000pro${SPEC_SUFFIX}.sh"
+# Prefer a framework-tagged script (e.g. qwen3.5_fp4_rtx6000pro_sglang.sh) so
+# models with multiple inference engines can coexist; fall back to the name
+# without an engine suffix for scripts that haven't been retagged.
+BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_rtx6000pro"
+BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK:-}${SPEC_SUFFIX}.sh"
+if [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then
+    BENCH_SCRIPT="${BENCH_BASE}${SPEC_SUFFIX}.sh"
+fi
 
 if [[ ! -f "$GITHUB_WORKSPACE/$BENCH_SCRIPT" ]]; then
     echo "Benchmark script not found: $GITHUB_WORKSPACE/$BENCH_SCRIPT" >&2
