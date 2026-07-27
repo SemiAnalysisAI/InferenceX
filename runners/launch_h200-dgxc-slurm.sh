@@ -7,175 +7,37 @@ SLURM_ACCOUNT="sa-shared"
 
 set -x
 
-run_kimik3_agentic_vllm() {
-    local node_count=2
-    local gpus_per_node=8
-    local model_host_path="/models/gharunners/hf-hub-cache/Kimi-K3"
-    local model_container_path="/models/hf-hub-cache/Kimi-K3"
-    local hf_cache_host_path="/models/gharunners/hf-hub-cache"
-    local hf_cache_container_path="/models/hf-hub-cache"
-    local aiperf_cache_host_path="/home/sa-shared/gharunners/ai-perf-cache"
-    local squash_dir="/data/gharunners/containers"
-    local squash_file
-    local lock_file
-    local server_log_dir="$GITHUB_WORKSPACE/agentic_logs/server"
-    local container_mounts
-    local job_id
-    local allocated_nodelist
-    local head_node
-    local server_step_pid
-    local client_rc
-    local ready=0
+# Native multi-node benchmarks opt into the reusable service connector by
+# providing in-container server and client entrypoints. This runner only maps
+# H200 DGXC storage, networking, and Slurm/Pyxis resources.
+if [[ "$IS_MULTINODE" == "true" && -n "${MULTINODE_SERVER_SCRIPT:-}" ]]; then
+    case "$MODEL_PREFIX/$PRECISION" in
+        kimik3/fp4)
+            export MODEL_HOST_PATH="/models/gharunners/hf-hub-cache/Kimi-K3"
+            export MODEL_PATH="/models/hf-hub-cache/Kimi-K3"
+            ;;
+        *)
+            echo "No native multi-node model mapping for $MODEL_PREFIX/$PRECISION on H200 DGXC" >&2
+            exit 1
+            ;;
+    esac
 
-    squash_file="$squash_dir/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    lock_file="${squash_file}.lock"
+    hf_cache_host_path="/models/gharunners/hf-hub-cache"
+    hf_cache_container_path="/models/hf-hub-cache"
+    aiperf_cache_host_path="/home/sa-shared/gharunners/ai-perf-cache"
+    mkdir -p "$aiperf_cache_host_path"
 
-    if [[ "${IS_AGENTIC:-0}" != "1" || "$FRAMEWORK" != "vllm" || \
-          "$MODEL_PREFIX" != "kimik3" || "$PRECISION" != "fp4" ]]; then
-        echo "Direct H200 multi-node vLLM is only configured for Kimi K3 FP4 AgentX" >&2
-        return 1
-    fi
-    if [[ ! -d "$model_host_path" ]]; then
-        echo "Pre-staged Kimi K3 weights not found at $model_host_path" >&2
-        return 1
-    fi
+    export PORT="${PORT:-8888}"
+    export HF_HUB_CACHE="$hf_cache_container_path"
+    export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"
+    export GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-eth0}"
+    export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-eth0}"
+    export SLURM_PYXIS_GPUS_PER_NODE=8
+    export SLURM_PYXIS_IMAGE_CACHE_DIR="/data/gharunners/containers"
+    export SLURM_PYXIS_CONTAINER_WORKDIR="/workspace"
+    export SLURM_PYXIS_CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache"
 
-    mkdir -p "$squash_dir" "$server_log_dir" "$aiperf_cache_host_path"
-    container_mounts="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache"
-
-    salloc \
-        --partition="$SLURM_PARTITION" \
-        --account="$SLURM_ACCOUNT" \
-        --nodes="$node_count" \
-        --ntasks-per-node=1 \
-        --gres="gpu:$gpus_per_node" \
-        --exclusive \
-        --time=240 \
-        --no-shell \
-        --job-name="$RUNNER_NAME"
-    job_id=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
-    if [[ -z "$job_id" ]]; then
-        echo "Failed to resolve the Kimi K3 H200 Slurm allocation" >&2
-        return 1
-    fi
-
-    cleanup_kimik3_allocation() {
-        local exit_code=$?
-        trap - EXIT INT TERM
-        set +e
-        if [[ -n "${server_step_pid:-}" ]]; then
-            kill "$server_step_pid" 2>/dev/null || true
-            wait "$server_step_pid" 2>/dev/null || true
-        fi
-        scancel "$job_id" 2>/dev/null || true
-        exit "$exit_code"
-    }
-    trap cleanup_kimik3_allocation EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-
-    allocated_nodelist=$(squeue -j "$job_id" -h -o %N)
-    head_node=$(scontrol show hostnames "$allocated_nodelist" | head -n1)
-    if [[ -z "$head_node" ]]; then
-        echo "Failed to resolve the Kimi K3 rank-zero node" >&2
-        return 1
-    fi
-
-    # Import once into the cluster's shared squash cache. All nodes use this
-    # same file, so a per-image flock prevents concurrent Day-0 jobs racing.
-    srun --jobid="$job_id" --nodes=1 --ntasks=1 --nodelist="$head_node" bash -c "
-        mkdir -p '$squash_dir'
-        exec 9>'$lock_file'
-        flock -w 1800 9 || { echo 'Failed to lock $squash_file' >&2; exit 1; }
-        if unsquashfs -l '$squash_file' >/dev/null 2>&1; then
-            echo 'Using cached Kimi K3 image: $squash_file'
-        else
-            rm -f '$squash_file'
-            enroot import -o '$squash_file' 'docker://$IMAGE'
-            unsquashfs -l '$squash_file' >/dev/null
-            chmod a+r '$squash_file' || true
-        fi
-    "
-
-    # One vLLM process per node. TP/TEP followers use --headless; DEP starts
-    # eight local DP ranks per node. The benchmark client runs later as an
-    # overlapping CPU-only step on rank zero.
-    srun \
-        --jobid="$job_id" \
-        --nodes="$node_count" \
-        --ntasks="$node_count" \
-        --ntasks-per-node=1 \
-        --kill-on-bad-exit=1 \
-        --container-image="$squash_file" \
-        --container-mounts="$container_mounts" \
-        --no-container-mount-home \
-        --container-remap-root \
-        --container-workdir=/workspace \
-        --no-container-entrypoint \
-        --export="ALL,MODEL_PATH=$model_container_path,HF_HUB_CACHE=$hf_cache_container_path,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,KIMIK3_NODE_COUNT=$node_count,KIMIK3_GPUS_PER_NODE=$gpus_per_node,KIMIK3_MASTER_ADDR=$head_node,PORT=8888" \
-        bash benchmarks/multi_node/agentic/kimik3_fp4_h200_vllm.sh \
-        >"$server_log_dir/combined.log" 2>&1 &
-    server_step_pid=$!
-
-    # A 1.5 TB checkpoint can take much longer than an ordinary model to load.
-    # Keep checking the server step while waiting so early launch failures
-    # surface immediately instead of waiting for the full two-hour timeout.
-    for ((attempt = 1; attempt <= 720; attempt++)); do
-        if curl --output /dev/null --silent --fail "http://$head_node:8888/health"; then
-            ready=1
-            break
-        fi
-        if ! kill -0 "$server_step_pid" 2>/dev/null; then
-            echo "Kimi K3 server step exited before becoming ready" >&2
-            tail -n 200 "$server_log_dir/combined.log" >&2 || true
-            return 1
-        fi
-        if (( attempt % 6 == 0 )); then
-            echo "Waiting for Kimi K3 server readiness ($((attempt * 10))s elapsed)"
-            tail -n 20 "$server_log_dir/combined.log" || true
-        fi
-        sleep 10
-    done
-    if [[ "$ready" != "1" ]]; then
-        echo "Kimi K3 server did not become healthy within 7200 seconds" >&2
-        tail -n 200 "$server_log_dir/combined.log" >&2 || true
-        return 1
-    fi
-
-    set +e
-    srun \
-        --jobid="$job_id" \
-        --overlap \
-        --nodes=1 \
-        --ntasks=1 \
-        --nodelist="$head_node" \
-        --container-image="$squash_file" \
-        --container-mounts="$container_mounts" \
-        --no-container-mount-home \
-        --container-remap-root \
-        --container-workdir=/workspace \
-        --no-container-entrypoint \
-        --export="ALL,MODEL_PATH=$model_container_path,HF_HUB_CACHE=$hf_cache_container_path,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,INFMAX_CONTAINER_WORKSPACE=/workspace,RESULT_DIR=/workspace/agentic_logs,PORT=8888" \
-        bash benchmarks/multi_node/agentic_srt.sh
-    client_rc=$?
-    set -e
-
-    kill "$server_step_pid" 2>/dev/null || true
-    wait "$server_step_pid" 2>/dev/null || true
-    server_step_pid=""
-    scancel "$job_id" 2>/dev/null || true
-    job_id=""
-    trap - EXIT INT TERM
-    return "$client_rc"
-}
-
-# The official Kimi K3 H200 TP/TEP/DEP strategies are aggregated vLLM
-# deployments. Keep them on the direct Slurm path; srt-slurm remains the
-# orchestrator for the existing Dynamo disaggregated configurations below.
-if [[ "$IS_MULTINODE" == "true" && "${IS_AGENTIC:-0}" == "1" && \
-      "$FRAMEWORK" == "vllm" && "$MODEL_PREFIX" == "kimik3" && \
-      "$PRECISION" == "fp4" ]]; then
-    run_kimik3_agentic_vllm
+    bash "$GITHUB_WORKSPACE/runners/connectors/slurm_pyxis.sh"
     exit $?
 fi
 

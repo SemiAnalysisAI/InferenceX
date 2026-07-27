@@ -1471,7 +1471,9 @@ kimik2.5-int4-h200-vllm-agentic:
 # nodes. These are the three aggregated strategies from the official H200
 # recipe (https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200):
 # multi-node TP is latency-oriented, TEP is balanced, and DEP is
-# throughput-oriented. P/D disaggregation is intentionally deferred.
+# throughput-oriented. The deployment settings feed a reusable cluster
+# connector; the in-container Kimi entrypoint has no H200 or Slurm assumptions.
+# P/D disaggregation is intentionally deferred.
 kimik3-fp4-h200-vllm-agentic:
   image: vllm/vllm-openai:kimi-k3
   model: moonshotai/Kimi-K3
@@ -1494,7 +1496,17 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "KIMIK3_STRATEGY=latency"
+          - "MULTINODE_GPU_COUNT=16"
+          - "MULTINODE_SERVER_SCRIPT=benchmarks/multi_node/agentic/kimik3_fp4_vllm.sh"
+          - "MULTINODE_CLIENT_SCRIPT=benchmarks/multi_node/agentic_srt.sh"
+          - "MULTINODE_STARTUP_TIMEOUT_SECONDS=7200"
+          - "INFMAX_CONTAINER_WORKSPACE=/workspace"
+          - "RESULT_DIR=/workspace/LOGS/agentic"
+          - "VLLM_MOE_BACKEND=marlin"
+          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
+          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
+          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
+          - "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1"
         decode:
           num-worker: 0
           tp: 16
@@ -1510,7 +1522,17 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 16
           dp-attn: false
           additional-settings:
-          - "KIMIK3_STRATEGY=balanced"
+          - "MULTINODE_GPU_COUNT=16"
+          - "MULTINODE_SERVER_SCRIPT=benchmarks/multi_node/agentic/kimik3_fp4_vllm.sh"
+          - "MULTINODE_CLIENT_SCRIPT=benchmarks/multi_node/agentic_srt.sh"
+          - "MULTINODE_STARTUP_TIMEOUT_SECONDS=7200"
+          - "INFMAX_CONTAINER_WORKSPACE=/workspace"
+          - "RESULT_DIR=/workspace/LOGS/agentic"
+          - "VLLM_MOE_BACKEND=marlin"
+          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
+          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
+          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
+          - "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1"
         decode:
           num-worker: 0
           tp: 16
@@ -1526,7 +1548,17 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 16
           dp-attn: true
           additional-settings:
-          - "KIMIK3_STRATEGY=throughput"
+          - "MULTINODE_GPU_COUNT=16"
+          - "MULTINODE_SERVER_SCRIPT=benchmarks/multi_node/agentic/kimik3_fp4_vllm.sh"
+          - "MULTINODE_CLIENT_SCRIPT=benchmarks/multi_node/agentic_srt.sh"
+          - "MULTINODE_STARTUP_TIMEOUT_SECONDS=7200"
+          - "INFMAX_CONTAINER_WORKSPACE=/workspace"
+          - "RESULT_DIR=/workspace/LOGS/agentic"
+          - "VLLM_MOE_BACKEND=marlin"
+          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
+          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
+          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
+          - "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1"
         decode:
           num-worker: 0
           tp: 8
