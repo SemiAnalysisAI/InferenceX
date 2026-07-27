@@ -126,8 +126,15 @@ CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
 # uccl-ep builds from source, so give it the same cross-allocation backend cache the single-slurm
 # launcher provides (built once per arch/image/commit under /cx-cache, reused each allocation).
 # mori ships in the image and needs no cache, so its mounts are left untouched.
+#
+# The cache parent is the runner-shared stage BASE, not SQUASH_DIR. single-slurm can use its
+# squash dir because that sits on shared storage, but this SKU's squash dir is node-local and
+# root-owned (/var/lib/squash), which fails twice over: the submit-side mkdir is denied to the
+# runner account, and even as root the directory it creates is not the one the compute node
+# would bind-mount. COLLX_STAGE_DIR is runner-owned and compute-visible, and the cache lands
+# beside job_<tag> rather than inside it, so it still survives stage cleanup between allocations.
 if [ "$COLLX_BENCH" = uccl-ep ]; then
-  collx_prepare_backend_cache "$SQUASH_DIR" \
+  collx_prepare_backend_cache "$COLLX_STAGE_DIR" \
     || collx_die "cannot prepare the isolated backend cache"
   CONTAINER_MOUNTS="$CONTAINER_MOUNTS,$COLLX_PREPARED_BACKEND_CACHE:/cx-cache"
   export COLLX_BACKEND_CACHE_ROOT=/cx-cache

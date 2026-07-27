@@ -2,7 +2,7 @@ name: "minimax-m3-vllm-disagg-b300-1p1d-dep2-tp4-fp4-8k1k-eagle3"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
-  container: "vllm/vllm-openai:nightly-8e981630c9336233ca9de91452f68918bddbc4e2"
+  container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: fp4
 
 resources:
@@ -31,12 +31,10 @@ backend:
 
   prefill_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
     UCX_TLS: cuda_copy,cuda_ipc,rc
 
   decode_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: trtllm
     UCX_TLS: cuda_copy,cuda_ipc,rc
 
   vllm_config:

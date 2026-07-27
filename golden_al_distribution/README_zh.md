@@ -39,6 +39,20 @@ vllm serve MODEL \
 
 该选项通过 [vllm-project/vllm#40662](https://github.com/vllm-project/vllm/pull/40662) 在 vLLM 的不同模型运行器中实现统一。
 
+SGLang 通过其模拟接受环境变量支持同一策略。这些变量设置在服务环境中（srt-slurm YAML 的 `aggregated_environment` / `decode_environment` 部分，或在基准脚本中于启动前导出）：
+
+```yaml
+SGLANG_SIMULATE_ACC_LEN: '3.24'   # 来自已提交黄金 YAML 的 AL
+SGLANG_SIMULATE_ACC_METHOD: match-expected
+SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+```
+
+TensorRT-LLM 通过 [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078) 支持该策略。**注意存在差一（off-by-one）：** 该变量只统计被接受的*草稿* token，不包括 bonus/验证 token，因此应设置为黄金 AL **减 1**。支持小数值——整数部分在每次迭代中始终被接受，小数部分是额外接受一个草稿 token 的概率。例如，黄金 AL 为 `3.5` 时应设置：
+
+```bash
+TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
+```
+
 这一策略遵循与 MLPerf Inference 相同的广义原则：规定可比较系统测量所需的工作负载规则。InferenceX 评估的是推理系统性能，而不是微调特定基准推测头的能力。
 
 ## 黄金 AL 曲线如何收集
