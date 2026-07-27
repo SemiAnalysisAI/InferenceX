@@ -45,6 +45,8 @@ infra:
 
 frontend:
   type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Dynamo-Session-ID
   enable_multiple_frontends: true
   num_additional_frontends: 4
   env:
@@ -54,7 +56,7 @@ frontend:
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
     router-mode: kv
-    router-reset-states: true
+    router-session-affinity-ttl-secs: "3600"
     active-decode-blocks-threshold: "None"
     active-prefill-tokens-threshold: "None"
     active-prefill-tokens-threshold-frac: "None"
@@ -226,7 +228,7 @@ benchmark:
     # Per-session affinity so multi-turn KV cache is reused across turns
     # (recipe name: "convaware"); build_replay_cmd adds
     # --use-dynamo-conv-aware-routing for dynamo-* frameworks.
-    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     # Container-side path of the aiperf mmap dataset cache; host-side mount
     # wired via launch_gb300-nv.sh srtslurm.yaml default_mounts.
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
