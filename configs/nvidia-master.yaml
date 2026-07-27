@@ -8344,7 +8344,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
   runner: cluster:b200-dgxc
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.2.1" }
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
   multinode: true
   disagg: false
   scenarios:

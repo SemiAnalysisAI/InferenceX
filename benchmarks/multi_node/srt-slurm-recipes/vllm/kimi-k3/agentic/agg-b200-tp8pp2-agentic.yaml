@@ -20,11 +20,11 @@ identity:
   container:
     image: "vllm/vllm-openai:kimi-k3"
   frameworks:
-    dynamo: "1.2.1"
+    dynamo: "1.2.0.dev20260426"
 
 dynamo:
-  wheel: "1.2.1"
   install: true
+  wheel: "1.2.0.dev20260426"
 
 slurm:
   time_limit: "8:00:00"
