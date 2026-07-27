@@ -68,10 +68,12 @@ backend:
     # 300-second model-execution default.
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    # Keep prefix-cache blocks alive across agentic turn gaps (same value as
-    # the GB200/GB300 AgentX recipes) — trajectory reuse is the point of the
-    # agentic scenario.
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    # No VLLM_PREFIX_CACHE_RETENTION_INTERVAL: the GB200/GB300 AgentX value
+    # (32768) hard-fails engine init on Kimi-K3 — the KDA hybrid gives it a
+    # scheduler_block_size of 3145728 and the interval must be a multiple of
+    # it ("VLLM_PREFIX_CACHE_RETENTION_INTERVAL (32768) must be non-negative
+    # and a multiple of scheduler_block_size (3145728)"). Default retention
+    # served fine in earlier runs.
     NCCL_CUMEM_ENABLE: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     UCX_MEMTYPE_CACHE: "n"
