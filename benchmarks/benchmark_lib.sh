@@ -1797,7 +1797,11 @@ build_replay_cmd() {
     # X-Correlation-ID is useful tracing metadata but does not establish that
     # binding by itself. AIPerf emits nvext.session_control bind/close actions
     # keyed by the stable conversation correlation ID when this flag is set.
-    if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
+    # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip this.
+    # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
+    # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
+    # (they moved to router/routing_constraints/agent_context). Default stays on.
+    if [[ "${FRAMEWORK:-}" == dynamo-* && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
         # The upstream 300s affinity TTL is shorter than an overloaded
         # high-concurrency agentic request. Keep bindings alive across long

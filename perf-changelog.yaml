@@ -5087,6 +5087,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
 
 - config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2336
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang-disagg-mtp
   description:
     - "Add MTP variant of dsv4-fp4-mi355x-sglang-disagg (new config-key dsv4-fp4-mi355x-sglang-disagg-mtp), Clones the base disagg search space and topologies exactly (image lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713, mori KV transfer + MoE a2a, sglang-router --pd-disaggregation on :30000); enables DeepSeek-V4 built-in MTP via spec-decoding: mtp, same enablement path as dsr1-fp8-mi355x-sglang-disagg-mtp"
@@ -5094,6 +5101,14 @@
     - "Recipe fix (model): adds mtp_flags (--speculative-algorithm EAGLE --speculative-eagle-topk 1) to the DeepSeek-V4-Pro-DI models.yaml entry; without it DECODE_MTP_SIZE>0 emitted --speculative-num-steps/--speculative-num-draft-tokens with no --speculative-algorithm, so sglang never engaged spec decoding. EAGLE with in-checkpoint draft (no draft-model-path); NEXTN (the V3/R1 keyword) crashes the dsv4 decode server at init"
     - "Recipe fix (launcher): build_server_config appended the speculative flags to the decode server only, so prefill never allocated the nextn (MTP draft) KV layer -- prefill registered 3 PD state components, decode 4. SGLang PD-disaggregation requires matching speculative config on both roles (the draft/MTP layers participate in both prefill KV computation and decode verification): v0.5.15 hard-fails the mismatch (mori 'state component count mismatch'), while v0.5.14 tolerated it silently but decode's nextn state was never seeded from prefill, corrupting greedy EAGLE verification (gsm8k 0.96 -> 0.88, worse at depth 2). Fix: apply the speculative flags to both prefill and decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2305/changes
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  description:
+    - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2341
+  
 
 - config-keys:
     - qwen3.5-fp8-mi355x-sglang
