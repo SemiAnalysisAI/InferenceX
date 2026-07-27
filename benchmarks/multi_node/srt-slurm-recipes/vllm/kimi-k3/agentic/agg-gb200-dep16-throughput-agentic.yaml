@@ -90,7 +90,6 @@ backend:
       moe-backend: "deep_gemm_mega_moe"
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.95
-      max-model-len: 1048576
       max-num-seqs: 128
       max-num-batched-tokens: 16384
       language-model-only: true

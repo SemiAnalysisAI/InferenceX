@@ -88,7 +88,6 @@ backend:
       moe-backend: "flashinfer_trtllm"
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.95
-      max-model-len: 1048576
       max-num-seqs: 32
       max-num-batched-tokens: 8192
       language-model-only: true

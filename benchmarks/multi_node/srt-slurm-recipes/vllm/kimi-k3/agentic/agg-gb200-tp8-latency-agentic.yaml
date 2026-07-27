@@ -86,7 +86,6 @@ backend:
       load-format: "fastsafetensors"
       moe-backend: "flashinfer_trtllm"
       gpu-memory-utilization: 0.95
-      max-model-len: 1048576
       max-num-seqs: 8
       max-num-batched-tokens: 8192
       language-model-only: true
