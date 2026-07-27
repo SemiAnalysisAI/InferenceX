@@ -54,11 +54,11 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 # This model has 64 KV heads. AMD flags AITER-MLA as officially supporting only
-# 16/128 heads, but empirically it runs this model and (forced via --block-size=1
-# below) is the ONLY ROCm MLA backend that accepts block_size=1 and is ~3x faster
-# than TRITON_MLA on the agentic trace (best-perf config, run 29337493492).
+# 16/128 heads, but empirically it runs this model and is ~3x faster than
+# TRITON_MLA on the agentic trace (measured: lmcache c32 189.9 vs 53.7 tok/s).
 # Deliberately keeping AITER-MLA ON for throughput; revisit if accuracy validation
-# shows the 64-head path is numerically wrong (then AITER_MLA=0 + drop block-size).
+# shows the 64-head path is numerically wrong (then AITER_MLA=0, which also
+# requires the default block size -- TRITON_MLA rejects block_size=1).
 export VLLM_ROCM_USE_AITER_MLA=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 # Avoid intermittent symm_mem all-reduce rendezvous hang at engine init on
@@ -340,7 +340,6 @@ export PYTHONNOUSERSITE=1
 # all-reduce, which exports its buffer with hipIpcGetMemHandle. Expandable
 # segments are VMM allocations and cannot be IPC-exported, so every rank dies at
 # engine init with "[HIP error](invalid argument)" (run 30225797082).
-# gpu-memory-utilization 0.85 below is what carries the c4/c8 OOM headroom.
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -349,14 +348,17 @@ VLLM_CMD=(
     --port "$VLLM_BACKEND_PORT"
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.85
+    --gpu-memory-utilization 0.9
     # This trace is GPU-KV-capacity bound (c8 sits at ~74% KV usage on TP4), and
     # the Quark checkpoint ships an empty kv_cache_quant_config, so the default
     # `auto` gives a bf16 KV cache. fp8 halves bytes/token in the pool -- the one
     # knob that moves the capacity wall rather than just adding headroom. Matches
     # dsv4_fp4_mi355x_vllm.sh and every kimik2.5 recipe.
     --kv-cache-dtype fp8
-    --block-size=1
+    # No --block-size: the default (16) measured ~+51% per-GPU throughput vs
+    # block_size=1 on this trace at c8. AITER-MLA is selected either way --
+    # block_size=1 only narrowed the candidate backend list, it did not change
+    # the winner, so forcing it cost paging efficiency for nothing.
     --trust-remote-code
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
