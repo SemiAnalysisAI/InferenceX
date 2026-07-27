@@ -5126,4 +5126,4 @@
     - "Full native 1M max-model-len for the AgentX trace (K3's KDA layers keep per-token KV small; only the 24 gated-MLA layers hold cache), max-num-batched-tokens 8192 so a single long prefill cannot OOM a pipeline stage; conc 8/16/32"
     - "Model pre-staged at /lustre/fsw/models/Kimi-K3 (moonshotai/Kimi-K3); launcher launch_b200-dgxc.sh gains the kimik3/fp4 model-path mapping, the agentic recipe overlay into the srt-slurm-nv clone, and the agentic default_mounts (/aiperf_mmap_cache, /hf_hub_cache) already used by the GB200/GB300 agentic paths"
     - "Recipe: benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-agentic.yaml on the cluster:b200-dgxc pool"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2355
