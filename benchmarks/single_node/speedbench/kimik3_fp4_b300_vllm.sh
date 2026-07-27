@@ -11,8 +11,9 @@
 #
 # Kimi-K3 uses the Inferact/Kimi-K3-DSpark draft head. The draft model is
 # downloaded to a writable workspace dir before the sweep begins; the target
-# checkpoint (moonshotai/Kimi-K3, FP4) is not pre-staged on the B300 cluster,
-# so it is downloaded to the launcher-resolved writable MODEL_PATH.
+# checkpoint (moonshotai/Kimi-K3, FP4) is pre-staged on the B300 cluster at
+# /scratch/models/Kimi-K3, so the launcher resolves MODEL_PATH there and no
+# target download happens.
 #
 # Differences vs the Kimi-K2.5 EAGLE3 template (kimik2.5_fp4_b300_vllm.sh):
 #   - speculative-config     dspark + attention_backend FLASHINFER_MLA (not eagle3)
@@ -88,9 +89,9 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
 # ---- Download target if it is not pre-staged ----
-# Kimi-K3 is not in the launcher's STAGED_MODELS, so MODEL_PATH resolves to the
-# writable /data/models/<basename> and the weights are pulled here. Kept
-# staged-aware so the script keeps working once K3 is added to STAGED_MODELS.
+# Kimi-K3 is in the launcher's STAGED_MODELS, so MODEL_PATH resolves to the
+# read-only /scratch/models/Kimi-K3 and this block is a no-op. It still covers a
+# standalone run where the weights are not staged.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
