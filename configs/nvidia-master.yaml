@@ -6599,7 +6599,7 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "3169427d2ed7ea6a0451e47ce443822d26893bae" }
+  router: { name: dynamo-router, version: "8e4bfa69ba486f07f6083fbe8cd026f432f520bc" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true

@@ -13,7 +13,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.3.0.dev1"
+  hash: "8e4bfa69ba486f07f6083fbe8cd026f432f520bc"
 
 slurm:
   time_limit: "8:00:00"
