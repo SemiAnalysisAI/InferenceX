@@ -25,10 +25,11 @@ class _StubBackend(ep_backend.EPBackend):
 
     name = "stub"
 
-    def __init__(self, stage_device_work: bool, fp8_consume: str):
+    def __init__(self, stage_device_work: bool, fp8_consume: str, precision: str = "fp8"):
         self.calls: list[str] = []
         self.stage_device_work = stage_device_work
         self.fp8_consume = fp8_consume
+        self.precision = precision
 
     def create_buffer(self, spec):  # pragma: no cover - unused
         raise NotImplementedError
@@ -80,6 +81,46 @@ class RoundtripStaging(unittest.TestCase):
     def test_default_models_the_native_path(self):
         # deepseek-v3 block-fp8 hits vLLM's matched branch and SGLang's no-dequant path.
         self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
+
+
+class NativeStagingGate(unittest.TestCase):
+    """`stage_device_work` does NOT imply fp8, so the gate must check precision.
+
+    MoRI sets `stage_device_work = self._fp8 or not self._external_input`, so its scale-up
+    kernels report True for BF16 too, and their stage() does a real copy into the registered
+    combine-input buffer. Gating on stage_device_work alone silently lifted that copy out of
+    the BF16 timed region -- a precision-asymmetric change of exactly the kind this file
+    exists to prevent.
+    """
+
+    def test_bf16_with_device_staging_keeps_the_stage_inline(self):
+        mori_intranode_bf16 = _StubBackend(
+            stage_device_work=True, fp8_consume="native", precision="bf16"
+        )
+        self.assertFalse(mori_intranode_bf16.stages_fp8_natively)
+        mori_intranode_bf16.run_roundtrip(object())
+        self.assertEqual(
+            mori_intranode_bf16.calls, ["dispatch", "stage", "combine(staged-by-stage)"]
+        )
+
+    def test_fp8_with_device_staging_lifts_the_conversion_out(self):
+        self.assertTrue(
+            _StubBackend(
+                stage_device_work=True, fp8_consume="native", precision="fp8"
+            ).stages_fp8_natively
+        )
+
+    def test_the_hatch_and_no_op_stages_never_take_the_fast_path(self):
+        self.assertFalse(  # CX_FP8_CONSUME=dequant restores the inline stage
+            _StubBackend(
+                stage_device_work=True, fp8_consume="dequant", precision="fp8"
+            ).stages_fp8_natively
+        )
+        self.assertFalse(  # nccl-ep / bf16 deepep-v2: nothing to lift
+            _StubBackend(
+                stage_device_work=False, fp8_consume="native", precision="fp8"
+            ).stages_fp8_natively
+        )
 
 
 if __name__ == "__main__":
