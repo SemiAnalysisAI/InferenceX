@@ -110,7 +110,7 @@ unset _benchmark_caller
 
 GPU_MONITOR_PID=""
 GPU_MONITOR_VENDOR=""
-GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
 NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
 

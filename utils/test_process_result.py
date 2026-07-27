@@ -1039,6 +1039,24 @@ class TestPowerWorkflowContract:
     def _repo_root():
         return Path(__file__).parents[1]
 
+    def test_gpu_monitor_default_matches_uploaded_artifact_path(self):
+        benchmark_lib = self._repo_root() / "benchmarks/benchmark_lib.sh"
+        script = f"""
+unset GPU_METRICS_CSV
+source {str(benchmark_lib)!r}
+printf '%s' "$GPU_METRICS_CSV"
+"""
+
+        result = subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == "gpu_metrics.csv"
+
     def test_benchmark_workflow_uploads_independent_power_audit_bundle(self):
         workflow = (
             self._repo_root() / ".github/workflows/benchmark-tmpl.yml"

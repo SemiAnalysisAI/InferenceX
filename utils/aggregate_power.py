@@ -234,11 +234,13 @@ def aggregate_power(
 
 
 def _append_reason(reasons: list[str], reason: str) -> None:
+    """Append a validation reason once while preserving discovery order."""
     if reason not in reasons:
         reasons.append(reason)
 
 
 def _gpu_sort_key(gpu_id: str) -> tuple[int, int | str]:
+    """Sort numeric GPU identities before arbitrary string identities."""
     return (0, int(gpu_id)) if gpu_id.isdigit() else (1, gpu_id)
 
 
@@ -247,6 +249,7 @@ def _empty_integration(
     expected_num_gpus: int | None,
     reasons: list[str],
 ) -> PowerIntegration:
+    """Build an invalid integration result when no device data is available."""
     return PowerIntegration(
         power_valid=False,
         invalid_reasons=tuple(reasons),
@@ -497,34 +500,6 @@ def integrate_power(
     )
 
 
-def _load_bench_window(
-    bench_result_path: Path,
-) -> tuple[float, float, float, int, int] | None:
-    """Read (start_unix, end_unix, duration_s, total_output_tokens, total_input_tokens)
-    from the raw bench JSON. Returns None if any required field is missing.
-
-    total_input_tokens defaults to 0 if absent (older bench JSONs may not have it);
-    this only degrades joules_per_total_token to equal joules_per_output_token in
-    that case, never breaks the rest of the aggregation.
-    """
-    try:
-        bench = json.loads(bench_result_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    start = bench.get("benchmark_start_time_unix")
-    end = bench.get("benchmark_end_time_unix")
-    duration = bench.get("duration")
-    total_output = bench.get("total_output_tokens")
-    total_input = bench.get("total_input_tokens", 0)
-    if not all(isinstance(v, (int, float)) for v in (start, end, duration)):
-        return None
-    if not isinstance(total_output, int) or total_output <= 0:
-        return None
-    if not isinstance(total_input, int) or total_input < 0:
-        total_input = 0
-    return float(start), float(end), float(duration), int(total_output), int(total_input)
-
-
 def _load_benchmark_data(
     bench_result_path: Path,
 ) -> tuple[BenchmarkData | None, list[str]]:
@@ -605,6 +580,7 @@ def patch_agg_result(
 
 
 def _write_json_atomic(path: Path, data: dict) -> None:
+    """Atomically replace a JSON artifact with formatted UTF-8 content."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -643,6 +619,7 @@ def _patch_power_result(
     power_valid: bool,
     metrics: dict[str, float],
 ) -> None:
+    """Replace aggregate power fields with one validated metric set."""
     data = json.loads(agg_path.read_text(encoding="utf-8"))
     for key in _POWER_METRIC_KEYS:
         data.pop(key, None)
@@ -669,6 +646,7 @@ def _validation_payload(
     reasons: list[str],
     metrics: dict[str, float],
 ) -> dict:
+    """Build the complete auditable power-validation sidecar payload."""
     benchmark_window = None
     if benchmark is not None:
         benchmark_window = {
