@@ -100,6 +100,7 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # per the production recipe; AL is read from the server's /metrics, so the client
 # choice does not affect the measurement.
 BENCH_DRIVER="$RESULTS_DIR/bench_serve_python.py"
+mkdir -p "$RESULTS_DIR"
 cat > "$BENCH_DRIVER" <<'PYEOF'
 # Python-only `vllm bench serve`: bypasses the Rust os.execv delegation in
 # vllm/entrypoints/cli/benchmark/serve.py by importing the benchmark directly.
@@ -116,8 +117,13 @@ parser = FlexibleArgumentParser(
 add_cli_args(parser)
 main(parser.parse_args())
 PYEOF
+# This script runs without `set -e`, so a failed redirect would otherwise only
+# surface later as a confusing "No such file" from the preflight.
+if [[ ! -s "$BENCH_DRIVER" ]]; then
+    echo "CRITICAL: could not write the benchmark driver to $BENCH_DRIVER — aborting."
+    exit 1
+fi
 
-mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
 # ---- Download target if it is not pre-staged ----
