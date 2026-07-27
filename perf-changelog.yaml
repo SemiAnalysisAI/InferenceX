@@ -5108,11 +5108,16 @@
   description:
     - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2341
-  
 
 - config-keys:
-    - qwen3.5-fp8-mi355x-sglang
-    - qwen3.5-fp8-mi355x-sglang-mtp
+    - kimik3-fp4-mi355x-vllm-agentic
   description:
-    - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+    - "Day-zero Kimi-K3 MXFP4 MI355X single-node vLLM agentic-coding recipe (2.8T-param natively-multimodal MoE: 896 experts / 16 routed + 2 shared, Kimi Delta Attention + gated MLA + Attention Residuals, MXFP4 weights with MXFP8 activations from QAT). Agentic trace replay only - no fixed-seq-len 1k1k/8k1k scenarios"
+    - "Flags/env follow the upstream recipe vllm-project/recipes#684 (models/moonshotai/Kimi-K3.yaml -> hardware_overrides.amd, which lists mi355x as verified): VLLM_ROCM_USE_AITER=1, SAFETENSORS_FAST_GPU=1, AITER_SITUV2_A8W4=1 (a8w4 MoE path; 0 selects a16w4), AITER_BF16_FP8_MOE_BOUND=0, VLLM_USE_BREAKABLE_CUDAGRAPH=0 (required on ROCm - the build auto-enables it), plus --moe-backend auto --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --max-num-seqs 128 --max-num-batched-tokens 4096; the AMD block replaces the base --load-format fastsafetensors with auto"
+    - "Served via vLLM's dedicated ROCm K3 path (vllm/models/kimi_k3/amd/*, selected by current_platform.is_rocm()) whose KDA and attn_res triton kernels are gfx950-validated; the CUDA-only FlashKDA extension is gated behind VLLM_GPU_LANG=CUDA and is not built for ROCm"
+    - "TP=8 only: the ~1.56 TB checkpoint needs ~195 GB/GPU of MI355X's 288 GB HBM, so the TP=4 rows carried by the K2.5 agentic recipe are omitted (TP=4 would need ~390 GB/GPU and cannot load); on-GPU conc 1-48 plus a vllm-native DRAM-offload arm at conc 32-56 above the KV cliff, dram-utilization 0.80"
+    - "--max-model-len 1048576 (K3's full native context): agentic trace-corpus selection is driven by the model family's native context length, so K3 resolves to the unfiltered 062126 v7 corpus rather than the 256k-capped variant; --max-num-seqs tracks CONC per agentic convention rather than the upstream fixed 128"
+    - "launch_mi355x-amds.sh routes moonshotai/Kimi-K3* weights to the NFS HF hub cache (/it-share/hf-hub-cache) instead of the node-local /var/lib NVMe cache, which cannot hold 1.56 TB - same treatment as MiniMax-M3"
+    - "VLLM_ENGINE_READY_TIMEOUT_S=7200 to cover loading ~1.56 TB of weights off NFS (the K2.5-class recipes load ~0.5 TB)"
+  pr-link: TBD
+  
