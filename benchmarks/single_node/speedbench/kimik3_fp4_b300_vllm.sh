@@ -85,14 +85,37 @@ export VLLM_ALLREDUCE_USE_FLASHINFER="${VLLM_ALLREDUCE_USE_FLASHINFER:-1}"
 export VLLM_USE_RUST_FRONTEND="${VLLM_USE_RUST_FRONTEND:-1}"
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-# VLLM_USE_RUST_FRONTEND also makes `vllm bench serve` delegate the CLIENT to
-# the Rust binary, whose flag surface is a subset of the Python one: it has no
-# --speed-bench-output-len (only --speed-bench-max-input-len), no --save-detailed
-# and no --chat-template-kwargs, so every cell dies before sending a request and
-# the whole matrix comes back N/A. Keep the Rust frontend on the SERVER (that is
-# the production recipe) and pin the benchmark client to the Python path. AL is
-# read from the server's /metrics, so the client choice does not affect it.
-BENCH_CLIENT_ENV=(env VLLM_USE_RUST_FRONTEND=0)
+# `vllm bench serve` delegates the CLIENT to the Rust binary: the kimi-k3 branch's
+# vllm/entrypoints/cli/benchmark/serve.py runs _maybe_exec_rust_bench(), which
+# os.execv's into vllm-rs whenever the dataset (speed_bench qualifies) and backend
+# are supported and the binary exists. There is no env var and no CLI flag to opt
+# out, and the Rust flag surface is a subset of the Python one (no
+# --speed-bench-output-len — only --speed-bench-max-input-len — no --save-detailed,
+# no --chat-template-kwargs), so every cell dies at argument parsing and the whole
+# matrix comes back N/A.
+#
+# Call the Python benchmark entrypoint directly instead, exactly as the CLI's own
+# Python fallback does (vllm.benchmarks.serve.main with a parser built by
+# add_cli_args), which never reaches the execv. The SERVER keeps the Rust frontend
+# per the production recipe; AL is read from the server's /metrics, so the client
+# choice does not affect the measurement.
+BENCH_DRIVER="$RESULTS_DIR/bench_serve_python.py"
+cat > "$BENCH_DRIVER" <<'PYEOF'
+# Python-only `vllm bench serve`: bypasses the Rust os.execv delegation in
+# vllm/entrypoints/cli/benchmark/serve.py by importing the benchmark directly.
+from vllm.benchmarks.serve import add_cli_args, main
+
+try:  # import path moved in newer vLLM
+    from vllm.utils.argparse_utils import FlexibleArgumentParser
+except ImportError:
+    from vllm.utils import FlexibleArgumentParser
+
+parser = FlexibleArgumentParser(
+    description="vllm bench serve (Python entrypoint, no Rust delegation)"
+)
+add_cli_args(parser)
+main(parser.parse_args())
+PYEOF
 
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
@@ -240,15 +263,14 @@ fi
 # ---- Preflight: the benchmark client must support the flags every cell uses ----
 # Cheap up front; without it a CLI mismatch is only visible as an all-N/A matrix
 # after eight full server starts (~1h of runner time).
-# NOTE: plain --help prints only a group summary ("speed bench dataset options"),
-# so individual flags are only visible under --help=all.
-BENCH_HELP="$("${BENCH_CLIENT_ENV[@]}" vllm bench serve --help=all 2>&1)"
+# NOTE: probe the driver, not `vllm bench serve` — the CLI's help exits inside
+# argparse before the Rust execv, so its help says nothing about what actually
+# runs. Plain --help prints only a group summary, so ask for --help=all.
+BENCH_HELP="$(python3 "$BENCH_DRIVER" --help=all 2>&1)"
 for flag in --speed-bench-category --speed-bench-output-len --chat-template-kwargs --save-detailed; do
     if [[ "$BENCH_HELP" != *"$flag"* ]]; then
-        echo "CRITICAL: 'vllm bench serve' in this image does not support $flag — aborting."
-        echo "  (If it delegated to the Rust binary, VLLM_USE_RUST_FRONTEND=0 did not stop it;"
-        echo "   the Rust help is a short flat usage block with no option groups.)"
-        echo "--- vllm bench serve --help=all ---"
+        echo "CRITICAL: the Python benchmark entrypoint does not support $flag — aborting."
+        echo "--- python3 $BENCH_DRIVER --help=all ---"
         echo "$BENCH_HELP"
         exit 1
     fi
@@ -361,7 +383,7 @@ run_cell() {
     acc_before=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
     drf_before=$(fetch_metric "$PORT" "vllm:spec_decode_num_drafts_total")
 
-    "${BENCH_CLIENT_ENV[@]}" vllm bench serve \
+    python3 "$BENCH_DRIVER" \
         --model "$SERVE_MODEL" \
         --port "$PORT" \
         --dataset-name speed_bench \
