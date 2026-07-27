@@ -5116,3 +5116,11 @@
   description:
     - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+
+- config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+  description:
+    - "Add Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration."
+    - "Include seven 8K/1K prefill/decode topology and concurrency entries."
+    - "Image: vllm/vllm-openai:v0.25.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
