@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -26,12 +26,29 @@ PARALLEL_ARGS=(-tp "$TP") #TP
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
-    else #DP+TP
+    else #DPA+TP
         PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
     fi
-fi 
+fi
 
-SPEC_ARGS=(--method mtp --num-speculative-tokens 3 )
+# MTP speculative decoding (ATOM self-draft). NO --enable-tbo: TBO is incompatible
+# with MTP in ATOM (UBatchWrapper sets spec_decode_metadata=None; official
+# models.json DPA MTP3 has no --enable-tbo).
+SPEC_ARGS=(--method mtp --num-speculative-tokens 3)
+
+# max_req=conc for dp-on cells (dp-attention keeps a full KV pool per rank, and MTP
+# reserves q=num_speculative_tokens+1 per request, so the large default max_num_seqs
+# OOMs) and for conc>=64. dp-off low conc uses the ATOM default.
+if [ "$DP_ATTENTION" = "true" ] || [ "$CONC" -ge 64 ]; then
+    PARALLEL_ARGS+=(--max-num-seqs "$CONC")
+fi
+
+BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN
+fi
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -40,6 +57,7 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
+
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -47,19 +65,19 @@ python3 -m atom.entrypoints.openai_server \
     "${SPEC_ARGS[@]}" \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
-    > $SERVER_LOG 2>&1 &
+    --no-enable_prefix_caching \
+    > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# --dsv4 routes prompts through encoding_dsv4.py (PR #1153), which emits the
-# <bos><User>...<Assistant><think> framing DeepSeek-V4-Pro expects. The DSv4-Pro
-# tokenizer ships without a jinja chat_template, so plain --use-chat-template
-# would crash; --dsv4 sidesteps that and satisfies the AGENTS.md rule that all
-# MTP scripts must benchmark against chat-formatted inputs (EAGLE acceptance
-# silently regresses on raw random tokens).
+# --use-chat-template: DSv4-Pro's dsv4 message encoder ships with the model dir
+# (encoding/encoding_*.py); ATOM auto-discovers it and applies the same chat framing
+# on both server and bench, so AL stays aligned. (Replaces the removed --dsv4 flag.)
+# Chat-formatted inputs are required for MTP: EAGLE/MTP acceptance silently regresses
+# on raw random tokens (AGENTS.md).
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -72,7 +90,7 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
     --trust-remote-code \
-    --dsv4
+    --use-chat-template
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
