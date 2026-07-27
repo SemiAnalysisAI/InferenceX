@@ -240,12 +240,15 @@ fi
 # ---- Preflight: the benchmark client must support the flags every cell uses ----
 # Cheap up front; without it a CLI mismatch is only visible as an all-N/A matrix
 # after eight full server starts (~1h of runner time).
-BENCH_HELP="$("${BENCH_CLIENT_ENV[@]}" vllm bench serve --help 2>&1)"
+# NOTE: plain --help prints only a group summary ("speed bench dataset options"),
+# so individual flags are only visible under --help=all.
+BENCH_HELP="$("${BENCH_CLIENT_ENV[@]}" vllm bench serve --help=all 2>&1)"
 for flag in --speed-bench-category --speed-bench-output-len --chat-template-kwargs --save-detailed; do
     if [[ "$BENCH_HELP" != *"$flag"* ]]; then
         echo "CRITICAL: 'vllm bench serve' in this image does not support $flag — aborting."
-        echo "  (If it delegated to the Rust binary, VLLM_USE_RUST_FRONTEND=0 did not stop it.)"
-        echo "--- vllm bench serve --help ---"
+        echo "  (If it delegated to the Rust binary, VLLM_USE_RUST_FRONTEND=0 did not stop it;"
+        echo "   the Rust help is a short flat usage block with no option groups.)"
+        echo "--- vllm bench serve --help=all ---"
         echo "$BENCH_HELP"
         exit 1
     fi
