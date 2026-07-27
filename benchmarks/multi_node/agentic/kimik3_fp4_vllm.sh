@@ -10,22 +10,6 @@ set -x
 # The runner supplies node ranks, rendezvous, and local GPU count.
 # This script only translates the requested TP/EP/DP topology into vLLM flags.
 
-# shellcheck disable=SC1091 # Resolved relative to this entrypoint at runtime.
-source "$(dirname "$0")/../../benchmark_lib.sh"
-
-check_env_vars \
-    MODEL \
-    MODEL_PATH \
-    PORT \
-    CONC_LIST \
-    PREFILL_TP \
-    PREFILL_EP \
-    PREFILL_DP_ATTN \
-    MULTINODE_NODE_COUNT \
-    MULTINODE_GPUS_PER_NODE \
-    MULTINODE_NODE_RANK \
-    MULTINODE_MASTER_ADDR
-
 WORLD_SIZE=$((MULTINODE_NODE_COUNT * MULTINODE_GPUS_PER_NODE))
 read -r -a CONCURRENCIES <<< "$CONC_LIST"
 MAX_CONCURRENCY=0
@@ -35,7 +19,7 @@ for concurrency in "${CONCURRENCIES[@]}"; do
     fi
 done
 
-export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
+export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export PYTHONNOUSERSITE=1
 
 VLLM_CMD=(
@@ -45,7 +29,7 @@ VLLM_CMD=(
     --port "$PORT"
     --trust-remote-code
     --load-format fastsafetensors
-    --moe-backend "${VLLM_MOE_BACKEND:-auto}"
+    --moe-backend "$VLLM_MOE_BACKEND"
     --gpu-memory-utilization 0.95
     --enable-prefix-caching
     --enable-auto-tool-choice
@@ -55,10 +39,10 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_CONCURRENCY"
 )
 
-if [[ "${VLLM_DISABLE_FLASHINFER_AUTOTUNE:-0}" == "1" ]]; then
+if [[ "$VLLM_DISABLE_FLASHINFER_AUTOTUNE" == "1" ]]; then
     VLLM_CMD+=(--no-enable-flashinfer-autotune)
 fi
-if [[ "${VLLM_DISABLE_CUSTOM_ALL_REDUCE:-0}" == "1" ]]; then
+if [[ "$VLLM_DISABLE_CUSTOM_ALL_REDUCE" == "1" ]]; then
     VLLM_CMD+=(--disable-custom-all-reduce)
 fi
 
@@ -88,7 +72,7 @@ elif [[ "$PREFILL_DP_ATTN" == "false" ]]; then
     if [ "$PREFILL_EP" -gt 1 ]; then
         VLLM_CMD+=(--enable-expert-parallel)
     fi
-    if [[ "${VLLM_DISABLE_FUSED_ALLREDUCE_RMS:-0}" == "1" ]]; then
+    if [[ "$VLLM_DISABLE_FUSED_ALLREDUCE_RMS" == "1" ]]; then
         VLLM_CMD+=(-cc.pass_config.fuse_allreduce_rms=False)
     fi
     if [ "$MULTINODE_NODE_RANK" -gt 0 ]; then
@@ -102,9 +86,5 @@ fi
 printf 'Kimi K3 rank %s command: ' "$MULTINODE_NODE_RANK"
 printf '%q ' "${VLLM_CMD[@]}"
 printf '\n'
-
-if [[ "${KIMIK3_DRY_RUN:-0}" == "1" ]]; then
-    exit 0
-fi
 
 exec "${VLLM_CMD[@]}"

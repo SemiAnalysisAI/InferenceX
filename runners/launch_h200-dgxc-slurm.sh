@@ -9,8 +9,8 @@ set -x
 
 # Native multi-node vLLM: keep Slurm/Pyxis on the host and pass only rank and
 # rendezvous information to the hardware-independent benchmark entrypoint.
-if [[ "$IS_MULTINODE" == "true" && "${NATIVE_MULTINODE:-0}" == "1" ]]; then
-    if [[ "${IS_AGENTIC:-0}" != "1" || "$FRAMEWORK" != "vllm" ]]; then
+if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
+    if [[ "$IS_AGENTIC" != "1" || "$FRAMEWORK" != "vllm" ]]; then
         echo "Native multi-node H200 currently supports AgentX vLLM jobs" >&2
         exit 1
     fi
@@ -50,13 +50,13 @@ if [[ "$IS_MULTINODE" == "true" && "${NATIVE_MULTINODE:-0}" == "1" ]]; then
     fi
     mkdir -p "$aiperf_cache_host_path" "$image_cache_dir" "$server_log_dir"
 
-    export PORT="${PORT:-8888}"
+    export PORT="$PORT"
     export HF_HUB_CACHE="$hf_cache_container_path"
     export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"
     export INFMAX_CONTAINER_WORKSPACE="/workspace"
     export RESULT_DIR="/workspace/LOGS/agentic"
-    export GLOO_SOCKET_IFNAME="${GLOO_SOCKET_IFNAME:-eth0}"
-    export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-eth0}"
+    export GLOO_SOCKET_IFNAME=eth0
+    export NCCL_SOCKET_IFNAME=eth0
 
     salloc \
         --partition="$SLURM_PARTITION" \
@@ -77,8 +77,8 @@ if [[ "$IS_MULTINODE" == "true" && "${NATIVE_MULTINODE:-0}" == "1" ]]; then
     cleanup_native_multinode() {
         local exit_code=$?
         trap - EXIT INT TERM
-        kill "${server_step_pid:-}" 2>/dev/null || true
-        wait "${server_step_pid:-}" 2>/dev/null || true
+        kill "$server_step_pid" 2>/dev/null || true
+        wait "$server_step_pid" 2>/dev/null || true
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
             -C "$server_log_dir" . 2>/dev/null || true
         scancel "$job_id" 2>/dev/null || true
