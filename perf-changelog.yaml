@@ -5123,4 +5123,4 @@
     - "Add Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration."
     - "Include seven 8K/1K prefill/decode topology and concurrency entries."
     - "Image: vllm/vllm-openai:v0.25.1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2360
