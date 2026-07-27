@@ -6,13 +6,11 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
-# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
+# MODEL_PATH: Override with pre-downloaded paths on cluster-accessible storage.
 # Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
-# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
+# portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every dgxc node. Runs for both single-node and multinode
 # launches.
-# NOTE: per-node /raid/models/* would be faster but is only populated on a
-# subset of dgxc nodes today, so we use Lustre for reliability.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -55,7 +53,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
+    export MODEL_PATH="/scratch/models/Kimi-K2.6-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
