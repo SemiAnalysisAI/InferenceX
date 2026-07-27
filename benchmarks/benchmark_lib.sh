@@ -1660,7 +1660,7 @@ resolve_trace_source() {
     # WEKA_LOADER_OVERRIDE.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|glm5.2*|minimaxm3*)
+        dsv4*|glm5.2*|minimaxm3*|kimik3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)
@@ -1799,16 +1799,20 @@ build_replay_cmd() {
     if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
         case "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID:-false}" in
             true|True|TRUE|1)
-                # AIPerf PR #17's environment setting is inherited directly
-                # from benchmark.env and needs no routing CLI flag.
+                # The environment setting is inherited directly from
+                # benchmark.env and needs no routing CLI flag.
                 ;;
             *)
-                # Existing Dynamo recipes retain the legacy nvext behavior.
-                REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
-                # The upstream 300s affinity TTL is shorter than an overloaded
-                # high-concurrency agentic request. Keep bindings alive across
-                # long prefills, generation, and capped inter-turn delay.
-                REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+                # Opt-out for Dynamo builds that reject the removed
+                # nvext.session_control POC field with a 400.
+                if [[ "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
+                    REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+                    # The upstream 300s affinity TTL is shorter than an
+                    # overloaded high-concurrency agentic request. Keep
+                    # bindings alive across long prefills, generation, and
+                    # capped inter-turn delay.
+                    REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
+                fi
                 ;;
         esac
     fi
