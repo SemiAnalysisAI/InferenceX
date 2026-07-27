@@ -342,30 +342,52 @@ export PYTHONNOUSERSITE=1
 # engine init with "[HIP error](invalid argument)" (run 30225797082).
 
 # ---- Eval-only serve args ---------------------------------------------------
-# The SWE-bench harness (mini-swe-agent) drives the model with plain bash in a
-# markdown code block -- it sends no `tools`/`tool_choice` -- so vLLM never
-# builds a tool-call grammar on this path. Belt and braces anyway: if a grammar
-# ever does get requested, the default backend `auto` resolves to xgrammar,
-# which rejects Kimi's tool-call tokens ("Failed to advance FSM" ->
-# "grammar rejected tokens" -> HTTP 500 on every affected request). Pin the
-# backend off xgrammar when this image supports it. Probed rather than
-# hard-coded so an image without the flag (or without llguidance installed)
-# can't turn a working eval into a server that won't start.
+# mini-swe-agent (2.4.5) drives SWE-bench through the OpenAI tools API and sends
+# tool_choice="auto" on every turn, so the server has to be started with the
+# tool-call plumbing or it 400s the whole eval:
+#   '"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser
+#    to be set'  -> every instance dies in agent.run() (run 30255761745).
+# These are gated on EVAL_ONLY: the aiperf trace replay sends no tools, so the
+# throughput config stays exactly as measured.
 EVAL_SERVE_ARGS=()
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    EVAL_SERVE_ARGS+=(
+        --enable-auto-tool-choice
+        --tool-call-parser kimi_k2
+        --reasoning-parser kimi_k2
+    )
+
+    # With tool calls flowing, vLLM builds a grammar for them, and the default
+    # backend `auto` resolves to xgrammar -- which rejects Kimi's tool-call
+    # tokens ("Failed to advance FSM" -> "grammar rejected tokens" -> HTTP 500).
+    # Move the backend off xgrammar. llguidance is the guidance backend's
+    # runtime and is not in the ROCm image, so install it on demand.
     SO_BACKEND="${STRUCTURED_OUTPUTS_BACKEND:-guidance}"
-    if [ "$SO_BACKEND" != "auto" ] && python3 -c 'import llguidance' 2>/dev/null; then
-        VLLM_SERVE_HELP="$(vllm serve --help 2>/dev/null || true)"
-        if grep -q -- '--structured-outputs-config' <<<"$VLLM_SERVE_HELP"; then
-            EVAL_SERVE_ARGS+=(--structured-outputs-config "{\"backend\":\"$SO_BACKEND\"}")
-        elif grep -q -- '--guided-decoding-backend' <<<"$VLLM_SERVE_HELP"; then
-            EVAL_SERVE_ARGS+=(--guided-decoding-backend "$SO_BACKEND")
+    if [ "$SO_BACKEND" != "auto" ]; then
+        python3 -c 'import llguidance' 2>/dev/null || pip install --quiet llguidance || true
+        if python3 -c 'import llguidance' 2>/dev/null; then
+            # `vllm serve --help` lists config SECTIONS, not flags -- the flag
+            # names only appear under --help=all. Probing the short help is why
+            # this silently no-op'd on the first attempt.
+            VLLM_SERVE_HELP="$(vllm serve --help=all 2>/dev/null || vllm serve --help 2>/dev/null || true)"
+            if grep -q -- '--structured-outputs-config' <<<"$VLLM_SERVE_HELP"; then
+                EVAL_SERVE_ARGS+=(--structured-outputs-config "{\"backend\":\"$SO_BACKEND\"}")
+            elif grep -q -- '--guided-decoding-backend' <<<"$VLLM_SERVE_HELP"; then
+                EVAL_SERVE_ARGS+=(--guided-decoding-backend "$SO_BACKEND")
+            else
+                echo "WARN: no structured-outputs backend flag found in this image; leaving the default in place" >&2
+            fi
         else
-            echo "WARN: no structured-outputs backend flag in this image; leaving the default in place" >&2
+            echo "WARN: llguidance unavailable; leaving the default structured-outputs backend (xgrammar) in place" >&2
         fi
-    else
-        echo "WARN: llguidance not importable (or backend forced to auto); leaving the default structured-outputs backend in place" >&2
     fi
+
+    # 300 SWE-bench Lite instances at the sweep's conc (8) would not finish
+    # inside SWEBENCH_AGENT_TIMEOUT (6h). Accuracy does not depend on the conc
+    # point, only wall-clock does, so widen serving concurrency for eval and let
+    # the harness match it.
+    EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-64}"
+    export SWEBENCH_AGENT_WORKERS="${SWEBENCH_AGENT_WORKERS:-$EVAL_MAX_NUM_SEQS}"
 fi
 
 { set +x; } 2>/dev/null
@@ -387,7 +409,7 @@ VLLM_CMD=(
     # either way -- block_size=1 only narrowed the candidate backend list, it
     # never changed the winner, so pinning it bought nothing worth carrying.
     --trust-remote-code
-    --max-num-seqs "$CONC"
+    --max-num-seqs "${EVAL_MAX_NUM_SEQS:-$CONC}"
     --mm-encoder-tp-mode data
     "${EVAL_SERVE_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
