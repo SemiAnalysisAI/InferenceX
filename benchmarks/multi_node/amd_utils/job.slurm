@@ -445,6 +445,11 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    # process_agentic_result.py reads these (distinct from the ENABLE_* launch
+    # booleans above) for agg_bmk.json's parallelism metadata; without them it
+    # defaulted to ep=1/dp_attention=false even for DEP8 arms.
+    -e PREFILL_EP=\${PREFILL_EP:-1}
+    -e PREFILL_DP_ATTN=\${PREFILL_DP_ATTN:-false}
     -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
     -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-0}
@@ -466,6 +471,9 @@ DOCKER_ENV_COMMON=(
     -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
+    # See PREFILL_EP/PREFILL_DP_ATTN comment above -- decode counterpart.
+    -e DECODE_EP=\${DECODE_EP:-1}
+    -e DECODE_DP_ATTN=\${DECODE_DP_ATTN:-false}
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
     -e DRY_RUN=\${DRY_RUN:-0}
