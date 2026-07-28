@@ -1775,13 +1775,6 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Saturation sweeps need the requested lanes to become active inside the
-    # benchmark window. Agentic replay otherwise preserves the traces' original
-    # phase-start offsets; long-lived traces can spread the initial warmup over
-    # many hours before cache-pressure warmup or profiling begins.
-    if [ "${AIPERF_BURST_PHASE_STARTS:-0}" = "1" ]; then
-        REPLAY_CMD+=" --burst-phase-starts"
-    fi
     # After the normal t* snapshot warmup, continue those exact trajectories
     # with one-token outputs and no idle delays for 10 minutes. Profiling begins
     # only after those requests drain and resumes from the resulting live state.
