@@ -1,0 +1,412 @@
+#!/usr/bin/env bash
+set -euo pipefail
+set -x
+
+# Agentic trace replay benchmark for Kimi-K3 MXFP4 on MI355X / MI350X (gfx950)
+# using vLLM.
+#
+# The server command is the AMD reference `vllm serve` for this model, i.e. the
+# upstream vLLM recipe's amd block (vllm-project/recipes,
+# models/moonshotai/Kimi-K3.yaml, date_updated 2026-07-25) as run in practice:
+#
+#   --trust-remote-code --moe-backend auto --tensor-parallel-size 8
+#   --load-format auto --gpu-memory-utilization 0.95 --mm-encoder-tp-mode data
+#   --max-num-seqs 128 --max-num-batched-tokens 4096 --enable-auto-tool-choice
+#   --tool-call-parser kimi_k3 --reasoning-parser kimi_k3
+#
+# with env VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1
+# AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0.
+#
+# The DRAM-offload arm adds LMCache's LMCacheMPConnector against a local
+# `lmcache server`, again matching the reference command.
+#
+# K3 is a 2.8T-parameter natively-multimodal MoE (896 routed experts, 16/token
+# plus shared) on Kimi Delta Attention, gated MLA and Attention Residuals, with
+# a 1M-token native context.
+#
+# TP=8 ONLY. The MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
+# safetensors), ~195 GB/GPU across 8 GPUs of the 288 GB part; TP=4 would need
+# ~390 GB/GPU and cannot load. Upstream strategy_min_gpus agrees (single_node_tp
+# and multi_node_tep both 8, DEP 16+), which is why there is no DP-attention arm.
+#
+# Required env vars:
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
+#   EP_SIZE
+#
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=lmcache. Mooncake is
+# deliberately unsupported: the upstream recipe marks both
+# kv_store_distributed_mooncake and kv_store_centralized_mooncake as
+# `unsupported` on every hardware target for this model.
+#
+# Perf-search knobs. Each defaults to the reference command's value, so an
+# otherwise-unset run reproduces the reference exactly:
+#   GPU_MEM_UTIL             0.95   (reference)
+#   MAX_NUM_SEQS             128    (reference)
+#   MAX_NUM_BATCHED_TOKENS   4096   (reference)
+#   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
+#   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
+#   KV_CACHE_DTYPE           auto   (unset -> flag not passed at all)
+#   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
+#   SPEC_DECODE              false  (DSpark; UNVALIDATED on ROCm)
+
+source "$(dirname "$0")/../../benchmark_lib.sh"
+
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+fi
+
+if [ "$TP" -ne 8 ]; then
+    echo "Error: Kimi-K3 MXFP4 is a 1.56 TB checkpoint and only fits at TP=8 on" >&2
+    echo "       288 GB gfx950 parts (~195 GB/GPU). Got TP=$TP." >&2
+    exit 1
+fi
+
+# ROCR/HIP visibility for vLLM 0.14+
+if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
+    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+fi
+
+# `hf download` creates the target dir if missing and is itself idempotent. The
+# 1.56 TB checkpoint is normally pre-staged, so these calls are a no-op there.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
+
+rocm-smi || true
+amd-smi || true
+
+# ---- Resolve traces and install deps ----------------------------------------
+# kimik3* is on resolve_trace_source's unfiltered allowlist (benchmark_lib.sh),
+# so this replays the full 062126 v7 corpus rather than the 256k-capped variant.
+resolve_trace_source
+install_agentic_deps
+
+# ---- Reference env block ----------------------------------------------------
+export VLLM_ROCM_USE_AITER=1
+export SAFETENSORS_FAST_GPU=1
+# AITER a8w4 MoE path for the MXFP4-weight / MXFP8-activation QAT checkpoint.
+# Upstream: "set AITER_SITUV2_A8W4 to 0 along with AITER master flag to use
+# aiter a16w4 MoE path. Set it to 1 to use aiter a8w4 MoE path." Swept.
+export AITER_SITUV2_A8W4="${AITER_A8W4:-1}"
+export AITER_BF16_FP8_MOE_BOUND=0
+# REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+
+# Workaround for MEC FW <177 RCCL memory reclaim issue (shared with the other
+# gfx950 recipes in this tree).
+mec_version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
+if [[ "$mec_version" == "" || ${mec_version:-0} -lt 177 ]]; then
+    export HSA_NO_SCRATCH_RECLAIM=1
+fi
+
+# 2.8T of weights off a shared/NFS mount takes far longer than the default.
+export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
+
+# Long agentic turns against a 1M context: keep the client from timing out
+# mid-request while the server is prefill-bound.
+export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+
+# ---- Server config ----------------------------------------------------------
+SERVER_LOG="$RESULT_DIR/server.log"
+LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+mkdir -p "$RESULT_DIR"
+
+SERVER_PID=""
+LMCACHE_PID=""
+
+cleanup_agentic_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$LMCACHE_PID" "LMCache server"
+    exit "$exit_code"
+}
+trap cleanup_agentic_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+wait_for_lmcache_ready() {
+    { set +x; } 2>/dev/null
+    local attempts="${LMCACHE_READY_ATTEMPTS:-180}"
+    for ((i = 1; i <= attempts; i++)); do
+        if curl --output /dev/null --silent --fail \
+                "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
+            echo "LMCache server healthy after ${i}s"
+            set -x
+            return 0
+        fi
+        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            echo "LMCache server died before becoming healthy. Log follows:" >&2
+            cat "$LMCACHE_LOG" >&2 || true
+            exit 1
+        fi
+        sleep 1
+    done
+    echo "Timed out waiting for LMCache healthcheck. Log follows:" >&2
+    cat "$LMCACHE_LOG" >&2 || true
+    exit 1
+}
+
+# ---- KV offload -------------------------------------------------------------
+# TOTAL_CPU_DRAM_GB is the aggregate host-DRAM budget the matrix generator
+# derives from dram-utilization and the runner's available-cpu-dram-mib, capped
+# at the 2,861,022 MiB (3 TB decimal) agentic limit. Per
+# benchmarks/single_node/agentic/README.md it must be consumed as given and
+# never replaced with a model-specific constant.
+OFFLOAD_ARGS=()
+
+if agentic_kv_offload_enabled; then
+case "${KV_OFFLOAD_BACKEND:-}" in
+  lmcache)
+    require_agentic_kv_offload_backend lmcache
+
+    # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
+    # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
+    # bind-mounted /workspace, so a later job's `clean: true` checkout does not
+    # trip over root-owned build artifacts.
+    #
+    # The matrix passes kv-offload-backend as JSON in KV_OFFLOAD_BACKEND_METADATA
+    # (e.g. {"name":"lmcache","version":"<sha>"}). Honour its `version` as the
+    # build ref so a version A/B is a config change rather than a recipe edit;
+    # an explicit LMCACHE_GIT_REF still wins, and the pin below is the fallback.
+    LMCACHE_CFG_VERSION=""
+    if [ -n "${KV_OFFLOAD_BACKEND_METADATA:-}" ]; then
+        LMCACHE_CFG_VERSION=$(KV_META="$KV_OFFLOAD_BACKEND_METADATA" python3 -c '
+import json, os
+try:
+    d = json.loads(os.environ["KV_META"])
+    print(d.get("version", "") if isinstance(d, dict) else "")
+except Exception:
+    print("")
+' 2>/dev/null || true)
+    fi
+
+    if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
+        LMCACHE_SRC_DIR="${LMCACHE_SRC_DIR:-/opt/lmcache-src}"
+        # Default pin = LMCache dev HEAD as of 2026-07-28. The server flags this
+        # recipe passes (--max-gpu-workers / --max-cpu-workers / --l1-align-bytes
+        # / --eviction-trigger-watermark) only exist on recent dev: they come
+        # from lmcache/v1/multiprocess/config.py and
+        # lmcache/v1/distributed/config.py, not the older --max-workers CLI.
+        LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-${LMCACHE_CFG_VERSION:-cd9a0ad5325c7d52c825ed17aac6185d5c520e44}}"
+        echo "Building LMCache at ref: $LMCACHE_GIT_REF"
+        rm -rf "$LMCACHE_SRC_DIR"
+        git clone https://github.com/LMCache/LMCache.git "$LMCACHE_SRC_DIR"
+        ( cd "$LMCACHE_SRC_DIR"
+          git checkout "$LMCACHE_GIT_REF"
+          pip install -r requirements/build.txt
+          CXX=hipcc BUILD_WITH_HIP=1 pip install -e . --no-build-isolation )
+        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+    fi
+
+    LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
+    LMCACHE_PORT="${LMCACHE_PORT:-5555}"
+    LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+
+    # L1 is SHM-backed: if it exceeds free /dev/shm, LMCache silently disables
+    # SHM and falls back to a pickle path that crashes at load. Cap at 90% of
+    # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
+    # is the number that actually backs the run.
+    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+    SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+    if [ -n "$SHM_FREE_GB" ] && [ "$SHM_FREE_GB" -gt 0 ]; then
+        SHM_CAP_GB=$(( SHM_FREE_GB * 90 / 100 ))
+        if [ "$LMCACHE_L1_SIZE_GB" -gt "$SHM_CAP_GB" ]; then
+            echo "WARNING: capping LMCACHE_L1_SIZE_GB ${LMCACHE_L1_SIZE_GB} -> ${SHM_CAP_GB}" \
+                 "to fit /dev/shm (${SHM_FREE_GB}G free). The offload pool for this" \
+                 "cell is ${SHM_CAP_GB}G, not the ${TOTAL_CPU_DRAM_GB}G the matrix budgeted."
+            LMCACHE_L1_SIZE_GB="$SHM_CAP_GB"
+        fi
+    fi
+
+    LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+    # --max-gpu-workers 1 avoids concurrent-GPU-transfer stalls under heavy
+    # async-load pressure; CPU-side workers stay at 8.
+    LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-1}"
+    LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-8}"
+    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-1024}"
+    LMCACHE_L1_ALIGN_BYTES="${LMCACHE_L1_ALIGN_BYTES:-16384}"
+    LMCACHE_EVICTION_WATERMARK="${LMCACHE_EVICTION_WATERMARK:-0.85}"
+    LMCACHE_EVICTION_RATIO="${LMCACHE_EVICTION_RATIO:-0.10}"
+    LMCACHE_MQ_TIMEOUT="${LMCACHE_MQ_TIMEOUT:-300}"
+    # Identical prefixes must hash to identical block keys across ranks.
+    export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+
+    echo "Starting LMCache MP server..."
+    LMCACHE_CMD=(
+        lmcache server
+        --host "$LMCACHE_HOST"
+        --port "$LMCACHE_PORT"
+        --http-host "$LMCACHE_HOST"
+        --http-port "$LMCACHE_HTTP_PORT"
+        --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+        --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+        --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
+        --max-cpu-workers "$LMCACHE_MAX_CPU_WORKERS"
+        --chunk-size "$LMCACHE_CHUNK_SIZE"
+        --l1-align-bytes "$LMCACHE_L1_ALIGN_BYTES"
+        --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
+        --eviction-ratio "$LMCACHE_EVICTION_RATIO"
+        --eviction-policy LRU
+        --supported-transfer-mode lmcache_driven
+    )
+    printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
+    printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
+    "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
+    LMCACHE_PID=$!
+    echo "LMCache server PID: $LMCACHE_PID"
+    wait_for_lmcache_ready
+
+    # LMCacheMPConnector is registered in this image's vLLM (verified against
+    # KVConnectorFactory), so no kv_connector_module_path is needed.
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+    )
+    ;;
+  mooncake)
+    echo "Error: Mooncake is unsupported for Kimi-K3. The upstream recipe marks" >&2
+    echo "       kv_store_{distributed,centralized}_mooncake as 'unsupported' on" >&2
+    echo "       every hardware target for this model." >&2
+    exit 1
+    ;;
+  *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: lmcache)" >&2
+    exit 1
+    ;;
+esac
+fi
+
+# ---- Parallelism ------------------------------------------------------------
+# TP8 or TEP8. No DP-attention arm: upstream strategy_min_gpus.multi_node_dep is
+# 16, so DEP is not a single-node strategy for this model.
+EP_ARGS=()
+if [ "$EP_SIZE" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
+# ---- Multimodal vs text-only ------------------------------------------------
+# The reference command loads the vision tower and passes --mm-encoder-tp-mode
+# data, so that is the default here. --language-model-only is an upstream
+# opt_in_feature ("skip the vision encoder for text-only workloads") and the
+# agentic corpus never sends an image, so it is a swept axis.
+#
+# Note this build's help describes the flag more narrowly than upstream's
+# phrasing: "disables all multimodal inputs by setting all modality limits to 0.
+# Equivalent to setting --limit-mm-per-prompt to 0 for every modality" -- input
+# gating, which does not by itself guarantee the vision tower goes unloaded.
+# Whether it returns HBM to the KV pool is measured by comparing
+# "model weights take N GiB" in server.log across both settings. Upstream marks
+# it mutually exclusive with encoder parallelism, so --mm-encoder-tp-mode is
+# only passed when multimodal inputs are enabled.
+LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"
+MM_ARGS=(--mm-encoder-tp-mode data)
+if [ "$LANGUAGE_MODEL_ONLY" = "true" ]; then
+    MM_ARGS=(--language-model-only)
+fi
+
+# ---- Optional axes ----------------------------------------------------------
+# Only emitted when set away from the reference, so the default command line is
+# byte-for-byte the reference one.
+#
+# fp8 KV halves bytes/token in the pool, which moves the KV-capacity wall itself
+# rather than just adding headroom -- the dominant effect on a prefill-heavy 1M
+# context corpus. Not on by default because K3's KV geometry is HYBRID (Kimi
+# Delta Attention state + gated-MLA latent) and fp8 across both spec types is
+# unconfirmed on this build.
+KV_CACHE_DTYPE_ARGS=()
+if [ -n "${KV_CACHE_DTYPE:-}" ] && [ "${KV_CACHE_DTYPE}" != "auto" ]; then
+    KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
+fi
+
+# Left unset by default so vLLM derives K3's native 1M context, which is what
+# the unfiltered corpus needs. Set explicitly only to test truncation effects.
+MAX_MODEL_LEN_ARGS=()
+if [ -n "${MAX_MODEL_LEN:-}" ] && [ "${MAX_MODEL_LEN}" != "0" ]; then
+    MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
+fi
+
+# The reference command passes neither --enable-prefix-caching nor
+# --no-enable-prefix-caching, and this build's default is None (vLLM decides
+# internally), so by default we pass nothing and stay aligned. Two reasons this
+# is a knob rather than a hardcode: agentic trace replay exists to exercise
+# large shared prefixes, so the resolved value must be confirmed from
+# server.log; and K3 is hybrid (Kimi Delta Attention + gated MLA), where block
+# and hash sizes only align with prefix caching on -- an omission has been
+# reported to trip "tokens_per_block not divisible by tokens_per_hash" at load.
+# Set PREFIX_CACHING=true/false to force it either way.
+PREFIX_CACHE_ARGS=()
+if [ "${PREFIX_CACHING:-}" = "true" ]; then
+    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+elif [ "${PREFIX_CACHING:-}" = "false" ]; then
+    PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
+fi
+
+# The upstream DSpark config pins "attention_backend": "FLASHINFER_MLA", which
+# is CUDA-only and cannot be used verbatim on gfx950; SPEC_ATTN_BACKEND
+# overrides it. Golden AL on B300 is 3.78 at 7 draft tokens
+# (golden_al_distribution/kimik3_dspark.yaml), so this is the largest decode-side
+# lever if it can be made to run here.
+SPEC_ARGS=()
+if [ "${SPEC_DECODE:-false}" = "true" ]; then
+    SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
+    SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
+    SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-TRITON_MLA}"
+    SPEC_ARGS=(
+        --speculative-config
+        "{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    )
+fi
+
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
+
+echo "Starting vllm server..."
+export PYTHONNOUSERSITE=1
+
+{ set +x; } 2>/dev/null
+VLLM_CMD=(
+    vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
+    --host 0.0.0.0
+    --port "$PORT"
+    --trust-remote-code
+    --moe-backend auto
+    --tensor-parallel-size "$TP"
+    "${EP_ARGS[@]}"
+    --load-format auto
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
+    "${MM_ARGS[@]}"
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
+    --enable-auto-tool-choice
+    --tool-call-parser kimi_k3
+    --reasoning-parser kimi_k3
+    "${MAX_MODEL_LEN_ARGS[@]}"
+    "${PREFIX_CACHE_ARGS[@]}"
+    "${KV_CACHE_DTYPE_ARGS[@]}"
+    "${SPEC_ARGS[@]}"
+    "${OFFLOAD_ARGS[@]}"
+)
+printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
+printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
+"${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+SERVER_PID=$!
+echo "Server PID: $SERVER_PID"
+
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
