@@ -1766,7 +1766,20 @@ build_replay_cmd() {
     # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
     export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
-    REPLAY_CMD+=" --url http://localhost:$PORT"
+    if declare -p AIPERF_ENDPOINT_URLS &>/dev/null; then
+        local endpoint_url
+        local -a endpoint_urls
+        IFS=',' read -r -a endpoint_urls <<< "$AIPERF_ENDPOINT_URLS"
+        for endpoint_url in "${endpoint_urls[@]}"; do
+            if [ -z "$endpoint_url" ] || [[ "$endpoint_url" == *[[:space:]]* ]]; then
+                echo "ERROR: AIPERF_ENDPOINT_URLS must be a comma-separated list of non-empty URLs" >&2
+                return 1
+            fi
+            REPLAY_CMD+=" --url $endpoint_url"
+        done
+    else
+        REPLAY_CMD+=" --url http://localhost:$PORT"
+    fi
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"

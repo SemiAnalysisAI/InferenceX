@@ -89,11 +89,28 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
     trap 'exit 143' TERM
 
     allocated_nodelist=$(squeue -j "$job_id" -h -o %N)
-    head_node=$(scontrol show hostnames "$allocated_nodelist" | sed -n '1p')
+    allocated_nodes=$(scontrol show hostnames "$allocated_nodelist")
+    head_node=$(sed -n '1p' <<< "$allocated_nodes")
     if [[ -z "$head_node" ]]; then
         echo "Failed to resolve native multi-node head node" >&2
         exit 1
     fi
+    server_nodes="$head_node"
+    if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
+        server_nodes="$allocated_nodes"
+    fi
+    endpoint_urls=
+    metrics_urls=
+    for server_node in $server_nodes; do
+        if [[ -n "$endpoint_urls" ]]; then
+            endpoint_urls+=","
+            metrics_urls+=","
+        fi
+        endpoint_urls+="http://$server_node:$PORT"
+        metrics_urls+="http://$server_node:$PORT/metrics"
+    done
+    export AIPERF_ENDPOINT_URLS="$endpoint_urls"
+    export AIPERF_SERVER_METRICS_URLS="$metrics_urls"
 
     srun --jobid="$job_id" --nodes=1 --ntasks=1 --nodelist="$head_node" bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
@@ -130,7 +147,14 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
     server_step_pid=$!
 
     for ((attempt = 1; attempt <= 720; attempt++)); do
-        if curl --output /dev/null --silent --fail "http://$head_node:$PORT/health"; then
+        servers_ready=true
+        for server_node in $server_nodes; do
+            if ! curl --output /dev/null --silent --fail "http://$server_node:$PORT/health"; then
+                servers_ready=false
+                break
+            fi
+        done
+        if [[ "$servers_ready" == "true" ]]; then
             break
         fi
         if ! kill -0 "$server_step_pid" 2>/dev/null; then
