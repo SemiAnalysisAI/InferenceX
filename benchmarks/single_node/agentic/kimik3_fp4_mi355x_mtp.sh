@@ -12,12 +12,14 @@ set -x
 #   - --enable-prefix-caching is required; K3 is hybrid (69 KDA + 24 gated MLA)
 #     and vLLM asserts tokens_per_block % tokens_per_hash without it.
 #   - speculative-config drops "attention_backend": "FLASHINFER_MLA" -- absent on
-#     ROCm, rejected by platforms/rocm.py. Server runs TRITON_ATTN.
+#     ROCm, rejected by platforms/rocm.py; replaced with TRITON_MLA, not dropped.
 #   - lazy_offload is a JSON boolean; bool("false") is True in Python.
 #
-# Acceptance follows docs/PR_REVIEW_CHECKLIST.md rule 10: throughput points
-# simulate acceptance at the committed golden AL from
-# golden_al_distribution/kimik3_dspark.yaml, EVAL_ONLY verifies for real.
+# Acceptance DEVIATES from docs/PR_REVIEW_CHECKLIST.md rule 10 and needs codeowner
+# sign-off: rule 10 wants throughput points to simulate acceptance at the
+# committed golden AL, but rejection_sample_method synthetic page-faults during
+# CUDA graph capture on gfx950, so every row runs block (real verification)
+# instead. See the SPEC_CONFIG block below for the measurements and consequences.
 #
 # TP=8 only: the ~1.56 TB checkpoint needs ~195 GB/GPU of 288 GB HBM.
 # On ROCm the draft runs the NVIDIA dspark_mla implementation (no amd/dspark*.py
@@ -135,13 +137,34 @@ if [ "$MAX_SEQS" -gt 32 ]; then MAX_SEQS=32; fi
 # page faults in dmesg.
 SPEC_ATTN_BACKEND="TRITON_MLA"
 
-# Throughput pins synthetic acceptance to the golden AL. EVAL_ONLY uses real
-# target verification (rejection_sample_method block, as the official recipe).
-if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
-else
-    SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$GOLDEN_AL}"
-fi
+# rejection_sample_method is "block" on EVERY row, including throughput.
+#
+# THIS DEVIATES FROM docs/PR_REVIEW_CHECKLIST.md RULE 10, which requires agentic
+# spec-decode throughput points to simulate acceptance via synthetic rejection
+# sampling pinned to the committed golden AL. It is a deliberate, temporary
+# deviation and needs codeowner sign-off; it is not an oversight.
+#
+# Reason: with "synthetic" this recipe cannot start at all on gfx950. The server
+# page-faults during CUDA graph capture, reproducibly at step 2/5, right after
+# "Compile and warming up model for size N" -> c10::AcceleratorError
+# hipErrorIllegalAddress, with the engine dying in _initialize_kv_caches.
+# Reproduced at conc 1 at both --max-num-batched-tokens 16384 (runs/30343017203)
+# and 4096 (runs/30344670346), so batch size is not the trigger. No wvSplitK
+# frames, so it is also distinct from the skinny-GEMM fault the non-MTP recipe
+# hits at conc <= 5.
+#
+# "block" (real target verification, as the official recipe uses) is the only
+# configuration measured working on this hardware: verified on 8x MI355X with
+# TRITON_MLA pinned - server reaches ready, returns coherent completions, and
+# dmesg shows no page faults.
+#
+# Consequence for the data: throughput rows now run REAL verification, so their
+# acceptance length is whatever the draft actually achieves rather than the
+# committed golden AL. Those numbers are therefore NOT comparable to other
+# agentic spec-decode entries in the changelog until synthetic works and this is
+# reverted. The golden AL guard above is deliberately retained so the committed
+# target still cannot drift silently and restoring synthetic is a one-line change.
+SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
