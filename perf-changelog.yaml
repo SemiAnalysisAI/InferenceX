@@ -5173,3 +5173,12 @@
     - "Bring-up validated in run 30326393603: all 12 configs green, zero ServerDisconnectedError after the keep-alive fix. GPU KV resolves to 42.23 GiB / 3,249,215 tokens, i.e. ~3.1 max-length requests, against MAX_NUM_SEQS = 2*CONC."
     - "Measured behaviour: below conc 8 the GPU-resident and DRAM arms are within run-to-run noise (1-5%). At conc 16 and 24 the GPU-resident arm thrashes -- prefix cache hit rate 2.7%, TTFT p50 86s and 191s, 49.6 and 54.9 output tok/s -- because the working set exceeds GPU KV and prefixes are recomputed. The DRAM arm holds TTFT p50 0.85s and 6.2s for 245.0 and 260.6 output tok/s (4-5x), with the CPU tier serving a 62% external prefix cache hit rate at conc 24. The high-conc GPU-resident points are retained deliberately as the honest baseline that makes the offload gain legible."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2386
+
+- config-keys:
+    - kimik3-fp4-mi300x-vllm-agentic
+  description:
+    - "Add an opt-in native Slurm path for aggregated Kimi K3 AgentX on two 8xMI300X nodes with TP8 x PP2, EP1, and concurrency 1/2/4/8"
+    - "Fail closed on the exact aggregate topology, complete and revision-matched node-local model snapshots, eight gfx942 GPUs per node, and independently validated node-local Enroot squash images"
+    - "Keep AITER_SITUV2_A8W4 caller-configurable pending exact-shape gfx942 validation, and never download the approximately 1.5 TB target checkpoint inside a benchmark job"
+    - "Preserve the existing single-node MI300X launcher unless NATIVE_MULTINODE=1, with bounded host-owned artifact handoff and signal/failure cleanup"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
