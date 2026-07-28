@@ -90,7 +90,15 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
 
     allocated_nodelist=$(squeue -j "$job_id" -h -o %N)
     allocated_nodes=$(scontrol show hostnames "$allocated_nodelist")
-    head_node=$(sed -n '1p' <<< "$allocated_nodes")
+    # Slurm task rank order is not guaranteed to match scontrol's hostname order.
+    head_node=$(
+        srun \
+            --jobid="$job_id" \
+            --nodes="$node_count" \
+            --ntasks="$node_count" \
+            --ntasks-per-node=1 \
+            bash -c 'if [[ "$SLURM_PROCID" == "0" ]]; then hostname; fi'
+    )
     if [[ -z "$head_node" ]]; then
         echo "Failed to resolve native multi-node head node" >&2
         exit 1
