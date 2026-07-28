@@ -7,7 +7,7 @@ set -x
 #
 # Recipe: https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=mi355x
 # (vllm-project/recipes#684 -> hardware_overrides.amd). Deviations, all measured:
-#   - gpu-memory-utilization 0.90, not 0.95: only ~271 GiB is free at the
+#   - gpu-memory-utilization 0.88, not 0.95: only ~271 GiB is free at the
 #     worker's startup check, below the 273.59 GiB that 0.95 demands.
 #   - --enable-prefix-caching is required; K3 is hybrid (69 KDA + 24 gated MLA)
 #     and vLLM asserts tokens_per_block % tokens_per_hash without it.
@@ -219,12 +219,16 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format auto
     --moe-backend auto
-    # 0.90, NOT the upstream recipe's 0.95: MI355X reports 287.98 GiB total but
-    # only ~271 GiB free at startup (~17 GiB driver/framework overhead), so 0.95
-    # (273.59 GiB) hard-fails before KV sizing with "Free memory on device cuda:N
-    # ... is less than desired GPU memory utilization". Measured on g17; 0.90 is
-    # also what every other MI355X recipe here uses.
-    --gpu-memory-utilization 0.90
+    # 0.88, NOT the upstream recipe's 0.95: MI355X reports 287.98 GiB total but
+    # only ~271 GiB free at the worker's startup check (~17 GiB driver/framework
+    # overhead), so 0.95 (273.59 GiB) hard-fails before KV sizing with "Free
+    # memory on device cuda:N ... is less than desired GPU memory utilization".
+    # Measured ceiling is ~0.94. Held at 0.88 rather than the 0.90 the non-MTP
+    # recipe uses: the resident DSpark draft plus its own state consume HBM on top
+    # of the ~195 GB/GPU of target weights (GPU KV drops 2,204,913 -> 1,723,308
+    # tokens with the draft loaded), and leaked-VRAM incidents on this fleet have
+    # repeatedly left GPUs a few GiB short of the threshold.
+    --gpu-memory-utilization 0.88
     # K3's full 1M native context, matching the unfiltered corpus that
     # resolve_trace_source now picks for kimik3*.
     --max-model-len 1048576
