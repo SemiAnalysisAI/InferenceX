@@ -21,11 +21,14 @@ set -x
 # mount and no download happens on the runner. The download block below only
 # covers stand-alone runs.
 #
-# KV_OFFLOADING: `none` only. Kimi-K3 is a KDA/MLA hybrid — its linear-attention
-# (KDA) layers carry a recurrent state rather than a paged KV cache, and
-# SimpleCPUOffloadConnector has no hybrid-geometry handling (it offloads uniform
-# paged blocks). The DRAM-offload arm is deferred until that interaction is
-# validated on-node; see the PR description.
+# KV_OFFLOADING: `none` (GPU-resident) or `dram` with
+# KV_OFFLOAD_BACKEND=vllm-simple (SimpleCPUOffloadConnector).
+#
+# Note on the DRAM arm: Kimi-K3 is a KDA/MLA hybrid — its linear-attention (KDA)
+# layers carry a recurrent state rather than paged KV blocks, and
+# SimpleCPUOffloadConnector offloads uniform paged blocks with no
+# hybrid-geometry handling. The arm is expected to offload only the MLA layers'
+# paged blocks; watch the bring-up sweep for KV-geometry errors at server init.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -36,9 +39,6 @@ if [ "$TP" -ne 8 ]; then
     echo "Error: Kimi-K3 on B300 requires TP=8 (a ~1.5 TB MXFP4 checkpoint does not fit at TP<8), got TP='$TP'" >&2
     exit 1
 fi
-
-# GPU-resident only for now; a dram arm needs the hybrid-KV work noted above.
-require_agentic_kv_offload_none
 
 if [[ -n "${EP_SIZE:-}" && "${EP_SIZE}" -gt 1 ]]; then
     echo "Error: this recipe ships the pure-TP8 profile; EP_SIZE='$EP_SIZE' is not wired yet" >&2
@@ -79,6 +79,36 @@ export PYTHONNOUSERSITE=1
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+# ---- KV offloading ----------------------------------------------------------
+# The generated TOTAL_CPU_DRAM_GB budget is the aggregate host-DRAM pool for the
+# node; SimpleCPUOffloadConnector is sized per rank. At dram-utilization 0.63 on
+# cluster:b300-nv this resolves to ~220 GiB per rank across the 8 TP ranks.
+OFFLOAD_ARGS=()
+case "${KV_OFFLOAD_BACKEND:-}" in
+    "")
+        require_agentic_kv_offload_none
+        ;;
+    vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
+        # Identical prefixes must hash to identical block keys run-to-run.
+        export PYTHONHASHSEED=42
+        # lazy_offload must be a JSON boolean, not a quoted string: the
+        # connector does bool(extra_config.get("lazy_offload", False)), and
+        # bool("false") is True in Python — a quoted "false" would silently
+        # turn lazy offload ON. Eager offload keeps block-hash behaviour
+        # aligned with the other B300 vllm-simple arms.
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
+        )
+        ;;
+    *)
+        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty or vllm-simple)" >&2
+        exit 1
+        ;;
+esac
+
 # Agentic fan-out: keep the scheduler headroom convention shared by the other
 # agentic recipes. Capture decode graphs only up to that batch size — a 93-layer
 # 2.8T model makes capturing vLLM's full 2048-wide ladder prohibitively slow.
@@ -109,6 +139,7 @@ VLLM_CMD=(
     --attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
     --max-cudagraph-capture-size "$MAX_NUM_SEQS"
     --disable-uvicorn-access-log
+    "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
