@@ -120,7 +120,7 @@ backend:
       attention-config: '{"mla_prefill_backend": "FLASHINFER", "use_prefill_query_quantization": true}'
       max-num-seqs: 64
       enable-prefix-caching: true
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.93
 
 sbatch_directives:
   mem: "0"
