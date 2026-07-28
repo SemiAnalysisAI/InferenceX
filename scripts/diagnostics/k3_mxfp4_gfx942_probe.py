@@ -66,8 +66,12 @@ def cuda_memory(label: str) -> None:
 def quantize_weight(
     shape: tuple[int, int, int],
     packed_shape: tuple[int, int, int],
+    pattern: str,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    source = torch.randn(shape, dtype=dtypes.bf16, device="cuda")
+    if pattern == "constant":
+        source = torch.full(shape, 0.03125, dtype=dtypes.bf16, device="cuda")
+    else:
+        source = torch.randn(shape, dtype=dtypes.bf16, device="cuda")
     quantize = aiter.get_torch_quant(QuantType.per_1x32)
     packed, scale = quantize(source, quant_dtype=dtypes.fp4x2)
     del source
@@ -101,18 +105,26 @@ def main() -> None:
         aiter_version = getattr(aiter, "__version__", "unknown")
 
     torch.manual_seed(20260728)
+    pattern = os.environ.get("K3_PROBE_PATTERN", "random").strip().lower()
+    if pattern not in {"constant", "random"}:
+        raise ValueError(f"unsupported K3_PROBE_PATTERN={pattern!r}")
     torch.cuda.reset_peak_memory_stats()
     print(
         "K3_MXFP4_KERNEL_ENV"
         f" gfx={get_gfx()} cu={get_cu_num()} aiter={aiter_version}"
         f" torch={torch.__version__} hip={torch.version.hip}"
         " mode=a16w4-separated"
+        f" pattern={pattern}"
         f" shape=M{TOKENS}xD{MODEL_DIM}xI{INTER_DIM}xE{EXPERTS}xK{TOPK}",
         flush=True,
     )
     cuda_memory("start")
 
-    hidden = torch.randn((TOKENS, MODEL_DIM), dtype=dtypes.bf16, device="cuda")
+    hidden = (
+        torch.full((TOKENS, MODEL_DIM), 0.5, dtype=dtypes.bf16, device="cuda")
+        if pattern == "constant"
+        else torch.randn((TOKENS, MODEL_DIM), dtype=dtypes.bf16, device="cuda")
+    )
     topk_ids = torch.arange(TOPK, dtype=dtypes.i32, device="cuda").view(TOKENS, TOPK)
     topk_weights = torch.full(
         (TOKENS, TOPK), 1.0 / TOPK, dtype=dtypes.fp32, device="cuda"
@@ -122,11 +134,13 @@ def main() -> None:
     w1, w1_scale = quantize_weight(
         (EXPERTS, INTER_DIM * 2, MODEL_DIM),
         (EXPERTS, INTER_DIM * 2, MODEL_DIM // 2),
+        pattern,
     )
     cuda_memory("w1-quantized")
     w2, w2_scale = quantize_weight(
         (EXPERTS, MODEL_DIM, INTER_DIM),
         (EXPERTS, MODEL_DIM, INTER_DIM // 2),
+        pattern,
     )
     torch.cuda.synchronize()
     print(

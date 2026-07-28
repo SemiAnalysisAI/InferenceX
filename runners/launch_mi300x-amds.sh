@@ -21,7 +21,7 @@ set -x
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
-    AITER_OVERLAY_REF="ecef4ad9396aa3d640976b2adf8cd17012af31da"
+    AITER_OVERLAY_REF="0e0dca63f866eb00e1dcf7ba1ff6da3f3ac78dd0"
     AITER_OVERLAY_DIR="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
 
     download_aiter_overlay() {
@@ -62,7 +62,7 @@ PY
         "a778cbe2d666afe791562a266485cb48f2637f7ec583330f088e4a0962e1486d"
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
-        "e12b93224fccf4793a0c8c1d229650432d51526f0ce0a4e184707f2f55d887ec"
+        "12ecefe55e188232166ddc34fe182464c26d1bff278196f7f72078ac5cab9cdd"
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
         "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
@@ -158,7 +158,7 @@ PY
         --no-container-entrypoint \
         bash -lc '
             set -euo pipefail
-            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-ecef4ad9396aa3d640976b2adf8cd17012af31da
+            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-0e0dca63f866eb00e1dcf7ba1ff6da3f3ac78dd0-constant
             mkdir -p "$FLYDSL_RUNTIME_CACHE_DIR"
             echo "K3_FLYDSL_CACHE dir=$FLYDSL_RUNTIME_CACHE_DIR"
             aiter_root=$(python -c \
@@ -180,7 +180,7 @@ PY
                 "$aiter_root/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
                 "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py" \
                 "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
-            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=ecef4ad9396aa3d640976b2adf8cd17012af31da"
+            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=0e0dca63f866eb00e1dcf7ba1ff6da3f3ac78dd0"
 
             python - <<"PY"
 import importlib.metadata
@@ -273,6 +273,7 @@ PY
             echo "K3_MXFP4_SOURCE_CONTRACT_END"
 
             export AITER_SITUV2_A8W4=0
+            export K3_PROBE_PATTERN=constant
             timeout --signal=TERM --kill-after=30s 1200s \
                 python /workspace/scripts/diagnostics/k3_mxfp4_gfx942_probe.py
         '
