@@ -5180,4 +5180,4 @@
     - "Add DeepSeek-V4-Pro FP4 B200 disaggregated Dynamo vLLM MTP benchmarks for 8k/1k"
     - "Add five srt-slurm recipes covering low-latency and high-throughput topologies from 1P1D through 3P1D"
     - "Pin the DSV4 Dynamo vLLM launch to the srt-slurm main branch"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2390
