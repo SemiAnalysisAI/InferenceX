@@ -56,7 +56,6 @@ frontend:
 backend:
   type: vllm
   connector: null
-  dp_launch_mode: per_node
   aggregated_environment:
     HF_HUB_CACHE: "/hf_hub_cache"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
@@ -88,7 +87,7 @@ backend:
       load-format: "fastsafetensors"
       moe-backend: "deep_gemm_mega_moe"
       all2all-backend: "flashinfer_nvlink_one_sided"
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.98
       max-num-seqs: 128
       max-num-batched-tokens: 16384
       language-model-only: true

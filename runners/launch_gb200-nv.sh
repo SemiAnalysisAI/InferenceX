@@ -358,8 +358,7 @@ fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses the same pinned cquil11/srt-slurm-nv commit as
-    # launch_gb300-nv.sh — everything the agentic recipes need is there:
+    # Agentic multi-node pins cquil11/srt-slurm-nv revisions that provide:
     #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
     #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
     #   - DynamoConfig.wheel (recipes pin the ai-dynamo wheel)
@@ -369,14 +368,15 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     #     must reach the agentic_srt.sh srun)
     git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
     if [[ "$MODEL_PREFIX" == "kimik3" ]]; then
+        # Kimi K3 additionally needs vLLM TP groups within data parallel and
+        # every DP engine metrics endpoint exposed to AIPerf.
+        git checkout b1fb626fbdbfe3306dcb51cb181ab35861ec3b1c
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
-        git apply \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimi-k3-vllm-tp-dp-per-node.patch"
     else
+        git checkout de59739b172e507e15ebf145bfe305f606e82fbf
         mkdir -p recipes/vllm/deepseek-v4/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
             recipes/vllm/deepseek-v4/agentic
