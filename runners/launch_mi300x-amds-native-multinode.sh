@@ -11,6 +11,9 @@ KIMIK3_CLEANUP_POLL_SECONDS="${KIMIK3_CLEANUP_POLL_SECONDS:-2}"
 export KIMIK3_MODEL_CACHE_ROOT KIMIK3_SQUASH_DIR
 export PORT="${PORT:-8888}"
 
+HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-/hf-hub-cache}"
+
 fail() {
     echo "ERROR: $*" >&2
     exit 1
@@ -323,7 +326,7 @@ srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \
     --no-container-mount-home \
     --no-container-entrypoint \
     --container-workdir=/workspace \
-    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
     --export=ALL \
     bash -c "$CLIENT_WORKER_SCRIPT" &
 CLIENT_PID=$!
