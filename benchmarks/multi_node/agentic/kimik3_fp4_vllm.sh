@@ -40,7 +40,9 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format "$LOAD_FORMAT"
     --moe-backend "$VLLM_MOE_BACKEND"
-    --gpu-memory-utilization 0.95
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.99
+    --attention-config '{"use_prefill_query_quantization":true}'
     --enable-prefix-caching
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
@@ -49,9 +51,6 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
 )
 
-if [ "$PREFILL_PP_SIZE" -gt 1 ]; then
-    VLLM_CMD+=(--attention-backend FLASHMLA)
-fi
 if [[ "$VLLM_DISABLE_FLASHINFER_AUTOTUNE" == "1" ]]; then
     VLLM_CMD+=(--no-enable-flashinfer-autotune)
 fi
