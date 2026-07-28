@@ -186,6 +186,19 @@ if any(supported.values()):
 else:
     print("K3_MXFP4_METADATA_RESULT status=no-gfx942-dispatch")
 PY
+
+            echo "K3_MXFP4_RUNTIME_ENV_BEGIN"
+            env | sort | grep -E "^(AITER|ATOM|VLLM|ROCM|HIP).*MOE|^AITER_SITUV2_A8W4=" || true
+            echo "K3_MXFP4_RUNTIME_ENV_END"
+
+            echo "K3_MXFP4_SOURCE_CONTRACT_BEGIN"
+            grep -R -n \
+                --include="*.py" \
+                -E "AITER_SITUV2_A8W4|ATOM_MOE_GU_ITLV|GateMode\\.(INTERLEAVE|SEPARATED)|gate_mode=|shuffle_weight_a16w4|ActivationType\\.Situv2" \
+                /usr/local/lib/python3.12/dist-packages/vllm \
+                /usr/local/lib/python3.12/dist-packages/aiter \
+                2>/dev/null | head -n 400 || true
+            echo "K3_MXFP4_SOURCE_CONTRACT_END"
         '
 
     echo "K3_MXFP4_METADATA_PREFLIGHT complete job_id=$DIAG_JOB_ID"
