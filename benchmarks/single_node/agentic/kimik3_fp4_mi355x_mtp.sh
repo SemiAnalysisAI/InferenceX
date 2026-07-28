@@ -323,6 +323,7 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
+    --language-model-only
     # Prefix caching is MANDATORY here and passed explicitly, not left to the
     # default: measured on gfx950, omitting it still trips
     #   AssertionError: tokens_per_block=1048576 not divisible by
