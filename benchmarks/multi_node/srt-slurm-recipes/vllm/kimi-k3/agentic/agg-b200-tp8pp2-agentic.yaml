@@ -1,4 +1,4 @@
-name: "kimik3-vllm-agg-b200-tp8pp2-simplecpu-agentic"
+name: "kimik3-vllm-agg-b200-tp8pp2-simplecpu-retention-agentic"
 
 # Kimi-K3 MXFP4 B200 AGGREGATED TP8 x PP2 agentic recipe (2 nodes / 16 GPUs).
 # The native MXFP4 checkpoint (2.8T total params, ~1.4TB of weights) does not
@@ -73,6 +73,13 @@ backend:
     # 300-second model-execution default.
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    # Prefix-cache retention (variant F). NOT the GB recipes' 32768: Kimi-K3's
+    # KDA hybrid gives a scheduler_block_size of 3145728 and the engine
+    # hard-rejects any value that is not a multiple of it (verified on this
+    # PR family: "VLLM_PREFIX_CACHE_RETENTION_INTERVAL (32768) must be
+    # non-negative and a multiple of scheduler_block_size (3145728)").
+    # 3145728 = one scheduler block, the smallest valid retention interval.
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "3145728"
     # No VLLM_PREFIX_CACHE_RETENTION_INTERVAL: the GB200/GB300 AgentX value
     # (32768) hard-fails engine init on Kimi-K3 — the KDA hybrid gives it a
     # scheduler_block_size of 3145728 and the interval must be a multiple of
