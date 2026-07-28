@@ -626,12 +626,13 @@ kimik3-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-      # 0.95 of the runner's available-cpu-dram-mib (3_095_781), which the matrix
-      # generator caps at the 2,861,022 MiB / 3 TB-decimal agentic limit -> 2849 GB
-      # aggregate at TP8, leaving ~397 GB host headroom. Not 1.0: the LMCache
-      # dsv4 recipe records that full-budget pinned pools OOM-killed the node,
-      # and pinned host memory is unswappable.
-    - dram-utilization: 0.95
+      # 0.93 of the runner's available-cpu-dram-mib (3_095_781), which the matrix
+      # generator caps at the 2,861,022 MiB / 3 TB-decimal agentic limit. Reduced
+      # from 0.95: at 0.95 the eager offload pool committed 2771 GiB and left only
+      # ~12 GiB host free (measured on real weights), which is far too close to a
+      # host OOM. Pinned host memory is unswappable, and the dsv4 LMCache recipe
+      # records full-budget pools OOM-killing the node.
+    - dram-utilization: 0.93
       search-space:
       # TP=8 only: the ~1.56 TB MXFP4 checkpoint needs ~195 GB/GPU of the
       # 288 GB HBM, so TP=4 (~390 GB/GPU) cannot load.
@@ -641,22 +642,13 @@ kimik3-fp4-mi355x-vllm-agentic:
       # offload backend shipped here because it needs no KV block/hash alignment,
       # unlike OffloadingConnector, which constrains K3's hybrid KDA+MLA geometry.
       #
-      # conc 1/4/8/16/32 straddles the KV cliff for this corpus: measured on-GPU
-      # KV is 2,204,913 tokens, i.e. only 2.10x concurrency for a 1M-token
-      # request, so against the unfiltered 062126 corpus the host tier starts
-      # being exercised from roughly conc 3 upward. conc 1 is the
-      # offload-path-overhead baseline; conc 32 also matches the official
-      # recipe's fixed --max-num-seqs 32 exactly, since --max-num-seqs tracks CONC.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16, 32] }
-      # TEP8 (TP8 + expert parallelism, no DP-attention) at the two highest conc
-      # points, on top of the EP1 ladder so the same conc can be compared directly.
-      # Measured on real weights: EP8 buys only +1.9% GPU KV headroom
-      # (2,246,948 vs 2,204,913 tokens; 2.14x vs 2.10x for a 1M-token request),
-      # because at TP8 the MoE weights are already sharded across all ranks --
-      # EP changes the partition axis, not per-rank bytes. Any win must therefore
-      # come from the all-to-all vs all-reduce path and expert-kernel efficiency,
-      # which is exactly what these two points measure.
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [16, 32] }
+      # conc 1/2/4/8. Measured at conc 16/32 on this corpus, interactivity is
+      # already floored at 2.6-2.9 output tok/s/user with ITL 353-384 ms and TTFT
+      # 189-601 s: mean ISL is 117k-155k tokens (p99 559k-810k) against ~500-token
+      # outputs, so the run is prefill-bound and aggregate KV (2.5-3.8M tokens)
+      # overruns the 2,204,913-token GPU pool. The low end is where per-user
+      # interactivity is still meaningful; conc 1 is the offload-overhead baseline.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
