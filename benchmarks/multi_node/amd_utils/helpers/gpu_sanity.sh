@@ -13,7 +13,7 @@ set -uo pipefail
 # Fail the node if any single GPU still has >= this many GB used.
 GPU_BUSY_GB="${GPU_BUSY_GB:-8}"
 # Poll a few times to give docker stop time to release VRAM before judging.
-GPU_DRAIN_TRIES="${GPU_DRAIN_TRIES:-6}"
+GPU_DRAIN_TRIES="${GPU_DRAIN_TRIES:-12}"
 
 if ! command -v rocm-smi >/dev/null 2>&1; then
     echo "[gpu-sanity] rocm-smi not found on $(hostname); skipping GPU check" >&2
@@ -21,11 +21,24 @@ if ! command -v rocm-smi >/dev/null 2>&1; then
 fi
 
 busy_gb=0
+busy_gpus=""
 for _ in $(seq "$GPU_DRAIN_TRIES"); do
-    used=$(rocm-smi --showmeminfo vram --json 2>/dev/null \
+    if ! mapfile -t _used_bytes < <(rocm-smi --showmeminfo vram --json 2>/dev/null \
         | grep -oE '"VRAM Total Used Memory \(B\)": "[0-9]+"' \
-        | grep -oE '[0-9]+' | sort -n | tail -1)
-    busy_gb=$(( ${used:-0} / 1024 / 1024 / 1024 ))
+        | grep -oE '[0-9]+'); then
+        _used_bytes=()
+    fi
+    busy_gb=0
+    busy_gpus=""
+    idx=0
+    for used in "${_used_bytes[@]}"; do
+        gb=$(( used / 1024 / 1024 / 1024 ))
+        if (( gb >= GPU_BUSY_GB )); then
+            busy_gpus+=" gpu${idx}=${gb}GB"
+            (( busy_gb < gb )) && busy_gb=$gb
+        fi
+        idx=$((idx + 1))
+    done
     if [ "$busy_gb" -lt "$GPU_BUSY_GB" ]; then
         exit 0
     fi
@@ -33,6 +46,6 @@ for _ in $(seq "$GPU_DRAIN_TRIES"); do
 done
 
 echo "FATAL: $(hostname) GPU still has ${busy_gb}GB used after stopping all containers" >&2
-echo "       (threshold ${GPU_BUSY_GB}GB) -- a bare (non-containerized) process is hogging the GPU:" >&2
+echo "       (threshold ${GPU_BUSY_GB}GB; busy:${busy_gpus}) -- a bare (non-containerized) process is hogging the GPU:" >&2
 rocm-smi --showpids >&2 || true
 exit 1

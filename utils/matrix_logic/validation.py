@@ -875,6 +875,13 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
+    eval_min_prefill_ep: Optional[int] = Field(
+        alias="eval-min-prefill-ep", default=None, ge=1,
+        description=(
+            "When set, multinode eval rows whose prefill.ep is below this "
+            "threshold are dropped after eval selection."
+        ),
+    )
     scenario_type: Optional[List[Literal["fixed-seq-len", "agentic-coding"]]] = Field(
         alias="scenario-type", default=None, min_length=1,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"

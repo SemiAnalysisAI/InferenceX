@@ -2301,11 +2301,11 @@ class TestGenerateTestConfigSweep:
         assert len(result) == 5
         assert [entry["conc"] for entry in result] == [[16], [32], [64], [128], [256]]
         assert [entry["exp-name"] for entry in result] == [
-            "dsv4_p2x4_d1x4_conc16",
-            "dsv4_p2x4_d1x4_conc32",
-            "dsv4_p2x4_d1x4_conc64",
-            "dsv4_p2x4_d1x4_conc128",
-            "dsv4_p2x4_d1x4_conc256",
+            "dsv4_p2x4ep4_d1x4_conc16",
+            "dsv4_p2x4ep4_d1x4_conc32",
+            "dsv4_p2x4ep4_d1x4_conc64",
+            "dsv4_p2x4ep4_d1x4_conc128",
+            "dsv4_p2x4ep4_d1x4_conc256",
         ]
         assert result[0]["prefill"]["pp"] == 2
         assert result[0]["prefill"]["dcp-size"] == 2
