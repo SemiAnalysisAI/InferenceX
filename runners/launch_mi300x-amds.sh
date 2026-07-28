@@ -132,6 +132,7 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
             export HF_HUB_CACHE="$cache"
             export HF_HOME="$cache/.hf-home"
             export HF_XET_CACHE="$cache/.xet"
+            export HF_ENDPOINT=https://huggingface.co
             export HF_HUB_DISABLE_PROGRESS_BARS=1
             unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
             mkdir -p "$cache" "$HF_HOME" "$HF_XET_CACHE"
@@ -146,8 +147,10 @@ import pathlib
 import sys
 
 from huggingface_hub import snapshot_download
+from huggingface_hub.constants import ENDPOINT
 
 revision = sys.argv[1]
+print(f"K3_STAGE_HF_ENDPOINT endpoint={ENDPOINT}", flush=True)
 snapshot = snapshot_download(
     repo_id="moonshotai/Kimi-K3",
     revision=revision,
