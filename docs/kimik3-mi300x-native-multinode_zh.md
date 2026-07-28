@@ -63,6 +63,8 @@ CONC_LIST=<1 2 4 8 之一>   IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
 |---|---|---|
 | `KIMIK3_MODEL_CACHE_ROOT` | `/raid/hf-hub-cache/models--moonshotai--Kimi-K3` | 节点本地模型缓存 |
 | `KIMIK3_SQUASH_DIR` | `/raid/hf-hub-cache/inferencex/squash` | 节点本地镜像目录 |
+| `HF_HUB_CACHE_MOUNT` | `/raid/hf-hub-cache` | client HF 缓存挂载的宿主机侧路径 |
+| `HF_HUB_CACHE` | `/hf-hub-cache` | 容器侧路径；AgentX 在此缓存 trace 语料 |
 | `KIMIK3_SLURM_TIME_MINUTES` | `480` | allocation 墙钟时间 |
 | `KIMIK3_STARTUP_TIMEOUT_SECONDS` | `7200` | 等待 `/health` 的上限 |
 | `KIMIK3_CLEANUP_TIMEOUT_SECONDS` | `120` | 清理时等待作业消失的上限 |

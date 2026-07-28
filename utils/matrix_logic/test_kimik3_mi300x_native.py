@@ -590,6 +590,8 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     client = next(line for line in lines if "agentic_srt.sh" in line)
     assert "--overlap" in client
     assert "--nodelist=node-a" in client
+    # The trace corpus download needs a persistent node-local HF cache.
+    assert "/raid/hf-hub-cache:/hf-hub-cache" in client
 
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
 
