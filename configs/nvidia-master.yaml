@@ -8393,7 +8393,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-dspark-agentic.yaml"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-dspark-retention0-agentic.yaml"
         # The aggregate worker also performs decode; keep the decode worker
         # count at zero so result aggregation counts the 16 GPUs only once.
         decode:
