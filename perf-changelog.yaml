@@ -5153,4 +5153,4 @@
     - "Agentic experiment Variant I (of the #2359 direct-vllm Variant D): DSpark speculative decoding with the Inferact/Kimi-K3-DSpark draft head — num_speculative_tokens 7, FLASHINFER_MLA attention backend, probabilistic draft sampling + block rejection sampling (the #2366 acceptance-rate optimization), synthetic_acceptance_length 3.84 = the committed golden AL for this exact sampling config at k=7 (#2368's golden_al_distribution curve, measured in run 30316471205). Conc curve widened to 1/2/4/8/16/32; spec-decoding labeled dspark (new schema value alongside mtp/draft_model)"
     - "Agentic experiment Variant J (of the #2376 DSpark Variant I): identical DSpark-at-golden-AL config plus VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0 (the only setting below one 3.1M-token KDA-hybrid scheduler block; positive values must be multiples of scheduler_block_size 3145728)"
     - "Recipe: benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-dspark-retention0-agentic.yaml on the cluster:b200-dgxc pool"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2379
