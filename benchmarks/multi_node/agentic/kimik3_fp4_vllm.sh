@@ -24,7 +24,6 @@ if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
 fi
 
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
-export VLLM_FASTSAFETENSORS_QUEUE_SIZE=-1
 export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONNOUSERSITE=1
 
@@ -36,7 +35,7 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format fastsafetensors
     --moe-backend "$VLLM_MOE_BACKEND"
-    --gpu-memory-utilization 0.982
+    --gpu-memory-utilization 0.95
     --enable-prefix-caching
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
@@ -45,14 +44,14 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
 )
 
+if [ "$PREFILL_PP_SIZE" -gt 1 ]; then
+    VLLM_CMD+=(--attention-backend FLASHMLA)
+fi
 if [[ "$VLLM_DISABLE_FLASHINFER_AUTOTUNE" == "1" ]]; then
     VLLM_CMD+=(--no-enable-flashinfer-autotune)
 fi
 if [[ "$VLLM_DISABLE_CUSTOM_ALL_REDUCE" == "1" ]]; then
     VLLM_CMD+=(--disable-custom-all-reduce)
-fi
-if [ "$PREFILL_DCP_SIZE" -gt 1 ]; then
-    VLLM_CMD+=(--decode-context-parallel-size "$PREFILL_DCP_SIZE")
 fi
 
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
