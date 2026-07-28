@@ -76,7 +76,7 @@ if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
 fi
 
 # ---- upstream recipe: hardware_overrides.amd extra_env -----------------------
-export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER=0
 export SAFETENSORS_FAST_GPU=1
 # AITER a8w4 MoE path for the MXFP4-weight/MXFP8-activation QAT checkpoint.
 # Set to 0 to fall back to the AITER a16w4 MoE path.
