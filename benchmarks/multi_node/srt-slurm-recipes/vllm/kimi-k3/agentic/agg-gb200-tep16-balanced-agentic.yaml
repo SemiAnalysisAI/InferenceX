@@ -1,32 +1,28 @@
 name: "kimi-k3-vllm-agg-gb200-tep16-balanced-agentic"
 
 # Day-0 GB200 translation of the official balanced multi_node_tep profile.
-# Dense layers and MoE experts are sharded across 16 GPUs on four GB200 nodes,
-# leaving enough HBM for the default BF16 KV cache.
+# Dense layers and MoE experts are sharded across 16 GPUs on four GB200 nodes
+# with the official FP8 KV cache.
 # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
 
 model:
   path: "kimi-k3"
-  container: "vllm/vllm-openai:kimi-k3"
+  container: "nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.0-kimi-k3-dev.1"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:kimi-k3"
+    image: "nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.0-kimi-k3-dev.1"
   frameworks:
-    dynamo: "1.3.0.dev20260618"
+    dynamo: "1.4.0-kimi-k3-dev.1"
 
 dynamo:
-  install: true
-  wheel: "1.3.0.dev20260618"
+  install: false
 
 environment:
-  DYNAMO_WHEEL_DIRS: "/srtctl-wheels"
   ETCD_LEASE_TTL: "7200"
-
-setup_script: vllm-container-deps.sh
 
 slurm:
   time_limit: "8:00:00"
@@ -50,8 +46,12 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
+    dyn-chat-processor: "dynamo"
     router-mode: "kv"
-    router-reset-states: true
+    router-kv-events: true
+    router-temperature: "0"
+    router-min-initial-workers: 1
+    kv-cache-block-size: 64
 
 backend:
   type: vllm
@@ -63,9 +63,10 @@ backend:
     VLLM_ENGINE_READY_TIMEOUT_S: "7200"
     VLLM_RPC_TIMEOUT: "600000"
     VLLM_LOG_STATS_INTERVAL: "1"
-    VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_USE_RUST_FRONTEND: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "0"
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
@@ -74,6 +75,8 @@ backend:
     UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     NCCL_P2P_LEVEL: "NVL"
+    NVIDIA_GDRCOPY: "1"
+    PYTORCH_ALLOC_CONF: "expandable_segments:True"
     DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-tep16-{job_id}"
   vllm_config:
     aggregated:
@@ -83,12 +86,25 @@ backend:
       enable-expert-parallel: true
       trust-remote-code: true
       load-format: "fastsafetensors"
+      safetensors-load-strategy: "lazy"
+      kv-cache-dtype: "fp8"
+      attention-backend: "FLASHINFER_MLA"
+      attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
       moe-backend: "flashinfer_trtllm"
+      kda-prefill-backend: "flashkda"
+      kernel-config: '{"enable_cutedsl_warmup":true}'
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.95
       max-num-seqs: 32
       max-num-batched-tokens: 8192
+      block-size: 64
       language-model-only: true
+      disable-custom-all-reduce: true
+      enable-prefix-caching: true
+      scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
+      dyn-tool-call-parser: "kimi_k3"
+      reasoning-parser: "kimi_k3"
+      dyn-reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true
       compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
 
