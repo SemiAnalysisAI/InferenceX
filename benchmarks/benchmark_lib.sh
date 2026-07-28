@@ -1249,15 +1249,23 @@ PYGEN
         slice_args=(--slice "0:${EVAL_LIMIT}")
     fi
 
+    # Optional instance-ID regex filter (re.match anchored at start).
+    # Set SWEBENCH_AGENT_FILTER to run only a subset of instances.
+    local filter_args=()
+    if [ -n "${SWEBENCH_AGENT_FILTER:-}" ]; then
+        filter_args=(--filter "$SWEBENCH_AGENT_FILTER")
+    fi
+
     export MSWEA_COST_TRACKING=ignore_errors
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-250} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-250} slice=${EVAL_LIMIT:-full} filter=${SWEBENCH_AGENT_FILTER:-none} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
         --subset lite --split test \
         --environment-class swerex_modal \
         "${slice_args[@]}" \
+        "${filter_args[@]}" \
         -w "${SWEBENCH_AGENT_WORKERS:-${CONC:-64}}" \
         -o "$gen_dir/agent_out" &
     local mini_pid=$!

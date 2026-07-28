@@ -10,6 +10,14 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# ---- DEBUG: restrict this run to just two SWE-bench instances ----------------
+# Validating the reasoning-parser fix (interleaved <mm:think> round-trip) on the
+# two instances that previously degenerated into command-repeat loops. Remove
+# these two exports to restore a full 300-instance sweep.
+export SWEBENCH_AGENT_FILTER='django__django-(11630|15498)$'
+export SWEBENCH_EXPECTED_INSTANCES=2
+# -----------------------------------------------------------------------------
+
 check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
@@ -111,7 +119,16 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
-    --reasoning-parser minimax_m3
+    # NOTE: --reasoning-parser minimax_m3 is intentionally OMITTED.
+    # MiniMax-M3 is an interleaved-thinking model: its <mm:think>...</mm:think>
+    # block MUST be round-tripped back into the conversation history every turn
+    # or multi-turn quality collapses (the model loses its plan and degenerates
+    # into repeating the same command until the step limit -> empty patch).
+    # The reasoning parser moves <mm:think> out of message.content into the
+    # response-only reasoning_content field, which the mini-swe-agent/litellm
+    # OpenAI client does NOT resend. Leaving the parser off keeps the think block
+    # inline in message.content, so the client preserves it across turns. The
+    # tool-call parser above still extracts tool calls from the full output.
     --max-num-seqs "$CONC"
     "${OFFLOAD_ARGS[@]}"
 )
