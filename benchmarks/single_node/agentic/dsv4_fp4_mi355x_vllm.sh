@@ -410,16 +410,13 @@ else
 fi
 CONTEXT_LEN=1048576
 
-# The LMCache MP server (kv_buffer_device=cuda) holds GPU staging memory on
-# every device before vLLM starts, so only ~256/288 GiB is free at init. At
-# --gpu-memory-utilization 0.95 vLLM requests 273.6 GiB and hard-fails
-# ("Free memory ... less than desired GPU memory utilization"). Derate the
-# lmcache arm to leave headroom above the LMCache footprint; other arms keep
-# the full 0.95.
-GPU_MEM_UTIL=0.95
-if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ]; then
-    GPU_MEM_UTIL=0.85
-fi
+# These MI355X nodes have a stable ~32 GiB/GPU carveout: only ~256/288 GiB is
+# free at init, independent of the KV-offload backend (observed identically on
+# both the lmcache and GPU-resident kv-none arms). At
+# --gpu-memory-utilization 0.95 vLLM requests 273.6 GiB and every DP worker
+# hard-fails ("Free memory ... less than desired GPU memory utilization"), so
+# cap utilization at 0.85 (244.8 GiB, ~11 GiB headroom).
+GPU_MEM_UTIL=0.85
 
 echo "Starting vllm server..."
 set -x
