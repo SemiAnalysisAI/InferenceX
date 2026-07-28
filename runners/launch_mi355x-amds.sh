@@ -306,6 +306,14 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
+    # Kimi-K3's MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
+    # safetensors) and does not fit the node-local /var/lib NVMe hub cache
+    # alongside anything else, so it is pre-staged once on the NFS share like
+    # MiniMax-M3.
+    if [[ "$MODEL" == moonshotai/Kimi-K3* ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
