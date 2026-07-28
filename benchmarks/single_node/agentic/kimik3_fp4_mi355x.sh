@@ -253,16 +253,18 @@ except Exception:
     # is the number that actually backs the run.
     LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
 
-    # Hard ceiling on the eager allocation. Memory pinning is unavailable in the
-    # ROCm container ("CudaPinMemoryBackend: neither torch cudart nor libcudart
-    # is available"), so LMCache disables its LazyMemoryAllocator and allocates
-    # the ENTIRE L1 pool before serving a single request. The agentic budget is
-    # therefore not a ceiling, it is an upfront cost: measured on gfx950, a
-    # 2249 GB pool had still not finished after 178 s, while 512 GB was healthy
-    # in 40 s. 512 is also what the AMD reference command uses. Raise
-    # LMCACHE_L1_MAX_GB only once lazy allocation works on this platform.
-    LMCACHE_L1_MAX_GB="${LMCACHE_L1_MAX_GB:-512}"
-    if [ "$LMCACHE_L1_SIZE_GB" -gt "$LMCACHE_L1_MAX_GB" ]; then
+    # Optional ceiling on the eager allocation. Memory pinning is unavailable in
+    # the ROCm container ("CudaPinMemoryBackend: neither torch cudart nor
+    # libcudart is available"), so LMCache disables its LazyMemoryAllocator and
+    # allocates the ENTIRE L1 pool before serving a request.
+    #
+    # Default is NO ceiling, matching kimik2.7_fp4_mi355x.sh, which sizes L1 to
+    # TOTAL_CPU_DRAM_GB capped only by /dev/shm and successfully ran a 1199 GB
+    # pool on this same fleet. The agentic README also requires consuming
+    # TOTAL_CPU_DRAM_GB rather than substituting a model-specific constant. Set
+    # LMCACHE_L1_MAX_GB to impose one (the AMD reference command uses 512).
+    LMCACHE_L1_MAX_GB="${LMCACHE_L1_MAX_GB:-0}"
+    if [ "$LMCACHE_L1_MAX_GB" -gt 0 ] && [ "$LMCACHE_L1_SIZE_GB" -gt "$LMCACHE_L1_MAX_GB" ]; then
         echo "WARNING: capping LMCACHE_L1_SIZE_GB ${LMCACHE_L1_SIZE_GB} -> ${LMCACHE_L1_MAX_GB}" \
              "(eager allocation ceiling). The offload pool for this cell is" \
              "${LMCACHE_L1_MAX_GB}G, NOT the ${TOTAL_CPU_DRAM_GB}G the matrix budgeted."
@@ -293,24 +295,57 @@ except Exception:
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
 
-    echo "Starting LMCache MP server..."
-    LMCACHE_CMD=(
-        lmcache server
-        --host "$LMCACHE_HOST"
-        --port "$LMCACHE_PORT"
-        --http-host "$LMCACHE_HOST"
-        --http-port "$LMCACHE_HTTP_PORT"
-        --l1-size-gb "$LMCACHE_L1_SIZE_GB"
-        --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
-        --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
-        --max-cpu-workers "$LMCACHE_MAX_CPU_WORKERS"
-        --chunk-size "$LMCACHE_CHUNK_SIZE"
-        --l1-align-bytes "$LMCACHE_L1_ALIGN_BYTES"
-        --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
-        --eviction-ratio "$LMCACHE_EVICTION_RATIO"
-        --eviction-policy LRU
-        --supported-transfer-mode lmcache_driven
-    )
+    # Two server profiles. `reference` is the AMD K3 reference command.
+    # `k2.7` reproduces kimik2.7_fp4_mi355x.sh's server exactly -- the one
+    # configuration known to have served this agentic trace on this fleet
+    # (1199 GB L1, TP4) -- so the two can be A/B'd without a recipe edit.
+    # The K2.7 flags all still exist on LMCache dev: --max-workers lives in
+    # lmcache/v1/multiprocess/config.py alongside the newer split
+    # --max-gpu-workers/--max-cpu-workers, and --l1-read-ttl-seconds in
+    # lmcache/v1/distributed/config.py.
+    LMCACHE_PROFILE="${LMCACHE_PROFILE:-reference}"
+    echo "Starting LMCache MP server (profile=$LMCACHE_PROFILE, L1=${LMCACHE_L1_SIZE_GB}GB)..."
+    case "$LMCACHE_PROFILE" in
+      k2.7)
+        export LMCACHE_BLOCKING_TIMEOUT_SECS="${LMCACHE_BLOCKING_TIMEOUT_SECS:-60}"
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$LMCACHE_PORT"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$LMCACHE_HTTP_PORT"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+            --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
+            --chunk-size "${LMCACHE_CHUNK_SIZE_K27:-256}"
+            --max-workers "${LMCACHE_MAX_WORKERS:-$((TP * 2))}"
+            --eviction-policy LRU
+        )
+        ;;
+      reference)
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$LMCACHE_PORT"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$LMCACHE_HTTP_PORT"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
+            --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
+            --max-cpu-workers "$LMCACHE_MAX_CPU_WORKERS"
+            --chunk-size "$LMCACHE_CHUNK_SIZE"
+            --l1-align-bytes "$LMCACHE_L1_ALIGN_BYTES"
+            --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
+            --eviction-ratio "$LMCACHE_EVICTION_RATIO"
+            --eviction-policy LRU
+            --supported-transfer-mode lmcache_driven
+        )
+        ;;
+      *)
+        echo "Error: unsupported LMCACHE_PROFILE '$LMCACHE_PROFILE' (expected: reference, k2.7)" >&2
+        exit 1
+        ;;
+    esac
     printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
     printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
     "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
@@ -319,11 +354,21 @@ except Exception:
     wait_for_lmcache_ready
 
     # LMCacheMPConnector is registered in this image's vLLM (verified against
-    # KVConnectorFactory), so no kv_connector_module_path is needed.
-    OFFLOAD_ARGS=(
-        --kv-transfer-config
-        "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
-    )
+    # KVConnectorFactory), so the reference profile needs no
+    # kv_connector_module_path. The k2.7 profile passes it (and the ZMQ-style
+    # lmcache.mp.host) exactly as kimik2.7_fp4_mi355x.sh does.
+    if [ "$LMCACHE_PROFILE" = "k2.7" ]; then
+        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
+        )
+    else
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+        )
+    fi
     ;;
   mooncake)
     echo "Error: Mooncake is unsupported for Kimi-K3. The upstream recipe marks" >&2
