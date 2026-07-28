@@ -553,10 +553,6 @@ def get_tokenizer(
         return MistralTokenizer.from_pretrained(
             str(pretrained_model_name_or_path))
     else:
-        # DeepSeek-V4 ships tokenizer.json but its model_type is not
-        # registered by stock Transformers. Load that fast tokenizer directly
-        # so InferenceX's self-contained --dsv4 prompt encoder can be used
-        # without srt-slurm's separate sa_bench_tokenizers package.
         try:
             tokenizer = AutoTokenizer.from_pretrained(
                 pretrained_model_name_or_path,

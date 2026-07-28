@@ -131,7 +131,8 @@ backend:
       stream-interval: 60
 
 benchmark:
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
   isl: 8192
   osl: 1024
   random_range_ratio: 0.8

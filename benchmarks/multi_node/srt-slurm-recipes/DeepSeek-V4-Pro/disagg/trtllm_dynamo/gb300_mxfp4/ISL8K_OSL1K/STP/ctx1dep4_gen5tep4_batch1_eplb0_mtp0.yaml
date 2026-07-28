@@ -109,7 +109,8 @@ backend:
       tensor_parallel_size: 4
 
 benchmark:
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
   isl: 8192
   osl: 1024
   concurrencies: "5"

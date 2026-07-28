@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # InferenceX benchmark_serving adapter for srt-slurm's custom benchmark runner.
-# The recipe converter in runners/srt_slurm_benchmark_config.py supplies the
-# environment below from the selected recipe's SA-Bench fields.
+# The recipe hydrator in runners/srt_slurm_benchmark_config.py supplies the
+# environment below from the selected recipe's throughput fields.
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ NUM_WARMUP_MULT="${NUM_WARMUP_MULT:-2}"
 USE_CHAT_TEMPLATE="${USE_CHAT_TEMPLATE:-true}"
 DSV4="${DSV4:-false}"
 TRUST_REMOTE_CODE="${TRUST_REMOTE_CODE:-true}"
-RESULT_DIR="/logs/sa-bench_isl_${ISL}_osl_${OSL}"
+RESULT_DIR="/logs/inferencex-bench_isl_${ISL}_osl_${OSL}"
 
 ensure_bench_serving_deps() {
     local deps=(aiohttp numpy tqdm transformers huggingface_hub)

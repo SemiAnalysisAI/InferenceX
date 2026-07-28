@@ -100,7 +100,8 @@ benchmark:
   isl: 8192
   osl: 1024
   req_rate: "inf"
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
   use_chat_template: true
 identity:
   model:

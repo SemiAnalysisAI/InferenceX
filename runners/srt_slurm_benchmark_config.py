@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render an srt-slurm SA-Bench recipe for InferenceX's custom benchmark."""
+"""Hydrate InferenceX srt-slurm custom benchmark recipes."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def stringify_concurrencies(concurrencies: list[int] | str | None) -> str:
 
 
 def custom_benchmark_environment(config: SrtConfig) -> dict[str, str]:
-    """Translate SA-Bench's typed settings to the custom wrapper contract."""
+    """Translate recipe settings to the custom wrapper contract."""
     benchmark = config.benchmark
     resources = config.resources
 
@@ -169,10 +169,20 @@ def custom_benchmark_environment(config: SrtConfig) -> dict[str, str]:
     }
 
 
-def convert_recipe(recipe: dict[str, Any]) -> bool:
-    """Convert an SA-Bench recipe in place; return whether it changed."""
+def hydrate_recipe(recipe: dict[str, Any]) -> bool:
+    """Hydrate an InferenceX throughput recipe; return whether it changed."""
     benchmark = recipe.get("benchmark")
-    if not isinstance(benchmark, dict) or benchmark.get("type") != "sa-bench":
+    if not isinstance(benchmark, dict):
+        return False
+
+    benchmark_type = benchmark.get("type")
+    if benchmark_type == "sa-bench":
+        benchmark["type"] = "custom"
+        benchmark["command"] = CUSTOM_BENCHMARK_COMMAND
+    elif not (
+        benchmark_type == "custom"
+        and benchmark.get("command") == CUSTOM_BENCHMARK_COMMAND
+    ):
         return False
 
     cluster_config = load_cluster_config()
@@ -183,8 +193,6 @@ def convert_recipe(recipe: dict[str, Any]) -> bool:
 
     environment = dict(benchmark.get("env") or {})
     environment.update(custom_benchmark_environment(config))
-    benchmark["type"] = "custom"
-    benchmark["command"] = CUSTOM_BENCHMARK_COMMAND
     benchmark["env"] = environment
     return True
 
@@ -196,7 +204,7 @@ def render_config(config_spec: str, output_dir: Path) -> str:
     )
     changed = False
     for _, recipe in variants:
-        changed = convert_recipe(recipe) or changed
+        changed = hydrate_recipe(recipe) or changed
     if not changed:
         return config_spec
 

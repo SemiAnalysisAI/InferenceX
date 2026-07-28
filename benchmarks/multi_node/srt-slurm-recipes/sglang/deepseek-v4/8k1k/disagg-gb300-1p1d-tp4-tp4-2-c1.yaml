@@ -156,7 +156,8 @@ backend:
       context-length: 16384
 
 benchmark:
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
   isl: 8192
   osl: 1024
   concurrencies: "1"
