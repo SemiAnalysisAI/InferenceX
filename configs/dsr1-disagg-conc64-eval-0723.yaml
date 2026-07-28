@@ -1,0 +1,37 @@
+# Repro check: DSR1-0528 MXFP4-v2 disagg conc-64 MTP on the KNOWN-BROKEN image
+# 20260723 (sglang v0.5.15.post1 + aiter 9127c94a1). Prior investigation: disagg
+# conc-64 gsm8k ~0.72. Confirms the InferenceX CI harness faithfully reproduces
+# the issue #27194 regime (1*DEP8+1*DEP8, MTP3, decode MoRI dispatch buffer 32).
+dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260723
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
+  model-prefix: dsr1
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  router: { name: sglang-router, version: "0.3.2" }
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
