@@ -21,7 +21,7 @@ set -x
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
-    AITER_OVERLAY_REF="c8009961347cf44d3fb5277af02044a1d95e9567"
+    AITER_OVERLAY_REF="1dfa2c2d67375cb630f615f90af2b3f548671097"
     AITER_OVERLAY_DIR="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
 
     download_aiter_overlay() {
@@ -59,10 +59,13 @@ PY
 
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
-        "cc5c499596223d7e2cb4cd1e216cacff3bd67f809c13f7bfaabe977ca17ac6a9"
+        "a36a476bbc43fa2961b4229b3a092176e5e3c183df9fa73012e33719f7fcba1a"
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
         "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/mfma_policy.py" \
+        "dac7aa6b2cf0e25adb2119072ca80fd708855c637efc3b98cfd8f998762d8f04"
 
     cleanup_diag() {
         local rc=$?
@@ -160,10 +163,14 @@ PY
             install -m 0644 \
                 /workspace/.aiter-k3-gfx942-overlay/lds_dma_policy.py \
                 "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py"
+            install -m 0644 \
+                /workspace/.aiter-k3-gfx942-overlay/mfma_policy.py \
+                "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
             python -m compileall -q \
                 "$aiter_root/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
-                "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py"
-            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=c8009961347cf44d3fb5277af02044a1d95e9567"
+                "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py" \
+                "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
+            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=1dfa2c2d67375cb630f615f90af2b3f548671097"
 
             python - <<"PY"
 import importlib.metadata
