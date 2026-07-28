@@ -17,6 +17,16 @@ COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
 
+# NCCL EP (NVIDIA's native MoE dispatch/combine on the NCCL Device API). Primary path is the
+# published nccl4py wheel — it bundles libnccl_ep.so's JIT runtime and pulls the matching
+# nvidia-nccl-cu13 (>= 2.30, carrying the Device API + GIN nccl.ep needs). The from-source pins
+# below are the fallback, deferred until on-metal bring-up shows the wheel is insufficient:
+# contrib/nccl_ep is absent from the v2.29.x / v2.30.4 release tags, so any such build must use
+# this post-merge master commit (which contains contrib/nccl_ep), NOT a release tag.
+COLLX_NCCL4PY_SPEC="nccl4py[cu13]==0.3.1"
+COLLX_NCCL_EP_REPO="https://github.com/NVIDIA/nccl"
+COLLX_NCCL_EP_COMMIT="9d22d5dfec8391ee65b56df139d471f8e08e921e"
+
 # Print bounded command output without maintaining a parallel failure taxonomy.
 collx_log_tail() {
   local log_path="$1"
