@@ -147,9 +147,21 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --tool-call-parser kimi_k3
     --enable-auto-tool-choice
-    # FP8 KV cache requires the prefill query quantization flag; MLA prefill
-    # runs on FlashInfer per the production recipe.
-    --attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
+    # FP8 KV cache requires the prefill query quantization flag. MLA prefill runs
+    # on TRTLLM_RAGGED per the Blackwell override in
+    # recipes.vllm.ai/moonshotai/Kimi-K3; agentic replay is prefill-dominated at
+    # ISL 105-313k, so this is the hot path.
+    #
+    # This is the only flag adopted from that upstream block. Taking the rest of
+    # it at the same time (gpu-memory-utilization 0.95, max-num-seqs 32,
+    # max-model-len 1000000, max-num-batched-tokens 32768,
+    # --no-enable-flashinfer-autotune, VLLM_USE_V2_MODEL_RUNNER=1) killed the
+    # engine core on every concurrency ~13-16 min in, during agentic warmup, with
+    # an assertion in the FlashInfer MoE runner's shared-experts output buffer
+    # (fused_moe/runner/shared_experts.py:165) firing on all 8 TP ranks at once.
+    # Everything else therefore stays on the values that ran 12/12 green in run
+    # 30326393603.
+    --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
     --max-cudagraph-capture-size "$MAX_NUM_SEQS"
     --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
