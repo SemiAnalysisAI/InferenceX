@@ -113,7 +113,8 @@ backend:
       context-length: 16384
 
 benchmark:
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   isl: 8192
   osl: 1024
   random_range_ratio: 0.8

@@ -114,7 +114,8 @@ base:
     max_attempts: 360
     interval_seconds: 10
   benchmark:
-    type: sa-bench
+    type: custom
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
     req_rate: inf
 # ################# 8k1k #################
 zip_override_mtp_8k1k_hightpt:

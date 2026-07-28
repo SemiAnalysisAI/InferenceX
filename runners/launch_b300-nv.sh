@@ -8,6 +8,8 @@ MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-01
 
 set -x
 
+source "$(dirname "${BASH_SOURCE[0]}")/srt_slurm.sh" || exit 1
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
 # Validate framework
@@ -58,57 +60,13 @@ else
     exit 1
 fi
 
-echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 SRTCTL_SETUP_SCRIPT=""
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
+if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
 fi
-
-# TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
-    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout aflowers/vllm-gb200-v0.20.0
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml ]]; then
-    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout c1b6b5c97f323baefad577d70c4e8392b6f537d9
-    mkdir -p recipes/vllm/minimax-m3
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout c1fb6989fc5aca803b4ca0f2d17d8be85fad9732
-    mkdir -p recipes/vllm/minimax-m3
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECISION == "fp4" || $PRECISION == "fp8" ) ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
-    mkdir -p recipes/vllm/minimax-m3
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    if [[ $PRECISION == "fp8" ]]; then
-        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
-    fi
-    # NVIDIA/srt-slurm#38
-    git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
-    if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
-        cp \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-            "configs/$SRTCTL_SETUP_SCRIPT"
-    fi
-else
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
-fi
+prepare_srt_slurm_checkout "$SRT_REPO_DIR" || exit 1
+cd "$SRT_REPO_DIR" || exit 1
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -189,18 +147,23 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
     sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
 fi
-SRTCTL_APPLY_ARGS=(
-    -f "$CONFIG_FILE"
-    --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
-)
 # The MTP and TP1 8k1k recipes use newer srt-slurm revisions whose preflight checks
 # model.path on this GHA login host. MiniMax-M3 NVFP4 is intentionally staged
 # under compute-node-local /scratch (as in the original B300 submission), so
 # the login host cannot stat it even though workers can. Keep this bypass
 # scoped to those recipe sets; runtime model loading still validates the path.
+PREFLIGHT_ARGS=()
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
-    SRTCTL_APPLY_ARGS+=(--no-preflight)
+    PREFLIGHT_ARGS=(--no-preflight)
 fi
+CONFIG_FILE="$(
+    prepare_inferencex_srt_benchmark_config "$CONFIG_FILE"
+)" || exit 1
+SRTCTL_APPLY_ARGS=(
+    "${PREFLIGHT_ARGS[@]}"
+    -f "$CONFIG_FILE"
+    --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
     SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi

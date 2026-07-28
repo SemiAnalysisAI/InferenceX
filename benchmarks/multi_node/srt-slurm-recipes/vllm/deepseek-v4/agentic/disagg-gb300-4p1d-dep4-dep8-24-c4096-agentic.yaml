@@ -6,7 +6,7 @@ name: "svf-vllm-disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic"
 # node. Sized for concurrency 4096 with deep_gemm_mega_moe on both workers.
 #
 # Divergence vs the 8k1k sibling:
-#   - benchmark.type:        sa-bench -> custom (hands off to agentic_srt.sh)
+#   - benchmark.type:        custom (hands off to agentic_srt.sh)
 #   - max-model-len:         removed (let vLLM derive from model config; agentic
 #                              trajectories blow past any small explicit cap)
 #   - no-enable-prefix-caching: dropped (prefix caching MUST be on for

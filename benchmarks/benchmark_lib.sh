@@ -327,7 +327,7 @@ wait_for_server_ready() {
 }
 
 # Run benchmark serving with standardized parameters
-# All parameters are required except --endpoint, --use-chat-template, --dsv4, and --trust-remote-code
+# All parameters are required except the optional parameters listed below.
 # Parameters:
 #   --model: Model name
 #   --port: Server port
@@ -346,9 +346,14 @@ wait_for_server_ready() {
 #           template. Implies --use-chat-template.
 #   --trust-remote-code: Optional flag to trust remote code from HuggingFace
 #   --server-pid: Optional server process ID to monitor during benchmark
+#   --tokenizer: Optional tokenizer name/path override
+#   --tokenizer-mode: Optional tokenizer implementation mode
+#   --host: Optional server host (default: 0.0.0.0)
+#   --request-rate: Optional request rate (default: inf)
+#   --num-warmups: Optional warmup request count (default: 2 * concurrency)
 run_benchmark_serving() {
     # In eval-only mode, skip the throughput benchmark entirely.
-    if [ "${EVAL_ONLY}" = "true" ]; then
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
         return 0
     fi
@@ -372,6 +377,9 @@ run_benchmark_serving() {
     local server_pid=""
     local tokenizer=""
     local tokenizer_mode=""
+    local host="0.0.0.0"
+    local request_rate="inf"
+    local num_warmups=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -448,6 +456,18 @@ run_benchmark_serving() {
                 tokenizer_mode="$2"
                 shift 2
                 ;;
+            --host)
+                host="$2"
+                shift 2
+                ;;
+            --request-rate)
+                request_rate="$2"
+                shift 2
+                ;;
+            --num-warmups)
+                num_warmups="$2"
+                shift 2
+                ;;
             *)
                 echo "Unknown parameter: $1"
                 return 1
@@ -500,6 +520,9 @@ run_benchmark_serving() {
     if [[ -z "$workspace_dir" ]]; then
         workspace_dir=$(pwd)
     fi
+    if [[ -z "$num_warmups" ]]; then
+        num_warmups="$((2 * max_concurrency))"
+    fi
 
     # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
     # and cap num_prompts to keep traces small.
@@ -518,18 +541,18 @@ run_benchmark_serving() {
         python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
         --model "$model"
         --backend "$backend"
-        --base-url "http://0.0.0.0:$port"
+        --base-url "http://${host}:$port"
         --dataset-name random
         --random-input-len "$input_len"
         --random-output-len "$output_len"
         --random-range-ratio "$random_range_ratio"
         --num-prompts "$num_prompts"
         --max-concurrency "$max_concurrency"
-        --request-rate inf
+        --request-rate "$request_rate"
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
-        --num-warmups "$((2 * max_concurrency))" \
+        --num-warmups "$num_warmups" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"

@@ -1,6 +1,6 @@
 # Qwen3.5-397B-A17B-NVFP4 Disaggregated 1P1D: TP4 Prefill + TP4 Decode
 # Pure tensor parallel, no expert parallel (STP)
-# 8k1k sa-bench concurrency sweep on GB300
+# 8k1k custom benchmark concurrency sweep on GB300
 #
 # Values taken from ni_experiment_config of the
 # sa-qwen-3.5-8k1k-fp4-baseline-low-latency study, row
@@ -167,7 +167,8 @@ backend:
       decode-log-interval: 50
 
 benchmark:
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   isl: 8192
   osl: 1024
   concurrencies: "1x4x8x16x32x64x256"

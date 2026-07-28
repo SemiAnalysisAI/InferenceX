@@ -116,10 +116,11 @@ backend:
       no-enable-flashinfer-autotune: true
 
 benchmark:
-  type: "sa-bench"
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   isl: 8192
   osl: 1024
   concurrencies: "4096"
   req_rate: "inf"
-  tokenizer_mode: "deepseek_v4"
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
   use_chat_template: true

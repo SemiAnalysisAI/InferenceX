@@ -103,7 +103,8 @@ base:
     max_attempts: 360
     interval_seconds: 10
   benchmark:
-    type: sa-bench
+    type: custom
+    command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
     req_rate: inf
     # MTP: EAGLE-style spec decoding is trained against chat-formatted
     # inputs — keep the chat template on explicitly rather than relying

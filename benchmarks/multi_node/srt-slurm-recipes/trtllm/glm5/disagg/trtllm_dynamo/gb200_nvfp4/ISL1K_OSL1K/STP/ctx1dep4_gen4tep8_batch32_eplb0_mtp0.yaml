@@ -95,7 +95,8 @@ backend:
           - cuda_core
       allreduce_strategy: MNNVL
 benchmark:
-  type: sa-bench
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   isl: 1024
   osl: 1024
   concurrencies: '168'

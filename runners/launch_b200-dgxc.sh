@@ -6,6 +6,8 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
+source "$(dirname "${BASH_SOURCE[0]}")/srt_slurm.sh" || exit 1
+
 # MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
 # Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
 # portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
@@ -96,49 +98,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     export SERVED_MODEL_NAME=$MODEL
 
-    echo "Cloning srt-slurm repository..."
     SRT_REPO_DIR="srt-slurm"
-    if [ -d "$SRT_REPO_DIR" ]; then
-        echo "Removing existing $SRT_REPO_DIR..."
-        rm -rf "$SRT_REPO_DIR"
-    fi
-
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout aflowers/vllm-gb200-v0.20.0
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        # Pin srt-slurm: newer commits stopped honoring the hash-pinned dynamo
-        # build and fall back to a dynamo release that is incompatible with this
-        # sglang image (worker fails at import). This is the last commit before
-        # that change. Do not float on main -- the srtctl + dynamo-install
-        # toolchain is unpinned there.
-        git checkout a98738de9b2233459b5456e9ed71af09ce893f92
-        mkdir -p recipes/sglang/dsr1/b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
-    elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout v1.0.29
-        mkdir -p recipes/trtllm/kimi-k25-nvfp4/b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/kimi-k2.5/disagg/trtllm_dynamo/b200-fp4" recipes/trtllm/kimi-k25-nvfp4/b200-fp4
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout sa-submission-q2-2026
-    fi
+    prepare_srt_slurm_checkout "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -261,6 +223,9 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
+    CONFIG_FILE="$(
+        prepare_inferencex_srt_benchmark_config "$CONFIG_FILE"
+    )" || exit 1
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 

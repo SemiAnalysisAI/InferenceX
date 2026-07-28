@@ -11,6 +11,8 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
+source "$(dirname "${BASH_SOURCE[0]}")/srt_slurm.sh" || exit 1
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # MODEL_PATH: Override with pre-downloaded paths on H100 runner
@@ -38,22 +40,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    echo "Cloning srt-slurm repository..."
     SRT_REPO_DIR="srt-slurm"
-    if [ -d "$SRT_REPO_DIR" ]; then
-        echo "Removing existing $SRT_REPO_DIR..."
-        rm -rf "$SRT_REPO_DIR"
-    fi
-
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout sa-submission-q2-2026
-    fi
+    prepare_srt_slurm_checkout "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
@@ -145,6 +134,9 @@ EOF
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
     # Raise sglang's torch-distributed TCPStore timeout from the 600s gloo default
     sed -i '/^      watchdog-timeout:/a\      dist-timeout: 1800' "${CONFIG_FILE%%:*}"
+    CONFIG_FILE="$(
+        prepare_inferencex_srt_benchmark_config "$CONFIG_FILE"
+    )" || exit 1
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h100,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 

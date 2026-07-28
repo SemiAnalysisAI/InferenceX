@@ -553,11 +553,20 @@ def get_tokenizer(
         return MistralTokenizer.from_pretrained(
             str(pretrained_model_name_or_path))
     else:
-        tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path,
-            trust_remote_code=trust_remote_code,
-            **kwargs,
-        )
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                pretrained_model_name_or_path,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
+            )
+        except ValueError as error:
+            if "deepseek_v4" not in str(error).lower():
+                raise
+            tokenizer = PreTrainedTokenizerFast.from_pretrained(
+                pretrained_model_name_or_path,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
+            )
         return _fix_tokenizer_for_sglang(tokenizer, pretrained_model_name_or_path)
 
 
