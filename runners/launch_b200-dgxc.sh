@@ -122,10 +122,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
             cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
                 recipes/vllm/kimi-k3/agentic || exit 1
-            # In-container vLLM patch for the kimi-k3 image, referenced by the
-            # recipes' setup_script field (srt-slurm mounts configs/ at /configs).
-            cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimi-k3-container-deps.sh" \
-                configs/kimi-k3-container-deps.sh || exit 1
         fi
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
