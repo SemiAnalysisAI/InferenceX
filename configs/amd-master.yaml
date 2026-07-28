@@ -626,53 +626,32 @@ kimik3-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-      # 0.80 of the runner's available-cpu-dram-mib (3_095_781), which the
-      # matrix generator caps at the 2,861,022 MiB / 3 TB-decimal agentic limit
-      # -> 2399 GB aggregate at TP8, leaving ~460 GB host headroom. Not 1.0:
-      # LMCache's L1 is pinned and therefore unswappable, and a full-budget
-      # pinned pool has OOM-killed nodes before.
-      #
-      # NOTE this is only a budget. The recipe applies a second, tighter cap at
-      # run time: L1 is SHM-backed, and if it exceeds free /dev/shm LMCache
-      # silently disables SHM and falls back to a pickle path that crashes at
-      # load. The effective pool is min(this budget, 90% of free /dev/shm), and
-      # the recipe logs a WARNING naming the value it actually used -- read that
-      # line rather than allocated_cpu_dram_gb when interpreting a result.
+      # 0.80 of the runner's available-cpu-dram-mib (3_095_781), capped by the
+      # matrix generator at the 2,861,022 MiB / 3 TB-decimal agentic limit ->
+      # 2399 GB aggregate at TP8, which SimpleCPUOffloadConnector divides into
+      # 279.28 GB per rank.
     - dram-utilization: 0.80
       search-space:
-      # TP=8 only. The MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
-      # safetensors), ~195 GB/GPU across 8 GPUs of the 288 GB part; TP=4 would
-      # need ~390 GB/GPU and cannot load. Upstream strategy_min_gpus agrees
-      # (single_node_tp: 8), and DEP needs 16+ GPUs so there is no DP-attn arm.
+      # TP=8 only: the MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
+      # safetensors), ~195 GB/GPU of the 288 GB part, so TP=4 cannot load.
+      # gpu-memory-utilization is 0.88 in the recipe, not the reference's 0.95:
+      # 0.95 asks for 273.59 of 287.98 GiB and cleared only 2 of 9 cells on this
+      # fleet, because most nodes have more than 14.4 GiB of overhead.
       #
-      # The none arm is the reference: it measures where the GPU-only KV wall
-      # actually sits for this corpus before any host tier is involved. The
-      # LMCache arm then shows what the offload path buys past that wall.
-      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16] }
-      # version pins the ref the recipe builds from source for ROCm (LMCache is
-      # not in the kimi-k3 image). It must be recent enough to carry the
-      # --max-gpu-workers / --max-cpu-workers / --l1-align-bytes /
-      # --eviction-trigger-watermark CLI the recipe passes; the recipe's own
-      # LMCACHE_GIT_REF default is this same commit.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [1, 4, 8, 16, 32] }
-      # TEP8 (TP8 + expert parallelism, no DP-attention) at the two highest
-      # concurrency points. At TP8 the MoE weights are already sharded across
-      # every rank, so EP changes the partition axis rather than per-rank bytes;
-      # any win has to come from the all-to-all vs all-reduce path and
-      # expert-kernel efficiency, which is what these two points isolate.
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [16, 32] }
+      # GPU-only, low concurrency. Measured at c8 the pool already peaks at
+      # 98.6% with a 13.8% prefix hit rate, so c8 is past the eviction crossing;
+      # c1/c2/c4 trace the region where the 1,957,290-token pool still holds the
+      # working set and no host tier is needed.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
+      # SimpleCPUOffloadConnector. LMCache cannot serve this model (its Mamba
+      # path expects [conv_state, ssm_state] and Kimi Delta Attention supplies
+      # one fused tensor), so this is the only working offload tier. Measured at
+      # c8 it lifts the prefix hit rate 13.8% -> 80.7% and drops TTFT from 193 s
+      # to 4.8 s for +70% output throughput, on a heavier ISL sample. c4 probes
+      # the crossover below which the GPU pool alone suffices; c16/c32 probe how
+      # far the 2234 GiB host tier extends the concurrency ceiling.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 32] }
 
-# Bring-up twin of kimik3-fp4-mi355x-vllm-agentic. NOT shipped -- delete once the
-# full key has produced results.
-#
-# Two cells, one per KV tier, at the same concurrency, so a short dispatch
-# answers the only questions that block the real sweep: does the reference
-# command serve K3 at all on this fleet, and does the LMCache arm survive
-# building LMCache from source (it is absent from the kimi-k3 image) plus the
-# SHM-backed L1 sizing. conc 8 because the measured GPU KV pool is 2,244,655
-# tokens = 2.14x concurrency for a 1M-token request, so c8 already exercises the
-# host tier on this corpus without being so deep that a capacity stall hides a
-# plain bring-up bug.
 # LMCache server-profile A/B for Kimi-K3. NOT shipped -- delete once one profile
 # wins. Both cells are conc 8 with prefix caching forced on, --max-num-batched-tokens
 # 768 and --chunk-size 768 (all three are hard Mamba-hybrid requirements the recipe
