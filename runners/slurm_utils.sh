@@ -41,6 +41,36 @@ copy_to_workspace() {
     echo "Copied $(basename "$source_file") to $destination_file"
 }
 
+copy_agentic_results() {
+    local source_dir="$1"
+    local workspace="$2"
+    local result_filename="$3"
+    local result_file
+    local copied=0
+
+    if [[ ! -d "$source_dir" ]]; then
+        echo "ERROR: agentic result directory not found at $source_dir" >&2
+        return 1
+    fi
+
+    while IFS= read -r -d '' result_file; do
+        copy_to_workspace \
+            "$result_file" \
+            "$workspace/$(basename "$result_file")" || return 1
+        copied=$((copied + 1))
+    done < <(
+        find "$source_dir" -maxdepth 1 -type f \
+            -name "${result_filename}_conc*.json" -print0
+    )
+
+    if [[ "$copied" -eq 0 ]]; then
+        echo "ERROR: no ${result_filename}_conc*.json results found in $source_dir" >&2
+        return 1
+    fi
+
+    echo "Copied $copied agentic result file(s)"
+}
+
 copy_eval_artifacts() {
     local eval_dir="$1"
     local workspace="$2"

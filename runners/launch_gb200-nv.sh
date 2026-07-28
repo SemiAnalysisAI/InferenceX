@@ -644,43 +644,54 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         exit 1
     fi
 
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        # The custom benchmark runs inside the compute-visible
+        # INFMAX_WORKSPACE mount. Its aggregation step writes one
+        # ${RESULT_FILENAME}_conc<N>.json there per point; stage those files
+        # back to GITHUB_WORKSPACE for the workflow guard and artifact upload.
+        copy_agentic_results \
+            "$INFMAX_WORKSPACE" \
+            "$GITHUB_WORKSPACE" \
+            "$RESULT_FILENAME" || exit 1
     else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
+        # Find all fixed-sequence result subdirectories.
+        RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
 
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
+        if [ -z "$RESULT_SUBDIRS" ]; then
+            echo "Warning: No result subdirectories found in $LOGS_DIR"
+        else
+            # Process results from all configurations
+            for result_subdir in $RESULT_SUBDIRS; do
+                echo "Processing result subdirectory: $result_subdir"
 
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
+                # Extract configuration info from directory name
+                CONFIG_NAME=$(basename "$result_subdir")
 
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
+                # Find all result JSON files
+                RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
 
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+                for result_file in $RESULT_FILES; do
+                    if [ -f "$result_file" ]; then
+                        # Extract metadata from filename
+                        # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
+                        filename=$(basename "$result_file")
+                        concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
+                        gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
+                        ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
+                        gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
 
-                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    else
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
+                        echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
+
+                        if [ -n "$ctx" ] && [ -n "$gen" ]; then
+                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
+                        else
+                            WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
+                        fi
+                        copy_to_workspace "$result_file" "$WORKSPACE_RESULT_FILE" || exit 1
                     fi
-                    copy_to_workspace "$result_file" "$WORKSPACE_RESULT_FILE" || exit 1
-                fi
+                done
             done
-        done
+        fi
     fi
 
     echo "All result files processed"
