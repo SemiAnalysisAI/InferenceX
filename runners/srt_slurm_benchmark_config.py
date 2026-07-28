@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import shlex
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +19,11 @@ from srtctl.core.config import (
 from srtctl.core.schema import SrtConfig
 
 
-CUSTOM_BENCHMARK_COMMAND = (
-    "bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh"
+CUSTOM_BENCHMARK_ENTRYPOINT = (
+    "/infmax-workspace/benchmarks/multi_node/"
+    "srt_bench_serving_entrypoint.sh"
 )
+CUSTOM_BENCHMARK_COMMAND = f"bash {CUSTOM_BENCHMARK_ENTRYPOINT}"
 
 
 def split_config_spec(config_spec: str) -> tuple[Path, str | None]:
@@ -88,7 +91,7 @@ def load_selected_recipes(
 
 
 def stringify_concurrencies(concurrencies: list[int] | str | None) -> str:
-    """Return the whitespace-separated format consumed by srt_bench.sh."""
+    """Return the entrypoint's whitespace-separated concurrency format."""
     if isinstance(concurrencies, list):
         return " ".join(str(value) for value in concurrencies)
     if concurrencies is None:
@@ -96,8 +99,8 @@ def stringify_concurrencies(concurrencies: list[int] | str | None) -> str:
     return str(concurrencies).replace("x", " ")
 
 
-def custom_benchmark_environment(config: SrtConfig) -> dict[str, str]:
-    """Translate recipe settings to the custom wrapper contract."""
+def custom_benchmark_arguments(config: SrtConfig) -> list[str]:
+    """Translate recipe settings to entrypoint arguments."""
     benchmark = config.benchmark
     resources = config.resources
 
@@ -143,30 +146,29 @@ def custom_benchmark_environment(config: SrtConfig) -> dict[str, str]:
     custom_tokenizer = benchmark.custom_tokenizer or ""
     is_deepseek_v4 = "deepseek_v4" in custom_tokenizer.lower()
 
-    return {
-        "MODEL": config.served_model_name,
-        "TOKENIZER": tokenizer,
-        "ISL": str(benchmark.isl),
-        "OSL": str(benchmark.osl),
-        "CONC_LIST": concurrencies,
-        "REQ_RATE": str(benchmark.req_rate or "inf"),
-        "DISAGG": str(resources.is_disaggregated).lower(),
-        "PREFILL_GPUS": str(prefill_gpus),
-        "DECODE_GPUS": str(decode_gpus),
-        "TOTAL_GPUS": str(total_gpus),
-        "RANDOM_RANGE_RATIO": str(benchmark.random_range_ratio or 0.8),
-        "NUM_PROMPTS_MULT": str(benchmark.num_prompts_mult or 10),
-        "NUM_WARMUP_MULT": str(
+    return [
+        config.served_model_name,
+        tokenizer,
+        str(benchmark.isl),
+        str(benchmark.osl),
+        concurrencies,
+        str(benchmark.req_rate or "inf"),
+        str(resources.is_disaggregated).lower(),
+        str(prefill_gpus),
+        str(decode_gpus),
+        str(total_gpus),
+        str(benchmark.random_range_ratio or 0.8),
+        str(benchmark.num_prompts_mult or 10),
+        str(
             benchmark.num_warmup_mult
             if benchmark.num_warmup_mult is not None
             else 2
         ),
-        "USE_CHAT_TEMPLATE": str(benchmark.use_chat_template).lower(),
-        "DSV4": str(
+        str(benchmark.use_chat_template).lower(),
+        str(
             is_deepseek_v4 and benchmark.use_chat_template
         ).lower(),
-        "TRUST_REMOTE_CODE": "true",
-    }
+    ]
 
 
 def hydrate_recipe(recipe: dict[str, Any]) -> bool:
@@ -191,9 +193,14 @@ def hydrate_recipe(recipe: dict[str, Any]) -> bool:
     if not isinstance(config, SrtConfig):
         raise TypeError("srt-slurm did not return a typed SrtConfig")
 
-    environment = dict(benchmark.get("env") or {})
-    environment.update(custom_benchmark_environment(config))
-    benchmark["env"] = environment
+    benchmark["command"] = shlex.join(
+        [
+            "bash",
+            CUSTOM_BENCHMARK_ENTRYPOINT,
+            *custom_benchmark_arguments(config),
+        ]
+    )
+    benchmark.pop("env", None)
     return True
 
 

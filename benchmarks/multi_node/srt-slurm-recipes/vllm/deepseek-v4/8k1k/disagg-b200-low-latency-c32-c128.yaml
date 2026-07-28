@@ -101,7 +101,7 @@ benchmark:
   osl: 1024
   req_rate: "inf"
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   use_chat_template: true
 identity:
   model:

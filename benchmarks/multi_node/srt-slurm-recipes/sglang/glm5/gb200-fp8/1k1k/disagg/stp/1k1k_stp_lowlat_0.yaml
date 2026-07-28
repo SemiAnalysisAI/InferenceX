@@ -123,7 +123,7 @@ health_check:
 
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   req_rate: inf
   isl: 1024
   osl: 1024

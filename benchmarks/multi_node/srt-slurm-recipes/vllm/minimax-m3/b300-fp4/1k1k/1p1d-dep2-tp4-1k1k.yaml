@@ -76,7 +76,7 @@ health_check:
 
 benchmark:
   type: custom
-  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench.sh
+  command: bash /infmax-workspace/benchmarks/multi_node/srt_bench_serving_entrypoint.sh
   isl: 1024
   osl: 1024
   concurrencies: "1x4x8x16"
