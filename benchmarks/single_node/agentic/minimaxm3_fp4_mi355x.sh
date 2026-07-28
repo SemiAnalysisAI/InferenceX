@@ -10,14 +10,6 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-# ---- DEBUG: restrict this run to just two SWE-bench instances ----------------
-# Validating the reasoning-parser fix (interleaved <mm:think> round-trip) on the
-# two instances that previously degenerated into command-repeat loops. Remove
-# these two exports to restore a full 300-instance sweep.
-export SWEBENCH_AGENT_FILTER='django__django-(11630|15498)$'
-export SWEBENCH_EXPECTED_INSTANCES=2
-# -----------------------------------------------------------------------------
-
 check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
