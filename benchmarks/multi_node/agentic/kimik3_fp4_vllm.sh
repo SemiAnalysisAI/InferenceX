@@ -18,6 +18,10 @@ for concurrency in "${CONCURRENCIES[@]}"; do
         MAX_CONCURRENCY="$concurrency"
     fi
 done
+MAX_NUM_SEQS="$MAX_CONCURRENCY"
+if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
+    MAX_NUM_SEQS=$(((MAX_CONCURRENCY + WORLD_SIZE - 1) / WORLD_SIZE))
+fi
 
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export PYTHONNOUSERSITE=1
@@ -28,6 +32,7 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
+    --load-format fastsafetensors
     --moe-backend "$VLLM_MOE_BACKEND"
     --gpu-memory-utilization 0.95
     --enable-prefix-caching
@@ -35,7 +40,7 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --language-model-only
-    --max-num-seqs "$MAX_CONCURRENCY"
+    --max-num-seqs "$MAX_NUM_SEQS"
 )
 
 if [[ "$VLLM_DISABLE_FLASHINFER_AUTOTUNE" == "1" ]]; then
