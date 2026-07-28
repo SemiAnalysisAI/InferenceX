@@ -70,6 +70,13 @@ if [[ "${PROFILE:-0}" == "1" && "${K3_ATTACH_INSPECT:-1}" == "1" ]]; then
                 "$host" "$addresses" "$getent_output" "$route_output"
             ip -4 -o addr show | sed "s/^/K3_NETWORK_ADDR host=$host /"
         '
+    srun \
+        --jobid="$NETWORK_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        python3 "$GITHUB_WORKSPACE/scripts/diagnostics/k3_node_connectivity_probe.py"
     exit 42
 fi
 
