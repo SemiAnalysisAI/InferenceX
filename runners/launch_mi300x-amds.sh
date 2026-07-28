@@ -17,8 +17,8 @@ export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 set -x
 
 # Temporary diagnostic branch only: prove that the MI300X controller can
-# create a two-node allocation and launch one Slurm task per node without
-# importing a container or loading model weights.
+# create a two-node allocation, launch one Slurm task per node, and inspect K3
+# staging without importing a container or loading model weights.
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
@@ -47,8 +47,6 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --nodes=2 \
         --ntasks=2 \
         --ntasks-per-node=1 \
-        --gres=gpu:8 \
-        --exclusive \
         --cpus-per-task=1 \
         --time=10 \
         --no-shell \
@@ -82,6 +80,52 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
                 "$host" "${SLURM_PROCID:-unknown}" "$gpu_count" "$kfd"
             [[ "$gpu_count" -ge 8 ]]
             [[ "$kfd" == "present" ]]
+        '
+
+    srun \
+        --jobid="$DIAG_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        bash -lc '
+            set -euo pipefail
+            host=$(hostname -f 2>/dev/null || hostname)
+            image=/home/gharunner/gharunners/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh
+            cache=/raid/hf-hub-cache/models--moonshotai--Kimi-K3
+            if [[ ! -d "$cache" && -d /raid/hf-hub-cache/hub/models--moonshotai--Kimi-K3 ]]; then
+                cache=/raid/hf-hub-cache/hub/models--moonshotai--Kimi-K3
+            fi
+
+            image_status=missing
+            if [[ -r "$image" ]] && unsquashfs -s "$image" >/dev/null 2>&1; then
+                image_status=valid
+            elif [[ -e "$image" ]]; then
+                image_status=invalid
+            fi
+
+            snapshot_status=missing
+            snapshot_count=0
+            safetensor_count=0
+            broken_links=0
+            if [[ -d "$cache/snapshots" ]]; then
+                snapshot_count=$(find "$cache/snapshots" -mindepth 1 -maxdepth 1 -type d | wc -l)
+                latest_snapshot=$(find "$cache/snapshots" -mindepth 1 -maxdepth 1 -type d | head -n1 || true)
+                if [[ -n "$latest_snapshot" ]]; then
+                    safetensor_count=$(find "$latest_snapshot" -maxdepth 1 -name "*.safetensors" | wc -l)
+                    broken_links=$(find -L "$latest_snapshot" -maxdepth 1 -type l | wc -l)
+                    if [[ -f "$latest_snapshot/config.json" && "$safetensor_count" -gt 0 && "$broken_links" -eq 0 ]]; then
+                        snapshot_status=present
+                    else
+                        snapshot_status=incomplete
+                    fi
+                fi
+            fi
+
+            raid_free_bytes=$(df -PB1 /raid | awk "NR==2 {print \$4}")
+            printf "K3_STAGING_PREFLIGHT host=%s image=%s cache=%s snapshots=%s safetensors=%s broken_links=%s raid_free_bytes=%s\n" \
+                "$host" "$image_status" "$snapshot_status" "$snapshot_count" \
+                "$safetensor_count" "$broken_links" "$raid_free_bytes"
         '
 
     echo "MI300X_TWO_NODE_SMOKE complete job_id=$DIAG_JOB_ID"
