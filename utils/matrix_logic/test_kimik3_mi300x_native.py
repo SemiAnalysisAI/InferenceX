@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -409,6 +410,9 @@ if [[ "$args" == *--kill-on-bad-exit=1* ]]; then
     if [[ "$mode" == exit:* ]]; then
         exit "${mode#exit:}"
     fi
+    # Recorded so a test can prove cleanup killed this step and not just the
+    # wrapper subshell waiting on it.
+    printf '%s\\n' "$$" > "$FAKE_SERVER_PID_FILE"
     # Outlive the launcher's health polling until the allocation is cancelled.
     sleep 600
     exit 0
@@ -481,6 +485,7 @@ def make_cluster(
         "GITHUB_WORKSPACE": str(workspace),
         "FAKE_CMD_LOG": str(cmd_log),
         "FAKE_PREFLIGHT_OUTPUT": str(preflight_output),
+        "FAKE_SERVER_PID_FILE": str(tmp_path / "server.pid"),
         "RUNNER_NAME": "mi300x-amds_00",
         "IMAGE": IMAGE,
         "MODEL": "moonshotai/Kimi-K3",
@@ -522,6 +527,7 @@ def make_cluster(
         "cmd_log": cmd_log,
         "env": env,
         "preflight_output": preflight_output,
+        "server_pid_file": tmp_path / "server.pid",
     }
 
 
@@ -742,6 +748,20 @@ def test_sigterm_returns_143_and_reaps_server_and_allocation(tmp_path: Path) -> 
     assert process.returncode == 143, output
     assert "stopping server step" in output
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+    # Killing the wrapper subshell that waits on the step is not the same as
+    # killing the step: that orphans both vLLM ranks on the allocated nodes.
+    server_pid = int(cluster["server_pid_file"].read_text().strip())
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.kill(server_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(server_pid, signal.SIGKILL)
+        raise AssertionError(f"server step {server_pid} outlived cleanup")
 
 
 def test_success_extracts_only_host_owned_bounded_artifacts(tmp_path: Path) -> None:
