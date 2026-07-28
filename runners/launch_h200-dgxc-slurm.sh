@@ -42,7 +42,7 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
     client_script="benchmarks/multi_node/agentic_srt.sh"
     squash_file="$image_cache_dir/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     lock_file="${squash_file}.lock"
-    container_mounts="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache"
+    container_mounts="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache,/usr/bin/git:/usr/bin/git,/usr/lib/git-core:/usr/lib/git-core"
 
     if [[ ! -d "$model_host_path" || ! -f "$server_script" ]]; then
         echo "Missing model or benchmark entrypoint: $model_host_path / $server_script" >&2
