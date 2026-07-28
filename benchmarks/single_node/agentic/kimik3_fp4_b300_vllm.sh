@@ -74,6 +74,19 @@ export VLLM_USE_RUST_FRONTEND=1
 # default readiness window even with fastsafetensors.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export PYTHONNOUSERSITE=1
+# AIPerf pins one pooled keep-alive connection per agentic session and reuses it
+# across turns, while the Rust frontend's default VLLM_HTTP_TIMEOUT_KEEP_ALIVE is
+# 5s. An inter-turn idle gap longer than that lets the client reuse a socket at
+# the moment the server closes it -> aiohttp ServerDisconnectedError -> AIPerf
+# treats it as a terminal warmup failure and aborts the whole job. This killed
+# the dram c4 arm ~15 min into run 30324907690 with a perfectly healthy server
+# (it kept serving after the client gave up). Outlast the client pool so the
+# race cannot occur. Same fix as glm5.2_fp4_b300_sglang.sh's
+# SGLANG_TIMEOUT_KEEP_ALIVE=900.
+export VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900
+# Agentic warmup dispatches large prompts at once; allow up to 15 minutes of TCP
+# progress before AIPerf declares a connection dead.
+export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
