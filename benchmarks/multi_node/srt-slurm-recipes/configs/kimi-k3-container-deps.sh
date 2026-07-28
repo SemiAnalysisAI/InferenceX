@@ -94,3 +94,114 @@ def _infmax_pp1_draft_view(parallel_config):
 path.write_text(src)
 print(f"Patched draft-model PP verification: {path}")
 PY
+
+# DSpark under pipeline parallelism, part 2: transport aux hidden states
+# across PP stages. The K3 DSpark head consumes aux hidden states from five
+# target layers (target_layer_ids [2, 23, 47, 71, 89]); the target model
+# captures them per PP stage, so with TP8xPP2 the layers-2/23 captures live
+# on stage 0 and never reach the last-stage drafter (whose
+# combine_hidden_states expects hidden_size x 5). This build's V2 runner
+# already broadcasts sampled counts across PP ranks (PPHandler), so the only
+# missing piece is the aux transport — the same gap vllm-ascend PR #12507
+# fixes for EAGLE3. Three coordinated edits to kimi_k3/nvidia/model.py:
+#   (a) preallocate aux_hidden_<layer> intermediate-tensor buffers on
+#       receiving ranks for aux layers owned by earlier stages;
+#   (b) non-last ranks attach their captured aux states (and pass through
+#       upstream ones) to the outgoing IntermediateTensors;
+#   (c) the last rank merges received + local aux states in global layer
+#       order before returning them to the drafter.
+# Idempotent; hard-asserts on exact anchors and refuses to patch otherwise.
+python3 - <<'PY'
+import pathlib
+
+import vllm.models.kimi_k3.nvidia.model as m
+
+path = pathlib.Path(m.__file__)
+src = path.read_text()
+if "_infmax_aux_pp" in src:
+    print(f"aux-PP transport patch already applied: {path}")
+    raise SystemExit(0)
+
+def replace_once(src: str, old: str, new: str, tag: str) -> str:
+    n = src.count(old)
+    if n != 1:
+        raise SystemExit(
+            f"aux-PP patch anchor {tag!r} matched {n} times in {path} — "
+            "image layout changed, refusing to patch"
+        )
+    return src.replace(old, new)
+
+# (a) preallocate upstream-aux receive buffers
+old_a = """        return IntermediateTensors(
+            {
+                "hidden_states": torch.zeros(
+                    (batch_size, self.config.hidden_size), dtype=dtype, device=device
+                ),
+                "residual": torch.zeros(residual_shape, dtype=dtype, device=device),
+            }
+        )"""
+new_a = """        _infmax_aux_pp = {
+            f"aux_hidden_{_l}": torch.zeros(
+                (batch_size, self.config.hidden_size), dtype=dtype, device=device
+            )
+            for _l in sorted(getattr(self, "aux_hidden_state_layers", ()) or ())
+            if _l < self.start_layer
+        }
+        return IntermediateTensors(
+            {
+                "hidden_states": torch.zeros(
+                    (batch_size, self.config.hidden_size), dtype=dtype, device=device
+                ),
+                "residual": torch.zeros(residual_shape, dtype=dtype, device=device),
+                **_infmax_aux_pp,
+            }
+        )"""
+src = replace_once(src, old_a, new_a, "prealloc")
+
+# (b) non-last ranks: send local aux states, pass through upstream ones
+old_b = """            if prefix_sum is not None:
+                hidden_states = hidden_states + prefix_sum
+            return IntermediateTensors(
+                {"hidden_states": hidden_states, "residual": residual}
+            )"""
+new_b = """            if prefix_sum is not None:
+                hidden_states = hidden_states + prefix_sum
+            _infmax_out = {"hidden_states": hidden_states, "residual": residual}
+            if intermediate_tensors is not None:
+                for _k, _v in intermediate_tensors.tensors.items():
+                    if _k.startswith("aux_hidden_"):
+                        _infmax_out.setdefault(_k, _v)
+            _infmax_local = sorted(
+                _l
+                for _l in (getattr(self, "aux_hidden_state_layers", ()) or ())
+                if self.start_layer <= _l <= self.end_layer
+            )
+            for _l, _t in zip(_infmax_local, aux_hidden_states):
+                _infmax_out[f"aux_hidden_{_l}"] = _t
+            return IntermediateTensors(_infmax_out)"""
+src = replace_once(src, old_b, new_b, "send")
+
+# (c) last rank: merge received + local aux in global layer order
+old_c = """        if aux_hidden_states:
+            return hidden_states, aux_hidden_states
+        return hidden_states"""
+new_c = """        if aux_hidden_states:
+            _infmax_merged = {}
+            if intermediate_tensors is not None:
+                for _k, _v in intermediate_tensors.tensors.items():
+                    if _k.startswith("aux_hidden_"):
+                        _infmax_merged[int(_k.rsplit("_", 1)[1])] = _v
+            _infmax_local = sorted(
+                _l
+                for _l in (getattr(self, "aux_hidden_state_layers", ()) or ())
+                if self.start_layer <= _l <= self.end_layer
+            )
+            _infmax_merged.update(zip(_infmax_local, aux_hidden_states))
+            aux_hidden_states = [_infmax_merged[_k] for _k in sorted(_infmax_merged)]
+            return hidden_states, aux_hidden_states
+        return hidden_states"""
+src = replace_once(src, old_c, new_c, "merge")
+
+path.write_text(src)
+print(f"Patched aux-hidden-state PP transport ({path})")
+PY
