@@ -8359,7 +8359,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
       - spec-decoding: none
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple, version: "kimi-k3" }
-        conc-list: [1, 8, 16, 32]
+        conc-list: [1, 2, 4, 8, 16]
         prefill:
           num-worker: 1
           tp: 8
