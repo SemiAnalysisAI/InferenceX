@@ -5062,6 +5062,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic
+  description:
+    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
+    - "Image: vllm/vllm-openai-rocm:nightly-dcfebf93f4eccf30f71872283331eee757915daf"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2118
+
+- config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm-mtp
     - minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4
   description:
