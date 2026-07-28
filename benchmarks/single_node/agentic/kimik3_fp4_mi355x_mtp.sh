@@ -41,9 +41,10 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# The ~1.56 TB checkpoint is pre-staged on the NFS HF hub cache, which
-# launch_mi355x-amds.sh mounts as HF_HUB_CACHE for this model (the node-local
-# /var/lib NVMe cache cannot hold it). These calls are no-ops there.
+# The ~1.5 TB checkpoint stages to the node-local /var/lib NVMe hub cache that
+# launch_mi355x-amds.sh mounts as HF_HUB_CACHE (~6.4 TB free there). The first
+# job on a cold node pays the download; every later job on that node reads from
+# local NVMe, which is faster than NFS and avoids share contention.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -81,7 +82,8 @@ export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
-# 2.8T of weights loaded off NFS takes far longer than the default to be ready.
+# 2.8T of weights takes far longer than the default to become ready, especially
+# on a cold node that must download the checkpoint first.
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
 
 # ---- DSpark draft + golden acceptance length --------------------------------
