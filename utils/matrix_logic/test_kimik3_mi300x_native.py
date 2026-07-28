@@ -407,6 +407,8 @@ fi
 
 if [[ "$args" == *--kill-on-bad-exit=1* ]]; then
     printf 'server_master_addr=%s\n' "$MULTINODE_MASTER_ADDR" >> "$FAKE_CMD_LOG"
+    printf 'server_gloo_ifname=%s\n' "${GLOO_SOCKET_IFNAME:-}" >> "$FAKE_CMD_LOG"
+    printf 'server_nccl_ifname=%s\n' "${NCCL_SOCKET_IFNAME:-}" >> "$FAKE_CMD_LOG"
     mode="${FAKE_SERVER_MODE:-alive}"
     if [[ "$mode" == exit:* ]]; then
         exit "${mode#exit:}"
@@ -602,6 +604,8 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     server = next(line for line in lines if "--kill-on-bad-exit=1" in line)
     assert "kimik3_fp4_mi300x_vllm.sh" in server
     assert "server_master_addr=10.0.0.10" in lines
+    assert "server_gloo_ifname=ens51f1np1" in lines
+    assert "server_nccl_ifname=ens51f1np1" in lines
     model_cache_root = cluster["env"]["KIMIK3_MODEL_CACHE_ROOT"]
     assert f"{model_cache_root}:/models-cache:ro" in server
     assert f"{model_cache_root}/snapshots/{REVISION}:" not in server

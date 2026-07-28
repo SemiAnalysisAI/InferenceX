@@ -25,6 +25,7 @@ KIMIK3_STARTUP_TIMEOUT_SECONDS="${KIMIK3_STARTUP_TIMEOUT_SECONDS:-7200}"
 KIMIK3_HEALTH_POLL_SECONDS="${KIMIK3_HEALTH_POLL_SECONDS:-10}"
 KIMIK3_CLEANUP_TIMEOUT_SECONDS="${KIMIK3_CLEANUP_TIMEOUT_SECONDS:-120}"
 KIMIK3_CLEANUP_POLL_SECONDS="${KIMIK3_CLEANUP_POLL_SECONDS:-2}"
+KIMIK3_SOCKET_IFNAME="${KIMIK3_SOCKET_IFNAME:-ens51f1np1}"
 # Anything that has to finish *before* scancel gets its own short deadline: a
 # cancelled CI job is SIGKILLed within seconds, and every second spent here is a
 # second two exclusive nodes stay allocated.
@@ -107,6 +108,10 @@ case "$CONC_VALUE" in
     1|2|4|8) ;;
     *) fail "concurrency must be 1, 2, 4, or 8, got '$CONC_VALUE'" ;;
 esac
+
+if [[ ! "$KIMIK3_SOCKET_IFNAME" =~ ^[[:alnum:]_.:-]+$ ]]; then
+    fail "KIMIK3_SOCKET_IFNAME must name one network interface, got '$KIMIK3_SOCKET_IFNAME'"
+fi
 
 # Every timing knob feeds `waited=$(( waited + poll ))` deadline loops, where a
 # zero, fractional or non-numeric value never advances the counter and spins
@@ -367,6 +372,12 @@ MODEL_CONTAINER_PATH="$MODEL_CACHE_CONTAINER_PATH/snapshots/$REVISION"
 export MULTINODE_NODE_COUNT=2
 export MULTINODE_GPUS_PER_NODE=8
 export MULTINODE_MASTER_ADDR="$HEAD_ADDR"
+# torch.distributed's initial TCPStore uses MULTINODE_MASTER_ADDR, but Gloo
+# subsequently forms a full mesh and otherwise advertises each node's
+# hostname. These hosts resolve their own names to 127.0.1.1, so pin both Gloo
+# and RCCL/NCCL bootstrap traffic to the verified private interface.
+export GLOO_SOCKET_IFNAME="$KIMIK3_SOCKET_IFNAME"
+export NCCL_SOCKET_IFNAME="$KIMIK3_SOCKET_IFNAME"
 export MODEL_PATH="$MODEL_CONTAINER_PATH"
 
 SERVER_LOG_DIR=$(mktemp -d)
