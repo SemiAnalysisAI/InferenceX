@@ -256,20 +256,22 @@ VLLM_CMD=(
     # resolve_trace_source now picks for kimik3*.
     --max-model-len 1048576
     --max-num-seqs "$MAX_SEQS"
-    # 16384, not the 4096 this recipe started with. The agentic corpus is
-    # prefill-dominated (measured 5,548 input tok/s against 16 output tok/s, a
-    # ~350:1 ratio), and at 4096 a single 167k-token trace prefill becomes ~41
-    # chunks. Each chunk drives its own DRAM-offload evict/restore round, and the
-    # resulting churn made one sample_tokens RPC exceed the executor timeout:
-    # measured on the non-MTP twin at conc 8, warmup froze at 25 completed
-    # requests and EngineCore died with "TimeoutError: RPC call to sample_tokens
-    # timed out" after ~1500 blocks were restored from CPU in a single step.
-    # At 16384 the same row completed warmup with 409 requests and 0 errors, then
-    # ran the full profiling phase. The tradeoff is real but favourable: peak
-    # activation rises 2.17 -> 5.41 GiB, which at a fixed --gpu-memory-utilization
-    # costs ~14% of the GPU KV pool (2,204,913 -> 1,893,092 tokens), yet the ~4x
-    # drop in chunk count more than pays for it.
-    --max-num-batched-tokens 16384
+    # 4096, NOT 16384. 16384 was tried here and reverted: it page-faults during
+    # CUDA graph capture on gfx950. Measured at conc 1 on 8x MI355X, twice - once
+    # with the draft attention_backend unpinned, and again after pinning
+    # TRITON_MLA, which rules the pin out as the cause: "Compile and warming up
+    # model for size 16384" -> "Capturing CUDA graphs (PIECEWISE) 2/5" ->
+    # c10::AcceleratorError hipErrorIllegalAddress. No wvSplitK frames, so this is
+    # distinct from the skinny-GEMM fault the non-MTP twin hits at conc <= 5.
+    # 4096 is the value verified working end to end with TRITON_MLA (server ready,
+    # coherent completions, no page faults in dmesg).
+    #
+    # This does leave a known cost: vLLM warns "max_num_scheduled_tokens is set to
+    # 4090 based on the speculative decoding settings ... consider increasing
+    # max_num_batched_tokens", because drafting reserves slots out of the budget.
+    # Raising it is the right direction once the graph-capture fault is fixed
+    # upstream, but it cannot be raised today.
+    --max-num-batched-tokens 4096
     --speculative-config "$SPEC_CONFIG"
     --mm-encoder-tp-mode data
     --enable-auto-tool-choice
