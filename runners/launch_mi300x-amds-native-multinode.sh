@@ -306,9 +306,9 @@ set -x
 # Exclude the same known-bad nodes as the single-node launcher:
 #   chi-mi300x-049: persistent /nvme_home disk-full
 #   chi-mi300x-121: provisioning incomplete; missing /raid and Enroot storage
-salloc_stdout=$(
+set +e
+salloc_output=$(
     salloc \
-        --parsable \
         --partition=compute \
         --exclude=chi-mi300x-049,chi-mi300x-121 \
         --nodelist="$KIMIK3_NODELIST" \
@@ -319,11 +319,22 @@ salloc_stdout=$(
         --exclusive \
         --time="$KIMIK3_SLURM_TIME_MINUTES" \
         --no-shell \
-        --job-name="$RUNNER_NAME"
+        --job-name="$RUNNER_NAME" \
+        2>&1
 )
-JOB_ID=$(printf '%s' "$salloc_stdout" | tr -d '[:space:]' | sed -n 's/^\([0-9][0-9]*\).*/\1/p')
+salloc_rc=$?
+set -e
+printf '%s\n' "$salloc_output"
+if [[ "$salloc_rc" -ne 0 ]]; then
+    fail "salloc failed with exit code $salloc_rc"
+fi
+JOB_ID=$(
+    printf '%s\n' "$salloc_output" |
+        sed -nE 's/.*(Pending|Granted) job allocation ([0-9]+).*/\2/p' |
+        tail -n 1
+)
 if [[ -z "$JOB_ID" ]]; then
-    fail "salloc did not return a job ID (stdout: '$salloc_stdout')"
+    fail "salloc did not report a job ID"
 fi
 echo "Allocated Slurm job $JOB_ID"
 
