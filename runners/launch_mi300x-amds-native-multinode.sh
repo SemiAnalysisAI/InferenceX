@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 KIMIK3_MODEL_CACHE_ROOT="${KIMIK3_MODEL_CACHE_ROOT:-/raid/hf-hub-cache/models--moonshotai--Kimi-K3}"
 KIMIK3_SQUASH_DIR="${KIMIK3_SQUASH_DIR:-/raid/hf-hub-cache/inferencex/squash}"
 KIMIK3_SLURM_TIME_MINUTES="${KIMIK3_SLURM_TIME_MINUTES:-480}"
@@ -101,10 +103,9 @@ dump_server_log() {
 }
 
 package_server_logs() {
-    if [[ -n "$SERVER_LOG_DIR" && -d "$SERVER_LOG_DIR" ]]; then
-        tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
-            -C "$SERVER_LOG_DIR" . 2>/dev/null ||
-            echo "[cleanup] WARNING: could not package server logs"
+    if [[ -n "$SERVER_LOG_DIR" ]]; then
+        bundle_server_logs "$SERVER_LOG_DIR" \
+            "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
     fi
 }
 
@@ -159,7 +160,7 @@ cleanup() {
         echo "[cleanup] cancelling allocation $JOB_ID"
         scancel "$JOB_ID" 2>/dev/null
         local waited=0
-        while [[ -n "$(squeue -j "$JOB_ID" --noheader 2>/dev/null)" ]]; do
+        while slurm_job_is_active "$JOB_ID"; do
             if (( waited >= KIMIK3_CLEANUP_TIMEOUT_SECONDS )); then
                 echo "[cleanup] WARNING: job $JOB_ID still present after ${waited}s"
                 break
@@ -360,7 +361,7 @@ AGGREGATE="$EXTRACT_DIR/output/${RESULT_FILENAME}_conc${CONC_VALUE}.json"
 if [[ ! -f "$AGGREGATE" ]]; then
     fail "the handoff archive is missing ${RESULT_FILENAME}_conc${CONC_VALUE}.json"
 fi
-cp "$AGGREGATE" "$GITHUB_WORKSPACE/"
+copy_to_workspace "$AGGREGATE" "$GITHUB_WORKSPACE/$(basename "$AGGREGATE")"
 
 RAW_SOURCE="$EXTRACT_DIR/agentic/conc_${CONC_VALUE}"
 RAW_DEST="$GITHUB_WORKSPACE/LOGS/agentic/conc_${CONC_VALUE}"
