@@ -380,9 +380,6 @@ def test_preflight_rejects_missing_indexed_shard(tmp_path: Path) -> None:
 FAKE_SALLOC = """#!/usr/bin/env bash
 echo "salloc $*" >> "$FAKE_CMD_LOG"
 echo "salloc: Granted job allocation {job_id}" >&2
-if [[ "$*" == *--parsable* ]]; then
-    echo "{job_id}"
-fi
 """
 
 FAKE_SCANCEL = """#!/usr/bin/env bash
@@ -594,6 +591,7 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     assert "--nodes=2" in allocation
     assert "--gres=gpu:8" in allocation
     assert "--nodelist=chi-mi300x-043,chi-mi300x-054" in allocation
+    assert "--parsable" not in allocation
 
     preflight = next(
         line for line in lines if "mi300x_native_node_preflight.sh" in line
