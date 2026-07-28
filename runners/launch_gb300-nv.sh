@@ -80,11 +80,6 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
-elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
-    # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("kimi-k3") in the
-    # Kimi-K3 vllm agentic recipes.
-    export MODEL_PATH=/scratch/models/Kimi-K3
-    export SRT_SLURM_MODEL_PREFIX="kimi-k3"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
     # Qwen3.5 sglang recipes (qwen3.5-fp4).
@@ -96,7 +91,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -154,16 +149,6 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
-elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik3" ]]; then
-    # Kimi-K3 GB300 vLLM agentic: same pinned srt-slurm as the generic agentic
-    # path (v1.0.36 -- per-node DP, matching Dynamo health counts, multi-node TP
-    # port handling, Mooncake compatibility); overlay the kimi-k3 recipe dir.
-    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-
-    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
-        recipes/vllm/kimi-k3/agentic || exit 1
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
     # version validated in InferenceX PR #2302 and includes per-node DP,
