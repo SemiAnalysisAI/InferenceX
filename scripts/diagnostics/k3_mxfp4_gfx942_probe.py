@@ -10,6 +10,7 @@ to separated A16W4 on gfx942; do not relabel this probe as A8W4.
 from __future__ import annotations
 
 import gc
+import importlib
 import importlib.metadata
 import os
 import time
@@ -183,7 +184,7 @@ def main() -> None:
     )
     if not torch.isfinite(reference).all().item():
         raise AssertionError("torch reference contains NaN or Inf")
-    del stage1_reference, ref_w1, ref_w2, ref_w1_scale, ref_w2_scale
+    del ref_w1, ref_w2, ref_w1_scale, ref_w2_scale
     gc.collect()
     torch.cuda.empty_cache()
     cuda_memory("reference-complete")
@@ -228,23 +229,93 @@ def main() -> None:
     )
 
     started = time.perf_counter()
-    actual = fused_moe(
-        hidden,
-        shuffled_w1,
-        shuffled_w2,
-        topk_weights,
-        topk_ids,
-        activation=ActivationType.Situv2,
-        quant_type=QuantType.per_1x32,
-        doweight_stage1=False,
-        w1_scale=shuffled_w1_scale,
-        w2_scale=shuffled_w2_scale,
-        beta=BETA,
-        linear_beta=LINEAR_BETA,
-        gate_mode=GateMode.SEPARATED.value,
-    )
+    fused_moe_module = importlib.import_module("aiter.fused_moe")
+    captured_calls: list[tuple[str, object]] = []
+    fused_moe_module.kernel_bench_callable = captured_calls
+    try:
+        actual = fused_moe(
+            hidden,
+            shuffled_w1,
+            shuffled_w2,
+            topk_weights,
+            topk_ids,
+            activation=ActivationType.Situv2,
+            quant_type=QuantType.per_1x32,
+            doweight_stage1=False,
+            w1_scale=shuffled_w1_scale,
+            w2_scale=shuffled_w2_scale,
+            beta=BETA,
+            linear_beta=LINEAR_BETA,
+            gate_mode=GateMode.SEPARATED.value,
+        )
+    finally:
+        fused_moe_module.kernel_bench_callable = None
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
+
+    calls_by_stage = dict(captured_calls)
+    if set(calls_by_stage) != {"stage1", "stage2"}:
+        raise AssertionError(
+            f"expected captured stage1/stage2 calls, got {list(calls_by_stage)}"
+        )
+
+    stage1_actual = calls_by_stage["stage1"]()
+    torch.cuda.synchronize()
+    stage1_reference_view = stage1_reference.view_as(stage1_actual)
+    stage1_finite = bool(torch.isfinite(stage1_actual).all().item())
+    stage1_diff = (
+        normalized_logits_diff(stage1_reference_view, stage1_actual)
+        if stage1_finite
+        else float("inf")
+    )
+    stage1_error = (
+        checkAllclose(
+            stage1_reference_view,
+            stage1_actual,
+            msg="K3 gfx942 A16W4 stage1 isolation",
+        )
+        if stage1_finite
+        else 1
+    )
+    print(
+        "K3_MXFP4_STAGE1_RESULT"
+        f" finite={str(stage1_finite).lower()}"
+        f" allclose_error={stage1_error}"
+        f" logits_diff={stage1_diff:.9g}",
+        flush=True,
+    )
+
+    stage2_call = calls_by_stage["stage2"]
+    stage2_args = list(stage2_call.args)
+    if len(stage2_args) < 8:
+        raise AssertionError(f"unexpected stage2 partial ABI: {len(stage2_args)} args")
+    stage2_args[0] = stage1_reference_view
+    stage2_isolated = torch.zeros_like(actual)
+    stage2_args[6] = stage2_isolated
+    stage2_call.func(*stage2_args, **stage2_call.keywords)
+    torch.cuda.synchronize()
+    stage2_finite = bool(torch.isfinite(stage2_isolated).all().item())
+    stage2_diff = (
+        normalized_logits_diff(reference, stage2_isolated)
+        if stage2_finite
+        else float("inf")
+    )
+    stage2_error = (
+        checkAllclose(
+            reference,
+            stage2_isolated,
+            msg="K3 gfx942 A16W4 stage2 isolation",
+        )
+        if stage2_finite
+        else 1
+    )
+    print(
+        "K3_MXFP4_STAGE2_RESULT"
+        f" finite={str(stage2_finite).lower()}"
+        f" allclose_error={stage2_error}"
+        f" logits_diff={stage2_diff:.9g}",
+        flush=True,
+    )
 
     finite = bool(torch.isfinite(actual).all().item())
     diff = normalized_logits_diff(reference, actual) if finite else float("inf")

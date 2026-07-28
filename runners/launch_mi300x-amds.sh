@@ -158,6 +158,9 @@ PY
         --no-container-entrypoint \
         bash -lc '
             set -euo pipefail
+            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-ecef4ad9396aa3d640976b2adf8cd17012af31da
+            mkdir -p "$FLYDSL_RUNTIME_CACHE_DIR"
+            echo "K3_FLYDSL_CACHE dir=$FLYDSL_RUNTIME_CACHE_DIR"
             aiter_root=$(python -c \
                 "import pathlib, aiter; print(pathlib.Path(aiter.__file__).resolve().parent)")
             install -m 0644 \
