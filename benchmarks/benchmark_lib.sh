@@ -1213,11 +1213,6 @@ env.update({
     "timeout": int(os.environ.get("SWEBENCH_AGENT_CMD_TIMEOUT", "300")),
     # Limit billing if cleanup misses a sandbox.
     "runtime_timeout": float(os.environ.get("SWEBENCH_AGENT_RUNTIME_TIMEOUT", "3600")),
-    # Modal sandbox hard lifetime. Must exceed the agent's total run time
-    # (step_limit x per-step latency); otherwise Modal reaps the sandbox
-    # mid-run and every later command fails with "Cannot connect to host
-    # ...modal.host", producing an empty patch even when the fix was correct.
-    "deployment_timeout": float(os.environ.get("SWEBENCH_AGENT_DEPLOYMENT_TIMEOUT", "3600")),
 })
 agent_cpu = os.environ.get("SWEBENCH_AGENT_SANDBOX_CPU", "")
 if agent_cpu:
