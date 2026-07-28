@@ -226,6 +226,19 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # so honouring it would just reproduce the abort. Only the explicit
     # LMCACHE_MAX_NUM_BATCHED_TOKENS overrides.
     MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
+
+    # THIRD constraint, asserted by the connector itself:
+    #   AssertionError: LMCache chunk size should be a multiple of vLLM block size
+    # i.e. chunk_size % block_size == 0. With K3's block_size=768, BOTH stock
+    # chunk sizes are invalid: the AMD K3 reference's 1024 (1024 % 768 = 256)
+    # and kimik2.7's 256 (smaller than a block). So chunk size is not a free
+    # A/B axis on this model -- it is pinned to a multiple of the block size,
+    # and the two server profiles can only differ in their other knobs.
+    # Override with LMCACHE_CHUNK_SIZE_OVERRIDE (must stay a multiple of 768).
+    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-768}"
+    LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
+    LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
+    echo "LMCache/Mamba-hybrid constraint: chunk-size pinned to $LMCACHE_K3_CHUNK_SIZE (must be a multiple of block_size)"
     echo "LMCache/Mamba-hybrid constraint: pinning --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS (block_size must satisfy bs <= mnbt < 2*bs)"
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
