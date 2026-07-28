@@ -181,6 +181,8 @@ trap 'cleanup; exit 130' INT
 trap 'cleanup; exit 143' TERM
 trap 'cleanup; exit 129' HUP
 
+set -x
+
 salloc_stdout=$(
     salloc \
         --parsable \
@@ -284,6 +286,7 @@ echo "Started both server ranks; logging to $SERVER_LOG"
 
 HEALTH_URL="http://${HEAD_NODE}:${PORT}/health"
 startup_deadline=$(( $(date +%s) + KIMIK3_STARTUP_TIMEOUT_SECONDS ))
+set +x
 while true; do
     if [[ -f "$SERVER_RC_FILE" ]]; then
         server_rc=$(tr -d '[:space:]' < "$SERVER_RC_FILE")
@@ -302,6 +305,7 @@ while true; do
     fi
     sleep "$KIMIK3_HEALTH_POLL_SECONDS"
 done
+set -x
 
 SCRATCH_HOST="$KIMIK3_SQUASH_DIR/.runs/${JOB_ID}-conc${CONC_VALUE}"
 srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \

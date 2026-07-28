@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../benchmark_lib.sh"
@@ -72,6 +73,7 @@ export VLLM_USE_V2_MODEL_RUNNER=0
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 export PYTHONNOUSERSITE=1
 
+{ set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
     --served-model-name "$MODEL"
