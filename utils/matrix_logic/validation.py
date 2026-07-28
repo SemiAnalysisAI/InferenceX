@@ -836,8 +836,14 @@ class RunnerModelConfig(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     model_paths: List[str] = Field(alias='model-paths', min_length=1)
-    srt_slurm_model_prefix: str = Field(
-        alias='srt-slurm-model-prefix', min_length=1
+    srt_slurm_model_prefix: Optional[str] = Field(
+        alias='srt-slurm-model-prefix', default=None, min_length=1
+    )
+    served_model_name: Optional[str] = Field(
+        alias='served-model-name', default=None, min_length=1
+    )
+    model_name: Optional[str] = Field(
+        alias='model-name', default=None, min_length=1
     )
     allow_model_path_override: bool = Field(
         alias='allow-model-path-override', default=False
@@ -867,7 +873,10 @@ class RunnerConfig(BaseModel):
 
     labels: Dict[str, List[str]]
     hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
-    models: Dict[str, Dict[str, Dict[str, RunnerModelConfig]]] = Field(
+    models: Dict[
+        str,
+        Dict[str, Dict[str, Dict[str, RunnerModelConfig]]]
+    ] = Field(
         default_factory=dict
     )
 

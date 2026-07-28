@@ -1364,14 +1364,16 @@ class TestValidateRunnerConfig:
             "labels": {"cluster:b200-dgxc": ["b200-dgxc_0"]},
             "models": {
                 "cluster:b200-dgxc": {
-                    "dsv4": {
-                        "fp4": {
-                            "model-paths": [
-                                "/lustre/fsw/models/deepseek-v4-pro",
-                                "/lustre/fsw/models/dsv4-pro",
-                            ],
-                            "srt-slurm-model-prefix": "deepseek-v4-pro",
-                            "allow-model-path-override": True,
+                    "dynamo-vllm": {
+                        "dsv4": {
+                            "fp4": {
+                                "model-paths": [
+                                    "/lustre/fsw/models/deepseek-v4-pro",
+                                    "/lustre/fsw/models/dsv4-pro",
+                                ],
+                                "srt-slurm-model-prefix": "deepseek-v4-pro",
+                                "allow-model-path-override": True,
+                            }
                         }
                     }
                 }
@@ -1385,10 +1387,12 @@ class TestValidateRunnerConfig:
             "labels": {"b200": ["b200-dgxc_0"]},
             "models": {
                 "cluster:b200-dgxc": {
-                    "dsr1": {
-                        "fp8": {
-                            "model-paths": ["/lustre/fsw/models/dsr1"],
-                            "srt-slurm-model-prefix": "dsr1-fp8",
+                    "default": {
+                        "dsr1": {
+                            "fp8": {
+                                "model-paths": ["/lustre/fsw/models/dsr1"],
+                                "srt-slurm-model-prefix": "dsr1-fp8",
+                            }
                         }
                     }
                 }
@@ -1403,10 +1407,12 @@ class TestValidateRunnerConfig:
             "labels": {"cluster:b200-dgxc": ["b200-dgxc_0"]},
             "models": {
                 "cluster:b200-dgxc": {
-                    "dsr1": {
-                        "fp8": {
-                            "model-paths": ["relative/model/path"],
-                            "srt-slurm-model-prefix": "dsr1-fp8",
+                    "default": {
+                        "dsr1": {
+                            "fp8": {
+                                "model-paths": ["relative/model/path"],
+                                "srt-slurm-model-prefix": "dsr1-fp8",
+                            }
                         }
                     }
                 }
@@ -1421,13 +1427,15 @@ class TestValidateRunnerConfig:
             "labels": {"cluster:b200-dgxc": ["b200-dgxc_0"]},
             "models": {
                 "cluster:b200-dgxc": {
-                    "dsr1": {
-                        "fp8": {
-                            "model-paths": [
-                                "/lustre/fsw/models/dsr1",
-                                "/lustre/fsw/models/dsr1",
-                            ],
-                            "srt-slurm-model-prefix": "dsr1-fp8",
+                    "default": {
+                        "dsr1": {
+                            "fp8": {
+                                "model-paths": [
+                                    "/lustre/fsw/models/dsr1",
+                                    "/lustre/fsw/models/dsr1",
+                                ],
+                                "srt-slurm-model-prefix": "dsr1-fp8",
+                            }
                         }
                     }
                 }

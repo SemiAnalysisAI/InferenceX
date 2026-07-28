@@ -5,19 +5,15 @@
 set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+# shellcheck source=runners/runner_model_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runner_model_utils.sh"
 
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
-        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
-        export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
-    else
-        echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
-        exit 1
-    fi
+    resolve_runner_model_config "cluster:gb200-nv" || exit 1
 
     SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
@@ -87,96 +83,15 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     exit 0
 fi
 
-# MODEL_PATH: Override with pre-downloaded paths on GB200 runner
-# The yaml files specify HuggingFace model IDs for portability, but we use
-# local paths to avoid repeated downloading on the shared GB200 cluster.
 if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     export CONFIG_DIR="/mnt/lustre01/artifacts/sglang-configs/1k1k"
-    if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528"
-        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
-        export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
-    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Lustre-resident weights staged on the GB200 external cluster.
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias in our
-        # DSV4 sglang recipes.
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
-        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
-        # in our GLM-5.1 sglang recipes.
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
-        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-    elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
-        export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
-    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
-        # in our GLM-5.1 sglang recipes.
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
-        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5.1-fp8")
-        # in our GLM-5.1 sglang recipes.
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-FP8"
-        export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
-    else
-        export MODEL_PATH=$MODEL
-    fi
-elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-    if [[ $MODEL_PREFIX == "gptoss" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
-        export SERVED_MODEL_NAME="gpt-oss-120b"
-    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/numa1/models/DeepSeek-R1-0528-NVFP4-v2"
-        export SERVED_MODEL_NAME="deepseek-r1-fp4"
-        export SRT_SLURM_MODEL_PREFIX="dsr1"
-    elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/numa1/models/DeepSeek-R1-0528"
-        export SERVED_MODEL_NAME="deepseek-r1-fp8"
-        export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-    elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
-        export SERVED_MODEL_NAME="kimi-k2.5-nvfp4"
-        export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
-    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias
-        # ("nvidia/GLM-5-NVFP4") in the upstream GLM5 trtllm_dynamo recipes.
-        export MODEL_PATH="/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4"
-        export SERVED_MODEL_NAME="glm-5-nvfp4"
-        export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
-    else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
-        exit 1
-    fi
-elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
-    if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
-        export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
-    elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # The FP4 checkpoint is staged on compute-visible Lustre. The former
-        # /mnt/numa1 path is no longer present on watchtower compute nodes;
-        # the lowercase Lustre sibling is the FP8 checkpoint, so keep the
-        # NVFP4 path explicit here.
-        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4/"
-        export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-    elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
-        export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-    elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
-        export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
-        export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
-    else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
-        exit 1
-    fi
+    resolve_runner_model_config "cluster:gb200-nv" \
+        --fallback-model-path "$MODEL" || exit 1
+elif [[ $FRAMEWORK == "dynamo-trt" || $FRAMEWORK == "dynamo-vllm" ]]; then
+    resolve_runner_model_config "cluster:gb200-nv" || exit 1
 else
-    export MODEL_PATH=$MODEL
+    resolve_runner_model_config "cluster:gb200-nv" \
+        --fallback-model-path "$MODEL" || exit 1
 fi
 
 NGINX_IMAGE="nginx:1.27.4"

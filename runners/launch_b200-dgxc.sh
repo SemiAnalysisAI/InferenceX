@@ -6,14 +6,9 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
-if ! RESOLVED_MODEL_ENV=$(python3 "$GITHUB_WORKSPACE/utils/resolve_runner_model.py" \
-    --runner-config "$GITHUB_WORKSPACE/configs/runners.yaml" \
-    --runner-label "cluster:b200-dgxc" \
-    --model-prefix "$MODEL_PREFIX" \
-    --precision "$PRECISION"); then
-    exit 1
-fi
-eval "$RESOLVED_MODEL_ENV"
+# shellcheck source=runners/runner_model_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runner_model_utils.sh"
+resolve_runner_model_config "cluster:b200-dgxc" || exit 1
 
 export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
 

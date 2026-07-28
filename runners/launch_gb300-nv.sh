@@ -4,6 +4,9 @@
 
 set -exo pipefail
 
+# shellcheck source=runners/runner_model_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runner_model_utils.sh"
+
 export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
@@ -31,69 +34,7 @@ mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 export DYNAMO_WHEELS_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/dynamo-wheels"
 mkdir -p "$DYNAMO_WHEELS_CACHE_HOST_PATH"
 
-export MODEL_PATH=$MODEL
-
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export MODEL_PATH=/scratch/models/DeepSeek-R1-0528-NVFP4-v2
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export MODEL_PATH=/scratch/models/DeepSeek-R1-0528
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    # Use the node-local /scratch SSD for the 806 GB DSv4-Pro
-    # checkpoint. Faster than the Vast NFS path, but this dir only
-    # exists on compute nodes — the GHA runner pod's view does NOT
-    # have /scratch/models, so srtctl preflight (which stats the path
-    # from the runner pod) may fail with "Model alias resolved to
-    # /scratch/models/DeepSeek-V4-Pro, but that path is unavailable."
-    # If that happens, the next step is either to (a) patch srt-slurm
-    # to add a skip_model_preflight recipe field, or (b) stub a
-    # symlink on the runner pod that points at the NFS copy.
-    export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
-    export SERVED_MODEL_NAME="glm-5-nvfp4"
-    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
-elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
-    # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
-    # in our GLM-5.1 sglang recipes.
-    export MODEL_PATH=/scratch/models/GLM-5.1-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-FP8
-    export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M2.5
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/data/models/MiniMax-M3-MXFP8
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
-    # Qwen3.5 sglang recipes (qwen3.5-fp4).
-    export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
-    # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
-    # Qwen3.5 sglang recipes (qwen3.5-fp8).
-    export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
-else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
-    exit 1
-fi
+resolve_runner_model_config "cluster:gb300-nv" || exit 1
 
 NGINX_IMAGE="nginx:1.27.4"
 
@@ -223,9 +164,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION
     mkdir -p recipes/vllm/kimi-k2.5-fp4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
-    # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
-    SRT_SLURM_MODEL_PREFIX="deepseek-ai/DeepSeek-V4-Pro"
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026

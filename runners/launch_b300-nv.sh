@@ -8,6 +8,9 @@ MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-01
 
 set -x
 
+# shellcheck source=runners/runner_model_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runner_model_utils.sh"
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
 # Validate framework
@@ -16,47 +19,7 @@ if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK 
     exit 1
 fi
 
-# MODEL_PATH: Override with pre-downloaded paths on B300 runner
-# The yaml files specify HuggingFace model IDs for portability, but we use
-# local paths to avoid repeated downloading on the shared B300 cluster.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp4"
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp8"
-    export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /data/models/dsv4-pro /data/models/deepseek-v4-pro /data/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/scratch/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
-    export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
-else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
-    exit 1
-fi
+resolve_runner_model_config "cluster:b300-nv" || exit 1
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
