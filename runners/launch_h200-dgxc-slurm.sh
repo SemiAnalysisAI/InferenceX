@@ -176,6 +176,11 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
             tail -n 200 "$server_log_dir/server.log" >&2 || true
             exit 1
         fi
+        if grep -q "Engine core initialization failed" "$server_log_dir/server.log"; then
+            echo "Native multi-node engine failed before becoming ready" >&2
+            tail -n 200 "$server_log_dir/server.log" >&2
+            exit 1
+        fi
         sleep 10
     done
     if (( attempt > 720 )); then
