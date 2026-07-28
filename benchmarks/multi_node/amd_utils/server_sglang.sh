@@ -1106,25 +1106,9 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                 export EVAL_MAX_MODEL_LEN="$prefill_context_length"
             fi
 
-            # Metadata for append_lm_eval_summary. Prefer workflow PREFILL_EP/DECODE_EP
-            # and *_DP_ATTN (from job.slurm) over ENABLE_* launch booleans so DEP8/DPA
-            # arms record the correct topology. Set before run_eval: agentic eval-only
-            # recipes call append_lm_eval_summary inside run_eval().
-            export TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-1}}"
-            export PREFILL_TP="${PREFILL_TP:-${PREFILL_TP_SIZE:-1}}"
-            export PREFILL_EP="${PREFILL_EP:-1}"
-            [[ "${PREFILL_EP}" == "1" && "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
-            export EP_SIZE="${PREFILL_EP}"
-            export PREFILL_NUM_WORKERS="${PREFILL_NUM_WORKERS:-${xP:-1}}"
-            export DECODE_TP="${DECODE_TP:-${DECODE_TP_SIZE:-1}}"
-            export DECODE_EP="${DECODE_EP:-1}"
-            [[ "${DECODE_EP}" == "1" && "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
-            export DECODE_NUM_WORKERS="${DECODE_NUM_WORKERS:-${yD:-1}}"
-            export DP_ATTENTION="${PREFILL_DP_ATTN:-${PREFILL_ENABLE_DP:-false}}"
-            export PREFILL_DP_ATTENTION="${PREFILL_DP_ATTN:-${PREFILL_ENABLE_DP:-false}}"
-            export DECODE_DP_ATTENTION="${DECODE_DP_ATTN:-${DECODE_ENABLE_DP:-false}}"
             export ISL="${BENCH_INPUT_LEN:-0}"
             export OSL="${BENCH_OUTPUT_LEN:-0}"
+            bridge_disagg_eval_metadata
             # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
             # RESULT_FILENAME are already set via Docker -e flags from job.slurm
 
@@ -1138,9 +1122,12 @@ print(json.dumps(json.loads(sys.stdin.read())))' <<<"$_val")" || {
                     echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
                     EVAL_FAILED=1
                 else
-                    # Agentic eval-only: run_eval() already called append_lm_eval_summary
-                    # with the metadata exports above. Fixed-seq-len post-bench eval needs
-                    # an explicit append because run_eval skips it when EVAL_ONLY=false.
+                    # Always rewrite meta_env.json so EP/DPA match the workflow
+                    # topology even when run_eval() staged artifacts internally.
+                    rewrite_lm_eval_meta_env
+
+                    # Fixed-seq-len post-bench eval still needs append to move
+                    # results out of the temp EVAL_RESULT_DIR.
                     if [[ "${EVAL_ONLY:-false}" != "true" || "$IS_AGENTIC_RUN" != "1" ]]; then
                         append_lm_eval_summary
                     fi

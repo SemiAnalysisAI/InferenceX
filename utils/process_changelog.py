@@ -101,6 +101,26 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     return [e for i, e in enumerate(out) if i not in drop]
 
 
+def filter_eval_rows_by_prefill_ep(
+    eval_rows: list[dict], min_prefill_ep: int | None
+) -> list[dict]:
+    """Drop multinode eval rows below a prefill EP threshold."""
+    if min_prefill_ep is None:
+        return eval_rows
+    kept: list[dict] = []
+    for row in eval_rows:
+        prefill = row.get("prefill")
+        if isinstance(prefill, dict):
+            ep = prefill.get("ep", 1)
+            try:
+                if int(ep) < min_prefill_ep:
+                    continue
+            except (TypeError, ValueError):
+                continue
+        kept.append(row)
+    return kept
+
+
 def get_config_keys_from_master(
     config_keys: list[str], master_config: dict
 ) -> list[str]:
@@ -272,7 +292,11 @@ def main():
             except subprocess.CalledProcessError as e:
                 print(e.stderr)
                 raise
-            all_eval_results.extend(json.loads(eval_result.stdout))
+            entry_eval_results = json.loads(eval_result.stdout)
+            entry_eval_results = filter_eval_rows_by_prefill_ep(
+                entry_eval_results, entry.eval_min_prefill_ep
+            )
+            all_eval_results.extend(entry_eval_results)
 
     if args.trim_conc:
         all_benchmark_results = trim_conc(all_benchmark_results)

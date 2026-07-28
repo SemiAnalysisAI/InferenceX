@@ -191,6 +191,35 @@ def agentic_kv_offload_suffix(
     return f"kv{kv_offloading}-{kv_offload_backend['name']}"
 
 
+def multinode_agentic_exp_name(
+    model_code: str,
+    prefill: dict,
+    decode: dict,
+    conc_batch: list[int],
+    offload_suffix: str,
+) -> str:
+    """Build a multinode agentic exp-name that encodes topology, not just TP."""
+
+    def _worker_tag(worker: dict, role_prefix: str) -> str:
+        ep = worker.get(Fields.EP.value, 1)
+        dpa = worker.get(Fields.DP_ATTN.value, False)
+        tag = (
+            f"{role_prefix}{worker[Fields.NUM_WORKER.value]}"
+            f"x{worker[Fields.TP.value]}"
+        )
+        if ep != 1:
+            tag += f"ep{ep}"
+        if dpa:
+            tag += "dpa"
+        return tag
+
+    return (
+        f"{model_code}_{_worker_tag(prefill, 'p')}_{_worker_tag(decode, 'd')}"
+        f"_conc{'x'.join(str(c) for c in conc_batch)}"
+        f"{offload_suffix}"
+    )
+
+
 def component_metadata(benchmark: dict, config: dict) -> dict:
     """Resolve optional component metadata from its validated scope."""
     metadata = {}
@@ -830,11 +859,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: (
-                                    f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
-                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
-                                    f"{offload_suffix}"
+                                Fields.EXP_NAME.value: multinode_agentic_exp_name(
+                                    model_code, prefill, decode, conc_batch, offload_suffix
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
@@ -1128,11 +1154,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: (
-                                    f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
-                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
-                                    f"{offload_suffix}"
+                                Fields.EXP_NAME.value: multinode_agentic_exp_name(
+                                    model_code, prefill, decode, conc_batch, offload_suffix
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
