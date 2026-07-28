@@ -103,6 +103,11 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format auto
     --moe-backend auto
+    # The image's AITER custom-allreduce module is gfx950-prebuilt. Its gfx942
+    # JIT finishes on both nodes, but the second TP group hangs while
+    # initializing the AITER_CUSTOM backend. Fall back to RCCL/PYNCCL for
+    # collectives; VLLM_ROCM_USE_AITER remains enabled for K3's MoE kernels.
+    --disable-custom-all-reduce
     --gpu-memory-utilization "${VLLM_GPU_MEMORY_UTILIZATION:-0.95}"
     --max-model-len 1048576
     --max-num-seqs "$CONC_LIST"
