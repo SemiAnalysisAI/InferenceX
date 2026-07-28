@@ -16,9 +16,81 @@ export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
 set -x
 
+# Temporary diagnostic branch only: inventory the exact pair selected for the
+# Kimi-K3 TP8xPP2 canary before starting the multi-terabyte staging operation.
+if [[ "${PROFILE:-0}" == "1" ]]; then
+    INVENTORY_LOG=$(mktemp)
+    INVENTORY_JOB_ID=""
+
+    cleanup_inventory() {
+        local rc=$?
+        trap - EXIT INT TERM
+        if [[ -n "$INVENTORY_JOB_ID" ]]; then
+            scancel "$INVENTORY_JOB_ID" 2>/dev/null || true
+        fi
+        rm -f "$INVENTORY_LOG"
+        exit "$rc"
+    }
+    trap cleanup_inventory EXIT INT TERM
+
+    set +e
+    timeout 120s salloc \
+        --partition="$PARTITION" \
+        --nodelist=chi-mi300x-043,chi-mi300x-054 \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --gres=gpu:1 \
+        --cpus-per-task=4 \
+        --time=15 \
+        --no-shell \
+        --job-name="$RUNNER_NAME" 2>&1 | tee "$INVENTORY_LOG"
+    inventory_rc=${PIPESTATUS[0]}
+    set -e
+
+    INVENTORY_JOB_ID=$(sed -nE 's/.*(Pending|Granted) job allocation ([0-9]+).*/\2/p' "$INVENTORY_LOG" | tail -n1)
+    if [[ "$inventory_rc" -ne 0 || -z "$INVENTORY_JOB_ID" ]]; then
+        echo "K3_INVENTORY allocation failed: rc=$inventory_rc job_id=${INVENTORY_JOB_ID:-missing}"
+        exit 1
+    fi
+
+    srun \
+        --jobid="$INVENTORY_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        bash -lc '
+            set -euo pipefail
+            host=$(hostname -s)
+            cache=/raid/hf-hub-cache/models--moonshotai--Kimi-K3
+            image=/raid/hf-hub-cache/inferencex/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh
+            revision=missing
+            shard_count=0
+            shard_bytes=0
+            if [[ -s "$cache/refs/main" ]]; then
+                revision=$(tr -d "[:space:]" < "$cache/refs/main")
+            fi
+            if [[ -d "$cache/snapshots/$revision" ]]; then
+                shard_count=$(find "$cache/snapshots/$revision" -maxdepth 1 -type f -name "model-*.safetensors" | wc -l)
+                shard_bytes=$(find "$cache/snapshots/$revision" -maxdepth 1 -type f -name "model-*.safetensors" -printf "%s\n" | awk "{s+=\$1} END {print s+0}")
+            fi
+            image_bytes=0
+            if unsquashfs -s "$image" >/dev/null 2>&1; then
+                image_bytes=$(stat -c %s "$image")
+            fi
+            read -r raid_bytes raid_free < <(df -B1 --output=size,avail /raid | tail -1)
+            printf "K3_INVENTORY host=%s raid_bytes=%s raid_free=%s revision=%s shard_count=%s shard_bytes=%s image_bytes=%s\n" \
+                "$host" "$raid_bytes" "$raid_free" "$revision" "$shard_count" "$shard_bytes" "$image_bytes"
+        '
+
+    echo "K3_INVENTORY complete job_id=$INVENTORY_JOB_ID"
+    exit 42
+fi
+
 # Temporary diagnostic branch only: import the K3 image to node-local /raid
 # and verify its ROCm userspace on one GPU without loading model weights.
-if [[ "${PROFILE:-0}" == "1" ]]; then
+if [[ "${PROFILE:-0}" == "kernel" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
     AITER_OVERLAY_REF="192f8db9c6d6f841f3bafc4e382a7cd2a361e88c"
