@@ -45,6 +45,47 @@ HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache/inferencex/agentx-h
 # Not exported: only the client container has this path mounted.
 HF_HUB_CACHE_CONTAINER="${HF_HUB_CACHE:-/hf-hub-cache}"
 
+# Canary-only compatibility overlay. This branch pins immutable source and
+# checksums; the production PR will instead depend on an image containing the
+# corresponding AITER commit.
+KIMIK3_AITER_OVERLAY_REF="192f8db9c6d6f841f3bafc4e382a7cd2a361e88c"
+KIMIK3_AITER_OVERLAY_HOST="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
+export KIMIK3_AITER_OVERLAY_REF
+export KIMIK3_AITER_OVERLAY_DIR="/workspace/.aiter-k3-gfx942-overlay"
+
+download_aiter_overlay() {
+    local relative_path="$1"
+    local expected_sha256="$2"
+    local output="$KIMIK3_AITER_OVERLAY_HOST/$(basename "$relative_path")"
+    local url="https://raw.githubusercontent.com/edwingao28/aiter/${KIMIK3_AITER_OVERLAY_REF}/${relative_path}"
+
+    python3 - "$url" "$output" "$expected_sha256" <<'PY'
+import hashlib
+import os
+import pathlib
+import sys
+import urllib.request
+
+url, output, expected = sys.argv[1:]
+destination = pathlib.Path(output)
+destination.parent.mkdir(parents=True, exist_ok=True)
+payload = urllib.request.urlopen(url, timeout=120).read()
+actual = hashlib.sha256(payload).hexdigest()
+if actual != expected:
+    raise SystemExit(
+        f"AITER overlay checksum mismatch for {url}: "
+        f"expected={expected} actual={actual}"
+    )
+temporary = destination.with_suffix(destination.suffix + ".tmp")
+temporary.write_bytes(payload)
+os.replace(temporary, destination)
+print(
+    f"K3_AITER_OVERLAY_DOWNLOAD file={destination.name} "
+    f"sha256={actual} bytes={len(payload)}"
+)
+PY
+}
+
 fail_with() {
     local rc="$1"
     shift
@@ -125,6 +166,19 @@ if [[ -n "${AITER_SITUV2_A8W4+set}" ]]; then
         fail "AITER_SITUV2_A8W4 must be 0 or 1 when set, got '$AITER_SITUV2_A8W4'"
     fi
 fi
+
+download_aiter_overlay \
+    "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
+    "ed809fce18da00bf98de6385b7b934bd97fbc52cc9dc8b6306280e235b4d3fae"
+download_aiter_overlay \
+    "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
+    "12ecefe55e188232166ddc34fe182464c26d1bff278196f7f72078ac5cab9cdd"
+download_aiter_overlay \
+    "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
+    "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
+download_aiter_overlay \
+    "aiter/ops/flydsl/kernels/mfma_policy.py" \
+    "dac7aa6b2cf0e25adb2119072ca80fd708855c637efc3b98cfd8f998762d8f04"
 
 # --- Lifecycle state and cleanup -------------------------------------------
 
