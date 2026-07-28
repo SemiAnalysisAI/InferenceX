@@ -62,9 +62,15 @@ trap cleanup_agentic_services EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-SPEC_CONFIG=$(printf \
-    '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
-    "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN")
+if [ "${EVAL_ONLY:-}" = "true" ]; then
+    SPEC_CONFIG=$(printf \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN"}' \
+        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS")
+else
+    SPEC_CONFIG=$(printf \
+        '{"method":"eagle3","model":"%s","num_speculative_tokens":%d,"attention_backend":"FLASH_ATTN","rejection_sample_method":"synthetic","synthetic_acceptance_length":%.2f}' \
+        "$DRAFT_MODEL_PATH" "$NUM_SPEC_TOKENS" "$SYNTHETIC_ACCEPT_LEN")
+fi
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -79,6 +85,8 @@ VLLM_CMD=(
     --enable-prefix-caching
     --no-enable-flashinfer-autotune
     --reasoning-parser minimax_m3
+    --tool-call-parser minimax_m3
+    --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     --attention-config '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
     --all2all-backend flashinfer_nvlink_one_sided
