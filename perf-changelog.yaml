@@ -5168,4 +5168,4 @@
     - "Fail closed on the exact aggregate topology, complete and revision-matched node-local model snapshots, eight gfx942 GPUs per node, and independently validated node-local Enroot squash images"
     - "Keep AITER_SITUV2_A8W4 caller-configurable pending exact-shape gfx942 validation, and never download the approximately 1.5 TB target checkpoint inside a benchmark job"
     - "Preserve the existing single-node MI300X launcher unless NATIVE_MULTINODE=1, with bounded host-owned artifact handoff and signal/failure cleanup"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2401
