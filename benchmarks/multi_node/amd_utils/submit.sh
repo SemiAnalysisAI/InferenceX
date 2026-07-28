@@ -149,6 +149,8 @@ export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
 export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
 export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"

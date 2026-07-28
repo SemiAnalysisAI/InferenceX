@@ -1136,7 +1136,12 @@ _patch_swebench_scoring() {
 
 # SWE-bench requires ~/.modal.toml despite env credentials.
 _ensure_modal_credentials() {
-    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
+    # Agentic generation uses swerex_modal sandboxes even when scoring is local.
+    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ] \
+        && [ "${IS_AGENTIC:-0}" != "1" ] \
+        && [ "${SCENARIO_TYPE:-}" != "agentic-coding" ]; then
+        return 0
+    fi
     # CI secrets may include whitespace or quotes.
     if [ -n "${MODAL_TOKEN_ID:-}" ]; then
         MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
@@ -1159,7 +1164,7 @@ _ensure_modal_credentials() {
         chmod 600 "$HOME/.modal.toml"
         echo "[swebench] wrote ~/.modal.toml from MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env"
     else
-        echo "WARN: SWEBENCH_USE_MODAL=true but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal scoring will fail credential validation" >&2
+        echo "WARN: Modal credentials required but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal sandboxes will fail authentication" >&2
     fi
 }
 

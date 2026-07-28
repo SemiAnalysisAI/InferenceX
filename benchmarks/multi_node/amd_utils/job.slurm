@@ -334,6 +334,8 @@ export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
 export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
 export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
 export HF_TOKEN="${HF_TOKEN:-}"
+export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -487,6 +489,8 @@ DOCKER_ENV_COMMON=(
     -e MODAL_TOKEN_ID=\${MODAL_TOKEN_ID:-}
     -e MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET:-}
     -e HF_TOKEN=\${HF_TOKEN:-}
+    -e SCENARIO_TYPE=\${SCENARIO_TYPE:-}
+    -e \"EVAL_LIMIT=\${EVAL_LIMIT:-}\"
 )
 
 # Engine-specific env vars
