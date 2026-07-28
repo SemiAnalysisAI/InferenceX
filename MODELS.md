@@ -18,7 +18,7 @@ This document tracks every model benchmarked by InferenceX-e2e: when it was adde
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
 |---|---|---|---|---|
 | Qwen3.8 2.4T | `qwen3.8` | TBD | Agentic coding | |
-| Kimi-K3 | `kimik3` | 2026-07-27 ([#2359](https://github.com/SemiAnalysisAI/InferenceX/pull/2359)) | Agentic coding | |
+| Kimi-K3 | `kimik3` | 2026-07-27 ([#2370](https://github.com/SemiAnalysisAI/InferenceX/pull/2370)) | Agentic coding | |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding | Single-turn 1k1k |
