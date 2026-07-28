@@ -94,7 +94,7 @@ backend:
       kda-prefill-backend: "flashkda"
       kernel-config: '{"enable_cutedsl_warmup":true}'
       all2all-backend: "flashinfer_nvlink_one_sided"
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.92
       max-num-seqs: 32
       max-num-batched-tokens: 8192
       block-size: 64

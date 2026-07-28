@@ -91,7 +91,7 @@ backend:
       moe-backend: "flashinfer_trtllm"
       kda-prefill-backend: "flashkda"
       kernel-config: '{"enable_cutedsl_warmup":true}'
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.92
       max-num-seqs: 8
       max-num-batched-tokens: 8192
       block-size: 64
