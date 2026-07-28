@@ -731,6 +731,26 @@ kimik3-fp4-mi355x-vllm-agentic-l1size:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-budget, version: "0.5.1" }, conc-list: [8] }
 
+# Native KV-offload A/B. LMCache cannot serve K3 (its Mamba path expects a
+# [conv_state, ssm_state] pair and KDA supplies one fused tensor), so these are
+# the only offload tiers that can initialise. Both at conc 8, GMU 0.88, prefix
+# caching on, --max-num-batched-tokens 4096 -- i.e. like-for-like with the
+# successful none c8 cell, unlike the LMCache arms which were forced to 768.
+kimik3-fp4-mi355x-vllm-agentic-native:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
