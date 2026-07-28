@@ -170,6 +170,45 @@ if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+# --max-num-batched-tokens is concurrency-dependent, because the two failure
+# modes this recipe hits pull in opposite directions and the boundary happens to
+# fall inside the conc ladder.
+#
+# conc > 5 -> 16384. The agentic corpus is prefill-dominated (measured 5,548
+# input tok/s against 16 output tok/s), so at 4096 a single 167k-token prefill
+# splits into ~41 chunks, each driving its own DRAM-offload evict/restore round.
+# At conc 8 that churn made one sample_tokens RPC exceed the executor timeout:
+# warmup froze at 25 completed requests while EngineCore logged "No available
+# shared memory broadcast block" once a minute, then died with "TimeoutError: RPC
+# call to sample_tokens timed out" after ~1500 blocks were restored from CPU in a
+# single step at kv_cache_usage 0.835. At 16384 the same row completed warmup with
+# 409 requests and 0 errors and ran the full profiling phase.
+#
+# conc <= 5 -> 4096. At 16384 the conc 4 row page-faults in wvSplitK, vLLM's
+# hand-written ROCm skinny GEMM, called from the KDA in_proj_qkvgfab projection
+# (utils.py:183 ops.wvSplitK -> _rocm_C.wvSplitK -> hipErrorIllegalAddress;
+# runs/30335755762). rocm_unquantized_gemm_impl only selects wvSplitK when the
+# GEMM has n <= 5 rows, i.e. decode steps at low concurrency, which is why conc 8
+# never enters it and conc 4 does. conc 1 and 2 pass at 4096, so 4096 is the
+# layout in which this kernel's out-of-bounds access stays latent.
+#
+# VLLM_ROCM_USE_SKINNY_GEMM=0 was measured as an alternative: it does remove the
+# fault outright (0 wvSplitK frames, 0 illegal accesses, warmup reached 141
+# completions), but the fallback GEMMs at M:16328 then exhausted HBM -
+# HSA_STATUS_ERROR_OUT_OF_RESOURCES with "Available Free mem : 0 MB". So it is
+# only viable paired with a smaller batch, which is what this ladder already does
+# without needing the env var.
+#
+# The threshold is 5 because that is the wvSplitK dispatch gate, not a guess.
+# NOTE: the conc 4 @ 4096 cell is inferred from conc 1 and 2 passing, not yet
+# measured directly.
+if [ "$CONC" -gt 5 ]; then
+    MAX_BATCHED_TOKENS=16384
+else
+    MAX_BATCHED_TOKENS=4096
+fi
+echo "max_num_batched_tokens=$MAX_BATCHED_TOKENS for CONC=$CONC"
+
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
@@ -197,21 +236,7 @@ VLLM_CMD=(
     # resolve_trace_source now picks for kimik3*.
     --max-model-len 1048576
     --max-num-seqs "$CONC"
-    # 16384, not the 4096 this recipe started with. The agentic corpus is
-    # prefill-dominated (measured 5,548 input tok/s against 16 output tok/s, a
-    # ~350:1 ratio), and at 4096 a single 167k-token trace prefill becomes ~41
-    # chunks. Each chunk drives its own DRAM-offload evict/restore round, and the
-    # resulting churn made one sample_tokens RPC exceed the executor timeout: at
-    # conc 8 on g16, warmup froze at 25 completed requests while EngineCore
-    # logged "No available shared memory broadcast block" once a minute, then
-    # died with "TimeoutError: RPC call to sample_tokens timed out" after ~1500
-    # blocks were restored from CPU in a single step at kv_cache_usage 0.835.
-    # At 16384 the same row completed warmup with 409 requests and 0 errors, then
-    # ran the full profiling phase. The tradeoff is real but favourable: peak
-    # activation rises 2.17 -> 5.41 GiB, which at a fixed --gpu-memory-utilization
-    # costs ~14% of the GPU KV pool (2,204,913 -> 1,893,092 tokens), yet the ~4x
-    # drop in chunk count more than pays for it.
-    --max-num-batched-tokens 16384
+    --max-num-batched-tokens "$MAX_BATCHED_TOKENS"
     --mm-encoder-tp-mode data
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
