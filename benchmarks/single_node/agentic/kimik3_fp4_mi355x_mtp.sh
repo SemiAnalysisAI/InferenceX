@@ -9,15 +9,11 @@ set -x
 # (vllm-project/recipes#684 -> hardware_overrides.amd). Deviations, all measured:
 #   - gpu-memory-utilization 0.88, not 0.95: only ~271 GiB is free at the
 #     worker's startup check, below the 273.59 GiB that 0.95 demands.
-#   - --enable-prefix-caching is passed for measurement validity, NOT because the
-#     server needs it. An earlier version of this comment claimed vLLM asserts
-#     "tokens_per_block % tokens_per_hash" without it; that was wrong -- those
-#     identifiers do not exist in vLLM and the run is clean without the flag
-#     (measured on 8x MI355X: server ready, correct generation, zero assertions,
-#     GPU KV 1,898,006 tokens off vs 1,893,092 on). It is kept because agentic
-#     trace replay exists to exercise shared prefixes -- measured theoretical
-#     prefix cache hit is 98.63%, so running without it would mis-measure the
-#     workload.
+#   - --enable-prefix-caching is NOT passed, and must not be. Adding it is the
+#     single flag that turns this recipe from working into an 8-rank GPU page
+#     fault; see the serve block for the one-node A/B. Because vLLM defaults it
+#     off for this hybrid model, omitting it genuinely disables prefix caching,
+#     which makes these DSpark rows non-comparable to the non-MTP rows.
 #   - speculative-config drops "attention_backend": "FLASHINFER_MLA" -- absent on
 #     ROCm, rejected by platforms/rocm.py; replaced with TRITON_MLA, not dropped.
 #   - lazy_offload is a JSON boolean; bool("false") is True in Python.
@@ -83,41 +79,20 @@ if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
 fi
 
 # ---- upstream recipe: hardware_overrides.amd extra_env -----------------------
-# AITER stays ON as the parent switch, but its LINEAR/GEMM children are turned
-# off. The parent cannot be disabled: VLLM_ROCM_USE_AITER=0 also disables
-# VLLM_ROCM_USE_AITER_MOE, and AITER is the only MXFP4 MoE backend on gfx950, so
-# the server dies with "NotImplementedError: No MXFP4 MoE backend supports the
-# deployment configuration". The children are independent of each other, so MoE
-# keeps its required AITER path while the GEMM paths fall back.
+# Upstream extra_env, unmodified. VLLM_ROCM_USE_AITER cannot be turned off: the
+# parent switch also disables VLLM_ROCM_USE_AITER_MOE and AITER is the only MXFP4
+# MoE backend on gfx950, so 0 gives "NotImplementedError: No MXFP4 MoE backend
+# supports the deployment configuration".
 #
-# Why the GEMM paths: every hipErrorIllegalAddress seen on this recipe has been
-# immediately preceded by AITER reporting an untuned shape --
-#   [aiter] shape is M:<n>, N:..., K:... not found tuned config in
-#   /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config!
-#   using torch solution:0
-# at four different M values (8, 16, 918, 16328) and four different stages, while
-# the faults themselves land in bf16 linear projections, not in expert matmuls.
-# One had a full Python stack pinning it to wvSplitH (ops.wvSplitK -> _rocm_C,
-# from the KDA in_proj_qkvgfab projection, runs/30335755762).
-#
-# Config-shape changes did not help: batch size (16384 and 4096), rejection
-# method (synthetic and block), draft attention backend (unpinned and TRITON_MLA)
-# and --language-model-only were each tried and each moved or kept the fault
-# rather than removing it. --max-num-seqs 128 did fix the capture-stage fault but
-# a second fault appears immediately after capture completes.
+# An earlier revision of this recipe additionally set VLLM_ROCM_USE_AITER_LINEAR=0,
+# VLLM_ROCM_USE_AITER_TRITON_GEMM=0 and VLLM_ROCM_USE_SKINNY_GEMM=0, on the theory
+# that the page fault came from AITER's untuned bf16 GEMM paths. That was measured
+# and REFUTED (runs/30367040157): the toggles took effect -- the "not found tuned
+# config in bf16_tuned_gemm.csv" messages went to zero -- and the fault was
+# unchanged. They only cost throughput by pushing linear GEMMs onto untuned
+# torch/Triton paths, so they are removed. The configuration measured working runs
+# AITER entirely at its defaults.
 export VLLM_ROCM_USE_AITER=1
-# AITER tuned GEMMs for unquantized GEMMs, plus scaled_mm per-tensor/rowwise.
-export VLLM_ROCM_USE_AITER_LINEAR=0
-# AITER Triton GEMM kernels (gemm_a16w16 and friends).
-export VLLM_ROCM_USE_AITER_TRITON_GEMM=0
-# rocm skinny GEMMs: wvSplitK / LLMM1, selected for GEMMs with <= 5 rows.
-# NOTE: measured on the non-MTP recipe, this alone removed the wvSplitK fault
-# (0 faults, warmup reached 141 completions) but the fallback GEMMs then
-# exhausted HBM at --max-num-batched-tokens 16384
-# (HSA_STATUS_ERROR_OUT_OF_RESOURCES, "Available Free mem : 0 MB"). This recipe
-# runs 4096, where the fallback temporaries are ~4x smaller, but that pairing is
-# not separately measured.
-export VLLM_ROCM_USE_SKINNY_GEMM=0
 export SAFETENSORS_FAST_GPU=1
 # AITER a8w4 MoE path for the MXFP4-weight/MXFP8-activation QAT checkpoint.
 # Set to 0 to fall back to the AITER a16w4 MoE path. Unaffected by the LINEAR
@@ -366,15 +341,34 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --language-model-only
-    # Prefix caching is MANDATORY here and passed explicitly, not left to the
-    # default: measured on gfx950, omitting it still trips
-    #   AssertionError: tokens_per_block=1048576 not divisible by
-    #   tokens_per_hash=3145728. Hybrid models (e.g. Mamba+Attention) need
-    #   --enable-prefix-caching to align block sizes.
-    # K3 is hybrid (69 KDA + 24 gated MLA), so the block/hash alignment only
-    # holds with prefix caching on. It is also the right measurement: agentic
-    # trace replay exists to exercise large shared prefixes.
-    --enable-prefix-caching
+    # --enable-prefix-caching is deliberately NOT passed on this recipe, and that
+    # is the single flag that makes DSpark + DRAM KV offload work on gfx950.
+    #
+    # Measured as a two-arm A/B on one node, same weights, one flag apart:
+    #   without it: enable_prefix_caching=False, GPU KV 1,525,407 tokens
+    #               -> server ready, coherent generation, server alive (PASS)
+    #   with it:    enable_prefix_caching=True,  GPU KV 1,523,093 tokens
+    #               -> 8x "Memory access fault by GPU node-N on address 0x7...
+    #                  Reason: Unknown", engine dead in _initialize_kv_caches
+    # That is the same fault that killed every DSpark sweep row: runs/30343017203,
+    # /30344670346, /30349509927, /30361474693 (3 nodes), /30367040157.
+    #
+    # It needs all three of prefix caching + SimpleCPUOffloadConnector + DSpark.
+    # Any two are fine: the non-MTP twin runs prefix caching WITH the same offload
+    # connector and completes warmup and profiling; DSpark runs with the connector
+    # and no prefix caching (above); and the upstream config with prefix caching
+    # but no connector also serves. Likely mechanism is
+    # resolve_kv_cache_block_sizes: prefix caching changes the hash block size, the
+    # connector indexes host-side blocks by that geometry, and DSpark's extra draft
+    # slots push the addressing out of range -- consistent with the faulting
+    # addresses being host-range with UTCL2 client TCP.
+    #
+    # COST, and it is not small: vLLM defaults enable_prefix_caching to False for
+    # this hybrid model (69 KDA + 24 gated MLA), so omitting the flag really does
+    # turn prefix caching OFF -- it is not a no-op. Agentic replay exists to
+    # exercise shared prefixes (measured theoretical prefix cache hit 98.63%), so
+    # these DSpark rows re-prefill instead of reusing. They are therefore NOT
+    # comparable to the non-MTP rows, which keep prefix caching on.
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
