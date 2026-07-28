@@ -1534,13 +1534,13 @@ kimik3-fp4-h200-vllm-agentic:
           pp: 2
           ep: 8
           dp-attn: true
-      # Throughput-oriented: TP1/PP2 with DP16/EP16 across four H200 nodes.
+      # Throughput-oriented: TP2/PP2 with DP8/EP16 across four H200 nodes.
       - spec-decoding: none
         kv-offloading: none
         conc-list: [16]
         prefill:
-          num-worker: 16
-          tp: 1
+          num-worker: 8
+          tp: 2
           pp: 2
           ep: 16
           dp-attn: true
@@ -1554,7 +1554,7 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
         decode:
           num-worker: 0
-          tp: 1
+          tp: 2
           pp: 2
           ep: 16
           dp-attn: true
