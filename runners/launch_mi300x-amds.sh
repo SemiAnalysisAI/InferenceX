@@ -158,7 +158,7 @@ PY
         --no-container-entrypoint \
         bash -lc '
             set -euo pipefail
-            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-192f8db9c6d6f841f3bafc4e382a7cd2a361e88c-constant
+            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-192f8db9c6d6f841f3bafc4e382a7cd2a361e88c-random
             mkdir -p "$FLYDSL_RUNTIME_CACHE_DIR"
             echo "K3_FLYDSL_CACHE dir=$FLYDSL_RUNTIME_CACHE_DIR"
             aiter_root=$(python -c \
@@ -273,7 +273,7 @@ PY
             echo "K3_MXFP4_SOURCE_CONTRACT_END"
 
             export AITER_SITUV2_A8W4=0
-            export K3_PROBE_PATTERN=constant
+            export K3_PROBE_PATTERN=random
             timeout --signal=TERM --kill-after=30s 1200s \
                 python /workspace/scripts/diagnostics/k3_mxfp4_gfx942_probe.py
         '
