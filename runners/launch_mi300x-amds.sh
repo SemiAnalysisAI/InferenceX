@@ -16,8 +16,8 @@ export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
 set -x
 
-# Temporary diagnostic branch only: inventory the exact pair selected for the
-# Kimi-K3 TP8xPP2 canary before starting the multi-terabyte staging operation.
+# Temporary diagnostic branch only: inventory and stage the exact pair selected
+# for the Kimi-K3 TP8xPP2 canary. The download is revision-pinned and resumable.
 if [[ "${PROFILE:-0}" == "1" ]]; then
     INVENTORY_LOG=$(mktemp)
     INVENTORY_JOB_ID=""
@@ -42,7 +42,7 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --ntasks-per-node=1 \
         --gres=gpu:1 \
         --cpus-per-task=4 \
-        --time=15 \
+        --time=480 \
         --no-shell \
         --job-name="$RUNNER_NAME" 2>&1 | tee "$INVENTORY_LOG"
     inventory_rc=${PIPESTATUS[0]}
@@ -84,7 +84,121 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
                 "$host" "$raid_bytes" "$raid_free" "$revision" "$shard_count" "$shard_bytes" "$image_bytes"
         '
 
-    echo "K3_INVENTORY complete job_id=$INVENTORY_JOB_ID"
+    srun \
+        --jobid="$INVENTORY_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        bash -lc '
+            set -euo pipefail
+            host=$(hostname -s)
+            image=/raid/hf-hub-cache/inferencex/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh
+            lock="${image}.lock"
+            mkdir -p "$(dirname "$image")"
+            exec 9>"$lock"
+            flock -w 3600 9
+            if unsquashfs -s "$image" >/dev/null 2>&1; then
+                echo "K3_STAGE_IMAGE host=$host status=already-valid bytes=$(stat -c %s "$image")"
+                exit 0
+            fi
+            temporary="${image}.partial.$$"
+            trap "rm -f \"$temporary\"" EXIT
+            enroot import -o "$temporary" docker://vllm/vllm-openai-rocm:kimi-k3
+            unsquashfs -s "$temporary" >/dev/null
+            mv -f "$temporary" "$image"
+            trap - EXIT
+            echo "K3_STAGE_IMAGE host=$host status=imported bytes=$(stat -c %s "$image")"
+        '
+
+    srun \
+        --jobid="$INVENTORY_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        --container-image=/raid/hf-hub-cache/inferencex/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh \
+        --container-mounts=/raid/hf-hub-cache:/hf-hub-cache \
+        --container-remap-root \
+        --container-writable \
+        --no-container-entrypoint \
+        --export=ALL \
+        bash -lc '
+            set -euo pipefail
+            host=$(hostname -s)
+            revision=9f62e4e9fffbd0a83ddd60e1c209d828994b3569
+            cache=/hf-hub-cache
+            model_cache="$cache/models--moonshotai--Kimi-K3"
+            export HF_HUB_CACHE="$cache"
+            export HF_HOME="$cache/.hf-home"
+            export HF_XET_CACHE="$cache/.xet"
+            export HF_HUB_DISABLE_PROGRESS_BARS=1
+            mkdir -p "$cache" "$HF_HOME" "$HF_XET_CACHE"
+            echo "K3_STAGE_MODEL host=$host status=starting revision=$revision"
+
+            python - "$revision" <<'"'"'PY'"'"' &
+import os
+import pathlib
+import sys
+
+from huggingface_hub import snapshot_download
+
+revision = sys.argv[1]
+snapshot = snapshot_download(
+    repo_id="moonshotai/Kimi-K3",
+    revision=revision,
+    cache_dir="/hf-hub-cache",
+    token=os.environ.get("HF_TOKEN"),
+    max_workers=8,
+)
+refs = pathlib.Path("/hf-hub-cache/models--moonshotai--Kimi-K3/refs")
+refs.mkdir(parents=True, exist_ok=True)
+temporary = refs / f".main.{os.getpid()}"
+temporary.write_text(revision + "\n")
+os.replace(temporary, refs / "main")
+print(f"K3_STAGE_DOWNLOAD_COMPLETE snapshot={snapshot}", flush=True)
+PY
+            download_pid=$!
+            while kill -0 "$download_pid" 2>/dev/null; do
+                blob_bytes=$(du -sb "$model_cache/blobs" 2>/dev/null | awk "{print \$1}" || true)
+                blob_count=$(find "$model_cache/blobs" -maxdepth 1 -type f 2>/dev/null | wc -l)
+                echo "K3_STAGE_PROGRESS host=$host blob_count=$blob_count blob_bytes=${blob_bytes:-0}"
+                sleep 60
+            done
+            wait "$download_pid"
+
+            python - "$model_cache" "$revision" "$host" <<'"'"'PY'"'"'
+import json
+import pathlib
+import sys
+
+cache = pathlib.Path(sys.argv[1])
+revision = sys.argv[2]
+host = sys.argv[3]
+snapshot = cache / "snapshots" / revision
+index_path = snapshot / "model.safetensors.index.json"
+index = json.loads(index_path.read_text())
+shards = sorted(set(index["weight_map"].values()))
+missing = [
+    shard
+    for shard in shards
+    if not (snapshot / shard).is_file() or (snapshot / shard).stat().st_size == 0
+]
+if missing:
+    raise SystemExit(
+        f"K3_STAGE_MODEL host={host} status=incomplete "
+        f"missing_count={len(missing)} first={missing[:3]}"
+    )
+total_bytes = sum((snapshot / shard).stat().st_size for shard in shards)
+print(
+    f"K3_STAGE_MODEL host={host} status=complete revision={revision} "
+    f"shard_count={len(shards)} shard_bytes={total_bytes}",
+    flush=True,
+)
+PY
+        '
+
+    echo "K3_STAGE complete job_id=$INVENTORY_JOB_ID"
     exit 42
 fi
 
