@@ -673,6 +673,30 @@ kimik3-fp4-mi355x-vllm-agentic:
 # tokens = 2.14x concurrency for a 1M-token request, so c8 already exercises the
 # host tier on this corpus without being so deep that a capacity stall hides a
 # plain bring-up bug.
+# LMCache server-profile A/B for Kimi-K3. NOT shipped -- delete once one profile
+# wins. Both cells are conc 8 with prefix caching forced on, --max-num-batched-tokens
+# 768 and --chunk-size 768 (all three are hard Mamba-hybrid requirements the recipe
+# applies automatically), so the ONLY difference is the lmcache server command:
+#   lmcache      -> AMD K3 reference: --max-gpu-workers 1 --max-cpu-workers 8,
+#                   --l1-align-bytes 16384, --eviction-trigger-watermark 0.85,
+#                   --eviction-ratio 0.10, --supported-transfer-mode lmcache_driven
+#   lmcache-k27  -> kimik2.7 recipe:   --max-workers TP*2, --l1-read-ttl-seconds 7200,
+#                   kv_connector_module_path + ZMQ-style lmcache.mp.host
+kimik3-fp4-mi355x-vllm-agentic-lmprofile:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3

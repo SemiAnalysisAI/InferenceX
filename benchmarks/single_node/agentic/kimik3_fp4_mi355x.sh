@@ -181,8 +181,15 @@ OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
-  lmcache)
-    require_agentic_kv_offload_backend lmcache
+  lmcache|lmcache-k27)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # The server profile has to be selectable from config: the agentic matrix
+    # has no per-cell env channel, so the backend NAME carries it.
+    #   lmcache      -> AMD K3 reference server command
+    #   lmcache-k27  -> kimik2.7_fp4_mi355x.sh's server command
+    if [ "$KV_OFFLOAD_BACKEND" = "lmcache-k27" ]; then
+        LMCACHE_PROFILE=k2.7
+    fi
 
     # LMCache on K3 REQUIRES prefix caching. K3's Kimi Delta Attention layers
     # are Mamba KV-cache groups, and vLLM only selects mamba_cache_mode='align'
@@ -414,7 +421,7 @@ except Exception:
     exit 1
     ;;
   *)
-    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: lmcache)" >&2
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: lmcache, lmcache-k27)" >&2
     exit 1
     ;;
 esac
