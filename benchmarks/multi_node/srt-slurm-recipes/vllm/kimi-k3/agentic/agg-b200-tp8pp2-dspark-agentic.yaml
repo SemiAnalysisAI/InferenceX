@@ -107,13 +107,15 @@ backend:
       # speculative decoding, arXiv 2607.05147): parallel backbone drafting
       # plus a lightweight sequential head — reported ~27-31% higher accepted
       # length than EAGLE3 and 60-85% faster per-user generation than MTP-1
-      # at matched throughput. Variant I uses the Inferact draft head,
-      # probabilistic draft sampling + block rejection sampling (the #2366
-      # acceptance-rate optimization), k=7, and synthetic_acceptance_length
-      # 3.84 = the committed golden AL for exactly this sampling config at
-      # k=7 (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_
-      # block_rejection_sample_method.yaml, measured in run 30316471205).
-      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark", "num_speculative_tokens":7, "method": "dspark", "attention_backend": "FLASHINFER_MLA", "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "synthetic_acceptance_length": 3.84}'
+      # at matched throughput. This variant uses the Inferact draft head at
+      # k=7 with SYNTHETIC rejection sampling, injecting
+      # synthetic_acceptance_length 3.84 — the committed golden AL measured
+      # under probabilistic draft + block rejection sampling (the #2366
+      # acceptance-rate optimization; golden_al_distribution/
+      # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_
+      # method.yaml, run 30316471205) — per the golden-AL synthetic-
+      # acceptance convention (golden_al_distribution/README.md).
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark", "num_speculative_tokens":7, "method": "dspark", "attention_backend": "FLASHINFER_MLA", "rejection_sample_method": "synthetic", "synthetic_acceptance_length": 3.84}'
       # No explicit max-model-len: let vLLM derive the native 1M window from
       # the model config (agentic trajectories blow past any small cap, and
       # K3's KDA layers keep per-token KV small — only the 24 gated-MLA
