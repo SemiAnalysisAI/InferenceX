@@ -512,6 +512,49 @@ if [ "${SPEC_DECODE:-false}" = "true" ]; then
     )
 fi
 
+# ---- Eval-only path -----------------------------------------------------------
+# Mirrors the kimik2.7 agentic EVAL v2 configuration that scored on SWE-bench
+# (run 30258968315). Two things are needed beyond the throughput config, and
+# both are gated on EVAL_ONLY so the measured serving config is untouched.
+EVAL_SERVE_ARGS=()
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    # The kimi_k3 tool-call and reasoning parsers are already passed
+    # unconditionally by this recipe (they are part of the AMD reference
+    # command), unlike kimik2.7 where they had to be added for eval.
+    #
+    # With tool calls flowing, vLLM builds a grammar for them and the default
+    # backend `auto` resolves to xgrammar, which rejects Kimi's tool-call tokens
+    # ("Failed to advance FSM" -> HTTP 500 -> empty patches -> a near-zero
+    # score). Move off xgrammar. llguidance is the guidance backend's runtime
+    # and is not in the ROCm image, so install it on demand.
+    SO_BACKEND="${STRUCTURED_OUTPUTS_BACKEND:-guidance}"
+    if [ "$SO_BACKEND" != "auto" ]; then
+        python3 -c 'import llguidance' 2>/dev/null || pip install --quiet llguidance || true
+        if python3 -c 'import llguidance' 2>/dev/null; then
+            # `vllm serve --help` lists config SECTIONS, not flags; the flag
+            # names only appear under --help=all.
+            VLLM_SERVE_HELP="$(vllm serve --help=all 2>/dev/null || vllm serve --help 2>/dev/null || true)"
+            if grep -q -- '--structured-outputs-config' <<<"$VLLM_SERVE_HELP"; then
+                EVAL_SERVE_ARGS+=(--structured-outputs-config "{\"backend\":\"$SO_BACKEND\"}")
+            elif grep -q -- '--guided-decoding-backend' <<<"$VLLM_SERVE_HELP"; then
+                EVAL_SERVE_ARGS+=(--guided-decoding-backend "$SO_BACKEND")
+            else
+                echo "WARN: no structured-outputs backend flag in this image; leaving the default in place" >&2
+            fi
+        else
+            echo "WARN: llguidance unavailable; leaving the default structured-outputs backend (xgrammar) in place" >&2
+        fi
+    fi
+
+    # 300 SWE-bench Lite instances at the sweep's conc would not finish inside
+    # SWEBENCH_AGENT_TIMEOUT (6h). Accuracy does not depend on the conc point,
+    # only wall-clock does, so widen serving concurrency for eval and let the
+    # harness match it.
+    EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-64}"
+    export SWEBENCH_AGENT_WORKERS="${SWEBENCH_AGENT_WORKERS:-$EVAL_MAX_NUM_SEQS}"
+    MAX_NUM_SEQS="$EVAL_MAX_NUM_SEQS"
+fi
+
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
@@ -540,6 +583,7 @@ VLLM_CMD=(
     "${PREFIX_CACHE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
     "${SPEC_ARGS[@]}"
+    "${EVAL_SERVE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
