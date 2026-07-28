@@ -1537,7 +1537,7 @@ kimik3-fp4-h200-vllm-agentic:
       # Throughput-oriented: TP1/PP2 with DP16/EP16 across four H200 nodes.
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [16, 32]
+        conc-list: [16]
         prefill:
           num-worker: 16
           tp: 1
