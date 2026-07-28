@@ -1,8 +1,10 @@
-# Kimi-K3 GB300 AgentX aggregate PoC: one TP8 worker spans two four-GPU nodes and
-# serves both prefill and decode. No mooncake / KV offload -- baseline aggregate.
-# Ported from the validated srt-slurm recipe; follows the deepseek-v4 agentic layout
-# (InferenceX PR #2341). Concurrency 16.
-name: "kimi-vllm-agg-gb300-tp8-agentic"
+# Kimi-K3 GB300 AgentX disaggregated: TP8 prefill + TP8 decode, NO mooncake.
+# P->D KV transfer over NixlConnector only. Mirrors the TP8 agg recipe for
+# parallelism (pure tensor-parallel 8, no DEP); disagg-specific bits are the
+# per-role kv-transfer-config and VLLM_SSM_CONV_STATE_LAYOUT=DS (required to
+# transfer the GatedDeltaNet/Mamba conv state P->D). Each role is TP8 = 8 GPUs
+# = 2 nodes (4 GPUs/node), 4 nodes total.
+name: "kimi-vllm-disagg-gb300-tp8-tp8-agentic"
 
 model:
   # Alias resolved to the checkpoint path via the launcher-generated models.yaml
@@ -39,9 +41,12 @@ health_check:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  agg_nodes: 2
-  agg_workers: 1
-  gpus_per_agg: 8
+  prefill_nodes: 2
+  decode_nodes: 2
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
 
 infra:
   etcd_nats_dedicated_node: false
@@ -60,18 +65,21 @@ frontend:
 backend:
   type: vllm
   connector: null
-  aggregated_environment:
+  kv_events_config:
+    prefill: true
+  # Same env as the TP8 agg recipe + the disagg-only Mamba conv-state layout.
+  prefill_environment: &kimi_env
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     DYN_REQUEST_PLANE: "tcp"
-    ETCD_LEASE_TTL: "120"
+    # Disagg-only: lay out the Mamba/GDN conv state in DeepSeek (DS) format so it
+    # can be transferred prefill->decode. Without it the prefill worker fails
+    # "3-read Mamba conv transfer requires DS conv state layout".
+    VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+    ETCD_LEASE_TTL: "600"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_RPC_TIMEOUT: "600000"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    # Disabled: the container's CUDA-graph capture path enters vLLM's
-    # nccl_symm_mem_context without set_graph_pool_id, so capture asserts
-    # "graph_pool_id is not set under graph capture". Off -> symm-mem context is
-    # a no-op and capture proceeds. (Fixed in newer vLLM cuda_graph.py.)
     VLLM_USE_NCCL_SYMM_MEM: "0"
-    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -81,17 +89,40 @@ backend:
     VLLM_USE_RUST_FRONTEND: "1"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-agentx"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_RCACHE_MAX_UNRELEASED: "1024"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_TCP_AF_PRIO: "inet"
     NCCL_P2P_LEVEL: NVL
+  decode_environment:
+    <<: *kimi_env
 
   vllm_config:
-    aggregated:
+    prefill:
+      # No mooncake: single NixlConnector for the P->D KV handshake/transfer.
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
+      served-model-name: "moonshotai/Kimi-K3"
+      tokenizer-mode: "kimi_k3"
+      load-format: fastsafetensors
+      kv-cache-dtype: fp8
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+      enable-cumem-allocator: true
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      enforce-eager: true
+      stream-interval: 10
+      max-num-seqs: 64
+      language-model-only: true
+      attention-backend: "FLASHINFER_MLA"
+      attention-config: '{"mla_prefill_backend": "FLASHINFER", "use_prefill_query_quantization": true}'
+    decode:
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: fastsafetensors
@@ -104,12 +135,10 @@ backend:
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       max-cudagraph-capture-size: 128
       stream-interval: 10
+      max-num-seqs: 64
       language-model-only: true
       attention-backend: "FLASHINFER_MLA"
       attention-config: '{"mla_prefill_backend": "FLASHINFER", "use_prefill_query_quantization": true}'
-      max-num-seqs: 64
-      enable-prefix-caching: true
-      gpu-memory-utilization: 0.95
 
 sbatch_directives:
   mem: "0"
@@ -127,10 +156,8 @@ benchmark:
     RESULT_DIR: /logs/agentic
     AGENTIC_OUTPUT_DIR: /logs/agentic
     PORT: "8000"
-    IS_MULTINODE: "false"
-    TP: "8"
-    EP_SIZE: "1"
-    DP_ATTENTION: "false"
+    IS_MULTINODE: "true"
+    DISAGG: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
@@ -141,7 +168,16 @@ benchmark:
     PRECISION: "fp4"
     CONC: "16"
     DURATION: "1800"
-    RESULT_FILENAME: "kimi-k3_fp4_dynamo-vllm_aggtp8_c16"
+    RESULT_FILENAME: "kimi-k3_fp4_dynamo-vllm_ptp8_dtp8_c16"
+    # Per-role topology: GPUs = prefill_tp*workers + decode_tp*workers = 8 + 8 = 16.
+    PREFILL_NUM_WORKERS: "1"
+    PREFILL_TP: "8"
+    PREFILL_EP: "1"
+    PREFILL_DP_ATTENTION: "false"
+    DECODE_NUM_WORKERS: "1"
+    DECODE_TP: "8"
+    DECODE_EP: "1"
+    DECODE_DP_ATTENTION: "false"
     KV_OFFLOADING: "none"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"

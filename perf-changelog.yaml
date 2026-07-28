@@ -5119,6 +5119,9 @@
 
 - config-keys:
     - kimik3-fp4-gb300-dynamo-vllm-agentic-agg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-disagg
   description:
-    - "Add Kimi-K3 GB300 Dynamo-vLLM AgentX aggregate TP8 baseline (concurrency 16): one TP8 aggregate worker across two GB300 4-GPU nodes, upstream srt-slurm v1.0.36, random session-affinity routing."
+    - "Add Kimi-K3 GB300 Dynamo-vLLM AgentX recipes on upstream srt-slurm v1.0.36 with random session-affinity routing."
+    - "Aggregate TP8 (two GB300 4-GPU nodes) swept at concurrency 1, 2, 4, 8, 12, 16 both without KV offload and with native CPU KV offload (SimpleCPUOffloadConnector, 120 GiB/GPU host DRAM); agg workers use gpu-memory-utilization 0.95."
+    - "Disaggregated TP8 prefill + TP8 decode (4 nodes) with P->D KV transfer over NixlConnector, swept at concurrency 1, 2, 4, 8, 12, 16."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2373

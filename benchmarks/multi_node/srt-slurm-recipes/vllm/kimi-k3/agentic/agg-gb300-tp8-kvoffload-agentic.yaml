@@ -1,8 +1,8 @@
-# Kimi-K3 GB300 AgentX aggregate PoC: one TP8 worker spans two four-GPU nodes and
-# serves both prefill and decode. No mooncake / KV offload -- baseline aggregate.
-# Ported from the validated srt-slurm recipe; follows the deepseek-v4 agentic layout
-# (InferenceX PR #2341). Concurrency 16.
-name: "kimi-vllm-agg-gb300-tp8-agentic"
+# Kimi-K3 GB300 AgentX aggregate with native CPU KV offload: one TP8 worker spans
+# two four-GPU nodes and serves both prefill and decode, with the in-process
+# SimpleCPUOffloadConnector holding evicted KV blocks in host DRAM. Mirrors the
+# baseline agg recipe (agg-gb300-tp8-agentic.yaml) plus the native-offload wiring.
+name: "kimi-vllm-agg-gb300-tp8-kvoffload-agentic"
 
 model:
   # Alias resolved to the checkpoint path via the launcher-generated models.yaml
@@ -79,6 +79,9 @@ backend:
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_USE_RUST_FRONTEND: "1"
+    # Use the simple in-process CPU KV-offload connector (SimpleCPUOffloadConnector)
+    # instead of the full OffloadingConnector.
+    VLLM_USE_SIMPLE_KV_OFFLOAD: "1"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_CONNECTOR_PREFETCH_KV_CAP: "0.65"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
@@ -96,6 +99,13 @@ backend:
       tokenizer-mode: "kimi_k3"
       load-format: fastsafetensors
       kv-cache-dtype: fp8
+      # Native CPU KV offload. kv-offloading-size is the TOTAL across all TP ranks
+      # (docstring), so 120 GiB/GPU * 8 GPUs = 960. vLLM auto-sets the connector to
+      # SimpleCPUOffloadConnector (VLLM_USE_SIMPLE_KV_OFFLOAD=1) and injects
+      # cpu_bytes_to_use; kv-transfer-config only carries lazy_offload here.
+      kv-transfer-config: '{"kv_connector_extra_config":{"lazy_offload":true}}'
+      kv-offloading-backend: native
+      kv-offloading-size: 960
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       enable-cumem-allocator: true
@@ -141,8 +151,11 @@ benchmark:
     PRECISION: "fp4"
     CONC: "16"
     DURATION: "1800"
-    RESULT_FILENAME: "kimi-k3_fp4_dynamo-vllm_aggtp8_c16"
-    KV_OFFLOADING: "none"
+    RESULT_FILENAME: "kimi-k3_fp4_dynamo-vllm_aggtp8_kvoffload_c16"
+    KV_OFFLOADING: "dram"
+    KV_OFFLOAD_BACKEND: "native"
+    KV_OFFLOAD_BACKEND_METADATA: '{"name": "native"}'
+    TOTAL_CPU_DRAM_GB: "960"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
