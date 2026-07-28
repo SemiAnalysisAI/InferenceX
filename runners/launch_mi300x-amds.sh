@@ -21,7 +21,7 @@ set -x
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
-    AITER_OVERLAY_REF="7dc33974f71341201ed0b59230aa38514b46c20f"
+    AITER_OVERLAY_REF="ecef4ad9396aa3d640976b2adf8cd17012af31da"
     AITER_OVERLAY_DIR="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
 
     download_aiter_overlay() {
@@ -60,6 +60,9 @@ PY
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
         "a778cbe2d666afe791562a266485cb48f2637f7ec583330f088e4a0962e1486d"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
+        "e12b93224fccf4793a0c8c1d229650432d51526f0ce0a4e184707f2f55d887ec"
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
         "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
@@ -161,6 +164,9 @@ PY
                 /workspace/.aiter-k3-gfx942-overlay/mixed_moe_gemm_2stage.py \
                 "$aiter_root/ops/flydsl/kernels/mixed_moe_gemm_2stage.py"
             install -m 0644 \
+                /workspace/.aiter-k3-gfx942-overlay/mfma_preshuffle_pipeline.py \
+                "$aiter_root/ops/flydsl/kernels/mfma_preshuffle_pipeline.py"
+            install -m 0644 \
                 /workspace/.aiter-k3-gfx942-overlay/lds_dma_policy.py \
                 "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py"
             install -m 0644 \
@@ -168,9 +174,10 @@ PY
                 "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
             python -m compileall -q \
                 "$aiter_root/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
+                "$aiter_root/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
                 "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py" \
                 "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
-            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=7dc33974f71341201ed0b59230aa38514b46c20f"
+            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=ecef4ad9396aa3d640976b2adf8cd17012af31da"
 
             python - <<"PY"
 import importlib.metadata
