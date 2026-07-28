@@ -105,7 +105,7 @@ backend:
   vllm_config:
     prefill:
       # No mooncake: single NixlConnector for the P->D KV handshake/transfer.
-      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: fastsafetensors
@@ -122,7 +122,7 @@ backend:
       attention-backend: "FLASHINFER_MLA"
       attention-config: '{"mla_prefill_backend": "FLASHINFER", "use_prefill_query_quantization": true}'
     decode:
-      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: fastsafetensors

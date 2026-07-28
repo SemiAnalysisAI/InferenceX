@@ -102,8 +102,9 @@ backend:
       # Native CPU KV offload. kv-offloading-size is the TOTAL across all TP ranks
       # (docstring), so 120 GiB/GPU * 8 GPUs = 960. vLLM auto-sets the connector to
       # SimpleCPUOffloadConnector (VLLM_USE_SIMPLE_KV_OFFLOAD=1) and injects
-      # cpu_bytes_to_use; kv-transfer-config only carries lazy_offload here.
-      kv-transfer-config: '{"kv_connector_extra_config":{"lazy_offload":true}}'
+      # cpu_bytes_to_use. Recompute KV on a failed offload load rather than
+      # failing the request (no lazy_offload -> synchronous offload).
+      kv-transfer-config: '{"kv_load_failure_policy":"recompute"}'
       kv-offloading-backend: native
       kv-offloading-size: 960
       tensor-parallel-size: 8
