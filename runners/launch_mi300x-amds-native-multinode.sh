@@ -434,7 +434,13 @@ export GLOO_SOCKET_IFNAME="$KIMIK3_SOCKET_IFNAME"
 export NCCL_SOCKET_IFNAME="$KIMIK3_SOCKET_IFNAME"
 export MODEL_PATH="$MODEL_CONTAINER_PATH"
 
-SERVER_LOG_DIR=$(mktemp -d)
+# Keep the live log in the workspace from the first byte. GitHub cancellation
+# can SIGKILL the launcher before its traps finish, but the workflow's
+# `always()` upload step still runs. A /tmp-only log is therefore lost exactly
+# on the failure path where it matters most.
+SERVER_LOG_DIR="$GITHUB_WORKSPACE/multinode_server_logs_live"
+rm -rf "$SERVER_LOG_DIR"
+mkdir -p "$SERVER_LOG_DIR"
 SERVER_LOG="$SERVER_LOG_DIR/vllm_server.log"
 SERVER_RC_FILE="$SERVER_LOG_DIR/server.rc"
 SERVER_SRUN_PID_FILE="$SERVER_LOG_DIR/server.srun.pid"

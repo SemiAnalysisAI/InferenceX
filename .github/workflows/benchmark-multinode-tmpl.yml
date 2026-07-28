@@ -392,7 +392,9 @@ jobs:
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           # multinode launchers package server logs into this tarball.
-          path: multinode_server_logs.tar.gz
+          path: |
+            multinode_server_logs.tar.gz
+            multinode_server_logs_live/**
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result
