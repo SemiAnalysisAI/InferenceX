@@ -27,13 +27,18 @@ export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONNOUSERSITE=1
 
+LOAD_FORMAT=fastsafetensors
+if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
+    LOAD_FORMAT=auto
+fi
+
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
-    --load-format fastsafetensors
+    --load-format "$LOAD_FORMAT"
     --moe-backend "$VLLM_MOE_BACKEND"
     --gpu-memory-utilization 0.95
     --enable-prefix-caching
