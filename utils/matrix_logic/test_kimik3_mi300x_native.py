@@ -75,6 +75,7 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         "NATIVE_MULTINODE=1",
         "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054",
         "AITER_SITUV2_A8W4=0",
+        "KIMIK3_STARTUP_TIMEOUT_SECONDS=300",
     ]
 
 

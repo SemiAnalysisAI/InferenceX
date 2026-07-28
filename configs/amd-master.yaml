@@ -2283,6 +2283,8 @@ kimik3-fp4-mi300x-vllm-agentic:
           - "NATIVE_MULTINODE=1"
           - "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054"
           - "AITER_SITUV2_A8W4=0"
+          # Canary-only diagnostic bound; production keeps the 7200s default.
+          - "KIMIK3_STARTUP_TIMEOUT_SECONDS=300"
         decode:
           num-worker: 0
           tp: 8
