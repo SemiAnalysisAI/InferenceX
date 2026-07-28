@@ -73,13 +73,17 @@ backend:
     # 300-second model-execution default.
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    # Prefix-cache retention (variant F). NOT the GB recipes' 32768: Kimi-K3's
-    # KDA hybrid gives a scheduler_block_size of 3145728 and the engine
-    # hard-rejects any value that is not a multiple of it (verified on this
-    # PR family: "VLLM_PREFIX_CACHE_RETENTION_INTERVAL (32768) must be
-    # non-negative and a multiple of scheduler_block_size (3145728)").
-    # 3145728 = one scheduler block, the smallest valid retention interval.
-    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "3145728"
+    # Allocator-fragmentation fix proven on the identical SimpleCPU connector
+    # config in #2370 (variant E, closed): a 2.36 GiB MLA prefill transient
+    # OOM'd while 2.63 GiB sat reserved-but-unallocated. The GPU-resident
+    # variant D runs green without this; the offload connector's staging
+    # shifts the layout enough to fragment. NCCL_CUMEM_ENABLE unchanged.
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+    # Prefix-cache retention (variant F): 0. Any positive value must be a
+    # multiple of Kimi-K3's KDA-hybrid scheduler_block_size (3145728; the GB
+    # recipes' 32768 is hard-rejected at engine init — verified on this PR
+    # family), and 0 is the only value below one 3.1M-token scheduler block.
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
     # No VLLM_PREFIX_CACHE_RETENTION_INTERVAL: the GB200/GB300 AgentX value
     # (32768) hard-fails engine init on Kimi-K3 — the KDA hybrid gives it a
     # scheduler_block_size of 3145728 and the interval must be a multiple of
