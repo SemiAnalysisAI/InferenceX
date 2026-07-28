@@ -56,6 +56,7 @@ frontend:
 backend:
   type: vllm
   connector: null
+  dp_launch_mode: per_node
   aggregated_environment:
     HF_HUB_CACHE: "/hf_hub_cache"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"

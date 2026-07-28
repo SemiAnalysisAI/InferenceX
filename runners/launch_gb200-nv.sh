@@ -374,6 +374,8 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
+        git apply \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimi-k3-vllm-tp-dp-per-node.patch"
     else
         mkdir -p recipes/vllm/deepseek-v4/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
