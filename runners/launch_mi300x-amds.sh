@@ -43,6 +43,7 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
     timeout 120s salloc \
         --partition="$PARTITION" \
         --exclude=chi-mi300x-049,chi-mi300x-121 \
+        --nodelist=chi-mi300x-043 \
         --nodes=1 \
         --ntasks=1 \
         --ntasks-per-node=1 \
@@ -110,47 +111,85 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         bash -lc '
             set -euo pipefail
             python - <<"PY"
-import importlib
-import importlib.util
-import json
-import pathlib
+import importlib.metadata
+import os
 
 import torch
+import aiter
+from aiter import ActivationType, QuantType, dtypes
+from aiter.fused_moe import get_2stage_cfgs, get_padded_M
+from aiter.jit.utils.chip_info import get_cu_num, get_gfx
+from aiter.ops.flydsl.moe_common import GateMode
 
 assert torch.cuda.is_available()
-props = torch.cuda.get_device_properties(0)
-arch = getattr(props, "gcnArchName", "unknown")
+assert get_gfx() == "gfx942", get_gfx()
 
-vllm = importlib.import_module("vllm")
-aiter = importlib.import_module("aiter")
-vllm_root = pathlib.Path(vllm.__file__).resolve().parent
-kimi_paths = sorted(
-    str(path.relative_to(vllm_root))
-    for path in vllm_root.rglob("*")
-    if "kimi" in path.name.lower() and "k3" in path.name.lower()
+try:
+    aiter_version = importlib.metadata.version("amd-aiter")
+except importlib.metadata.PackageNotFoundError:
+    aiter_version = getattr(aiter, "__version__", "unknown")
+
+print(
+    "K3_MXFP4_METADATA_ENV"
+    f" gfx={get_gfx()} cu={get_cu_num()} aiter={aiter_version}"
+    f" torch={torch.__version__} hip={torch.version.hip}"
 )
-kimi_spec = importlib.util.find_spec("vllm.model_executor.models.kimi_k3")
 
-evidence = {
-    "torch_version": torch.__version__,
-    "hip_version": torch.version.hip,
-    "device_count": torch.cuda.device_count(),
-    "device_name": props.name,
-    "gcn_arch": arch,
-    "vllm_version": getattr(vllm, "__version__", "unknown"),
-    "aiter_path": str(pathlib.Path(aiter.__file__).resolve()),
-    "kimi_module": kimi_spec is not None,
-    "kimi_paths": kimi_paths[:20],
-}
-print("K3_RAID_CONTAINER_PREFLIGHT " + json.dumps(evidence, sort_keys=True))
-assert evidence["hip_version"]
-assert evidence["device_count"] >= 1
-assert arch == "unknown" or "gfx942" in arch
-assert evidence["kimi_module"] or evidence["kimi_paths"]
+def describe(stage):
+    func = getattr(stage, "func", stage)
+    keywords = getattr(stage, "keywords", {})
+    return (
+        f"{getattr(func, '__module__', '')}."
+        f"{getattr(func, '__name__', repr(func))} {keywords}"
+    )
+
+supported = {}
+for mode, activation_dtype in (
+    ("a16w4", dtypes.bf16),
+    ("a8w4", dtypes.fp8),
+):
+    os.environ["AITER_SITUV2_A8W4"] = "1" if mode == "a8w4" else "0"
+    try:
+        metadata = get_2stage_cfgs(
+            get_padded_M(1),
+            3584,
+            384,
+            896,
+            16,
+            dtypes.bf16,
+            activation_dtype,
+            dtypes.fp4x2,
+            QuantType.per_1x32,
+            True,
+            ActivationType.Situv2,
+            False,
+            0,
+            0,
+            True,
+            GateMode.SEPARATED,
+        )
+        supported[mode] = True
+        print(
+            f"K3_MXFP4_METADATA mode={mode} status=supported"
+            f" block_m={metadata.block_m}"
+            f" stage1={describe(metadata.stage1)}"
+            f" stage2={describe(metadata.stage2)}"
+        )
+    except Exception as exc:
+        supported[mode] = False
+        print(
+            f"K3_MXFP4_METADATA mode={mode} status=unsupported"
+            f" error_type={type(exc).__name__} error={exc}"
+        )
+
+if any(supported.values()):
+    print("K3_MXFP4_METADATA_RESULT status=kernel-launch-required")
+else:
+    print("K3_MXFP4_METADATA_RESULT status=no-gfx942-dispatch")
 PY
         '
 
-    echo "K3_RAID_CONTAINER_PREFLIGHT complete job_id=$DIAG_JOB_ID"
+    echo "K3_MXFP4_METADATA_PREFLIGHT complete job_id=$DIAG_JOB_ID"
     exit 42
 fi
 
