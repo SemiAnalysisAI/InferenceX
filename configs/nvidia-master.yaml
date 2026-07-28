@@ -1467,7 +1467,7 @@ kimik2.5-int4-h200-vllm-agentic:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
-# Kimi K3 is a 2.8T MXFP4 MoE served on 8xH200 nodes.
+# Kimi K3 is a 2.8T MXFP4 MoE served on H200 nodes.
 # These are the three aggregated strategies from the official H200
 # recipe (https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200):
 # multi-node TP is latency-oriented, TEP is balanced, and DEP is
@@ -1489,7 +1489,7 @@ kimik3-fp4-h200-vllm-agentic:
       # Latency-oriented: one TP8/PP2 engine spanning two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [5]
+        conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
           tp: 8
@@ -1513,7 +1513,7 @@ kimik3-fp4-h200-vllm-agentic:
       # Balanced: TP4/PP2 with DP2/EP8 across two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [3]
+        conc-list: [4, 8, 16, 32]
         prefill:
           num-worker: 2
           tp: 4
