@@ -1427,7 +1427,7 @@ dsv4-fp4-mi355x-atom:
       - { tp: 8, ep: 1, dp-attn: true,  conc-start: 64, conc-end: 2048 }
 
 dsv4-fp4-mi355x-atom-mtp:
-  image: rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3
+  image: rocm/atom-dev:nightly_202607231538
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -1439,7 +1439,16 @@ dsv4-fp4-mi355x-atom-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1024, spec-decoding: mtp }
+      # Aligns ATOM official DSv4 MTP (models.json): MTP3 dp-off at low-mid conc,
+      # DPA MTP3 (dp-attn) at mid-high conc. dp-on starts at c32 (dp-attn helps from c32).
+      # prefill-only TBO on dp-attn cells at conc>=256 (measured crossover: TBO hurts
+      # c64/c128 -10~14%, helps c256+ +8~14%; MTP removes low-conc latency so TBO there is
+      # pure overhead). MTP-safe — only decode-TBO (--enable-tbo all) drops spec metadata.
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 4,  conc-end: 256,  spec-decoding: mtp }
+      - { tp: 8, ep: 1, dp-attn: true,  conc-start: 32, conc-end: 1024, spec-decoding: mtp }
+      # tp4 removed: tp4+MTP+dp-on OOMs — 806G/4=201G/GPU weight leaves KV budget
+      # NEGATIVE (-10.98GB) even at gpu-mem-util 0.90 (run 30277221626). #2327 tp4
+      # works only because it's non-MTP (no draft KV layer). MTP stays tp8-only.
 
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x

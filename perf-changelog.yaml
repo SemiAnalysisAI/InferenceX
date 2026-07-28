@@ -5122,3 +5122,10 @@
   description:
     - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+  
+- config-keys:
+    - dsv4-fp4-mi355x-atom-mtp
+  description:
+    - "Re-sweep dsv4-fp4-mi355x-atom-mtp on latest atom-dev nightly (nightly_202607231538, was atom0.1.3 release). Align ATOM official MTP config (models.json): MTP3 dp-off conc 4-256 + DPA MTP3 (dp-attn) conc 32-1024 (added c32 dp-on; tp4 tried but removed — tp4+MTP+dp-on OOMs, KV budget negative). prefill-only TBO (--enable-tbo, argparse const=prefill so enable_tbo_decode=False) on dp-attn cells at conc>=256 (measured crossover run 30257759947 vs non-TBO 30238071409: TBO -10~14% output tput at c64/c128 but +8~14% at c256+; MTP removes low-conc latency so TBO overlap there is pure overhead); MTP-safe because only decode-TBO (--enable-tbo all) drops spec_decode_metadata. max_num_seqs=conc on dp-on cells and conc>=64 to avoid OOM. bench keeps --dsv4 (InferenceX bench uses encoding_dsv4.py; DSv4-Pro has no jinja chat_template). Fixed benchmark_lib source path (../ -> ../../)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2345
+  
