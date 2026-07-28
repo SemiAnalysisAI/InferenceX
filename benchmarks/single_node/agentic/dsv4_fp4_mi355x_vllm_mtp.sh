@@ -403,14 +403,11 @@ fi
 # so size the per-rank cap as 2*CONC/TP (aggregate = 2*CONC). In pure-TP there
 # is a single scheduler across all GPUs that sees all CONC sessions, so use
 # 2*CONC directly. 
-#if [ "$DP_ATTENTION" = "true" ]; then
-#    MAX_NUM_SEQS=$((2 * CONC / TP))
-#else
-#    MAX_NUM_SEQS=$((2 * CONC))
-#fi
-
-# enforce to use 2xCONC for better throughput
-MAX_NUM_SEQS=$((2 * CONC))
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_NUM_SEQS=$((2 * CONC / TP))
+else
+    MAX_NUM_SEQS=$((2 * CONC))
+fi
 CONTEXT_LEN=1048576
 
 # MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
