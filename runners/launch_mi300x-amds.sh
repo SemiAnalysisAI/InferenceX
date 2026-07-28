@@ -134,7 +134,7 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
             export HF_XET_CACHE="$cache/.xet"
             export HF_HUB_DISABLE_PROGRESS_BARS=1
             mkdir -p "$cache" "$HF_HOME" "$HF_XET_CACHE"
-            python -c "import socket; socket.getaddrinfo('huggingface.co', 443)"
+            python -c "import socket; socket.getaddrinfo(\"huggingface.co\", 443)"
             echo "K3_STAGE_NETWORK host=$host status=resolved"
             echo "K3_STAGE_MODEL host=$host status=starting revision=$revision"
 
