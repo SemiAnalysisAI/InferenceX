@@ -495,11 +495,11 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     PREFLIGHT_ARGS=(--no-preflight)
 fi
 
+CONFIG_FILE="$(
+    prepare_inferencex_srt_benchmark_config "$CONFIG_FILE"
+)" || exit 1
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
-    # Pass the full CONFIG_FILE (not the stripped CONFIG_PATH): srtctl needs the
-    # ":zip_override_...[i]" selector to pick the recipe block. For plain-file
-    # recipes CONFIG_FILE == CONFIG_PATH, so this is a no-op for them.
     -f "$CONFIG_FILE"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )

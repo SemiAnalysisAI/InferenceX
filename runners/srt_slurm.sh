@@ -65,3 +65,11 @@ prepare_srt_slurm_checkout() {
         cp -R "$source_dir/." "$target_dir/" || return 1
     fi
 }
+
+prepare_inferencex_srt_benchmark_config() {
+    local config_spec=$1
+
+    python \
+        "${SRT_SLURM_INFERENCEX_ROOT}/runners/srt_slurm_benchmark_config.py" \
+        "$config_spec"
+}
