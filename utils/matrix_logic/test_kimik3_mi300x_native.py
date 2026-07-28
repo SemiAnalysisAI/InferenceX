@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -20,6 +22,10 @@ CONFIG_KEY = "kimik3-fp4-mi300x-vllm-agentic"
 SERVER_SCRIPT = (
     REPO_ROOT / "benchmarks" / "multi_node" / "agentic" / "kimik3_fp4_mi300x_vllm.sh"
 )
+PREFLIGHT_SCRIPT = REPO_ROOT / "runners" / "mi300x_native_node_preflight.sh"
+IMAGE = "vllm/vllm-openai-rocm:kimi-k3"
+REVISION = "0123456789abcdef0123456789abcdef01234567"
+STAGING_COMMANDS = ("hf download", "huggingface-cli download", "wget", "curl")
 
 
 def generate_kimik3_matrix() -> list[dict]:
@@ -150,3 +156,206 @@ def test_aiter_mode_is_not_defaulted_and_accepts_both_modes() -> None:
         result = run_server(env)
         assert result.returncode == 0
         assert f"AITER_SITUV2_A8W4={value}" in result.stdout
+
+
+def write_executable(path: Path, body: str) -> None:
+    path.write_text(body)
+    path.chmod(0o755)
+
+
+def rocminfo_output(gpu_count: int, gpu_arch: str) -> str:
+    """Mimic rocminfo closely enough to catch sloppy agent counting."""
+    blocks = [
+        "HSA Agents\n==========\n",
+        "Agent 1\n*******\n"
+        "  Name:                    AMD EPYC 9654 96-Core Processor\n"
+        "  Marketing Name:          AMD EPYC 9654 96-Core Processor\n"
+        "  Device Type:             CPU\n",
+    ]
+    for index in range(gpu_count):
+        blocks.append(
+            f"Agent {index + 2}\n*******\n"
+            f"  Name:                    {gpu_arch}\n"
+            "  Marketing Name:          AMD Instinct MI300X\n"
+            "  Device Type:             GPU\n"
+        )
+    # The ISA block repeats the arch in a different shape; counting it would
+    # double every GPU.
+    blocks.append(
+        "*** Done ***\nISA Info:\n  ISA 1\n"
+        f"    Name:                    amdgcn-amd-amdhsa--{gpu_arch}:sramecc+:xnack-\n"
+    )
+    return "".join(blocks)
+
+
+def make_node(
+    tmp_path: Path,
+    *,
+    gpu_count: int = 8,
+    gpu_arch: str = "gfx942",
+    with_main_ref: bool = True,
+    with_weight_index: bool = True,
+    with_indexed_shard: bool = True,
+) -> dict[str, object]:
+    """Build one node's model cache, squash tree, and external-command fakes."""
+    cache_root = tmp_path / "raid" / "hf-hub-cache" / "models--moonshotai--Kimi-K3"
+    snapshot_dir = cache_root / "snapshots" / REVISION
+    snapshot_dir.mkdir(parents=True)
+    (snapshot_dir / "config.json").write_text('{"model_type": "kimi_k3"}\n')
+    if with_main_ref:
+        (cache_root / "refs").mkdir(parents=True)
+        (cache_root / "refs" / "main").write_text(f"{REVISION}\n")
+    if with_weight_index:
+        (snapshot_dir / "model.safetensors.index.json").write_text(
+            json.dumps(
+                {
+                    "metadata": {},
+                    "weight_map": {
+                        "model.layers.0.weight": "model-00001-of-00001.safetensors"
+                    },
+                }
+            )
+        )
+    if with_indexed_shard:
+        (snapshot_dir / "model-00001-of-00001.safetensors").write_text("weights\n")
+
+    squash_dir = tmp_path / "raid" / "hf-hub-cache" / "inferencex" / "squash"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    cmd_log = tmp_path / "commands.log"
+    cmd_log.write_text("")
+
+    write_executable(
+        bin_dir / "rocminfo",
+        "#!/usr/bin/env bash\ncat <<'ROCMINFO_EOF'\n"
+        + rocminfo_output(gpu_count, gpu_arch)
+        + "ROCMINFO_EOF\n",
+    )
+    write_executable(
+        bin_dir / "unsquashfs",
+        "#!/usr/bin/env bash\n"
+        'echo "unsquashfs $*" >> "$FAKE_CMD_LOG"\n'
+        "for arg in \"$@\"; do target=\"$arg\"; done\n"
+        '[[ -s "$target" ]] || exit 1\n'
+        "exit 0\n",
+    )
+    write_executable(
+        bin_dir / "enroot",
+        "#!/usr/bin/env bash\n"
+        'echo "enroot $*" >> "$FAKE_CMD_LOG"\n'
+        '[[ "${1:-}" == "import" ]] || exit 1\n'
+        "out=\"\"\n"
+        "while [[ $# -gt 0 ]]; do\n"
+        '  case "$1" in\n'
+        '    -o) out="$2"; shift 2 ;;\n'
+        "    *) shift ;;\n"
+        "  esac\n"
+        "done\n"
+        '[[ -n "$out" ]] || exit 1\n'
+        "printf 'fake-squash-image\\n' > \"$out\"\n",
+    )
+    # Linux runners use the real flock; macOS has none, so shim only there.
+    if shutil.which("flock") is None:
+        write_executable(
+            bin_dir / "flock",
+            "#!/usr/bin/env bash\n"
+            'echo "flock $*" >> "$FAKE_CMD_LOG"\n'
+            "exit 0\n",
+        )
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "KIMIK3_MODEL_CACHE_ROOT": str(cache_root),
+        "KIMIK3_SQUASH_DIR": str(squash_dir),
+        "IMAGE": IMAGE,
+        "FAKE_CMD_LOG": str(cmd_log),
+        "KIMIK3_IMAGE_LOCK_TIMEOUT_SECONDS": "5",
+    }
+    return {"squash_dir": squash_dir, "cmd_log": cmd_log, "env": env}
+
+
+def run_preflight(node: dict[str, object]) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(PREFLIGHT_SCRIPT)],
+        cwd=str(REPO_ROOT),
+        env=node["env"],
+        capture_output=True,
+        text=True,
+    )
+
+
+def preflight_records(stdout: str) -> list[str]:
+    return [
+        line
+        for line in stdout.splitlines()
+        if line.startswith("INFERENCEX_KIMIK3_PREFLIGHT ")
+    ]
+
+
+def test_preflight_imports_and_validates_image_in_node_local_tree(
+    tmp_path: Path,
+) -> None:
+    node = make_node(tmp_path)
+    result = run_preflight(node)
+
+    assert result.returncode == 0, result.stderr
+    records = preflight_records(result.stdout)
+    assert len(records) == 1
+    record = records[0]
+    assert f"revision={REVISION}" in record
+    assert "gpu_count=8" in record
+    assert "gpu_arch=gfx942" in record
+
+    squashes = sorted(node["squash_dir"].glob("*.sqsh"))
+    assert len(squashes) == 1
+    assert squashes[0].stat().st_size > 0
+    assert f"squash_size_bytes={squashes[0].stat().st_size}" in record
+
+    command_log = node["cmd_log"].read_text()
+    assert f"docker://{IMAGE}" in command_log
+    assert not any(command in command_log for command in STAGING_COMMANDS)
+    script_source = PREFLIGHT_SCRIPT.read_text()
+    assert not any(command in script_source for command in STAGING_COMMANDS)
+
+
+def test_preflight_reuses_a_valid_squash_without_import(tmp_path: Path) -> None:
+    node = make_node(tmp_path)
+    assert run_preflight(node).returncode == 0
+
+    node["cmd_log"].write_text("")
+    result = run_preflight(node)
+
+    assert result.returncode == 0, result.stderr
+    assert len(preflight_records(result.stdout)) == 1
+    assert "enroot import" not in node["cmd_log"].read_text()
+
+
+def test_preflight_rejects_seven_gpus(tmp_path: Path) -> None:
+    result = run_preflight(make_node(tmp_path, gpu_count=7))
+    assert result.returncode != 0
+    assert "exactly 8 gfx942" in result.stderr
+
+
+def test_preflight_rejects_wrong_architecture(tmp_path: Path) -> None:
+    result = run_preflight(make_node(tmp_path, gpu_arch="gfx950"))
+    assert result.returncode != 0
+    assert "exactly 8 gfx942" in result.stderr
+
+
+def test_preflight_rejects_missing_main_ref(tmp_path: Path) -> None:
+    result = run_preflight(make_node(tmp_path, with_main_ref=False))
+    assert result.returncode != 0
+    assert "refs/main" in result.stderr
+
+
+def test_preflight_rejects_missing_weight_index(tmp_path: Path) -> None:
+    result = run_preflight(make_node(tmp_path, with_weight_index=False))
+    assert result.returncode != 0
+    assert "model.safetensors.index.json" in result.stderr
+
+
+def test_preflight_rejects_missing_indexed_shard(tmp_path: Path) -> None:
+    result = run_preflight(make_node(tmp_path, with_indexed_shard=False))
+    assert result.returncode != 0
+    assert "missing weight shard" in result.stderr
