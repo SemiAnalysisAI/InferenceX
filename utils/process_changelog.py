@@ -102,12 +102,10 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 
 
 def filter_eval_rows_by_prefill_ep(
-    eval_rows: list[dict],
-    min_prefill_ep: int | None = None,
-    max_prefill_ep: int | None = None,
+    eval_rows: list[dict], min_prefill_ep: int | None
 ) -> list[dict]:
-    """Drop multinode eval rows outside a prefill EP range."""
-    if min_prefill_ep is None and max_prefill_ep is None:
+    """Drop multinode eval rows below a prefill EP threshold."""
+    if min_prefill_ep is None:
         return eval_rows
     kept: list[dict] = []
     for row in eval_rows:
@@ -115,12 +113,9 @@ def filter_eval_rows_by_prefill_ep(
         if isinstance(prefill, dict):
             ep = prefill.get("ep", 1)
             try:
-                ep_val = int(ep)
+                if int(ep) < min_prefill_ep:
+                    continue
             except (TypeError, ValueError):
-                continue
-            if min_prefill_ep is not None and ep_val < min_prefill_ep:
-                continue
-            if max_prefill_ep is not None and ep_val > max_prefill_ep:
                 continue
         kept.append(row)
     return kept
@@ -299,9 +294,7 @@ def main():
                 raise
             entry_eval_results = json.loads(eval_result.stdout)
             entry_eval_results = filter_eval_rows_by_prefill_ep(
-                entry_eval_results,
-                entry.eval_min_prefill_ep,
-                entry.eval_max_prefill_ep,
+                entry_eval_results, entry.eval_min_prefill_ep
             )
             all_eval_results.extend(entry_eval_results)
 

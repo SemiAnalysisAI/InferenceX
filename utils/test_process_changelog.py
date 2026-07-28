@@ -730,13 +730,3 @@ def test_eval_rows_split_into_multinode_fixed_and_agentic_buckets(
     assert [r["exp-name"] for r in output["multinode_agentic_evals"]] == ["multinode_agentic_eval"]
     assert output["evals"] == []
     assert output["agentic_evals"] == []
-
-
-def test_filter_eval_rows_by_prefill_ep_range():
-    rows = [
-        {"prefill": {"ep": 1}, "eval-conc": 32},
-        {"prefill": {"ep": 8}, "eval-conc": 128},
-    ]
-    assert process_changelog.filter_eval_rows_by_prefill_ep(rows, min_prefill_ep=8) == [rows[1]]
-    assert process_changelog.filter_eval_rows_by_prefill_ep(rows, max_prefill_ep=1) == [rows[0]]
-    assert process_changelog.filter_eval_rows_by_prefill_ep(rows) == rows
