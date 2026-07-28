@@ -626,18 +626,19 @@ kimik3-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-      # 0.75 of the runner's available-cpu-dram-mib (3_095_781), which the
+      # 0.80 of the runner's available-cpu-dram-mib (3_095_781), which the
       # matrix generator caps at the 2,861,022 MiB / 3 TB-decimal agentic limit
-      # -> 2249 GB aggregate at TP8. Not higher: LMCache's L1 is pinned and
-      # therefore unswappable, and the reference command sizes the pool to
-      # ~75% of the host DRAM that can be dedicated to it.
+      # -> 2399 GB aggregate at TP8, leaving ~460 GB host headroom. Not 1.0:
+      # LMCache's L1 is pinned and therefore unswappable, and a full-budget
+      # pinned pool has OOM-killed nodes before.
       #
-      # NOTE the recipe applies a second, tighter cap at run time: L1 is
-      # SHM-backed, and if it exceeds free /dev/shm LMCache silently disables
-      # SHM and falls back to a pickle path that crashes at load. The effective
-      # pool is min(this budget, 90% of free /dev/shm) and the recipe logs a
-      # WARNING naming the value it actually used.
-    - dram-utilization: 0.75
+      # NOTE this is only a budget. The recipe applies a second, tighter cap at
+      # run time: L1 is SHM-backed, and if it exceeds free /dev/shm LMCache
+      # silently disables SHM and falls back to a pickle path that crashes at
+      # load. The effective pool is min(this budget, 90% of free /dev/shm), and
+      # the recipe logs a WARNING naming the value it actually used -- read that
+      # line rather than allocated_cpu_dram_gb when interpreting a result.
+    - dram-utilization: 0.80
       search-space:
       # TP=8 only. The MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
       # safetensors), ~195 GB/GPU across 8 GPUs of the 288 GB part; TP=4 would
@@ -682,7 +683,7 @@ kimik3-fp4-mi355x-vllm-agentic-bringup:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.75
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
