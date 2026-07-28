@@ -8073,6 +8073,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           dp-attn: false
       # Throughput oriented: official multi_node_dep strategy, DEP16 across
       # four GB200 nodes (TP4 x DP4 = EP16, one local DP rank per node).
+      # The recipe allows up to 3600s for full-context saturation warmup to drain.
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
       - spec-decoding: none
         conc-list: [32, 64, 96, 128, 192, 256]
