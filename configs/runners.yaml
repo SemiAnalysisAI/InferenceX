@@ -247,6 +247,7 @@ labels:
     - gb200-nv_0
     - gb200-nv_1
     - gb200-nv_2
+    - gb200-nv_3
   cluster:gb300-nv:
     - gb300-nv_0
     - gb300-nv_1
