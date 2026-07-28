@@ -205,3 +205,45 @@ src = replace_once(src, old_c, new_c, "merge")
 path.write_text(src)
 print(f"Patched aux-hidden-state PP transport ({path})")
 PY
+
+# DSpark under pipeline parallelism, part 3: lift the runner's blanket guard.
+# The V2 runner refuses aux-hidden-state spec methods (eagle3/dflash/dspark)
+# under PP because the aux captures were stage-local — exactly the gap the
+# aux-transport patch above closes. With transport in place (and PPHandler
+# already broadcasting sampled counts across ranks), downgrade the hard
+# ValueError to a warning. Idempotent; refuses to patch on layout drift.
+python3 - <<'PY'
+import pathlib
+
+import vllm.v1.worker.gpu.model_runner as mr
+
+path = pathlib.Path(mr.__file__)
+src = path.read_text()
+if "_infmax_pp_aux_enabled" in src:
+    print(f"PP spec-method guard patch already applied: {path}")
+    raise SystemExit(0)
+
+old = """                self.use_aux_hidden_state_outputs = True
+                if self.use_pp:
+                    raise ValueError(
+                        f"{self.speculative_config.method} with pipeline parallel "
+                        "is not supported."
+                    )"""
+new = """                self.use_aux_hidden_state_outputs = True
+                if self.use_pp:
+                    # _infmax_pp_aux_enabled: aux hidden states are shipped
+                    # across PP stages by the InferenceX container patch.
+                    logger.warning(
+                        "InferenceX: %s under pipeline parallelism enabled "
+                        "via patched aux-hidden-state transport.",
+                        self.speculative_config.method,
+                    )"""
+n = src.count(old)
+if n != 1:
+    raise SystemExit(
+        f"expected exactly one PP spec-method guard in {path}, found {n} — "
+        "image layout changed, refusing to patch"
+    )
+path.write_text(src.replace(old, new))
+print(f"Lifted PP spec-method guard: {path}")
+PY
