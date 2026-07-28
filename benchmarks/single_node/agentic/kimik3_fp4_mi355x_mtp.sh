@@ -63,8 +63,9 @@ amd-smi || true
 # allowlist (benchmark_lib.sh), so this replays the full unfiltered 062126 v7
 # corpus rather than the 256k-capped variant. Note that allowlist is a hardcoded
 # MODEL_PREFIX match, NOT a native-context-length rule as its comment suggests --
-# kimik3 had to be added explicitly. --max-model-len below is K3's full 1M native
-# context so the unfiltered corpus can be replayed without truncation.
+# kimik3 had to be added explicitly. The served context is K3's full 1M native
+# window so the unfiltered corpus replays without truncation; vLLM derives it
+# rather than it being pinned with --max-model-len (see the serve block).
 resolve_trace_source
 install_agentic_deps
 
@@ -116,10 +117,25 @@ fi
 echo "Golden AL OK: num_speculative_tokens=$NUM_SPEC_TOKENS -> $FILE_AL"
 if [[ "$DRAFT_MODEL" != /* ]]; then hf download "$DRAFT_MODEL"; fi
 
-# Upstream caps --max-num-seqs at 32 under spec decoding (drafting needs extra
-# VRAM). Agentic convention tracks CONC, so take the lower of the two.
-MAX_SEQS="$CONC"
-if [ "$MAX_SEQS" -gt 32 ]; then MAX_SEQS=32; fi
+# --max-num-seqs is the upstream recipe's fixed 128, NOT the agentic convention of
+# tracking CONC. This is deliberate and is the one remaining difference between
+# this recipe and the only configuration measured working on gfx950.
+#
+# Tracking CONC (previously min(CONC, 32)) makes conc 1 emit
+# cudagraph_capture_sizes [1, 2, 4, 8, 16], and capture page-faults at index 2
+# with hipErrorIllegalAddress. The verified-working diagnostic ran 128, which
+# emits 51 capture sizes [1, 2, 4 ... 496, 512] and captured all of them cleanly
+# -- including the same small sizes that fault under the short list, so the
+# trigger is not a single poisonous shape. GPU KV also differs (1,525,407 tokens
+# at 128 vs 1,601,340 at 1), so allocator layout shifts too, which fits an
+# out-of-bounds access that only faults when the neighbouring page is unmapped.
+#
+# Cost: --max-num-seqs no longer tracks CONC, so the server's batching ceiling is
+# constant across the ladder instead of matching the offered concurrency. At these
+# concurrencies the load generator is the binding constraint, so this should not
+# change what is measured, but it is a real deviation from agentic convention and
+# from the sibling non-MTP recipe.
+MAX_SEQS=128
 
 # The draft's attention backend MUST be pinned. The upstream recipe pins
 # FLASHINFER_MLA, which cannot work here: flashinfer is absent from the ROCm
@@ -144,19 +160,22 @@ SPEC_ATTN_BACKEND="TRITON_MLA"
 # sampling pinned to the committed golden AL. It is a deliberate, temporary
 # deviation and needs codeowner sign-off; it is not an oversight.
 #
-# Reason: with "synthetic" this recipe cannot start at all on gfx950. The server
-# page-faults during CUDA graph capture, reproducibly at step 2/5, right after
-# "Compile and warming up model for size N" -> c10::AcceleratorError
-# hipErrorIllegalAddress, with the engine dying in _initialize_kv_caches.
-# Reproduced at conc 1 at both --max-num-batched-tokens 16384 (runs/30343017203)
-# and 4096 (runs/30344670346), so batch size is not the trigger. No wvSplitK
-# frames, so it is also distinct from the skinny-GEMM fault the non-MTP recipe
-# hits at conc <= 5.
+# Reason: "block" is what the only configuration measured working on gfx950 used
+# (verified on 8x MI355X with TRITON_MLA pinned and --max-num-seqs 128: server
+# reaches ready, returns coherent completions, dmesg shows no page faults), so
+# this recipe matches that configuration rather than diverging from it.
 #
-# "block" (real target verification, as the official recipe uses) is the only
-# configuration measured working on this hardware: verified on 8x MI355X with
-# TRITON_MLA pinned - server reaches ready, returns coherent completions, and
-# dmesg shows no page faults.
+# Do NOT read this as "synthetic is the bug". That hypothesis was tested and
+# refuted: with block, TRITON_MLA and 4096, conc 1 still page-faulted at capture
+# step 2/5 (runs/30349509927). The graph-capture fault reproduces across
+# 16384 (runs/30343017203), 4096 (runs/30344670346) and both rejection methods,
+# so neither batch size nor the rejection method is the trigger. The remaining
+# difference from the working configuration is --max-num-seqs, addressed above.
+# No wvSplitK frames in any of them, so this is distinct from the skinny-GEMM
+# fault the non-MTP recipe hits at conc <= 5.
+#
+# If --max-num-seqs 128 proves sufficient, synthetic should be restored to comply
+# with rule 10 -- it is a one-line change and has not been retested since.
 #
 # Consequence for the data: throughput rows now run REAL verification, so their
 # acceptance length is whatever the draft actually achieves rather than the
@@ -275,9 +294,13 @@ VLLM_CMD=(
     # tokens with the draft loaded), and leaked-VRAM incidents on this fleet have
     # repeatedly left GPUs a few GiB short of the threshold.
     --gpu-memory-utilization 0.88
-    # K3's full 1M native context, matching the unfiltered corpus that
-    # resolve_trace_source now picks for kimik3*.
-    --max-model-len 1048576
+    # --max-model-len is deliberately NOT passed. K3's config.json has no
+    # max_position_embeddings, but vLLM still derives the full 1M native context:
+    # the verified-working diagnostic omitted the flag and resolved to
+    # max_seq_len=1048576, byte-identical to passing it explicitly. Omitting it
+    # keeps this recipe aligned with that diagnostic and with the upstream recipe,
+    # which also does not pass it. This is presentational only - it does not change
+    # the served context length, and it is NOT a fix for anything.
     --max-num-seqs "$MAX_SEQS"
     # 4096, NOT 16384. 16384 was tried here and reverted: it page-faults during
     # CUDA graph capture on gfx950. Measured at conc 1 on 8x MI355X, twice - once
