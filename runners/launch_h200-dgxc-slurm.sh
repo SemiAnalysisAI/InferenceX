@@ -108,21 +108,23 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         exit 1
     fi
     server_nodes="$head_node"
+    server_ports_per_node=1
     if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
         server_nodes="$allocated_nodes"
+        server_ports_per_node=$((gpus_per_node / (PREFILL_TP * PREFILL_PP_SIZE)))
     fi
-    endpoint_urls=
-    metrics_urls=
+    server_urls=()
+    metrics_urls=()
     for server_node in $server_nodes; do
-        if [[ -n "$endpoint_urls" ]]; then
-            endpoint_urls+=","
-            metrics_urls+=","
-        fi
-        endpoint_urls+="http://$server_node:$PORT"
-        metrics_urls+="http://$server_node:$PORT/metrics"
+        for ((local_dp_rank = 0; local_dp_rank < server_ports_per_node; local_dp_rank++)); do
+            server_port=$((PORT + local_dp_rank))
+            server_urls+=("http://$server_node:$server_port")
+            metrics_urls+=("http://$server_node:$server_port/metrics")
+        done
     done
-    export AIPERF_ENDPOINT_URLS="$endpoint_urls"
-    export AIPERF_SERVER_METRICS_URLS="$metrics_urls"
+    AIPERF_ENDPOINT_URLS=$(IFS=,; echo "${server_urls[*]}")
+    AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${metrics_urls[*]}")
+    export AIPERF_ENDPOINT_URLS AIPERF_SERVER_METRICS_URLS
 
     srun --jobid="$job_id" --nodes=1 --ntasks=1 --nodelist="$head_node" bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
@@ -160,8 +162,8 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
 
     for ((attempt = 1; attempt <= 720; attempt++)); do
         servers_ready=true
-        for server_node in $server_nodes; do
-            if ! curl --output /dev/null --silent --fail "http://$server_node:$PORT/health"; then
+        for server_url in "${server_urls[@]}"; do
+            if ! curl --output /dev/null --silent --fail "$server_url/health"; then
                 servers_ready=false
                 break
             fi
