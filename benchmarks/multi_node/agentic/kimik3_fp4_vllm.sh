@@ -53,10 +53,6 @@ fi
 if [[ "$VLLM_DISABLE_CUSTOM_ALL_REDUCE" == "1" ]]; then
     VLLM_CMD+=(--disable-custom-all-reduce)
 fi
-if [ "$PREFILL_DCP_SIZE" -gt 1 ]; then
-    VLLM_CMD+=(--decode-context-parallel-size "$PREFILL_DCP_SIZE")
-fi
-
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
     LOCAL_DATA_PARALLEL_SIZE=$((MULTINODE_GPUS_PER_NODE / (PREFILL_TP * PREFILL_PP_SIZE)))
     VLLM_CMD+=(

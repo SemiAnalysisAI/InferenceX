@@ -1508,34 +1508,10 @@ kimik3-fp4-h200-vllm-agentic:
           pp: 2
           ep: 1
           dp-attn: false
-      # Bring-up probe: preserve full context with DCP across two nodes.
-      - spec-decoding: none
-        kv-offloading: none
-        conc-list: [3]
-        prefill:
-          num-worker: 1
-          tp: 16
-          pp: 1
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "NATIVE_MULTINODE=1"
-          - "VLLM_MOE_BACKEND=marlin"
-          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
-          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
-          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
-        decode:
-          num-worker: 0
-          tp: 16
-          pp: 1
-          dcp-size: 16
-          ep: 1
-          dp-attn: false
       # Balanced: TEP16 across two nodes (TP8 attention, DP2/EP16 MoE).
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [4, 8, 16, 32]
+        conc-list: [3]
         prefill:
           num-worker: 2
           tp: 8
