@@ -178,12 +178,16 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format auto
     --moe-backend auto
-    # 0.90, NOT the upstream recipe's 0.95: MI355X reports 287.98 GiB total but
-    # only ~271 GiB free at startup (~17 GiB driver/framework overhead), so 0.95
-    # (273.59 GiB) hard-fails before KV sizing with "Free memory on device cuda:N
-    # ... is less than desired GPU memory utilization". Measured on g17; 0.90 is
-    # also what every other MI355X recipe here uses.
-    --gpu-memory-utilization 0.90
+    # 0.88, NOT the upstream recipe's 0.95. MI355X reports 287.98 GiB total but
+    # only ~271 GiB free by the time the worker checks (~17 GiB driver/framework
+    # overhead), so 0.95 (273.59 GiB) hard-fails before KV sizing with "Free
+    # memory on device cuda:N ... is less than desired GPU memory utilization".
+    # Measured ceiling is ~0.94. Backed off from 0.90 to 0.88 (253.4 GiB) for
+    # headroom: free memory at the check varied 271.1-271.95 GiB rank-to-rank
+    # even on an idle node, and this fleet intermittently strands ~263 GiB on a
+    # GPU after a killed job, so a tighter setting turns residue into a hard
+    # startup failure instead of a slightly smaller KV cache.
+    --gpu-memory-utilization 0.88
     # K3's full 1M native context, matching the unfiltered corpus that
     # resolve_trace_source now picks for kimik3*.
     --max-model-len 1048576
