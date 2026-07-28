@@ -550,7 +550,14 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
     MAX_NUM_SEQS="$EVAL_MAX_NUM_SEQS"
 fi
 
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
+# 0.88, not the reference's 0.95. Measured on cluster:mi355x-amds: 0.95 asks for
+# 273.59 of 287.98 GiB and cleared only 2 of 9 cells. Observed free memory at
+# startup across seven nodes -- g09 281, g11 275/212/208, g14 256, g16 271/262,
+# g15 21, g18 22 -- so even nominally clean nodes sit below 273.59 once driver
+# overhead and transient co-tenancy are counted. This is not a denylist problem:
+# g11 and g16 each measured both above and below the line hours apart. 0.88
+# (253.4 GiB) clears every observation except the two genuinely occupied nodes.
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 
