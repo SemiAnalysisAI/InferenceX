@@ -1,4 +1,4 @@
-name: "kimik3-vllm-agg-b200-tp8pp2-agentic"
+name: "kimik3-vllm-agg-b200-tp8pp2-simplecpu-agentic"
 
 # Kimi-K3 MXFP4 B200 AGGREGATED TP8 x PP2 agentic recipe (2 nodes / 16 GPUs).
 # The native MXFP4 checkpoint (2.8T total params, ~1.4TB of weights) does not
@@ -30,6 +30,11 @@ dynamo:
 # requires an int64 index but the runner passes the int32 idx_mapping,
 # crashing the first decode step (IndexError: Expected dtype int64 for index).
 setup_script: kimi-k3-container-deps.sh
+
+environment:
+  # SimpleCPUOffloadConnector: identical prefixes must hash to identical
+  # block keys across ranks.
+  PYTHONHASHSEED: "42"
 
 slurm:
   time_limit: "8:00:00"
@@ -87,6 +92,16 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 2
       trust-remote-code: true
+      # SimpleCPUOffloadConnector (variant E): offload KV blocks to CPU DRAM.
+      # cpu_bytes_to_use_per_rank = TOTAL_CPU_DRAM_GB * 1e9 / GPU_COUNT with
+      # the framework's own budget math for cluster:b200-dgxc — DRAM
+      # min(3,095,781 MiB, 2,861,022 MiB cap) * 0.80 utilization = 2399 GB
+      # per node (matrix total-cpu-dram-gb), / 8 ranks = 299,875,000,000
+      # bytes per rank.
+      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":299875000000,"lazy_offload":false,"enable_cross_layers_blocks":"true"}}'
+      # Explicit (default-on) — offloaded blocks are only useful if prefix
+      # caching reuses them across agentic turns.
+      enable-prefix-caching: true
       load-format: fastsafetensors
       moe-backend: auto
       # 0.90, not 0.95: the flashinfer trtllm MXFP4 MoE kernel allocates a

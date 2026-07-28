@@ -8351,8 +8351,14 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
   disagg: false
   scenarios:
     agentic-coding:
-    - search-space:
+    # Variant E: SimpleCPUOffloadConnector KV offload to CPU DRAM.
+    # dram-utilization 0.80 of the capped node DRAM = 2400 GB/node budget;
+    # the recipe hardcodes the resulting 300 GB/rank connector config.
+    - dram-utilization: 0.80
+      search-space:
       - spec-decoding: none
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple, version: "kimi-k3" }
         conc-list: [1, 8, 16, 32]
         prefill:
           num-worker: 1
