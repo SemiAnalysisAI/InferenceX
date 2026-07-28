@@ -79,6 +79,7 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         "NCCL_DEBUG=INFO",
         "NCCL_DEBUG_SUBSYS=INIT,NET",
         "NCCL_IB_DISABLE=1",
+        "KIMIK3_VLLM_GFX942_GATE_PATCH=1",
     ]
 
 
@@ -171,6 +172,31 @@ def test_aiter_mode_is_not_defaulted_and_accepts_both_modes() -> None:
         result = run_server(env)
         assert result.returncode == 0
         assert f"AITER_SITUV2_A8W4={value}" in result.stdout
+
+
+def test_canary_patch_extends_vllm_mxfp4_gate_to_gfx942(tmp_path: Path) -> None:
+    source = tmp_path / "rocm_aiter_moe.py"
+    source.write_text(
+        """class Dummy:
+    def check(self):
+        if weight_key == kMxfp4Static:
+            from vllm.platforms.rocm import on_gfx950
+
+            if not on_gfx950():
+                return False
+"""
+    )
+    env = server_env()
+    env["KIMIK3_VLLM_GFX942_GATE_PATCH"] = "1"
+    env["KIMIK3_VLLM_ROCM_AITER_MOE_PATH"] = str(source)
+
+    result = run_server(env)
+
+    assert result.returncode == 0, result.stderr
+    assert "K3_VLLM_GFX942_MXFP4_GATE_PATCHED" in result.stdout
+    patched = source.read_text()
+    assert "from vllm.platforms.rocm import on_gfx942, on_gfx950" in patched
+    assert "if not (on_gfx942() or on_gfx950()):" in patched
 
 
 def write_executable(path: Path, body: str) -> None:

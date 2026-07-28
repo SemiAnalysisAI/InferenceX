@@ -103,6 +103,58 @@ if [[ -n "${KIMIK3_AITER_OVERLAY_DIR:-}" ]]; then
     echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=${KIMIK3_AITER_OVERLAY_REF:-unknown}"
 fi
 
+# Canary-only companion to the exact-shape gfx942 AITER overlay. The image's
+# vLLM oracle rejects every MXFP4 AITER deployment outside gfx950 before model
+# weights are loaded, even when the underlying gfx942 A16W4 kernel has passed
+# its numerical preflight. Keep this exact guarded source transformation out of
+# the production path; the production image must carry the equivalent upstream
+# vLLM capability change.
+if [[ "${KIMIK3_VLLM_GFX942_GATE_PATCH:-0}" == "1" ]]; then
+    python - <<'PY'
+import hashlib
+import importlib.util
+import os
+from pathlib import Path
+
+override = os.environ.get("KIMIK3_VLLM_ROCM_AITER_MOE_PATH")
+if override:
+    path = Path(override)
+else:
+    from vllm.platforms.rocm import on_gfx942  # noqa: F401
+
+    spec = importlib.util.find_spec(
+        "vllm.model_executor.layers.fused_moe.experts.rocm_aiter_moe"
+    )
+    if spec is None or spec.origin is None:
+        raise SystemExit("could not locate vLLM rocm_aiter_moe.py")
+    path = Path(spec.origin)
+
+old = """            from vllm.platforms.rocm import on_gfx950
+
+            if not on_gfx950():
+"""
+new = """            from vllm.platforms.rocm import on_gfx942, on_gfx950
+
+            if not (on_gfx942() or on_gfx950()):
+"""
+payload = path.read_text()
+if new in payload:
+    updated = payload
+elif payload.count(old) == 1:
+    updated = payload.replace(old, new)
+else:
+    raise SystemExit(
+        f"vLLM gfx950 MXFP4 gate did not match exactly once in {path}"
+    )
+compile(updated, str(path), "exec")
+temporary = path.with_suffix(path.suffix + ".tmp")
+temporary.write_text(updated)
+os.replace(temporary, path)
+digest = hashlib.sha256(updated.encode()).hexdigest()
+print(f"K3_VLLM_GFX942_MXFP4_GATE_PATCHED path={path} sha256={digest}")
+PY
+fi
+
 # The %q dump below is the readable record of the command; tracing the array
 # build as well just prints it twice.
 { set +x; } 2>/dev/null

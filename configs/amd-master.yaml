@@ -2295,6 +2295,9 @@ kimik3-fp4-mi300x-vllm-agentic:
           # status=12/vendor_err=10. Force sockets to prove the K3/model path
           # independently of that node-fabric problem.
           - "NCCL_IB_DISABLE=1"
+          # Canary-only: the AITER overlay validates gfx942 MXFP4 numerics, but
+          # this image's vLLM oracle still hard-rejects MXFP4 outside gfx950.
+          - "KIMIK3_VLLM_GFX942_GATE_PATCH=1"
         decode:
           num-worker: 0
           tp: 8
