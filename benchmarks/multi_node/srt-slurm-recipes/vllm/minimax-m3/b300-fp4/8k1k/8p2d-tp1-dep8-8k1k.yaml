@@ -1,7 +1,7 @@
 name: "minimax-m3-vllm-disagg-b300-8p2d-tp1-dep8-fp4-8k1k"
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
-  container: "vllm/vllm-openai:nightly-2dfaae752b4db0d43cfc0715c780e33be030d0f1"
+  container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: "fp4"
 resources:
   gpu_type: "b300"
