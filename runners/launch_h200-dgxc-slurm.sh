@@ -74,6 +74,7 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         exit 1
     fi
 
+    server_step_pid=""
     cleanup_native_multinode() {
         local exit_code=$?
         trap - EXIT INT TERM
@@ -81,8 +82,10 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         # forcibly terminate the launcher before the server step exits.
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
             -C "$server_log_dir" . 2>/dev/null || true
-        kill "$server_step_pid" 2>/dev/null || true
-        wait "$server_step_pid" 2>/dev/null || true
+        if [[ -n "$server_step_pid" ]]; then
+            kill "$server_step_pid" 2>/dev/null || true
+            wait "$server_step_pid" 2>/dev/null || true
+        fi
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
             -C "$server_log_dir" . 2>/dev/null || true
         scancel "$job_id" 2>/dev/null || true
