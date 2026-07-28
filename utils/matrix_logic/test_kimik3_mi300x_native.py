@@ -478,7 +478,12 @@ def make_cluster(
         "FAKE_HEALTH": "ok",
     }
     env.pop("NATIVE_MULTINODE", None)
-    return {"workspace": workspace, "cmd_log": cmd_log, "env": env}
+    return {
+        "workspace": workspace,
+        "cmd_log": cmd_log,
+        "env": env,
+        "preflight_output": preflight_output,
+    }
 
 def run_launcher(
     cluster: dict[str, object], script: Path = NATIVE_LAUNCHER, timeout: int = 120
@@ -547,7 +552,10 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     client = next(line for line in lines if "agentic_srt.sh" in line)
     assert "--overlap" in client
     assert "--nodelist=node-a" in client
-    assert "/raid/hf-hub-cache:/hf-hub-cache" in client
+    assert "/raid/hf-hub-cache/inferencex/agentx-hub:/hf-hub-cache" in client
+    assert "/raid/hf-hub-cache:/hf-hub-cache" not in client
+    assert "--container-writable" in client
+    assert "--container-writable" in server
 
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
 
@@ -586,6 +594,51 @@ def test_server_failure_preserves_failure_and_cancels_allocation(
     assert "exited" in (result.stdout + result.stderr)
     assert "agentic_srt.sh" not in cluster["cmd_log"].read_text()
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+def test_native_launcher_cancels_the_allocation_before_packaging_logs(
+    tmp_path: Path,
+) -> None:
+    cluster = make_cluster(tmp_path)
+    result = run_launcher(cluster)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    output = result.stdout + result.stderr
+    assert output.index("[cleanup] cancelling allocation") < output.index(
+        "[cleanup] packaging server logs"
+    )
+
+@pytest.mark.parametrize(
+    "knob,value",
+    [
+        ("KIMIK3_CLEANUP_POLL_SECONDS", "0"),
+        ("KIMIK3_CLEANUP_POLL_SECONDS", "0.5"),
+        ("KIMIK3_HEALTH_POLL_SECONDS", "abc"),
+    ],
+)
+def test_native_launcher_rejects_non_positive_timing_knobs(
+    tmp_path: Path, knob: str, value: str
+) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"][knob] = value
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "positive integer" in result.stderr
+    assert "salloc " not in cluster["cmd_log"].read_text()
+
+def test_native_launcher_rejects_mismatched_image_builds(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["preflight_output"].write_text(
+        preflight_record("node-a", REVISION)
+        + preflight_record("node-b", REVISION).replace(
+            "squash_size_bytes=33076838400", "squash_size_bytes=33076838401"
+        )
+    )
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "different builds" in result.stdout + result.stderr
+    assert "--kill-on-bad-exit=1" not in cluster["cmd_log"].read_text()
 
 def test_client_failure_propagates_the_client_exit_code(tmp_path: Path) -> None:
     cluster = make_cluster(tmp_path)

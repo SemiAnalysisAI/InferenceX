@@ -22,6 +22,7 @@ remove_tmp_squash() {
 trap remove_tmp_squash EXIT
 trap 'remove_tmp_squash; exit 130' INT
 trap 'remove_tmp_squash; exit 143' TERM
+trap 'remove_tmp_squash; exit 129' HUP
 
 gpu_arch_lines=$(
     rocminfo 2>/dev/null |

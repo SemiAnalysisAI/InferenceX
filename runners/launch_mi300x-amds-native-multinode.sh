@@ -10,11 +10,12 @@ KIMIK3_STARTUP_TIMEOUT_SECONDS="${KIMIK3_STARTUP_TIMEOUT_SECONDS:-7200}"
 KIMIK3_HEALTH_POLL_SECONDS="${KIMIK3_HEALTH_POLL_SECONDS:-10}"
 KIMIK3_CLEANUP_TIMEOUT_SECONDS="${KIMIK3_CLEANUP_TIMEOUT_SECONDS:-120}"
 KIMIK3_CLEANUP_POLL_SECONDS="${KIMIK3_CLEANUP_POLL_SECONDS:-2}"
+KIMIK3_PRESCANCEL_TIMEOUT_SECONDS="${KIMIK3_PRESCANCEL_TIMEOUT_SECONDS:-15}"
 export KIMIK3_MODEL_CACHE_ROOT KIMIK3_SQUASH_DIR
 export PORT="${PORT:-8888}"
 
-HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache}"
-export HF_HUB_CACHE="${HF_HUB_CACHE:-/hf-hub-cache}"
+HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache/inferencex/agentx-hub}"
+HF_HUB_CACHE_CONTAINER="${HF_HUB_CACHE:-/hf-hub-cache}"
 
 fail_with() {
     local rc="$1"
@@ -76,6 +77,14 @@ case "$CONC_VALUE" in
     *) fail "concurrency must be 1, 2, 4, or 8, got '$CONC_VALUE'" ;;
 esac
 
+for knob in KIMIK3_STARTUP_TIMEOUT_SECONDS KIMIK3_HEALTH_POLL_SECONDS \
+    KIMIK3_CLEANUP_TIMEOUT_SECONDS KIMIK3_CLEANUP_POLL_SECONDS \
+    KIMIK3_PRESCANCEL_TIMEOUT_SECONDS KIMIK3_SLURM_TIME_MINUTES; do
+    if [[ ! "${!knob}" =~ ^[1-9][0-9]*$ ]]; then
+        fail "$knob must be a positive integer, got '${!knob}'"
+    fi
+done
+
 if [[ -n "${AITER_SITUV2_A8W4+set}" ]]; then
     if [[ "$AITER_SITUV2_A8W4" != "0" && "$AITER_SITUV2_A8W4" != "1" ]]; then
         fail "AITER_SITUV2_A8W4 must be 0 or 1 when set, got '$AITER_SITUV2_A8W4'"
@@ -89,6 +98,7 @@ CLIENT_PID=""
 SERVER_LOG_DIR=""
 SERVER_LOG=""
 SERVER_RC_FILE=""
+SERVER_SRUN_PID_FILE=""
 EXTRACT_DIR=""
 HANDOFF_HOST=""
 SCRATCH_HOST=""
@@ -104,8 +114,12 @@ dump_server_log() {
 
 package_server_logs() {
     if [[ -n "$SERVER_LOG_DIR" ]]; then
+        echo "[cleanup] packaging server logs"
         bundle_server_logs "$SERVER_LOG_DIR" \
             "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+        if [[ ! -s "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+            echo "[cleanup] WARNING: the server produced no log to package"
+        fi
     fi
 }
 
@@ -142,16 +156,17 @@ cleanup() {
 
     if [[ -n "$SERVER_PID" ]]; then
         echo "[cleanup] stopping server step"
+        if [[ -n "$SERVER_SRUN_PID_FILE" && -s "$SERVER_SRUN_PID_FILE" ]]; then
+            kill "$(cat "$SERVER_SRUN_PID_FILE")" 2>/dev/null
+        fi
         kill "$SERVER_PID" 2>/dev/null
         wait "$SERVER_PID" 2>/dev/null
         SERVER_PID=""
     fi
 
-    package_server_logs
-
     if [[ -n "$JOB_ID" && -n "$HEAD_NODE" && -n "$SCRATCH_HOST" ]]; then
         echo "[cleanup] removing node-local scratch $SCRATCH_HOST"
-        run_bounded "$KIMIK3_CLEANUP_TIMEOUT_SECONDS" \
+        run_bounded "$KIMIK3_PRESCANCEL_TIMEOUT_SECONDS" \
             srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 \
             --nodelist="$HEAD_NODE" rm -rf "$SCRATCH_HOST"
     fi
@@ -169,6 +184,8 @@ cleanup() {
             waited=$(( waited + KIMIK3_CLEANUP_POLL_SECONDS ))
         done
     fi
+
+    package_server_logs
 
     [[ -n "$HANDOFF_HOST" ]] && rm -f "$HANDOFF_HOST"
     [[ -n "$EXTRACT_DIR" ]] && rm -rf "$EXTRACT_DIR"
@@ -246,6 +263,10 @@ for record in records:
     if int(record.get("squash_size_bytes") or 0) <= 0:
         sys.exit(f"ERROR: node {host} has no valid container image")
 
+sizes = {record.get("squash_size_bytes") for record in records}
+if len(sizes) != 1:
+    sys.exit(f"ERROR: nodes imported different builds of the image: {sorted(sizes)} bytes")
+
 print(revisions.pop())
 ')
 echo "Both nodes verified at model revision $REVISION"
@@ -262,6 +283,7 @@ export MODEL_PATH="$MODEL_CONTAINER_PATH"
 SERVER_LOG_DIR=$(mktemp -d)
 SERVER_LOG="$SERVER_LOG_DIR/vllm_server.log"
 SERVER_RC_FILE="$SERVER_LOG_DIR/server.rc"
+SERVER_SRUN_PID_FILE="$SERVER_LOG_DIR/server.srun.pid"
 
 {
     set +e
@@ -272,13 +294,17 @@ SERVER_RC_FILE="$SERVER_LOG_DIR/server.rc"
         --kill-on-bad-exit=1 \
         --container-image="$IMAGE_PATH" \
         --container-remap-root \
+        --container-writable \
         --no-container-mount-home \
         --no-container-entrypoint \
         --container-workdir=/workspace \
         --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
         --export=ALL \
         bash -c 'export MULTINODE_NODE_RANK="$SLURM_PROCID"; exec bash /workspace/benchmarks/multi_node/agentic/kimik3_fp4_mi300x_vllm.sh' \
-        > "$SERVER_LOG" 2>&1
+        > "$SERVER_LOG" 2>&1 &
+    srun_pid=$!
+    printf '%s\n' "$srun_pid" > "$SERVER_SRUN_PID_FILE"
+    wait "$srun_pid"
     printf '%s\n' "$?" > "$SERVER_RC_FILE"
 } &
 SERVER_PID=$!
@@ -288,7 +314,7 @@ HEALTH_URL="http://${HEAD_NODE}:${PORT}/health"
 startup_deadline=$(( $(date +%s) + KIMIK3_STARTUP_TIMEOUT_SECONDS ))
 set +x
 while true; do
-    if [[ -f "$SERVER_RC_FILE" ]]; then
+    if [[ -s "$SERVER_RC_FILE" ]]; then
         server_rc=$(tr -d '[:space:]' < "$SERVER_RC_FILE")
         wait "$SERVER_PID" 2>/dev/null || true
         SERVER_PID=""
@@ -309,7 +335,7 @@ set -x
 
 SCRATCH_HOST="$KIMIK3_SQUASH_DIR/.runs/${JOB_ID}-conc${CONC_VALUE}"
 srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \
-    mkdir -p "$SCRATCH_HOST/output" "$SCRATCH_HOST/agentic"
+    mkdir -p "$SCRATCH_HOST/output" "$SCRATCH_HOST/agentic" "$HF_HUB_CACHE_MOUNT"
 
 HANDOFF_NAME="multinode_agentic_handoff.tar.gz"
 HANDOFF_HOST="$GITHUB_WORKSPACE/$HANDOFF_NAME"
@@ -328,16 +354,18 @@ client_rc=$?
 shopt -s nullglob
 cd /results
 aggregates=(output/*.json)
-tar czf "$KIMIK3_HANDOFF_PATH" "${aggregates[@]}" agentic
+tar czf "$KIMIK3_HANDOFF_PATH" ${aggregates[@]+"${aggregates[@]}"} agentic
 exit "$client_rc"'
 
+HF_HUB_CACHE="$HF_HUB_CACHE_CONTAINER" \
 srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \
     --container-image="$IMAGE_PATH" \
     --container-remap-root \
+    --container-writable \
     --no-container-mount-home \
     --no-container-entrypoint \
     --container-workdir=/workspace \
-    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_CONTAINER,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
     --export=ALL \
     bash -c "$CLIENT_WORKER_SCRIPT" &
 CLIENT_PID=$!
@@ -359,11 +387,12 @@ if printf '%s\n' "$archive_entries" | grep -Eq '(^|/)\.\.(/|$)'; then
 fi
 
 EXTRACT_DIR=$(mktemp -d)
-tar xzf "$HANDOFF_HOST" -C "$EXTRACT_DIR"
+tar xzf "$HANDOFF_HOST" -C "$EXTRACT_DIR" --no-same-owner --no-same-permissions
 
 AGGREGATE="$EXTRACT_DIR/output/${RESULT_FILENAME}_conc${CONC_VALUE}.json"
 if [[ ! -f "$AGGREGATE" ]]; then
-    fail "the handoff archive is missing ${RESULT_FILENAME}_conc${CONC_VALUE}.json"
+    fail_with "$(( client_rc == 0 ? 1 : client_rc ))" \
+        "the handoff archive is missing ${RESULT_FILENAME}_conc${CONC_VALUE}.json (client exit code $client_rc)"
 fi
 copy_to_workspace "$AGGREGATE" "$GITHUB_WORKSPACE/$(basename "$AGGREGATE")"
 
