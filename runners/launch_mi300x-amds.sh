@@ -239,7 +239,7 @@ def download_one(item):
                 raise
             print(
                 f"K3_STAGE_RETRY file={relative_path} attempt={attempt + 1} "
-                f"offset={offset} error_type={type(exc).__name__}",
+                f"offset={offset} error_type={type(exc).__name__} error={exc}",
                 flush=True,
             )
             time.sleep(min(60, 2 ** attempt))
@@ -268,7 +268,7 @@ PY
             while kill -0 "$download_pid" 2>/dev/null; do
                 snapshot="$model_cache/snapshots/$revision"
                 file_bytes=$(du -sb "$snapshot" 2>/dev/null | awk "{print \$1}" || true)
-                file_count=$(find "$snapshot" -type f 2>/dev/null | wc -l)
+                file_count=$(find "$snapshot" -type f 2>/dev/null | wc -l || true)
                 echo "K3_STAGE_PROGRESS host=$host file_count=$file_count file_bytes=${file_bytes:-0}"
                 sleep 60
             done
