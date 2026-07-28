@@ -330,3 +330,83 @@ hardware:
   cluster:mi355x-amds:
     available-cpu-dram-mib: 3_095_781
     gpus-per-node: 8
+models:
+  # Cluster-local checkpoints used by launchers instead of downloading the
+  # portable HuggingFace model IDs in the benchmark configs. When multiple
+  # paths are listed, the first existing directory wins and the first entry is
+  # the deterministic fallback.
+  cluster:b200-dgxc:
+    dsr1:
+      fp4:
+        # Per-node /raid is not populated reliably across the cluster.
+        model-paths:
+          - /scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2
+        srt-slurm-model-prefix: dsr1
+      fp8:
+        model-paths:
+          - /lustre/fsw/models/dsr1-0528-fp8
+        srt-slurm-model-prefix: dsr1-fp8
+    dsv4:
+      fp4:
+        model-paths:
+          - /lustre/fsw/models/deepseek-v4-pro
+          - /lustre/fsw/models/dsv4-pro
+          - /lustre/fsw/models/DeepSeek-V4-Pro
+        srt-slurm-model-prefix: deepseek-v4-pro
+        # Preserve the operator override supported by the previous launcher.
+        allow-model-path-override: true
+    qwen3.5:
+      bf16:
+        model-paths:
+          - /lustre/fsw/models/Qwen3.5-397B-A17B
+        srt-slurm-model-prefix: qwen3.5
+      fp8:
+        model-paths:
+          - /lustre/fsw/models/Qwen3.5-397B-A17B-FP8
+        srt-slurm-model-prefix: qwen3.5-fp8
+      fp4:
+        model-paths:
+          - /lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4
+        srt-slurm-model-prefix: qwen3.5-fp4
+    glm5:
+      fp8:
+        model-paths:
+          - /lustre/fsw/models/GLM-5-FP8
+        srt-slurm-model-prefix: glm5-fp8
+      fp4:
+        model-paths:
+          - /lustre/fsw/models/GLM-5-NVFP4
+        srt-slurm-model-prefix: glm5-fp4
+    kimik2.5:
+      int4:
+        model-paths:
+          - /lustre/fsw/models/Kimi-K2.5
+        srt-slurm-model-prefix: kimik2.5
+      fp4:
+        model-paths:
+          - /lustre/fsw/models/Kimi-K2.5-NVFP4
+        srt-slurm-model-prefix: kimik2.5-fp4
+    minimaxm2.5:
+      fp8:
+        model-paths:
+          - /lustre/fsw/models/MiniMax-M2.5
+        srt-slurm-model-prefix: minimax-m2.5-fp8
+      fp4:
+        model-paths:
+          - /lustre/fsw/models/MiniMax-M2.5-NVFP4
+        srt-slurm-model-prefix: minimax-m2.5-nvfp4
+    gptoss:
+      fp4:
+        model-paths:
+          - /lustre/fsw/models/gpt-oss-120b
+        srt-slurm-model-prefix: gptoss
+    minimaxm3:
+      fp8:
+        # Day-zero model staged in the sa-shared-writable gharunners tree.
+        model-paths:
+          - /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8
+        srt-slurm-model-prefix: minimax-m3-mxfp8
+      fp4:
+        model-paths:
+          - /scratch/fsw/models/MiniMax-M3-NVFP4
+        srt-slurm-model-prefix: minimax-m3-nvfp4
