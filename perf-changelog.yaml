@@ -5127,4 +5127,4 @@
     - "There is no vllm/models/kimi_k3/amd/dspark*.py and the registry hardcodes vllm.models.kimi_k3.nvidia.dspark_mla with no platform dispatch, so on ROCm the draft runs the NVIDIA implementation while the base model still resolves to kimi_k3.amd.model"
     - "--max-num-seqs is min(CONC, 32): upstream caps at 32 under spec decoding for the extra drafting VRAM, agentic convention tracks CONC"
     - "TP=8 only (~195 GB/GPU of MI355X's 288 GB HBM); conc 1/4/8/16 mirrors the non-MTP ladder for direct comparison, with conc 32 omitted because the resident draft cuts GPU KV from 2,204,913 to 1,723,308 tokens (2.10x -> 1.64x for a 1M-token request); DRAM KV offload via vllm-simple at dram-utilization 0.95 (2849 GB aggregate, 356 GB/rank)"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2367
