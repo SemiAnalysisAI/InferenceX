@@ -32,7 +32,6 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
-    --load-format fastsafetensors
     --moe-backend "$VLLM_MOE_BACKEND"
     --gpu-memory-utilization 0.95
     --enable-prefix-caching
