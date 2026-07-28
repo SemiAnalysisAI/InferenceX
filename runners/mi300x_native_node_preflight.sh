@@ -38,6 +38,7 @@ remove_tmp_squash() {
 trap remove_tmp_squash EXIT
 trap 'remove_tmp_squash; exit 130' INT
 trap 'remove_tmp_squash; exit 143' TERM
+trap 'remove_tmp_squash; exit 129' HUP
 
 # 1. GPU topology. Each GPU agent contributes one bare "Name: gfx<arch>" line;
 #    the trailing ISA block spells the arch differently and must not be counted.

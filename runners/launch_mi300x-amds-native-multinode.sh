@@ -25,15 +25,25 @@ KIMIK3_STARTUP_TIMEOUT_SECONDS="${KIMIK3_STARTUP_TIMEOUT_SECONDS:-7200}"
 KIMIK3_HEALTH_POLL_SECONDS="${KIMIK3_HEALTH_POLL_SECONDS:-10}"
 KIMIK3_CLEANUP_TIMEOUT_SECONDS="${KIMIK3_CLEANUP_TIMEOUT_SECONDS:-120}"
 KIMIK3_CLEANUP_POLL_SECONDS="${KIMIK3_CLEANUP_POLL_SECONDS:-2}"
+# Anything that has to finish *before* scancel gets its own short deadline: a
+# cancelled CI job is SIGKILLed within seconds, and every second spent here is a
+# second two exclusive nodes stay allocated.
+KIMIK3_PRESCANCEL_TIMEOUT_SECONDS="${KIMIK3_PRESCANCEL_TIMEOUT_SECONDS:-15}"
 export KIMIK3_MODEL_CACHE_ROOT KIMIK3_SQUASH_DIR
 export PORT="${PORT:-8888}"
 
 # The AgentX client pre-downloads its trace corpus into HF_HUB_CACHE. The
 # multi-node workflow template does not set it (only the single-node one does),
-# so point it at the same node-local cache the weights live in; otherwise every
-# job re-downloads the corpus into a throwaway container layer.
-HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache}"
-export HF_HUB_CACHE="${HF_HUB_CACHE:-/hf-hub-cache}"
+# so give the client its own node-local cache; otherwise every job re-downloads
+# the corpus into a throwaway container layer.
+#
+# Deliberately not /raid/hf-hub-cache itself. This mount is read-write, and that
+# directory is the parent of both the pinned checkpoint and every job's squash
+# image, so mounting it would hand the replay client delete rights over the
+# ~1.5 TB snapshot the preflight refuses to re-download.
+HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache/inferencex/agentx-hub}"
+# Not exported: only the client container has this path mounted.
+HF_HUB_CACHE_CONTAINER="${HF_HUB_CACHE:-/hf-hub-cache}"
 
 fail_with() {
     local rc="$1"
@@ -97,6 +107,17 @@ case "$CONC_VALUE" in
     *) fail "concurrency must be 1, 2, 4, or 8, got '$CONC_VALUE'" ;;
 esac
 
+# Every timing knob feeds `waited=$(( waited + poll ))` deadline loops, where a
+# zero, fractional or non-numeric value never advances the counter and spins
+# forever -- once *before* scancel, where it would leak the allocation.
+for knob in KIMIK3_STARTUP_TIMEOUT_SECONDS KIMIK3_HEALTH_POLL_SECONDS \
+    KIMIK3_CLEANUP_TIMEOUT_SECONDS KIMIK3_CLEANUP_POLL_SECONDS \
+    KIMIK3_PRESCANCEL_TIMEOUT_SECONDS KIMIK3_SLURM_TIME_MINUTES; do
+    if [[ ! "${!knob}" =~ ^[1-9][0-9]*$ ]]; then
+        fail "$knob must be a positive integer, got '${!knob}'"
+    fi
+done
+
 # Passed through untouched; gfx942 has no committed Kimi-K3 tuned MoE tables yet.
 if [[ -n "${AITER_SITUV2_A8W4+set}" ]]; then
     if [[ "$AITER_SITUV2_A8W4" != "0" && "$AITER_SITUV2_A8W4" != "1" ]]; then
@@ -113,6 +134,7 @@ CLIENT_PID=""
 SERVER_LOG_DIR=""
 SERVER_LOG=""
 SERVER_RC_FILE=""
+SERVER_SRUN_PID_FILE=""
 EXTRACT_DIR=""
 HANDOFF_HOST=""
 SCRATCH_HOST=""
@@ -128,8 +150,14 @@ dump_server_log() {
 
 package_server_logs() {
     if [[ -n "$SERVER_LOG_DIR" ]]; then
+        echo "[cleanup] packaging server logs"
         bundle_server_logs "$SERVER_LOG_DIR" \
             "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+        # bundle_server_logs returns 0 on an empty directory, which otherwise
+        # looks identical to a successful archive.
+        if [[ ! -s "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" ]]; then
+            echo "[cleanup] WARNING: the server produced no log to package"
+        fi
     fi
 }
 
@@ -167,16 +195,24 @@ cleanup() {
 
     if [[ -n "$SERVER_PID" ]]; then
         echo "[cleanup] stopping server step"
+        # Kill the srun itself, not just the wrapper subshell that waits on it:
+        # killing the wrapper orphans both vLLM ranks, which then keep running
+        # (and keep appending to the log we are about to package and delete)
+        # until scancel lands.
+        if [[ -n "$SERVER_SRUN_PID_FILE" && -s "$SERVER_SRUN_PID_FILE" ]]; then
+            kill "$(cat "$SERVER_SRUN_PID_FILE")" 2>/dev/null
+        fi
         kill "$SERVER_PID" 2>/dev/null
         wait "$SERVER_PID" 2>/dev/null
         SERVER_PID=""
     fi
 
-    package_server_logs
-
+    # Only the scratch removal needs the allocation alive, so it is the only
+    # thing allowed to delay scancel -- and only briefly. Packaging logs writes
+    # host-local files and happens afterwards.
     if [[ -n "$JOB_ID" && -n "$HEAD_NODE" && -n "$SCRATCH_HOST" ]]; then
         echo "[cleanup] removing node-local scratch $SCRATCH_HOST"
-        run_bounded "$KIMIK3_CLEANUP_TIMEOUT_SECONDS" \
+        run_bounded "$KIMIK3_PRESCANCEL_TIMEOUT_SECONDS" \
             srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 \
             --nodelist="$HEAD_NODE" rm -rf "$SCRATCH_HOST"
     fi
@@ -194,6 +230,8 @@ cleanup() {
             waited=$(( waited + KIMIK3_CLEANUP_POLL_SECONDS ))
         done
     fi
+
+    package_server_logs
 
     [[ -n "$HANDOFF_HOST" ]] && rm -f "$HANDOFF_HOST"
     [[ -n "$EXTRACT_DIR" ]] && rm -rf "$EXTRACT_DIR"
@@ -279,6 +317,12 @@ for record in records:
     if int(record.get("squash_size_bytes") or 0) <= 0:
         sys.exit(f"ERROR: node {host} has no valid container image")
 
+# The image tag is mutable, so two nodes can each hold a valid squash built from
+# a different push. Size is the only cross-node identity signal in the record.
+sizes = {record.get("squash_size_bytes") for record in records}
+if len(sizes) != 1:
+    sys.exit(f"ERROR: nodes imported different builds of the image: {sorted(sizes)} bytes")
+
 print(revisions.pop())
 ')
 echo "Both nodes verified at model revision $REVISION"
@@ -297,10 +341,16 @@ export MODEL_PATH="$MODEL_CONTAINER_PATH"
 SERVER_LOG_DIR=$(mktemp -d)
 SERVER_LOG="$SERVER_LOG_DIR/vllm_server.log"
 SERVER_RC_FILE="$SERVER_LOG_DIR/server.rc"
+SERVER_SRUN_PID_FILE="$SERVER_LOG_DIR/server.srun.pid"
 
 # The rc file, not the PID, is the liveness signal: a background child that has
 # exited but not been reaped still answers `kill -0`. `set +e` is what lets a
 # failing rank reach the printf below instead of killing this subshell silently.
+# srun runs backgrounded inside the wrapper purely so its own PID can be
+# recorded -- cleanup needs it, because killing the wrapper leaves srun running.
+# --container-writable matches the other three AMD launchers: AITER JIT-compiles
+# kernels into its package directory at runtime and --no-container-mount-home
+# leaves it nowhere else to write.
 {
     set +e
     srun --jobid="$JOB_ID" \
@@ -310,13 +360,17 @@ SERVER_RC_FILE="$SERVER_LOG_DIR/server.rc"
         --kill-on-bad-exit=1 \
         --container-image="$IMAGE_PATH" \
         --container-remap-root \
+        --container-writable \
         --no-container-mount-home \
         --no-container-entrypoint \
         --container-workdir=/workspace \
         --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
         --export=ALL \
         bash -c 'export MULTINODE_NODE_RANK="$SLURM_PROCID"; exec bash /workspace/benchmarks/multi_node/agentic/kimik3_fp4_mi300x_vllm.sh' \
-        > "$SERVER_LOG" 2>&1
+        > "$SERVER_LOG" 2>&1 &
+    srun_pid=$!
+    printf '%s\n' "$srun_pid" > "$SERVER_SRUN_PID_FILE"
+    wait "$srun_pid"
     printf '%s\n' "$?" > "$SERVER_RC_FILE"
 } &
 SERVER_PID=$!
@@ -328,7 +382,8 @@ startup_deadline=$(( $(date +%s) + KIMIK3_STARTUP_TIMEOUT_SECONDS ))
 # bury the server log in curl lines.
 set +x
 while true; do
-    if [[ -f "$SERVER_RC_FILE" ]]; then
+    # -s, not -f: printf creates the file before it writes the code.
+    if [[ -s "$SERVER_RC_FILE" ]]; then
         server_rc=$(tr -d '[:space:]' < "$SERVER_RC_FILE")
         wait "$SERVER_PID" 2>/dev/null || true
         SERVER_PID=""
@@ -353,7 +408,7 @@ set -x
 # crosses into the workspace.
 SCRATCH_HOST="$KIMIK3_SQUASH_DIR/.runs/${JOB_ID}-conc${CONC_VALUE}"
 srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \
-    mkdir -p "$SCRATCH_HOST/output" "$SCRATCH_HOST/agentic"
+    mkdir -p "$SCRATCH_HOST/output" "$SCRATCH_HOST/agentic" "$HF_HUB_CACHE_MOUNT"
 
 # Pre-created by the host user so the remapped-root container writes *into* an
 # already host-owned file instead of creating a root-owned one.
@@ -376,16 +431,22 @@ client_rc=$?
 shopt -s nullglob
 cd /results
 aggregates=(output/*.json)
-tar czf "$KIMIK3_HANDOFF_PATH" "${aggregates[@]}" agentic
+# nullglob plus set -u: an empty aggregates array is unbound on bash < 4.4.
+tar czf "$KIMIK3_HANDOFF_PATH" ${aggregates[@]+"${aggregates[@]}"} agentic
 exit "$client_rc"'
 
+# HF_HUB_CACHE is set here rather than exported: only this container has the
+# cache mounted, and pointing the server ranks at a path they cannot see would
+# make them resolve a cache root that does not exist.
+HF_HUB_CACHE="$HF_HUB_CACHE_CONTAINER" \
 srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \
     --container-image="$IMAGE_PATH" \
     --container-remap-root \
+    --container-writable \
     --no-container-mount-home \
     --no-container-entrypoint \
     --container-workdir=/workspace \
-    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_CONTAINER,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
     --export=ALL \
     bash -c "$CLIENT_WORKER_SCRIPT" &
 CLIENT_PID=$!
@@ -411,11 +472,14 @@ if printf '%s\n' "$archive_entries" | grep -Eq '(^|/)\.\.(/|$)'; then
 fi
 
 EXTRACT_DIR=$(mktemp -d)
-tar xzf "$HANDOFF_HOST" -C "$EXTRACT_DIR"
+# The name checks above cannot see link *targets*, so extract without honouring
+# archived ownership or modes as well.
+tar xzf "$HANDOFF_HOST" -C "$EXTRACT_DIR" --no-same-owner --no-same-permissions
 
 AGGREGATE="$EXTRACT_DIR/output/${RESULT_FILENAME}_conc${CONC_VALUE}.json"
 if [[ ! -f "$AGGREGATE" ]]; then
-    fail "the handoff archive is missing ${RESULT_FILENAME}_conc${CONC_VALUE}.json"
+    fail_with "$(( client_rc == 0 ? 1 : client_rc ))" \
+        "the handoff archive is missing ${RESULT_FILENAME}_conc${CONC_VALUE}.json (client exit code $client_rc)"
 fi
 copy_to_workspace "$AGGREGATE" "$GITHUB_WORKSPACE/$(basename "$AGGREGATE")"
 

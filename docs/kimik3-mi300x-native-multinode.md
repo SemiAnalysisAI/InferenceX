@@ -68,11 +68,12 @@ Optional knobs, with their defaults:
 |---|---|---|
 | `KIMIK3_MODEL_CACHE_ROOT` | `/raid/hf-hub-cache/models--moonshotai--Kimi-K3` | node-local model cache |
 | `KIMIK3_SQUASH_DIR` | `/raid/hf-hub-cache/inferencex/squash` | node-local image tree |
-| `HF_HUB_CACHE_MOUNT` | `/raid/hf-hub-cache` | host side of the client's HF cache mount |
+| `HF_HUB_CACHE_MOUNT` | `/raid/hf-hub-cache/inferencex/agentx-hub` | host side of the client's HF cache mount |
 | `HF_HUB_CACHE` | `/hf-hub-cache` | container side; where AgentX caches its trace corpus |
 | `KIMIK3_SLURM_TIME_MINUTES` | `480` | allocation wall clock |
 | `KIMIK3_STARTUP_TIMEOUT_SECONDS` | `7200` | how long to wait for `/health` |
 | `KIMIK3_CLEANUP_TIMEOUT_SECONDS` | `120` | how long cleanup waits for the job to disappear |
+| `KIMIK3_PRESCANCEL_TIMEOUT_SECONDS` | `15` | deadline for the one cleanup step that must precede `scancel` |
 | `KIMIK3_IMAGE_LOCK_TIMEOUT_SECONDS` | `3600` | wait for the per-node image lock |
 
 ## Model layout on each node
