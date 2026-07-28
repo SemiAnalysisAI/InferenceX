@@ -51,6 +51,7 @@ backend:
       gpu-memory-utilization: 0.90
       max-num-seqs: 16
       max-num-batched-tokens: 4096
+      enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
       enable-auto-tool-choice: true

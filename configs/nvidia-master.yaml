@@ -1485,7 +1485,8 @@ kimik3-fp4-h200-vllm-agentic:
   disagg: false
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.80
+      search-space:
       # Latency-oriented: one TP8/PP2 engine spanning two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
@@ -1534,6 +1535,25 @@ kimik3-fp4-h200-vllm-agentic:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp2pp2-dp8ep16-throughput-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
+          pp: 2
+          ep: 16
+          dp-attn: true
+      # High-concurrency DEP with vLLM's host-DRAM KV tier.
+      - spec-decoding: none
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [32, 64, 128]
+        prefill:
+          num-worker: 8
+          tp: 2
+          pp: 2
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp2pp2-dp8ep16-vllm-simple-agentic.yaml"
         decode:
           num-worker: 0
           tp: 2

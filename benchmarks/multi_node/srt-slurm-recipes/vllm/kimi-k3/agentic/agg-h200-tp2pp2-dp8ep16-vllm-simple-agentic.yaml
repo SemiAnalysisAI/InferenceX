@@ -1,4 +1,4 @@
-name: "kimik3-vllm-agg-h200-tp2pp2-dp8ep16-throughput-agentic"
+name: "kimik3-vllm-agg-h200-tp2pp2-dp8ep16-vllm-simple-agentic"
 
 model:
   path: "kimik3"
@@ -33,6 +33,7 @@ backend:
     GLOO_SOCKET_IFNAME: "eth0"
     NCCL_SOCKET_IFNAME: "eth0"
     NCCL_CUMEM_ENABLE: "1"
+    PYTHONHASHSEED: "42"
     PYTHONNOUSERSITE: "1"
     VLLM_ENGINE_READY_TIMEOUT_S: "7200"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
@@ -49,9 +50,10 @@ backend:
       moe-backend: marlin
       attention-backend: FLASHMLA
       gpu-memory-utilization: 0.85
-      max-num-seqs: 2
+      max-num-seqs: 16
       max-num-batched-tokens: 1024
       enable-prefix-caching: true
+      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":154250000000,"lazy_offload":false}}'
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
       enable-auto-tool-choice: true
