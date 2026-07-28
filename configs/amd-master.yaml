@@ -2291,6 +2291,10 @@ kimik3-fp4-mi300x-vllm-agentic:
           # issue is isolated; production does not need verbose collective logs.
           - "NCCL_DEBUG=INFO"
           - "NCCL_DEBUG_SUBSYS=INIT,NET"
+          # Canary-only isolation: the cluster's bnxt_re RoCE path returned
+          # status=12/vendor_err=10. Force sockets to prove the K3/model path
+          # independently of that node-fabric problem.
+          - "NCCL_IB_DISABLE=1"
         decode:
           num-worker: 0
           tp: 8

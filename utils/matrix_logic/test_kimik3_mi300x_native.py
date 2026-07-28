@@ -78,6 +78,7 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         "KIMIK3_STARTUP_TIMEOUT_SECONDS=300",
         "NCCL_DEBUG=INFO",
         "NCCL_DEBUG_SUBSYS=INIT,NET",
+        "NCCL_IB_DISABLE=1",
     ]
 
 
