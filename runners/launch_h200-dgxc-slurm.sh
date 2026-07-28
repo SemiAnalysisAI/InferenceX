@@ -50,7 +50,7 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
     fi
     mkdir -p "$aiperf_cache_host_path" "$image_cache_dir" "$server_log_dir"
 
-    export PORT="$PORT"
+    export PORT=8888
     export HF_HUB_CACHE="$hf_cache_container_path"
     export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"
     export INFMAX_CONTAINER_WORKSPACE="/workspace"
