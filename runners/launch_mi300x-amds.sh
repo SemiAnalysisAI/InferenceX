@@ -16,6 +16,78 @@ export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
 set -x
 
+# Temporary diagnostic branch only: prove that the MI300X controller can
+# create a two-node allocation and launch one Slurm task per node without
+# importing a container or loading model weights.
+if [[ "${PROFILE:-0}" == "1" ]]; then
+    DIAG_ALLOC_LOG=$(mktemp)
+    DIAG_JOB_ID=""
+
+    cleanup_diag() {
+        local rc=$?
+        trap - EXIT INT TERM
+        if [[ -n "$DIAG_JOB_ID" ]]; then
+            scancel "$DIAG_JOB_ID" 2>/dev/null || true
+            for _ in $(seq 1 30); do
+                if ! squeue -j "$DIAG_JOB_ID" --noheader 2>/dev/null | grep -q "$DIAG_JOB_ID"; then
+                    break
+                fi
+                sleep 1
+            done
+        fi
+        rm -f "$DIAG_ALLOC_LOG"
+        exit "$rc"
+    }
+    trap cleanup_diag EXIT INT TERM
+
+    set +e
+    timeout 120s salloc \
+        --partition="$PARTITION" \
+        --exclude=chi-mi300x-049,chi-mi300x-121 \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --gres=gpu:8 \
+        --exclusive \
+        --cpus-per-task=1 \
+        --time=10 \
+        --no-shell \
+        --job-name="$RUNNER_NAME" 2>&1 | tee "$DIAG_ALLOC_LOG"
+    alloc_rc=${PIPESTATUS[0]}
+    set -e
+
+    DIAG_JOB_ID=$(sed -nE 's/.*(Pending|Granted) job allocation ([0-9]+).*/\2/p' "$DIAG_ALLOC_LOG" | tail -n1)
+    if [[ "$alloc_rc" -ne 0 || -z "$DIAG_JOB_ID" ]]; then
+        echo "DIAG allocation failed: rc=$alloc_rc job_id=${DIAG_JOB_ID:-missing}"
+        exit 1
+    fi
+
+    scontrol show job -o "$DIAG_JOB_ID"
+    srun \
+        --jobid="$DIAG_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        bash -lc '
+            set -euo pipefail
+            host=$(hostname -f 2>/dev/null || hostname)
+            gpu_count=$(find /dev/dri -maxdepth 1 -name "renderD*" 2>/dev/null | wc -l)
+            if [[ -e /dev/kfd ]]; then
+                kfd=present
+            else
+                kfd=missing
+            fi
+            printf "MI300X_TWO_NODE_SMOKE host=%s procid=%s gpu_count=%s kfd=%s\n" \
+                "$host" "${SLURM_PROCID:-unknown}" "$gpu_count" "$kfd"
+            [[ "$gpu_count" -ge 8 ]]
+            [[ "$kfd" == "present" ]]
+        '
+
+    echo "MI300X_TWO_NODE_SMOKE complete job_id=$DIAG_JOB_ID"
+    exit 42
+fi
+
 # Exclude known-bad nodes; let Slurm pick from anything else:
 #   chi-mi300x-049: persistent /nvme_home disk-full
 #   chi-mi300x-121: provisioning incomplete; missing /raid and Enroot storage
