@@ -5116,3 +5116,9 @@
   description:
     - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-agg
+  description:
+    - "Add Kimi-K3 GB300 Dynamo-vLLM AgentX aggregate TP8 baseline (concurrency 16): one TP8 aggregate worker across two GB300 4-GPU nodes, upstream srt-slurm v1.0.36, random session-affinity routing."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
