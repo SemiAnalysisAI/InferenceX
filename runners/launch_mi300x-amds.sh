@@ -32,11 +32,11 @@ if [[ "${PROFILE:-0}" == "1" && "${K3_LIVE_ATTACH:-1}" == "1" ]]; then
             set -o pipefail
             host=$(hostname -s)
             echo "K3_LIVE_BEGIN host=$host"
-            rocm-smi --showuse --showmemuse --showpower || true
-            ps -eo pid,ppid,etime,stat,pcpu,pmem,args |
-                grep -E "vllm|EngineCore|multiproc|python" |
+            rocm-smi --showuse --showmemuse --showpower --showpids || true
+            ps -eLo pid,tid,ppid,etime,stat,pcpu,pmem,wchan:32,args |
+                grep -E "vllm|VLLM::|EngineCore|multiproc|python" |
                 grep -v grep |
-                tail -n 120 || true
+                tail -n 240 || true
             echo "K3_LIVE_END host=$host"
         '
     exit 42
