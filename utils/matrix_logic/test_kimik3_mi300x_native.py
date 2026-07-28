@@ -34,7 +34,9 @@ STAGING_COMMANDS = ("hf download", "huggingface-cli download", "wget", "curl")
 JOB_ID = "4242"
 RESULT_FILENAME = "kimik3_agentic_prefill-tp8-pp2_conc4_mi300x-amds_00"
 
+
 def generate_kimik3_matrix() -> list[dict]:
+    """Generate the sweep rows the workflow would dispatch for this config key."""
     configs = load_config_files([str(REPO_ROOT / "configs" / "amd-master.yaml")])
     runners = load_runner_file(str(REPO_ROOT / "configs" / "runners.yaml"))
     args = argparse.Namespace(
@@ -46,7 +48,9 @@ def generate_kimik3_matrix() -> list[dict]:
     )
     return generate_test_config_sweep(args, configs, runners)
 
+
 def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
+    """One aggregate job per concurrency, all TP8 x PP2, with no AITER default."""
     rows = generate_kimik3_matrix()
 
     assert [row["conc"] for row in rows] == [[1], [2], [4], [8]]
@@ -72,7 +76,9 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
     assert settings == ["NATIVE_MULTINODE=1"]
     assert all("AITER_SITUV2_A8W4" not in setting for setting in settings)
 
+
 def server_env(rank: int = 0) -> dict[str, str]:
+    """Build the environment the workflow exports for one vLLM rank."""
     env = {
         **os.environ,
         "MODEL": "moonshotai/Kimi-K3",
@@ -95,7 +101,9 @@ def server_env(rank: int = 0) -> dict[str, str]:
     env.pop("AITER_SITUV2_A8W4", None)
     return env
 
+
 def run_server(env: dict[str, str]) -> subprocess.CompletedProcess:
+    """Run the rank entrypoint in dry-run mode and capture the rendered command."""
     return subprocess.run(
         ["bash", str(SERVER_SCRIPT)],
         cwd=str(REPO_ROOT),
@@ -104,23 +112,23 @@ def run_server(env: dict[str, str]) -> subprocess.CompletedProcess:
         text=True,
     )
 
-def test_rank_zero_serves_tp8_pp2_without_headless() -> None:
-    result = run_server(server_env(0))
+
+@pytest.mark.parametrize("rank", [0, 1])
+def test_each_rank_serves_tp8_pp2_and_only_rank_zero_owns_the_endpoint(
+    rank: int,
+) -> None:
+    """Both ranks share one topology; --headless is the only difference."""
+    result = run_server(server_env(rank))
     assert result.returncode == 0, result.stderr
     assert "--tensor-parallel-size 8" in result.stdout
     assert "--pipeline-parallel-size 2" in result.stdout
     assert "--nnodes 2" in result.stdout
-    assert "--node-rank 0" in result.stdout
+    assert f"--node-rank {rank}" in result.stdout
     assert "--master-addr node-a" in result.stdout
-    assert "--headless" not in result.stdout
+    assert ("--headless" in result.stdout) is (rank == 1)
     assert "FLASHMLA" not in result.stdout
     assert "FLASHINFER" not in result.stdout
 
-def test_rank_one_is_headless() -> None:
-    result = run_server(server_env(1))
-    assert result.returncode == 0, result.stderr
-    assert "--node-rank 1" in result.stdout
-    assert "--headless" in result.stdout
 
 @pytest.mark.parametrize(
     ("name", "value", "message"),
@@ -137,13 +145,16 @@ def test_rank_one_is_headless() -> None:
 def test_server_rejects_out_of_contract_values(
     name: str, value: str, message: str
 ) -> None:
+    """Reject any topology this bring-up has not been validated for."""
     env = server_env()
     env[name] = value
     result = run_server(env)
     assert result.returncode != 0
     assert message in result.stderr
 
+
 def test_aiter_mode_is_not_defaulted_and_accepts_both_modes() -> None:
+    """gfx942 has no tuned MoE tables, so a8w4 stays an operator input."""
     unset_result = run_server(server_env())
     assert "AITER_SITUV2_A8W4=unset" in unset_result.stdout
     for value in ("0", "1"):
@@ -153,9 +164,12 @@ def test_aiter_mode_is_not_defaulted_and_accepts_both_modes() -> None:
         assert result.returncode == 0
         assert f"AITER_SITUV2_A8W4={value}" in result.stdout
 
+
 def write_executable(path: Path, body: str) -> None:
+    """Write a fake executable onto the test PATH."""
     path.write_text(body)
     path.chmod(0o755)
+
 
 def rocminfo_output(gpu_count: int, gpu_arch: str) -> str:
     """Mimic rocminfo closely enough to catch sloppy agent counting."""
@@ -178,6 +192,7 @@ def rocminfo_output(gpu_count: int, gpu_arch: str) -> str:
         f"    Name:                    amdgcn-amd-amdhsa--{gpu_arch}:sramecc+:xnack-\n"
     )
     return "".join(blocks)
+
 
 def make_node(
     tmp_path: Path,
@@ -264,7 +279,9 @@ def make_node(
     }
     return {"squash_dir": squash_dir, "cmd_log": cmd_log, "env": env}
 
+
 def run_preflight(node: dict[str, object]) -> subprocess.CompletedProcess:
+    """Run the real preflight script against a staged node."""
     return subprocess.run(
         ["bash", str(PREFLIGHT_SCRIPT)],
         cwd=str(REPO_ROOT),
@@ -273,16 +290,20 @@ def run_preflight(node: dict[str, object]) -> subprocess.CompletedProcess:
         text=True,
     )
 
+
 def preflight_records(stdout: str) -> list[str]:
+    """Extract the machine-readable preflight records from stdout."""
     return [
         line
         for line in stdout.splitlines()
         if line.startswith("INFERENCEX_KIMIK3_PREFLIGHT ")
     ]
 
+
 def test_preflight_imports_and_validates_image_in_node_local_tree(
     tmp_path: Path,
 ) -> None:
+    """Import the image node-locally and never download the checkpoint."""
     node = make_node(tmp_path)
     result = run_preflight(node)
 
@@ -305,7 +326,9 @@ def test_preflight_imports_and_validates_image_in_node_local_tree(
     script_source = PREFLIGHT_SCRIPT.read_text()
     assert not any(command in script_source for command in STAGING_COMMANDS)
 
+
 def test_preflight_reuses_a_valid_squash_without_import(tmp_path: Path) -> None:
+    """A later job on the same node reuses the already validated image."""
     node = make_node(tmp_path)
     assert run_preflight(node).returncode == 0
 
@@ -316,30 +339,25 @@ def test_preflight_reuses_a_valid_squash_without_import(tmp_path: Path) -> None:
     assert len(preflight_records(result.stdout)) == 1
     assert "enroot import" not in node["cmd_log"].read_text()
 
-def test_preflight_rejects_seven_gpus(tmp_path: Path) -> None:
-    result = run_preflight(make_node(tmp_path, gpu_count=7))
-    assert result.returncode != 0
-    assert "exactly 8 gfx942" in result.stderr
 
-def test_preflight_rejects_wrong_architecture(tmp_path: Path) -> None:
-    result = run_preflight(make_node(tmp_path, gpu_arch="gfx950"))
+@pytest.mark.parametrize(
+    ("node_kwargs", "message"),
+    [
+        ({"gpu_count": 7}, "exactly 8 gfx942"),
+        ({"gpu_arch": "gfx950"}, "exactly 8 gfx942"),
+        ({"with_main_ref": False}, "refs/main"),
+        ({"with_weight_index": False}, "model.safetensors.index.json"),
+        ({"with_indexed_shard": False}, "missing weight shard"),
+    ],
+)
+def test_preflight_rejects_unusable_node_state(
+    tmp_path: Path, node_kwargs: dict, message: str
+) -> None:
+    """Reject a node before the job starts loading 1.5 TB of weights onto it."""
+    result = run_preflight(make_node(tmp_path, **node_kwargs))
     assert result.returncode != 0
-    assert "exactly 8 gfx942" in result.stderr
+    assert message in result.stderr
 
-def test_preflight_rejects_missing_main_ref(tmp_path: Path) -> None:
-    result = run_preflight(make_node(tmp_path, with_main_ref=False))
-    assert result.returncode != 0
-    assert "refs/main" in result.stderr
-
-def test_preflight_rejects_missing_weight_index(tmp_path: Path) -> None:
-    result = run_preflight(make_node(tmp_path, with_weight_index=False))
-    assert result.returncode != 0
-    assert "model.safetensors.index.json" in result.stderr
-
-def test_preflight_rejects_missing_indexed_shard(tmp_path: Path) -> None:
-    result = run_preflight(make_node(tmp_path, with_indexed_shard=False))
-    assert result.returncode != 0
-    assert "missing weight shard" in result.stderr
 
 FAKE_SALLOC = """#!/usr/bin/env bash
 echo "salloc $*" >> "$FAKE_CMD_LOG"
@@ -403,11 +421,14 @@ fi
 exit 0
 """
 
+
 def preflight_record(hostname: str, revision: str) -> str:
+    """Build one preflight record line as a node would emit it."""
     return (
         f"INFERENCEX_KIMIK3_PREFLIGHT hostname={hostname} revision={revision} "
         "gpu_count=8 gpu_arch=gfx942 squash_size_bytes=33076838400"
     )
+
 
 def make_cluster(
     tmp_path: Path,
@@ -415,6 +436,7 @@ def make_cluster(
     preflight_node_count: int = 2,
     mismatched_revisions: bool = False,
 ) -> dict[str, object]:
+    """Stage a two-node cluster with fake Slurm, curl and srun on PATH."""
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     bin_dir = tmp_path / "bin"
@@ -489,9 +511,11 @@ def make_cluster(
         "server_pid_file": tmp_path / "server.pid",
     }
 
+
 def run_launcher(
     cluster: dict[str, object], script: Path = NATIVE_LAUNCHER, timeout: int = 120
 ) -> subprocess.CompletedProcess:
+    """Run a launcher against the staged cluster."""
     return subprocess.run(
         ["bash", str(script)],
         cwd=str(REPO_ROOT),
@@ -501,7 +525,9 @@ def run_launcher(
         timeout=timeout,
     )
 
+
 def grep_supports_perl_regex() -> bool:
+    """Report whether the local grep supports -P; BSD grep does not."""
     return (
         subprocess.run(
             ["grep", "-oP", "x"], input="x", capture_output=True, text=True
@@ -509,11 +535,13 @@ def grep_supports_perl_regex() -> bool:
         == 0
     )
 
+
 @pytest.mark.skipif(
     not grep_supports_perl_regex(),
     reason="the pre-existing single-node launcher parses salloc with GNU grep -P",
 )
 def test_default_launcher_keeps_existing_single_node_path(tmp_path: Path) -> None:
+    """Without NATIVE_MULTINODE the MI300X launcher behaves exactly as before."""
     cluster = make_cluster(tmp_path)
     cluster["env"].update(
         {
@@ -531,9 +559,11 @@ def test_default_launcher_keeps_existing_single_node_path(tmp_path: Path) -> Non
     assert "--nodes=2" not in command_log
     assert "mi300x_native_node_preflight.sh" not in command_log
 
+
 def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     tmp_path: Path,
 ) -> None:
+    """Allocate both nodes exclusively and verify each one before serving."""
     cluster = make_cluster(tmp_path)
     cluster["env"]["NATIVE_MULTINODE"] = "1"
     result = run_launcher(cluster, script=DEFAULT_LAUNCHER)
@@ -563,7 +593,9 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
 
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
 
+
 def test_native_launcher_rejects_topology_before_salloc(tmp_path: Path) -> None:
+    """Fail the contract check before holding any allocation."""
     cluster = make_cluster(tmp_path)
     cluster["env"]["PREFILL_PP_SIZE"] = "1"
     result = run_launcher(cluster)
@@ -572,23 +604,27 @@ def test_native_launcher_rejects_topology_before_salloc(tmp_path: Path) -> None:
     assert "TP8 x PP2" in result.stderr
     assert "salloc " not in cluster["cmd_log"].read_text()
 
-def test_native_launcher_rejects_one_preflight_record(tmp_path: Path) -> None:
-    cluster = make_cluster(tmp_path, preflight_node_count=1)
+
+@pytest.mark.parametrize(
+    "cluster_kwargs",
+    [{"preflight_node_count": 1}, {"mismatched_revisions": True}],
+    ids=["one_record", "mismatched_revisions"],
+)
+def test_native_launcher_rejects_inconsistent_preflight_records(
+    tmp_path: Path, cluster_kwargs: dict
+) -> None:
+    """Never start a rank until both nodes report the same usable state."""
+    cluster = make_cluster(tmp_path, **cluster_kwargs)
     result = run_launcher(cluster)
 
     assert result.returncode != 0
     assert "--kill-on-bad-exit=1" not in cluster["cmd_log"].read_text()
 
-def test_native_launcher_rejects_mismatched_revisions(tmp_path: Path) -> None:
-    cluster = make_cluster(tmp_path, mismatched_revisions=True)
-    result = run_launcher(cluster)
-
-    assert result.returncode != 0
-    assert "--kill-on-bad-exit=1" not in cluster["cmd_log"].read_text()
 
 def test_server_failure_preserves_failure_and_cancels_allocation(
     tmp_path: Path,
 ) -> None:
+    """A rank that dies early surfaces as a failure and frees the nodes."""
     cluster = make_cluster(tmp_path)
     cluster["env"]["FAKE_SERVER_MODE"] = "exit:23"
     cluster["env"]["FAKE_HEALTH"] = "down"
@@ -599,9 +635,11 @@ def test_server_failure_preserves_failure_and_cancels_allocation(
     assert "agentic_srt.sh" not in cluster["cmd_log"].read_text()
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
 
+
 def test_native_launcher_cancels_the_allocation_before_packaging_logs(
     tmp_path: Path,
 ) -> None:
+    """Nothing that does not need the allocation may delay scancel."""
     cluster = make_cluster(tmp_path)
     result = run_launcher(cluster)
 
@@ -610,6 +648,7 @@ def test_native_launcher_cancels_the_allocation_before_packaging_logs(
     assert output.index("[cleanup] cancelling allocation") < output.index(
         "[cleanup] packaging server logs"
     )
+
 
 @pytest.mark.parametrize(
     "knob,value",
@@ -622,6 +661,7 @@ def test_native_launcher_cancels_the_allocation_before_packaging_logs(
 def test_native_launcher_rejects_non_positive_timing_knobs(
     tmp_path: Path, knob: str, value: str
 ) -> None:
+    """A zero or fractional poll would spin forever, once before scancel."""
     cluster = make_cluster(tmp_path)
     cluster["env"][knob] = value
     result = run_launcher(cluster)
@@ -630,7 +670,9 @@ def test_native_launcher_rejects_non_positive_timing_knobs(
     assert "positive integer" in result.stderr
     assert "salloc " not in cluster["cmd_log"].read_text()
 
+
 def test_native_launcher_rejects_mismatched_image_builds(tmp_path: Path) -> None:
+    """Equal squash size is the only signal both nodes hold the same build."""
     cluster = make_cluster(tmp_path)
     cluster["preflight_output"].write_text(
         preflight_record("node-a", REVISION)
@@ -644,7 +686,9 @@ def test_native_launcher_rejects_mismatched_image_builds(tmp_path: Path) -> None
     assert "different builds" in result.stdout + result.stderr
     assert "--kill-on-bad-exit=1" not in cluster["cmd_log"].read_text()
 
+
 def test_client_failure_propagates_the_client_exit_code(tmp_path: Path) -> None:
+    """Publish the artifacts, then exit with the replay's own status."""
     cluster = make_cluster(tmp_path)
     cluster["env"]["FAKE_CLIENT_EXIT_CODE"] = "23"
     result = run_launcher(cluster)
@@ -653,7 +697,9 @@ def test_client_failure_propagates_the_client_exit_code(tmp_path: Path) -> None:
     assert (cluster["workspace"] / f"{RESULT_FILENAME}_conc4.json").is_file()
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
 
+
 def test_sigterm_returns_143_and_reaps_server_and_allocation(tmp_path: Path) -> None:
+    """A signal must reap the server step and cancel the allocation."""
     cluster = make_cluster(tmp_path)
     cluster["env"]["FAKE_HEALTH"] = "down"
     cluster["env"]["KIMIK3_STARTUP_TIMEOUT_SECONDS"] = "300"
@@ -696,7 +742,9 @@ def test_sigterm_returns_143_and_reaps_server_and_allocation(tmp_path: Path) -> 
         os.kill(server_pid, signal.SIGKILL)
         raise AssertionError(f"server step {server_pid} outlived cleanup")
 
+
 def test_success_extracts_only_host_owned_bounded_artifacts(tmp_path: Path) -> None:
+    """Only host-owned files cross into the workspace; the handoff is removed."""
     cluster = make_cluster(tmp_path)
     workspace = cluster["workspace"]
     result = run_launcher(cluster)
