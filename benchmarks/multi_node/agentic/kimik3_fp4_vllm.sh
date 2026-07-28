@@ -36,7 +36,7 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format fastsafetensors
     --moe-backend "$VLLM_MOE_BACKEND"
-    --gpu-memory-utilization 0.99
+    --gpu-memory-utilization 0.982
     --enable-prefix-caching
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
