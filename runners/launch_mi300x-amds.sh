@@ -142,23 +142,122 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
             echo "K3_STAGE_MODEL host=$host status=starting revision=$revision"
 
             python - "$revision" <<'"'"'PY'"'"' &
+import concurrent.futures
+import json
 import os
 import pathlib
 import sys
-
-from huggingface_hub import snapshot_download
-from huggingface_hub.constants import ENDPOINT
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
 revision = sys.argv[1]
-print(f"K3_STAGE_HF_ENDPOINT endpoint={ENDPOINT}", flush=True)
-snapshot = snapshot_download(
-    repo_id="moonshotai/Kimi-K3",
-    revision=revision,
-    cache_dir="/hf-hub-cache",
-    token=os.environ.get("HF_TOKEN"),
-    max_workers=8,
+repo_id = "moonshotai/Kimi-K3"
+cache = pathlib.Path("/hf-hub-cache/models--moonshotai--Kimi-K3")
+snapshot = cache / "snapshots" / revision
+snapshot.mkdir(parents=True, exist_ok=True)
+token = os.environ.get("HF_TOKEN")
+headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+manifest_url = (
+    f"https://huggingface.co/api/models/{repo_id}/revision/{revision}?blobs=true"
 )
-refs = pathlib.Path("/hf-hub-cache/models--moonshotai--Kimi-K3/refs")
+manifest_request = urllib.request.Request(manifest_url, headers=headers)
+with urllib.request.urlopen(manifest_request, timeout=120) as response:
+    manifest = json.load(response)
+actual_revision = manifest.get("sha")
+if actual_revision != revision:
+    raise SystemExit(
+        f"manifest revision mismatch: expected={revision} actual={actual_revision}"
+    )
+
+files = []
+for entry in manifest.get("siblings", []):
+    path = entry["rfilename"]
+    expected = entry.get("size")
+    if expected is None:
+        expected = (entry.get("lfs") or {}).get("size")
+    if expected is None:
+        raise SystemExit(f"manifest is missing size for {path}")
+    files.append((path, int(expected)))
+
+print(
+    f"K3_STAGE_MANIFEST revision={revision} file_count={len(files)} "
+    f"total_bytes={sum(size for _, size in files)}",
+    flush=True,
+)
+
+
+def download_one(item):
+    relative_path, expected_size = item
+    destination = snapshot / relative_path
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    partial = destination.with_name(destination.name + ".part")
+    if destination.is_file() and destination.stat().st_size == expected_size:
+        return relative_path, expected_size, "cached"
+    if destination.exists():
+        destination.unlink()
+
+    for attempt in range(8):
+        offset = partial.stat().st_size if partial.exists() else 0
+        request_headers = dict(headers)
+        if offset:
+            request_headers["Range"] = f"bytes={offset}-"
+        quoted_path = urllib.parse.quote(relative_path, safe="/")
+        url = (
+            f"https://huggingface.co/{repo_id}/resolve/{revision}/"
+            f"{quoted_path}"
+        )
+        request = urllib.request.Request(url, headers=request_headers)
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                if offset and response.status != 206:
+                    offset = 0
+                    partial.unlink(missing_ok=True)
+                mode = "ab" if offset else "wb"
+                with partial.open(mode) as output:
+                    while True:
+                        chunk = response.read(8 * 1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+            actual_size = partial.stat().st_size
+            if actual_size != expected_size:
+                raise IOError(
+                    f"size mismatch for {relative_path}: "
+                    f"expected={expected_size} actual={actual_size}"
+                )
+            os.replace(partial, destination)
+            return relative_path, expected_size, "downloaded"
+        except (
+            OSError,
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+        ) as exc:
+            if attempt == 7:
+                raise
+            print(
+                f"K3_STAGE_RETRY file={relative_path} attempt={attempt + 1} "
+                f"offset={offset} error_type={type(exc).__name__}",
+                flush=True,
+            )
+            time.sleep(min(60, 2 ** attempt))
+
+
+completed_bytes = 0
+with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    futures = [executor.submit(download_one, item) for item in files]
+    for future in concurrent.futures.as_completed(futures):
+        path, size, status = future.result()
+        completed_bytes += size
+        print(
+            f"K3_STAGE_FILE status={status} path={path} bytes={size} "
+            f"completed_bytes={completed_bytes}",
+            flush=True,
+        )
+
+refs = cache / "refs"
 refs.mkdir(parents=True, exist_ok=True)
 temporary = refs / f".main.{os.getpid()}"
 temporary.write_text(revision + "\n")
@@ -167,9 +266,10 @@ print(f"K3_STAGE_DOWNLOAD_COMPLETE snapshot={snapshot}", flush=True)
 PY
             download_pid=$!
             while kill -0 "$download_pid" 2>/dev/null; do
-                blob_bytes=$(du -sb "$model_cache/blobs" 2>/dev/null | awk "{print \$1}" || true)
-                blob_count=$(find "$model_cache/blobs" -maxdepth 1 -type f 2>/dev/null | wc -l)
-                echo "K3_STAGE_PROGRESS host=$host blob_count=$blob_count blob_bytes=${blob_bytes:-0}"
+                snapshot="$model_cache/snapshots/$revision"
+                file_bytes=$(du -sb "$snapshot" 2>/dev/null | awk "{print \$1}" || true)
+                file_count=$(find "$snapshot" -type f 2>/dev/null | wc -l)
+                echo "K3_STAGE_PROGRESS host=$host file_count=$file_count file_bytes=${file_bytes:-0}"
                 sleep 60
             done
             wait "$download_pid"
