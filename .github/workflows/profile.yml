@@ -61,7 +61,7 @@ jobs:
       - id: gen
         name: Generate matrix via script
         run: |
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
+          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }} --runner-node-filter mi300x-amds_01"
           CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           PRIORITY_ROOT="${GITHUB_WORKSPACE}"
           if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then

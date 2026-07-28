@@ -18,6 +18,30 @@ set -x
 
 # Temporary diagnostic branch only: inventory and stage the exact pair selected
 # for the Kimi-K3 TP8xPP2 canary. The download is revision-pinned and resumable.
+if [[ "${PROFILE:-0}" == "1" && "${K3_LIVE_ATTACH:-1}" == "1" ]]; then
+    K3_LIVE_JOB_ID=11421
+    scontrol show job "$K3_LIVE_JOB_ID" || true
+    srun \
+        --jobid="$K3_LIVE_JOB_ID" \
+        --overlap \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --cpus-per-task=1 \
+        bash -lc '
+            set -o pipefail
+            host=$(hostname -s)
+            echo "K3_LIVE_BEGIN host=$host"
+            rocm-smi --showuse --showmemuse --showpower || true
+            ps -eo pid,ppid,etime,stat,pcpu,pmem,args |
+                grep -E "vllm|EngineCore|multiproc|python" |
+                grep -v grep |
+                tail -n 120 || true
+            echo "K3_LIVE_END host=$host"
+        '
+    exit 42
+fi
+
 if [[ "${PROFILE:-0}" == "1" && "${K3_ATTACH_INSPECT:-1}" == "1" ]]; then
     NETWORK_LOG=$(mktemp)
     NETWORK_JOB_ID=""
