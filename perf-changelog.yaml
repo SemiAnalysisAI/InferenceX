@@ -4971,13 +4971,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2256
 
 - config-keys:
-    - dsv4-fp4-gb300-dynamo-trt-agentic
-  description:
-    - "Add DeepSeek V4 Pro FP4 GB300 disaggregated Dynamo TensorRT-LLM MTP agentic config with eight prefill/decode topologies"
-    - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2274
-
-- config-keys:
     - glm5.2-fp4-b300-sglang-agentic
   description:
     - "Enable DRAM KV offloading (SGLang HiCache) on all points of both arms: DSv4-style host/device token-capacity ratio, tuned to 0.75 for GLM-5.2 (DSA/MLA-family: the 169.98 GB device pool is replicated on all 8 ranks, so ratio 0.75 = ~1.0 TB pinned host pools; ratio 2 and GB-based sizing both OOM-killed 3 TB nodes), io-backend direct, mem-layout page_first_direct, write policy write_back; validated on-node with an overflow bench forcing eviction through the DSA KV+INDEXER host pools"
@@ -5115,4 +5108,11 @@
   description:
     - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2341
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt-agentic
+  description:
+    - "Add DeepSeek V4 Pro FP4 GB300 disaggregated Dynamo TensorRT-LLM MTP agentic config with eight prefill/decode topologies"
+    - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2274
 
