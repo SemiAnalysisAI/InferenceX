@@ -306,12 +306,11 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
-    # Kimi-K3's MXFP4 checkpoint is ~1.56 TB and does not fit the node-local
-    # /var/lib NVMe hub cache, so it is pre-staged once on the NFS share
-    # (/it-share/hf-hub-cache/models--moonshotai--Kimi-K3) like MiniMax-M3.
-    if [[ "$MODEL" == moonshotai/Kimi-K3* ]]; then
-        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
-    fi
+    # NOTE: Kimi-K3 deliberately does NOT get an /it-share/hf-hub-cache override.
+    # Its ~1.5 TB MXFP4 checkpoint stages to the node-local /var/lib NVMe cache
+    # (~6.4 TB free) on first use and is read from local NVMe thereafter, which
+    # loads faster than NFS and avoids the share contention that stretched weight
+    # loads to ~25 min when several nodes pulled concurrently.
 
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"

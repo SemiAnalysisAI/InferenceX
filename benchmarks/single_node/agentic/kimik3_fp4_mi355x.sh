@@ -38,9 +38,11 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-# The ~1.56 TB checkpoint is pre-staged on the NFS HF hub cache, which
-# launch_mi355x-amds.sh mounts as HF_HUB_CACHE for this model (the node-local
-# /var/lib NVMe cache cannot hold it). These calls are no-ops there.
+# The ~1.5 TB checkpoint stages to the node-local /var/lib NVMe hub cache that
+# launch_mi355x-amds.sh mounts as HF_HUB_CACHE (~6.4 TB free there). The first
+# job on a cold node pays the download; every later job on that node reads from
+# local NVMe, which is faster than NFS and avoids the share contention that
+# stretched weight loads to ~25 min when several nodes pulled concurrently.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
