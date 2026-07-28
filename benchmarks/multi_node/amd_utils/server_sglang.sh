@@ -988,7 +988,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
                       WEKA_LOADER_OVERRIDE AIPERF_FAILED_REQUEST_THRESHOLD \
                       AIPERF_AGENTIC_CACHE_WARMUP_DURATION AIPERF_UNSAFE_OVERRIDE \
                       AIPERF_TRAJECTORY_START_MIN_RATIO AIPERF_TRAJECTORY_START_MAX_RATIO \
-                      AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES ROUTER_PORT TQDM_MININTERVAL; do
+                      ROUTER_PORT TQDM_MININTERVAL; do
                 if [[ -n "${!_v+x}" ]]; then
                     _val="${!_v}"
                     # docker --env-file requires one KEY=VALUE per line with no

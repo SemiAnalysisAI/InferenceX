@@ -5062,6 +5062,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2301
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic
+  description:
+    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
+    - "Image: vllm/vllm-openai-rocm:nightly-dcfebf93f4eccf30f71872283331eee757915daf"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2118
+
+- config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm-mtp
     - minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4
   description:
@@ -5138,6 +5145,35 @@
     - "Add a one-node 4P1D TP1-prefill/TEP4-decode concurrency-4096 point on the refreshed image while preserving the legacy 4P2D DEP2-prefill/TEP4-decode point unchanged"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2310
   
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic
+  description:
+    - "Add day-zero single-node agentic-coding recipe for Kimi-K3 (MXFP4, 2.8T MoE, 896 experts, KDA/MLA hybrid, 1M native context) on B300 with vLLM. Agentic-coding scenario only -- no fixed-seq-len (1k1k / 8k1k) arms."
+    - "Image vllm/vllm-openai:kimi-k3 (vLLM 0.1.dev19262+gb6bbf29dd, pushed 2026-07-27): K3 ships as the out-of-tree vllm.models.kimi_k3 plugin package (DSpark MLA + KDA kernels, registering KimiK3ForConditionalGeneration / KimiLinearForCausalLM / KimiK3MTPModel), so a generic vllm-openai release cannot serve this checkpoint."
+    - "Weights are pre-staged node-local at /scratch/models/Kimi-K3 (96/96 shards, 1.5 TB, verified on all 18 b300 nodes); Kimi-K3 is already in the b300-nv launcher STAGED_MODELS list, so MODEL_PATH resolves to the read-only staged mount and the runner performs no download."
+    - "Search space is two TP8 arms at conc 1-24: GPU-resident (kv-offloading none) and host-DRAM offload (kv-offloading dram, SimpleCPUOffloadConnector via kv-offload-backend vllm-simple). Both share one ladder so the arms are directly comparable at equal concurrency. TP8 is the only single-node layout that fits: the MXFP4 checkpoint is ~1.5 TB (~188 GB/GPU across 8 B300s), whereas TP4 would need ~375 GB/GPU against 288 GB of HBM."
+    - "DRAM arm: dram-utilization 0.63 resolves to total-cpu-dram-gb 1889 on cluster:b300-nv, which the script divides across the 8 TP ranks into cpu_bytes_to_use_per_rank (~220 GiB/rank), with eager offload (lazy_offload false). Note K3 is a KDA/MLA hybrid -- the KDA layers hold a recurrent state rather than paged KV blocks, so only the MLA layers' paged blocks are expected to offload; the bring-up sweep is the check for KV-geometry errors at server init."
+    - "Serve flags follow the K3 production recipe already exercised by the DSpark AL collector: --load-format fastsafetensors, --moe-backend auto, --enable-prefix-caching, --kv-cache-dtype fp8 with --attention-config mla_prefill_backend=FLASHINFER + use_prefill_query_quantization, kimi_k3 reasoning/tool-call parsers, NCCL_DMABUF_ENABLE=0, VLLM_ALLREDUCE_USE_FLASHINFER=1, VLLM_USE_RUST_FRONTEND=1."
+    - "Sets VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900 and AIPERF_HTTP_TCP_USER_TIMEOUT=900000. AIPerf pins one pooled keep-alive connection per agentic session and reuses it across turns, while the Rust frontend defaults to a 5s keep-alive; an inter-turn idle gap past that lets the client reuse a socket exactly as the server closes it, producing an aiohttp ServerDisconnectedError that AIPerf escalates to a terminal warmup failure. This aborted the dram c4 arm ~15 min into run 30324907690 against a healthy server. Same mitigation as glm5.2_fp4_b300_sglang.sh's SGLANG_TIMEOUT_KEEP_ALIVE=900."
+    - "Bring-up validated in run 30326393603: all 12 configs green, zero ServerDisconnectedError after the keep-alive fix. GPU KV resolves to 42.23 GiB / 3,249,215 tokens, i.e. ~3.1 max-length requests, against MAX_NUM_SEQS = 2*CONC."
+    - "Measured behaviour: below conc 8 the GPU-resident and DRAM arms are within run-to-run noise (1-5%). At conc 16 and 24 the GPU-resident arm thrashes -- prefix cache hit rate 2.7%, TTFT p50 86s and 191s, 49.6 and 54.9 output tok/s -- because the working set exceeds GPU KV and prefixes are recomputed. The DRAM arm holds TTFT p50 0.85s and 6.2s for 245.0 and 260.6 output tok/s (4-5x), with the CPU tier serving a 62% external prefix cache hit rate at conc 24. The high-conc GPU-resident points are retained deliberately as the honest baseline that makes the offload gain legible."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2371
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic
+  description:
+    - "Add day-zero single-node agentic-coding recipe for Kimi-K3 (MXFP4, 2.8T MoE, 896 experts, KDA/MLA hybrid, 1M native context) on B300 with vLLM. Agentic-coding scenario only -- no fixed-seq-len (1k1k / 8k1k) arms."
+    - "Image vllm/vllm-openai:kimi-k3 (vLLM 0.1.dev19262+gb6bbf29dd, pushed 2026-07-27): K3 ships as the out-of-tree vllm.models.kimi_k3 plugin package (DSpark MLA + KDA kernels, registering KimiK3ForConditionalGeneration / KimiLinearForCausalLM / KimiK3MTPModel), so a generic vllm-openai release cannot serve this checkpoint."
+    - "Weights are pre-staged node-local at /scratch/models/Kimi-K3 (96/96 shards, 1.5 TB, verified on all 18 b300 nodes); Kimi-K3 is already in the b300-nv launcher STAGED_MODELS list, so MODEL_PATH resolves to the read-only staged mount and the runner performs no download."
+    - "Search space is two TP8 arms at conc 1-24: GPU-resident (kv-offloading none) and host-DRAM offload (kv-offloading dram, SimpleCPUOffloadConnector via kv-offload-backend vllm-simple). Both share one ladder so the arms are directly comparable at equal concurrency. TP8 is the only single-node layout that fits: the MXFP4 checkpoint is ~1.5 TB (~188 GB/GPU across 8 B300s), whereas TP4 would need ~375 GB/GPU against 288 GB of HBM."
+    - "DRAM arm: dram-utilization 0.63 resolves to total-cpu-dram-gb 1889 on cluster:b300-nv, which the script divides across the 8 TP ranks into cpu_bytes_to_use_per_rank (~220 GiB/rank), with eager offload (lazy_offload false). Note K3 is a KDA/MLA hybrid -- the KDA layers hold a recurrent state rather than paged KV blocks, so only the MLA layers' paged blocks are expected to offload; the bring-up sweep is the check for KV-geometry errors at server init."
+    - "Serve flags follow the K3 production recipe already exercised by the DSpark AL collector: --load-format fastsafetensors, --moe-backend auto, --enable-prefix-caching, --kv-cache-dtype fp8 with --attention-config mla_prefill_backend=FLASHINFER + use_prefill_query_quantization, kimi_k3 reasoning/tool-call parsers, NCCL_DMABUF_ENABLE=0, VLLM_ALLREDUCE_USE_FLASHINFER=1, VLLM_USE_RUST_FRONTEND=1."
+    - "Sets VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900 and AIPERF_HTTP_TCP_USER_TIMEOUT=900000. AIPerf pins one pooled keep-alive connection per agentic session and reuses it across turns, while the Rust frontend defaults to a 5s keep-alive; an inter-turn idle gap past that lets the client reuse a socket exactly as the server closes it, producing an aiohttp ServerDisconnectedError that AIPerf escalates to a terminal warmup failure. This aborted the dram c4 arm ~15 min into run 30324907690 against a healthy server. Same mitigation as glm5.2_fp4_b300_sglang.sh's SGLANG_TIMEOUT_KEEP_ALIVE=900."
+    - "Bring-up validated in run 30326393603: all 12 configs green, zero ServerDisconnectedError after the keep-alive fix. GPU KV resolves to 42.23 GiB / 3,249,215 tokens, i.e. ~3.1 max-length requests, against MAX_NUM_SEQS = 2*CONC."
+    - "Measured behaviour: below conc 8 the GPU-resident and DRAM arms are within run-to-run noise (1-5%). At conc 16 and 24 the GPU-resident arm thrashes -- prefix cache hit rate 2.7%, TTFT p50 86s and 191s, 49.6 and 54.9 output tok/s -- because the working set exceeds GPU KV and prefixes are recomputed. The DRAM arm holds TTFT p50 0.85s and 6.2s for 245.0 and 260.6 output tok/s (4-5x), with the CPU tier serving a 62% external prefix cache hit rate at conc 24. The high-conc GPU-resident points are retained deliberately as the honest baseline that makes the offload gain legible."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2386
+
 - config-keys:
     - kimik3-fp4-gb200-dynamo-vllm-agentic
   description:

@@ -143,7 +143,7 @@ benchmark:
     # Keep aggregate workers in the multinode result schema so ingestion uses
     # the zero decode-worker count instead of duplicating TP into P and D.
     IS_MULTINODE: "true"
-    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "false"
     AIPERF_AGENTIC_CACHE_WARMUP_DURATION: "600"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
