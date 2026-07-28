@@ -6,78 +6,9 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
-# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
-# Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
-# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
-# downloading on every dgxc node. Runs for both single-node and multinode
-# launches.
-# NOTE: per-node /raid/models/* would be faster but is only populated on a
-# subset of dgxc nodes today, so we use Lustre for reliability.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
-    export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
-    export SRT_SLURM_MODEL_PREFIX="kimik2.5"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
-    export SRT_SLURM_MODEL_PREFIX="gptoss"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
-    # Day-zero: MiniMax-M3-MXFP8 is not in the SRE-staged /lustre/fsw/models
-    # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
-    export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
-    # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
-    export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
-else
-    echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
-    echo "Available models under /lustre/fsw/models:"
-    ls -la /lustre/fsw/models
-    exit 1
-fi
+# shellcheck source=runners/runner_model_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runner_model_utils.sh"
+resolve_runner_model_config "cluster:b200-dgxc" || exit 1
 
 export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
 

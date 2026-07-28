@@ -1359,6 +1359,92 @@ class TestValidateRunnerConfig:
             validate_runner_config(config)
         assert "gpus-per-node" in str(exc_info.value)
 
+    def test_valid_runner_model_mapping(self):
+        config = {
+            "labels": {"cluster:b200-dgxc": ["b200-dgxc_0"]},
+            "models": {
+                "cluster:b200-dgxc": {
+                    "dynamo-vllm": {
+                        "dsv4": {
+                            "fp4": {
+                                "model-paths": [
+                                    "/lustre/fsw/models/deepseek-v4-pro",
+                                    "/lustre/fsw/models/dsv4-pro",
+                                ],
+                                "srt-slurm-model-prefix": "deepseek-v4-pro",
+                                "allow-model-path-override": True,
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+        assert validate_runner_config(config) == config
+
+    def test_runner_model_mapping_requires_known_label(self):
+        config = {
+            "labels": {"b200": ["b200-dgxc_0"]},
+            "models": {
+                "cluster:b200-dgxc": {
+                    "default": {
+                        "dsr1": {
+                            "fp8": {
+                                "model-paths": ["/lustre/fsw/models/dsr1"],
+                                "srt-slurm-model-prefix": "dsr1-fp8",
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+        with pytest.raises(ValueError, match="unknown labels"):
+            validate_runner_config(config)
+
+    def test_runner_model_paths_must_be_absolute(self):
+        config = {
+            "labels": {"cluster:b200-dgxc": ["b200-dgxc_0"]},
+            "models": {
+                "cluster:b200-dgxc": {
+                    "default": {
+                        "dsr1": {
+                            "fp8": {
+                                "model-paths": ["relative/model/path"],
+                                "srt-slurm-model-prefix": "dsr1-fp8",
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+        with pytest.raises(ValueError, match="must be absolute"):
+            validate_runner_config(config)
+
+    def test_runner_model_paths_must_be_unique(self):
+        config = {
+            "labels": {"cluster:b200-dgxc": ["b200-dgxc_0"]},
+            "models": {
+                "cluster:b200-dgxc": {
+                    "default": {
+                        "dsr1": {
+                            "fp8": {
+                                "model-paths": [
+                                    "/lustre/fsw/models/dsr1",
+                                    "/lustre/fsw/models/dsr1",
+                                ],
+                                "srt-slurm-model-prefix": "dsr1-fp8",
+                            }
+                        }
+                    }
+                }
+            },
+        }
+
+        with pytest.raises(ValueError, match="must not contain duplicates"):
+            validate_runner_config(config)
+
 
 # =============================================================================
 # Test changelog entry validation

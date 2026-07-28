@@ -7,32 +7,16 @@ SLURM_ACCOUNT="sa-shared"
 
 set -x
 
+# shellcheck source=runners/runner_model_utils.sh
+source "$(dirname "${BASH_SOURCE[0]}")/runner_model_utils.sh"
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
-    # MODEL_PATH: Override with pre-downloaded paths on H200 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared H200 cluster.
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/models/DeepSeek-R1-0528"
-            export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-        else
-            echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
-            exit 1
-        fi
-    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/models/DeepSeek-R1-0528"
-            export SERVED_MODEL_NAME="DeepSeek-R1-0528"
-            export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
-        else
-            echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
-            exit 1
-        fi
-    else
+    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" ]]; then
         echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
         exit 1
     fi
+    resolve_runner_model_config "cluster:h200-dgxc" || exit 1
 
     echo "Cloning srt-slurm repository..."
     SRT_REPO_DIR="srt-slurm"

@@ -831,12 +831,65 @@ class RunnerHardwareConfig(BaseModel):
     )
 
 
+class RunnerModelConfig(BaseModel):
+    """Cluster-local model paths and aliases used by runner launchers."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    model_paths: List[str] = Field(alias='model-paths', min_length=1)
+    srt_slurm_model_prefix: Optional[str] = Field(
+        alias='srt-slurm-model-prefix', default=None, min_length=1
+    )
+    served_model_name: Optional[str] = Field(
+        alias='served-model-name', default=None, min_length=1
+    )
+    model_name: Optional[str] = Field(
+        alias='model-name', default=None, min_length=1
+    )
+    allow_model_path_override: bool = Field(
+        alias='allow-model-path-override', default=False
+    )
+
+    @field_validator('model_paths')
+    @classmethod
+    def validate_model_paths(cls, model_paths: List[str]) -> List[str]:
+        """Require unique absolute paths that are safe to export to a shell."""
+        if len(model_paths) != len(set(model_paths)):
+            raise ValueError("'model-paths' must not contain duplicates")
+        for model_path in model_paths:
+            if not model_path.startswith('/'):
+                raise ValueError(
+                    f"Runner model path must be absolute: {model_path}"
+                )
+            if '\n' in model_path or '\t' in model_path:
+                raise ValueError(
+                    "Runner model paths must not contain tabs or newlines"
+                )
+        return model_paths
+
+
 class RunnerConfig(BaseModel):
     """Top-level runner configuration file."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     labels: Dict[str, List[str]]
     hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
+    models: Dict[
+        str,
+        Dict[str, Dict[str, Dict[str, RunnerModelConfig]]]
+    ] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode='after')
+    def validate_model_runner_labels(self):
+        """Require model mappings to reference a declared runner label."""
+        unknown_labels = sorted(set(self.models) - set(self.labels))
+        if unknown_labels:
+            raise ValueError(
+                "Runner model mappings reference unknown labels: "
+                + ", ".join(unknown_labels)
+            )
+        return self
 
 
 def validate_runner_config(runner_configs: dict) -> dict:
