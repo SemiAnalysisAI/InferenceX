@@ -139,7 +139,7 @@ wait_for_lmcache_ready() {
     # disables its LazyMemoryAllocator and allocates the whole L1 pool UP FRONT,
     # so "ready" can be minutes away and scales with --l1-size-gb. A 180s budget
     # timed out at exactly 178s on a 2249 GB pool.
-    local attempts="${LMCACHE_READY_ATTEMPTS:-900}"
+    local attempts="${LMCACHE_READY_ATTEMPTS:-1800}"
     # The health route has moved across LMCache versions, and a wrong path is
     # indistinguishable from a slow start: both just never return 200. Probe the
     # known spellings and report which one answered.
@@ -181,7 +181,7 @@ OFFLOAD_ARGS=()
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
-  lmcache|lmcache-k27)
+  lmcache|lmcache-k27|lmcache-budget)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
     # The server profile has to be selectable from config: the agentic matrix
     # has no per-cell env channel, so the backend NAME carries it.
@@ -189,6 +189,15 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     #   lmcache-k27  -> kimik2.7_fp4_mi355x.sh's server command
     if [ "$KV_OFFLOAD_BACKEND" = "lmcache-k27" ]; then
         LMCACHE_PROFILE=k2.7
+    fi
+    # lmcache-budget: same reference server, but L1 sized from the agentic DRAM
+    # budget (shm-capped) instead of the reference's flat 512 GB -- i.e. what
+    # kimik2.7 does, which ran a 1199 GB pool successfully on this fleet. The
+    # agentic README also asks recipes to consume TOTAL_CPU_DRAM_GB rather than
+    # a constant. Kept as a separate backend name because the matrix has no
+    # per-cell env channel to vary it from config.
+    if [ "$KV_OFFLOAD_BACKEND" = "lmcache-budget" ]; then
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
     fi
 
     # LMCache on K3 REQUIRES prefix caching. K3's Kimi Delta Attention layers
