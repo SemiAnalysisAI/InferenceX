@@ -74,20 +74,28 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         exit 1
     fi
 
+    snapshot_native_logs() {
+        local snapshot_path="$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
+        local snapshot_tmp="${snapshot_path}.${BASHPID}.tmp"
+        tar czf "$snapshot_tmp" -C "$server_log_dir" . 2>/dev/null &&
+            mv "$snapshot_tmp" "$snapshot_path" || true
+    }
+
     server_step_pid=""
+    log_snapshot_pid=""
     cleanup_native_multinode() {
         local exit_code=$?
         trap - EXIT INT TERM
-        # Preserve a snapshot before waiting on Slurm: GitHub cancellation may
-        # forcibly terminate the launcher before the server step exits.
-        tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
-            -C "$server_log_dir" . 2>/dev/null || true
+        if [[ -n "$log_snapshot_pid" ]]; then
+            kill "$log_snapshot_pid" 2>/dev/null || true
+            wait "$log_snapshot_pid" 2>/dev/null || true
+        fi
+        snapshot_native_logs
         if [[ -n "$server_step_pid" ]]; then
             kill "$server_step_pid" 2>/dev/null || true
             wait "$server_step_pid" 2>/dev/null || true
         fi
-        tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
-            -C "$server_log_dir" . 2>/dev/null || true
+        snapshot_native_logs
         scancel "$job_id" 2>/dev/null || true
         exit "$exit_code"
     }
@@ -157,6 +165,13 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         bash "$server_script" \
         >"$server_log_dir/server.log" 2>&1 &
     server_step_pid=$!
+    (
+        while kill -0 "$server_step_pid" 2>/dev/null; do
+            snapshot_native_logs
+            sleep 30
+        done
+    ) &
+    log_snapshot_pid=$!
 
     for ((attempt = 1; attempt <= 720; attempt++)); do
         servers_ready=true
