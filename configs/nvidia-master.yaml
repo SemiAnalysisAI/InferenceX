@@ -8352,7 +8352,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      - spec-decoding: draft_model
+      - spec-decoding: dspark
         conc-list: [1, 2, 4, 8, 16, 32]
         prefill:
           num-worker: 1
