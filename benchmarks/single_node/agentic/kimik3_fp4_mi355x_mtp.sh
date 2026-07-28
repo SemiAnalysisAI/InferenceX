@@ -119,12 +119,28 @@ if [[ "$DRAFT_MODEL" != /* ]]; then hf download "$DRAFT_MODEL"; fi
 MAX_SEQS="$CONC"
 if [ "$MAX_SEQS" -gt 32 ]; then MAX_SEQS=32; fi
 
+# The draft's attention backend MUST be pinned. The upstream recipe pins
+# FLASHINFER_MLA, which cannot work here: flashinfer is absent from the ROCm
+# image and platforms/rocm.py rejects it outright ("Selected backend
+# AttentionBackendEnum.FLASHINFER_MLA is not valid for this configuration.
+# Reason: [ImportError]"), failing the draft at construction (dspark_mla.py:59
+# -> nvidia/mla.py:267 get_attn_backend). Leaving the key off entirely is NOT a
+# safe substitute: with no pin the draft resolves to a backend that page-faults
+# on gfx950 during CUDA graph capture -- measured twice, once as
+# "hipErrorIllegalAddress" during capture and once as a kernel-level
+# "amdgpu [gfxhub0] retry page fault ... VM_L2_PROTECTION_FAULT_STATUS
+# 0x00301031, Faulty UTCL2 client ID: TCP" that killed the worker before Python
+# could log anything. TRITON_MLA is ROCm-native and fixes it: verified on
+# 8x MI355X, server reaches ready and returns coherent completions with no
+# page faults in dmesg.
+SPEC_ATTN_BACKEND="TRITON_MLA"
+
 # Throughput pins synthetic acceptance to the golden AL. EVAL_ONLY uses real
 # target verification (rejection_sample_method block, as the official recipe).
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
-    SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
 else
-    SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$GOLDEN_AL}"
+    SPEC_CONFIG="{\"model\":\"$DRAFT_MODEL\",\"num_speculative_tokens\":$NUM_SPEC_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$GOLDEN_AL}"
 fi
 
 # ---- Server config ----------------------------------------------------------
