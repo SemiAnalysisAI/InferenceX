@@ -186,8 +186,7 @@ fi
 # Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
 # Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
 EXCLUDE_OPT=()
-# g10/g16: recurring bare-GPU VRAM leaks fail gpu_sanity pre-flight (see PR #2308).
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g10,mia1-p01-g11,mia1-p01-g12,mia1-p01-g14,mia1-p01-g15,mia1-p01-g16}"
+SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g11,mia1-p01-g12,mia1-p01-g14,mia1-p01-g15}"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi
