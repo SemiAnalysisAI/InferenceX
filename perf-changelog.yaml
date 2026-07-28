@@ -5178,6 +5178,7 @@
     - kimik3-fp4-mi300x-vllm-agentic
   description:
     - "Add an opt-in native Slurm path for aggregated Kimi K3 AgentX on two 8xMI300X nodes with TP8 x PP2, EP1, and concurrency 1/2/4/8"
+    - "Image: vllm/vllm-openai-rocm:kimi-k3; model moonshotai/Kimi-K3"
     - "Fail closed on the exact aggregate topology, complete and revision-matched node-local model snapshots, eight gfx942 GPUs per node, and independently validated node-local Enroot squash images"
     - "Keep AITER_SITUV2_A8W4 caller-configurable pending exact-shape gfx942 validation, and never download the approximately 1.5 TB target checkpoint inside a benchmark job"
     - "Preserve the existing single-node MI300X launcher unless NATIVE_MULTINODE=1, with bounded host-owned artifact handoff and signal/failure cleanup"

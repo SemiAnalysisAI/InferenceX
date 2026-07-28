@@ -10,7 +10,12 @@ set -euo pipefail
 # absent weights are a hard failure, not something to fix inside a timed job.
 #
 # Emits exactly one machine-readable INFERENCEX_KIMIK3_PREFLIGHT record that the
-# launcher cross-checks across nodes.
+# launcher cross-checks across nodes. The trace goes to stderr, so it never
+# contaminates that record.
+#
+# Operator runbook: docs/kimik3-mi300x-native-multinode.md
+
+set -x
 
 KIMIK3_MODEL_CACHE_ROOT="${KIMIK3_MODEL_CACHE_ROOT:-/raid/hf-hub-cache/models--moonshotai--Kimi-K3}"
 KIMIK3_SQUASH_DIR="${KIMIK3_SQUASH_DIR:-/raid/hf-hub-cache/inferencex/squash}"

@@ -13,6 +13,8 @@ set -euo pipefail
 # Model and image state stays node-local on /raid. Only host-owned result and
 # log files cross into $GITHUB_WORKSPACE, because a root-owned file there breaks
 # the next job's checkout.
+#
+# Operator runbook: docs/kimik3-mi300x-native-multinode.md
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
@@ -206,6 +208,8 @@ trap 'cleanup; exit 129' HUP
 
 # --- Allocation ------------------------------------------------------------
 
+set -x
+
 # Exclude the same known-bad nodes as the single-node launcher:
 #   chi-mi300x-049: persistent /nvme_home disk-full
 #   chi-mi300x-121: provisioning incomplete; missing /raid and Enroot storage
@@ -320,6 +324,9 @@ echo "Started both server ranks; logging to $SERVER_LOG"
 
 HEALTH_URL="http://${HEAD_NODE}:${PORT}/health"
 startup_deadline=$(( $(date +%s) + KIMIK3_STARTUP_TIMEOUT_SECONDS ))
+# Weight load can take the better part of an hour; tracing every poll would
+# bury the server log in curl lines.
+set +x
 while true; do
     if [[ -f "$SERVER_RC_FILE" ]]; then
         server_rc=$(tr -d '[:space:]' < "$SERVER_RC_FILE")
@@ -338,6 +345,7 @@ while true; do
     fi
     sleep "$KIMIK3_HEALTH_POLL_SECONDS"
 done
+set -x
 
 # --- AgentX client on rank 0 ----------------------------------------------
 

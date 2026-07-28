@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set -x
 
 # One vLLM rank of the aggregated Kimi-K3 MXFP4 server on 2x8 MI300X.
+#
+# Operator runbook: docs/kimik3-mi300x-native-multinode.md
 #
 # Scheduler-independent by design: the caller supplies the node count, GPUs per
 # node, this task's rank, and the rank-0 address, so the same entrypoint works
@@ -84,6 +87,9 @@ export VLLM_USE_V2_MODEL_RUNNER=0
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 export PYTHONNOUSERSITE=1
 
+# The %q dump below is the readable record of the command; tracing the array
+# build as well just prints it twice.
+{ set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
     --served-model-name "$MODEL"
