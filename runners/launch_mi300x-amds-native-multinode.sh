@@ -74,7 +74,8 @@ require_set() {
 
 # --- Contract validation, strictly before any allocation -------------------
 
-require_set GITHUB_WORKSPACE RUNNER_NAME IMAGE MODEL RESULT_FILENAME CONC_LIST
+require_set GITHUB_WORKSPACE RUNNER_NAME IMAGE MODEL RESULT_FILENAME CONC_LIST \
+    KIMIK3_NODELIST
 
 require_exact IS_MULTINODE true
 require_exact IS_AGENTIC 1
@@ -256,6 +257,7 @@ salloc_stdout=$(
         --parsable \
         --partition=compute \
         --exclude=chi-mi300x-049,chi-mi300x-121 \
+        --nodelist="$KIMIK3_NODELIST" \
         --nodes=2 \
         --ntasks-per-node=1 \
         --gres=gpu:8 \
@@ -328,8 +330,8 @@ print(revisions.pop())
 echo "Both nodes verified at model revision $REVISION"
 
 IMAGE_PATH="$KIMIK3_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-MODEL_SNAPSHOT="$KIMIK3_MODEL_CACHE_ROOT/snapshots/$REVISION"
-MODEL_CONTAINER_PATH="/models/Kimi-K3"
+MODEL_CACHE_CONTAINER_PATH="/models-cache"
+MODEL_CONTAINER_PATH="$MODEL_CACHE_CONTAINER_PATH/snapshots/$REVISION"
 
 # --- Server ranks ----------------------------------------------------------
 
@@ -364,7 +366,7 @@ SERVER_SRUN_PID_FILE="$SERVER_LOG_DIR/server.srun.pid"
         --no-container-mount-home \
         --no-container-entrypoint \
         --container-workdir=/workspace \
-        --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+        --container-mounts="$GITHUB_WORKSPACE:/workspace,$KIMIK3_MODEL_CACHE_ROOT:$MODEL_CACHE_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
         --export=ALL \
         bash -c 'export MULTINODE_NODE_RANK="$SLURM_PROCID"; exec bash /workspace/benchmarks/multi_node/agentic/kimik3_fp4_mi300x_vllm.sh' \
         > "$SERVER_LOG" 2>&1 &
@@ -446,7 +448,7 @@ srun --overlap --jobid="$JOB_ID" --nodes=1 --ntasks=1 --nodelist="$HEAD_NODE" \
     --no-container-mount-home \
     --no-container-entrypoint \
     --container-workdir=/workspace \
-    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_CONTAINER,$MODEL_SNAPSHOT:$MODEL_CONTAINER_PATH:ro,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+    --container-mounts="$GITHUB_WORKSPACE:/workspace,$SCRATCH_HOST:/results,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_CONTAINER,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
     --export=ALL \
     bash -c "$CLIENT_WORKER_SCRIPT" &
 CLIENT_PID=$!

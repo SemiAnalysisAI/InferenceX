@@ -2256,9 +2256,8 @@ minimaxm3-fp4-mi355x-vllm-agentic:
 #
 # NATIVE_MULTINODE=1 opts this config into
 # runners/launch_mi300x-amds-native-multinode.sh; every other MI300X config
-# keeps the existing single-node launcher untouched. AITER_SITUV2_A8W4 is
-# deliberately absent: gfx942 has no committed Kimi-K3 tuned MoE tables, so the
-# a8w4 switch stays an operator input until an exact-shape test picks a mode.
+# keeps the existing single-node launcher untouched. The exact-shape gfx942
+# kernel gate validates the A16W4 path, so AITER_SITUV2_A8W4 is pinned to 0.
 kimik3-fp4-mi300x-vllm-agentic:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
@@ -2282,6 +2281,8 @@ kimik3-fp4-mi300x-vllm-agentic:
           dp-attn: false
           additional-settings:
           - "NATIVE_MULTINODE=1"
+          - "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054"
+          - "AITER_SITUV2_A8W4=0"
         decode:
           num-worker: 0
           tp: 8

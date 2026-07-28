@@ -71,8 +71,11 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         for row in rows
     } == {(1, 8, 2, 1, False, 0, 8, 2, 1, False)}
     settings = rows[0]["prefill"]["additional-settings"]
-    assert settings == ["NATIVE_MULTINODE=1"]
-    assert all("AITER_SITUV2_A8W4" not in setting for setting in settings)
+    assert settings == [
+        "NATIVE_MULTINODE=1",
+        "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054",
+        "AITER_SITUV2_A8W4=0",
+    ]
 
 
 def server_env(rank: int = 0) -> dict[str, str]:
@@ -515,6 +518,7 @@ def make_cluster(
         "DECODE_DP_ATTN": "false",
         "KIMIK3_MODEL_CACHE_ROOT": str(tmp_path / "raid" / "models--moonshotai--Kimi-K3"),
         "KIMIK3_SQUASH_DIR": str(tmp_path / "raid" / "squash"),
+        "KIMIK3_NODELIST": "chi-mi300x-043,chi-mi300x-054",
         "KIMIK3_STARTUP_TIMEOUT_SECONDS": "60",
         "KIMIK3_HEALTH_POLL_SECONDS": "1",
         "KIMIK3_CLEANUP_TIMEOUT_SECONDS": "5",
@@ -589,6 +593,7 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     allocation = next(line for line in lines if line.startswith("salloc "))
     assert "--nodes=2" in allocation
     assert "--gres=gpu:8" in allocation
+    assert "--nodelist=chi-mi300x-043,chi-mi300x-054" in allocation
 
     preflight = next(
         line for line in lines if "mi300x_native_node_preflight.sh" in line
@@ -597,6 +602,9 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
 
     server = next(line for line in lines if "--kill-on-bad-exit=1" in line)
     assert "kimik3_fp4_mi300x_vllm.sh" in server
+    model_cache_root = cluster["env"]["KIMIK3_MODEL_CACHE_ROOT"]
+    assert f"{model_cache_root}:/models-cache:ro" in server
+    assert f"{model_cache_root}/snapshots/{REVISION}:" not in server
 
     client = next(line for line in lines if "agentic_srt.sh" in line)
     assert "--overlap" in client

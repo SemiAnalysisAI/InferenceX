@@ -38,11 +38,14 @@ MI325X、Kubernetes、P/D 分离、srt-slurm 和 DSpark 都不在本文范围内
 ```yaml
 additional-settings:
 - "NATIVE_MULTINODE=1"
+- "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054"
+- "AITER_SITUV2_A8W4=0"
 ```
 
-`NATIVE_MULTINODE=1` 是唯一的开关。`runners/launch_mi300x-amds.sh` 在第一行
-检查它，然后交给 `runners/launch_mi300x-amds-native-multinode.sh`。其他所有
-MI300X 配置仍然走原本不变的单节点路径。
+`NATIVE_MULTINODE=1` 选择原生多节点启动器；`KIMIK3_NODELIST` 将 allocation
+固定到已经预置节点本地 snapshot 的节点对。`runners/launch_mi300x-amds.sh`
+检查前者，然后交给 `runners/launch_mi300x-amds-native-multinode.sh`。其他
+所有 MI300X 配置仍然走原本不变的单节点路径。
 
 启动器要求下列环境变量，多节点 workflow 模板已经全部提供：
 
@@ -54,7 +57,8 @@ PREFILL_NUM_WORKERS=1      PREFILL_TP=8                    PREFILL_PP_SIZE=2
 PREFILL_EP=1               PREFILL_DP_ATTN=false
 DECODE_NUM_WORKERS=0       DECODE_TP=8                     DECODE_PP_SIZE=2
 DECODE_EP=1                DECODE_DP_ATTN=false
-CONC_LIST=<1 2 4 8 之一>   IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
+CONC_LIST=<1 2 4 8 之一>   KIMIK3_NODELIST=<已预置节点 A,已预置节点 B>
+IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
 ```
 
 可选参数及其默认值：
@@ -62,6 +66,7 @@ CONC_LIST=<1 2 4 8 之一>   IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
 | 变量 | 默认值 | 用途 |
 |---|---|---|
 | `KIMIK3_MODEL_CACHE_ROOT` | `/raid/hf-hub-cache/models--moonshotai--Kimi-K3` | 节点本地模型缓存 |
+| `KIMIK3_NODELIST` | 必填；矩阵固定为 `chi-mi300x-043,chi-mi300x-054` | 持有已预置 snapshot 的准确节点对 |
 | `KIMIK3_SQUASH_DIR` | `/raid/hf-hub-cache/inferencex/squash` | 节点本地镜像目录 |
 | `HF_HUB_CACHE_MOUNT` | `/raid/hf-hub-cache/inferencex/agentx-hub` | client HF 缓存挂载的宿主机侧路径 |
 | `HF_HUB_CACHE` | `/hf-hub-cache` | 容器侧路径；AgentX 在此缓存 trace 语料 |
@@ -84,6 +89,11 @@ CONC_LIST=<1 2 4 8 之一>   IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
     ├── model.safetensors.index.json
     └── model-*.safetensors
 ```
+
+Hugging Face snapshot 通常包含指向同级 `blobs/` 目录的符号链接。因此 server
+会只读挂载整个 `models--moonshotai--Kimi-K3` 缓存，并通过
+`/models-cache/snapshots/<revision>` 解析模型；若只挂载 snapshot，weight
+链接会失效。
 
 `runners/mi300x_native_node_preflight.sh` 会在每个分配到的节点上运行，
 按顺序检查：
@@ -114,16 +124,16 @@ Enroot 的 cache 和 temp 目录也固定在同一个节点本地目录下，不
 
 ## AITER_SITUV2_A8W4
 
-镜像用 `AITER_ROCM_ARCH=gfx942;gfx950` 构建，但其中已提交的 Kimi K3 tuned MoE
-表只覆盖 gfx950。在 gfx942 exact-shape 测试给出结论之前，这个开关保持为运维
-输入：
+镜像用 `AITER_ROCM_ARCH=gfx942;gfx950` 构建，但原始 Kimi K3 tuned MoE 表只覆盖
+gfx950。K3 exact-shape gfx942 kernel gate 已经用常量和随机输入验证 A16W4 路径，
+因此矩阵固定为：
 
-- **不设置** —— 保留镜像默认值。矩阵就是这么做的。
-- `0` 或 `1` —— 原样传递。
-- 其他取值 —— 在分配资源之前被拒绝。
+```text
+AITER_SITUV2_A8W4=0
+```
 
-本 PR 不为它挑选任何默认值。入口脚本在启动时打印实际取值
-（`AITER_SITUV2_A8W4=unset` 或具体数字），因此每次运行都会留下记录。
+入口脚本仍允许诊断运行显式传入 `0` 或 `1`，其他值会在分配资源前被拒绝。
+启动时会打印最终取值，因此每次运行都会留下记录。
 
 ## 本地验证
 

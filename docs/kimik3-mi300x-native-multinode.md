@@ -41,10 +41,13 @@ Its prefill worker carries one additional setting:
 ```yaml
 additional-settings:
 - "NATIVE_MULTINODE=1"
+- "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054"
+- "AITER_SITUV2_A8W4=0"
 ```
 
-`NATIVE_MULTINODE=1` is the only switch. `runners/launch_mi300x-amds.sh` checks
-it on the first line and hands off to
+`NATIVE_MULTINODE=1` selects the native launcher. `KIMIK3_NODELIST` pins the
+allocation to the exact pair carrying the node-local snapshot.
+`runners/launch_mi300x-amds.sh` checks the first setting and hands off to
 `runners/launch_mi300x-amds-native-multinode.sh`. Every other MI300X config
 still runs the unchanged single-node path.
 
@@ -59,7 +62,8 @@ PREFILL_NUM_WORKERS=1      PREFILL_TP=8                    PREFILL_PP_SIZE=2
 PREFILL_EP=1               PREFILL_DP_ATTN=false
 DECODE_NUM_WORKERS=0       DECODE_TP=8                     DECODE_PP_SIZE=2
 DECODE_EP=1                DECODE_DP_ATTN=false
-CONC_LIST=<one of 1 2 4 8> IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
+CONC_LIST=<one of 1 2 4 8> KIMIK3_NODELIST=<staged-node-a,staged-node-b>
+IMAGE  MODEL  RESULT_FILENAME  RUNNER_NAME
 ```
 
 Optional knobs, with their defaults:
@@ -67,6 +71,7 @@ Optional knobs, with their defaults:
 | Variable | Default | Purpose |
 |---|---|---|
 | `KIMIK3_MODEL_CACHE_ROOT` | `/raid/hf-hub-cache/models--moonshotai--Kimi-K3` | node-local model cache |
+| `KIMIK3_NODELIST` | required; matrix pins `chi-mi300x-043,chi-mi300x-054` | exact pair carrying the staged snapshot |
 | `KIMIK3_SQUASH_DIR` | `/raid/hf-hub-cache/inferencex/squash` | node-local image tree |
 | `HF_HUB_CACHE_MOUNT` | `/raid/hf-hub-cache/inferencex/agentx-hub` | host side of the client's HF cache mount |
 | `HF_HUB_CACHE` | `/hf-hub-cache` | container side; where AgentX caches its trace corpus |
@@ -89,6 +94,12 @@ Both allocated nodes need their own copy, at the same revision:
     ├── model.safetensors.index.json
     └── model-*.safetensors
 ```
+
+Hugging Face snapshots normally contain symlinks into the sibling `blobs/`
+directory. The server therefore mounts the entire
+`models--moonshotai--Kimi-K3` cache read-only and resolves the model as
+`/models-cache/snapshots/<revision>`; mounting only the snapshot would leave
+those weight links dangling.
 
 `runners/mi300x_native_node_preflight.sh` runs on every allocated node and
 checks, in order:
@@ -124,17 +135,18 @@ nothing lands in `$HOME`.
 
 ## AITER_SITUV2_A8W4
 
-The image is built with `AITER_ROCM_ARCH=gfx942;gfx950`, but its committed
-Kimi K3 tuned MoE tables cover gfx950 only. Until an exact-shape gfx942 test
-says which mode is correct, this stays an operator input:
+The image is built with `AITER_ROCM_ARCH=gfx942;gfx950`, but its original
+Kimi K3 tuned MoE tables cover gfx950 only. The exact K3-shape gfx942 kernel
+gate passed both constant and random numerical checks with the A16W4 path, so
+the matrix pins:
 
-- **unset** — keep the image default. This is what the matrix does.
-- `0` or `1` — passed through unchanged.
-- anything else — rejected before allocation.
+```text
+AITER_SITUV2_A8W4=0
+```
 
-Nothing in this PR picks a default. The entrypoint prints the resolved value
-(`AITER_SITUV2_A8W4=unset` or the number) at startup so every run records what
-it used.
+The entrypoint still accepts an explicit `0` or `1` for diagnostic runs and
+rejects anything else before allocation. It prints the resolved value at
+startup so every run records what it used.
 
 ## Verifying locally
 
