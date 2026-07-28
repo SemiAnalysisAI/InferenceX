@@ -93,9 +93,6 @@ backend:
       max-num-seqs: 128
       max-num-batched-tokens: 16384
       language-model-only: true
-      enable-auto-tool-choice: true
-      tool-call-parser: "kimi_k3"
-      reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true
 
 sbatch_directives:

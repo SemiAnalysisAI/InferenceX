@@ -91,9 +91,6 @@ backend:
       max-num-seqs: 32
       max-num-batched-tokens: 8192
       language-model-only: true
-      enable-auto-tool-choice: true
-      tool-call-parser: "kimi_k3"
-      reasoning-parser: "kimi_k3"
       no-enable-flashinfer-autotune: true
       compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
 
