@@ -118,7 +118,7 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --ntasks-per-node=1 \
         --kill-on-bad-exit=1 \
         --container-image=/raid/hf-hub-cache/inferencex/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh \
-        --container-mounts=/raid/hf-hub-cache:/hf-hub-cache \
+        --container-mounts=/raid/hf-hub-cache:/hf-hub-cache,/etc/resolv.conf:/etc/resolv.conf:ro \
         --container-remap-root \
         --container-writable \
         --no-container-entrypoint \
@@ -134,6 +134,8 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
             export HF_XET_CACHE="$cache/.xet"
             export HF_HUB_DISABLE_PROGRESS_BARS=1
             mkdir -p "$cache" "$HF_HOME" "$HF_XET_CACHE"
+            python -c "import socket; socket.getaddrinfo('huggingface.co', 443)"
+            echo "K3_STAGE_NETWORK host=$host status=resolved"
             echo "K3_STAGE_MODEL host=$host status=starting revision=$revision"
 
             python - "$revision" <<'"'"'PY'"'"' &
