@@ -14,9 +14,15 @@ export PORT="${PORT:-8888}"
 HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/hf-hub-cache}"
 
-fail() {
+fail_with() {
+    local rc="$1"
+    shift
     echo "ERROR: $*" >&2
-    exit 1
+    exit "$rc"
+}
+
+fail() {
+    fail_with 1 "$@"
 }
 
 require_exact() {
@@ -335,7 +341,8 @@ wait "$CLIENT_PID" || client_rc=$?
 CLIENT_PID=""
 
 if [[ ! -s "$HANDOFF_HOST" ]]; then
-    fail "the AgentX client produced no handoff archive (client exit code $client_rc)"
+    fail_with "$(( client_rc == 0 ? 1 : client_rc ))" \
+        "the AgentX client produced no handoff archive (client exit code $client_rc)"
 fi
 
 archive_entries=$(tar tzf "$HANDOFF_HOST")
@@ -366,7 +373,7 @@ rm -f "$HANDOFF_HOST"
 HANDOFF_HOST=""
 
 if (( client_rc != 0 )); then
-    fail "the AgentX client exited with code $client_rc"
+    fail_with "$client_rc" "the AgentX client exited with code $client_rc"
 fi
 
 echo "Native MI300X Kimi K3 AgentX run complete at concurrency ${CONC_VALUE}"
