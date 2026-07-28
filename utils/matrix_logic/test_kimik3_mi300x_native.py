@@ -635,6 +635,18 @@ def test_native_launcher_rejects_topology_before_salloc(tmp_path: Path) -> None:
     assert "salloc " not in cluster["cmd_log"].read_text()
 
 
+def test_native_launcher_rejects_invalid_socket_interface_before_salloc(
+    tmp_path: Path,
+) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["KIMIK3_SOCKET_IFNAME"] = "ens51f1np1, docker0"
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "KIMIK3_SOCKET_IFNAME" in result.stderr
+    assert "salloc " not in cluster["cmd_log"].read_text()
+
+
 def test_native_launcher_rejects_one_preflight_record(tmp_path: Path) -> None:
     cluster = make_cluster(tmp_path, preflight_node_count=1)
     result = run_launcher(cluster)
