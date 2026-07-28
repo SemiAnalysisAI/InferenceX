@@ -485,10 +485,14 @@ fi
 # and hash sizes only align with prefix caching on -- an omission has been
 # reported to trip "tokens_per_block not divisible by tokens_per_hash" at load.
 # Set PREFIX_CACHING=true/false to force it either way.
-PREFIX_CACHE_ARGS=()
-if [ "${PREFIX_CACHING:-}" = "true" ]; then
-    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
-elif [ "${PREFIX_CACHING:-}" = "false" ]; then
+# ON by default for every arm. Agentic trace replay exists to exercise large
+# shared prefixes, so measuring it with reuse disabled is not a useful baseline.
+# It also costs essentially no KV (measured: 1,414,660 vs 1,420,824 tokens) and
+# improves ITL (484 vs 577 ms). Note vLLM resolves the flag's default to False
+# for this model, so it must be passed explicitly. PREFIX_CACHING=false remains
+# available for a deliberate A/B.
+PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+if [ "${PREFIX_CACHING:-}" = "false" ]; then
     PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
 fi
 
