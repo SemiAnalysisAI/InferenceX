@@ -15,7 +15,7 @@ identity:
   container:
     image: "nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.0-kimi-k3-dev.1"
   frameworks:
-    dynamo: "1.4.0-kimi-k3-dev.1"
+    dynamo: "1.3.0"
 
 dynamo:
   install: false

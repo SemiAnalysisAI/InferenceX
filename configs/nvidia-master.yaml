@@ -8000,7 +8000,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
   runner: cluster:gb200-nv
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.4.0-kimi-k3-dev.1" }
+  router: { name: dynamo-router, version: "1.3.0" }
   multinode: true
   disagg: false
   scenarios:
