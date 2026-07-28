@@ -89,11 +89,14 @@ export VLLM_ENGINE_READY_TIMEOUT_S=7200
 # ---- DSpark draft + golden acceptance length --------------------------------
 DRAFT_MODEL="${DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-7}"
-# Committed golden AL for kimi-k3 / thinking_on / this draft length. Kept in sync
-# with golden_al_distribution/kimik3_dspark.yaml; the guard below hard-fails if
-# that file is ever recollected and this constant goes stale.
-GOLDEN_AL=3.78
-GOLDEN_AL_FILE="golden_al_distribution/kimik3_dspark.yaml"
+# Committed golden AL for kimi-k3 / thinking_on / this draft length, taken from
+# the curve whose collector used the SAME sampling this recipe does
+# (draft_sample_method=probabilistic, rejection_sample_method=block). The plain
+# kimik3_dspark.yaml curve does not state its sampling and runs lower at every
+# draft length (3.78 vs 3.84 at k=7), so it is the wrong target here. The guard
+# below hard-fails if the committed file is recollected and this goes stale.
+GOLDEN_AL=3.84
+GOLDEN_AL_FILE="golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml"
 # Fail closed if the pinned AL does not match the committed curve: a missing,
 # unparseable or drifted value all collapse to one mismatch check, so a
 # recollected curve can never leave a stale constant in place.
