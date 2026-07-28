@@ -5368,3 +5368,11 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2308
   evals-only: true
   eval-min-prefill-ep: 8
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg-agentic-hicache
+  description:
+    - "GSM8K lm-eval for TP8/EP1 low-conc hicache arm at eval-conc 32; complements the DEP8/DPA c128 eval above (one eval job per distinct parallelism topology)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2308
+  evals-only: true
+  eval-max-prefill-ep: 1

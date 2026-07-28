@@ -882,6 +882,13 @@ class ChangelogEntry(BaseModel):
             "threshold are dropped after eval selection."
         ),
     )
+    eval_max_prefill_ep: Optional[int] = Field(
+        alias="eval-max-prefill-ep", default=None, ge=1,
+        description=(
+            "When set, multinode eval rows whose prefill.ep is above this "
+            "threshold are dropped after eval selection."
+        ),
+    )
     scenario_type: Optional[List[Literal["fixed-seq-len", "agentic-coding"]]] = Field(
         alias="scenario-type", default=None, min_length=1,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
