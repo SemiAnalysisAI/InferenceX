@@ -39,7 +39,7 @@ VLLM_CMD=(
     --load-format auto
     --moe-backend "$VLLM_MOE_BACKEND"
     --kv-cache-dtype fp8
-    --gpu-memory-utilization 0.985
+    --gpu-memory-utilization 0.97
     --attention-config '{"use_prefill_query_quantization":true}'
     --enable-prefix-caching
     --enable-auto-tool-choice
