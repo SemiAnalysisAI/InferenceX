@@ -155,7 +155,7 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         --export=ALL \
         bash -c 'export MULTINODE_NODE_RANK="$SLURM_PROCID"; exec bash "$1"' \
         bash "$server_script" \
-        >"$server_log_dir/combined.log" 2>&1 &
+        >"$server_log_dir/server.log" 2>&1 &
     server_step_pid=$!
 
     for ((attempt = 1; attempt <= 720; attempt++)); do
@@ -171,7 +171,7 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         fi
         if ! kill -0 "$server_step_pid" 2>/dev/null; then
             echo "Native multi-node server exited before becoming ready" >&2
-            tail -n 200 "$server_log_dir/combined.log" >&2 || true
+            tail -n 200 "$server_log_dir/server.log" >&2 || true
             exit 1
         fi
         sleep 10
