@@ -57,6 +57,7 @@ fi
 if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
+rocm-smi
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
@@ -402,6 +403,17 @@ else
 fi
 CONTEXT_LEN=1048576
 
+# The LMCache MP server (kv_buffer_device=cuda) holds GPU staging memory on
+# every device before vLLM starts, so only ~256/288 GiB is free at init. At
+# --gpu-memory-utilization 0.95 vLLM requests 273.6 GiB and hard-fails
+# ("Free memory ... less than desired GPU memory utilization"). Derate the
+# lmcache arm to leave headroom above the LMCache footprint; other arms keep
+# the full 0.95.
+GPU_MEM_UTIL=0.95
+if [ "${KV_OFFLOAD_BACKEND:-}" = "lmcache" ]; then
+    GPU_MEM_UTIL=0.85
+fi
+
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
@@ -422,7 +434,7 @@ VLLM_CMD=(
     --max-model-len "$CONTEXT_LEN"
     "${PARALLEL_ARGS[@]}"
     "${MODE_ARGS[@]}"
-    --gpu-memory-utilization 0.95
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
     --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --tokenizer-mode deepseek_v4
