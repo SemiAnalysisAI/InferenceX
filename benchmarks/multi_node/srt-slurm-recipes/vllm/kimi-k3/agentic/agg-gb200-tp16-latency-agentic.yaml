@@ -1,9 +1,9 @@
-name: "kimi-k3-vllm-agg-gb200-tp8-latency-agentic"
+name: "kimi-k3-vllm-agg-gb200-tp16-latency-agentic"
 
 # Day-0 GB200 translation of the official latency-oriented multi_node_tp
-# profile. Kimi K3 requires at least eight GPUs for TP, so this aggregate
-# worker spans two four-GPU GB200 nodes.
-# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=2&strategy=multi_node_tp
+# profile. TP16 across four GB200 nodes leaves enough HBM for the default
+# BF16 KV cache with the 2.8T MXFP4 checkpoint.
+# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tp
 
 model:
   path: "kimi-k3"
@@ -38,9 +38,9 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 2
+  agg_nodes: 4
   agg_workers: 1
-  gpus_per_agg: 8
+  gpus_per_agg: 16
 
 infra:
   etcd_nats_dedicated_node: false
@@ -76,11 +76,11 @@ backend:
     UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     NCCL_P2P_LEVEL: "NVL"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-tp8-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-tp16-{job_id}"
   vllm_config:
     aggregated:
       served-model-name: "moonshotai/Kimi-K3"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 16
       pipeline-parallel-size: 1
       trust-remote-code: true
       load-format: "fastsafetensors"

@@ -1,9 +1,9 @@
-name: "kimi-k3-vllm-agg-gb200-tep8-balanced-agentic"
+name: "kimi-k3-vllm-agg-gb200-tep16-balanced-agentic"
 
 # Day-0 GB200 translation of the official balanced multi_node_tep profile.
-# Dense layers use TP8 while the MoE experts are sharded across the same eight
-# GPUs on two four-GPU GB200 nodes.
-# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=2&strategy=multi_node_tep
+# Dense layers and MoE experts are sharded across 16 GPUs on four GB200 nodes,
+# leaving enough HBM for the default BF16 KV cache.
+# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
 
 model:
   path: "kimi-k3"
@@ -38,9 +38,9 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 2
+  agg_nodes: 4
   agg_workers: 1
-  gpus_per_agg: 8
+  gpus_per_agg: 16
 
 infra:
   etcd_nats_dedicated_node: false
@@ -76,11 +76,11 @@ backend:
     UCX_TLS: "rc,cuda_copy"
     NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     NCCL_P2P_LEVEL: "NVL"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-tep8-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-tep16-{job_id}"
   vllm_config:
     aggregated:
       served-model-name: "moonshotai/Kimi-K3"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 16
       pipeline-parallel-size: 1
       enable-expert-parallel: true
       trust-remote-code: true

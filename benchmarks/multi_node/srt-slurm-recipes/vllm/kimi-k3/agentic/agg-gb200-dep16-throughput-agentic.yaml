@@ -1,8 +1,8 @@
 name: "kimi-k3-vllm-agg-gb200-dep16-throughput-agentic"
 
 # Day-0 GB200 translation of the official throughput-oriented multi_node_dep
-# profile. The 16-way data/expert-parallel worker spans four four-GPU GB200
-# nodes, with four local DP ranks on each node.
+# profile. TP2 x DP8 gives EP16 across four four-GPU GB200 nodes. TP2 shards
+# the dense weights so each DP rank has room for K3's default BF16 KV cache.
 # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
 
 model:
@@ -80,9 +80,9 @@ backend:
   vllm_config:
     aggregated:
       served-model-name: "moonshotai/Kimi-K3"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 2
       pipeline-parallel-size: 1
-      data-parallel-size: 16
+      data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
