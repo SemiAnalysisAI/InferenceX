@@ -8388,3 +8388,48 @@ qwen3.5-fp8-gb200-dynamo-sglang-mtp:
           tp: 16
           ep: 16
           dp-attn: true
+
+# Kimi-K3 MXFP4 B200 aggregated vLLM via Dynamo (TP8 x PP2, 2 nodes / 16
+# GPUs), agentic bring-up. The native MXFP4 checkpoint (2.8T total params,
+# ~1.4TB weights) does not fit one 8xB200 node, so TP8 shards attention/dense
+# and PP2 splits layers. Plain TP (NOT TEP): ep 1, no expert parallelism —
+# the 896 routed experts are TP-sharded within each pipeline stage. Node
+# count = tp*pp/gpus_per_node = 8*2/8 = 2. Aggregated (prefill num-worker 1 +
+# decode num-worker 0, RECIPES.md section 5) — the single worker serves both
+# phases, so no P/D KV transfer. Dedicated kimi-k3 vLLM bring-up image with
+# VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1 and the kimi_k3 tool-call/reasoning
+# parsers.
+# Recipe: benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-agentic.yaml
+kimik3-fp4-b200-dynamo-vllm-agentic:
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b200-dgxc
+  precision: fp4
+  # framework stays dynamo-vllm for launcher routing, but this variant serves
+  # DIRECTLY with vllm serve (srt-slurm PR #278 frontend.type: vllm + the
+  # InferenceX multinode patch) — no dynamo frontend/worker/router involved.
+  framework: dynamo-vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        conc-list: [1, 2, 4, 8, 16, 32]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-agentic.yaml"
+        # The aggregate worker also performs decode; keep the decode worker
+        # count at zero so result aggregation counts the 16 GPUs only once.
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          ep: 1
+          dp-attn: false
