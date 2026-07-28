@@ -103,7 +103,7 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --gpus-per-task=1 \
         --kill-on-bad-exit=1 \
         --container-image=/raid/hf-hub-cache/inferencex/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh \
-        --container-mounts=/dev/kfd:/dev/kfd,/dev/dri:/dev/dri \
+        --container-mounts="$GITHUB_WORKSPACE:/workspace,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
         --container-mount-home \
         --container-writable \
         --container-remap-root \
@@ -199,6 +199,10 @@ PY
                 /usr/local/lib/python3.12/dist-packages/aiter \
                 2>/dev/null | head -n 400 || true
             echo "K3_MXFP4_SOURCE_CONTRACT_END"
+
+            export AITER_SITUV2_A8W4=0
+            timeout --signal=TERM --kill-after=30s 1200s \
+                python /workspace/scripts/diagnostics/k3_mxfp4_gfx942_probe.py
         '
 
     echo "K3_MXFP4_METADATA_PREFLIGHT complete job_id=$DIAG_JOB_ID"
