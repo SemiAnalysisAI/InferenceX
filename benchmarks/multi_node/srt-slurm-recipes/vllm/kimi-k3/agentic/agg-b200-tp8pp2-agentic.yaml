@@ -1,4 +1,4 @@
-name: "kimik3-vllm-agg-b200-tp8pp2-agentic"
+name: "kimik3-vllm-agg-b200-tp8pp2-dspark-agentic"
 
 # Kimi-K3 MXFP4 B200 AGGREGATED TP8 x PP2 agentic recipe (2 nodes / 16 GPUs).
 # The native MXFP4 checkpoint (2.8T total params, ~1.4TB of weights) does not
@@ -103,6 +103,13 @@ backend:
       enable-auto-tool-choice: true
       tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
+      # DSpark speculative decoding (variant I) with the Inferact draft head,
+      # probabilistic draft sampling + block rejection sampling (the #2366
+      # acceptance-rate optimization), k=7, and synthetic_acceptance_length
+      # 3.84 = the committed golden AL for exactly this sampling config at
+      # k=7 (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_
+      # block_rejection_sample_method.yaml, measured in run 30316471205).
+      speculative-config: '{"model":"Inferact/Kimi-K3-DSpark", "num_speculative_tokens":7, "method": "dspark", "attention_backend": "FLASHINFER_MLA", "draft_sample_method": "probabilistic", "rejection_sample_method": "block", "synthetic_acceptance_length": 3.84}'
       # No explicit max-model-len: let vLLM derive the native 1M window from
       # the model config (agentic trajectories blow past any small cap, and
       # K3's KDA layers keep per-token KV small — only the 24 gated-MLA

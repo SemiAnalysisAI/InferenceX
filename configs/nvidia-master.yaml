@@ -8352,8 +8352,8 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      - spec-decoding: none
-        conc-list: [1, 8, 16, 32]
+      - spec-decoding: draft_model
+        conc-list: [1, 2, 4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 8
