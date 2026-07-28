@@ -1508,15 +1508,15 @@ kimik3-fp4-h200-vllm-agentic:
           pp: 2
           ep: 1
           dp-attn: false
-      # Balanced: TEP16 across two nodes (TP8 attention, DP2/EP16 MoE).
+      # Balanced: TP4/PP2 with DP2/EP8 across two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
         conc-list: [3]
         prefill:
           num-worker: 2
-          tp: 8
-          pp: 1
-          ep: 16
+          tp: 4
+          pp: 2
+          ep: 8
           dp-attn: true
           additional-settings:
           - "NATIVE_MULTINODE=1"
@@ -1526,19 +1526,19 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
         decode:
           num-worker: 0
-          tp: 8
-          pp: 1
-          ep: 16
+          tp: 4
+          pp: 2
+          ep: 8
           dp-attn: true
-      # Throughput-oriented: TP2 with DP16/EP32 across four nodes.
+      # Throughput-oriented: TP1/PP2 with DP16/EP16 across four H200 nodes.
       - spec-decoding: none
         kv-offloading: none
         conc-list: [16, 32, 64, 128]
         prefill:
           num-worker: 16
-          tp: 2
-          pp: 1
-          ep: 32
+          tp: 1
+          pp: 2
+          ep: 16
           dp-attn: true
           additional-settings:
           - "NATIVE_MULTINODE=1"
@@ -1548,9 +1548,9 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
         decode:
           num-worker: 0
-          tp: 2
-          pp: 1
-          ep: 32
+          tp: 1
+          pp: 2
+          ep: 16
           dp-attn: true
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
