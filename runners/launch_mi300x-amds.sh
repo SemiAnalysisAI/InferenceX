@@ -46,9 +46,8 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --nodes=1 \
         --ntasks=1 \
         --ntasks-per-node=1 \
-        --gres=gpu:1 \
-        --cpus-per-task=4 \
-        --time=30 \
+        --cpus-per-task=1 \
+        --time=5 \
         --no-shell \
         --job-name="$RUNNER_NAME" 2>&1 | tee "$DIAG_ALLOC_LOG"
     alloc_rc=${PIPESTATUS[0]}
@@ -61,6 +60,28 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
     fi
 
     scontrol show job -o "$DIAG_JOB_ID"
+    srun \
+        --jobid="$DIAG_JOB_ID" \
+        --nodes=1 \
+        --ntasks=1 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        bash -lc '
+            set -euo pipefail
+            host=$(hostname -f 2>/dev/null || hostname)
+            echo "K3_RAID_PATH_PROBE host=$host uid=$(id -u) gid=$(id -g)"
+            stat -c "K3_RAID_PATH_STAT path=%n owner=%U group=%G mode=%a" /raid
+            (find /raid -mindepth 1 -maxdepth 2 -type d -writable -printf "%p\n" 2>/dev/null || true) \
+                | sort \
+                | sed -n "1,100p" \
+                | while IFS= read -r path; do
+                    stat -c "K3_RAID_WRITABLE path=%n owner=%U group=%G mode=%a" "$path"
+                done
+        '
+
+    echo "K3_RAID_PATH_PROBE complete job_id=$DIAG_JOB_ID"
+    exit 42
+
     srun \
         --jobid="$DIAG_JOB_ID" \
         --nodes=1 \
