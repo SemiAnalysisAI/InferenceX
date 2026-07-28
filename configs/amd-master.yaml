@@ -654,13 +654,13 @@ kimik3-fp4-mi355x-vllm-agentic:
       # --max-gpu-workers / --max-cpu-workers / --l1-align-bytes /
       # --eviction-trigger-watermark CLI the recipe passes; the recipe's own
       # LMCACHE_GIT_REF default is this same commit.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [1, 4, 8, 16, 32] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [1, 4, 8, 16, 32] }
       # TEP8 (TP8 + expert parallelism, no DP-attention) at the two highest
       # concurrency points. At TP8 the MoE weights are already sharded across
       # every rank, so EP changes the partition axis rather than per-rank bytes;
       # any win has to come from the all-to-all vs all-reduce path and
       # expert-kernel efficiency, which is what these two points isolate.
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [16, 32] }
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [16, 32] }
 
 # Bring-up twin of kimik3-fp4-mi355x-vllm-agentic. NOT shipped -- delete once the
 # full key has produced results.
@@ -694,8 +694,8 @@ kimik3-fp4-mi355x-vllm-agentic-lmprofile:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8] }
 
 # Retry-only key: single cell, re-dispatched when a bringup cell lands on a
 # node carrying another tenant's allocation. Delete once it has a result.
@@ -711,7 +711,7 @@ kimik3-fp4-mi355x-vllm-agentic-retry:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
 
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
@@ -726,8 +726,8 @@ kimik3-fp4-mi355x-vllm-agentic-bringup:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511

@@ -211,42 +211,25 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     fi
     PREFIX_CACHING=true
 
-    # SECOND hard constraint from the same Mamba-hybrid path. vLLM enforces
-    #   block_size <= max_num_batched_tokens < 2 * block_size
-    # "so every prefill step advances exactly one block and every block boundary
-    # gets a state snapshot". K3 resolves to block_size=768, so the reference
-    # command's --max-num-batched-tokens 4096 aborts engine init with
-    # "got max_num_batched_tokens=4096, block_size=768. Set
-    # --max-num-batched-tokens 768." (measured on gfx950, LMCache v0.5.3.dev47).
-    #
-    # NOTE this is a real and severe cost of the LMCache arm on this model, not
-    # a formality: at ~106k-token average ISL for this corpus, a 768-token
-    # budget means ~138 chunked-prefill steps per turn versus ~26 at 4096. Any
-    # LMCache-vs-none comparison has to be read with that in mind -- the offload
-    # tier is not free here, it changes the prefill schedule.
-    #
-    # 768 is what this model/config resolves to; if vLLM reports a different
-    # block_size, its error names the value to use. Override with
-    # LMCACHE_MAX_NUM_BATCHED_TOKENS.
-    # Deliberately ignores any inherited MAX_NUM_BATCHED_TOKENS: the harness and
-    # the driver both export the reference 4096, which is invalid on this path,
-    # so honouring it would just reproduce the abort. Only the explicit
-    # LMCACHE_MAX_NUM_BATCHED_TOKENS overrides.
-    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
-
-    # THIRD constraint, asserted by the connector itself:
+    # --max-num-batched-tokens and --chunk-size stay at the AMD reference
+    # values (4096 / 1024). They were briefly pinned to 768 because LMCache
+    # dev HEAD (v0.5.3.dev47) rejects the reference values on this hybrid model:
+    #   ValueError: Mamba-hybrid models with LMCache require
+    #     block_size <= max_num_batched_tokens < 2 * block_size ... block_size=768
     #   AssertionError: LMCache chunk size should be a multiple of vLLM block size
-    # i.e. chunk_size % block_size == 0. With K3's block_size=768, BOTH stock
-    # chunk sizes are invalid: the AMD K3 reference's 1024 (1024 % 768 = 256)
-    # and kimik2.7's 256 (smaller than a block). So chunk size is not a free
-    # A/B axis on this model -- it is pinned to a multiple of the block size,
-    # and the two server profiles can only differ in their other knobs.
-    # Override with LMCACHE_CHUNK_SIZE_OVERRIDE (must stay a multiple of 768).
-    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-768}"
+    # Those checks live in the dev integration, not in the pinned 0.5.1 release
+    # the reference recipe installs, so with 0.5.1 the reference values stand.
+    # If 0.5.1 turns out to enforce them too, LMCACHE_MAX_NUM_BATCHED_TOKENS and
+    # LMCACHE_CHUNK_SIZE_OVERRIDE set them back to 768 without a recipe edit.
+    #
+    # Worth keeping in view either way: at ~106k-token average ISL, 768 would
+    # mean ~138 chunked-prefill steps per turn versus ~26 at 4096, so the two
+    # settings are not performance-equivalent.
+    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-4096}"
+    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-1024}"
     LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
     LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
-    echo "LMCache/Mamba-hybrid constraint: chunk-size pinned to $LMCACHE_K3_CHUNK_SIZE (must be a multiple of block_size)"
-    echo "LMCache/Mamba-hybrid constraint: pinning --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS (block_size must satisfy bs <= mnbt < 2*bs)"
+    echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (reference values)"
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
@@ -269,23 +252,26 @@ except Exception:
 ' 2>/dev/null || true)
     fi
 
+    # The AMD reference recipe pins a PyPI release: `uv pip install
+    # "lmcache==0.5.1"`. Do not substitute a git build of dev HEAD -- dev
+    # (v0.5.3.dev47) carries a LazyMemoryAllocator that expands the pinned L1
+    # pool ~10 GB per ~17 s DURING serving, which starves the vLLM worker until
+    # the executor RPC deadline fires ("RPC call to sample_tokens timed out",
+    # observed on g09 and g11). It also adds Mamba-hybrid constraints
+    # (block_size <= max_num_batched_tokens < 2*block_size, and
+    # chunk_size % block_size == 0) that the reference command does not satisfy.
+    LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-0.5.1}}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
-        LMCACHE_SRC_DIR="${LMCACHE_SRC_DIR:-/opt/lmcache-src}"
-        # Default pin = LMCache dev HEAD as of 2026-07-28. The server flags this
-        # recipe passes (--max-gpu-workers / --max-cpu-workers / --l1-align-bytes
-        # / --eviction-trigger-watermark) only exist on recent dev: they come
-        # from lmcache/v1/multiprocess/config.py and
-        # lmcache/v1/distributed/config.py, not the older --max-workers CLI.
-        LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-${LMCACHE_CFG_VERSION:-cd9a0ad5325c7d52c825ed17aac6185d5c520e44}}"
-        echo "Building LMCache at ref: $LMCACHE_GIT_REF"
-        rm -rf "$LMCACHE_SRC_DIR"
-        git clone https://github.com/LMCache/LMCache.git "$LMCACHE_SRC_DIR"
-        ( cd "$LMCACHE_SRC_DIR"
-          git checkout "$LMCACHE_GIT_REF"
-          pip install -r requirements/build.txt
-          CXX=hipcc BUILD_WITH_HIP=1 pip install -e . --no-build-isolation )
+        echo "Installing lmcache==$LMCACHE_VERSION"
+        if command -v uv >/dev/null 2>&1; then
+            uv pip install --system "lmcache==$LMCACHE_VERSION" \
+                || agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+        else
+            agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+        fi
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
     fi
+    python3 -c "import lmcache; print('lmcache', getattr(lmcache,'__version__','?'))" || true
 
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
     LMCACHE_PORT="${LMCACHE_PORT:-5555}"
@@ -295,7 +281,7 @@ except Exception:
     # SHM and falls back to a pickle path that crashes at load. Cap at 90% of
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
     # is the number that actually backs the run.
-    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
 
     # Optional ceiling on the eager allocation. Memory pinning is unavailable in
     # the ROCm container ("CudaPinMemoryBackend: neither torch cudart nor
