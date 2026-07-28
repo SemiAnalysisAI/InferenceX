@@ -110,6 +110,12 @@ backend:
       # KV while remaining active for transient activations). Same setting as
       # the GB300 aggregate AgentX recipe.
       enable-cumem-allocator: true
+      # Paired with the cumem allocator, as in the GB300 aggregate AgentX
+      # recipe: vLLM's custom all-reduce registers IPC buffers that the
+      # VMM-backed CuMemAllocator invalidates — CUDA-graph capture dies with
+      # "custom_all_reduce.cuh 'invalid argument'" (ninth sweep attempt).
+      # TP all-reduce falls back to NCCL.
+      disable-custom-all-reduce: true
       trust-remote-code: true
       # SimpleCPUOffloadConnector (variant E): offload KV blocks to CPU DRAM.
       # enable_cross_layers_blocks false: with true, KV-cache init crashes on
