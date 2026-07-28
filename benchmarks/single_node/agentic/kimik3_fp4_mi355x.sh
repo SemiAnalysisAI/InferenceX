@@ -135,22 +135,38 @@ trap 'exit 143' TERM
 
 wait_for_lmcache_ready() {
     { set +x; } 2>/dev/null
-    local attempts="${LMCACHE_READY_ATTEMPTS:-180}"
+    # Generous by default. With memory pinning unavailable on ROCm, LMCache
+    # disables its LazyMemoryAllocator and allocates the whole L1 pool UP FRONT,
+    # so "ready" can be minutes away and scales with --l1-size-gb. A 180s budget
+    # timed out at exactly 178s on a 2249 GB pool.
+    local attempts="${LMCACHE_READY_ATTEMPTS:-900}"
+    # The health route has moved across LMCache versions, and a wrong path is
+    # indistinguishable from a slow start: both just never return 200. Probe the
+    # known spellings and report which one answered.
+    local paths=(/healthcheck /health /v1/health /status /)
+    local i p
     for ((i = 1; i <= attempts; i++)); do
-        if curl --output /dev/null --silent --fail \
-                "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
-            echo "LMCache server healthy after ${i}s"
-            set -x
-            return 0
-        fi
+        for p in "${paths[@]}"; do
+            if curl --output /dev/null --silent --fail \
+                    "http://127.0.0.1:${LMCACHE_HTTP_PORT}${p}"; then
+                echo "LMCache server healthy after ${i}s (endpoint ${p})"
+                set -x
+                return 0
+            fi
+        done
         if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
             echo "LMCache server died before becoming healthy. Log follows:" >&2
             cat "$LMCACHE_LOG" >&2 || true
             exit 1
         fi
+        # Heartbeat so a slow eager allocation is visibly distinct from a hang.
+        if (( i % 60 == 0 )); then
+            echo "  ... still waiting for LMCache (${i}s / ${attempts}s), L1=${LMCACHE_L1_SIZE_GB:-?}GB"
+        fi
         sleep 1
     done
-    echo "Timed out waiting for LMCache healthcheck. Log follows:" >&2
+    echo "Timed out after ${attempts}s waiting for LMCache healthcheck." >&2
+    echo "Tried endpoints: ${paths[*]} on port ${LMCACHE_HTTP_PORT}. Log follows:" >&2
     cat "$LMCACHE_LOG" >&2 || true
     exit 1
 }
@@ -167,6 +183,26 @@ if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
   lmcache)
     require_agentic_kv_offload_backend lmcache
+
+    # LMCache on K3 REQUIRES prefix caching. K3's Kimi Delta Attention layers
+    # are Mamba KV-cache groups, and vLLM only selects mamba_cache_mode='align'
+    # -- the mode that keeps reusable state snapshots -- when prefix caching is
+    # enabled. Without it the connector refuses to initialise at KV-transfer
+    # setup with:
+    #   ValueError: LMCache cannot serve this model's KV cache groups:
+    #   group N: MambaSpec with mamba_cache_mode='none' (only 'align' keeps
+    #   reusable state snapshots)
+    # (lmcache/integration/vllm/kv_cache_group_edits.py:137). Measured on
+    # gfx950 with LMCache v0.5.3.dev47. This is a hard dependency, not a tuning
+    # choice, so force it here rather than leaving it to the caller -- the
+    # agentic matrix has no per-cell env channel to set it from config.
+    if [ "${PREFIX_CACHING:-}" = "false" ]; then
+        echo "Error: PREFIX_CACHING=false is incompatible with KV_OFFLOAD_BACKEND=lmcache." >&2
+        echo "       LMCache needs mamba_cache_mode='align', which vLLM only selects when" >&2
+        echo "       prefix caching is enabled. Use KV_OFFLOADING=none to measure without it." >&2
+        exit 1
+    fi
+    PREFIX_CACHING=true
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
