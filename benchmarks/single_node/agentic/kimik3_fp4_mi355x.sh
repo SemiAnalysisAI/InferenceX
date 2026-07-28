@@ -252,6 +252,23 @@ except Exception:
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
     # is the number that actually backs the run.
     LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+
+    # Hard ceiling on the eager allocation. Memory pinning is unavailable in the
+    # ROCm container ("CudaPinMemoryBackend: neither torch cudart nor libcudart
+    # is available"), so LMCache disables its LazyMemoryAllocator and allocates
+    # the ENTIRE L1 pool before serving a single request. The agentic budget is
+    # therefore not a ceiling, it is an upfront cost: measured on gfx950, a
+    # 2249 GB pool had still not finished after 178 s, while 512 GB was healthy
+    # in 40 s. 512 is also what the AMD reference command uses. Raise
+    # LMCACHE_L1_MAX_GB only once lazy allocation works on this platform.
+    LMCACHE_L1_MAX_GB="${LMCACHE_L1_MAX_GB:-512}"
+    if [ "$LMCACHE_L1_SIZE_GB" -gt "$LMCACHE_L1_MAX_GB" ]; then
+        echo "WARNING: capping LMCACHE_L1_SIZE_GB ${LMCACHE_L1_SIZE_GB} -> ${LMCACHE_L1_MAX_GB}" \
+             "(eager allocation ceiling). The offload pool for this cell is" \
+             "${LMCACHE_L1_MAX_GB}G, NOT the ${TOTAL_CPU_DRAM_GB}G the matrix budgeted."
+        LMCACHE_L1_SIZE_GB="$LMCACHE_L1_MAX_GB"
+    fi
+
     SHM_FREE_GB=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
     if [ -n "$SHM_FREE_GB" ] && [ "$SHM_FREE_GB" -gt 0 ]; then
         SHM_CAP_GB=$(( SHM_FREE_GB * 90 / 100 ))
