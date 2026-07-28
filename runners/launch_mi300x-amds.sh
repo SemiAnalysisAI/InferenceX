@@ -21,7 +21,7 @@ set -x
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
-    AITER_OVERLAY_REF="1dfa2c2d67375cb630f615f90af2b3f548671097"
+    AITER_OVERLAY_REF="7dc33974f71341201ed0b59230aa38514b46c20f"
     AITER_OVERLAY_DIR="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
 
     download_aiter_overlay() {
@@ -59,7 +59,7 @@ PY
 
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
-        "a36a476bbc43fa2961b4229b3a092176e5e3c183df9fa73012e33719f7fcba1a"
+        "a778cbe2d666afe791562a266485cb48f2637f7ec583330f088e4a0962e1486d"
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
         "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
@@ -170,7 +170,7 @@ PY
                 "$aiter_root/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
                 "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py" \
                 "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
-            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=1dfa2c2d67375cb630f615f90af2b3f548671097"
+            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=7dc33974f71341201ed0b59230aa38514b46c20f"
 
             python - <<"PY"
 import importlib.metadata
