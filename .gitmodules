@@ -1,4 +1,4 @@
 [submodule "utils/aiperf"]
 	path = utils/aiperf
 	url = https://github.com/SemiAnalysisAI/aiperf.git
-	branch = main
+	branch = cquil11/aiperf-agentx-v1.0
