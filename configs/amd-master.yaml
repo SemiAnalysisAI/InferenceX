@@ -626,11 +626,13 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-      # Same DRAM policy as the non-MTP entry: 0.93 of available-cpu-dram-mib,
-      # capped by the matrix generator at the 2,861,022 MiB / 3 TB-decimal
-      # agentic limit -> 2789 GB aggregate at TP8 (349 GB/rank). 0.95 was measured
-      # to leave only ~12 GiB host free once the eager pool commits.
-    - dram-utilization: 0.93
+      # Same DRAM policy as the non-MTP entry: 0.80 of available-cpu-dram-mib,
+      # capped by the matrix generator at the 2,861,022 MiB / 3 TB-decimal agentic
+      # limit -> 2399 GB aggregate at TP8 (~300 GB/rank), paired with lazy offload.
+      # Higher values failed: 0.95 left ~12 GiB host free, and 0.93 with eager
+      # offload had each of the 8 workers pin 324.67 GB up front (2597 GB total),
+      # starving the shm_broadcast ring and killing EngineCore during warmup.
+    - dram-utilization: 0.80
       search-space:
       # DSpark speculative decoding, draft Inferact/Kimi-K3-DSpark,
       # num_speculative_tokens=7. Throughput points simulate acceptance at the
