@@ -626,10 +626,11 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-      # Same DRAM policy as the non-MTP entry: 0.95 of available-cpu-dram-mib,
+      # Same DRAM policy as the non-MTP entry: 0.93 of available-cpu-dram-mib,
       # capped by the matrix generator at the 2,861,022 MiB / 3 TB-decimal
-      # agentic limit -> 2849 GB aggregate at TP8 (356 GB/rank).
-    - dram-utilization: 0.95
+      # agentic limit -> 2789 GB aggregate at TP8 (349 GB/rank). 0.95 was measured
+      # to leave only ~12 GiB host free once the eager pool commits.
+    - dram-utilization: 0.93
       search-space:
       # DSpark speculative decoding, draft Inferact/Kimi-K3-DSpark,
       # num_speculative_tokens=7. Throughput points simulate acceptance at the
@@ -637,12 +638,13 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       # kimi-k3 / thinking_on / 7) per docs/PR_REVIEW_CHECKLIST.md rule 10; the
       # eval point uses real target verification instead.
       #
-      # TP=8 only (~195 GB/GPU of 288 GB HBM). conc mirrors the non-MTP ladder so
-      # the two compare directly; conc 32 is omitted because the resident draft
-      # already cuts GPU KV from 2,204,913 to 1,723,308 tokens (2.10x -> 1.64x
-      # for a 1M-token request) and --max-num-seqs is capped at 32 under spec
-      # decoding.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 16] }
+      # TP=8 only (~195 GB/GPU of 288 GB HBM). conc 1/2/4/8 mirrors the non-MTP
+      # ladder so the two compare directly. Higher conc is omitted: measured at
+      # conc 16/32 on this corpus, interactivity is already floored at 2.6-2.9
+      # output tok/s/user (prefill-bound, mean ISL 117k-155k vs ~500-token
+      # outputs), and the resident draft further cuts GPU KV from 2,204,913 to
+      # 1,723,308 tokens (2.10x -> 1.64x for a 1M-token request).
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
