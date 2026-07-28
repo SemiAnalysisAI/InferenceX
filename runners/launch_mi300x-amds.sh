@@ -38,10 +38,7 @@ if [[ "${PROFILE:-0}" == "1" && "${K3_LIVE_ATTACH:-1}" == "1" ]]; then
                 grep -v grep |
                 tail -n 240 || true
             echo "K3_STACK_TOOLS host=$host py_spy=$(command -v py-spy || true) gdb=$(command -v gdb || true)"
-            worker_pid=$(
-                ps -eo pid=,comm= |
-                    awk '$2 == "VLLM::Worker" { print $1; exit }'
-            )
+            worker_pid=$(pgrep -x -o "VLLM::Worker" || true)
             if [[ -n "$worker_pid" ]]; then
                 echo "K3_STACK_BEGIN host=$host pid=$worker_pid"
                 printf "wchan="
