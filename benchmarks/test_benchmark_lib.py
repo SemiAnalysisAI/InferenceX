@@ -39,18 +39,18 @@ printf '%s\\n' "$REPLAY_CMD"
     )
 
 
-def test_build_replay_command_defaults_to_spread_phase_starts() -> None:
+def test_build_replay_command_defaults_to_burst_phase_starts() -> None:
     result = build_replay_command(None)
 
     assert result.returncode == 0, result.stderr
-    assert "--burst-phase-starts" not in result.stdout
+    assert "--burst-phase-starts" in result.stdout
 
 
-def test_build_replay_command_can_enable_burst_phase_starts() -> None:
-    result = build_replay_command("1")
+def test_build_replay_command_can_restore_spread_phase_starts() -> None:
+    result = build_replay_command("0")
 
     assert result.returncode == 0, result.stderr
-    assert "--burst-phase-starts" in result.stdout
+    assert "--burst-phase-starts" not in result.stdout
 
 
 def test_build_replay_command_rejects_invalid_burst_value() -> None:

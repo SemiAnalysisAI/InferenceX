@@ -1775,10 +1775,10 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Saturation sweeps need the requested lanes to become active inside the
-    # benchmark window. Agentic replay otherwise preserves the traces' original
-    # phase-start offsets, which can spread the initial warmup over many hours.
-    case "${AIPERF_BURST_PHASE_STARTS:-0}" in
+    # Start every selected trajectory together so the requested lanes become
+    # active inside the benchmark window. Recipes that intentionally measure
+    # the traces' recorded phase-start ramp can restore it with an explicit 0.
+    case "${AIPERF_BURST_PHASE_STARTS:-1}" in
         0)
             ;;
         1)
