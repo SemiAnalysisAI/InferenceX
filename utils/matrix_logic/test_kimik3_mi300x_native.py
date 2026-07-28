@@ -409,6 +409,7 @@ if [[ "$args" == *--kill-on-bad-exit=1* ]]; then
     printf 'server_master_addr=%s\n' "$MULTINODE_MASTER_ADDR" >> "$FAKE_CMD_LOG"
     printf 'server_gloo_ifname=%s\n' "${GLOO_SOCKET_IFNAME:-}" >> "$FAKE_CMD_LOG"
     printf 'server_nccl_ifname=%s\n' "${NCCL_SOCKET_IFNAME:-}" >> "$FAKE_CMD_LOG"
+    echo "fake server started"
     mode="${FAKE_SERVER_MODE:-alive}"
     if [[ "$mode" == exit:* ]]; then
         exit "${mode#exit:}"
@@ -787,6 +788,42 @@ def test_sigterm_returns_143_and_reaps_server_and_allocation(tmp_path: Path) -> 
     else:
         os.kill(server_pid, signal.SIGKILL)
         raise AssertionError(f"server step {server_pid} outlived cleanup")
+
+
+def test_hard_kill_leaves_live_server_log_in_workspace(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["FAKE_HEALTH"] = "down"
+    cluster["env"]["KIMIK3_STARTUP_TIMEOUT_SECONDS"] = "300"
+
+    process = subprocess.Popen(
+        ["bash", str(NATIVE_LAUNCHER)],
+        cwd=str(REPO_ROOT),
+        env=cluster["env"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        live_log = (
+            cluster["workspace"]
+            / "multinode_server_logs_live"
+            / "vllm_server.log"
+        )
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if live_log.is_file() and "fake server started" in live_log.read_text():
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("launcher did not create a live workspace log")
+    finally:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=10)
+
+    assert live_log.is_file()
+    assert live_log.stat().st_uid == os.getuid()
+    assert "fake server started" in live_log.read_text()
 
 
 def test_success_extracts_only_host_owned_bounded_artifacts(tmp_path: Path) -> None:
