@@ -37,6 +37,29 @@ if [[ "${PROFILE:-0}" == "1" && "${K3_LIVE_ATTACH:-1}" == "1" ]]; then
                 grep -E "vllm|VLLM::|EngineCore|multiproc|python" |
                 grep -v grep |
                 tail -n 240 || true
+            echo "K3_STACK_TOOLS host=$host py_spy=$(command -v py-spy || true) gdb=$(command -v gdb || true)"
+            worker_pid=$(
+                ps -eo pid=,comm= |
+                    awk '$2 == "VLLM::Worker" { print $1; exit }'
+            )
+            if [[ -n "$worker_pid" ]]; then
+                echo "K3_STACK_BEGIN host=$host pid=$worker_pid"
+                printf "wchan="
+                cat "/proc/$worker_pid/wchan" 2>&1 || true
+                printf "\nstack=\n"
+                cat "/proc/$worker_pid/stack" 2>&1 || true
+                if command -v py-spy >/dev/null 2>&1; then
+                    timeout 15s py-spy dump --pid "$worker_pid" --native 2>&1 || true
+                elif command -v gdb >/dev/null 2>&1; then
+                    timeout 15s gdb --batch --quiet \
+                        -ex "set pagination off" \
+                        -ex "thread apply all bt 8" \
+                        -p "$worker_pid" 2>&1 || true
+                fi
+                echo "K3_STACK_END host=$host pid=$worker_pid"
+            else
+                echo "K3_STACK_MISSING host=$host"
+            fi
             echo "K3_LIVE_END host=$host"
         '
     exit 42
