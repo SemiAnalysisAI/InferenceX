@@ -713,6 +713,24 @@ kimik3-fp4-mi355x-vllm-agentic-retry:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
 
+# L1 pool-size A/B. Same reference server command and lmcache==0.5.1 on both;
+# the only difference is --l1-size-gb: the reference's flat 512 GB vs the
+# agentic DRAM budget capped by /dev/shm (~1360 GB on these nodes, which is the
+# kimik2.7 sizing that ran a 1199 GB pool here successfully).
+kimik3-fp4-mi355x-vllm-agentic-l1size:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-budget, version: "0.5.1" }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
