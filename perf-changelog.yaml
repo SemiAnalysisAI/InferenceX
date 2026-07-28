@@ -5159,3 +5159,10 @@
     - "Bring-up validated in run 30326393603: all 12 configs green, zero ServerDisconnectedError after the keep-alive fix. GPU KV resolves to 42.23 GiB / 3,249,215 tokens, i.e. ~3.1 max-length requests, against MAX_NUM_SEQS = 2*CONC."
     - "Measured behaviour: below conc 8 the GPU-resident and DRAM arms are within run-to-run noise (1-5%). At conc 16 and 24 the GPU-resident arm thrashes -- prefix cache hit rate 2.7%, TTFT p50 86s and 191s, 49.6 and 54.9 output tok/s -- because the working set exceeds GPU KV and prefixes are recomputed. The DRAM arm holds TTFT p50 0.85s and 6.2s for 245.0 and 260.6 output tok/s (4-5x), with the CPU tier serving a 62% external prefix cache hit rate at conc 24. The high-conc GPU-resident points are retained deliberately as the honest baseline that makes the offload gain legible."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2371
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic
+  description:
+    - "Recover the 12 completed Kimi-K3 B300 vLLM agentic benchmark points from run 30326393603: TP8 GPU-resident and TP8 host-DRAM KV-offload arms at concurrency 1, 2, 4, 8, 16, and 24."
+    - "Below concurrency 8, the two arms are within 1-5%. At concurrency 16 and 24, GPU-resident reaches 49.6 and 54.9 output tok/s with p50 TTFT of 86s and 191s, while DRAM offload reaches 245.0 and 260.6 output tok/s with p50 TTFT of 0.85s and 6.2s (4-5x higher output throughput)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
