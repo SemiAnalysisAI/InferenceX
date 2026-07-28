@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+if [[ "${NATIVE_MULTINODE:-0}" == "1" ]]; then
+    exec bash runners/launch_mi300x-amds-native-multinode.sh
+fi
+
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 export PORT=8888
 

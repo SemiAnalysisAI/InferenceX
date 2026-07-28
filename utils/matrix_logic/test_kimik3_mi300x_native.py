@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -23,9 +24,14 @@ SERVER_SCRIPT = (
     REPO_ROOT / "benchmarks" / "multi_node" / "agentic" / "kimik3_fp4_mi300x_vllm.sh"
 )
 PREFLIGHT_SCRIPT = REPO_ROOT / "runners" / "mi300x_native_node_preflight.sh"
+DEFAULT_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds.sh"
+NATIVE_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds-native-multinode.sh"
 IMAGE = "vllm/vllm-openai-rocm:kimi-k3"
 REVISION = "0123456789abcdef0123456789abcdef01234567"
+OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
 STAGING_COMMANDS = ("hf download", "huggingface-cli download", "wget", "curl")
+JOB_ID = "4242"
+RESULT_FILENAME = "kimik3_agentic_prefill-tp8-pp2_conc4_mi300x-amds_00"
 
 def generate_kimik3_matrix() -> list[dict]:
     configs = load_config_files([str(REPO_ROOT / "configs" / "amd-master.yaml")])
@@ -333,3 +339,300 @@ def test_preflight_rejects_missing_indexed_shard(tmp_path: Path) -> None:
     result = run_preflight(make_node(tmp_path, with_indexed_shard=False))
     assert result.returncode != 0
     assert "missing weight shard" in result.stderr
+
+FAKE_SALLOC = """#!/usr/bin/env bash
+echo "salloc $*" >> "$FAKE_CMD_LOG"
+echo "salloc: Granted job allocation {job_id}" >&2
+if [[ "$*" == *--parsable* ]]; then
+    echo "{job_id}"
+fi
+"""
+
+FAKE_SCANCEL = """#!/usr/bin/env bash
+echo "scancel $*" >> "$FAKE_CMD_LOG"
+"""
+
+FAKE_SQUEUE = """#!/usr/bin/env bash
+echo "squeue $*" >> "$FAKE_CMD_LOG"
+"""
+
+FAKE_CURL = """#!/usr/bin/env bash
+echo "curl $*" >> "$FAKE_CMD_LOG"
+[[ "${FAKE_HEALTH:-ok}" == "ok" ]]
+"""
+
+FAKE_SRUN = """#!/usr/bin/env bash
+args="$*"
+printf 'srun %s\\n' "$(printf '%s' "$args" | tr '\\n' ' ')" >> "$FAKE_CMD_LOG"
+
+if [[ "$args" == *mi300x_native_node_preflight.sh* ]]; then
+    cat "$FAKE_PREFLIGHT_OUTPUT"
+    exit 0
+fi
+
+if [[ "$args" == *--kill-on-bad-exit=1* ]]; then
+    mode="${FAKE_SERVER_MODE:-alive}"
+    if [[ "$mode" == exit:* ]]; then
+        exit "${mode#exit:}"
+    fi
+    sleep 600
+    exit 0
+fi
+
+if [[ "$args" == *agentic_srt.sh* ]]; then
+    handoff="$GITHUB_WORKSPACE/$(basename "$KIMIK3_HANDOFF_PATH")"
+    staging=$(mktemp -d)
+    mkdir -p "$staging/output" "$staging/agentic/conc_${CONC_LIST}/aiperf_artifacts"
+    printf '{"num_requests_successful": 12}\\n' \
+        > "$staging/output/${RESULT_FILENAME}_conc${CONC_LIST}.json"
+    printf '{}\\n' \
+        > "$staging/agentic/conc_${CONC_LIST}/aiperf_artifacts/profile_export.json"
+    ( cd "$staging" && tar czf - output agentic ) > "$handoff"
+    rm -rf "$staging"
+    sleep "${FAKE_CLIENT_SLEEP_SECONDS:-0}"
+    exit "${FAKE_CLIENT_EXIT_CODE:-0}"
+fi
+
+if [[ "$args" == *hostname* ]]; then
+    echo "node-a"
+    exit 0
+fi
+
+exit 0
+"""
+
+def preflight_record(hostname: str, revision: str) -> str:
+    return (
+        f"INFERENCEX_KIMIK3_PREFLIGHT hostname={hostname} revision={revision} "
+        "gpu_count=8 gpu_arch=gfx942 squash_size_bytes=33076838400"
+    )
+
+def make_cluster(
+    tmp_path: Path,
+    *,
+    preflight_node_count: int = 2,
+    mismatched_revisions: bool = False,
+) -> dict[str, object]:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    cmd_log = tmp_path / "commands.log"
+    cmd_log.write_text("")
+
+    write_executable(bin_dir / "salloc", FAKE_SALLOC.format(job_id=JOB_ID))
+    write_executable(bin_dir / "scancel", FAKE_SCANCEL)
+    write_executable(bin_dir / "squeue", FAKE_SQUEUE)
+    write_executable(bin_dir / "curl", FAKE_CURL)
+    write_executable(bin_dir / "srun", FAKE_SRUN)
+
+    hostnames = ["node-a", "node-b"][:preflight_node_count]
+    revisions = [REVISION, OTHER_REVISION if mismatched_revisions else REVISION]
+    preflight_output = tmp_path / "preflight.txt"
+    preflight_output.write_text(
+        "".join(
+            f"{preflight_record(host, revisions[index])}\n"
+            for index, host in enumerate(hostnames)
+        )
+    )
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "GITHUB_WORKSPACE": str(workspace),
+        "FAKE_CMD_LOG": str(cmd_log),
+        "FAKE_PREFLIGHT_OUTPUT": str(preflight_output),
+        "RUNNER_NAME": "mi300x-amds_00",
+        "IMAGE": IMAGE,
+        "MODEL": "moonshotai/Kimi-K3",
+        "MODEL_PREFIX": "kimik3",
+        "PRECISION": "fp4",
+        "FRAMEWORK": "vllm",
+        "EXP_NAME": "kimik3_p1x8_d0x8_conc4",
+        "RESULT_FILENAME": RESULT_FILENAME,
+        "SCENARIO_TYPE": "agentic-coding",
+        "SCENARIO_SUBDIR": "agentic/",
+        "IS_AGENTIC": "1",
+        "IS_MULTINODE": "true",
+        "DISAGG": "false",
+        "SPEC_DECODING": "none",
+        "KV_OFFLOADING": "none",
+        "CONC_LIST": "4",
+        "PORT": "8888",
+        "PREFILL_NUM_WORKERS": "1",
+        "PREFILL_TP": "8",
+        "PREFILL_PP_SIZE": "2",
+        "PREFILL_EP": "1",
+        "PREFILL_DP_ATTN": "false",
+        "DECODE_NUM_WORKERS": "0",
+        "DECODE_TP": "8",
+        "DECODE_PP_SIZE": "2",
+        "DECODE_EP": "1",
+        "DECODE_DP_ATTN": "false",
+        "KIMIK3_MODEL_CACHE_ROOT": str(tmp_path / "raid" / "models--moonshotai--Kimi-K3"),
+        "KIMIK3_SQUASH_DIR": str(tmp_path / "raid" / "squash"),
+        "KIMIK3_STARTUP_TIMEOUT_SECONDS": "60",
+        "KIMIK3_HEALTH_POLL_SECONDS": "1",
+        "KIMIK3_CLEANUP_TIMEOUT_SECONDS": "5",
+        "KIMIK3_CLEANUP_POLL_SECONDS": "1",
+        "FAKE_HEALTH": "ok",
+    }
+    env.pop("NATIVE_MULTINODE", None)
+    return {"workspace": workspace, "cmd_log": cmd_log, "env": env}
+
+def run_launcher(
+    cluster: dict[str, object], script: Path = NATIVE_LAUNCHER, timeout: int = 120
+) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["bash", str(script)],
+        cwd=str(REPO_ROOT),
+        env=cluster["env"],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+def grep_supports_perl_regex() -> bool:
+    return (
+        subprocess.run(
+            ["grep", "-oP", "x"], input="x", capture_output=True, text=True
+        ).returncode
+        == 0
+    )
+
+@pytest.mark.skipif(
+    not grep_supports_perl_regex(),
+    reason="the pre-existing single-node launcher parses salloc with GNU grep -P",
+)
+def test_default_launcher_keeps_existing_single_node_path(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"].update(
+        {
+            "TP": "8",
+            "HF_HUB_CACHE": "/hf-hub-cache",
+            "SCENARIO_SUBDIR": "fixed_seq_len/",
+            "IS_MULTINODE": "false",
+            "IS_AGENTIC": "0",
+        }
+    )
+    result = run_launcher(cluster, script=DEFAULT_LAUNCHER)
+
+    assert result.returncode == 0, result.stderr
+    command_log = cluster["cmd_log"].read_text()
+    assert "--nodes=2" not in command_log
+    assert "mi300x_native_node_preflight.sh" not in command_log
+
+def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
+    tmp_path: Path,
+) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["NATIVE_MULTINODE"] = "1"
+    result = run_launcher(cluster, script=DEFAULT_LAUNCHER)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = cluster["cmd_log"].read_text().splitlines()
+
+    allocation = next(line for line in lines if line.startswith("salloc "))
+    assert "--nodes=2" in allocation
+    assert "--gres=gpu:8" in allocation
+
+    preflight = next(
+        line for line in lines if "mi300x_native_node_preflight.sh" in line
+    )
+    assert "--ntasks=2" in preflight
+
+    server = next(line for line in lines if "--kill-on-bad-exit=1" in line)
+    assert "kimik3_fp4_mi300x_vllm.sh" in server
+
+    client = next(line for line in lines if "agentic_srt.sh" in line)
+    assert "--overlap" in client
+    assert "--nodelist=node-a" in client
+
+    assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+def test_native_launcher_rejects_topology_before_salloc(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["PREFILL_PP_SIZE"] = "1"
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "TP8 x PP2" in result.stderr
+    assert "salloc " not in cluster["cmd_log"].read_text()
+
+def test_native_launcher_rejects_one_preflight_record(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path, preflight_node_count=1)
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "--kill-on-bad-exit=1" not in cluster["cmd_log"].read_text()
+
+def test_native_launcher_rejects_mismatched_revisions(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path, mismatched_revisions=True)
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "--kill-on-bad-exit=1" not in cluster["cmd_log"].read_text()
+
+def test_server_failure_preserves_failure_and_cancels_allocation(
+    tmp_path: Path,
+) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["FAKE_SERVER_MODE"] = "exit:23"
+    cluster["env"]["FAKE_HEALTH"] = "down"
+    result = run_launcher(cluster)
+
+    assert result.returncode != 0
+    assert "exited" in (result.stdout + result.stderr)
+    assert "agentic_srt.sh" not in cluster["cmd_log"].read_text()
+    assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+def test_sigterm_returns_143_and_reaps_server_and_allocation(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["FAKE_HEALTH"] = "down"
+    cluster["env"]["KIMIK3_STARTUP_TIMEOUT_SECONDS"] = "300"
+
+    process = subprocess.Popen(
+        ["bash", str(NATIVE_LAUNCHER)],
+        cwd=str(REPO_ROOT),
+        env=cluster["env"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if "curl " in cluster["cmd_log"].read_text():
+                break
+            time.sleep(0.1)
+        else:
+            raise AssertionError("launcher never reached server health polling")
+        process.terminate()
+        output = process.communicate(timeout=10)[0]
+    except BaseException:
+        process.kill()
+        raise
+
+    assert process.returncode == 143, output
+    assert "stopping server step" in output
+    assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+def test_success_extracts_only_host_owned_bounded_artifacts(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    workspace = cluster["workspace"]
+    result = run_launcher(cluster)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    aggregate = workspace / f"{RESULT_FILENAME}_conc4.json"
+    raw_artifact = (
+        workspace / "LOGS" / "agentic" / "conc_4" / "aiperf_artifacts"
+        / "profile_export.json"
+    )
+    server_logs = workspace / "multinode_server_logs.tar.gz"
+    for path in (aggregate, raw_artifact, server_logs):
+        assert path.is_file(), f"missing {path}"
+        assert path.stat().st_uid == os.getuid()
+
+    handoffs = sorted(workspace.glob("*handoff*"))
+    assert handoffs == []
