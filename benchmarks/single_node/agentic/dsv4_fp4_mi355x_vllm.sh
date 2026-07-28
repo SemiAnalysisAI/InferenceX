@@ -31,6 +31,13 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
+GPU_COUNT=$TP
+if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
+    exit 1
+fi
+export GPU_COUNT
+
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -109,7 +116,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
     # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
     # worker RSS / page cache / slurm cgroup).
-    TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
+    TOTAL_CPU_DRAM_PARTITION_GB="$TOTAL_CPU_DRAM_GB"
     # Use vLLM's regular native KV-offload path (OffloadingConnector),
     # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
     # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
@@ -132,7 +139,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # ---- Mooncake config ----------------------------------------------------------
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
-        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / GPU_COUNT))
 
         #MOONCAKE_VERSION=0.3.11.post1
         #apt-get update && apt-get install -y libcurl4 libibverbs1 rdma-core librdmacm1 libnuma1 liburing2
@@ -276,16 +283,14 @@ EOF
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
-        # https://github.com/LMCache/LMCache/pull/3853
-        git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
+        git checkout v0.5.2
         pip install -r requirements/build.txt
-        pip install grpcio==1.78.0
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
 
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
+        TOTAL_CPU_DRAM_PARTITION_GB="$TOTAL_CPU_DRAM_GB"
         # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
         # pool, but let the external MP server own that pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
@@ -310,7 +315,7 @@ EOF
         # object present in L1 but no longer readable. Keep the 2.5 TB pool
         # size unchanged and only extend the lookup-to-retrieve lease.
         LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-1024}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
         export LMCACHE_BLOCKING_TIMEOUT_SECS=1200
@@ -351,32 +356,56 @@ EOF
 esac
 fi
 
+# ---- LLM server config ----------------------------------------------------------
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
 fi
-
-EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+    PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
-# AgentX concurrency counts live session trees, not individual requests.
-# Subagent fan-out can push instantaneous request concurrency above CONC, so
-# leave 2x headroom rather than clipping those bursts at the scheduler.
+# DEP8 (TP8 + DP-attention) is a high-concurrency arm tuned separately from the
+# smaller DEP arm: larger prefill token budget and long-prefill chunking so
+# decode latency stays bounded at high concurrency.
+IS_DEP8=false
+if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
+    IS_DEP8=true
+fi
+
+MODE_ARGS=()
+MNBT=8192
+if [ "$EP_SIZE" -gt 1 ]; then
+    MODE_ARGS+=(--enable-ep-weight-filter)
+fi
+if [ "$DP_ATTENTION" = "true" ]; then
+    MODE_ARGS+=(--prefill-schedule-interval 8)
+    if [ "$IS_DEP8" = "true" ]; then
+        MODE_ARGS+=(
+            --max-num-batched-tokens $((MNBT * 8))
+            --long-prefill-token-threshold 16384
+        )
+    else
+        MODE_ARGS+=(--max-num-batched-tokens $MNBT)
+    fi
+fi
+
+#if [ "$DP_ATTENTION" = "true" ]; then
+#    # The DEP source recipe enforces 2*CONC = DP_WORLD_SIZE*MAX_NUM_SEQS.
+#    MAX_NUM_SEQS=$((2 * CONC / TP))
+#else
+#    # Preserve the previous TP4 scheduler headroom for agentic fan-out.
+#    MAX_NUM_SEQS=$((2 * CONC))
+#fi
 MAX_NUM_SEQS=$((2 * CONC))
+CONTEXT_LEN=1048576
 
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
-#export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 sleep 180
-
-# https://github.com/vllm-project/vllm/pull/45497
-git clone https://gist.github.com/seungrokj/a37ff4d9a52db31752e2d5fa5b192e00
-cp a37ff4d9a52db31752e2d5fa5b192e00/gistfile1.txt /usr/local/lib/python3.12/dist-packages/vllm/v1/core/sched/scheduler.py
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -387,11 +416,13 @@ VLLM_CMD=(
     --async-scheduling
     --distributed-executor-backend mp
     --kv-cache-dtype fp8
+    --block-size 256
+    --max-model-len "$CONTEXT_LEN"
     "${PARALLEL_ARGS[@]}"
-    "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.8 
+    "${MODE_ARGS[@]}"
+    --gpu-memory-utilization 0.95
     --moe-backend aiter
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --reasoning-parser deepseek_v4
