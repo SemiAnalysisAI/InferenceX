@@ -21,7 +21,7 @@ set -x
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
-    AITER_OVERLAY_REF="0e0dca63f866eb00e1dcf7ba1ff6da3f3ac78dd0"
+    AITER_OVERLAY_REF="192f8db9c6d6f841f3bafc4e382a7cd2a361e88c"
     AITER_OVERLAY_DIR="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
 
     download_aiter_overlay() {
@@ -59,7 +59,7 @@ PY
 
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
-        "a778cbe2d666afe791562a266485cb48f2637f7ec583330f088e4a0962e1486d"
+        "ed809fce18da00bf98de6385b7b934bd97fbc52cc9dc8b6306280e235b4d3fae"
     download_aiter_overlay \
         "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
         "12ecefe55e188232166ddc34fe182464c26d1bff278196f7f72078ac5cab9cdd"
@@ -158,7 +158,7 @@ PY
         --no-container-entrypoint \
         bash -lc '
             set -euo pipefail
-            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-0e0dca63f866eb00e1dcf7ba1ff6da3f3ac78dd0-constant
+            export FLYDSL_RUNTIME_CACHE_DIR=/tmp/inferencex-k3-flydsl-192f8db9c6d6f841f3bafc4e382a7cd2a361e88c-constant
             mkdir -p "$FLYDSL_RUNTIME_CACHE_DIR"
             echo "K3_FLYDSL_CACHE dir=$FLYDSL_RUNTIME_CACHE_DIR"
             aiter_root=$(python -c \
@@ -180,7 +180,7 @@ PY
                 "$aiter_root/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
                 "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py" \
                 "$aiter_root/ops/flydsl/kernels/mfma_policy.py"
-            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=0e0dca63f866eb00e1dcf7ba1ff6da3f3ac78dd0"
+            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=192f8db9c6d6f841f3bafc4e382a7cd2a361e88c"
 
             python - <<"PY"
 import importlib.metadata
@@ -273,7 +273,7 @@ PY
             echo "K3_MXFP4_SOURCE_CONTRACT_END"
 
             export AITER_SITUV2_A8W4=0
-            export K3_PROBE_PATTERN=random
+            export K3_PROBE_PATTERN=constant
             timeout --signal=TERM --kill-after=30s 1200s \
                 python /workspace/scripts/diagnostics/k3_mxfp4_gfx942_probe.py
         '
