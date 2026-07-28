@@ -406,6 +406,7 @@ if [[ "$args" == *mi300x_native_node_preflight.sh* ]]; then
 fi
 
 if [[ "$args" == *--kill-on-bad-exit=1* ]]; then
+    printf 'server_master_addr=%s\n' "$MULTINODE_MASTER_ADDR" >> "$FAKE_CMD_LOG"
     mode="${FAKE_SERVER_MODE:-alive}"
     if [[ "$mode" == exit:* ]]; then
         exit "${mode#exit:}"
@@ -435,7 +436,7 @@ if [[ "$args" == *agentic_srt.sh* ]]; then
 fi
 
 if [[ "$args" == *hostname* ]]; then
-    echo "node-a"
+    echo "node-a 10.0.0.10"
     exit 0
 fi
 
@@ -600,6 +601,7 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
 
     server = next(line for line in lines if "--kill-on-bad-exit=1" in line)
     assert "kimik3_fp4_mi300x_vllm.sh" in server
+    assert "server_master_addr=10.0.0.10" in lines
     model_cache_root = cluster["env"]["KIMIK3_MODEL_CACHE_ROOT"]
     assert f"{model_cache_root}:/models-cache:ro" in server
     assert f"{model_cache_root}/snapshots/{REVISION}:" not in server
@@ -607,6 +609,7 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     client = next(line for line in lines if "agentic_srt.sh" in line)
     assert "--overlap" in client
     assert "--nodelist=node-a" in client
+    assert any("http://10.0.0.10:8888/health" in line for line in lines)
     # The trace corpus download needs a persistent node-local HF cache, but it
     # must not be the parent of the weights and squash images: this mount is rw.
     assert "/raid/hf-hub-cache/inferencex/agentx-hub:/hf-hub-cache" in client

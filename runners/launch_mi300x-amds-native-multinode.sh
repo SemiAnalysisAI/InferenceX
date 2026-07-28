@@ -338,16 +338,34 @@ if [[ -z "$JOB_ID" ]]; then
 fi
 echo "Allocated Slurm job $JOB_ID"
 
-# Rank 0 is defined by task rank, not by scontrol's node ordering.
-head_node_output=$(
+# Rank 0 is defined by task rank, not by scontrol's node ordering. Slurm needs
+# the node name for placement, while torch.distributed needs a cross-node
+# routable address. On this cluster each hostname resolves locally to
+# 127.0.1.1, so using the hostname as --master-addr strands the remote ranks.
+head_endpoint_output=$(
     srun --jobid="$JOB_ID" --nodes=2 --ntasks=2 --ntasks-per-node=1 \
-        bash -c 'if [[ "$SLURM_PROCID" == "0" ]]; then hostname; fi'
+        bash -c '
+            if [[ "$SLURM_PROCID" == "0" ]]; then
+                private_ip=$(
+                    hostname -I |
+                        tr " " "\n" |
+                        awk "/^10\\./ {print; exit}"
+                )
+                [[ -n "$private_ip" ]] || {
+                    echo "rank 0 has no private 10/8 address" >&2
+                    exit 1
+                }
+                printf "%s %s\n" "$(hostname)" "$private_ip"
+            fi
+        '
 )
-HEAD_NODE=$(printf '%s\n' "$head_node_output" | awk 'NF {print $1; exit}')
-if [[ -z "$HEAD_NODE" ]]; then
-    fail "could not resolve the rank-0 hostname for job $JOB_ID"
+read -r HEAD_NODE HEAD_ADDR extra < <(
+    printf '%s\n' "$head_endpoint_output" | awk 'NF {print; exit}'
+)
+if [[ -z "$HEAD_NODE" || -z "$HEAD_ADDR" || -n "${extra:-}" ]]; then
+    fail "could not resolve the rank-0 hostname and private address for job $JOB_ID"
 fi
-echo "Rank 0 runs on $HEAD_NODE"
+echo "Rank 0 runs on $HEAD_NODE at $HEAD_ADDR"
 
 # --- Per-node verification -------------------------------------------------
 
@@ -402,7 +420,7 @@ MODEL_CONTAINER_PATH="$MODEL_CACHE_CONTAINER_PATH/snapshots/$REVISION"
 
 export MULTINODE_NODE_COUNT=2
 export MULTINODE_GPUS_PER_NODE=8
-export MULTINODE_MASTER_ADDR="$HEAD_NODE"
+export MULTINODE_MASTER_ADDR="$HEAD_ADDR"
 export MODEL_PATH="$MODEL_CONTAINER_PATH"
 
 SERVER_LOG_DIR=$(mktemp -d)
@@ -443,7 +461,7 @@ SERVER_SRUN_PID_FILE="$SERVER_LOG_DIR/server.srun.pid"
 SERVER_PID=$!
 echo "Started both server ranks; logging to $SERVER_LOG"
 
-HEALTH_URL="http://${HEAD_NODE}:${PORT}/health"
+HEALTH_URL="http://${HEAD_ADDR}:${PORT}/health"
 startup_deadline=$(( $(date +%s) + KIMIK3_STARTUP_TIMEOUT_SECONDS ))
 # Weight load can take the better part of an hour; tracing every poll would
 # bury the server log in curl lines.
@@ -487,7 +505,7 @@ export KIMIK3_HANDOFF_PATH="/workspace/$HANDOFF_NAME"
 export INFMAX_CONTAINER_WORKSPACE=/workspace
 export RESULT_DIR=/results/agentic
 export AGENTIC_OUTPUT_DIR=/results/output
-export AIPERF_SERVER_METRICS_URLS="http://${HEAD_NODE}:${PORT}/metrics"
+export AIPERF_SERVER_METRICS_URLS="http://${HEAD_ADDR}:${PORT}/metrics"
 
 # No `set -e`: a failing replay must still hand back whatever it produced, and
 # the client's own exit code is what the launcher reports.
