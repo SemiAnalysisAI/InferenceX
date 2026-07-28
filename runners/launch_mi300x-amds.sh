@@ -19,29 +19,56 @@ set -x
 # Temporary diagnostic branch only: inventory and stage the exact pair selected
 # for the Kimi-K3 TP8xPP2 canary. The download is revision-pinned and resumable.
 if [[ "${PROFILE:-0}" == "1" && "${K3_ATTACH_INSPECT:-1}" == "1" ]]; then
-    K3_INSPECT_JOB_ID=11417
-    echo "K3_INSPECT slurm_state_begin job_id=$K3_INSPECT_JOB_ID"
-    scontrol show job "$K3_INSPECT_JOB_ID" || true
-    squeue --jobs="$K3_INSPECT_JOB_ID" || true
-    echo "K3_INSPECT slurm_state_end job_id=$K3_INSPECT_JOB_ID"
+    NETWORK_LOG=$(mktemp)
+    NETWORK_JOB_ID=""
 
-    srun \
-        --jobid="$K3_INSPECT_JOB_ID" \
-        --overlap \
+    cleanup_network_probe() {
+        local rc=$?
+        trap - EXIT INT TERM
+        if [[ -n "$NETWORK_JOB_ID" ]]; then
+            scancel "$NETWORK_JOB_ID" 2>/dev/null || true
+        fi
+        rm -f "$NETWORK_LOG"
+        exit "$rc"
+    }
+    trap cleanup_network_probe EXIT INT TERM
+
+    set +e
+    timeout 120s salloc \
+        --partition="$PARTITION" \
+        --nodelist=chi-mi300x-043,chi-mi300x-054 \
         --nodes=2 \
         --ntasks=2 \
         --ntasks-per-node=1 \
-        --cpus-per-task=1 \
+        --gres=gpu:1 \
+        --cpus-per-task=2 \
+        --time=10 \
+        --no-shell \
+        --job-name="$RUNNER_NAME" 2>&1 | tee "$NETWORK_LOG"
+    network_rc=${PIPESTATUS[0]}
+    set -e
+
+    NETWORK_JOB_ID=$(sed -nE 's/.*(Pending|Granted) job allocation ([0-9]+).*/\2/p' "$NETWORK_LOG" | tail -n1)
+    if [[ "$network_rc" -ne 0 || -z "$NETWORK_JOB_ID" ]]; then
+        echo "K3_NETWORK allocation failed: rc=$network_rc job_id=${NETWORK_JOB_ID:-missing}"
+        exit 1
+    fi
+
+    srun \
+        --jobid="$NETWORK_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
         bash -lc '
-            set -o pipefail
+            set -euo pipefail
             host=$(hostname -s)
-            echo "K3_INSPECT node_begin host=$host"
-            rocm-smi --showuse --showmemuse --showpower || true
-            ps -eo pid,ppid,etime,stat,pcpu,pmem,args |
-                grep -E "vllm|python" |
-                grep -v grep |
-                tail -n 100 || true
-            echo "K3_INSPECT node_end host=$host"
+            addresses=$(hostname -I | xargs)
+            getent_output=$(getent ahostsv4 "$host" 2>&1 || true)
+            route_output=$(ip -4 route get 1.1.1.1 2>&1 || true)
+            printf "K3_NETWORK host=%s addresses=%q getent=%q route=%q\n" \
+                "$host" "$addresses" "$getent_output" "$route_output"
+            ip -4 -o addr show | sed "s/^/K3_NETWORK_ADDR host=$host /"
         '
     exit 42
 fi
