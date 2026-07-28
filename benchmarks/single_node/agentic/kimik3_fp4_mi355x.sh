@@ -135,17 +135,20 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # instead, because benchmarks/single_node/agentic/README.md requires
         # scripts to consume TOTAL_CPU_DRAM_GB, dividing it for per-rank backends.
         #
-        # lazy_offload is a JSON BOOLEAN, not the official command's string
-        # "false": the connector does bool(extra_config.get("lazy_offload")),
-        # and bool("false") is True in Python, so the string silently selects
-        # LAZY. We pass false to actually get eager offload.
+        # lazy_offload MUST be a JSON boolean: the connector does
+        # bool(extra_config.get("lazy_offload", False)), so the official command's
+        # string "false" is truthy and silently selects LAZY. We pass true
+        # deliberately. Eager was tried and reverted: with eager each of the 8
+        # workers pinned its full per-rank pool up front (324.67 GB each, 2597 GB
+        # total), which starved the shm_broadcast ring and killed EngineCore during
+        # warmup. Lazy commits host pages as blocks are actually offloaded.
         OFFLOAD_CONFIG=$(cat <<EOF
 {
   "kv_connector": "SimpleCPUOffloadConnector",
   "kv_role": "kv_both",
   "kv_connector_extra_config": {
     "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
-    "lazy_offload": false
+    "lazy_offload": true
   }
 }
 EOF

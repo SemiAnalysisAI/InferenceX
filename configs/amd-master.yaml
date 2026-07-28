@@ -626,13 +626,15 @@ kimik3-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-      # 0.93 of the runner's available-cpu-dram-mib (3_095_781), which the matrix
-      # generator caps at the 2,861,022 MiB / 3 TB-decimal agentic limit. Reduced
-      # from 0.95: at 0.95 the eager offload pool committed 2771 GiB and left only
-      # ~12 GiB host free (measured on real weights), which is far too close to a
-      # host OOM. Pinned host memory is unswappable, and the dsv4 LMCache recipe
-      # records full-budget pools OOM-killing the node.
-    - dram-utilization: 0.93
+      # 0.80 of the runner's available-cpu-dram-mib (3_095_781), capped by the
+      # matrix generator at the 2,861,022 MiB / 3 TB-decimal agentic limit ->
+      # 2399 GB aggregate at TP8 (~300 GB/rank). Walked down from 0.95: at 0.95 the
+      # pool committed 2771 GiB and left ~12 GiB host free, and at 0.93 each of the
+      # 8 workers still eagerly pinned 324.67 GB (2597 GB total), which starved the
+      # shm_broadcast ring ("No available shared memory broadcast block found in 60
+      # seconds") and killed EngineCore during warmup. Pinned host memory is
+      # unswappable; the dsv4 LMCache recipe derates its pool for the same reason.
+    - dram-utilization: 0.80
       search-space:
       # TP=8 only: the ~1.56 TB MXFP4 checkpoint needs ~195 GB/GPU of the
       # 288 GB HBM, so TP=4 (~390 GB/GPU) cannot load.
