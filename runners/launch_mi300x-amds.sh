@@ -198,6 +198,13 @@ def download_one(item):
         return relative_path, expected_size, "cached"
     if destination.exists():
         destination.unlink()
+    if partial.is_file():
+        partial_size = partial.stat().st_size
+        if partial_size == expected_size:
+            os.replace(partial, destination)
+            return relative_path, expected_size, "recovered"
+        if partial_size > expected_size:
+            partial.unlink()
 
     for attempt in range(8):
         offset = partial.stat().st_size if partial.exists() else 0
