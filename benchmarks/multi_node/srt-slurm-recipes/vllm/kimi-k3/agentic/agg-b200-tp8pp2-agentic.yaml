@@ -21,7 +21,8 @@ identity:
     image: "vllm/vllm-openai:kimi-k3"
 
 # Direct vLLM serving (frontend.type: vllm, srt-slurm PR #278 + the
-# InferenceX multinode patch): `vllm serve` owns the OpenAI port itself, so
+# multinode extension on functionstackx/srt-slurm-nv branch
+# klaud/direct-vllm-multinode): `vllm serve` owns the OpenAI port itself, so
 # no Dynamo frontend/worker is involved and no dynamo install is needed.
 dynamo:
   install: false
@@ -52,8 +53,8 @@ infra:
 frontend:
   # Direct vLLM OpenAI server (srt-slurm PR #278): the vllm serve leader owns
   # the public port; rank-1 runs a headless engine worker (vLLM-native
-  # multi-node TP8xPP2 via --master-addr/--nnodes/--node-rank, enabled by
-  # patches/srt-slurm-pr278-direct-vllm-multinode.patch).
+  # multi-node TP8xPP2 via --master-addr/--nnodes/--node-rank, carried by the
+  # functionstackx/srt-slurm-nv klaud/direct-vllm-multinode branch).
   type: vllm
   enable_multiple_frontends: false
 

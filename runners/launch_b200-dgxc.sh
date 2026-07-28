@@ -111,13 +111,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
         # Direct-vLLM agentic experiment (Variant D): srt-slurm PR #278
         # (kylliang/direct-aggregate-vllm) adds frontend.type: vllm — `vllm
-        # serve` owns the OpenAI port itself, no Dynamo layer. The InferenceX
-        # patch below extends it from single-node to vLLM-native multi-node
-        # serve (--master-addr/--nnodes/--node-rank + headless non-leader
+        # serve` owns the OpenAI port itself, no Dynamo layer. The fork branch
+        # carries PR #278 plus the multi-node extension (vLLM-native
+        # --master-addr/--nnodes/--node-rank serve + headless non-leader
         # ranks) so the 2-node TP8xPP2 topology can run.
-        git clone --branch kylliang/direct-aggregate-vllm --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+        git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
-        git apply "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/patches/srt-slurm-pr278-direct-vllm-multinode.patch" || exit 1
         if [[ $MODEL_PREFIX == "kimik3" ]]; then
             mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
             cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
