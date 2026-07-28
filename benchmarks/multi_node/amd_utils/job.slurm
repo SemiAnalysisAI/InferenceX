@@ -330,6 +330,10 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+export SWEBENCH_USE_MODAL="${SWEBENCH_USE_MODAL:-false}"
+export MODAL_TOKEN_ID="${MODAL_TOKEN_ID:-}"
+export MODAL_TOKEN_SECRET="${MODAL_TOKEN_SECRET:-}"
+export HF_TOKEN="${HF_TOKEN:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -477,6 +481,12 @@ DOCKER_ENV_COMMON=(
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
     -e DRY_RUN=\${DRY_RUN:-0}
+    # SWE-bench agentic eval runs inside this container and needs Modal/HF
+    # credentials to launch sandboxes and download datasets.
+    -e SWEBENCH_USE_MODAL=\${SWEBENCH_USE_MODAL:-false}
+    -e MODAL_TOKEN_ID=\${MODAL_TOKEN_ID:-}
+    -e MODAL_TOKEN_SECRET=\${MODAL_TOKEN_SECRET:-}
+    -e HF_TOKEN=\${HF_TOKEN:-}
 )
 
 # Engine-specific env vars
