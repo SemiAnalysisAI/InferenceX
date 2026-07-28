@@ -103,7 +103,11 @@ backend:
       enable-auto-tool-choice: true
       tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
-      # DSpark speculative decoding (variant I) with the Inferact draft head,
+      # DSpark (DeepSeek's confidence-scheduled semi-autoregressive
+      # speculative decoding, arXiv 2607.05147): parallel backbone drafting
+      # plus a lightweight sequential head — reported ~27-31% higher accepted
+      # length than EAGLE3 and 60-85% faster per-user generation than MTP-1
+      # at matched throughput. Variant I uses the Inferact draft head,
       # probabilistic draft sampling + block rejection sampling (the #2366
       # acceptance-rate optimization), k=7, and synthetic_acceptance_length
       # 3.84 = the committed golden AL for exactly this sampling config at
