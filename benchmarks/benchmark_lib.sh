@@ -1729,14 +1729,19 @@ resolve_trace_source() {
 build_replay_cmd() {
     # aiperf invocation for the inferencex-agentx-mvp scenario.
     #
-    # Weka replay uses recorded assistant responses when constructing future
-    # prompts, preserving the captured hash-id and KV-prefix structure.
+    # Pre-canned assistant replay is the default: recorded assistant responses
+    # are used for future prompt construction, and live server responses are
+    # discarded. Set AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1 explicitly
+    # to use live-assistant mode, where the loader emits user-only deltas and
+    # the worker threads the server's live assistant response back into the
+    # session.
     #
     # The scenario plugin locks: --cache-bust first_turn_prefix and
-    # --system-idle-gap-cap-seconds 10. The global cap advances all pending
-    # timers only when the whole replay is idle; per-trace think times remain
-    # unchanged. The scenario forbids the old per-trace and per-turn delay
-    # caps. See utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # --trace-idle-gap-cap-seconds 10 (per-trace idle-gap compression
+    # against parent + subagent request-start timestamps; supersedes the
+    # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
+    # and auto-injects them — so we do not pass them. See
+    # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
     local cache_warmup_duration="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-600}"
@@ -1749,6 +1754,7 @@ build_replay_cmd() {
         cache_warmup_duration=300
     fi
 
+    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
     # routinely takes 4-5 min for the Weka corpus on fast /tmp
     # (B300) but can stretch to 14 min on slower /tmp + parallel contention
@@ -1778,14 +1784,6 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Preserve the existing InferenceX traffic shape when moving to upstream
-    # aiperf: start all configured warmup/profiling lanes immediately instead
-    # of spreading their first requests by the recorded offset around t*.
-    REPLAY_CMD+=" --burst-phase-starts"
-    # Filtering can leave fewer Weka roots than requested concurrency. Reuse
-    # roots with independent replay points and cache-bust identities, matching
-    # the previous fork behavior instead of failing oversubscription.
-    REPLAY_CMD+=" --allow-dataset-wrap"
     # After the normal t* snapshot warmup, continue those exact trajectories
     # with one-token outputs and no idle delays. Profiling begins only after
     # those requests drain and resumes from the resulting live state.
@@ -1803,13 +1801,22 @@ build_replay_cmd() {
     # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
     # usage is authoritative).
     REPLAY_CMD+=" --use-server-token-count"
-    # Current Dynamo routers use session-affinity headers rather than the
-    # retired nvext.session_control request body. Stamp the stable correlation
-    # ID onto every root/child request; router-side TTLs live in the recipes.
-    # Individual recipes can explicitly disable the header.
-    if [[ "${FRAMEWORK:-}" == dynamo-* &&
-          -z "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID+x}" ]]; then
-        export AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    # Dynamo's KV router needs an explicit conversation session binding to
+    # keep later turns on the prefill worker that owns their prefix blocks.
+    # X-Correlation-ID is useful tracing metadata but does not establish that
+    # binding by itself. AIPerf emits nvext.session_control bind/close actions
+    # keyed by the stable conversation correlation ID when this flag is set.
+    # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip this.
+    # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
+    # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
+    # (they moved to router/routing_constraints/agent_context). Default stays on.
+    if [[ "${FRAMEWORK:-}" == dynamo-* && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
+        REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+        # The upstream 300s affinity TTL is shorter than an overloaded
+        # high-concurrency agentic request. Keep bindings alive across long
+        # prefills, generation, and capped inter-turn delay. This controls the
+        # router's inactivity lease; it does not relax HTTP/request failures.
+        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
     fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
