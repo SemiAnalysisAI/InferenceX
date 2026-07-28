@@ -390,14 +390,16 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi
 
-#if [ "$DP_ATTENTION" = "true" ]; then
-#    # The DEP source recipe enforces 2*CONC = DP_WORLD_SIZE*MAX_NUM_SEQS.
-#    MAX_NUM_SEQS=$((2 * CONC / TP))
-#else
-#    # Preserve the previous TP4 scheduler headroom for agentic fan-out.
-#    MAX_NUM_SEQS=$((2 * CONC))
-#fi
-MAX_NUM_SEQS=$((2 * CONC))
+# --max-num-seqs is applied PER scheduler. Under DP-attention each of the $TP
+# DP ranks runs its own scheduler and the router spreads sessions across them,
+# so size the per-rank cap as 2*CONC/TP (aggregate = 2*CONC). In pure-TP there
+# is a single scheduler across all GPUs that sees all CONC sessions, so use
+# 2*CONC directly. 
+if [ "$DP_ATTENTION" = "true" ]; then
+    MAX_NUM_SEQS=$((2 * CONC / TP))
+else
+    MAX_NUM_SEQS=$((2 * CONC))
+fi
 CONTEXT_LEN=1048576
 
 echo "Starting vllm server..."
