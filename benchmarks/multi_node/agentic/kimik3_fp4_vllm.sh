@@ -30,13 +30,18 @@ if [ "$PREFILL_PP_SIZE" -gt 1 ]; then
 fi
 export PYTHONNOUSERSITE=1
 
+LOAD_FORMAT=auto
+if [ "$PREFILL_PP_SIZE" -gt 1 ]; then
+    LOAD_FORMAT=fastsafetensors
+fi
+
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
-    --load-format auto
+    --load-format "$LOAD_FORMAT"
     --moe-backend "$VLLM_MOE_BACKEND"
     --kv-cache-dtype fp8
     --gpu-memory-utilization 0.97
