@@ -1471,8 +1471,8 @@ kimik2.5-int4-h200-vllm-agentic:
 # These are the three aggregated strategies from the official H200
 # recipe (https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200):
 # multi-node TP is latency-oriented, TEP is balanced, and DEP is
-# throughput-oriented. The runner owns Slurm/Pyxis; the in-container Kimi
-# entrypoint only receives rank and rendezvous information.
+# throughput-oriented. The H200 runner supplies cluster paths while
+# srt-slurm owns allocation, direct vLLM startup, readiness, and log capture.
 # P/D disaggregation is intentionally deferred.
 kimik3-fp4-h200-vllm-agentic:
   image: vllm/vllm-openai:kimi-k3
@@ -1497,13 +1497,7 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "NATIVE_MULTINODE=1"
-          - "VLLM_MOE_BACKEND=marlin"
-          - "VLLM_GPU_MEMORY_UTILIZATION=0.95"
-          - "VLLM_MAX_NUM_BATCHED_TOKENS=4096"
-          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
-          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
-          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp8pp2-latency-agentic.yaml"
         decode:
           num-worker: 0
           tp: 8
@@ -1521,13 +1515,7 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 8
           dp-attn: true
           additional-settings:
-          - "NATIVE_MULTINODE=1"
-          - "VLLM_MOE_BACKEND=marlin"
-          - "VLLM_GPU_MEMORY_UTILIZATION=0.90"
-          - "VLLM_MAX_NUM_BATCHED_TOKENS=4096"
-          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
-          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
-          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp4pp2-dp2ep8-balanced-agentic.yaml"
         decode:
           num-worker: 0
           tp: 4
@@ -1545,13 +1533,7 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 16
           dp-attn: true
           additional-settings:
-          - "NATIVE_MULTINODE=1"
-          - "VLLM_MOE_BACKEND=marlin"
-          - "VLLM_GPU_MEMORY_UTILIZATION=0.85"
-          - "VLLM_MAX_NUM_BATCHED_TOKENS=1024"
-          - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
-          - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
-          - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp2pp2-dp8ep16-throughput-agentic.yaml"
         decode:
           num-worker: 0
           tp: 2

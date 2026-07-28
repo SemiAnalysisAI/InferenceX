@@ -7,219 +7,7 @@ SLURM_ACCOUNT="sa-shared"
 
 set -x
 
-# Native multi-node vLLM: keep Slurm/Pyxis on the host and pass only rank and
-# rendezvous information to the hardware-independent benchmark entrypoint.
-if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
-    if [[ "$IS_AGENTIC" != "1" || "$FRAMEWORK" != "vllm" ]]; then
-        echo "Native multi-node H200 currently supports AgentX vLLM jobs" >&2
-        exit 1
-    fi
-
-    case "$MODEL_PREFIX/$PRECISION" in
-        kimik3/fp4)
-            model_host_path="/models/gharunners/hf-hub-cache/Kimi-K3"
-            export MODEL_PATH="/models/hf-hub-cache/Kimi-K3"
-            ;;
-        *)
-            echo "No native multi-node model mapping for $MODEL_PREFIX/$PRECISION on H200 DGXC" >&2
-            exit 1
-            ;;
-    esac
-
-    hf_cache_host_path="/models/gharunners/hf-hub-cache"
-    hf_cache_container_path="/models/hf-hub-cache"
-    aiperf_cache_host_path="/home/sa-shared/gharunners/ai-perf-cache"
-    image_cache_dir="/data/gharunners/containers"
-    server_log_dir="$GITHUB_WORKSPACE/multinode_server_logs"
-    gpus_per_node=8
-    gpu_count=$((PREFILL_NUM_WORKERS * PREFILL_TP * PREFILL_PP_SIZE))
-    if (( gpu_count % gpus_per_node != 0 )); then
-        echo "Native multi-node GPU count ($gpu_count) must use full 8xH200 nodes" >&2
-        exit 1
-    fi
-    node_count=$((gpu_count / gpus_per_node))
-    server_script="benchmarks/multi_node/${SCENARIO_SUBDIR}${MODEL_PREFIX}_${PRECISION}_${FRAMEWORK}.sh"
-    client_script="benchmarks/multi_node/agentic_srt.sh"
-    squash_file="$image_cache_dir/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    lock_file="${squash_file}.lock"
-    container_mounts="$GITHUB_WORKSPACE:/workspace,$hf_cache_host_path:$hf_cache_container_path,$aiperf_cache_host_path:/aiperf_mmap_cache,/usr/bin/git:/usr/bin/git,/usr/lib/git-core:/usr/lib/git-core"
-
-    if [[ ! -d "$model_host_path" || ! -f "$server_script" ]]; then
-        echo "Missing model or benchmark entrypoint: $model_host_path / $server_script" >&2
-        exit 1
-    fi
-    mkdir -p "$aiperf_cache_host_path" "$image_cache_dir" "$server_log_dir"
-
-    export PORT=8888
-    export HF_HUB_CACHE="$hf_cache_container_path"
-    export AIPERF_DATASET_MMAP_CACHE_DIR="/aiperf_mmap_cache"
-    export INFMAX_CONTAINER_WORKSPACE="/workspace"
-    export RESULT_DIR="/workspace/LOGS/agentic"
-    export GLOO_SOCKET_IFNAME=eth0
-    export NCCL_SOCKET_IFNAME=eth0
-
-    salloc \
-        --partition="$SLURM_PARTITION" \
-        --account="$SLURM_ACCOUNT" \
-        --nodes="$node_count" \
-        --ntasks-per-node=1 \
-        --gres="gpu:$gpus_per_node" \
-        --exclusive \
-        --time=240 \
-        --no-shell \
-        --job-name="$RUNNER_NAME"
-    job_id=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | sed -n '1p')
-    if [[ -z "$job_id" ]]; then
-        echo "Failed to resolve native multi-node Slurm allocation" >&2
-        exit 1
-    fi
-
-    snapshot_native_logs() {
-        local snapshot_path="$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
-        local snapshot_tmp="${snapshot_path}.${BASHPID}.tmp"
-        tar czf "$snapshot_tmp" -C "$server_log_dir" . 2>/dev/null &&
-            mv "$snapshot_tmp" "$snapshot_path" || true
-    }
-
-    server_step_pid=""
-    log_snapshot_pid=""
-    cleanup_native_multinode() {
-        local exit_code=$?
-        trap - EXIT INT TERM
-        if [[ -n "$log_snapshot_pid" ]]; then
-            kill "$log_snapshot_pid" 2>/dev/null || true
-            wait "$log_snapshot_pid" 2>/dev/null || true
-        fi
-        snapshot_native_logs
-        if [[ -n "$server_step_pid" ]]; then
-            kill "$server_step_pid" 2>/dev/null || true
-            wait "$server_step_pid" 2>/dev/null || true
-        fi
-        snapshot_native_logs
-        scancel "$job_id" 2>/dev/null || true
-        exit "$exit_code"
-    }
-    trap cleanup_native_multinode EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-
-    allocated_nodelist=$(squeue -j "$job_id" -h -o %N)
-    allocated_nodes=$(scontrol show hostnames "$allocated_nodelist")
-    # Slurm task rank order is not guaranteed to match scontrol's hostname order.
-    head_node=$(
-        srun \
-            --jobid="$job_id" \
-            --nodes="$node_count" \
-            --ntasks="$node_count" \
-            --ntasks-per-node=1 \
-            bash -c 'if [[ "$SLURM_PROCID" == "0" ]]; then hostname; fi'
-    )
-    if [[ -z "$head_node" ]]; then
-        echo "Failed to resolve native multi-node head node" >&2
-        exit 1
-    fi
-    server_nodes="$head_node"
-    if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
-        server_nodes="$allocated_nodes"
-    fi
-    server_urls=()
-    metrics_urls=()
-    for server_node in $server_nodes; do
-        server_urls+=("http://$server_node:$PORT")
-        metrics_urls+=("http://$server_node:$PORT/metrics")
-    done
-    AIPERF_ENDPOINT_URLS=$(IFS=,; echo "${server_urls[*]}")
-    AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${metrics_urls[*]}")
-    export AIPERF_ENDPOINT_URLS AIPERF_SERVER_METRICS_URLS
-
-    srun --jobid="$job_id" --nodes=1 --ntasks=1 --nodelist="$head_node" bash -c "
-        export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
-        mkdir -p \$ENROOT_CACHE_PATH
-        exec 9>'$lock_file'
-        flock -w 1800 9
-        if ! unsquashfs -l '$squash_file' >/dev/null 2>&1; then
-            rm -f '$squash_file'
-            enroot import -o '$squash_file' 'docker://${IMAGE//#//}'
-        fi
-    "
-
-    export MULTINODE_NODE_COUNT="$node_count"
-    export MULTINODE_GPUS_PER_NODE="$gpus_per_node"
-    export MULTINODE_MASTER_ADDR="$head_node"
-
-    # shellcheck disable=SC2016 # SLURM_PROCID is created inside each srun task.
-    srun \
-        --jobid="$job_id" \
-        --nodes="$node_count" \
-        --ntasks="$node_count" \
-        --ntasks-per-node=1 \
-        --kill-on-bad-exit=1 \
-        --container-image="$squash_file" \
-        --container-mounts="$container_mounts" \
-        --no-container-mount-home \
-        --container-remap-root \
-        --container-workdir=/workspace \
-        --no-container-entrypoint \
-        --export=ALL \
-        bash -c 'export MULTINODE_NODE_RANK="$SLURM_PROCID"; exec bash "$1"' \
-        bash "$server_script" \
-        >"$server_log_dir/server.log" 2>&1 &
-    server_step_pid=$!
-    (
-        while kill -0 "$server_step_pid" 2>/dev/null; do
-            snapshot_native_logs
-            sleep 30
-        done
-    ) &
-    log_snapshot_pid=$!
-
-    for ((attempt = 1; attempt <= 720; attempt++)); do
-        servers_ready=true
-        for server_url in "${server_urls[@]}"; do
-            if ! curl --output /dev/null --silent --fail "$server_url/health"; then
-                servers_ready=false
-                break
-            fi
-        done
-        if [[ "$servers_ready" == "true" ]]; then
-            break
-        fi
-        if ! kill -0 "$server_step_pid" 2>/dev/null; then
-            echo "Native multi-node server exited before becoming ready" >&2
-            tail -n 200 "$server_log_dir/server.log" >&2 || true
-            exit 1
-        fi
-        if grep -q "Engine core initialization failed" "$server_log_dir/server.log"; then
-            echo "Native multi-node engine failed before becoming ready" >&2
-            tail -n 200 "$server_log_dir/server.log" >&2
-            exit 1
-        fi
-        sleep 10
-    done
-    if (( attempt > 720 )); then
-        echo "Native multi-node server did not become ready within 7200 seconds" >&2
-        exit 1
-    fi
-
-    set +e
-    srun \
-        --jobid="$job_id" \
-        --overlap \
-        --nodes=1 \
-        --ntasks=1 \
-        --nodelist="$head_node" \
-        --container-image="$squash_file" \
-        --container-mounts="$container_mounts" \
-        --no-container-mount-home \
-        --container-remap-root \
-        --container-workdir=/workspace \
-        --no-container-entrypoint \
-        --export=ALL,MULTINODE_NODE_RANK=0 \
-        bash "$client_script"
-    client_rc=$?
-    set -e
-    exit "$client_rc"
-fi
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
@@ -243,8 +31,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
+    elif [[ $FRAMEWORK == "vllm" ]]; then
+        if [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+            export MODEL_PATH="/models/gharunners/hf-hub-cache/Kimi-K3"
+            export SRT_SLURM_MODEL_PREFIX="kimik3"
+        else
+            echo "Unsupported model prefix/precision for vllm: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, vllm"
         exit 1
     fi
 
@@ -255,8 +51,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
+    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
+        git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        mkdir -p recipes/vllm/kimi-k3/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+            recipes/vllm/kimi-k3/agentic
+    elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
     else
@@ -291,6 +93,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    elif [[ $FRAMEWORK == "vllm" ]]; then
+        CONTAINER_KEY="$IMAGE"
+        SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     fi
 
     export ISL="$ISL"
@@ -299,6 +104,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+    DEFAULT_MOUNTS_BLOCK=""
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
+        HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
+        mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
+        DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    fi
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for H200
@@ -319,6 +133,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
@@ -326,6 +141,7 @@ containers:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
     echo "Generated srtslurm.yaml:"
@@ -368,32 +184,9 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+    trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
-    # Wait for log file to appear (also check job is still alive)
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    # Poll for job completion in background
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
     set -x
 
@@ -408,7 +201,7 @@ EOF
     echo "Found logs directory: $LOGS_DIR"
 
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         # Find all result subdirectories
