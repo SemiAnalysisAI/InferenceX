@@ -171,11 +171,11 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format auto
     # The image's auto-priority list omits ROCm AITER MXFP4 on gfx942 even
-    # after its device capability gate is extended. Requesting CK explicitly
+    # after its device capability gate is extended. Requesting AITER explicitly
     # sends the same patched AiterExperts implementation through the oracle's
     # strict is_supported_config check and exposes any remaining rejection
     # reason instead of ending with the generic "no backend" error.
-    --moe-backend ck
+    --moe-backend aiter
     # The image's AITER custom-allreduce module is gfx950-prebuilt. Its gfx942
     # JIT finishes on both nodes, but the second TP group hangs while
     # initializing the AITER_CUSTOM backend. Fall back to RCCL/PYNCCL for

@@ -129,7 +129,7 @@ def test_rank_zero_serves_tp8_pp2_without_headless() -> None:
     assert "--node-rank 0" in result.stdout
     assert "--master-addr node-a" in result.stdout
     assert "--disable-custom-all-reduce" in result.stdout
-    assert "--moe-backend ck" in result.stdout
+    assert "--moe-backend aiter" in result.stdout
     assert "--headless" not in result.stdout
     assert "FLASHMLA" not in result.stdout
     assert "FLASHINFER" not in result.stdout
