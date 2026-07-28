@@ -1113,7 +1113,7 @@ _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
     _patch_swebench_agent || \
-        echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
+        echo "WARN: mini-swe-agent/swe-rex patches failed; sandbox cleanup, submission fallback, or non-interactive stdin handling may be degraded" >&2
 }
 
 _patch_swebench_agent() {
@@ -1191,7 +1191,7 @@ import os, sys, yaml
 default_path, out_path = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(default_path)) or {}
 d.setdefault("agent", {})
-step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "75"))
+step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "250"))
 guidance = f"""
 
 <additional_critical_guidance>
@@ -1246,7 +1246,7 @@ PYGEN
 
     export MSWEA_COST_TRACKING=ignore_errors
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-75} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-250} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
@@ -1258,12 +1258,12 @@ PYGEN
     local mini_pid=$!
     # preds.json detects completion despite teardown hangs.
     local preds_file="$gen_dir/agent_out/preds.json"
-    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-14400} ))
+    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-21600} ))
     local grace_until=0
     local killed_after_complete=0
     while kill -0 "$mini_pid" 2>/dev/null; do
         if [ "$(date +%s)" -ge "$deadline" ]; then
-            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-14400}s); killing mini-extra" >&2
+            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-21600}s); killing mini-extra" >&2
             kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
             agen_rc=124
             break
@@ -1660,7 +1660,7 @@ resolve_trace_source() {
     # WEKA_LOADER_OVERRIDE.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|glm5.2*|minimaxm3*)
+        dsv4*|glm5.2*|minimaxm3*|kimik3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)
@@ -1744,6 +1744,15 @@ build_replay_cmd() {
     # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
+    local cache_warmup_duration="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-600}"
+
+    # Fast mode is an e2e-only feedback preset used before canonical one-hour
+    # sweeps. AIPerf already exposes both controls, so no AIPerf patch is
+    # required.
+    if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
+        duration=1200
+        cache_warmup_duration=300
+    fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
@@ -1776,9 +1785,9 @@ build_replay_cmd() {
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
     # After the normal t* snapshot warmup, continue those exact trajectories
-    # with one-token outputs and no idle delays for 10 minutes. Profiling begins
-    # only after those requests drain and resumes from the resulting live state.
-    REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
+    # with one-token outputs and no idle delays. Profiling begins only after
+    # those requests drain and resumes from the resulting live state.
+    REPLAY_CMD+=" --agentic-cache-warmup-duration $cache_warmup_duration"
     # Give long-context warmup requests up to 30 minutes to drain before
     # declaring warmup failed. Recipes whose saturation arms carry a larger
     # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
@@ -1797,7 +1806,11 @@ build_replay_cmd() {
     # X-Correlation-ID is useful tracing metadata but does not establish that
     # binding by itself. AIPerf emits nvext.session_control bind/close actions
     # keyed by the stable conversation correlation ID when this flag is set.
-    if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
+    # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip this.
+    # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
+    # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
+    # (they moved to router/routing_constraints/agent_context). Default stays on.
+    if [[ "${FRAMEWORK:-}" == dynamo-* && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
         # The upstream 300s affinity TTL is shorter than an overloaded
         # high-concurrency agentic request. Keep bindings alive across long
