@@ -73,9 +73,11 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
     settings = rows[0]["prefill"]["additional-settings"]
     assert settings == [
         "NATIVE_MULTINODE=1",
-        "KIMIK3_NODELIST=chi-mi300x-043,chi-mi300x-054",
+        "KIMIK3_NODELIST=chi-mi300x-054,chi-mi300x-043",
         "AITER_SITUV2_A8W4=0",
         "KIMIK3_STARTUP_TIMEOUT_SECONDS=300",
+        "NCCL_DEBUG=INFO",
+        "NCCL_DEBUG_SUBSYS=INIT,NET",
     ]
 
 
