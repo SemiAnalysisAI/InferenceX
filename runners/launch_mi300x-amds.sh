@@ -21,6 +21,48 @@ set -x
 if [[ "${PROFILE:-0}" == "1" ]]; then
     DIAG_ALLOC_LOG=$(mktemp)
     DIAG_JOB_ID=""
+    AITER_OVERLAY_REF="c8009961347cf44d3fb5277af02044a1d95e9567"
+    AITER_OVERLAY_DIR="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
+
+    download_aiter_overlay() {
+        local relative_path="$1"
+        local expected_sha256="$2"
+        local output="$AITER_OVERLAY_DIR/$(basename "$relative_path")"
+        local url="https://raw.githubusercontent.com/edwingao28/aiter/${AITER_OVERLAY_REF}/${relative_path}"
+
+        python3 - "$url" "$output" "$expected_sha256" <<'PY'
+import hashlib
+import os
+import pathlib
+import sys
+import urllib.request
+
+url, output, expected = sys.argv[1:]
+destination = pathlib.Path(output)
+destination.parent.mkdir(parents=True, exist_ok=True)
+payload = urllib.request.urlopen(url, timeout=120).read()
+actual = hashlib.sha256(payload).hexdigest()
+if actual != expected:
+    raise SystemExit(
+        f"AITER overlay checksum mismatch for {url}: "
+        f"expected={expected} actual={actual}"
+    )
+temporary = destination.with_suffix(destination.suffix + ".tmp")
+temporary.write_bytes(payload)
+os.replace(temporary, destination)
+print(
+    f"K3_AITER_OVERLAY_DOWNLOAD file={destination.name} "
+    f"sha256={actual} bytes={len(payload)}"
+)
+PY
+    }
+
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
+        "cc5c499596223d7e2cb4cd1e216cacff3bd67f809c13f7bfaabe977ca17ac6a9"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
+        "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
 
     cleanup_diag() {
         local rc=$?
@@ -110,6 +152,19 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --no-container-entrypoint \
         bash -lc '
             set -euo pipefail
+            aiter_root=$(python -c \
+                "import pathlib, aiter; print(pathlib.Path(aiter.__file__).resolve().parent)")
+            install -m 0644 \
+                /workspace/.aiter-k3-gfx942-overlay/mixed_moe_gemm_2stage.py \
+                "$aiter_root/ops/flydsl/kernels/mixed_moe_gemm_2stage.py"
+            install -m 0644 \
+                /workspace/.aiter-k3-gfx942-overlay/lds_dma_policy.py \
+                "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py"
+            python -m compileall -q \
+                "$aiter_root/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
+                "$aiter_root/ops/flydsl/kernels/lds_dma_policy.py"
+            echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=c8009961347cf44d3fb5277af02044a1d95e9567"
+
             python - <<"PY"
 import importlib.metadata
 import os
