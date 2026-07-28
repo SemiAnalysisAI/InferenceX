@@ -240,7 +240,20 @@ VLLM_CMD=(
     # resolve_trace_source now picks for kimik3*.
     --max-model-len 1048576
     --max-num-seqs "$MAX_SEQS"
-    --max-num-batched-tokens 4096
+    # 16384, not the 4096 this recipe started with. The agentic corpus is
+    # prefill-dominated (measured 5,548 input tok/s against 16 output tok/s, a
+    # ~350:1 ratio), and at 4096 a single 167k-token trace prefill becomes ~41
+    # chunks. Each chunk drives its own DRAM-offload evict/restore round, and the
+    # resulting churn made one sample_tokens RPC exceed the executor timeout:
+    # measured on the non-MTP twin at conc 8, warmup froze at 25 completed
+    # requests and EngineCore died with "TimeoutError: RPC call to sample_tokens
+    # timed out" after ~1500 blocks were restored from CPU in a single step.
+    # At 16384 the same row completed warmup with 409 requests and 0 errors, then
+    # ran the full profiling phase. The tradeoff is real but favourable: peak
+    # activation rises 2.17 -> 5.41 GiB, which at a fixed --gpu-memory-utilization
+    # costs ~14% of the GPU KV pool (2,204,913 -> 1,893,092 tokens), yet the ~4x
+    # drop in chunk count more than pays for it.
+    --max-num-batched-tokens 16384
     --speculative-config "$SPEC_CONFIG"
     --mm-encoder-tp-mode data
     --enable-auto-tool-choice
