@@ -25,6 +25,9 @@ fi
 
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
 export VLLM_USE_V2_MODEL_RUNNER=1
+if [ "$PREFILL_PP_SIZE" -gt 1 ]; then
+    export VLLM_USE_V2_MODEL_RUNNER=0
+fi
 export PYTHONNOUSERSITE=1
 
 VLLM_CMD=(
@@ -46,6 +49,9 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
 )
 
+if [ "$PREFILL_PP_SIZE" -gt 1 ]; then
+    VLLM_CMD+=(--attention-backend FLASHMLA)
+fi
 if [[ "$VLLM_DISABLE_FLASHINFER_AUTOTUNE" == "1" ]]; then
     VLLM_CMD+=(--no-enable-flashinfer-autotune)
 fi

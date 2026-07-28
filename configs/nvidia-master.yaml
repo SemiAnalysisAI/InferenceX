@@ -1486,14 +1486,14 @@ kimik3-fp4-h200-vllm-agentic:
   scenarios:
     agentic-coding:
     - search-space:
-      # Latency-oriented: one TP16 engine spanning two H200 nodes.
+      # Latency-oriented: one TP8/PP2 engine spanning two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
         conc-list: [5]
         prefill:
           num-worker: 1
-          tp: 16
-          pp: 1
+          tp: 8
+          pp: 2
           ep: 1
           dp-attn: false
           additional-settings:
@@ -1504,8 +1504,8 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
         decode:
           num-worker: 0
-          tp: 16
-          pp: 1
+          tp: 8
+          pp: 2
           ep: 1
           dp-attn: false
       # Balanced: TEP16 across two nodes (TP8 attention, DP2/EP16 MoE).
