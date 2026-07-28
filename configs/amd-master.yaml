@@ -697,6 +697,22 @@ kimik3-fp4-mi355x-vllm-agentic-lmprofile:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
 
+# Retry-only key: single cell, re-dispatched when a bringup cell lands on a
+# node carrying another tenant's allocation. Delete once it has a result.
+kimik3-fp4-mi355x-vllm-agentic-retry:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "cd9a0ad5325c7d52c825ed17aac6185d5c520e44" }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
