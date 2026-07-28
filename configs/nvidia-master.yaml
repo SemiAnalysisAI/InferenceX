@@ -1592,9 +1592,8 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-agg:
   scenarios:
     agentic-coding:
     - search-space:
-      # Baseline aggregate: no mooncake / KV offload.
+      # Baseline aggregate: no mooncake / KV offload (defined in the recipe).
       - conc-list: [1, 2, 4, 8, 12, 16]
-        kv-offloading: none
         prefill:
           num-worker: 1
           tp: 8
@@ -1609,10 +1608,9 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-agg:
           tp: 8
           ep: 1
           dp-attn: false
-      # Native CPU KV offload (SimpleCPUOffloadConnector, 120 GiB/GPU host DRAM).
+      # Native CPU KV offload defined in the recipe (SimpleCPUOffloadConnector,
+      # 120 GiB/GPU host DRAM).
       - conc-list: [1, 2, 4, 8, 12, 16]
-        kv-offloading: dram
-        kv-offload-backend: { name: native }
         prefill:
           num-worker: 1
           tp: 8
