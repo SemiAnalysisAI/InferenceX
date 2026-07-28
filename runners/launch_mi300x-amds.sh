@@ -47,8 +47,9 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
         --nodes=2 \
         --ntasks=2 \
         --ntasks-per-node=1 \
+        --gres=gpu:1 \
         --cpus-per-task=1 \
-        --time=10 \
+        --time=30 \
         --no-shell \
         --job-name="$RUNNER_NAME" 2>&1 | tee "$DIAG_ALLOC_LOG"
     alloc_rc=${PIPESTATUS[0]}
@@ -126,6 +127,84 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
             printf "K3_STAGING_PREFLIGHT host=%s image=%s cache=%s snapshots=%s safetensors=%s broken_links=%s raid_free_bytes=%s\n" \
                 "$host" "$image_status" "$snapshot_status" "$snapshot_count" \
                 "$safetensor_count" "$broken_links" "$raid_free_bytes"
+        '
+
+    srun \
+        --jobid="$DIAG_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --kill-on-bad-exit=1 \
+        bash -lc '
+            set -euo pipefail
+            image=/home/gharunner/gharunners/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh
+            lock="${image}.lock"
+            exec 9>"$lock"
+            flock -w 1200 9
+            if unsquashfs -l "$image" >/dev/null 2>&1; then
+                echo "K3_IMAGE_IMPORT host=$(hostname) status=already-valid"
+            else
+                rm -f "$image"
+                enroot import -o "$image" docker://vllm/vllm-openai-rocm:kimi-k3
+                unsquashfs -l "$image" >/dev/null
+                echo "K3_IMAGE_IMPORT host=$(hostname) status=imported"
+            fi
+        '
+
+    srun \
+        --jobid="$DIAG_JOB_ID" \
+        --nodes=2 \
+        --ntasks=2 \
+        --ntasks-per-node=1 \
+        --gpus-per-task=1 \
+        --kill-on-bad-exit=1 \
+        --container-image=/home/gharunner/gharunners/squash/vllm_vllm-openai-rocm_kimi-k3.sqsh \
+        --container-mounts=/dev/kfd:/dev/kfd,/dev/dri:/dev/dri \
+        --container-mount-home \
+        --container-writable \
+        --container-remap-root \
+        --no-container-entrypoint \
+        bash -lc '
+            set -euo pipefail
+            python - <<"PY"
+import importlib
+import importlib.util
+import json
+import pathlib
+
+import torch
+
+assert torch.cuda.is_available()
+props = torch.cuda.get_device_properties(0)
+arch = getattr(props, "gcnArchName", "unknown")
+
+vllm = importlib.import_module("vllm")
+aiter = importlib.import_module("aiter")
+vllm_root = pathlib.Path(vllm.__file__).resolve().parent
+kimi_paths = sorted(
+    str(path.relative_to(vllm_root))
+    for path in vllm_root.rglob("*")
+    if "kimi" in path.name.lower() and "k3" in path.name.lower()
+)
+kimi_spec = importlib.util.find_spec("vllm.model_executor.models.kimi_k3")
+
+evidence = {
+    "torch_version": torch.__version__,
+    "hip_version": torch.version.hip,
+    "device_count": torch.cuda.device_count(),
+    "device_name": props.name,
+    "gcn_arch": arch,
+    "vllm_version": getattr(vllm, "__version__", "unknown"),
+    "aiter_path": str(pathlib.Path(aiter.__file__).resolve()),
+    "kimi_module": kimi_spec is not None,
+    "kimi_paths": kimi_paths[:20],
+}
+print("K3_CONTAINER_PREFLIGHT " + json.dumps(evidence, sort_keys=True))
+assert evidence["hip_version"]
+assert evidence["device_count"] >= 1
+assert arch == "unknown" or "gfx942" in arch
+assert evidence["kimi_module"] or evidence["kimi_paths"]
+PY
         '
 
     echo "MI300X_TWO_NODE_SMOKE complete job_id=$DIAG_JOB_ID"
