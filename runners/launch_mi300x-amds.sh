@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+# Opt-in native two-node path (Kimi K3 aggregate AgentX). Everything below is
+# the unchanged single-node path.
+if [[ "${NATIVE_MULTINODE:-0}" == "1" ]]; then
+    exec bash runners/launch_mi300x-amds-native-multinode.sh
+fi
+
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 export PORT=8888
 
