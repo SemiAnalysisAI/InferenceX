@@ -1113,7 +1113,7 @@ _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
     _patch_swebench_agent || \
-        echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
+        echo "WARN: mini-swe-agent/swe-rex patches failed; sandbox cleanup, submission fallback, or non-interactive stdin handling may be degraded" >&2
 }
 
 _patch_swebench_agent() {
@@ -1191,7 +1191,7 @@ import os, sys, yaml
 default_path, out_path = sys.argv[1], sys.argv[2]
 d = yaml.safe_load(open(default_path)) or {}
 d.setdefault("agent", {})
-step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "75"))
+step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "250"))
 guidance = f"""
 
 <additional_critical_guidance>
@@ -1246,7 +1246,7 @@ PYGEN
 
     export MSWEA_COST_TRACKING=ignore_errors
     local expected="${EVAL_LIMIT:-${SWEBENCH_EXPECTED_INSTANCES:-300}}"
-    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-75} slice=${EVAL_LIMIT:-full} expected=$expected"
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-${CONC:-64}} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-250} slice=${EVAL_LIMIT:-full} expected=$expected"
     local agen_rc=0
     mini-extra swebench \
         -c "$cfg" \
@@ -1258,12 +1258,12 @@ PYGEN
     local mini_pid=$!
     # preds.json detects completion despite teardown hangs.
     local preds_file="$gen_dir/agent_out/preds.json"
-    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-14400} ))
+    local deadline=$(( $(date +%s) + ${SWEBENCH_AGENT_TIMEOUT:-21600} ))
     local grace_until=0
     local killed_after_complete=0
     while kill -0 "$mini_pid" 2>/dev/null; do
         if [ "$(date +%s)" -ge "$deadline" ]; then
-            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-14400}s); killing mini-extra" >&2
+            echo "ERROR: generation exceeded SWEBENCH_AGENT_TIMEOUT (${SWEBENCH_AGENT_TIMEOUT:-21600}s); killing mini-extra" >&2
             kill "$mini_pid" 2>/dev/null; sleep 5; kill -9 "$mini_pid" 2>/dev/null
             agen_rc=124
             break
@@ -1660,7 +1660,7 @@ resolve_trace_source() {
     # WEKA_LOADER_OVERRIDE.
     local default_loader
     case "${MODEL_PREFIX:-}" in
-        dsv4*|minimaxm3*)
+        dsv4*|glm5.2*|minimaxm3*)
             default_loader="semianalysis_cc_traces_weka_062126"
             ;;
         *)
@@ -1781,8 +1781,11 @@ build_replay_cmd() {
     # only after those requests drain and resumes from the resulting live state.
     REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
     # Give long-context warmup requests up to 30 minutes to drain before
+    # declaring warmup failed. Recipes whose saturation arms carry a larger
+    # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
+    # (grace is a maximum wait, not a fixed sleep — drain exits when done).
     # cancelling any remaining requests and starting profiling.
-    REPLAY_CMD+=" --warmup-grace-period 1800"
+    REPLAY_CMD+=" --warmup-grace-period ${AGENTIC_WARMUP_GRACE_PERIOD:-1800}"
     # Use server-reported usage fields (prompt_tokens / completion_tokens) for
     # ISL/OSL instead of client-side tokenizer.encode(). Auto-enables
     # stream_options.include_usage on the OpenAI chat endpoint. Skips the
@@ -1796,12 +1799,13 @@ build_replay_cmd() {
     # binding by itself. AIPerf emits nvext.session_control bind/close actions
     # keyed by the stable conversation correlation ID when this flag is set.
     if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
-        # Newer Dynamo versions accept session IDs through X-Session-ID. Opt in
-        # only when the recipe requests that path; older configurations retain
-        # AIPerf's conversation-aware routing flags.
+        # Newer Dynamo versions (>=1.3.0-dev, post #9920) dropped nvext.session_control
+        # in favour of router/routing_constraints/agent_context; set
+        # AIPERF_NEW_DYNAMO_SESSION_CONTROL=1 to use the X-Session-ID path instead.
         if [[ -n "${AIPERF_NEW_DYNAMO_SESSION_CONTROL:-}" ]]; then
             export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
-        else
+        elif [[ "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
+            # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip.
             REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
             # The upstream 300s affinity TTL is shorter than an overloaded
             # high-concurrency agentic request. Keep bindings alive across long
