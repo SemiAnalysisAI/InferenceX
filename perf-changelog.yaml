@@ -5128,4 +5128,14 @@
   description:
     - "Re-sweep dsv4-fp4-mi355x-atom-mtp on latest atom-dev nightly (nightly_202607231538, was atom0.1.3 release). Align ATOM official MTP config (models.json): MTP3 dp-off conc 4-256 + DPA MTP3 (dp-attn) conc 32-1024 (added c32 dp-on; tp4 tried but removed — tp4+MTP+dp-on OOMs, KV budget negative). prefill-only TBO (--enable-tbo, argparse const=prefill so enable_tbo_decode=False) on dp-attn cells at conc>=256 (measured crossover run 30257759947 vs non-TBO 30238071409: TBO -10~14% output tput at c64/c128 but +8~14% at c256+; MTP removes low-conc latency so TBO overlap there is pure overhead); MTP-safe because only decode-TBO (--enable-tbo all) drops spec_decode_metadata. max_num_seqs=conc on dp-on cells and conc>=64 to avoid OOM. bench keeps --dsv4 (InferenceX bench uses encoding_dsv4.py; DSv4-Pro has no jinja chat_template). Fixed benchmark_lib source path (../ -> ../../)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2345
-  
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic
+  description:
+    - "Tune the DEP arm: add MODE_ARGS with --enable-ep-weight-filter (EP>1), --prefill-schedule-interval 8 (dp-attn), and a DEP8 (TP8+dp-attn) prefill budget of --max-num-batched-tokens 65536 (8x the 8192 base) + --long-prefill-token-threshold 16384; non-DEP8 dp-attn keeps --max-num-batched-tokens 8192. Merge --enable-expert-parallel into PARALLEL_ARGS."
+    - "Serve flags: add --block-size 256 and --max-model-len 1048576; switch --compilation-config cudagraph_mode FULL_AND_PIECEWISE -> FULL_DECODE_ONLY; --gpu-memory-utilization 0.8 -> 0.95; enable VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4; drop the gist scheduler.py monkeypatch and the VLLM_ROCM_USE_AITER_MOE export."
+    - "LMCache: build tagged v0.5.2 (was the PR-3853 SHA 9229067) and drop the grpcio==1.78.0 pin; --chunk-size 256 -> 1024; give the external MP server the undivided CPU pool (TOTAL_CPU_DRAM_PARTITION_GB = full TOTAL_CPU_DRAM_GB instead of the /(8/TP) partition)."
+    - "Bug fix: TOTAL_CPU_DRAM_PARTITION_GB=\"$(TOTAL_CPU_DRAM_GB)\" (command substitution, yielded empty) -> \"$TOTAL_CPU_DRAM_GB\" in the vllm-native and lmcache branches."
+    - "amd-master.yaml: bump image to nightly-49f31d7cee425a6d38f8c5bc76877986daf832ed; dram-utilization 0.60 -> 0.80; switch agentic search-space to a single DEP lmcache arm at conc 76 (prior GPU-resident and dp-off arms commented out)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2378
+
