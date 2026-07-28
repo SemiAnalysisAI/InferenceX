@@ -93,12 +93,17 @@ backend:
       pipeline-parallel-size: 2
       trust-remote-code: true
       # SimpleCPUOffloadConnector (variant E): offload KV blocks to CPU DRAM.
+      # enable_cross_layers_blocks false: with true, KV-cache init crashes on
+      # K3's KDA hybrid — "shape '[64980, 64, 576]' is invalid for input of
+      # size 199618560", a 12x mismatch equal to the MLA layers per PP stage
+      # (24/2); the cross-layer block folding gets the hybrid geometry wrong.
+      # The GB200 recipes also run connectors with cross-layer blocks off.
       # cpu_bytes_to_use_per_rank = TOTAL_CPU_DRAM_GB * 1e9 / GPU_COUNT with
       # the framework's own budget math for cluster:b200-dgxc — DRAM
       # min(3,095,781 MiB, 2,861,022 MiB cap) * 0.80 utilization = 2399 GB
       # per node (matrix total-cpu-dram-gb), / 8 ranks = 299,875,000,000
       # bytes per rank.
-      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":299875000000,"lazy_offload":false,"enable_cross_layers_blocks":"true"}}'
+      kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":299875000000,"lazy_offload":false,"enable_cross_layers_blocks":false}}'
       # Explicit (default-on) — offloaded blocks are only useful if prefix
       # caching reuses them across agentic turns.
       enable-prefix-caching: true
