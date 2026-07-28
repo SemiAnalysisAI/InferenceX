@@ -242,6 +242,22 @@ def main() -> None:
         flush=True,
     )
 
+    moe_kernels = importlib.import_module("aiter.ops.flydsl.moe_kernels")
+    original_compile_stage1 = moe_kernels.compile_flydsl_moe_stage1
+
+    def traced_compile_stage1(*args, **kwargs):
+        print(
+            "K3_MXFP4_STAGE1_COMPILE"
+            f" act={kwargs.get('act')}"
+            f" situ_beta={kwargs.get('situ_beta')}"
+            f" situ_linear_beta={kwargs.get('situ_linear_beta')}"
+            f" tile_k={kwargs.get('tile_k')}"
+            f" k_batch={kwargs.get('k_batch')}",
+            flush=True,
+        )
+        return original_compile_stage1(*args, **kwargs)
+
+    moe_kernels.compile_flydsl_moe_stage1 = traced_compile_stage1
     started = time.perf_counter()
     fused_moe_module = importlib.import_module("aiter.fused_moe")
     captured_calls: list[tuple[str, object]] = []
@@ -264,6 +280,7 @@ def main() -> None:
         )
     finally:
         fused_moe_module.kernel_bench_callable = None
+        moe_kernels.compile_flydsl_moe_stage1 = original_compile_stage1
     torch.cuda.synchronize()
     elapsed = time.perf_counter() - started
 

@@ -273,7 +273,7 @@ PY
             echo "K3_MXFP4_SOURCE_CONTRACT_END"
 
             export AITER_SITUV2_A8W4=0
-            export K3_PROBE_PATTERN=constant
+            export K3_PROBE_PATTERN=random
             timeout --signal=TERM --kill-after=30s 1200s \
                 python /workspace/scripts/diagnostics/k3_mxfp4_gfx942_probe.py
         '
