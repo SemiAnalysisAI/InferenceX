@@ -4,6 +4,10 @@ English | [中文](MODELS_zh.md)
 
 This document tracks every model benchmarked by InferenceX-e2e: when it was added, which benchmark scenarios are currently active for it, and which scenarios are deprecated. Results for active scenarios are published to <https://inferencex.com/>.
 
+## Deprecation Notice
+
+- **Thursday, August 6, 2026** is the last day for the **Single-turn 8k1k** scenario on **Kimi-K2.5/2.6/2.7-Code** (`kimik2.5`); the scenario is deprecated for these models after that date. Rationale: the Agentic coding (AgentX) scenario already covers them with real-world traffic, and Kimi-K3 launched on July 27, 2026, so GPU cluster time shifts to the newer frontier model.
+
 ## Scenarios
 
 | Scenario | ISL/OSL | Status |
