@@ -5195,5 +5195,5 @@
 - config-keys:
     - kimik3-fp4-h200-vllm-agentic
   description:
-    - "Add Day-0 Kimi K3 FP4 AgentX performance coverage on 4x8 H200 using the official vLLM H200 recipe: TP32 at concurrency 1-8, TEP32 at 4-32, and DEP32 at 16-128"
+    - "Add Day-0 Kimi K3 FP4 AgentX performance coverage on 4x8 H200 using the official vLLM H200 recipe: TP16/PP2 at concurrency 1-8, TEP16/PP2 at 4-32, and DEP16/PP2 at 16-128"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2353

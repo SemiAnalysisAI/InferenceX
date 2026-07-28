@@ -32,7 +32,7 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
     image_cache_dir="/data/gharunners/containers"
     server_log_dir="$GITHUB_WORKSPACE/multinode_server_logs"
     gpus_per_node=8
-    gpu_count=$((PREFILL_NUM_WORKERS * PREFILL_TP))
+    gpu_count=$((PREFILL_NUM_WORKERS * PREFILL_TP * PREFILL_PP_SIZE))
     if (( gpu_count % gpus_per_node != 0 )); then
         echo "Native multi-node GPU count ($gpu_count) must use full 8xH200 nodes" >&2
         exit 1

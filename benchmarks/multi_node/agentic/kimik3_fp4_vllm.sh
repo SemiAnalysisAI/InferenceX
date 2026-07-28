@@ -20,7 +20,7 @@ for concurrency in "${CONCURRENCIES[@]}"; do
 done
 MAX_NUM_SEQS="$MAX_CONCURRENCY"
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
-    MAX_NUM_SEQS=$(((MAX_CONCURRENCY + WORLD_SIZE - 1) / WORLD_SIZE))
+    MAX_NUM_SEQS=$(((MAX_CONCURRENCY + PREFILL_NUM_WORKERS - 1) / PREFILL_NUM_WORKERS))
 fi
 
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
@@ -32,6 +32,8 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
+    --load-format fastsafetensors
+    --attention-backend FLASHMLA
     --moe-backend "$VLLM_MOE_BACKEND"
     --gpu-memory-utilization 0.95
     --enable-prefix-caching
@@ -50,24 +52,28 @@ if [[ "$VLLM_DISABLE_CUSTOM_ALL_REDUCE" == "1" ]]; then
 fi
 
 if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
+    LOCAL_DATA_PARALLEL_SIZE=$((MULTINODE_GPUS_PER_NODE / (PREFILL_TP * PREFILL_PP_SIZE)))
     VLLM_CMD+=(
-        --data-parallel-size "$WORLD_SIZE"
-        --data-parallel-size-local "$MULTINODE_GPUS_PER_NODE"
+        --tensor-parallel-size "$PREFILL_TP"
+        --pipeline-parallel-size "$PREFILL_PP_SIZE"
+        --data-parallel-size "$PREFILL_NUM_WORKERS"
+        --data-parallel-size-local "$LOCAL_DATA_PARALLEL_SIZE"
         --data-parallel-address "$MULTINODE_MASTER_ADDR"
-        --data-parallel-start-rank "$((MULTINODE_NODE_RANK * MULTINODE_GPUS_PER_NODE))"
+        --data-parallel-start-rank "$((MULTINODE_NODE_RANK * LOCAL_DATA_PARALLEL_SIZE))"
         --data-parallel-hybrid-lb
     )
     if [ "$PREFILL_EP" -gt 1 ]; then
         VLLM_CMD+=(--enable-expert-parallel)
     fi
 elif [[ "$PREFILL_DP_ATTN" == "false" ]]; then
-    if [ "$PREFILL_TP" -ne "$WORLD_SIZE" ]; then
-        echo "Cross-node TP ($PREFILL_TP) must match the allocated world size ($WORLD_SIZE)" >&2
+    if [ "$((PREFILL_TP * PREFILL_PP_SIZE))" -ne "$WORLD_SIZE" ]; then
+        echo "Cross-node TPxPP must match the allocated world size ($WORLD_SIZE)" >&2
         exit 1
     fi
 
     VLLM_CMD+=(
         --tensor-parallel-size "$PREFILL_TP"
+        --pipeline-parallel-size "$PREFILL_PP_SIZE"
         --nnodes "$MULTINODE_NODE_COUNT"
         --node-rank "$MULTINODE_NODE_RANK"
         --master-addr "$MULTINODE_MASTER_ADDR"
