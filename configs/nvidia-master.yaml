@@ -1547,7 +1547,7 @@ kimik3-fp4-h200-vllm-agentic:
           additional-settings:
           - "NATIVE_MULTINODE=1"
           - "VLLM_MOE_BACKEND=marlin"
-          - "VLLM_GPU_MEMORY_UTILIZATION=0.95"
+          - "VLLM_GPU_MEMORY_UTILIZATION=0.90"
           - "VLLM_MAX_NUM_BATCHED_TOKENS=2048"
           - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
           - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
