@@ -43,9 +43,7 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format "$LOAD_FORMAT"
     --moe-backend "$VLLM_MOE_BACKEND"
-    --kv-cache-dtype fp8
     --gpu-memory-utilization 0.97
-    --attention-config '{"use_prefill_query_quantization":true}'
     --enable-prefix-caching
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
