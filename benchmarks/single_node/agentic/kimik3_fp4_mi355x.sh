@@ -204,6 +204,30 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     fi
     PREFIX_CACHING=true
 
+    # SECOND hard constraint from the same Mamba-hybrid path. vLLM enforces
+    #   block_size <= max_num_batched_tokens < 2 * block_size
+    # "so every prefill step advances exactly one block and every block boundary
+    # gets a state snapshot". K3 resolves to block_size=768, so the reference
+    # command's --max-num-batched-tokens 4096 aborts engine init with
+    # "got max_num_batched_tokens=4096, block_size=768. Set
+    # --max-num-batched-tokens 768." (measured on gfx950, LMCache v0.5.3.dev47).
+    #
+    # NOTE this is a real and severe cost of the LMCache arm on this model, not
+    # a formality: at ~106k-token average ISL for this corpus, a 768-token
+    # budget means ~138 chunked-prefill steps per turn versus ~26 at 4096. Any
+    # LMCache-vs-none comparison has to be read with that in mind -- the offload
+    # tier is not free here, it changes the prefill schedule.
+    #
+    # 768 is what this model/config resolves to; if vLLM reports a different
+    # block_size, its error names the value to use. Override with
+    # LMCACHE_MAX_NUM_BATCHED_TOKENS.
+    # Deliberately ignores any inherited MAX_NUM_BATCHED_TOKENS: the harness and
+    # the driver both export the reference 4096, which is invalid on this path,
+    # so honouring it would just reproduce the abort. Only the explicit
+    # LMCACHE_MAX_NUM_BATCHED_TOKENS overrides.
+    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
+    echo "LMCache/Mamba-hybrid constraint: pinning --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS (block_size must satisfy bs <= mnbt < 2*bs)"
+
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
     # bind-mounted /workspace, so a later job's `clean: true` checkout does not
