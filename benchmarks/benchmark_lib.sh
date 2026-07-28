@@ -1775,20 +1775,6 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # Start every selected trajectory together so the requested lanes become
-    # active inside the benchmark window. Recipes that intentionally measure
-    # the traces' recorded phase-start ramp can restore it with an explicit 0.
-    case "${AIPERF_BURST_PHASE_STARTS:-1}" in
-        0)
-            ;;
-        1)
-            REPLAY_CMD+=" --burst-phase-starts"
-            ;;
-        *)
-            echo "ERROR: AIPERF_BURST_PHASE_STARTS must be 0 or 1" >&2
-            return 1
-            ;;
-    esac
     # After the normal t* snapshot warmup, continue those exact trajectories
     # with one-token outputs and no idle delays for 10 minutes. Profiling begins
     # only after those requests drain and resumes from the resulting live state.
