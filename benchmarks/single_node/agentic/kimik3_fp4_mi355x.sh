@@ -409,6 +409,51 @@ except Exception:
         )
     fi
     ;;
+  vllm-simple)
+    require_agentic_kv_offload_backend vllm-simple
+    # vLLM's own SimpleCPUOffloadConnector -- the AMD reference's native
+    # offload path. Unlike LMCache it does not go through the Mamba
+    # [conv_state, ssm_state] adapter that K3's Kimi Delta Attention breaks
+    # ("expected a Mamba [conv_state, ssm_state] tensor list, got Tensor",
+    # runs 30350911388), so it is the only offload tier that can currently
+    # initialise on this model.
+    #
+    # cpu_bytes_to_use is server-wide; cpu_bytes_to_use_per_rank overrides it
+    # per rank (simple_cpu_offload_connector.py:66). The agentic README requires
+    # consuming TOTAL_CPU_DRAM_GB, so derive it rather than hardcode the
+    # reference's 236223201280 (= 220 GiB/rank, 1760 GiB across 8 ranks).
+    SIMPLE_RANKS="${GPU_COUNT:-$TP}"
+    CPU_BYTES_PER_RANK="${SIMPLE_CPU_BYTES_PER_RANK:-$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / SIMPLE_RANKS ))}"
+    # Identical prefixes must hash to identical block keys across ranks.
+    export PYTHONHASHSEED=42
+    # lazy_offload MUST be a JSON boolean. The reference command passes the
+    # STRING "false", and the connector does
+    #   lazy_offload = bool(extra_config.get("lazy_offload", False))
+    # (simple_cpu_offload_connector.py:77) -- bool("false") is True in Python,
+    # so the string silently selects LAZY, the opposite of what it reads as.
+    # Default to real eager offload; SIMPLE_LAZY_OFFLOAD=true swaps it.
+    # The connector logs "lazy"/"eager" at line 95, so server.log confirms which
+    # mode actually engaged.
+    SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-false}"
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":$CPU_BYTES_PER_RANK,\"lazy_offload\":$SIMPLE_LAZY_OFFLOAD}}"
+    )
+    echo "SimpleCPUOffloadConnector: ${CPU_BYTES_PER_RANK} B/rank x ${SIMPLE_RANKS} ranks, lazy_offload=$SIMPLE_LAZY_OFFLOAD"
+    ;;
+  vllm-native)
+    require_agentic_kv_offload_backend vllm-native
+    # OffloadingConnector, vLLM's other native tier. --kv_offloading_size is
+    # GiB (vllm/config/vllm.py multiplies by 1<<30) while TOTAL_CPU_DRAM_GB is
+    # decimal GB, so convert or we over-request by ~7.4%.
+    unset VLLM_USE_SIMPLE_KV_OFFLOAD
+    KV_OFFLOAD_GIB=$(( TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824 ))
+    OFFLOAD_ARGS=(
+        --kv_offloading_backend native
+        --kv_offloading_size "$KV_OFFLOAD_GIB"
+    )
+    echo "OffloadingConnector: ${KV_OFFLOAD_GIB} GiB"
+    ;;
   mooncake)
     echo "Error: Mooncake is unsupported for Kimi-K3. The upstream recipe marks" >&2
     echo "       kv_store_{distributed,centralized}_mooncake as 'unsupported' on" >&2
