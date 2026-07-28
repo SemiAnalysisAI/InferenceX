@@ -23,6 +23,7 @@ adjustments:
     dynamo-sglang: 0.5
     dynamo-vllm: 0.5
   model-prefix:
+    kimik3: 1.5
     glm5: 0.75
     glm5.1: 0.75
     kimik2.5: 0.75

@@ -5087,6 +5087,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2313
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Re-sweep dsv4-fp4-mi355x-atom on latest atom-dev nightly (nightly_202607231538, was 202606161823). Recipe: max_num_seqs=conc for all dp-on cells (avoids dp-attn OOM) and conc>=64; TBO on dp-attn cells at conc>=64 (was per-scenario gate 256/1024). 8k1k grid adds tp8 dp-off low-conc redundancy to recheck the crossover on the new image."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2327
+
+- config-keys:
     - minimaxm3-fp8-b200-vllm
     - minimaxm3-fp8-b300-vllm
   description:
@@ -5109,10 +5115,23 @@
     - "Add GB300 Dynamo-vLLM AgentX MTP3 points: aggregate TP8 c1, aggregate TP4 c4, P/D DEP4/DEP8 c128, and P/D DEP8/DEP8 c384; use upstream vLLM 426e59f, srt-slurm v1.0.36, and random session-affinity routing for P/D."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2341
 
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-mtp
+  description:
+    - "Re-sweep dsv4-fp4-mi355x-atom-mtp on latest atom-dev nightly (nightly_202607231538, was atom0.1.3 release). Align ATOM official MTP config (models.json): MTP3 dp-off conc 4-256 + DPA MTP3 (dp-attn) conc 32-1024 (added c32 dp-on; tp4 tried but removed — tp4+MTP+dp-on OOMs, KV budget negative). prefill-only TBO (--enable-tbo, argparse const=prefill so enable_tbo_decode=False) on dp-attn cells at conc>=256 (measured crossover run 30257759947 vs non-TBO 30238071409: TBO -10~14% output tput at c64/c128 but +8~14% at c256+; MTP removes low-conc latency so TBO overlap there is pure overhead); MTP-safe because only decode-TBO (--enable-tbo all) drops spec_decode_metadata. max_num_seqs=conc on dp-on cells and conc>=64 to avoid OOM. bench keeps --dsv4 (InferenceX bench uses encoding_dsv4.py; DSv4-Pro has no jinja chat_template). Fixed benchmark_lib source path (../ -> ../../)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2345
+
 - config-keys:
     - dsv4-fp4-gb300-dynamo-trt-agentic
   description:
     - "Add DeepSeek V4 Pro FP4 GB300 disaggregated Dynamo TensorRT-LLM MTP agentic config with eight prefill/decode topologies"
     - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc21"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2274
-
