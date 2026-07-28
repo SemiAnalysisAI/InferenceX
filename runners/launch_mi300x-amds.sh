@@ -133,9 +133,11 @@ if [[ "${PROFILE:-0}" == "1" ]]; then
             export HF_HOME="$cache/.hf-home"
             export HF_XET_CACHE="$cache/.xet"
             export HF_HUB_DISABLE_PROGRESS_BARS=1
+            unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
             mkdir -p "$cache" "$HF_HOME" "$HF_XET_CACHE"
             python -c "import socket; socket.getaddrinfo(\"huggingface.co\", 443)"
-            echo "K3_STAGE_NETWORK host=$host status=resolved"
+            python -c "import urllib.request; urllib.request.urlopen(\"https://huggingface.co/api/models/moonshotai/Kimi-K3\", timeout=30).read(1)"
+            echo "K3_STAGE_NETWORK host=$host status=https-ready"
             echo "K3_STAGE_MODEL host=$host status=starting revision=$revision"
 
             python - "$revision" <<'"'"'PY'"'"' &
