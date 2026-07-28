@@ -226,16 +226,16 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     #   ValueError: Mamba-hybrid models with LMCache require
     #     block_size <= max_num_batched_tokens < 2 * block_size ... block_size=768
     #   AssertionError: LMCache chunk size should be a multiple of vLLM block size
-    # Those checks live in the dev integration, not in the pinned 0.5.1 release
-    # the reference recipe installs, so with 0.5.1 the reference values stand.
-    # If 0.5.1 turns out to enforce them too, LMCACHE_MAX_NUM_BATCHED_TOKENS and
-    # LMCACHE_CHUNK_SIZE_OVERRIDE set them back to 768 without a recipe edit.
+    # CONFIRMED on 0.5.1 as well (run 30348060242, g09): the pinned release
+    # raises the same ValueError, so these are properties of the LMCache/vLLM
+    # Mamba-hybrid integration, not of dev HEAD. Only the LazyMemoryAllocator
+    # stall was dev-specific. Both stay pinned to 768 for the LMCache arms.
     #
     # Worth keeping in view either way: at ~106k-token average ISL, 768 would
     # mean ~138 chunked-prefill steps per turn versus ~26 at 4096, so the two
     # settings are not performance-equivalent.
-    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-4096}"
-    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-1024}"
+    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
+    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-768}"
     LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
     LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
     echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (reference values)"
