@@ -244,9 +244,18 @@ def validate_reusable_run(
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
     if run.get("status") != "completed":
         raise RuntimeError(f"Reusable source run {run_id} is not completed.")
-    allowed_conclusions = {"success", "failure"} if allow_failed else {"success"}
+    # A pinned run is an explicit maintainer choice, so incomplete sweeps are
+    # allowed: ingestion skips rows without results, leaving only the completed
+    # points.  ``cancelled`` belongs here alongside ``failure`` because a
+    # fail-fast sweep cancels its remaining jobs, so a run whose benchmark jobs
+    # all passed still concludes ``cancelled`` when a later job is cut short.
+    allowed_conclusions = (
+        {"success", "failure", "cancelled"} if allow_failed else {"success"}
+    )
     if run.get("conclusion") not in allowed_conclusions:
-        expected = "success or failure" if allow_failed else "success"
+        expected = (
+            "success, failure, or cancelled" if allow_failed else "success"
+        )
         raise RuntimeError(
             f"Reusable source run {run_id} has conclusion {run.get('conclusion')!r}; "
             f"expected {expected}."

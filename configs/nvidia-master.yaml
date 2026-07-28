@@ -1578,6 +1578,37 @@ kimik2.5-fp4-b300-vllm-agentic-mtp:
       - { tp: 4, ep: 1, spec-decoding: mtp, dcp-size: 4, kv-offloading: none, conc-list: [32, 64, 80, 96, 112, 128] }
       - { tp: 4, ep: 1, spec-decoding: mtp, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [64, 80, 96, 112, 128, 144, 160] }
 
+kimik3-fp4-b300-vllm-agentic:
+  # Day-zero Kimi-K3 recipe. `vllm/vllm-openai:kimi-k3` is the pre-release
+  # Kimi-K3 build (vLLM 0.1.dev19262+gb6bbf29dd, pushed 2026-07-27); K3 ships as
+  # the out-of-tree `vllm.models.kimi_k3` plugin package (DSpark MLA + KDA
+  # kernels), so a generic vllm-openai release cannot serve this checkpoint.
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
+    agentic-coding:
+      # 0.63 resolves to ~220 GiB of host DRAM per rank across the 8 TP ranks on
+      # cluster:b300-nv (total-cpu-dram-gb 1889), which is what the
+      # SimpleCPUOffloadConnector pool is sized to in the script.
+    - dram-utilization: 0.63
+      search-space:
+      # TP8 is the only single-node layout that fits: the MXFP4 checkpoint is
+      # ~1.5 TB (~188 GB/GPU across 8 B300s), and TP4 would need ~375 GB/GPU
+      # against 288 GB of HBM. The conc ceiling is set by the ~70 GB/GPU left
+      # for MLA KV after weights at gpu-memory-utilization 0.90.
+      # Both arms share one ladder so GPU-resident and DRAM-offload are directly
+      # comparable at equal concurrency (same shape as the kimik2.5 B300 sister).
+      # TP8 GPU-resident
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
+      # TP8 SimpleCPUOffload (host DRAM)
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24] }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
