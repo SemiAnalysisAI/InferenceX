@@ -24,6 +24,7 @@ if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
 fi
 
 export VLLM_ENGINE_READY_TIMEOUT_S=7200
+export VLLM_USE_V2_MODEL_RUNNER=1
 export PYTHONNOUSERSITE=1
 
 VLLM_CMD=(
