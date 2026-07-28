@@ -108,19 +108,14 @@ if [[ "$IS_MULTINODE" == "true" && "$NATIVE_MULTINODE" == "1" ]]; then
         exit 1
     fi
     server_nodes="$head_node"
-    server_ports_per_node=1
     if [[ "$PREFILL_DP_ATTN" == "true" ]]; then
         server_nodes="$allocated_nodes"
-        server_ports_per_node=$((gpus_per_node / (PREFILL_TP * PREFILL_PP_SIZE)))
     fi
     server_urls=()
     metrics_urls=()
     for server_node in $server_nodes; do
-        for ((local_dp_rank = 0; local_dp_rank < server_ports_per_node; local_dp_rank++)); do
-            server_port=$((PORT + local_dp_rank))
-            server_urls+=("http://$server_node:$server_port")
-            metrics_urls+=("http://$server_node:$server_port/metrics")
-        done
+        server_urls+=("http://$server_node:$PORT")
+        metrics_urls+=("http://$server_node:$PORT/metrics")
     done
     AIPERF_ENDPOINT_URLS=$(IFS=,; echo "${server_urls[*]}")
     AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${metrics_urls[*]}")
