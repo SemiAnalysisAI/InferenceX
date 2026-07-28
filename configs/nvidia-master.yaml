@@ -1504,7 +1504,6 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
           - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
-          - "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1"
         decode:
           num-worker: 0
           tp: 8
@@ -1529,7 +1528,6 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
           - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
-          - "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1"
         decode:
           num-worker: 0
           tp: 4
@@ -1554,7 +1552,6 @@ kimik3-fp4-h200-vllm-agentic:
           - "VLLM_DISABLE_FLASHINFER_AUTOTUNE=1"
           - "VLLM_DISABLE_CUSTOM_ALL_REDUCE=1"
           - "VLLM_DISABLE_FUSED_ALLREDUCE_RMS=1"
-          - "VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1"
         decode:
           num-worker: 0
           tp: 1
