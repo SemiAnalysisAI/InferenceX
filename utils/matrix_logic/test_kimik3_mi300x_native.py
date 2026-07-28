@@ -636,6 +636,18 @@ def test_server_failure_preserves_failure_and_cancels_allocation(
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
 
 
+def test_client_failure_propagates_the_client_exit_code(tmp_path: Path) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"]["FAKE_CLIENT_EXIT_CODE"] = "23"
+    result = run_launcher(cluster)
+
+    # The replay still handed its artifacts back, so publish them and then exit
+    # with the client's own status instead of flattening it to a generic 1.
+    assert result.returncode == 23, result.stdout + result.stderr
+    assert (cluster["workspace"] / f"{RESULT_FILENAME}_conc4.json").is_file()
+    assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+
 def test_sigterm_returns_143_and_reaps_server_and_allocation(tmp_path: Path) -> None:
     cluster = make_cluster(tmp_path)
     cluster["env"]["FAKE_HEALTH"] = "down"
