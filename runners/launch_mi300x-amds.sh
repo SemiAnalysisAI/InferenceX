@@ -19,7 +19,15 @@ set -x
 # Temporary diagnostic branch only: inventory and stage the exact pair selected
 # for the Kimi-K3 TP8xPP2 canary. The download is revision-pinned and resumable.
 if [[ "${PROFILE:-0}" == "1" && "${K3_LIVE_ATTACH:-1}" == "1" ]]; then
-    K3_LIVE_JOB_ID=11421
+    K3_LIVE_JOB_ID=11422
+    K3_LIVE_LOG="/nvme_home/gharunner/gharunners/gharunner00/actions-runner/_work/InferenceX/InferenceX/multinode_server_logs_live/vllm_server.log"
+    if [[ -r "$K3_LIVE_LOG" ]]; then
+        echo "K3_LIVE_LOG_BEGIN path=$K3_LIVE_LOG"
+        tail -n 400 "$K3_LIVE_LOG"
+        echo "K3_LIVE_LOG_END path=$K3_LIVE_LOG"
+    else
+        echo "K3_LIVE_LOG_UNREADABLE path=$K3_LIVE_LOG"
+    fi
     scontrol show job "$K3_LIVE_JOB_ID" || true
     srun \
         --jobid="$K3_LIVE_JOB_ID" \
