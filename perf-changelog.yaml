@@ -5165,4 +5165,4 @@
   description:
     - "Recover the 12 completed Kimi-K3 B300 vLLM agentic benchmark points from run 30326393603: TP8 GPU-resident and TP8 host-DRAM KV-offload arms at concurrency 1, 2, 4, 8, 16, and 24."
     - "Below concurrency 8, the two arms are within 1-5%. At concurrency 16 and 24, GPU-resident reaches 49.6 and 54.9 output tok/s with p50 TTFT of 86s and 191s, while DRAM offload reaches 245.0 and 260.6 output tok/s with p50 TTFT of 0.85s and 6.2s (4-5x higher output throughput)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2397
