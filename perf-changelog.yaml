@@ -5116,3 +5116,15 @@
   description:
     - "Bump image from lmsysorg/sglang:v0.5.14-rocm720-mi35x to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2349
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add DSpark speculative-decoding variant of the Kimi-K3 MXFP4 MI355X agentic recipe (draft Inferact/Kimi-K3-DSpark, method dspark, num_speculative_tokens 7, draft_sample_method probabilistic)"
+    - "Follows docs/PR_REVIEW_CHECKLIST.md rule 10: throughput points simulate acceptance via vLLM synthetic rejection sampling pinned to the committed golden AL 3.78 (golden_al_distribution/kimik3_dspark.yaml, kimi-k3 / thinking_on / num_speculative_tokens=7, collected on B300 with SPEED-Bench coding at temperature 1.0 / top_p 0.95). The EVAL_ONLY accuracy point uses rejection_sample_method block for real target verification, since synthetic acceptance bypasses verification and would zero the eval score"
+    - "The recipe hard-fails if the pinned AL drifts from golden_al_distribution/kimik3_dspark.yaml or cannot be parsed, so a recollected curve cannot silently leave a stale constant in place"
+    - "Drops the upstream spec_decoding pin \"attention_backend\": \"FLASHINFER_MLA\": flashinfer is absent from the ROCm image and platforms/rocm.py rejects the backend with 'Selected backend AttentionBackendEnum.FLASHINFER_MLA is not valid for this configuration. Reason: [ImportError]'. Verified by A/B on 8x MI355X - with the pin the draft fails at construction (dspark_mla.py:59 -> nvidia/mla.py:267 get_attn_backend), without it the server reaches ready and generates. Server runs TRITON_ATTN, matching the MiniMax-M3 ROCm MTP recipe"
+    - "There is no vllm/models/kimi_k3/amd/dspark*.py and the registry hardcodes vllm.models.kimi_k3.nvidia.dspark_mla with no platform dispatch, so on ROCm the draft runs the NVIDIA implementation while the base model still resolves to kimi_k3.amd.model"
+    - "--max-num-seqs is min(CONC, 32): upstream caps at 32 under spec decoding for the extra drafting VRAM, agentic convention tracks CONC"
+    - "TP=8 only (~195 GB/GPU of MI355X's 288 GB HBM); conc 1/4/8/16 mirrors the non-MTP ladder for direct comparison, with conc 32 omitted because the resident draft cuts GPU KV from 2,204,913 to 1,723,308 tokens (2.10x -> 1.64x for a 1M-token request); DRAM KV offload via vllm-simple at dram-utilization 0.95 (2849 GB aggregate, 356 GB/rank)"
+  pr-link: TBD

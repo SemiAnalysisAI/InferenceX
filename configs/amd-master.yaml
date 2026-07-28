@@ -616,6 +616,34 @@ kimik2.5-fp4-mi355x-atom-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+kimik3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+      # Same DRAM policy as the non-MTP entry: 0.95 of available-cpu-dram-mib,
+      # capped by the matrix generator at the 2,861,022 MiB / 3 TB-decimal
+      # agentic limit -> 2849 GB aggregate at TP8 (356 GB/rank).
+    - dram-utilization: 0.95
+      search-space:
+      # DSpark speculative decoding, draft Inferact/Kimi-K3-DSpark,
+      # num_speculative_tokens=7. Throughput points simulate acceptance at the
+      # committed golden AL 3.78 (golden_al_distribution/kimik3_dspark.yaml,
+      # kimi-k3 / thinking_on / 7) per docs/PR_REVIEW_CHECKLIST.md rule 10; the
+      # eval point uses real target verification instead.
+      #
+      # TP=8 only (~195 GB/GPU of 288 GB HBM). conc mirrors the non-MTP ladder so
+      # the two compare directly; conc 32 is omitted because the resident draft
+      # already cuts GPU KV from 2,204,913 to 1,723,308 tokens (2.10x -> 1.64x
+      # for a 1M-token request) and --max-num-seqs is capped at 32 under spec
+      # decoding.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 4, 8, 16] }
+
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: deepseek-ai/DeepSeek-R1-0528
