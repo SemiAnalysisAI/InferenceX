@@ -5148,4 +5148,4 @@
     - "Aggregate TP8 (two GB300 4-GPU nodes) swept at concurrency 1, 2, 4, 8, 12, 16 both without KV offload and with native CPU KV offload (SimpleCPUOffloadConnector, 120 GiB/GPU host DRAM); agg workers use gpu-memory-utilization 0.95."
     - "Disaggregated TP8 prefill + TP8 decode (4 nodes) with P->D KV transfer over NixlConnector, swept at concurrency 1, 2, 4, 8, 12, 16."
     - "DSpark speculative decoding (new spec-decoding backend; draft model Inferact/Kimi-K3-DSpark, synthetic acceptance length 3.78) on aggregate TP8, swept at concurrency 1, 2, 4, 8 both without and with native CPU KV offload."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2377
