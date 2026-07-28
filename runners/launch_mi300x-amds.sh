@@ -138,10 +138,9 @@ print(
 def describe(stage):
     func = getattr(stage, "func", stage)
     keywords = getattr(stage, "keywords", {})
-    return (
-        f"{getattr(func, '__module__', '')}."
-        f"{getattr(func, '__name__', repr(func))} {keywords}"
-    )
+    module_name = getattr(func, "__module__", "")
+    function_name = getattr(func, "__name__", repr(func))
+    return f"{module_name}.{function_name} {keywords}"
 
 supported = {}
 for mode, activation_dtype in (
