@@ -1744,6 +1744,15 @@ build_replay_cmd() {
     # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
+    local cache_warmup_duration="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-600}"
+
+    # Fast mode is an e2e-only feedback preset used before canonical one-hour
+    # sweeps. AIPerf already exposes both controls, so no AIPerf patch is
+    # required.
+    if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
+        duration=1200
+        cache_warmup_duration=300
+    fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
@@ -1776,9 +1785,9 @@ build_replay_cmd() {
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
     # After the normal t* snapshot warmup, continue those exact trajectories
-    # with one-token outputs and no idle delays for 10 minutes. Profiling begins
-    # only after those requests drain and resumes from the resulting live state.
-    REPLAY_CMD+=" --agentic-cache-warmup-duration 600"
+    # with one-token outputs and no idle delays. Profiling begins only after
+    # those requests drain and resumes from the resulting live state.
+    REPLAY_CMD+=" --agentic-cache-warmup-duration $cache_warmup_duration"
     # Give long-context warmup requests up to 30 minutes to drain before
     # declaring warmup failed. Recipes whose saturation arms carry a larger
     # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
