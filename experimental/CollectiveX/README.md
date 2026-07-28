@@ -13,9 +13,11 @@ responsibility. The full measurement methodology is in [docs/methodology.md](doc
 
 The workload uses packed placement and one pinned `fixed-profile` resource configuration per
 backend/topology; there is no tuning sweep. Combine is always BF16; dispatch precision is a swept
-dimension — a BF16 control plus an FP8 dispatch on every backend, caller-prequantized in `normal`
-mode (in `low-latency` the DeepEP and UCCL-EP kernels quantize internally from BF16; MoRI stays
-caller-prequantized). Coverage is uniform routing only. Cases run in one of two modes:
+dimension — a BF16 control plus, on every backend whose FP8 dispatch is supported upstream
+(DeepEP V2, MoRI, UCCL-EP), an FP8 dispatch, caller-prequantized in `normal` mode (in `low-latency`
+the DeepEP and UCCL-EP kernels quantize internally from BF16; MoRI stays caller-prequantized). NCCL
+EP is BF16-only this release, so it emits the control alone. Coverage is uniform routing only. Cases
+run in one of two modes:
 
 - `normal` uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only,
   unweighted rank-sum combine. It runs the full decode and prefill ladders.
@@ -27,7 +29,9 @@ caller-prequantized). Coverage is uniform routing only. Cases run in one of two 
   decode-phase-only, per-SKU-capability-gated addition whose runnable set differs from `normal`'s, so
   it is enabled from each SKU's `ll_backends` registry entry (currently DeepEP V2 EP8 on H100/H200/B200,
   MoRI EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only — UCCL's low-latency kernel
-  trips a warp-group assertion on AMD's CU count, so the AMD SKUs keep UCCL-EP normal mode without LL).
+  trips a warp-group assertion on AMD's CU count, so the AMD SKUs keep UCCL-EP normal mode without LL;
+  NCCL EP has no low-latency row on any SKU while its decode kernels carry
+  [NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)).
   Scoped single-node EP8 runs over the intra-node NVLink/XGMI
   low-latency path (no `/dev/gdrdrv` needed — validated on H200 with it absent); NVSHMEM/IBGDA on the
   wire is only a multi-node scale-out (EP16) concern.
@@ -68,6 +72,7 @@ scale-up domain.
 | DeepEP V2 | `normal` mode is PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out. FP8 dispatch via `use_fp8_dispatch` (blockwise e4m3fn) alongside BF16. `low-latency` mode is the legacy `deep_ep.Buffer` IBGDA decode kernels (per-expert padded layout, weighted combine, `use_fp8` e4m3fn), decode/EP8 only |
 | MoRI | `normal` mode uses the direct `IntraNode` kernel for scale-up EP8 on every CDNA SKU and pins `InterNodeV1` for EP16 over 2x8 XGMI + RDMA. `low-latency` mode selects the `IntraNodeLL` decode kernel (single-call, pure-intranode, same compact layout and unweighted combine as `IntraNode`), decode/EP8 only. FP8 dispatch is caller-prequantized (per-SKU e4m3fnuz on gfx942, e4m3fn on gfx950); combine stays BF16 (`quant_type=none`) alongside BF16 dispatch |
 | UCCL-EP | [UCCL](https://github.com/uccl-project/uccl) EP: a drop-in, API-identical DeepEP replacement whose CPU proxies issue GPUDirect RDMA over plain `libibverbs` (no NVSHMEM/IBGDA), with software message ordering, atomics, and flow control; scale-up is single-node `cudaIpc` over NVLink/XGMI (never MNNVL). `normal` mode is the legacy `Buffer` `dispatch`/`combine` (unweighted rank-sum); `low-latency` reuses the legacy `low_latency_dispatch`/`low_latency_combine` decode kernels (weighted combine), decode/EP8 only. FP8 dispatch is caller-prequantized in `normal` mode (blockwise e4m3fn, per-SKU e4m3fnuz on gfx942); in `low-latency` mode the caller sends BF16 and the decode kernel quantizes to e4m3 internally (`use_fp8`). Combine is BF16. Runs on NVIDIA and AMD (H100/H200/B200 + MI300X/MI325X/MI355X), EP8 scale-up. Cross-node EP16 is functional (the internode RDMA path connects and the light case passes correctness) but its CPU-proxy throughput overruns the standardized per-case wall-clock budget on heavy token counts, so EP16 is an unsupported coverage row for now |
+| NCCL EP | [NCCL EP](https://github.com/NVIDIA/nccl/tree/master/contrib/nccl_ep): NVIDIA's native MoE dispatch/combine on the NCCL Device API — LSA (NVLink load/store) intra-node, GIN (GPU-Initiated Networking) inter-node — driven through the `nccl4py` bindings. `normal` mode selects the `HIGH_THROUGHPUT` algorithm (FLAT `[N, hidden]` receive, unweighted rank-sum combine); the `LOW_LATENCY` algorithm is implemented in the adapter but has no enabled cell (see the `ll_backends` note above). BF16 only: NCCL EP's FP8 machinery exists upstream but its RELEASE.md lists it unsupported/untested, so no FP8 case is emitted. NVIDIA-only and CUDA 13 only. EP8 scale-up on H100/H200/B200/B300 plus EP8 and EP16 on GB200/GB300, where EP16 stays inside the MNNVL scale-up domain. x86 EP16 scale-out is an unsupported coverage row: the cross-node GIN path faults inside `nccl_ep.cc` identically on RoCE and IB across four SKUs, a GDAKI limit rather than a fabric-selection one |
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.
