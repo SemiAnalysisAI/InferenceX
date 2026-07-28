@@ -5130,6 +5130,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2345
   
 - config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1-tep4
+  description:
+    - "Update the non-speculative MiniMax-M3 NVFP4 B300 8k1k disaggregated vLLM image from nightly-2dfaae752b4db0d43cfc0715c780e33be030d0f1 to nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
+    - "Remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm from the 1P1D TP1-prefill/TP8-decode recipe; retain the existing FP8 indexer KV cache configuration"
+    - "Add a one-node 4P1D TP1-prefill/TEP4-decode concurrency-4096 point on the refreshed image while preserving the legacy 4P2D DEP2-prefill/TEP4-decode point unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2310
+  
+- config-keys:
     - kimik3-fp4-gb300-dynamo-vllm-agentic-agg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-disagg
   description:
