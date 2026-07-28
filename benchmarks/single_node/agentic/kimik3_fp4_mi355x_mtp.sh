@@ -2,42 +2,26 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K3 MXFP4 on MI355X (gfx950) using vLLM
-# WITH DSpark speculative decoding (draft: Inferact/Kimi-K3-DSpark).
+# Agentic trace replay for Kimi-K3 MXFP4 on MI355X (gfx950), vLLM, with DSpark
+# speculative decoding (draft: Inferact/Kimi-K3-DSpark).
 #
-# Upstream recipe: https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=mi355x
-# (vllm-project/recipes#684, models/moonshotai/Kimi-K3.yaml ->
-# hardware_overrides.amd), which lists mi355x as verified. The env/flags below
-# are that AMD block; the AMD block replaces the base --load-format
-# fastsafetensors with auto.
+# Recipe: https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=mi355x
+# (vllm-project/recipes#684 -> hardware_overrides.amd). Deviations, all measured:
+#   - gpu-memory-utilization 0.90, not 0.95: only ~271 GiB is free at the
+#     worker's startup check, below the 273.59 GiB that 0.95 demands.
+#   - --enable-prefix-caching is required; K3 is hybrid (69 KDA + 24 gated MLA)
+#     and vLLM asserts tokens_per_block % tokens_per_hash without it.
+#   - speculative-config drops "attention_backend": "FLASHINFER_MLA" -- absent on
+#     ROCm, rejected by platforms/rocm.py. Server runs TRITON_ATTN.
+#   - lazy_offload is a JSON boolean; bool("false") is True in Python.
 #
-# K3 is a 2.8T-param natively-multimodal MoE (896 experts, 16 routed + 2 shared)
-# built on Kimi Delta Attention (KDA), gated MLA and Attention Residuals. vLLM
-# serves it through a dedicated ROCm path (vllm/models/kimi_k3/amd/*) selected by
-# current_platform.is_rocm(); its KDA and attn_res triton kernels are validated
-# on gfx950. The CUDA-only FlashKDA extension is gated behind
-# VLLM_GPU_LANG=CUDA upstream and is neither built nor used here.
+# Acceptance follows docs/PR_REVIEW_CHECKLIST.md rule 10: throughput points
+# simulate acceptance at the committed golden AL from
+# golden_al_distribution/kimik3_dspark.yaml, EVAL_ONLY verifies for real.
 #
-# TP=8 only: the MXFP4 checkpoint is ~1.56 TB, i.e. ~195 GB/GPU across 8 GPUs of
-# MI355X's 288 GB HBM. TP=4 would need ~390 GB/GPU and cannot load.
-#
-# ACCEPTANCE: per docs/PR_REVIEW_CHECKLIST.md rule 10, agentic spec-decode
-# throughput points must simulate acceptance at the committed golden AL from
-# golden_al_distribution/, not measure it. This recipe pins vLLM synthetic
-# rejection sampling to the kimi-k3 thinking_on AL for num_speculative_tokens=7
-# (golden_al_distribution/kimik3_dspark.yaml). The EVAL_ONLY accuracy run uses
-# real target verification instead: synthetic acceptance bypasses verification
-# and would zero the eval score.
-#
-# The upstream recipe additionally pins "attention_backend": "FLASHINFER_MLA",
-# which CANNOT be used on ROCm -- flashinfer is absent from the image and
-# platforms/rocm.py rejects the backend ("Selected backend
-# AttentionBackendEnum.FLASHINFER_MLA is not valid ... Reason: ['ImportError']").
-# Verified by A/B on 8x MI355X: with the pin the draft fails at construction,
-# without it the server reaches ready and generates. The pin is therefore
-# dropped and the server runs TRITON_ATTN, as the MiniMax-M3 ROCm MTP recipe
-# does. Note there is no vllm/models/kimi_k3/amd/dspark*.py, so on ROCm the
-# draft runs the NVIDIA implementation while the base model uses kimi_k3.amd.*.
+# TP=8 only: the ~1.56 TB checkpoint needs ~195 GB/GPU of 288 GB HBM.
+# On ROCm the draft runs the NVIDIA dspark_mla implementation (no amd/dspark*.py
+# exists); the base model still resolves to kimi_k3.amd.model.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE
@@ -108,30 +92,21 @@ NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-7}"
 # that file is ever recollected and this constant goes stale.
 GOLDEN_AL=3.78
 GOLDEN_AL_FILE="golden_al_distribution/kimik3_dspark.yaml"
-# Drift guard: hard-fail if the committed golden AL no longer matches what this
-# recipe pins, or if it cannot be parsed. Fail closed on purpose -- silently
-# falling back to a stale constant is exactly the failure this is here to stop.
-# (Note for maintainers: "int" is a reserved word in awk, hence in_th.)
-if [ -f "$GOLDEN_AL_FILE" ]; then
-    FILE_AL=$(awk -v k="$NUM_SPEC_TOKENS" '
-        /^kimi-k3:/            { in_model = 1; next }
-        /^[^[:space:]#]/       { in_model = 0 }
-        in_model && /thinking_on:/ { in_th = 1; next }
-        in_th && $1 == k":"    { print $2; exit }
-    ' "$GOLDEN_AL_FILE")
-    if [ -z "$FILE_AL" ]; then
-        echo "Golden AL guard: could not read an AL for num_speculative_tokens=$NUM_SPEC_TOKENS from $GOLDEN_AL_FILE" >&2
-        exit 1
-    fi
-    if [ "$FILE_AL" != "$GOLDEN_AL" ]; then
-        echo "Golden AL drift: $GOLDEN_AL_FILE says $FILE_AL for num_speculative_tokens=$NUM_SPEC_TOKENS, recipe pins $GOLDEN_AL" >&2
-        exit 1
-    fi
-    echo "Golden AL check OK: num_speculative_tokens=$NUM_SPEC_TOKENS -> AL $FILE_AL"
-else
-    echo "Golden AL guard: $GOLDEN_AL_FILE is missing" >&2
+# Fail closed if the pinned AL does not match the committed curve: a missing,
+# unparseable or drifted value all collapse to one mismatch check, so a
+# recollected curve can never leave a stale constant in place.
+# ("int" is reserved in awk, hence in_th.)
+FILE_AL=$(awk -v k="$NUM_SPEC_TOKENS" '
+    /^kimi-k3:/                { in_model = 1; next }
+    /^[^[:space:]#]/           { in_model = 0 }
+    in_model && /thinking_on:/ { in_th = 1; next }
+    in_th && $1 == k":"        { print $2; exit }
+' "$GOLDEN_AL_FILE" 2>/dev/null)
+if [ "$FILE_AL" != "$GOLDEN_AL" ]; then
+    echo "Golden AL mismatch: $GOLDEN_AL_FILE gives '${FILE_AL:-<unreadable>}' for num_speculative_tokens=$NUM_SPEC_TOKENS, recipe pins $GOLDEN_AL" >&2
     exit 1
 fi
+echo "Golden AL OK: num_speculative_tokens=$NUM_SPEC_TOKENS -> $FILE_AL"
 if [[ "$DRAFT_MODEL" != /* ]]; then hf download "$DRAFT_MODEL"; fi
 
 # Upstream caps --max-num-seqs at 32 under spec decoding (drafting needs extra
