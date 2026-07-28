@@ -43,7 +43,8 @@ VLLM_CMD=(
     --trust-remote-code
     --load-format "$LOAD_FORMAT"
     --moe-backend "$VLLM_MOE_BACKEND"
-    --gpu-memory-utilization 0.95
+    --gpu-memory-utilization "$VLLM_GPU_MEMORY_UTILIZATION"
+    --max-num-batched-tokens "$VLLM_MAX_NUM_BATCHED_TOKENS"
     --enable-prefix-caching
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
