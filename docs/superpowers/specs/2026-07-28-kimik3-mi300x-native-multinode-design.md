@@ -25,12 +25,17 @@ changes to vLLM itself are outside this design.
 - The existing `launch_mi300x-amds.sh` path is single-node and conflates total
   tensor parallelism with GPUs requested per node.
 - `/raid` is node-local. A model cached on one node is not visible on another.
-- The controller currently holds real jobs with
-  `SystemComment=slurm_cred_create failure, holding job`. That infrastructure
-  issue is an external execution gate, not something the benchmark code should
-  work around. Local implementation, CPU/static tests, and a draft PR can
-  proceed while it is broken; no change is runtime-ready or merge-ready until
-  the cluster gates pass.
+- Slurm credential creation, a two-node allocation, and a cross-node `srun` are
+  now verified working on this cluster. The earlier
+  `slurm_cred_create failure, holding job` hold is resolved and is no longer an
+  execution gate.
+- `/home` resolves to the nearly-full `/nvme_home` NFS export and is forbidden
+  for the 30.8 GB container image. `gharunner` also cannot create `/raid/squash`.
+  Every allocated node therefore imports and validates its own squash below
+  `/raid/hf-hub-cache/inferencex/squash`, which the runner user can write.
+- The target `moonshotai/Kimi-K3` weights are absent from the MI300X nodes
+  today. Staging them is a later, explicit gate; the launcher fails closed
+  rather than downloading them inside a timed benchmark job.
 - The current Kimi K3 AMD references are InferenceX PRs #2351 (plain MI355X)
   and #2367 (DSpark MI355X). PR #2353 provides a native multi-node Kimi K3
   lifecycle on H200. The MI300X implementation reuses their proven contracts
@@ -177,12 +182,15 @@ deliberately narrow first contract.
 
 The server entrypoint reuses only the architecture-neutral parts of the Kimi K3
 AMD contract already exercised by #2351: the ROCm Kimi K3 image, fast
-safetensors, and required parser/serving flags. Before model staging, a
-single-GPU gfx942 preflight tests both the AITER a16w4 baseline and the opt-in
-a8w4 path. Only the passing mode is frozen into the PR A configuration.
-Hardware-specific AITER mode, memory utilization, and batching values remain
-explicit inputs; the implementation must not copy gfx950-only tuning from
-MI355X without evidence.
+safetensors, and required parser/serving flags.
+
+`AITER_SITUV2_A8W4` stays a runtime input rather than a frozen configuration
+value. The matrix does not set it; the entrypoint accepts only `0` or `1` when
+the caller sets it and otherwise preserves the image default. It becomes a
+fixed value only after the parent task's exact-shape gfx942 comparison selects
+a mode. Memory utilization and batching values remain explicit inputs on the
+same grounds; the implementation must not copy gfx950-only tuning from MI355X
+without evidence.
 
 ## Slurm and process lifecycle
 
@@ -234,8 +242,14 @@ Formal benchmark runs are offline with respect to model weights:
 
 - Target: `moonshotai/Kimi-K3`
 - DSpark draft: `Inferact/Kimi-K3-DSpark`
-- Host cache: `/raid/hf-hub-cache`
-- Container cache: node-local, validated by `unsquashfs -l`
+- Host model cache: `/raid/hf-hub-cache` (node-local)
+- Container image: `/raid/hf-hub-cache/inferencex/squash`, imported
+  independently per node and validated by `unsquashfs -s`
+
+The image is never staged under `/home`, `/nvme_home`, or `/raid/squash`: the
+first two are the same nearly-full NFS export and the third is not creatable by
+`gharunner`. Because `/raid` is node-local, the 30.8 GB import happens on every
+allocated node rather than once on shared storage.
 
 For the first canary, stage both selected nodes and pin the allocation to that
 pair. Before enabling the CI sweep, stage the target on every eligible MI300X
@@ -244,10 +258,10 @@ runner node; stage the draft on the same pool before PR B.
 Staging is resumable and serialized with a node-local lock. Each node must pass:
 
 ```text
-at least 2 TB free before target staging
-target snapshot present and complete
+exactly 8 gfx942 GPU agents
+target snapshot present, revision-pinned, and complete against its weight index
 draft snapshot present for DSpark
-container squash readable
+container squash present and valid
 ```
 
 The production launcher fails closed when a required cache is absent. It does
@@ -284,19 +298,18 @@ not begin a 1.5 TB download inside a timed benchmark job.
 
 ### Cluster gates
 
-1. A real one-node Slurm `hostname` job completes after the controller
-   credential repair.
-2. A one-GPU container preflight reports gfx942, imports the AMD Kimi K3
+1. A one-GPU container preflight reports gfx942, imports the AMD Kimi K3
    implementation, and passes a Kimi K3-shaped AITER MoE smoke test. It records
-   whether a16w4 or a8w4 is valid; failure of both modes becomes an explicit
-   vLLM/AITER dependency rather than an InferenceX launcher workaround.
-3. A two-node diagnostic prints two unique hostnames and eight visible GPUs per
-   node.
-4. Both nodes pass model and container preflight.
-5. Plain vLLM reaches health and serves one direct request.
-6. AgentX concurrency 1 produces a valid result and no residual Slurm job.
-7. The four-job bounded plain sweep is green.
-8. PR B repeats gates 5–7 with DSpark and runs the required eval path.
+   whether a16w4 or a8w4 is valid, which is what finally fixes
+   `AITER_SITUV2_A8W4`; failure of both modes becomes an explicit vLLM/AITER
+   dependency rather than an InferenceX launcher workaround.
+2. The target snapshot is staged on the selected pair without touching `/home`.
+3. Both nodes pass model and container preflight, reporting one shared revision
+   and a valid 30.8 GB squash each.
+4. Plain vLLM reaches health and serves one direct request.
+5. AgentX concurrency 1 produces a valid result and no residual Slurm job.
+6. The four-job bounded plain sweep is green.
+7. PR B repeats gates 4–6 with DSpark and runs the required eval path.
 
 ## Non-goals
 

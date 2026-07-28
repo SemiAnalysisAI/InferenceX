@@ -25,11 +25,14 @@ MI325X 以及 vLLM 核心修改均不在范围内。
 - 现有 `launch_mi300x-amds.sh` 是单节点路径，并且把总张量并行度和
   每节点 GPU 请求数混为同一个值。
 - `/raid` 是节点本地存储；一个节点上的模型缓存无法被另一个节点看到。
-- controller 当前以
-  `SystemComment=slurm_cred_create failure, holding job` 挂起真实作业。
-  这是外部执行门槛，基准测试代码不应绕过它。在该问题修复前，可以继续
-  本地实现、CPU/静态测试并提交 draft PR；只有集群门槛通过后，改动才能
-  被视为 runtime-ready 或 merge-ready。
+- Slurm credential 创建、两节点 allocation 和跨节点 `srun` 已经验证可用。
+  此前的 `slurm_cred_create failure, holding job` 挂起问题已解决，不再是
+  执行门槛。
+- `/home` 解析到几乎写满的 `/nvme_home` NFS 导出，禁止用于 30.8 GB 容器
+  镜像；`gharunner` 也无权创建 `/raid/squash`。因此每个分配到的节点都在
+  自己可写的 `/raid/hf-hub-cache/inferencex/squash` 下导入并校验 squash。
+- 目标权重 `moonshotai/Kimi-K3` 目前尚未落到 MI300X 节点上。预置权重是
+  后续的显式门槛；launcher 直接失败，而不是在有时限的基准作业里下载。
 - 当前 AMD Kimi K3 参考实现为 InferenceX PR #2351（MI355X 普通
   vLLM）和 #2367（MI355X DSpark）。PR #2353 提供 H200 上的 Kimi K3
   原生多节点生命周期。MI300X 实现复用这些已验证的契约，但不依赖
@@ -170,10 +173,13 @@ kimik3-fp4-mi300x-vllm-agentic:
 
 服务入口只复用 #2351 已经实际运行过、且与架构无关的 Kimi K3 AMD
 契约：ROCm Kimi K3 镜像、fast safetensors 以及必要的 parser/serving
-参数。在 staging 模型之前，先用单 GPU gfx942 preflight 分别测试 AITER
-a16w4 基线和显式启用的 a8w4 路径，只把通过的模式固化到 PR A 配置中。
-AITER 模式、显存利用率和 batching 数值都保持为显式输入；没有证据时，
-实现不得照搬 MI355X 上只适用于 gfx950 的调优结果。
+参数。
+
+`AITER_SITUV2_A8W4` 保持为运行时输入，而不是固化到配置里。矩阵不设置它；
+入口只在调用方显式设置时接受 `0` 或 `1`，否则保留镜像默认值。只有当上游
+任务用 gfx942 exact-shape 对比选出模式后，它才会被固定下来。显存利用率和
+batching 数值出于同样理由保持为显式输入；没有证据时，实现不得照搬
+MI355X 上只适用于 gfx950 的调优结果。
 
 ## Slurm 与进程生命周期
 
@@ -224,8 +230,14 @@ GPU 常驻 KV；host KV offload 是后续优化，而不是模型加载的替代
 
 - 目标模型：`moonshotai/Kimi-K3`
 - DSpark draft：`Inferact/Kimi-K3-DSpark`
-- 主机缓存：`/raid/hf-hub-cache`
-- 容器缓存：节点本地，并使用 `unsquashfs -l` 验证
+- 主机模型缓存：`/raid/hf-hub-cache`（节点本地）
+- 容器镜像：`/raid/hf-hub-cache/inferencex/squash`，逐节点独立导入，
+  并使用 `unsquashfs -s` 校验
+
+镜像不会放在 `/home`、`/nvme_home` 或 `/raid/squash`：前两者是同一个几乎
+写满的 NFS 导出，第三个 `gharunner` 无权创建。由于 `/raid` 是节点本地
+存储，30.8 GB 的导入在每个分配到的节点上各做一次，而不是在共享存储上
+只做一次。
 
 第一次 canary 在选定的两个节点完成 staging，并把 allocation 固定到
 该节点对。启用 CI sweep 前，将目标模型复制到所有符合条件的 MI300X
@@ -234,10 +246,10 @@ runner 节点；在 PR B 之前将 draft 同步到同一节点池。
 staging 支持续传，并使用节点本地锁串行化。每个节点必须满足：
 
 ```text
-目标模型 staging 前至少有 2 TB 可用空间
-目标 snapshot 存在且完整
+恰好 8 个 gfx942 GPU agent
+目标 snapshot 存在、revision 固定，并与其 weight index 完整对应
 DSpark 运行前 draft snapshot 存在
-容器 squash 可读
+容器 squash 存在且有效
 ```
 
 如果所需缓存缺失，production launcher 会直接失败，不会在有时限的
@@ -273,17 +285,18 @@ DSpark 运行前 draft snapshot 存在
 
 ### 集群门槛
 
-1. controller credential 修复后，真实单节点 `hostname` 作业成功。
-2. 单 GPU 容器 preflight 识别出 gfx942，成功导入 AMD Kimi K3 实现，
+1. 单 GPU 容器 preflight 识别出 gfx942，成功导入 AMD Kimi K3 实现，
    并通过一个 Kimi K3 shape 的 AITER MoE smoke test。它会记录 a16w4
-   或 a8w4 哪个模式有效；如果两者都失败，则明确记录为 vLLM/AITER
-   依赖，而不是在 InferenceX launcher 中偷偷绕过。
-3. 两节点诊断输出两个不同 hostname，并在每节点看到 8 张 GPU。
-4. 两个节点都通过模型与容器 preflight。
-5. 普通 vLLM health 成功，并能服务一个直接请求。
-6. AgentX 并发 1 生成有效结果，且无残留 Slurm job。
-7. 四个独立 job 的普通模式有界扫描全绿。
-8. PR B 使用 DSpark 重复门槛 5–7，并运行规定的评估路径。
+   或 a8w4 哪个模式有效，这也是最终固定 `AITER_SITUV2_A8W4` 的依据；
+   如果两者都失败，则明确记录为 vLLM/AITER 依赖，而不是在 InferenceX
+   launcher 中偷偷绕过。
+2. 在不使用 `/home` 的前提下，把目标 snapshot 预置到选定的节点对上。
+3. 两个节点都通过模型与容器 preflight，报告同一个 revision 和各自有效的
+   30.8 GB squash。
+4. 普通 vLLM health 成功，并能服务一个直接请求。
+5. AgentX 并发 1 生成有效结果，且无残留 Slurm job。
+6. 四个独立 job 的普通模式有界扫描全绿。
+7. PR B 使用 DSpark 重复门槛 4–6，并运行规定的评估路径。
 
 ## 非目标
 

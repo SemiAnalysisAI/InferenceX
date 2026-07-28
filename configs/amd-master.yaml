@@ -2247,6 +2247,48 @@ minimaxm3-fp4-mi355x-vllm-agentic:
       search-space:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16] }
 
+# Kimi-K3 MXFP4 aggregated AgentX across two 8xMI300X nodes via plain vLLM.
+# The ~1.5 TB checkpoint does not leave safe runtime headroom on one node's
+# aggregate HBM, so the first slice spans two nodes with TP8 inside each node
+# and PP2 across the node boundary; a cross-node TP16 would put a collective on
+# every tensor-parallel op. EP1 and no DP attention keep this bring-up as close
+# to the proven single-node vLLM path as possible.
+#
+# NATIVE_MULTINODE=1 opts this config into
+# runners/launch_mi300x-amds-native-multinode.sh; every other MI300X config
+# keeps the existing single-node launcher untouched. AITER_SITUV2_A8W4 is
+# deliberately absent: gfx942 has no committed Kimi-K3 tuned MoE tables, so the
+# a8w4 switch stays an operator input until an exact-shape test picks a mode.
+kimik3-fp4-mi300x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi300x-amds
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        kv-offloading: none
+        conc-list: [1, 2, 4, 8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          pp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "NATIVE_MULTINODE=1"
+        decode:
+          num-worker: 0
+          tp: 8
+          pp: 2
+          ep: 1
+          dp-attn: false
+
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
   model: deepseek-ai/DeepSeek-V4-Pro
