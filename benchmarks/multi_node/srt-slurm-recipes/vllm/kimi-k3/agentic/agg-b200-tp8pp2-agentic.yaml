@@ -102,6 +102,14 @@ backend:
       served-model-name: "moonshotai/Kimi-K3"
       tensor-parallel-size: 8
       pipeline-parallel-size: 2
+      # Required by vLLM's config validation when SimpleCPUOffloadConnector
+      # is combined with PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True:
+      # torch's VMM allocator can remap KV virtual addresses under pinned/
+      # registered connector memory, so KV allocations must route through
+      # CuMemAllocator's pool (where expandable_segments is auto-disabled for
+      # KV while remaining active for transient activations). Same setting as
+      # the GB300 aggregate AgentX recipe.
+      enable-cumem-allocator: true
       trust-remote-code: true
       # SimpleCPUOffloadConnector (variant E): offload KV blocks to CPU DRAM.
       # enable_cross_layers_blocks false: with true, KV-cache init crashes on
