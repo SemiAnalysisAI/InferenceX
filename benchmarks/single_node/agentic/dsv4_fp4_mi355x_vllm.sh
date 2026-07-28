@@ -390,7 +390,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     MODE_ARGS+=(--prefill-schedule-interval 8)
     if [ "$IS_DEP8" = "true" ]; then
         MODE_ARGS+=(
-            --max-num-batched-tokens $((MNBT * 8))
+            --max-num-batched-tokens $((MNBT * 2))
             --long-prefill-token-threshold 16384
         )
     else
