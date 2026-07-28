@@ -268,7 +268,21 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
-    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
+    # Node denylist. mia1-p01-g14 chronically carries a stale ~32 GiB/GPU
+    # allocation from previous tenants, so vLLM refuses to start on it: only
+    # ~256 of 287.98 GiB is free and any gpu-memory-utilization above ~0.888
+    # trips "Free memory on device cuda:N ... is less than desired GPU memory
+    # utilization". It took out kimik3 cells in runs 30330955808 and
+    # 30331297999, and the same node did the same thing to the kimik2.7 -tune2
+    # cells. Override with SALLOC_EXCLUDE_NODES (comma-separated, empty to
+    # disable).
+    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-mia1-p01-g14}"
+    EXCLUDE_ARG=""
+    if [ -n "$SALLOC_EXCLUDE_NODES" ]; then
+        EXCLUDE_ARG="--exclude=$SALLOC_EXCLUDE_NODES"
+        echo "salloc excluding nodes: $SALLOC_EXCLUDE_NODES"
+    fi
+    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME" $EXCLUDE_ARG
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
