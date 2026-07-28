@@ -57,6 +57,28 @@ if ! docker ps >/dev/null 2>&1; then
   fi
 fi
 
+# Reap containers left behind by an earlier leg before touching the GPUs.
+#
+# A case container can outlive its GHA job: `docker run --rm` only removes the container when it
+# exits, so when Actions kills the runner's process tree (job cancellation, or the 350-minute
+# timeout firing on a wedged run) the daemon keeps it alive, and the workflow's non-root cleanup
+# step cannot remove a root-owned container. It then pins every GPU on the node, and the failure
+# it causes is nothing like a hang: hipIpcGetMemHandle starts returning "invalid argument" for any
+# job with >= 3 ranks while 1- and 2-rank jobs still pass. Observed twice - tw032 carried a wedged
+# MoRI low-latency leg for 5 days (4 red legs in one sweep, cleared by hand) and tw018 stranded one
+# the same way when a MoRI run hit the job timeout. A wedged low-latency leg is a known class, so
+# without this the next sweep re-poisons the node.
+#
+# The -tw fleets run one runner per node, so any container from the pinned image that predates this
+# launcher belongs to a finished leg. Should a pool ever put two runners on one node, this needs a
+# narrower predicate (match COLLX_CX_LABEL below and exclude the live execution id) instead.
+COLLX_CX_LABEL="collectivex.leg"
+for stray_id in $("${DOCKER[@]}" ps -q --filter "ancestor=$IMAGE" 2>/dev/null); do
+  stray_started="$("${DOCKER[@]}" inspect -f '{{.State.StartedAt}}' "$stray_id" 2>/dev/null)" || continue
+  collx_log "reaping stray container ${stray_id:0:12} from an earlier leg (started $stray_started)"
+  "${DOCKER[@]}" rm -f "$stray_id" >/dev/null 2>&1 || true
+done
+
 # The image is imported once per node and reused; pull only when absent.
 "${DOCKER[@]}" image inspect "$IMAGE" >/dev/null 2>&1 \
   || "${DOCKER[@]}" pull "$IMAGE" >&2 \
@@ -187,6 +209,7 @@ for ((ci = 0; ci < ncases; ci++)); do
   for attempt in 1 2; do
     collx_log "case $ci/$ncases attempt $attempt: docker torchrun --nproc-per-node=$NGPUS"
     if "${DOCKER[@]}" run --rm \
+        --label "$COLLX_CX_LABEL=${COLLECTIVEX_EXECUTION_ID:-manual}" \
         --device /dev/kfd --device /dev/dri \
         --group-add video --group-add render \
         --ipc host --shm-size 32g \
