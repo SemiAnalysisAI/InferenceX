@@ -9,11 +9,11 @@ set -x
 # (vllm-project/recipes#684 -> hardware_overrides.amd). Deviations, all measured:
 #   - gpu-memory-utilization 0.88, not 0.95: only ~271 GiB is free at the
 #     worker's startup check, below the 273.59 GiB that 0.95 demands.
-#   - --enable-prefix-caching is NOT passed, and must not be. Adding it is the
-#     single flag that turns this recipe from working into an 8-rank GPU page
-#     fault; see the serve block for the one-node A/B. Because vLLM defaults it
-#     off for this hybrid model, omitting it genuinely disables prefix caching,
-#     which makes these DSpark rows non-comparable to the non-MTP rows.
+#   - --enable-prefix-caching IS passed, because SimpleCPUOffloadConnector
+#     requires it and silently disables offload without it. KNOWN FAILING: with
+#     it, DSpark + KV offload takes an 8-rank GPU memory access fault after CUDA
+#     graph capture. Both offload backends fail the same way, so this recipe
+#     cannot currently produce DSpark rows with KV offload; see the serve block.
 #   - speculative-config drops "attention_backend": "FLASHINFER_MLA" -- absent on
 #     ROCm, rejected by platforms/rocm.py; replaced with TRITON_MLA, not dropped.
 #   - lazy_offload is a JSON boolean; bool("false") is True in Python.
@@ -341,34 +341,33 @@ VLLM_CMD=(
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --language-model-only
-    # --enable-prefix-caching is deliberately NOT passed on this recipe, and that
-    # is the single flag that makes DSpark + DRAM KV offload work on gfx950.
+    # --enable-prefix-caching IS required here, and it is required BY the offload
+    # connector, not by the model.
     #
-    # Measured as a two-arm A/B on one node, same weights, one flag apart:
-    #   without it: enable_prefix_caching=False, GPU KV 1,525,407 tokens
-    #               -> server ready, coherent generation, server alive (PASS)
-    #   with it:    enable_prefix_caching=True,  GPU KV 1,523,093 tokens
-    #               -> 8x "Memory access fault by GPU node-N on address 0x7...
-    #                  Reason: Unknown", engine dead in _initialize_kv_caches
-    # That is the same fault that killed every DSpark sweep row: runs/30343017203,
-    # /30344670346, /30349509927, /30361474693 (3 nodes), /30367040157.
+    # SimpleCPUOffloadConnector refuses to run without it and silently turns
+    # itself off:
+    #   simple_cpu_offload_connector.py:83] Detected prefix caching disabled,
+    #   disabling CPU offload since it requires prefix caching.
+    # So dropping this flag does NOT give "DSpark with DRAM offload" -- it gives
+    # DSpark with no offload at all, while the sweep config still declares
+    # kv-offloading: dram. That is a silent mis-measurement and was briefly
+    # committed here (2a3c0d134) before being caught; do not reintroduce it.
     #
-    # It needs all three of prefix caching + SimpleCPUOffloadConnector + DSpark.
-    # Any two are fine: the non-MTP twin runs prefix caching WITH the same offload
-    # connector and completes warmup and profiling; DSpark runs with the connector
-    # and no prefix caching (above); and the upstream config with prefix caching
-    # but no connector also serves. Likely mechanism is
-    # resolve_kv_cache_block_sizes: prefix caching changes the hash block size, the
-    # connector indexes host-side blocks by that geometry, and DSpark's extra draft
-    # slots push the addressing out of range -- consistent with the faulting
-    # addresses being host-range with UTCL2 client TCP.
+    # With the flag, the connector activates
+    #   (simple_cpu_offload_connector.py:89] role=WORKER, per_rank=220.00 GB,
+    #    world_size=8, mode=lazy)
+    # and the run dies with 8x "Memory access fault by GPU node-N on address
+    # 0x7..., Reason: Unknown" just after CUDA graph capture completes. So prefix
+    # caching is not the defect -- it is the switch that activates the offload
+    # path, and the defect is KV offload x DSpark.
     #
-    # COST, and it is not small: vLLM defaults enable_prefix_caching to False for
-    # this hybrid model (69 KDA + 24 gated MLA), so omitting the flag really does
-    # turn prefix caching OFF -- it is not a no-op. Agentic replay exists to
-    # exercise shared prefixes (measured theoretical prefix cache hit 98.63%), so
-    # these DSpark rows re-prefill instead of reusing. They are therefore NOT
-    # comparable to the non-MTP rows, which keep prefix caching on.
+    # That is measured against BOTH offload implementations, so it is not a bug in
+    # one connector: vllm-simple (SimpleCPUOffloadConnector) and vllm-native
+    # (OffloadingConnector / CPUOffloadingSpec, 2234 GiB) both reach capture 100%
+    # and then take the same fault. The non-MTP twin runs either connector with
+    # prefix caching and completes warmup and profiling, and the upstream config
+    # runs prefix caching with no connector, so DSpark is the differentiator.
+    --enable-prefix-caching
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
