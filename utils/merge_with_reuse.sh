@@ -110,8 +110,14 @@ case "$SELECTED_SWEEP_LABEL" in
         die "PR #${PR} must use a full-sweep label for artifact reuse"
         ;;
 esac
-[ "$(jq '[.labels[].name | select(. == "evals-only")] | length' <<<"$PR_INFO")" -eq 0 ] \
-    || die "PR #${PR} uses evals-only, which is not eligible for artifact reuse"
+REUSE_INCOMPATIBLE_LABELS="$(
+    jq -r '
+        [.labels[].name | select(. == "evals-only" or . == "agentx-fast")] |
+        join(", ")
+    ' <<<"$PR_INFO"
+)"
+[ -z "$REUSE_INCOMPATIBLE_LABELS" ] \
+    || die "PR #${PR} uses ${REUSE_INCOMPATIBLE_LABELS}, which is not eligible for artifact reuse"
 
 # Fail early unless a successful run with reusable artifacts exists on a
 # current PR commit. This excludes reuse-gate-only success runs.
