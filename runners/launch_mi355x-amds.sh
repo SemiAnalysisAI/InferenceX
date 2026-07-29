@@ -276,7 +276,7 @@ else
     # 30331297999, and the same node did the same thing to the kimik2.7 -tune2
     # cells. Override with SALLOC_EXCLUDE_NODES (comma-separated, empty to
     # disable).
-    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-mia1-p01-g14,mia1-p01-g15,mia1-p01-g18}"
+    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-mia1-p01-g11,mia1-p01-g14,mia1-p01-g15,mia1-p01-g18}"
     EXCLUDE_ARG=""
     if [ -n "$SALLOC_EXCLUDE_NODES" ]; then
         EXCLUDE_ARG="--exclude=$SALLOC_EXCLUDE_NODES"
