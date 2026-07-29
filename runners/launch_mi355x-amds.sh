@@ -274,9 +274,16 @@ else
     # trips "Free memory on device cuda:N ... is less than desired GPU memory
     # utilization". It took out kimik3 cells in runs 30330955808 and
     # 30331297999, and the same node did the same thing to the kimik2.7 -tune2
-    # cells. Override with SALLOC_EXCLUDE_NODES (comma-separated, empty to
-    # disable).
-    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-mia1-p01-g11,mia1-p01-g14,mia1-p01-g15,mia1-p01-g18}"
+    # cells.
+    #
+    # The denylist is OFF by default. It did not work: after excluding
+    # g11/g14/g15/g18, run 30412966635 still lost all three cells -- to g19
+    # (hipErrorIllegalAddress), g17 (warmup_failure) and g16 (srun node
+    # failure), none of them on the list. Free memory on these nodes varies
+    # hour to hour, so a static list mostly just shrinks an already-contended
+    # pool and lengthens queue time. Set SALLOC_EXCLUDE_NODES to a
+    # comma-separated list to re-enable it for a specific run.
+    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-}"
     EXCLUDE_ARG=""
     if [ -n "$SALLOC_EXCLUDE_NODES" ]; then
         EXCLUDE_ARG="--exclude=$SALLOC_EXCLUDE_NODES"
