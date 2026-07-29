@@ -27,7 +27,10 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 | DeepSeek-V4-Pro 1.6T（`dsv4`） | 智能体编码，非 MTP | 智能体编码，MTP |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 智能体编码，非 MTP | 智能体编码，MTP |
 | MiniMax-M3（`minimaxm3`） | 智能体编码，非 MTP | 智能体编码，MTP |
+| GLM-5.2（`glm5.2`） | 智能体编码，非 MTP | 智能体编码，MTP |
 | Kimi-K3（`kimik3`） | 智能体编码，非 DSpark —— 自第 0 天（day 0）起即弃用 | 智能体编码，DSpark |
+
+上表中唯有 GLM-5.2 的投机解码分支尚不存在：`glm5.2-fp4-b300-sglang-agentic` 目前仅以非 MTP 方式运行，且 `golden_al_distribution/` 中尚无已提交的 GLM-5.2 曲线。其 MTP 分支及对应的黄金 AL 曲线（可用现有的 [`glm52_fp4_b300_vllm.sh`](benchmarks/single_node/speedbench/glm52_fp4_b300_vllm.sh) SPEED-Bench 采集脚本收集）必须先行落地，之后才能停用非 MTP 分支，以确保 GLM-5.2 任何时候都不会出现没有可发布智能体编码分支的情况。
 
 **今后我们不再以 A/B 对照的方式基准测试「非投机解码 vs 投机解码」。**当初保留非投机解码分支，是把它当作中立基线：那时接受长度（AL）完全取决于提交方草稿头（draft head）的实际水平，导致各家投机解码数据之间无法横向比较。这一问题现已解决：[`golden_al_distribution/`](golden_al_distribution/) 为每个模型、thinking 模式与草稿长度各提交了一条黄金 AL 曲线，均在 SPEED-Bench `coding` 类别上测得；AgentX 通过合成接受（synthetic acceptance）将所有提交锁定到该曲线（vLLM 用 `synthetic_acceptance_length`，SGLang 用 `SGLANG_SIMULATE_ACC_LEN`，TensorRT-LLM 用 `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`，等等）。既然已有公平且与引擎无关的接受目标，投机解码结果本身即可直接横向比较，单独保留一条非投机解码赛道已属冗余。因此，智能体编码配方一律仅在启用投机解码的条件下运行与发布 —— 具体为 MTP、EAGLE/EAGLE3、DSpark，或该模型自带的任何草稿方法 —— 非投机解码分支既不运行也不发布。新模型自第 0 天起即按此方式接入，Kimi-K3 即为一例。
 
@@ -50,7 +53,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 |---|---|---|---|---|
 | Qwen3.8 2.4T | `qwen3.8` | 待定 | 智能体编码 | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（仅 DSpark） | 智能体编码非 DSpark 分支（自第 0 天起弃用） |
-| GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码 | |
+| GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码（自 2026-08-03 起仅 MTP） | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 单轮 8k1k（至 2026-08-03）、智能体编码（自 2026-08-03 起仅 MTP） | 单轮 1k1k |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 单轮 8k1k、智能体编码（自 2026-08-03 起仅 MTP） | 单轮 1k1k |
 | GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)）；GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | —（2026-07-18 退役，[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） | 单轮 1k1k、单轮 1k8k（仅 GLM-5）、单轮 8k1k |
