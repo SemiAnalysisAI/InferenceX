@@ -3,16 +3,17 @@ set -euo pipefail
 set -x
 
 # MiniMax-M3 NVFP4 B300 AgentX with EAGLE3-GQA and synthetic acceptance.
+# DRAM KV offload uses vLLM's SimpleCPUOffloadConnector in lazy mode.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 export EVAL_FRAMEWORK="lm-eval"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
-SYNTHETIC_ACCEPT_LEN=2.78
+SYNTHETIC_ACCEPT_LEN=2.83
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -37,9 +38,14 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
-if agentic_kv_offload_enabled; then
-    echo "Error: this submission contains GPU-resident KV points only" >&2
-    exit 1
+OFFLOAD_ARGS=()
+if require_agentic_kv_offload_backend vllm-simple; then
+    CPU_OFFLOAD_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+    OFFLOAD_CONFIG=$(printf \
+        '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use":%d,"lazy_offload":true}}' \
+        "$CPU_OFFLOAD_BYTES")
+    OFFLOAD_ARGS=(--kv-transfer-config "$OFFLOAD_CONFIG")
 fi
 
 export PYTHONNOUSERSITE=1
@@ -95,6 +101,7 @@ VLLM_CMD=(
     --stream-interval 20
     --trust-remote-code
     --speculative-config "$SPEC_CONFIG"
+    "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
