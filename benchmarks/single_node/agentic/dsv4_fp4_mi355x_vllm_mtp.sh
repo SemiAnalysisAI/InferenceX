@@ -156,6 +156,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         git clone https://github.com/kvcache-ai/Mooncake.git
         cd Mooncake
+        git checkout ac5ec1dce9ec2619a6f5f96c6f63cbbfb883d999
         bash dependencies.sh
         mkdir build
         cd build
