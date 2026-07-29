@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-gb200-5p2d-dep4-dep8-fp8-8k1k"
+name: "minimax-m3-vllm-disagg-gb200-5p1d-dep4-dep16-fp8-8k1k"
 
 # 5P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 2D DEP8 decode (TP1 DP8 EP, 8 GPU/worker = 2 nodes each).
 # GB200 has 4 GPUs/node.
@@ -6,13 +6,13 @@ name: "minimax-m3-vllm-disagg-gb200-5p2d-dep4-dep8-fp8-8k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+  container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: "fp8"
 
 
 dynamo:
   install: true
-  version: 1.3.0.dev20260614
+  version: 1.3.0.dev20260710
 
 health_check:
   max_attempts: 720
@@ -31,9 +31,9 @@ resources:
   prefill_nodes: 5
   decode_nodes: 4
   prefill_workers: 5
-  decode_workers: 2
+  decode_workers: 1
   gpus_per_prefill: 4
-  gpus_per_decode: 8
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -84,7 +84,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true

@@ -66,9 +66,17 @@ jobs:
               ? [
                   `@${requestedBy} staged run ${runId}: ${chartUrl}`,
                   '',
-                  `This shared staging slot remains available until the next \`/stage-results\` request. [Staging workflow](${appRunUrl})`,
+                  `This run remains available across future \`/stage-results\` requests. Staging the same run ID again updates its staged data. [Staging workflow](${appRunUrl})`,
+                  '',
+                  `@${requestedBy} 已将运行 ${runId} 发布到预发布环境：${chartUrl}`,
+                  '',
+                  `后续的 \`/stage-results\` 请求不会移除此运行；再次发布相同的运行 ID 会更新其预发布数据。[预发布工作流](${appRunUrl})`,
                 ].join('\n')
-              : `@${requestedBy} staging run ${runId} failed. [Inspect the staging workflow](${appRunUrl}).`;
+              : [
+                  `@${requestedBy} staging run ${runId} failed. [Inspect the staging workflow](${appRunUrl}).`,
+                  '',
+                  `@${requestedBy} 预发布运行 ${runId} 失败。[查看预发布工作流](${appRunUrl})。`,
+                ].join('\n');
 
             if (commentId) {
               await github.rest.issues.updateComment({

@@ -47,7 +47,6 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
