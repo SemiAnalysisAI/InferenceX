@@ -5403,3 +5403,11 @@
     - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update 2p1d-dep2-dep4 recipe YAML container to match"
     - "Enable minimax_m3_msa_decode_backend=cutlass in decode attention-config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2483
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the Kimi-K3 MXFP4 MI355X AgentX DSpark variant with Inferact/Kimi-K3-DSpark, seven draft tokens, probabilistic draft sampling, and TRITON_MLA on ROCm."
+    - "Pin throughput to the committed thinking-on golden acceptance length 3.84 with synthetic rejection sampling; eval-only runs retain real block verification."
+    - "Run TP8 with SimpleCPUOffloadConnector at concurrency 1/2/4/8. The _mtp wrapper keeps the gfx950 bring-up settings validated in PR #2367 together: --enforce-eager, --max-num-batched-tokens 1024, --max-num-seqs 32, bf16 KV cache, language-model-only mode, and lazy host allocation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2403
