@@ -644,6 +644,18 @@ MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
+# Patch aiter's Gluon MLA kernel with a fixed version.
+MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
+MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/mla_gluon.py"
+if [ -f "$MLA_GLUON_DST" ]; then
+    echo "Patching $MLA_GLUON_DST from gist..."
+    curl --silent --fail --location "$MLA_GLUON_SRC" -o "$MLA_GLUON_DST" \
+        && echo "Patched mla_gluon.py" \
+        || echo "WARN: failed to patch mla_gluon.py; leaving the image version in place" >&2
+else
+    echo "WARN: $MLA_GLUON_DST not found; skipping mla_gluon.py patch" >&2
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
