@@ -668,7 +668,7 @@ kimik3-fp4-mi355x-vllm-agentic-fp8kvtest:
       # 279.28 GB per rank.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: none, conc-list: [8] }
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
 
 # LMCache server-profile A/B for Kimi-K3. NOT shipped -- delete once one profile
 # wins. Both cells are conc 8 with prefix caching forced on, --max-num-batched-tokens
