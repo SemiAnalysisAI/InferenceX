@@ -175,7 +175,9 @@ def test_aiter_mode_is_not_defaulted_and_accepts_both_modes() -> None:
         assert f"AITER_SITUV2_A8W4={value}" in result.stdout
 
 
-def test_canary_patch_extends_vllm_mxfp4_gate_to_gfx942(tmp_path: Path) -> None:
+def test_canary_patch_extends_vllm_mxfp4_capabilities_for_gfx942_k3(
+    tmp_path: Path,
+) -> None:
     source = tmp_path / "rocm_aiter_moe.py"
     source.write_text(
         """class Dummy:
@@ -185,6 +187,15 @@ def test_canary_patch_extends_vllm_mxfp4_gate_to_gfx942(tmp_path: Path) -> None:
 
             if not on_gfx950():
                 return False
+
+    @staticmethod
+    def _supports_activation(activation: MoEActivation) -> bool:
+        return activation in [
+            MoEActivation.SILU,
+            MoEActivation.GELU,
+            MoEActivation.SWIGLUOAI,
+            MoEActivation.SWIGLUOAI_UNINTERLEAVE,
+        ]
 """
     )
     env = server_env()
@@ -194,10 +205,15 @@ def test_canary_patch_extends_vllm_mxfp4_gate_to_gfx942(tmp_path: Path) -> None:
     result = run_server(env)
 
     assert result.returncode == 0, result.stderr
-    assert "K3_VLLM_GFX942_MXFP4_GATE_PATCHED" in result.stdout
+    assert "K3_VLLM_GFX942_K3_CAPABILITIES_PATCHED" in result.stdout
     patched = source.read_text()
     assert "from vllm.platforms.rocm import on_gfx942, on_gfx950" in patched
     assert "if not (on_gfx942() or on_gfx950()):" in patched
+    assert "MoEActivation.SITU," in patched
+
+    second_result = run_server(env)
+    assert second_result.returncode == 0, second_result.stderr
+    assert source.read_text().count("MoEActivation.SITU,") == 1
 
 
 def write_executable(path: Path, body: str) -> None:

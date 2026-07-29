@@ -104,11 +104,11 @@ if [[ -n "${KIMIK3_AITER_OVERLAY_DIR:-}" ]]; then
 fi
 
 # Canary-only companion to the exact-shape gfx942 AITER overlay. The image's
-# vLLM oracle rejects every MXFP4 AITER deployment outside gfx950 before model
-# weights are loaded, even when the underlying gfx942 A16W4 kernel has passed
-# its numerical preflight. Keep this exact guarded source transformation out of
-# the production path; the production image must carry the equivalent upstream
-# vLLM capability change.
+# vLLM oracle rejects the deployment before loading weights because its AITER
+# capability declaration both limits MXFP4 to gfx950 and omits the already
+# implemented SITU activation. Keep these exact guarded source transformations
+# out of the production path; the production image must carry the equivalent
+# vLLM capability changes.
 if [[ "${KIMIK3_VLLM_GFX942_GATE_PATCH:-0}" == "1" ]]; then
     python - <<'PY'
 import hashlib
@@ -129,29 +129,70 @@ else:
         raise SystemExit("could not locate vLLM rocm_aiter_moe.py")
     path = Path(spec.origin)
 
-old = """            from vllm.platforms.rocm import on_gfx950
+architecture_old = """            from vllm.platforms.rocm import on_gfx950
 
             if not on_gfx950():
 """
-new = """            from vllm.platforms.rocm import on_gfx942, on_gfx950
+architecture_new = """            from vllm.platforms.rocm import on_gfx942, on_gfx950
 
             if not (on_gfx942() or on_gfx950()):
 """
-payload = path.read_text()
-if new in payload:
-    updated = payload
-elif payload.count(old) == 1:
-    updated = payload.replace(old, new)
-else:
+activation_old = """    def _supports_activation(activation: MoEActivation) -> bool:
+        return activation in [
+            MoEActivation.SILU,
+            MoEActivation.GELU,
+            MoEActivation.SWIGLUOAI,
+            MoEActivation.SWIGLUOAI_UNINTERLEAVE,
+        ]
+"""
+activation_new = """    def _supports_activation(activation: MoEActivation) -> bool:
+        return activation in [
+            MoEActivation.SILU,
+            MoEActivation.GELU,
+            MoEActivation.SWIGLUOAI,
+            MoEActivation.SWIGLUOAI_UNINTERLEAVE,
+            MoEActivation.SITU,
+        ]
+"""
+
+
+def replace_exact_capability(
+    payload: str,
+    old: str,
+    new: str,
+    capability: str,
+) -> str:
+    old_count = payload.count(old)
+    new_count = payload.count(new)
+    if old_count == 1 and new_count == 0:
+        return payload.replace(old, new)
+    if old_count == 0 and new_count == 1:
+        return payload
     raise SystemExit(
-        f"vLLM gfx950 MXFP4 gate did not match exactly once in {path}"
+        f"vLLM {capability} did not match one known state in {path}: "
+        f"old_count={old_count} new_count={new_count}"
     )
+
+
+payload = path.read_text()
+updated = replace_exact_capability(
+    payload,
+    architecture_old,
+    architecture_new,
+    "gfx950 MXFP4 architecture gate",
+)
+updated = replace_exact_capability(
+    updated,
+    activation_old,
+    activation_new,
+    "AITER SITU activation declaration",
+)
 compile(updated, str(path), "exec")
 temporary = path.with_suffix(path.suffix + ".tmp")
 temporary.write_text(updated)
 os.replace(temporary, path)
 digest = hashlib.sha256(updated.encode()).hexdigest()
-print(f"K3_VLLM_GFX942_MXFP4_GATE_PATCHED path={path} sha256={digest}")
+print(f"K3_VLLM_GFX942_K3_CAPABILITIES_PATCHED path={path} sha256={digest}")
 PY
 fi
 
@@ -170,11 +211,10 @@ VLLM_CMD=(
     --master-addr "$MULTINODE_MASTER_ADDR"
     --trust-remote-code
     --load-format auto
-    # The image's auto-priority list omits ROCm AITER MXFP4 on gfx942 even
-    # after its device capability gate is extended. Requesting AITER explicitly
-    # sends the same patched AiterExperts implementation through the oracle's
-    # strict is_supported_config check and exposes any remaining rejection
-    # reason instead of ending with the generic "no backend" error.
+    # The image's auto-priority list omits ROCm AITER MXFP4 on gfx942.
+    # Requesting AITER explicitly sends the patched AiterExperts implementation
+    # through the oracle's strict is_supported_config check and exposes any
+    # remaining rejection reason instead of the generic "no backend" error.
     --moe-backend aiter
     # The image's AITER custom-allreduce module is gfx950-prebuilt. Its gfx942
     # JIT finishes on both nodes, but the second TP group hangs while
