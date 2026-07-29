@@ -2286,7 +2286,7 @@ kimik3-fp4-mi300x-vllm-agentic:
           - "KIMIK3_NODELIST=chi-mi300x-054,chi-mi300x-043"
           - "AITER_SITUV2_A8W4=0"
           # Canary-only diagnostic bound; production keeps the 7200s default.
-          - "KIMIK3_STARTUP_TIMEOUT_SECONDS=300"
+          - "KIMIK3_STARTUP_TIMEOUT_SECONDS=7200"
           # Canary-only RCCL bootstrap evidence. Remove after the transport
           # issue is isolated; production does not need verbose collective logs.
           - "NCCL_DEBUG=INFO"
