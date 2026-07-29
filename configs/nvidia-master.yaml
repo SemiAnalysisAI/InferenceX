@@ -8055,9 +8055,12 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
 #   latency:    multi-node TP16       (4 GB200 nodes / 16 GPUs)
 #   balanced:   multi-node TEP16      (4 GB200 nodes / 16 GPUs)
 #   throughput: multi-node TP4 x DP4  (4 GB200 nodes / EP16)
+# All profiles enable Kimi K3 DSpark level 2 at the committed golden AL 2.51.
+# `spec-decoding: mtp` is the existing matrix label used for speculative
+# decoding methods; the checked-in recipes select DSpark explicitly.
 # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200
 kimik3-fp4-gb200-dynamo-vllm-agentic:
-  image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.4.0-kimi-k3-dev.1
+  image: vllm/vllm-openai:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb200-nv
@@ -8073,7 +8076,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
       # Latency oriented: multi_node_tp strategy, TP16 across four GB200
       # nodes.
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tp
-      - spec-decoding: none
+      - spec-decoding: mtp
         conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
@@ -8089,7 +8092,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
           dp-attn: false
       # Balanced: multi_node_tep strategy, TEP16 across four GB200 nodes.
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
-      - spec-decoding: none
+      - spec-decoding: mtp
         conc-list: [8, 16, 24, 32]
         prefill:
           num-worker: 1
@@ -8107,7 +8110,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
       # four GB200 nodes (TP4 x DP4 = EP16, one local DP rank per node).
       # The recipe allows up to 3600s for full-context saturation warmup to drain.
       # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
-      - spec-decoding: none
+      - spec-decoding: mtp
         conc-list: [32, 64, 96, 128, 192, 256]
         prefill:
           num-worker: 1
@@ -8124,7 +8127,7 @@ kimik3-fp4-gb200-dynamo-vllm-agentic:
       # High-concurrency DEP16 with vLLM Simple CPU KV offloading. c384
       # exercises 384 of the 393 AgentX trajectories and remains below the
       # aggregate max-num-seqs capacity of 512 (128 per DP rank).
-      - spec-decoding: none
+      - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple, version: "13c59a3" }
         conc-list: [128, 192, 256, 384]
