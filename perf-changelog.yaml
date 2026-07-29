@@ -5191,3 +5191,9 @@
     - "Agentic experiment Variant K (probe, of the #2374 Variant G): REMOVES the kimi-k3-container-deps.sh in-container patch (setup_script, script file, and launcher copy) to verify whether the mamba_hybrid index_fill_ dtype patch is still required by the current vllm/vllm-openai:kimi-k3 image — expected to fail at the first decode step if it is"
     - "Recipe: benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-agentic.yaml on the cluster:b200-dgxc pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2391
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic
+  description:
+    - "Test deterministic AIPerf warmup on Kimi K3 B300 with 10 requests per lane."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2408
