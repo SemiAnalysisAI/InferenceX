@@ -646,7 +646,18 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
       # output tok/s/user (prefill-bound, mean ISL 117k-155k vs ~500-token
       # outputs), and the resident draft further cuts GPU KV from 2,204,913 to
       # 1,723,308 tokens (2.10x -> 1.64x for a 1M-token request).
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+      # kv-offloading is none, NOT dram. DSpark + DRAM KV offload is broken on
+      # gfx950: with the connector active the server takes an 8-rank GPU memory
+      # access fault right after CUDA graph capture, in _initialize_kv_caches.
+      # Measured against all three offload implementations (vllm-simple,
+      # vllm-native, LMCache) and 18 config variables; see the mtp entry in
+      # perf-changelog.yaml. Prefix caching is the connector's activation switch,
+      # so declaring dram here and dropping the flag would silently produce rows
+      # with no offload at all -- that was briefly committed (2a3c0d134) and
+      # reverted. This arm therefore measures DSpark GPU-resident, which is the
+      # configuration verified serving on 8x MI355X, and the offload dimension is
+      # dropped until the upstream fault is fixed.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511

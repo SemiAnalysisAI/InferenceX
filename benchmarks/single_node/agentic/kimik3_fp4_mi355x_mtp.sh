@@ -9,11 +9,12 @@ set -x
 # (vllm-project/recipes#684 -> hardware_overrides.amd). Deviations, all measured:
 #   - gpu-memory-utilization 0.88, not 0.95: only ~271 GiB is free at the
 #     worker's startup check, below the 273.59 GiB that 0.95 demands.
-#   - --enable-prefix-caching IS passed, because SimpleCPUOffloadConnector
-#     requires it and silently disables offload without it. KNOWN FAILING: with
-#     it, DSpark + KV offload takes an 8-rank GPU memory access fault after CUDA
-#     graph capture. Both offload backends fail the same way, so this recipe
-#     cannot currently produce DSpark rows with KV offload; see the serve block.
+#   - --enable-prefix-caching is passed ONLY on the KV-offload arms, because the
+#     offload connector requires it and silently self-disables without it. The
+#     shipped arm is kv-offloading none, so the flag is omitted there, matching
+#     the configuration measured serving on 8x MI355X. DSpark + KV offload is
+#     broken on gfx950 (8-rank GPU memory access fault after CUDA graph capture,
+#     all three offload backends); see the SPEC_CONFIG/offload blocks below.
 #   - speculative-config drops "attention_backend": "FLASHINFER_MLA" -- absent on
 #     ROCm, rejected by platforms/rocm.py; replaced with TRITON_MLA, not dropped.
 #   - lazy_offload is a JSON boolean; bool("false") is True in Python.
@@ -217,6 +218,9 @@ PREFIX_CACHE_ARGS=()
 case "${KV_OFFLOAD_BACKEND:-}" in
     vllm-native)
         require_agentic_kv_offload_backend vllm-native
+        # the connector REQUIRES prefix caching; without it it silently
+        # self-disables ("disabling CPU offload since it requires prefix caching")
+        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         # vLLM's regular native KV-offload path (OffloadingConnector), NOT
         # SimpleCPUOffloadConnector: the "vllm-native" backend resolves to
@@ -240,6 +244,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         ;;
     vllm-simple)
         require_agentic_kv_offload_backend vllm-simple
+        # the connector REQUIRES prefix caching; without it it silently
+        # self-disables ("disabling CPU offload since it requires prefix caching")
+        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         # SimpleCPUOffloadConnector's cpu_bytes_to_use is PER RANK, so divide the
         # aggregate budget by the rank count (single-node TP => GPU_COUNT, which
         # the launcher exports; fall back to TP for stand-alone runs).
@@ -367,7 +374,6 @@ VLLM_CMD=(
     # and then take the same fault. The non-MTP twin runs either connector with
     # prefix caching and completes warmup and profiling, and the upstream config
     # runs prefix caching with no connector, so DSpark is the differentiator.
-    --enable-prefix-caching
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
