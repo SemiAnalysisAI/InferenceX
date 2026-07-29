@@ -26,8 +26,10 @@ else
     CONTAINER_MOUNT_DIR=/workspace
 fi
 
+export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
 set -x
-srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
+srun --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --job-name="$RUNNER_NAME" \
 --container-image=$IMAGE \
 --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 --no-container-mount-home \

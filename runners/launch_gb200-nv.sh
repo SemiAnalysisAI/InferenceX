@@ -4,6 +4,89 @@
 
 set -x
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
+export SLURM_PARTITION="batch"
+export SLURM_ACCOUNT="benchmark"
+SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
+
+if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
+        export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
+    else
+        echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
+        exit 1
+    fi
+
+    SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+    # Enroot uses '#' between the registry and repository, e.g. docker://ghcr.io#org/image:tag.
+    case "$IMAGE" in
+        */*)
+            _registry="${IMAGE%%/*}"
+            _rest="${IMAGE#*/}"
+            if [[ "$_registry" == *.* || "$_registry" == *:* ]]; then
+                ENROOT_URL="docker://${_registry}#${_rest}"
+            else
+                ENROOT_URL="docker://${IMAGE}"  # bare hub repo
+            fi
+            ;;
+        *)  ENROOT_URL="docker://${IMAGE}" ;;
+    esac
+    echo "ENROOT_URL=$ENROOT_URL"
+
+    if [[ ! -s "$SQUASH_FILE" ]]; then
+        echo "enroot import -> $SQUASH_FILE"
+        enroot import -o "$SQUASH_FILE" "$ENROOT_URL" || {
+            echo "Error: enroot import failed for $ENROOT_URL" >&2
+            exit 1
+        }
+    else
+        echo "Reusing existing squash: $SQUASH_FILE"
+    fi
+
+    export LLMD_CONTAINER_ENGINE=pyxis
+    export LLMD_SQUASH_FILE="$SQUASH_FILE"
+
+    export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
+    mkdir -p "$BENCHMARK_LOGS_DIR"
+
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
+    BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
+        exit 1
+    fi
+
+    JOB_ID=$(bash "$BENCH_SCRIPT")
+    if [[ -z "$JOB_ID" ]]; then
+        echo "Error: failed to submit llm-d job" >&2
+        exit 1
+    fi
+    echo "Submitted llm-d job: $JOB_ID"
+
+    trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
+
+    LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+
+    while IFS= read -r -d '' result_file; do
+        copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
+    done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
+
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
+        if [[ -z "$EVAL_DIR" ]]; then
+            EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
+        fi
+        copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
+    fi
+
+    scancel "$JOB_ID" 2>/dev/null || true
+    exit 0
+fi
+
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
@@ -21,9 +104,24 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # DSV4 sglang recipes.
         export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5.1-fp8")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-FP8"
+        export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -32,19 +130,25 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/gpt-oss-120b"
         export SERVED_MODEL_NAME="gpt-oss-120b"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-R1-0528-NVFP4-v2"
         export SERVED_MODEL_NAME="deepseek-r1-fp4"
         export SRT_SLURM_MODEL_PREFIX="dsr1"
     elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-        export MODEL_PATH="/mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/"
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-R1-0528"
         export SERVED_MODEL_NAME="deepseek-r1-fp8"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
     elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SERVED_MODEL_NAME="kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
+    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias
+        # ("nvidia/GLM-5-NVFP4") in the upstream GLM5 trtllm_dynamo recipes.
+        export MODEL_PATH="/mnt/lustre01/slurm-shared/glm-model/GLM-5-NVFP4"
+        export SERVED_MODEL_NAME="glm-5-nvfp4"
+        export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
     else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, or kimik2.5"
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -79,15 +183,11 @@ else
     export MODEL_PATH=$MODEL
 fi
 
-# Set up environment variables for SLURM
-export SLURM_PARTITION="batch"
-export SLURM_ACCOUNT="benchmark"
-
 NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5|qwen3.5) return 0 ;;
     esac
     # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
     # needs the srt-slurm workspace/outputs on a compute-visible shared FS
@@ -96,59 +196,55 @@ uses_watchtower_shared_fs() {
     return 1
 }
 
-# === Cluster diagnostic probe for watchtower-hosted sweeps ===
-# The gb200-nv_* runners may be hosted on different physical clusters
-# (e.g., the legacy NVIDIA Lustre cluster vs Oracle Cloud "watchtower").
-# Print enough info to identify the layout, then pick a writable
-# squash dir on a path that's also visible to compute nodes. Falls
-# back to the legacy sa-shared path so other configs are untouched.
-SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if uses_watchtower_shared_fs; then
-    echo "=== cluster diagnostic (watchtower sweep) ==="
-    echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
-    echo "HOME=$HOME"
-    echo "HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
-    echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-    echo "--- mount summary ---"
-    mount | grep -E 'lustre|nfs|home|shared|/mnt' || true
-    echo "--- /mnt contents ---"
-    ls -ld /mnt/* 2>/dev/null || true
-    echo "--- /mnt/lustre01 user dirs ---"
-    ls -ld /mnt/lustre01/users/* 2>/dev/null || true
-    ls -ld /mnt/lustre01/users-public/* 2>/dev/null || true
-    ls -ld /mnt/lustre01/groups/* 2>/dev/null || true
-    echo "--- /nfs contents (if present) ---"
-    ls -ld /nfs/* 2>/dev/null || true
-    echo "--- /home contents ---"
-    ls -ld /home/* 2>/dev/null || true
-    echo "=== end diagnostic ==="
-
-    # Probe candidate squash dirs in order, pick first writable one.
-    SQUASH_DIR=""
-    for cand in \
-        /mnt/lustre01/users/slurm-shared/squash \
-        /mnt/lustre01/users-public/slurm-shared/squash \
-        /mnt/lustre01/groups/slurm-shared/squash \
-        /mnt/lustre01/users-public/sa-shared \
-        /nfs/slurm-shared/squash \
-        /home/slurm-shared/gharunners/squash
-    do
-        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
-            rm -f "$cand/.write-probe.$$" 2>/dev/null
-            SQUASH_DIR="$cand"
-            echo "Selected SQUASH_DIR=$SQUASH_DIR (first writable candidate)"
-            break
-        else
-            echo "  not writable: $cand"
-        fi
-    done
-    if [ -z "$SQUASH_DIR" ]; then
-        echo "Error: no writable squash dir candidate found on this cluster" >&2
-        exit 1
-    fi
-fi
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+# Enroot 3.x does not parse Docker's tag@digest syntax. For digest-pinned
+# images, use its explicit registry syntax and pass the digest as the
+# manifest reference so the import remains immutable.
+enroot_uri_for_image() {
+    local image="$1"
+    local image_without_digest="$image"
+    local digest=""
+    local first_component registry repository repository_dir repository_name
+
+    if [[ "$image" == *@sha256:* ]]; then
+        image_without_digest="${image%@*}"
+        digest="${image##*@}"
+    fi
+
+    first_component="${image_without_digest%%/*}"
+    if [[ "$image_without_digest" == */* && ( "$first_component" == *.* || "$first_component" == *:* || "$first_component" == "localhost" ) ]]; then
+        registry="$first_component"
+        repository="${image_without_digest#*/}"
+    else
+        registry="registry-1.docker.io"
+        repository="$image_without_digest"
+    fi
+
+    if [[ -z "$digest" ]]; then
+        if [[ "$registry" == "registry-1.docker.io" ]]; then
+            printf 'docker://%s\n' "$image"
+        else
+            printf 'docker://%s#%s\n' "$registry" "$repository"
+        fi
+        return
+    fi
+
+    repository_dir="${repository%/*}"
+    repository_name="${repository##*/}"
+    repository_name="${repository_name%%:*}"
+    if [[ "$repository" == */* ]]; then
+        repository="${repository_dir}/${repository_name}"
+    else
+        repository="$repository_name"
+    fi
+    if [[ "$registry" == "registry-1.docker.io" && "$repository" != */* ]]; then
+        repository="library/$repository"
+    fi
+
+    printf 'docker://%s#%s:%s\n' "$registry" "$repository" "$digest"
+}
 
 # Concurrent matrix jobs import to the same shared-FS squash path.
 # Serialize imports and atomically replace invalid images so readers never
@@ -156,6 +252,9 @@ NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sq
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
+    local tmp="${squash}.tmp.$$"
+    local enroot_uri
+    enroot_uri=$(enroot_uri_for_image "$image") || exit 1
     (
         exec 9>"$lock"
         flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
@@ -163,8 +262,17 @@ import_squash() {
             echo "Squash file already exists and is valid, skipping import: $squash"
         else
             rm -f "$squash" "$squash".tmp.*
-            enroot import -o "${squash}.tmp.$$" "docker://$image"
-            mv -f "${squash}.tmp.$$" "$squash"
+            if ! enroot import -o "$tmp" "$enroot_uri"; then
+                rm -f "$tmp"
+                echo "Error: enroot import failed for $enroot_uri" >&2
+                exit 1
+            fi
+            if ! unsquashfs -l "$tmp" > /dev/null 2>&1; then
+                rm -f "$tmp"
+                echo "Error: enroot import produced an invalid squash file: $tmp" >&2
+                exit 1
+            fi
+            mv -f "$tmp" "$squash" || exit 1
         fi
     ) || exit 1
 }
@@ -240,36 +348,10 @@ fi
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 SRTCTL_SETUP_SCRIPT=""
-# On the watchtower (Oracle) gb200 cluster, /home/slurm-shared is not
-# cross-mounted to compute nodes. Put the srt-slurm workspace and staged
-# InferenceX checkout on a writable shared-FS path that compute can see.
-# Per-run-unique paths avoid races between parallel sweep jobs.
 if uses_watchtower_shared_fs; then
-    SHARED_BASE=""
-    for cand in \
-        /mnt/lustre01/users-public/sa-shared/gha-runs \
-        /mnt/lustre01/users/slurm-shared/gha-runs \
-        /mnt/lustre01/users-public/slurm-shared/gha-runs \
-        /mnt/lustre01/groups/slurm-shared/gha-runs \
-        /nfs/slurm-shared/gha-runs \
-        /home/slurm-shared/gharunners/gha-runs
-    do
-        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
-            rm -f "$cand/.write-probe.$$" 2>/dev/null
-            SHARED_BASE="$cand"
-            echo "Selected SHARED_BASE=$SHARED_BASE (first writable candidate)"
-            break
-        else
-            echo "  not writable: $cand"
-        fi
-    done
-    if [ -z "$SHARED_BASE" ]; then
-        echo "Error: no writable shared run directory candidate found on this cluster" >&2
-        exit 1
-    fi
-    RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-gb200-nv}-$$"
+    SHARED_BASE="/mnt/lustre01/users-public/sa-shared/gha-runs"
+    RUN_KEY="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUNNER_NAME}-$$"
     SRT_REPO_DIR="${SHARED_BASE}/srt-slurm-${RUN_KEY}"
-    echo "Using shared-FS SRT_REPO_DIR=$SRT_REPO_DIR (compute-visible)"
 fi
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."
@@ -310,11 +392,22 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/glm5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    mkdir -p recipes/sglang/glm5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -339,6 +432,12 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
+elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "glm5" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.26
+    mkdir -p recipes/trtllm/glm5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/glm5" recipes/trtllm/glm5
 else
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -489,7 +588,10 @@ fi
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
-    -f "$CONFIG_PATH"
+    # Pass the full CONFIG_FILE (not the stripped CONFIG_PATH): srtctl needs the
+    # ":zip_override_...[i]" selector to pick the recipe block. For plain-file
+    # recipes CONFIG_FILE == CONFIG_PATH, so this is a no-op for them.
+    -f "$CONFIG_FILE"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
@@ -516,31 +618,7 @@ echo "Extracted JOB_ID: $JOB_ID"
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
-# Wait for log file to appear (also check job is still alive)
-while ! ls "$LOG_FILE" &>/dev/null; do
-    if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-        echo "ERROR: Job $JOB_ID failed before creating log file"
-        scontrol show job "$JOB_ID"
-        exit 1
-    fi
-    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-    sleep 5
-done
-
-# Poll for job completion in background
-(
-    while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-        sleep 10
-    done
-) &
-POLL_PID=$!
-
-echo "Tailing LOG_FILE: $LOG_FILE"
-
-# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-wait $POLL_PID
+stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
 set -x
 
@@ -550,7 +628,7 @@ echo "Collecting results..."
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
@@ -593,9 +671,7 @@ if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
                     else
                         WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
                     fi
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
+                    copy_to_workspace "$result_file" "$WORKSPACE_RESULT_FILE" || exit 1
                 fi
             done
         done
@@ -608,17 +684,5 @@ fi
 
 # Collect eval results if eval was requested
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
-    EVAL_DIR="$LOGS_DIR/eval_results"
-    if [ -d "$EVAL_DIR" ]; then
-        echo "Extracting eval results from $EVAL_DIR"
-        shopt -s nullglob
-        for eval_file in "$EVAL_DIR"/*; do
-            [ -f "$eval_file" ] || continue
-            cp "$eval_file" "$GITHUB_WORKSPACE/"
-            echo "Copied eval artifact: $(basename "$eval_file")"
-        done
-        shopt -u nullglob
-    else
-        echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
-    fi
+    copy_eval_artifacts "$LOGS_DIR/eval_results" "$GITHUB_WORKSPACE" || exit 1
 fi

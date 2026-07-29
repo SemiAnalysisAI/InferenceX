@@ -1,0 +1,143 @@
+name: "b200-fp4-mtp2-throughput-1p-dep4-1d-dep8"
+
+# Derived from the srt-slurm b200-fp4 8k1k recipe (recipes/b200-fp4/8k1k.yaml
+# base + override_mtp2_throughput_1p1d, DEP4 prefill / DEP8 decode, MTP2).
+# One flat YAML per concrete topology, matching the InferenceX glm5 disagg
+# layout (sglang/<model>/<hw>-<precision>/<seq>/disagg/<variant>/...).
+
+dynamo:
+  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+  install: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 3
+  nginx_container: nginx-sqsh
+
+model:
+  path: "dsr1"
+  container: "lmsysorg/sglang:v0.5.12.post1"
+  precision: "fp4"
+
+resources:
+  gpu_type: "b200"
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_node: 8
+
+backend:
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+    SGLANG_ENABLE_SPEC_V2: "1"
+    UCX_TLS: "rc,cuda_ipc,cuda_copy,tcp,self"
+
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: "1000"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_ENABLE_JIT_DEEPGEMM: "false"
+    SGLANG_ENABLE_SPEC_V2: "1"
+    UCX_TLS: "rc,cuda_ipc,cuda_copy,tcp,self"
+
+  sglang_config:
+    prefill:
+      disaggregation-mode: "prefill"
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      trust-remote-code: true
+      disable-radix-cache: true
+      kv-cache-dtype: "fp8_e4m3"
+      attention-backend: "trtllm_mla"
+      quantization: "modelopt_fp4"
+      moe-runner-backend: "flashinfer_trtllm"
+      stream-interval: 50
+      watchdog-timeout: 1000000
+      context-length: 9600
+      mem-fraction-static: 0.95
+      max-total-tokens: 32768
+      chunked-prefill-size: 24576
+      cuda-graph-max-bs: 256
+      max-running-requests: 2048
+      scheduler-recv-interval: 1
+      load-balance-method: "round_robin"
+      disaggregation-bootstrap-port: null
+      data-parallel-size: 4
+      tensor-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      fp4-gemm-backend: "flashinfer_trtllm"
+      disaggregation-transfer-backend: nixl
+      speculative-algorithm: "EAGLE"
+      speculative-num-steps: 2
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 3
+
+    decode:
+      disaggregation-mode: "decode"
+      served-model-name: "deepseek-ai/DeepSeek-R1"
+      prefill-round-robin-balance: true
+      trust-remote-code: true
+      disable-radix-cache: true
+      kv-cache-dtype: "fp8_e4m3"
+      attention-backend: "trtllm_mla"
+      quantization: "modelopt_fp4"
+      moe-runner-backend: "flashinfer_trtllm"
+      disaggregation-bootstrap-port: 30001
+      stream-interval: 50
+      watchdog-timeout: 1000000
+      context-length: 9600
+      mem-fraction-static: 0.85
+      chunked-prefill-size: 8192
+      cuda-graph-max-bs: 1024
+      max-running-requests: 2048
+      scheduler-recv-interval: 1
+      data-parallel-size: 8
+      tensor-parallel-size: 8
+      expert-parallel-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      fp4-gemm-backend: "flashinfer_trtllm"
+      disaggregation-transfer-backend: nixl
+      speculative-algorithm: "EAGLE"
+      speculative-num-steps: 2
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 3
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  req_rate: 300
+  concurrencies: "512"
+  use_chat_template: true

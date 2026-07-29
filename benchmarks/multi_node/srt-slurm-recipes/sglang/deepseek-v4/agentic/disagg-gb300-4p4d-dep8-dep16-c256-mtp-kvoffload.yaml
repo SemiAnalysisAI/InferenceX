@@ -1,0 +1,212 @@
+name: "disagg-gb300-4p4d-dep8-dep16-c256-mtp-kvoffload"
+
+# Agentic-coding SGLang disaggregated recipe for DeepSeek-V4-Pro on GB300
+# (4P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 256.
+#
+# DEP8-prefill variant aligned with the measured Pareto point: prefill uses
+# tp/dp/ep 8, four nodes, and SGLANG_DSV4_MHC_PREWARM=1.
+# Concurrency is exported into agentic_srt.sh
+# from the master-config conc-list.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev1"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: gb300
+  gpus_per_node: 4
+  prefill_nodes: 4
+  decode_nodes: 4
+  prefill_workers: 2
+  decode_workers: 1
+
+
+infra:
+  etcd_nats_dedicated_node: true
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Correlation-ID
+  enable_multiple_frontends: true
+  num_additional_frontends: 4
+  env:
+    DYN_ROUTER_TEMPERATURE: "10000000"
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  args:
+    router-mode: "kv"
+    router-reset-states: true
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PYTHONUNBUFFERED: '1'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+    SGLANG_DEFAULT_THINKING: '1'
+    SGLANG_DSV4_REASONING_EFFORT: high
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: '1'
+    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '9216'
+    SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    MC_FORCE_MNNVL: '1'
+    NCCL_TIMEOUT: '100000'
+    NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
+    SGLANG_LOG_FORWARD_ITERS: '1'
+    SGLANG_LOG_MS: '1'
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+    SGLANG_DSV4_MHC_PREWARM: '1'
+
+  decode_environment:
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    SGLANG_SIMULATE_ACC_LEN: '2.49'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+    PIP_BREAK_SYSTEM_PACKAGES: '1'
+    PYTHONUNBUFFERED: '1'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    SGLANG_DG_CACHE_DIR: /configs/deepgemm_cache
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: '1'
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: '1'
+    SGLANG_DEFAULT_THINKING: '1'
+    SGLANG_DSV4_REASONING_EFFORT: high
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: '1'
+    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: '1'
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: '4096'
+    SGLANG_OPT_USE_ONLINE_COMPRESS: '0'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    MC_FORCE_MNNVL: '1'
+    NCCL_TIMEOUT: '100000'
+    NCCL_MNNVL_UUID_QUERY_TIMEOUT: '100000'
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: '1'
+    SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION: '8'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    DYN_LOG: info,dynamo_runtime::pipeline::network::ingress::push_handler=warn
+    SGLANG_LOG_FORWARD_ITERS: '1'
+    SGLANG_LOG_MS: '1'
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: '60'
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: '1'
+    SGLANG_DSV4_MHC_PREWARM: '1'
+
+  sglang_config:
+    prefill:
+      host: 0.0.0.0
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      model-path: /model/
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      stream-interval: 60
+      tp-size: 8
+      dp-size: 8
+      ep-size: 8
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      moe-a2a-backend: megamoe
+      disaggregation-transfer-backend: mooncake
+      disaggregation-mode: prefill
+      load-balance-method: total_tokens
+      mem-fraction-static: 0.9
+      swa-full-tokens-ratio: 0.02
+      max-running-requests: 256
+      cuda-graph-max-bs: 256
+      chunked-prefill-size: 32768
+      disable-flashinfer-autotune: true
+      model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5557"}'
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      enable-hierarchical-cache: true
+      hicache-write-policy: write_back
+      hicache-ratio: 1
+      hicache-io-backend: direct
+
+    decode:
+      host: 0.0.0.0
+      served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      model-path: /model/
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      stream-interval: 60
+      tp-size: 16
+      dp-size: 16
+      ep-size: 16
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      moe-dense-tp-size: 1
+      moe-a2a-backend: megamoe
+      disaggregation-transfer-backend: mooncake
+      disaggregation-mode: decode
+      load-balance-method: total_tokens
+      mem-fraction-static: 0.9
+      swa-full-tokens-ratio: 0.02
+      max-running-requests: 3072
+      cuda-graph-max-bs: 256
+      disable-flashinfer-autotune: true
+      model-loader-extra-config: '{"enable_multithread_load":true,"num_threads":8}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:5567"}'
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "144"
+
+srun_options:
+  mem: "0"
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+
