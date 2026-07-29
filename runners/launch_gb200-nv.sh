@@ -162,11 +162,15 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/numa1/models/Kimi-K3"
         export SRT_SLURM_MODEL_PREFIX="kimi-k3"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # The FP4 checkpoint is staged on compute-visible Lustre. The former
-        # /mnt/numa1 path is no longer present on watchtower compute nodes;
-        # the lowercase Lustre sibling is the FP8 checkpoint, so keep the
-        # NVFP4 path explicit here.
-        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4/"
+        # FP4 checkpoint on compute-visible Lustre (the /mnt/numa1 path is gone
+        # on watchtower compute nodes). Use the base DeepSeek-V4-Pro checkpoint,
+        # NOT the -NVFP4 re-quant: the recipe's served identity is plain
+        # deepseek-ai/DeepSeek-V4-Pro and the pinned v0.20.1 container's
+        # deepseek_v4 loader doesn't define the NVFP4 export's extra quant
+        # params (e.g. ffn.experts.w13_input_scale), which KeyErrors at load.
+        # The lowercase Lustre sibling is the FP8 checkpoint, so name the
+        # CamelCase FP4 path explicitly (Linux is case-sensitive).
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
@@ -190,8 +194,12 @@ NGINX_IMAGE="nginx:1.27.4"
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
         minimaxm2.5|minimaxm3|kimik2.5|kimik3|qwen3.5) return 0 ;;
-        *) return 1 ;;
     esac
+    # dsv4 multinode runs only under dynamo-vllm on watchtower, which likewise
+    # needs the srt-slurm workspace/outputs on a compute-visible shared FS
+    # (the runner home is not cross-mounted to compute nodes).
+    [[ "$FRAMEWORK" == "dynamo-vllm" && "$MODEL_PREFIX" == "dsv4" ]] && return 0
+    return 1
 }
 
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -420,10 +428,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISIO
     git checkout sa-submission-q2-2026 || exit 1
     mkdir -p recipes/vllm/minimax-m3-gb200-fp8 || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb200-fp8" recipes/vllm/minimax-m3-gb200-fp8 || exit 1
-    SRTCTL_SETUP_SCRIPT="minimax-m3-gb200-vllm-fixes.sh"
-    cp \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -574,6 +578,11 @@ fi
 
 # Keep the Slurm job name aligned with the GitHub runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+
+# Optionally inject synthetic acceptance into the recipe's speculative-config
+# when SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
+# override and before srtctl apply so the rendered job picks it up.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH" "$FRAMEWORK"
 
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
