@@ -409,8 +409,18 @@ except Exception:
         )
     fi
     ;;
-  vllm-simple)
-    require_agentic_kv_offload_backend vllm-simple
+  vllm-simple|vllm-simple-fp8)
+    require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # vllm-simple-fp8 is the same connector with an fp8 KV cache. fp8 halves
+    # bytes/token in the GPU pool, which on this KV-bound corpus moves the
+    # eviction wall itself rather than just adding headroom (measured: the pool
+    # peaks at 98.6-99.8% usage even at c8). ROCm maps fp8 -> fp8_e4m3.
+    # UNVALIDATED on K3's hybrid geometry: the pool spans Kimi Delta Attention
+    # state and gated-MLA latent, and fp8 support across both spec types is
+    # unconfirmed on this build.
+    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8" ]; then
+        KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+    fi
     # vLLM's own SimpleCPUOffloadConnector -- the AMD reference's native
     # offload path. Unlike LMCache it does not go through the Mamba
     # [conv_state, ssm_state] adapter that K3's Kimi Delta Attention breaks
