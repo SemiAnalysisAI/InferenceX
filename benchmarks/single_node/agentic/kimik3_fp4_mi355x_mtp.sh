@@ -16,5 +16,8 @@ export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-1024}"
 export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-true}"
 export SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-true}"
 export ENFORCE_EAGER="${ENFORCE_EAGER:-true}"
+# Diagnostic branch only: make ROCm report the kernel that actually faults
+# instead of a later asynchronous API call.
+export AMD_SERIALIZE_KERNEL="${AMD_SERIALIZE_KERNEL:-3}"
 
 exec "$(dirname "$0")/kimik3_fp4_mi355x.sh" "$@"

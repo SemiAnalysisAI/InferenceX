@@ -1,0 +1,13 @@
+kimik3-fp4-mi355x-vllm-agentic-mtp-debug:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1] }
