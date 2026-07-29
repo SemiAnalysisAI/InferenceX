@@ -1,0 +1,1082 @@
+[
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 25600,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 25600,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 4096,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 4096,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16384,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16384,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 64,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 64,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 8,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 8,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 64,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 64,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 4,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 4,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 64,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 64,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16384,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16384,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 24576,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 24576,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 2560,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 2560,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 4,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "glm5.1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 4,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "glm5.1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "glm5.1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 2
+    },
+    "name": "glm5.1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 2,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 2,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 8,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 8,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 6,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsv4"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 6,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsv4"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 8192,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "glm5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 8192,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "glm5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "glm5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "glm5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 4,
+      "num_experts": 384,
+      "top_k": 6,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsv4"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 4,
+      "num_experts": 384,
+      "top_k": 6,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsv4"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16384,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16384,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 24576,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 24576,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 256,
+      "num_experts": 128,
+      "top_k": 4,
+      "hidden": 2880,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "gptoss"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 3,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 3,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 4
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 1214,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 1214,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 1096,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 1096,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 2192,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 2192,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 8192,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 8192,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 271,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 271,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 2305,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 2305,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 288,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 288,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 3072,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 3072,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 384,
+      "top_k": 6,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsv4"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 384,
+      "top_k": 6,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsv4"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 512,
+      "top_k": 10,
+      "hidden": 4096,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "qwen3.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "glm5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 32768,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 6144,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "glm5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 16,
+      "num_experts": 384,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "kimik2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 4096,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 4096,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 32,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 32,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 3072,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "minimaxm2.5"
+  },
+  {
+    "type": "dispatch",
+    "args": {
+      "num_tokens": 2151,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  },
+  {
+    "type": "combine",
+    "args": {
+      "num_tokens": 2151,
+      "num_experts": 256,
+      "top_k": 8,
+      "hidden": 7168,
+      "dtype": "bf16",
+      "world_size": 8
+    },
+    "name": "dsr1"
+  }
+]

@@ -1,4 +1,4 @@
-# Model-specific SGLang server configurations for disaggregated inference.
+# Model-specific ATOM server configurations for disaggregated inference.
 #
 # Each top-level key is a MODEL_NAME value (must match the directory name under MODEL_DIR).
 #
@@ -7,50 +7,78 @@
 #
 # Schema:
 #   <model-name>:
-#     base_flags: str          # Common flags for both prefill and decode
-#     mtp_flags: str           # Appended to decode when DECODE_MTP_SIZE > 0
-#     dp_flags: str            # Appended when DP is enabled (prefill or decode)
-#     prefill:
-#       mem_fraction_static: float
-#       disable_radix_cache: bool
-#       dp:                              # Config when data-parallel attention is enabled
-#         max_running_requests: int
-#         chunked_prefill_size: str      # Can be integer or bash arithmetic expression
-#         cuda_graph_bs: str             # Space-separated values
-#       no_dp:                           # Config when data-parallel attention is disabled
-#         max_running_requests: int
-#         chunked_prefill_size: int
-#         cuda_graph_bs_range: str       # "start-end" expanded via seq
-#     decode:
-#       mem_fraction_static: float
-#       prefill_round_robin_balance: bool
-#       dp:
-#         max_running_requests: int
-#         chunked_prefill_size: str
-#         cuda_graph_bs_range: str
-#       ep_only:                         # Config when EP is enabled but DP is disabled
-#         max_running_requests: int
-#         chunked_prefill_size: int
-#         cuda_graph_bs_range: str
-#       no_dp:
-#         max_running_requests: int
-#         chunked_prefill_size: int
-#         cuda_graph_bs_range: str
+#     env:          str  # Space-separated KEY=VALUE pairs exported unconditionally
+#     tp_dp_flags:  str  # Shared TP+DPA flags (fallback when prefill/decode-specific keys are absent)
+#     prefill_tp_dp_flags: str  # TP+DPA flags for prefill only (overrides tp_dp_flags)
+#     decode_tp_dp_flags:  str  # TP+DPA flags for decode only (overrides tp_dp_flags)
+#     tp_dp_env:    str  # Space-separated KEY=VALUE pairs exported only in TP+DPA mode
+#     ep_dp_flags:  str  # Shared EP+DPA flags (fallback when prefill/decode-specific keys are absent)
+#     prefill_ep_dp_flags: str  # EP+DPA flags for prefill only (overrides ep_dp_flags)
+#     decode_ep_dp_flags:  str  # EP+DPA flags for decode only (overrides ep_dp_flags)
+#     ep_dp_env:    str  # Space-separated KEY=VALUE pairs exported only in EP+DPA mode
+#     mtp_flags:    str  # Flags passed to SPEC_ARGS before $DECODE_MTP_SIZE (e.g. "--method mtp --num-speculative-tokens")
+#     kv_cache_flags: str  # Full --kv_cache_dtype flag string (e.g. "--kv_cache_dtype fp8", or "" for none)
+#     online_quant_config: str  # JSON string passed to --online_quant_config (used when DPA is disabled)
+#     online_quant_dpa_config: str  # JSON string passed to --online_quant_config when DPA is enabled (falls back to online_quant_config)
+#     block_size:   str  # --block-size value (overrides server_atom.sh default of 16)
+#     mem_frac_static: str  # --gpu-memory-utilization value (overrides default of 0.85)
+#     max_model_len: str  # --max-model-len value (overrides default of unset)
+#     max_num_seqs:  str  # --max-num-seqs value (overrides default of 256)
+#     max_num_batched_tokens: str  # --max-num-batched-tokens value (overrides default of unset)
+#     scheduler_delay_factor: str  # --scheduler-delay-factor value (overrides default of unset)
 
 DeepSeek-V4-Pro:
-  # ATOM engine (atom-disagg): server_atom.sh uses MEM_FRACTION/KV_CACHE_DTYPE/BLOCK_SIZE/MAX_NUM_SEQS
-  # directly from env vars (defaulting to 0.85/fp8/16/256). base_flags/dp_flags are not used by
-  # server_atom.sh; they are kept here for documentation and potential future use.
-  base_flags: ""
-  mtp_flags: ""
-  dp_flags: ""
+  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  tp_dp_flags: "--enable-dp-attention --enable-tbo"
+  prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo"
+  decode_tp_dp_flags: "--enable-dp-attention --enable-tbo"
+  tp_dp_env: "GPU_MAX_HW_QUEUES=5 ATOM_CPU_AFFINITY=1"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  mtp_flags: "--method mtp --num-speculative-tokens"
 
 MiniMax-M3-MXFP4:
-  base_flags: ""
-  mtp_flags: ""
-  dp_flags: ""
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  tp_dp_flags: "--enable-dp-attention"
+  prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo prefill"
+  decode_tp_dp_flags: "--enable-dp-attention"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  mtp_flags: "--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens"
+  online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
+  online_quant_dpa_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
+  block_size: "128"
+  mem_frac_static: "0.8"
+  max_model_len: "32768"
+  max_num_seqs: "256"
+  max_num_batched_tokens: "32768"
+
+Kimi-K2.5-MXFP4:
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 AITER_MXFP4_INTERMEDIATE=1"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  mem_frac_static: "0.9"
+  max_model_len: "32768"
+  max_num_seqs: "256"
+  max_num_batched_tokens: "32768"
 
 MiniMax-M3-MXFP8:
-  base_flags: ""
-  mtp_flags: ""
-  dp_flags: ""
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  tp_dp_flags: "--enable-dp-attention"
+  prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo prefill"
+  decode_tp_dp_flags: "--enable-dp-attention"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  mtp_flags: "--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens"
+  online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
+  online_quant_dpa_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*.gate.*","*.block_sparse_moe.experts*"]}'
+  block_size: "128"
+  mem_frac_static: "0.8"
+  max_model_len: "32768"
+  max_num_seqs: "256"
+  max_num_batched_tokens: "32768"
