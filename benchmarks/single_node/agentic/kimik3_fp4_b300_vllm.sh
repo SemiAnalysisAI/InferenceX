@@ -124,6 +124,7 @@ mkdir -p "$RESULT_DIR"
 # ---- KV offloading ----------------------------------------------------------
 GMU=0.90
 OFFLOAD_ARGS=()
+PREFIX_MATCH_ARGS=(--prefix-match-unit 64)
 case "${KV_OFFLOAD_BACKEND:-}" in
     "")
         require_agentic_kv_offload_none
@@ -138,6 +139,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         # full TOTAL_CPU_DRAM_GB budget passed in by the launcher. On failure to
         # load a KV block from DRAM, recompute rather than fail the request.
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        PREFIX_MATCH_ARGS=()
         OFFLOAD_ARGS=(
             --kv-offloading-backend native
             --kv-offloading-size "$TOTAL_CPU_DRAM_GB"
@@ -180,7 +182,7 @@ VLLM_CMD=(
     # runs on FlashInfer per the production recipe.
     --attention-backend FLASHINFER_MLA
     --attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
-    --prefix-match-unit 64
+    "${PREFIX_MATCH_ARGS[@]}"
     --max-cudagraph-capture-size "$MAX_NUM_SEQS"
     --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
