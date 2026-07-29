@@ -179,7 +179,7 @@ wait_for_lmcache_ready() {
 # never replaced with a model-specific constant.
 OFFLOAD_ARGS=()
 # (srok), enforce fp8 kv
-KV_CACHE_DTYPE="fp8"
+#KV_CACHE_DTYPE="fp8"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
