@@ -136,9 +136,9 @@ nothing lands in `$HOME`.
 ## AITER_SITUV2_A8W4
 
 The image is built with `AITER_ROCM_ARCH=gfx942;gfx950`, but its original
-Kimi K3 tuned MoE tables cover gfx950 only. The exact K3-shape gfx942 kernel
-gate passed both constant and random numerical checks with the A16W4 path, so
-the matrix pins:
+Kimi K3 tuned MoE tables cover gfx950 only. A single-GPU gfx942 probe passed
+constant and random numerical checks for the A16W4 `tile_m=32` path, so the
+matrix pins:
 
 ```text
 AITER_SITUV2_A8W4=0
@@ -147,6 +147,12 @@ AITER_SITUV2_A8W4=0
 The entrypoint still accepts an explicit `0` or `1` for diagnostic runs and
 rejects anything else before allocation. It prints the resolved value at
 startup so every run records what it used.
+
+That probe did not cover vLLM's startup-profile shape
+`token=4096, inter_dim=512`. The untuned gfx942 fallback originally selected
+`tile_m=128`, whose two BF16 input buffers require 128 KiB of LDS on hardware
+with a 64 KiB limit. The pinned AITER overlay caps only gfx94x A16W4 fallback
+dispatches at `tile_m=32`; gfx950 and non-A16W4 paths are unchanged.
 
 ## Verifying locally
 
@@ -214,6 +220,11 @@ free space under `/raid` and re-run.
 A rank died during startup. The last 200 lines of the server log are printed
 inline, and the full log is uploaded as `multinode_server_logs.tar.gz`.
 `--kill-on-bad-exit=1` means one bad rank takes down both.
+
+**`local memory (...) exceeds limit (...) in function 'moe_gemm1_0'`**
+The gfx942 A16W4 fallback selected an MoE tile that is too large for its
+64 KiB LDS limit. Confirm the pinned `fused_moe.py` overlay was installed and
+that the AITER dispatch name contains `t32`, not `t128`.
 
 **`the vLLM server did not become healthy within Ns`**
 Loading 1.5 TB across two nodes is slow. Confirm both ranks are alive in the

@@ -90,6 +90,9 @@ export PYTHONNOUSERSITE=1
 if [[ -n "${KIMIK3_AITER_OVERLAY_DIR:-}" ]]; then
     aiter_root=$(python -c \
         "import pathlib, aiter; print(pathlib.Path(aiter.__file__).resolve().parent)")
+    install -m 0644 \
+        "$KIMIK3_AITER_OVERLAY_DIR/fused_moe.py" \
+        "$aiter_root/fused_moe.py"
     for filename in \
         mixed_moe_gemm_2stage.py \
         mfma_preshuffle_pipeline.py \

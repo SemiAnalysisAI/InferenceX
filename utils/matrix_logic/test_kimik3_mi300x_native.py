@@ -33,6 +33,10 @@ OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
 STAGING_COMMANDS = ("hf download", "huggingface-cli download", "wget", "curl")
 JOB_ID = "4242"
 RESULT_FILENAME = "kimik3_agentic_prefill-tp8-pp2_conc4_mi300x-amds_00"
+AITER_LDS_SAFE_REF = "ccf22af6ead6196b473eba3d2a81825d01c44e55"
+AITER_FUSED_MOE_SHA256 = (
+    "341dd12f028ead0bf90e156b50a7894926f9fef32752c858f1792f0fa6eb9d51"
+)
 
 
 def generate_kimik3_matrix() -> list[dict]:
@@ -104,6 +108,10 @@ def server_env(rank: int = 0) -> dict[str, str]:
         "MULTINODE_NODE_RANK": str(rank),
         "MULTINODE_MASTER_ADDR": "node-a",
         "KIMIK3_VLLM_DRY_RUN": "1",
+        # The server script runs Python-based source guards inside the vLLM
+        # image. Make the active test interpreter discoverable when pytest was
+        # launched by absolute path and its venv was not prepended to PATH.
+        "PATH": f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}",
     }
     # The unset-AITER case is a real assertion, so never inherit the ambient value.
     env.pop("AITER_SITUV2_A8W4", None)
@@ -214,6 +222,17 @@ def test_canary_patch_extends_vllm_mxfp4_capabilities_for_gfx942_k3(
     second_result = run_server(env)
     assert second_result.returncode == 0, second_result.stderr
     assert source.read_text().count("MoEActivation.SITU,") == 1
+
+
+def test_canary_overlay_pins_the_gfx942_lds_safe_fallback_dispatch() -> None:
+    launcher_source = NATIVE_LAUNCHER.read_text()
+    server_source = SERVER_SCRIPT.read_text()
+
+    assert f'KIMIK3_AITER_OVERLAY_REF="{AITER_LDS_SAFE_REF}"' in launcher_source
+    assert '"aiter/fused_moe.py"' in launcher_source
+    assert f'"{AITER_FUSED_MOE_SHA256}"' in launcher_source
+    assert '"$KIMIK3_AITER_OVERLAY_DIR/fused_moe.py"' in server_source
+    assert '"$aiter_root/fused_moe.py"' in server_source
 
 
 def write_executable(path: Path, body: str) -> None:

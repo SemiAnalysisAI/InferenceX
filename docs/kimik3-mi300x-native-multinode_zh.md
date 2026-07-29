@@ -125,8 +125,8 @@ Enroot 的 cache 和 temp 目录也固定在同一个节点本地目录下，不
 ## AITER_SITUV2_A8W4
 
 镜像用 `AITER_ROCM_ARCH=gfx942;gfx950` 构建，但原始 Kimi K3 tuned MoE 表只覆盖
-gfx950。K3 exact-shape gfx942 kernel gate 已经用常量和随机输入验证 A16W4 路径，
-因此矩阵固定为：
+gfx950。单 GPU gfx942 probe 已经用常量和随机输入验证 A16W4 的 `tile_m=32`
+路径，因此矩阵固定为：
 
 ```text
 AITER_SITUV2_A8W4=0
@@ -134,6 +134,12 @@ AITER_SITUV2_A8W4=0
 
 入口脚本仍允许诊断运行显式传入 `0` 或 `1`，其他值会在分配资源前被拒绝。
 启动时会打印最终取值，因此每次运行都会留下记录。
+
+该 probe 没有覆盖 vLLM 启动 profiling 使用的
+`token=4096, inter_dim=512`。未调优的 gfx942 fallback 原本会选择
+`tile_m=128`，其两个 BF16 输入缓冲区需要 128 KiB LDS，而硬件上限只有
+64 KiB。当前固定的 AITER overlay 只把 gfx94x A16W4 fallback 限制到
+`tile_m=32`；gfx950 和非 A16W4 路径保持不变。
 
 ## 本地验证
 
@@ -196,6 +202,11 @@ allocation 固定到版本一致的节点对上。
 某个 rank 在启动阶段挂了。server 日志最后 200 行会直接打印出来，完整日志作为
 `multinode_server_logs.tar.gz` 上传。`--kill-on-bad-exit=1` 意味着一个 rank
 失败会带走两个。
+
+**`local memory (...) exceeds limit (...) in function 'moe_gemm1_0'`**
+gfx942 A16W4 fallback 选择的 MoE tile 超过了 64 KiB LDS 上限。确认固定版本的
+`fused_moe.py` overlay 已安装，并检查 AITER dispatch 名称包含 `t32`，而不是
+`t128`。
 
 **`the vLLM server did not become healthy within Ns`**
 跨两个节点加载 1.5 TB 本来就慢。先在日志里确认两个 rank 都还活着，再考虑调大

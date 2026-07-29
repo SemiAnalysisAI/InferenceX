@@ -49,7 +49,7 @@ HF_HUB_CACHE_CONTAINER="${HF_HUB_CACHE:-/hf-hub-cache}"
 # Canary-only compatibility overlay. This branch pins immutable source and
 # checksums; the production PR will instead depend on an image containing the
 # corresponding AITER commit.
-KIMIK3_AITER_OVERLAY_REF="192f8db9c6d6f841f3bafc4e382a7cd2a361e88c"
+KIMIK3_AITER_OVERLAY_REF="ccf22af6ead6196b473eba3d2a81825d01c44e55"
 KIMIK3_AITER_OVERLAY_HOST="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
 export KIMIK3_AITER_OVERLAY_REF
 export KIMIK3_AITER_OVERLAY_DIR="/workspace/.aiter-k3-gfx942-overlay"
@@ -184,6 +184,9 @@ download_aiter_overlay \
 download_aiter_overlay \
     "aiter/ops/flydsl/kernels/mfma_policy.py" \
     "dac7aa6b2cf0e25adb2119072ca80fd708855c637efc3b98cfd8f998762d8f04"
+download_aiter_overlay \
+    "aiter/fused_moe.py" \
+    "341dd12f028ead0bf90e156b50a7894926f9fef32752c858f1792f0fa6eb9d51"
 
 # --- Lifecycle state and cleanup -------------------------------------------
 
