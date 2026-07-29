@@ -122,14 +122,13 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 # ---- KV offloading ----------------------------------------------------------
-GMU=0.93
+GMU=0.90
 OFFLOAD_ARGS=()
 case "${KV_OFFLOAD_BACKEND:-}" in
     "")
         require_agentic_kv_offload_none
         ;;
     native)
-        GMU=0.90
         require_agentic_kv_offload_backend native
         # Identical prefixes must hash to identical block keys run-to-run.
         export PYTHONHASHSEED=42
