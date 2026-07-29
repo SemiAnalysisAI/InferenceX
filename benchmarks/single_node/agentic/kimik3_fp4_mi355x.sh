@@ -178,8 +178,23 @@ wait_for_lmcache_ready() {
 # benchmarks/single_node/agentic/README.md it must be consumed as given and
 # never replaced with a model-specific constant.
 OFFLOAD_ARGS=()
-# (srok), enforce fp8 kv
-#KV_CACHE_DTYPE="fp8"
+
+# fp8 KV is the DEFAULT for every arm on this model.
+#
+# It is the first thing that made the trace run well: run 30442578333 (c8,
+# kvnone, 3600s) scored 32.59 output tok/s / 696 total tok/s/GPU at TTFT 2.6s,
+# against 19.17 / 535 / 69.1s for the bf16 offload cell in the same window.
+# K3 costs ~217 KiB KV/token -- 3x K2.7 -- so halving the KV element size is
+# the single largest lever available, exactly as in
+# [[fp8-kv-cache-mandatory]] for kimik2.7.
+#
+# This is set here, before the KV_OFFLOAD_BACKEND case below, for two reasons:
+# the agentic matrix has no per-cell env channel (so a kvnone cell has no other
+# way to ask for fp8), and the mla_gluon patch further down gates on
+# KV_CACHE_DTYPE=fp8 and must see it already set.
+#
+# Set KV_CACHE_DTYPE=auto for a bf16 A/B.
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
