@@ -157,6 +157,14 @@ they run all evals only. The primary label still controls canary/fail-fast.
 with both modifiers, are not. Default full sweeps, including default evals,
 are also reusable.
 
+## AgentX Fast Mode
+
+Add `agentx-fast` alongside one primary sweep label to run the 5-minute cache
+warmup and 20-minute profiling preset for single- and multi-node AgentX
+throughput jobs. Fixed-sequence throughput and eval jobs retain their canonical
+settings. Adding or removing the modifier restarts the active sweep. Fast-mode
+runs are not eligible for artifact reuse after merge.
+
 ## Reusing an Approved PR Full Sweep
 
 `[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
