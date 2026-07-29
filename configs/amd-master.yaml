@@ -698,6 +698,34 @@ kimik3-fp4-mi355x-vllm-agentic-lmprofile:
 # node carrying another tenant's allocation. Delete once it has a result.
 # fp8 KV-cache probe: identical to the winning vllm-simple c8 cell except for
 # --kv-cache-dtype fp8, which should roughly double the 1,957,290-token GPU pool.
+kimik3-fp4-mi355x-vllm-agentic-fp8sweep:
+  # Full fp8-KV sweep. Supersedes the bf16 numbers: fp8 is now the recipe
+  # default (see kimik3_fp4_mi355x.sh), so every cell here runs
+  # --kv-cache-dtype fp8 with prefix caching on, and the mla_gluon kernel is
+  # patched from the pinned gist revision that run 30442578333 used.
+  #
+  # Stock image on purpose -- 30442578333 proved the patched stock image runs
+  # fp8 clean; the custom hyukjleeamd/kimi-k3-mla-b128 image is the fallback.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # No-offload arm. c8 repeats 30442578333 (696 tok/s/GPU) as a control;
+      # c1/c4 replace the bf16 points (159 / 421 tok/s/GPU) from run
+      # 30430688459 so the whole curve is one KV dtype.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] }
+      # Offload arm at the same dtype -- isolates what
+      # SimpleCPUOffloadConnector costs or buys under fp8. c16 probes whether
+      # fp8 pushes the concurrency ceiling past the bf16 collapse at c16.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8, 16] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8kv:
   # fp8 KV on the OFFLOAD arm. This is the fp8kvtest arm (run 30442578333:
   # 696 total tok/s/GPU, TTFT 2.6s, the first clean fp8 result) plus the
