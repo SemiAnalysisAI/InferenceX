@@ -1471,9 +1471,12 @@ kimik2.5-int4-h200-vllm-agentic:
 # These are the three aggregated strategies from the official H200
 # recipe (https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200):
 # multi-node TP is latency-oriented, TEP is balanced, and DEP is
-# throughput-oriented. The H200 runner supplies cluster paths while
-# srt-slurm owns allocation, direct vLLM startup, readiness, and log capture.
-# P/D disaggregation is intentionally deferred.
+# throughput-oriented. All profiles use Kimi K3 DSpark level 2 with
+# probabilistic drafting and synthetic acceptance pinned to golden AL 2.51.
+# The existing `mtp` matrix label covers speculative-decoding methods; the
+# checked-in recipes select DSpark explicitly. The H200 runner supplies
+# cluster paths while srt-slurm owns allocation, direct vLLM startup,
+# readiness, and log capture. P/D disaggregation is intentionally deferred.
 kimik3-fp4-h200-vllm-agentic:
   image: vllm/vllm-openai:kimi-k3
   model: moonshotai/Kimi-K3
@@ -1488,7 +1491,7 @@ kimik3-fp4-h200-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       # Latency-oriented: one TP8/PP2 engine spanning two H200 nodes.
-      - spec-decoding: none
+      - spec-decoding: mtp
         kv-offloading: none
         conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         prefill:
@@ -1506,7 +1509,7 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 1
           dp-attn: false
       # Balanced: TP4/PP2 with DP2/EP8 across two H200 nodes.
-      - spec-decoding: none
+      - spec-decoding: mtp
         kv-offloading: none
         conc-list: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
         prefill:
@@ -1524,7 +1527,7 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 8
           dp-attn: true
       # Throughput-oriented: TP2/PP2 with DP8/EP16 across four H200 nodes.
-      - spec-decoding: none
+      - spec-decoding: mtp
         kv-offloading: none
         conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24]
         prefill:
@@ -1542,7 +1545,7 @@ kimik3-fp4-h200-vllm-agentic:
           ep: 16
           dp-attn: true
       # High-concurrency DEP with vLLM's host-DRAM KV tier.
-      - spec-decoding: none
+      - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
         conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
