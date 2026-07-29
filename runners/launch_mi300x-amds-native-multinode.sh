@@ -307,6 +307,133 @@ trap 'cleanup; exit 130' INT
 trap 'cleanup; exit 143' TERM
 trap 'cleanup; exit 129' HUP
 
+# --- Kernel probe ----------------------------------------------------------
+
+# Diagnostic mode for the gfx942 A16W4 SiTUv2 illegal access. It shares nothing
+# with the canary below except the image and the preflight: one node, one GPU,
+# no model, no server, no client. Deliberately its own allocation -- the canary
+# holds two exclusive nodes for hours, and a probe that borrowed that would idle
+# 15 of 16 GPUs on every iteration of what is meant to be a fast loop.
+if [[ "${KIMIK3_PROBE_ONLY:-0}" == "1" ]]; then
+    set -x
+    PROBE_CASES="${KIMIK3_PROBE_CASES:-m2 seq m4096}"
+    PROBE_NODE=$(scontrol show hostnames "$KIMIK3_NODELIST" | head -n 1)
+    [[ -n "$PROBE_NODE" ]] || fail "could not resolve a probe node from KIMIK3_NODELIST='$KIMIK3_NODELIST'"
+
+    set +e
+    salloc_output=$(
+        salloc \
+            --partition=compute \
+            --nodelist="$PROBE_NODE" \
+            --nodes=1 \
+            --ntasks-per-node=1 \
+            --gres=gpu:1 \
+            --cpus-per-task=32 \
+            --time="${KIMIK3_PROBE_TIME_MINUTES:-60}" \
+            --no-shell \
+            --job-name="${RUNNER_NAME}-probe" \
+            2>&1
+    )
+    salloc_rc=$?
+    set -e
+    printf '%s\n' "$salloc_output"
+    [[ "$salloc_rc" -eq 0 ]] || fail "probe salloc failed with exit code $salloc_rc"
+    JOB_ID=$(
+        printf '%s\n' "$salloc_output" |
+            sed -nE 's/.*(Pending|Granted) job allocation ([0-9]+).*/\2/p' |
+            tail -n 1
+    )
+    [[ -n "$JOB_ID" ]] || fail "probe salloc did not report a job ID"
+    HEAD_NODE="$PROBE_NODE"
+    echo "Probe allocated Slurm job $JOB_ID on $PROBE_NODE"
+
+    SERVER_LOG_DIR="$GITHUB_WORKSPACE/multinode_server_logs_live"
+    rm -rf "$SERVER_LOG_DIR"
+    mkdir -p "$SERVER_LOG_DIR"
+
+    # The image lives on node-local /raid and the preflight is what imports it,
+    # so the probe cannot skip it. Its model checks are satisfied for free: the
+    # node comes from KIMIK3_NODELIST, which is already staged for the canary.
+    probe_preflight=$(
+        srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --export=ALL \
+            bash runners/mi300x_native_node_preflight.sh
+    )
+    printf '%s\n' "$probe_preflight" | grep -q '^INFERENCEX_KIMIK3_PREFLIGHT ' ||
+        fail "probe node $PROBE_NODE produced no preflight record"
+
+    IMAGE_PATH="$KIMIK3_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    PROBE_LOG="$SERVER_LOG_DIR/kernel_probe.log"
+    probe_rc=0
+
+    set +e
+    srun --overlap --jobid="$JOB_ID" \
+        --nodes=1 \
+        --ntasks=1 \
+        --container-image="$IMAGE_PATH" \
+        --container-remap-root \
+        --container-writable \
+        --no-container-mount-home \
+        --no-container-entrypoint \
+        --container-workdir=/workspace \
+        --container-mounts="$GITHUB_WORKSPACE:/workspace,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
+        --export=ALL,KIMIK3_PROBE_CASES="$PROBE_CASES" \
+        bash -c '
+            set -x
+            # Synchronous kernel error reporting: without it the fault surfaces
+            # at an arbitrary later launch and names the wrong kernel.
+            export AMD_SERIALIZE_KERNEL="${AMD_SERIALIZE_KERNEL:-3}"
+            aiter_root=$(python -c "import pathlib, aiter; print(pathlib.Path(aiter.__file__).resolve().parent)")
+            if [[ "${KIMIK3_PROBE_APPLY_OVERLAY:-1}" == "1" && -d "$KIMIK3_AITER_OVERLAY_DIR" ]]; then
+                install -m 0644 "$KIMIK3_AITER_OVERLAY_DIR/fused_moe.py" "$aiter_root/fused_moe.py"
+                for filename in mixed_moe_gemm_2stage.py mfma_preshuffle_pipeline.py \
+                                lds_dma_policy.py mfma_policy.py; do
+                    install -m 0644 "$KIMIK3_AITER_OVERLAY_DIR/$filename" \
+                        "$aiter_root/ops/flydsl/kernels/$filename"
+                done
+                python -m compileall -q "$aiter_root/ops/flydsl/kernels"
+                echo "PROBE_OVERLAY_APPLIED ref=${KIMIK3_AITER_OVERLAY_REF:-unknown}"
+            else
+                echo "PROBE_OVERLAY_SKIPPED (baseline image aiter)"
+            fi
+            export PROBE_EXPECT_AITER_ROOT="$aiter_root"
+
+            python /workspace/benchmarks/kernel_probe/k3_oracle.py || exit 1
+
+            worst=0
+            for probe_case in ${KIMIK3_PROBE_CASES}; do
+                echo "===== PROBE CASE ${probe_case} ====="
+                # A fresh process per case, and caches that cannot carry a
+                # tuned config or a compiled kernel across cases: two cases
+                # sharing them would stop being independent observations.
+                case_root="/tmp/k3-probe/${probe_case}"
+                rm -rf "$case_root"
+                mkdir -p "$case_root/jit" "$case_root/triton"
+                # Artifacts stay container-local and reach the host only as
+                # stdout. This step runs with --container-remap-root, so a JSON
+                # written straight into /workspace would be a root-owned file in
+                # $GITHUB_WORKSPACE and would break the next job checkout.
+                PROBE_CASE="$probe_case" \
+                PROBE_ARTIFACT_DIR="$case_root" \
+                AITER_JIT_DIR="$case_root/jit" \
+                TRITON_CACHE_DIR="$case_root/triton" \
+                    python /workspace/benchmarks/kernel_probe/k3_moe_probe.py
+                rc=$?
+                echo "----- k3_probe_${probe_case}.json -----"
+                cat "$case_root/k3_probe_${probe_case}.json" || echo "(no JSON produced)"
+                echo "===== PROBE CASE ${probe_case} rc=${rc} ====="
+                [[ "$rc" -gt "$worst" ]] && worst="$rc"
+            done
+            exit "$worst"
+        ' 2>&1 | tee "$PROBE_LOG"
+    probe_rc="${PIPESTATUS[0]}"
+    set -e
+
+    echo "kernel probe exited with $probe_rc"
+    # cleanup() packages SERVER_LOG_DIR into the tarball the workflow uploads
+    # with always(), so the probe output and its JSON survive this exit.
+    exit "$probe_rc"
+fi
+
 # --- Allocation ------------------------------------------------------------
 
 set -x

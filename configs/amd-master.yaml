@@ -2298,6 +2298,11 @@ kimik3-fp4-mi300x-vllm-agentic:
           # Canary-only: the AITER overlay validates gfx942 MXFP4 numerics, but
           # this image's vLLM oracle still hard-rejects MXFP4 outside gfx950.
           - "KIMIK3_VLLM_GFX942_GATE_PATCH=1"
+          # Diagnostic mode: take one node and one GPU, run the A16W4 SiTUv2
+          # MoE probe, and skip the server entirely. The job still ends red
+          # because no result file is produced; the evidence is the probe JSON
+          # in the always() log artifact. Set to 0 to run the real canary.
+          - "KIMIK3_PROBE_ONLY=1"
         decode:
           num-worker: 0
           tp: 8
