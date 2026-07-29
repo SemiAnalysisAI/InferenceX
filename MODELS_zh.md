@@ -29,7 +29,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 | MiniMax-M3（`minimaxm3`） | 智能体编码，非 MTP | 智能体编码，MTP |
 | Kimi-K3（`kimik3`） | 智能体编码，非 DSpark —— 自第 0 天（day 0）起即弃用 | 智能体编码，DSpark |
 
-**今后我们不再以 A/B 对照的方式基准测试「非投机解码 vs 投机解码」。**智能体编码配方一律仅在启用投机解码的条件下运行与发布 —— 具体为 MTP、EAGLE/EAGLE3、DSpark，或该模型自带的任何草稿（draft）方法 —— 非投机解码分支既不运行也不发布。新模型自第 0 天起即按此方式接入，Kimi-K3 即为一例。
+**今后我们不再以 A/B 对照的方式基准测试「非投机解码 vs 投机解码」。**当初保留非投机解码分支，是把它当作中立基线：那时接受长度（AL）完全取决于提交方草稿头（draft head）的实际水平，导致各家投机解码数据之间无法横向比较。这一问题现已解决：[`golden_al_distribution/`](golden_al_distribution/) 为每个模型、thinking 模式与草稿长度各提交了一条黄金 AL 曲线，均在 SPEED-Bench `coding` 类别上测得；AgentX 通过合成接受（synthetic acceptance）将所有提交锁定到该曲线（vLLM 用 `synthetic_acceptance_length`，SGLang 用 `SGLANG_SIMULATE_ACC_LEN`，TensorRT-LLM 用 `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`）。既然已有公平且与引擎无关的接受目标，投机解码结果本身即可直接横向比较，单独保留一条非投机解码赛道已属冗余。因此，智能体编码配方一律仅在启用投机解码的条件下运行与发布 —— 具体为 MTP、EAGLE/EAGLE3、DSpark，或该模型自带的任何草稿方法 —— 非投机解码分支既不运行也不发布。新模型自第 0 天起即按此方式接入，Kimi-K3 即为一例。
 
 ### 2026 年 8 月 6 日（星期四）
 
