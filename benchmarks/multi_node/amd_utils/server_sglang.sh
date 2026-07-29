@@ -1279,22 +1279,27 @@ else
     # measured MTP/EAGLE acceptance there isn't representative (PR #2309
     # review: https://github.com/SemiAnalysisAI/InferenceX/pull/2309#pullrequestreview-4778348624).
     # Per the AgentX fairness guidelines (golden_al_distribution/README.md),
-    # agentic spec-decode runs must instead simulate acceptance at the
-    # model's committed golden AL for this draft length instead of measuring
-    # real (and non-representative) acceptance. Golden curve source:
+    # agentic throughput benchmarks simulate acceptance at the model's
+    # committed golden AL instead of measuring real (non-representative)
+    # acceptance. Eval runs (RUN_EVAL / EVAL_ONLY) need real acceptance so
+    # GSM8K scores reflect actual MTP behavior. Golden curve source:
     # golden_al_distribution/dsv4_mtp.yaml (thinking_on).
     DECODE_SIM_ACC_ENV=""
     if [[ "$DECODE_MTP_SIZE" -gt 0 ]] && { [[ "${IS_AGENTIC:-0}" == "1" ]] || [[ "${IS_AGENTIC:-}" == "true" ]]; }; then
-        DSV4_GOLDEN_AL=""
-        case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
-            *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
-            *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
-            *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
-        esac
-        if [[ -n "$DSV4_GOLDEN_AL" ]]; then
-            DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
+        if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
+            echo "[INFO] Eval mode: synthetic MTP disabled (using real acceptance)"
         else
-            echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+            DSV4_GOLDEN_AL=""
+            case "${MODEL_NAME}:${DECODE_MTP_SIZE}" in
+                *DeepSeek-V4*:1) DSV4_GOLDEN_AL=1.79 ;;
+                *DeepSeek-V4*:2) DSV4_GOLDEN_AL=2.27 ;;
+                *DeepSeek-V4*:3) DSV4_GOLDEN_AL=2.49 ;;
+            esac
+            if [[ -n "$DSV4_GOLDEN_AL" ]]; then
+                DECODE_SIM_ACC_ENV="SGLANG_SIMULATE_ACC_LEN=${DSV4_GOLDEN_AL} SGLANG_SIMULATE_ACC_METHOD=match-expected SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token"
+            else
+                echo "WARNING: agentic MTP run (model=${MODEL_NAME}, DECODE_MTP_SIZE=${DECODE_MTP_SIZE}) has no golden AL wired in server_sglang.sh -- falling back to real (unsimulated, non-representative) acceptance. Add a case in server_sglang.sh and golden_al_distribution/ before shipping this arm. See golden_al_distribution/README.md." >&2
+            fi
         fi
     fi
 
