@@ -13,7 +13,10 @@ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 NUM_SPEC_TOKENS=3
-SYNTHETIC_ACCEPT_LEN=2.83
+# Golden AL for the GQA draft head: golden_al_distribution/minimaxm3_eagle3_gqa.yaml
+# minimax-m3.thinking_on[3]. The non-GQA curve (minimaxm3_eagle3.yaml) reads 2.83
+# at the same level -- that head is not what this script runs.
+SYNTHETIC_ACCEPT_LEN=2.78
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
