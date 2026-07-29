@@ -26,7 +26,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 |---|---|---|
 | DeepSeek-V4-Pro 1.6T（`dsv4`） | 智能体编码，非 MTP | 智能体编码，MTP |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 智能体编码，非 MTP | 智能体编码，MTP |
-| MiniMax-M3（`minimaxm3`） | 智能体编码，非 MTP | 智能体编码，MTP |
+| MiniMax-M3（`minimaxm3`） | 智能体编码，非 EAGLE3 | 智能体编码，EAGLE3 |
 | GLM-5.2（`glm5.2`） | 智能体编码，非 MTP | 智能体编码，MTP |
 | Kimi-K3（`kimik3`） | 智能体编码，非 DSpark —— 自第 0 天（day 0）起即弃用 | 智能体编码，DSpark |
 
@@ -52,7 +52,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 | Qwen3.8 2.4T | `qwen3.8` | 待定 | 智能体编码 | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码（仅 DSpark） | 智能体编码非 DSpark 分支（自第 0 天起弃用） |
 | GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码（自 2026-08-03 起仅 MTP） | |
-| MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 单轮 8k1k（至 2026-08-03）、智能体编码（自 2026-08-03 起仅 MTP） | 单轮 1k1k |
+| MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 单轮 8k1k（至 2026-08-03）、智能体编码（自 2026-08-03 起仅 EAGLE3） | 单轮 1k1k |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 单轮 8k1k、智能体编码（自 2026-08-03 起仅 MTP） | 单轮 1k1k |
 | GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)）；GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | —（2026-07-18 退役，[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） | 单轮 1k1k、单轮 1k8k（仅 GLM-5）、单轮 8k1k |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18（[#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)） | —（2026-06-20 退役，[#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |

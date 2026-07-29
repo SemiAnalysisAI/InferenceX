@@ -26,7 +26,7 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 |---|---|---|
 | DeepSeek-V4-Pro 1.6T (`dsv4`) | Agentic coding, non-MTP | Agentic coding, MTP |
 | Qwen3.5-397B-A17B (`qwen3.5`) | Agentic coding, non-MTP | Agentic coding, MTP |
-| MiniMax-M3 (`minimaxm3`) | Agentic coding, non-MTP | Agentic coding, MTP |
+| MiniMax-M3 (`minimaxm3`) | Agentic coding, non-EAGLE3 | Agentic coding, EAGLE3 |
 | GLM-5.2 (`glm5.2`) | Agentic coding, non-MTP | Agentic coding, MTP |
 | Kimi-K3 (`kimik3`) | Agentic coding, non-DSpark — deprecated from day 0 | Agentic coding, DSpark |
 
@@ -52,7 +52,7 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 | Qwen3.8 2.4T | `qwen3.8` | TBD | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark only) | Agentic coding non-DSpark arm (deprecated from day 0) |
 | GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (MTP only from 2026-08-03) | |
-| MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Single-turn 8k1k (until 2026-08-03), Agentic coding (MTP only from 2026-08-03) | Single-turn 1k1k |
+| MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Single-turn 8k1k (until 2026-08-03), Agentic coding (EAGLE3 only from 2026-08-03) | Single-turn 1k1k |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding (MTP only from 2026-08-03) | Single-turn 1k1k |
 | GLM-5 / GLM-5.1 | `glm5`, `glm5.1` | 2026-03-06 ([#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)); GLM-5.1 added 2026-04-21 ([#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)) | — (retired 2026-07-18, [#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)) | Single-turn 1k1k, Single-turn 1k8k (GLM-5 only), Single-turn 8k1k |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | — (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
