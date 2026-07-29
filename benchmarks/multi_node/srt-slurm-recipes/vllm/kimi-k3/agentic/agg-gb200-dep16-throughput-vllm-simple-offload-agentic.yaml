@@ -16,10 +16,10 @@ identity:
   container:
     image: "vllm/vllm-openai:kimi-k3"
   frameworks:
-    dynamo: "1.3.0"
+    dynamo: "1.4.0-kimi-k3-dev.1"
 
 dynamo:
-  version: "1.3.0"
+  hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
   install: true
 
 environment:
