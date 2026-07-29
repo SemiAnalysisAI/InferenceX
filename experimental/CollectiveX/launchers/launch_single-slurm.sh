@@ -47,7 +47,7 @@ TIME_MIN="${COLLX_TIME:-$DEFAULT_TIME}"
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
-  deepep-v2 | uccl-ep) ;;
+  deepep-v2 | uccl-ep | nccl-ep) ;;
   *) collx_die "unsupported $RUNNER EP backend: $COLLX_BENCH" ;;
 esac
 
