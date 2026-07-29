@@ -417,6 +417,23 @@ def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
     assert "INFX_FRONTEND_PAT" not in workflow
 
 
+def test_e2e_agentic_eval_preserves_matrix_transport_settings() -> None:
+    workflow = yaml.load(
+        (REPO_ROOT / ".github/workflows/e2e-tests.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    inputs = workflow["jobs"]["test-sweep-agentic-evals"]["with"]
+
+    assert inputs["kv-offload-backend"] == (
+        "${{ matrix.config['kv-offload-backend'].name }}"
+    )
+    assert inputs["kv-offload-backend-metadata"] == (
+        "${{ matrix.config['kv-offload-backend']"
+        " && toJson(matrix.config['kv-offload-backend']) || '' }}"
+    )
+    assert inputs["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
+
+
 def test_priority_classifier_runs_for_enabled_actions() -> None:
     scenario = {
         **_PR,

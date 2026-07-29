@@ -5355,3 +5355,11 @@
     - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the Kimi-K3 MXFP4 MI355X AgentX DSpark variant with Inferact/Kimi-K3-DSpark, seven draft tokens, probabilistic draft sampling, and TRITON_MLA on ROCm."
+    - "Pin throughput to the committed thinking-on golden acceptance length 3.84 with synthetic rejection sampling; eval-only runs retain real block verification."
+    - "Run TP8 with SimpleCPUOffloadConnector at concurrency 1/2/4/8. The _mtp wrapper keeps the gfx950 bring-up settings validated in PR #2367 together: --enforce-eager, --max-num-batched-tokens 1024, --max-num-seqs 32, bf16 KV cache, language-model-only mode, and lazy host allocation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2403
