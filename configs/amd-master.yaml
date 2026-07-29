@@ -626,31 +626,25 @@ kimik3-fp4-mi355x-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-      # 0.80 of the runner's available-cpu-dram-mib (3_095_781), capped by the
-      # matrix generator at the 2,861,022 MiB / 3 TB-decimal agentic limit ->
-      # 2399 GB aggregate at TP8 (~300 GB/rank). Walked down from 0.95: at 0.95 the
-      # pool committed 2771 GiB and left ~12 GiB host free, and at 0.93 each of the
-      # 8 workers still eagerly pinned 324.67 GB (2597 GB total), which starved the
-      # shm_broadcast ring ("No available shared memory broadcast block found in 60
-      # seconds") and killed EngineCore during warmup. Pinned host memory is
-      # unswappable; the dsv4 LMCache recipe derates its pool for the same reason.
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       # TP=8 only: the ~1.56 TB MXFP4 checkpoint needs ~195 GB/GPU of the
       # 288 GB HBM, so TP=4 (~390 GB/GPU) cannot load.
       #
-      # DRAM offload on every point. vllm-simple = SimpleCPUOffloadConnector with
-      # per-rank cpu_bytes_to_use_per_rank and eager offload; it is the only
-      # offload backend shipped here because it needs no KV block/hash alignment,
-      # unlike OffloadingConnector, which constrains K3's hybrid KDA+MLA geometry.
+      # GPU-resident: KV offloading is OFF. The SimpleCPUOffloadConnector arm
+      # (dram-utilization 0.80 -> ~2399 GB aggregate at TP8) was walked down from
+      # 0.95 and still destabilized startup -- pinned host memory is unswappable,
+      # and the workers' per-rank pools starved the shm_broadcast ring ("No
+      # available shared memory broadcast block found in 60 seconds"), killing
+      # EngineCore during warmup. This entry measures the GPU-resident baseline
+      # first; the offload arm can come back as a separate row once it is stable.
       #
       # conc 1/2/4/8. Measured at conc 16/32 on this corpus, interactivity is
       # already floored at 2.6-2.9 output tok/s/user with ITL 353-384 ms and TTFT
       # 189-601 s: mean ISL is 117k-155k tokens (p99 559k-810k) against ~500-token
       # outputs, so the run is prefill-bound and aggregate KV (2.5-3.8M tokens)
       # overruns the 2,204,913-token GPU pool. The low end is where per-user
-      # interactivity is still meaningful; conc 1 is the offload-overhead baseline.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8] }
+      # interactivity is still meaningful.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511

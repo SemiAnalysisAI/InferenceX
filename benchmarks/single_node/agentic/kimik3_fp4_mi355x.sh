@@ -23,7 +23,9 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-native.
+# The shipped config runs KV_OFFLOADING=none (GPU-resident). The dram branches
+# below are kept for when the offload arm is re-armed: vllm-native pairs with
+# KV_OFFLOAD_BACKEND=vllm-native, vllm-simple with vllm-simple.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -182,7 +184,9 @@ fi
 # shared memory broadcast block" once a minute, then died with "TimeoutError: RPC
 # call to sample_tokens timed out" after ~1500 blocks were restored from CPU in a
 # single step at kv_cache_usage 0.835. At 16384 the same row completed warmup with
-# 409 requests and 0 errors and ran the full profiling phase.
+# 409 requests and 0 errors and ran the full profiling phase. The evict/restore
+# driver is gone now that the shipped config is GPU-resident, but 16384 is the
+# layout conc 8 was measured green in, so it stays.
 #
 # conc <= 5 -> 4096. At 16384 the conc 4 row page-faults in wvSplitK, vLLM's
 # hand-written ROCm skinny GEMM, called from the KDA in_proj_qkvgfab projection
