@@ -73,6 +73,7 @@ class NCCLEPBackend(EPBackend):
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
     stage_device_work = False
+    combine_input_attr = "combine_input_t"  # this adapter's combine reads combine_input_t
     combine_needs_redispatch = False
     dispatch_needs_combine_cleanup = False
     combine_weight_semantics = "unweighted-rank-sum"

@@ -22,7 +22,7 @@
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
 |---|---|---|---|---|
 | Qwen3.8 2.4T | `qwen3.8` | 待定 | 智能体编码 | |
-| Kimi-K3 | `kimik3` | 2026-07-27 | 智能体编码 | |
+| Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | 智能体编码 | |
 | GLM-5.2 | `glm5.2` | 2026-07-18（[#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)） | 智能体编码 | |
 | MiniMax-M3 | `minimaxm3` | 2026-06-12（[#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)） | 单轮 8k1k、智能体编码 | 单轮 1k1k |
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 单轮 8k1k、智能体编码 | 单轮 1k1k |

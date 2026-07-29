@@ -169,13 +169,19 @@ jobs:
                   reason: 'it was not created while a full-sweep label was applied',
                 };
               }
-              if (candidate.status !== 'completed' || candidate.conclusion !== 'success') {
+              const stageableConclusions = new Set(['success', 'cancelled']);
+              if (
+                candidate.status !== 'completed' ||
+                !stageableConclusions.has(candidate.conclusion)
+              ) {
                 return {
                   valid: false,
                   reason: `it is ${candidate.status}/${candidate.conclusion}`,
                 };
               }
 
+              // Cancelled sweeps may still contain useful partial results. The
+              // artifact checks below keep empty or metadata-only runs ineligible.
               const artifactNames = await usableArtifactNames(candidate.id);
               if (!artifactNames.includes('changelog-metadata')) {
                 return { valid: false, reason: 'it has no unexpired changelog-metadata artifact' };
@@ -222,7 +228,7 @@ jobs:
               }
               if (!run) {
                 core.setFailed(
-                  `No successful completed run-sweep.yml run with unexpired staging artifacts was found for PR #${context.issue.number}`,
+                  `No stageable completed run-sweep.yml run with unexpired staging artifacts was found for PR #${context.issue.number}`,
                 );
                 return;
               }

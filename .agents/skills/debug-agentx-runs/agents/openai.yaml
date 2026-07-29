@@ -1,0 +1,4 @@
+interface:
+  display_name: "Debug AgentX Runs"
+  short_description: "Debug long AgentX runs from live cluster signals"
+  default_prompt: "Use $debug-agentx-runs to debug this AgentX benchmark from live cluster logs and metrics."

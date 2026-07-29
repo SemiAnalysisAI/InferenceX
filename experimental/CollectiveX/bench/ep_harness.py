@@ -1081,6 +1081,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             },
         },
         "implementation": {
+            # Which production FP8 consumption path the chained roundtrip modelled; see
+            # EPBackend.fp8_consume. Only meaningful when the case dispatches FP8.
+            "fp8_consume": getattr(backend, "fp8_consume", None),
             "kernel_generation": kernel_generation(backend),
             "name": backend.name,
         },

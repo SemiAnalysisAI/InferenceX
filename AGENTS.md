@@ -119,6 +119,8 @@ gh api -X POST \
 
 Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value.
 
+For an AgentX preflight, add `-F 'inputs[agentx-fast]=true'` to the dispatch command. This selects a 5-minute cache warmup and 20-minute profile for every AgentX job in that e2e dispatch and takes precedence over `duration-override`. Use it to get faster signal while debugging, then run the official sweep without `agentx-fast`; canonical AgentX timing remains a 10-minute cache warmup and 1-hour profile.
+
 The POST returns no body and no run ID - find the run with `gh run list` below.
 
 ### Monitoring jobs

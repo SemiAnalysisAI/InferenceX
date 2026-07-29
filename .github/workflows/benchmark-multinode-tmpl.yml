@@ -154,6 +154,11 @@ on:
         type: string
         required: false
         default: "3600"
+      agentx-fast:
+        description: "Use the AgentX 5-minute warmup and 20-minute profiling preset"
+        type: boolean
+        required: false
+        default: false
       kv-offloading:
         description: "KV offload mode for agentic scenarios (none/dram)"
         required: false
@@ -214,6 +219,7 @@ env:
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
+  AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   KV_OFFLOADING: ${{ inputs.kv-offloading }}
   KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
   KV_OFFLOAD_BACKEND_METADATA: ${{ inputs.kv-offload-backend-metadata }}
