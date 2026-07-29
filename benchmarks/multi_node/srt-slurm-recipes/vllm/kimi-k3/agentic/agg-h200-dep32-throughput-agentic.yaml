@@ -1,4 +1,4 @@
-name: "kimik3-vllm-agg-h200-tp8pp2-latency-agentic"
+name: "kimik3-vllm-agg-h200-dep32-throughput-agentic"
 
 model:
   path: "kimik3"
@@ -18,9 +18,9 @@ health_check:
 resources:
   gpu_type: "h200"
   gpus_per_node: 8
-  agg_nodes: 2
+  agg_nodes: 4
   agg_workers: 1
-  gpus_per_agg: 16
+  gpus_per_agg: 32
 
 frontend:
   type: vllm
@@ -43,18 +43,19 @@ backend:
   vllm_config:
     aggregated:
       served-model-name: "moonshotai/Kimi-K3"
-      tensor-parallel-size: 8
-      pipeline-parallel-size: 2
+      tensor-parallel-size: 1
+      data-parallel-size: 32
+      enable-expert-parallel: true
       trust-remote-code: true
       load-format: fastsafetensors
       moe-backend: marlin
       attention-backend: FLASHMLA
       gpu-memory-utilization: 0.95
-      max-num-seqs: 8
-      max-num-batched-tokens: 4096
+      max-num-seqs: 2
+      max-num-batched-tokens: 1024
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
+      compilation-config: '{"cudagraph_capture_sizes":[3,6]}'
       enable-prefix-caching: true
-      compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24],"pass_config":{"fuse_allreduce_rms":false}}'
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
       enable-auto-tool-choice: true
