@@ -115,6 +115,10 @@ export VLLM_HTTP_TIMEOUT_KEEP_ALIVE=900
 # Agentic warmup dispatches large prompts at once; allow up to 15 minutes of TCP
 # progress before AIPerf declares a connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+# THROWAWAY TEST BRANCH ONLY -- do not merge. Agentic scenarios default to
+# EVAL_FRAMEWORK=swebench (benchmark_lib.sh run_eval); lm-eval runs
+# utils/evals/gsm8k.yaml by default, so this switches the eval-only job to gsm8k.
+export EVAL_FRAMEWORK=lm-eval
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
