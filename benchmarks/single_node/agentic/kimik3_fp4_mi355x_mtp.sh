@@ -153,7 +153,7 @@ if [[ "$DRAFT_MODEL" != /* ]]; then hf download "$DRAFT_MODEL"; fi
 # concurrencies the load generator is the binding constraint, so this should not
 # change what is measured, but it is a real deviation from agentic convention and
 # from the sibling non-MTP recipe.
-MAX_SEQS=128
+MAX_SEQS=32
 
 # The draft's attention backend MUST be pinned. The upstream recipe pins
 # FLASHINFER_MLA, which cannot work here: flashinfer is absent from the ROCm
@@ -341,7 +341,30 @@ VLLM_CMD=(
     # max_num_batched_tokens", because drafting reserves slots out of the budget.
     # Raising it is the right direction once the graph-capture fault is fixed
     # upstream, but it cannot be raised today.
-    --max-num-batched-tokens 4096
+    --max-num-batched-tokens 1024
+    # --enforce-eager, --max-num-batched-tokens 1024 and --max-num-seqs 32 are ONE
+    # unit: together they are the only configuration measured serving DSpark with
+    # KV offload active on gfx950. Verified on 8x MI355X: connector active
+    # (SimpleCPUOffloadConnector role=SCHEDULER + role=WORKER, not self-disabled),
+    # GPU KV 1,648,968 tokens, two chat completions returned coherent output, and
+    # the server stayed up.
+    #
+    # Each lever alone is NOT sufficient, measured:
+    #   graphs on,  mnbt 1024, seqs 128 -> 8-rank GPU memory access fault
+    #   eager,      mnbt 2048, seqs 128 -> 8-rank GPU memory access fault
+    #   eager,      mnbt 4096, seqs 128 -> CUDA OOM before reaching the fault site
+    #   eager,      mnbt 1024, seqs 32  -> SERVES
+    # An earlier revision claimed --enforce-eager alone removed the fault; that was
+    # wrong. Those runs OOMed before reaching the fault site, so memfault=0 only
+    # meant they died sooner. On this bug an earlier failure hides the later one.
+    #
+    # COST, deliberate: eager mode removes CUDA graphs and a 1024-token batch turns
+    # a 167k-token agentic prefill into ~163 chunks, so these rows are a FLOOR, not
+    # a representative MI355X figure, and are not comparable to the non-MTP rows.
+    # That chunking churn is also what caused the "TimeoutError: RPC call to
+    # sample_tokens timed out" stall on the non-MTP twin, so warmup may still fail
+    # here even though the server serves.
+    --enforce-eager
     --speculative-config "$SPEC_CONFIG"
     --mm-encoder-tp-mode data
     --enable-auto-tool-choice
