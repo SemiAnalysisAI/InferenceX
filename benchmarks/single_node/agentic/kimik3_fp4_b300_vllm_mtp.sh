@@ -79,6 +79,16 @@ install_agentic_deps
 # ---- Kimi-K3 production serving environment ---------------------------------
 export NCCL_DMABUF_ENABLE=0
 export VLLM_ALLREDUCE_USE_FLASHINFER=1
+# Required by the upstream recipe on BOTH its blackwell and nvidia paths
+# (recipes.vllm.ai/moonshotai/Kimi-K3), and never set here before. It defaults to
+# 0, and it is threaded into LatentMoERunner as
+# runner_args={"enable_k3_latent_moe_tail_fusion": ...} at
+# vllm/models/kimi_k3/nvidia/model.py:549 -- the same runner whose shared-experts
+# output buffer asserted (fused_moe/runner/shared_experts.py:165, all 8 TP ranks)
+# when the wider flag alignment was tried. With this unset we have been running a
+# MoE tail path upstream never exercises, so enable it on its own before
+# re-attempting any of the other upstream flags.
+export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1
 export VLLM_USE_RUST_FRONTEND=1
 # Loading ~1.5 TB of MXFP4 shards off the staged mount takes well past the
 # default readiness window even with fastsafetensors.
