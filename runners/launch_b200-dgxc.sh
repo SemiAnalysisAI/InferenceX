@@ -72,6 +72,10 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
     # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
     export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
+elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+    # Native MXFP4 checkpoint, pre-staged on the SRE-managed Lustre tree.
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K3"
+    export SRT_SLURM_MODEL_PREFIX="kimik3"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"
@@ -104,9 +108,20 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
+        # Direct-vLLM agentic experiment (Variant D): srt-slurm PR #278
+        # (kylliang/direct-aggregate-vllm) adds frontend.type: vllm — `vllm
+        # serve` owns the OpenAI port itself, no Dynamo layer. The fork branch
+        # carries PR #278 plus the multi-node extension (vLLM-native
+        # --master-addr/--nnodes/--node-rank serve + headless non-leader
+        # ranks) so the 2-node TP8xPP2 topology can run.
+        git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
+        if [[ $MODEL_PREFIX == "kimik3" ]]; then
+            mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+            cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+                recipes/vllm/kimi-k3/agentic || exit 1
+        fi
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -207,6 +222,22 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
     export EVAL_ONLY="${EVAL_ONLY:-false}"
 
+    # Agentic runs bind-mount two persistent caches into every worker
+    # container (Lustre, shared across nodes): aiperf's content-addressed
+    # dataset mmap cache and the HF hub cache holding the trace dataset
+    # download. The container-side paths are referenced by the agentic
+    # recipes' benchmark.env (AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,
+    # HF_HUB_CACHE=/hf_hub_cache).
+    DEFAULT_MOUNTS_BLOCK=""
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        HF_HUB_CACHE_HOST_PATH="/lustre/fsw/gharunners/hf-hub-cache"
+        mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
+        chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+        DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    fi
+
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
@@ -234,6 +265,7 @@ containers:
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
     echo "Generated srtslurm.yaml:"
