@@ -703,7 +703,7 @@ kimik3-fp4-mi355x-vllm-agentic-fp8kv:
   # vllm/vllm-openai-rocm:kimi-k3 routes fp8 KV into AITER's mla_gluon path,
   # which asserts `mla_gluon[bh16bn128] requires batch_size=1, got 128`
   # (run 30411594835). This image is built to accept b128 so fp8 KV can run.
-  image: hyukjleeamd/kimi-k3-mla-b128:latest
+  image: hyukjleeamd/kimi-k3-mla-b128:fp8-kv-fixed
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
