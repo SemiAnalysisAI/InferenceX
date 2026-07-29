@@ -96,7 +96,7 @@ if require_agentic_kv_offload_backend lmcache; then
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        agentic_pip_install --quiet --no-cache-dir lmcache
+        agentic_pip_install --quiet --no-cache-dir 'lmcache==0.5.1'
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
         # MP mode owns the configured CPU pool in the external LMCache
@@ -190,7 +190,9 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

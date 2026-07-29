@@ -1,0 +1,182 @@
+# DeepSeek-V4-Pro (FP4) on GB200, low-latency P/D disagg via llmd-vllm.
+#
+# Latency end of the curve. Engine config mirrors the upstream srt-slurm
+# recipe disagg-gb200-low-latency.yaml (less the dynamo-only frontend keys),
+# served via the InferenceX llmd-vllm path (no NATS/etcd infra node). It is
+# the direct sibling of the dsv4-fp4-gb200-dynamo-vllm conc=1 low-latency
+# point (same topology: 1 prefill DEP8 + 1 decode pure-TP8).
+#
+# Topology (set by the nvidia-master.yaml key via additional-settings):
+#   low-latency key (conc 1): 1P1D = 1 prefill + 1 decode engine, 4 GB200
+#       nodes / 16 GPUs. PREFILL_NODES=2 DECODE_NODES=2.
+#
+# The ONLY difference from the mid-curve-megamoe recipe is the DECODE engine:
+#   1. DECODE is PURE TP=8 (tensor-parallel-size 8, NO DP, NO EP) - ONE model
+#      replica across 8 GPUs / 2 GB200 nodes, launched headless multi-node TP
+#      (leader + follower). This is the latency-optimal decode: no all-to-all
+#      MoE routing, no DP-attention. `enable-expert-parallel: false` +
+#      decode ep:1/dp-attn:false in the master key is what selects the
+#      pure-TP path in server.sh. Decode knobs are latency-sized: max-num-seqs
+#      256, max-num-batched-tokens 256, max-cudagraph-capture-size 256,
+#      FULL_DECODE_ONLY graphs, stream-interval 50, gpu-memory-utilization 0.9.
+#   2. PREFILL is IDENTICAL to the mid-curve/high-tpt prefill (copied verbatim,
+#      DEP8 with enable-ep-weight-filter + moe-backend deep_gemm_mega_moe). An
+#      earlier srt-slurm-style low-latency prefill (weight-offload, no filter,
+#      moe-backend auto) warmed up ALL expert shapes (~4069-step DeepGEMM) and
+#      never became ready in the bring-up window; the mid-curve prefill's
+#      weight-filter collapses that warmup, and it is already proven on GB200.
+#
+# ---- EPP scheduling config (identical to the mid-curve recipe) ----
+# EPP routing is engine-config-agnostic, so the scheduling profiles match the
+# upstream generic wide-ep-lws router config byte-for-byte:
+#   prefill = prefix-cache(3) + queue(2) + active-request(2)
+#   decode  = active-request only
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags ----
+# Prefill: DEP=8 (TP=1, DP=8, EP). IDENTICAL to the mid-curve/high-tpt prefill
+# block - copied verbatim (all args + env). enable-ep-weight-filter +
+# moe-backend deep_gemm_mega_moe keep only the served experts resident and
+# collapse the DeepGEMM warmup, so bring-up is fast. A pure srt-slurm-style
+# low-latency prefill (weight-offload, no filter, moe-backend auto) instead
+# warmed up ALL expert shapes (~4069-step DeepGEMM) and never became ready
+# inside the bring-up window (e2e runs 28742781217 / 28744015942). Only the
+# DECODE below differs from mid-curve: pure TP=8 instead of DEP=8.
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --enforce-eager
+    --gpu-memory-utilization 0.9
+    --enable-cumem-allocator
+    --no-enable-prefix-caching
+    --no-async-scheduling
+    --block-size 256
+    --tokenizer-mode deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+    --numa-bind
+  env:
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: "NVL"
+    # dynamo-vllm parity (2026-06-27): GPUDirect-RDMA over the GB200
+    # Grace-Blackwell C2C link - lifts cross-node NCCL collective (DP8/EP8
+    # MoE all-to-all) bandwidth. Dynamo sets it; we did not.
+    NCCL_NET_GDR_C2C: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    # Added rc (IB verbs) so cross-node KV falls back to InfiniBand, not
+    # TCP, when MNNVL/cuda_ipc is unavailable. Prior value lacked rc, so
+    # the fallback was tcp (slow). Primary path is still MNNVL via
+    # cuda_ipc + cumem allocator.
+    UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    # dynamo-vllm parity (2026-06-27): no NVSHMEM remote transport (we don't
+    # use DeepEP), plus explicit NIC->PE mapping. server.sh defaults
+    # NVSHMEM_REMOTE_TRANSPORT to ibgda but honors this override and clears
+    # the image's NVSHMEM_HCA_LIST so this PE mapping takes effect.
+    NVSHMEM_REMOTE_TRANSPORT: "none"
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
+    NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_SKIP_P2P_CHECK: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
+    VLLM_USE_DEEP_GEMM: "1"
+    NVIDIA_GDRCOPY: "enabled"
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    # Harden distributed coordination against transient gloo/NCCL resets under
+    # load (matters for the low-middle 1P4D point; harmless at conc=1). Matches
+    # the DEP8 recipe + srt-slurm (TORCH_DISTRIBUTED_DEFAULT_TIMEOUT 1800).
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+# Decode: PURE TP=8 (one replica across 8 GPUs / 2 nodes). NO EP, NO DP.
+# Mirrors the srt-slurm low-latency decode vllm_config. tensor-parallel-size
+# is supplied by server.sh from the master key (tp:8); the recipe sets EP off.
+decode:
+  tp: 8
+  enable-expert-parallel: false
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --max-model-len 16384
+    --max-num-seqs 256
+    --max-num-batched-tokens 256
+    --max-cudagraph-capture-size 256
+    --gpu-memory-utilization 0.9
+    --enable-cumem-allocator
+    --no-enable-prefix-caching
+    --no-enable-flashinfer-autotune
+    --block-size 256
+    --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
+    --stream-interval 50
+    --tokenizer-mode deepseek_v4
+    --no-disable-hybrid-kv-cache-manager
+    --enable-sleep-mode
+  env:
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: "NVL"
+    NCCL_NET_GDR_C2C: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    # rc added so KV falls back to InfiniBand, not TCP (see prefill note).
+    UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_SKIP_P2P_CHECK: "1"
+    NVIDIA_GDRCOPY: "enabled"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+# ---- SLURM resource directives ----
+slurm:
+  time_limit: "08:00:00"

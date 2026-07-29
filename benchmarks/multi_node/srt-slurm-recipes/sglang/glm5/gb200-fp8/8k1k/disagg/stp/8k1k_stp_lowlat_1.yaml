@@ -1,0 +1,119 @@
+name: gb200-fp8-glm5_8k1k_lowlat_1
+
+# Combined upstream srt-slurm recipe split into one flat yaml per concrete
+# topology to match the InferenceX glm5 sglang convention
+# (see ../../../gb300-fp8/). All shared base envs and the prefill
+# sglang_config are inlined here verbatim; the decode block is the shared
+# base plus the topology-specific override for this concrete shape.
+
+model:
+  path: glm-5.1-fp8
+  container: "lmsysorg/sglang:v0.5.12"
+  precision: fp8
+
+resources:
+  gpu_type: gb200
+  gpus_per_node: 4
+  prefill_nodes: 2
+  prefill_workers: 1
+  decode_nodes: 16
+  decode_workers: 8
+frontend:
+  type: dynamo
+dynamo:
+  version: 1.2.1
+
+backend:
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    MC_TE_METRIC: 'true'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    DYN_REQUEST_PLANE: nats
+
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    MC_TE_METRIC: 'true'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    DYN_REQUEST_PLANE: nats
+
+  sglang_config:
+    prefill:
+      served-model-name: GLM-5.1-FP8
+      trust-remote-code: true
+      quantization: fp8
+      kv-cache-dtype: fp8_e4m3
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: nixl
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 1
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      enable-flashinfer-allreduce-fusion: false
+      chunked-prefill-size: 131072
+      max-prefill-tokens: 16384
+      context-length: 9280
+      nsa-prefill-backend: trtllm
+      nsa-decode-backend: trtllm
+      moe-runner-backend: flashinfer_trtllm
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+      mem-fraction-static: 0.7
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+
+    decode:
+      served-model-name: GLM-5.1-FP8
+      trust-remote-code: true
+      quantization: fp8
+      kv-cache-dtype: fp8_e4m3
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: nixl
+      tensor-parallel-size: 8
+      data-parallel-size: 1
+      expert-parallel-size: 1
+      enable-flashinfer-allreduce-fusion: false
+      nsa-decode-backend: trtllm
+      nsa-prefill-backend: trtllm
+      moe-runner-backend: flashinfer_trtllm
+      mem-fraction-static: 0.943
+      context-length: 9280
+      chunked-prefill-size: 64
+      max-running-requests: 16
+      cuda-graph-max-bs: 16
+      skip-tokenizer-init: true
+      stream-interval: 30
+      disable-radix-cache: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+benchmark:
+  type: sa-bench
+  req_rate: inf
+  isl: 8192
+  osl: 1024
+  concurrencies: '90'
