@@ -39,8 +39,18 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+# qwen3.5 fp4 spans two checkpoints, so this must branch on the checkpoint and
+# not on MODEL_PREFIX+PRECISION alone: the sglang keys moved to NVFP4-V2 while
+# qwen3.5-fp4-b200-trt / -trt-mtp still declare plain NVFP4. Both share
+# model-prefix qwen3.5 + precision fp4 + runner b200, and further down this
+# script does `export MODEL="$MODEL_PATH"`, so a single shared branch would
+# serve V2 weights to the TRT configs while publishing them under the old
+# checkpoint name.
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" && $MODEL == *NVFP4-V2 ]]; then
     export MODEL_PATH="/scratch/fsw/models/Qwen3.5-397B-A17B-NVFP4-V2"
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
