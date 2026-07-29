@@ -317,7 +317,13 @@ jobs:
             isl: '0'
             osl: '0'
             max-model-len: '0'
-            spec-decoding: 'none'
+            # THROWAWAY BRANCH ONLY: main pins this to 'none', which forces every
+            # single-node agentic eval onto the non-spec script. Pass the matrix value
+            # through so a DSpark eval is reachable. Safe here because only the
+            # kimik3 dspark config runs, and its EVAL_ONLY branch uses real block
+            # verification -- recipes that always run synthetic (kimik2.5) would score
+            # 0.0000 if this were flipped on main.
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ 'false' }}
             run-eval: true
             eval-only: true
