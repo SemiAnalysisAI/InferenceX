@@ -51,8 +51,12 @@ HF_HUB_CACHE_CONTAINER="${HF_HUB_CACHE:-/hf-hub-cache}"
 # corresponding AITER commit.
 KIMIK3_AITER_OVERLAY_REF="ccf22af6ead6196b473eba3d2a81825d01c44e55"
 KIMIK3_AITER_OVERLAY_HOST="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
-export KIMIK3_AITER_OVERLAY_REF
-export KIMIK3_AITER_OVERLAY_DIR="/workspace/.aiter-k3-gfx942-overlay"
+KIMIK3_AITER_OVERLAY_ENABLED="${KIMIK3_AITER_OVERLAY_ENABLED:-1}"
+KIMIK3_AMD_PR50319_REF="c8654181d160dc08931ec6881ce622b2baa10e49"
+KIMIK3_AMD_PR50319_HOST="$GITHUB_WORKSPACE/.vllm-pr50319-overlay"
+KIMIK3_AITER_WHEEL_NAME="amd_aiter-0.1.19+rocm7.2.manylinux.2.28-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
+KIMIK3_AITER_WHEEL_SHA256="bafd3bddfccb4dd3147026433174eb6e7995f2d1b05f87c79bb75818a617c0aa"
+KIMIK3_AITER_WHEEL_URL="https://github.com/ROCm/aiter/releases/download/v0.1.19/amd_aiter-0.1.19%2Brocm7.2.manylinux.2.28-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl"
 
 download_aiter_overlay() {
     local relative_path="$1"
@@ -84,6 +88,55 @@ print(
     f"K3_AITER_OVERLAY_DOWNLOAD file={destination.name} "
     f"sha256={actual} bytes={len(payload)}"
 )
+PY
+}
+
+download_pinned_file() {
+    local url="$1"
+    local output="$2"
+    local expected_sha256="$3"
+
+    python3 - "$url" "$output" "$expected_sha256" <<'PY'
+import hashlib
+import os
+import pathlib
+import sys
+import urllib.request
+
+url, output, expected = sys.argv[1:]
+destination = pathlib.Path(output)
+destination.parent.mkdir(parents=True, exist_ok=True)
+
+
+def digest(path: pathlib.Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            value.update(chunk)
+    return value.hexdigest()
+
+
+if destination.is_file() and digest(destination) == expected:
+    print(f"K3_PINNED_FILE_REUSED file={destination} sha256={expected}")
+    raise SystemExit(0)
+
+temporary = destination.with_suffix(destination.suffix + ".tmp")
+temporary.unlink(missing_ok=True)
+value = hashlib.sha256()
+try:
+    with urllib.request.urlopen(url, timeout=120) as response, temporary.open("wb") as out:
+        while chunk := response.read(8 * 1024 * 1024):
+            value.update(chunk)
+            out.write(chunk)
+    actual = value.hexdigest()
+    if actual != expected:
+        raise SystemExit(
+            f"checksum mismatch for {url}: expected={expected} actual={actual}"
+        )
+    os.replace(temporary, destination)
+finally:
+    temporary.unlink(missing_ok=True)
+print(f"K3_PINNED_FILE_DOWNLOADED file={destination} sha256={expected}")
 PY
 }
 
@@ -172,21 +225,52 @@ if [[ -n "${AITER_SITUV2_A8W4+set}" ]]; then
     fi
 fi
 
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
-    "ed809fce18da00bf98de6385b7b934bd97fbc52cc9dc8b6306280e235b4d3fae"
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
-    "12ecefe55e188232166ddc34fe182464c26d1bff278196f7f72078ac5cab9cdd"
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
-    "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/mfma_policy.py" \
-    "dac7aa6b2cf0e25adb2119072ca80fd708855c637efc3b98cfd8f998762d8f04"
-download_aiter_overlay \
-    "aiter/fused_moe.py" \
-    "341dd12f028ead0bf90e156b50a7894926f9fef32752c858f1792f0fa6eb9d51"
+if [[ "$KIMIK3_AITER_OVERLAY_ENABLED" == "1" ]]; then
+    export KIMIK3_AITER_OVERLAY_REF
+    export KIMIK3_AITER_OVERLAY_DIR="/workspace/.aiter-k3-gfx942-overlay"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
+        "ed809fce18da00bf98de6385b7b934bd97fbc52cc9dc8b6306280e235b4d3fae"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
+        "12ecefe55e188232166ddc34fe182464c26d1bff278196f7f72078ac5cab9cdd"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
+        "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
+    download_aiter_overlay \
+        "aiter/ops/flydsl/kernels/mfma_policy.py" \
+        "dac7aa6b2cf0e25adb2119072ca80fd708855c637efc3b98cfd8f998762d8f04"
+    download_aiter_overlay \
+        "aiter/fused_moe.py" \
+        "341dd12f028ead0bf90e156b50a7894926f9fef32752c858f1792f0fa6eb9d51"
+elif [[ "$KIMIK3_AITER_OVERLAY_ENABLED" != "0" ]]; then
+    fail "KIMIK3_AITER_OVERLAY_ENABLED must be 0 or 1, got '$KIMIK3_AITER_OVERLAY_ENABLED'"
+fi
+
+if [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" == "1" ]]; then
+    export KIMIK3_AMD_PR50319_REF
+    export KIMIK3_AMD_PR50319_DIR="/workspace/.vllm-pr50319-overlay"
+    export KIMIK3_AITER_WHEEL_PATH="/workspace/.vllm-pr50319-overlay/$KIMIK3_AITER_WHEEL_NAME"
+    download_pinned_file \
+        "$KIMIK3_AITER_WHEEL_URL" \
+        "$KIMIK3_AMD_PR50319_HOST/$KIMIK3_AITER_WHEEL_NAME" \
+        "$KIMIK3_AITER_WHEEL_SHA256"
+    while read -r relative_path expected_sha256; do
+        download_pinned_file \
+            "https://raw.githubusercontent.com/vllm-project/vllm/$KIMIK3_AMD_PR50319_REF/$relative_path" \
+            "$KIMIK3_AMD_PR50319_HOST/$relative_path" \
+            "$expected_sha256"
+    done <<'EOF'
+vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py f758af920c10e3fbf010e6505360963ce2e6b84e7feec56879f9cc62190324fa
+vllm/model_executor/layers/fused_moe/router/gate_linear.py 6fca8c7fba361ac79418dd56d6d3c281ef04f34ebfdd2044cb1d12e1fa9e70d7
+vllm/model_executor/layers/fused_moe/runner/shared_experts.py f47474638508ac2a4dad361cf7c704a2cdd151a83defb35c4e2c14c6a06e1687
+vllm/model_executor/layers/quantization/mxfp4.py b6e9a238989e7c20be709059f62ae1592ff04c4a2d64c7d9bc586ce5fa078f6e
+vllm/v1/attention/backends/mla/rocm_aiter_mla.py eac6be6dc71b1c1e2ec4192df55e2f038eacf14a78b5a472b7920261c50e2879
+vllm/v1/sample/ops/topk_topp_sampler.py 5a700079645c43784d65554e02a9200feb53b3143fdc63914a03b648ac9c4df8
+EOF
+elif [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" != "0" ]]; then
+    fail "KIMIK3_AMD_PR50319_ENABLED must be 0 or 1, got '${KIMIK3_AMD_PR50319_ENABLED}'"
+fi
 
 # --- Lifecycle state and cleanup -------------------------------------------
 

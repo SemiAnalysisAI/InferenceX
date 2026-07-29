@@ -78,13 +78,40 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
     assert settings == [
         "NATIVE_MULTINODE=1",
         "KIMIK3_NODELIST=chi-mi300x-054,chi-mi300x-043",
-        "AITER_SITUV2_A8W4=0",
         "KIMIK3_STARTUP_TIMEOUT_SECONDS=7200",
         "NCCL_DEBUG=INFO",
         "NCCL_DEBUG_SUBSYS=INIT,NET",
         "NCCL_IB_DISABLE=1",
-        "KIMIK3_VLLM_GFX942_GATE_PATCH=1",
+        "KIMIK3_AMD_PR50319_ENABLED=1",
+        "KIMIK3_AITER_OVERLAY_ENABLED=0",
     ]
+    assert {row["image"] for row in rows} == {IMAGE}
+
+
+def test_amd_pr_canary_disables_legacy_runtime_patches() -> None:
+    launcher_source = NATIVE_LAUNCHER.read_text()
+    server_source = SERVER_SCRIPT.read_text()
+
+    assert (
+        'KIMIK3_AMD_PR50319_REF="c8654181d160dc08931ec6881ce622b2baa10e49"'
+        in launcher_source
+    )
+    assert (
+        'KIMIK3_AITER_WHEEL_SHA256="bafd3bddfccb4dd3147026433174eb6e7995f2d1b05f87c79bb75818a617c0aa"'
+        in launcher_source
+    )
+    assert 'KIMIK3_AITER_OVERLAY_ENABLED="${KIMIK3_AITER_OVERLAY_ENABLED:-1}"' in (
+        launcher_source
+    )
+    assert (
+        'if [[ "$KIMIK3_AITER_OVERLAY_ENABLED" == "1" ]]; then' in launcher_source
+    )
+    assert "KIMIK3_VLLM_GFX942_GATE_PATCH=1" not in (
+        REPO_ROOT / "configs" / "amd-master.yaml"
+    ).read_text()
+    assert 'if [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" == "1" ]]; then' in server_source
+    assert "K3_AMD_PR50319_APPLIED" in server_source
+    assert "--attention-backend TRITON_MLA" in server_source
 
 
 def server_env(rank: int = 0) -> dict[str, str]:

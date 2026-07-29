@@ -106,6 +106,43 @@ if [[ -n "${KIMIK3_AITER_OVERLAY_DIR:-}" ]]; then
     echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=${KIMIK3_AITER_OVERLAY_REF:-unknown}"
 fi
 
+if [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" == "1" ]]; then
+    : "${KIMIK3_AMD_PR50319_DIR:?KIMIK3_AMD_PR50319_DIR must be set}"
+    : "${KIMIK3_AMD_PR50319_REF:?KIMIK3_AMD_PR50319_REF must be set}"
+    : "${KIMIK3_AITER_WHEEL_PATH:?KIMIK3_AITER_WHEEL_PATH must be set}"
+    [[ -f "$KIMIK3_AITER_WHEEL_PATH" ]] ||
+        fail "missing pinned AITER wheel: $KIMIK3_AITER_WHEEL_PATH"
+
+    rm -rf /app/aiter
+    python3 -m pip install --force-reinstall --no-deps --no-cache-dir \
+        "$KIMIK3_AITER_WHEEL_PATH"
+    vllm_root=$(python3 -c \
+        "import pathlib, vllm; print(pathlib.Path(vllm.__file__).resolve().parent)")
+    while read -r relative_path; do
+        source_path="$KIMIK3_AMD_PR50319_DIR/$relative_path"
+        target_path="$vllm_root/${relative_path#vllm/}"
+        [[ -f "$source_path" ]] ||
+            fail "missing pinned vLLM source: $source_path"
+        install -m 0644 "$source_path" "$target_path"
+    done <<'EOF'
+vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
+vllm/model_executor/layers/fused_moe/router/gate_linear.py
+vllm/model_executor/layers/fused_moe/runner/shared_experts.py
+vllm/model_executor/layers/quantization/mxfp4.py
+vllm/v1/attention/backends/mla/rocm_aiter_mla.py
+vllm/v1/sample/ops/topk_topp_sampler.py
+EOF
+    python3 -m compileall -q "$vllm_root"
+    python3 - <<'PY'
+import importlib.metadata
+
+version = importlib.metadata.version("amd-aiter")
+if not version.startswith("0.1.19"):
+    raise SystemExit(f"expected amd-aiter 0.1.19, got {version}")
+PY
+    echo "K3_AMD_PR50319_APPLIED ref=$KIMIK3_AMD_PR50319_REF aiter=0.1.19"
+fi
+
 # Canary-only companion to the exact-shape gfx942 AITER overlay. The image's
 # vLLM oracle rejects the deployment before loading weights because its AITER
 # capability declaration both limits MXFP4 to gfx950 and omits the already
