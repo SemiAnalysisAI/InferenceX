@@ -1,0 +1,87 @@
+name: Report Staging Result
+
+run-name: Report staged run ${{ github.event.client_payload.run-id }} to PR #${{ github.event.client_payload.pr-number }}
+
+on:
+  repository_dispatch:
+    types: [stage-results-completed]
+
+permissions: {}
+
+concurrency:
+  group: stage-results-callback-${{ github.event.client_payload.pr-number }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Comment on source pull request
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # Post the staging result as github-actions
+    steps:
+      - name: Validate callback and comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const payload = context.payload.client_payload;
+            const runId = String(payload['run-id'] ?? '');
+            const runDate = String(payload['run-date'] ?? '');
+            const pullNumber = String(payload['pr-number'] ?? '');
+            const requestedBy = String(payload['requested-by'] ?? '');
+            const appRunId = String(payload['app-run-id'] ?? '');
+            const commentId = String(payload['comment-id'] ?? '');
+            const succeeded = String(payload['stage-succeeded'] ?? '');
+
+            if (payload['source-repository'] !== 'SemiAnalysisAI/InferenceX-app') {
+              core.setFailed('Unsupported staging callback source');
+              return;
+            }
+            if (!/^\d+$/u.test(runId) || !/^\d+$/u.test(pullNumber) || !/^\d+$/u.test(appRunId)) {
+              core.setFailed('Callback run and PR identifiers must be numeric');
+              return;
+            }
+            if (commentId && !/^\d+$/u.test(commentId)) {
+              core.setFailed('Callback comment identifier must be numeric');
+              return;
+            }
+            if (!/^\d{4}-\d{2}-\d{2}$/u.test(runDate)) {
+              core.setFailed('Callback run date must use YYYY-MM-DD');
+              return;
+            }
+            if (!/^[A-Za-z0-9-]+$/u.test(requestedBy)) {
+              core.setFailed('Callback requester is not a valid GitHub login');
+              return;
+            }
+            if (!['true', 'false'].includes(succeeded)) {
+              core.setFailed('Callback stage-succeeded value must be true or false');
+              return;
+            }
+
+            const appRunUrl = `${context.serverUrl}/SemiAnalysisAI/InferenceX-app/actions/runs/${appRunId}`;
+            const stagingSite = 'https://inferencemax-app-git-staging-semianalysisai.vercel.app';
+            const entry = encodeURIComponent(`${runDate}~r${runId}`);
+            const chartUrl = `${stagingSite}/inference?i_dates=${entry}`;
+            const body = succeeded === 'true'
+              ? [
+                  `@${requestedBy} staged run ${runId}: ${chartUrl}`,
+                  '',
+                  `This shared staging slot remains available until the next \`/stage-results\` request. [Staging workflow](${appRunUrl})`,
+                ].join('\n')
+              : `@${requestedBy} staging run ${runId} failed. [Inspect the staging workflow](${appRunUrl}).`;
+
+            if (commentId) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: Number(commentId),
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(pullNumber),
+                body,
+              });
+            }

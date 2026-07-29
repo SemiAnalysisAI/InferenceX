@@ -47,6 +47,10 @@ Required environment variables:
   MODEL_NAME       Model name directory
   CONTAINER_IMAGE  Docker image name (e.g., vllm_disagg_pd:latest)
   RUNNER_NAME      Runner identifier (for job name)
+
+Optional environment variables:
+  DRY_RUN          1 = echo composed server/router launch commands instead of
+                   running them (preview a recipe against a real allocation).
 USAGE
 }
 
@@ -124,6 +128,12 @@ export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
 export BENCH_REQUEST_RATE=${REQUEST_RATE}
 export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
 
+# DRY_RUN=1 makes server_sglang.sh echo the composed prefill/decode/router launch
+# commands instead of executing them (useful for previewing a recipe against a real
+# allocation). Threaded here → job.slurm → Docker (-e DRY_RUN) → server_sglang.sh.
+# sbatch defaults to --export=ALL, so exporting it is what carries it into the job.
+export DRY_RUN="${DRY_RUN:-0}"
+
 # Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -156,7 +166,7 @@ fi
 # Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
 # Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
+SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g11,mia1-p01-g12,mia1-p01-g14,mia1-p01-g15}"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi

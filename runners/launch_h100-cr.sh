@@ -18,7 +18,7 @@ docker run --rm --network=host --name=$server_name \
 --runtime=nvidia --gpus="$GPU_COUNT" --ipc=host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
 -v $HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
 -v $GITHUB_WORKSPACE:/workspace/ -w /workspace/ \
--e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e DCP_SIZE -e PCP_SIZE -e GPU_COUNT -e CONC -e MAX_MODEL_LEN -e ISL -e OSL -e RUN_EVAL -e EVAL_ONLY -e RUNNER_TYPE -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e PORT=$PORT \
+-e HF_TOKEN -e HF_HUB_CACHE -e MODEL -e TP -e PP_SIZE -e DCP_SIZE -e PCP_SIZE -e GPU_COUNT -e CONC -e MAX_MODEL_LEN -e ISL -e OSL -e RUN_EVAL -e EVAL_ONLY -e RUNNER_TYPE -e RESULT_FILENAME -e RANDOM_RANGE_RATIO -e PORT=$PORT \
 -e PROFILE -e SGLANG_TORCH_PROFILER_DIR -e VLLM_TORCH_PROFILER_DIR -e VLLM_RPC_TIMEOUT \
 -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e TORCH_CUDA_ARCH_LIST="9.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES \
 --entrypoint=/bin/bash \
