@@ -690,31 +690,8 @@ kimik3-fp4-mi355x-vllm-agentic-retry:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
 
-# L1 pool-size A/B. Same reference server command and lmcache==0.5.1 on both;
-# the only difference is --l1-size-gb: the reference's flat 512 GB vs the
-# agentic DRAM budget capped by /dev/shm (~1360 GB on these nodes, which is the
-# kimik2.7 sizing that ran a 1199 GB pool here successfully).
-kimik3-fp4-mi355x-vllm-agentic-l1size:
-  image: vllm/vllm-openai-rocm:kimi-k3
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-budget, version: "0.5.1" }, conc-list: [8] }
-
-# Native KV-offload A/B. LMCache cannot serve K3 (its Mamba path expects a
-# [conv_state, ssm_state] pair and KDA supplies one fused tensor), so these are
-# the only offload tiers that can initialise. Both at conc 8, GMU 0.88, prefix
-# caching on, --max-num-batched-tokens 4096 -- i.e. like-for-like with the
-# successful none c8 cell, unlike the LMCache arms which were forced to 768.
 kimik3-fp4-mi355x-vllm-agentic-native:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
