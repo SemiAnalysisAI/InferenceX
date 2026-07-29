@@ -535,40 +535,29 @@ fi
 # and hash sizes only align with prefix caching on -- an omission has been
 # reported to trip "tokens_per_block not divisible by tokens_per_hash" at load.
 # Set PREFIX_CACHING=true/false to force it either way.
-# ON by default for the KV-offload arms, which require it, and OFF for the
-# no-offload baseline. Agentic trace replay exists to exercise large shared
-# prefixes, and reuse costs essentially no KV (measured: 1,414,660 vs 1,420,824
-# tokens) while improving ITL (484 vs 577 ms) -- so ON is the right default
-# wherever it is stable.
+# ON by default for EVERY arm. This trace is built around large shared
+# prefixes -- theoretical prefix-cache hit is 98.1%, and a live kvnone cell
+# measured 92.8% server-side -- so a run with reuse disabled is not measuring
+# the workload. Reuse also costs essentially no KV (1,414,660 vs 1,420,824
+# tokens) and improves ITL (484 vs 577 ms). The offload arms additionally
+# require it: LMCache needs mamba_cache_mode='align', which vLLM only selects
+# when prefix caching is on. Turning it off for kvnone alone would also make
+# the kvnone-vs-offload comparison at matched concurrency meaningless.
 #
-# It is SUSPECTED-unstable on the no-offload arm -- suspected, not proven, and
-# the default is off there only to remove a variable while we get a clean
-# baseline. K3 is hybrid (69 KDA layers + 24 gated MLA), and prefix caching
-# activates vLLM's Mamba-state block reuse path. Evidence for:
-#   - kvnone c2 (g19) and c4 (g17), run 30412966635, both died during aiperf
-#     warmup; c2 with hipErrorIllegalAddress and a scheduler dump naming that
-#     path (new_block_ids_to_zero=[1615] at num_computed_tokens=327936).
-# Evidence against -- this is why it is not settled:
-#   - kvnone c1 (g16), same run, same flag, cleared warmup with 0 errors and
-#     profiled 47 min clean (12 trajectories, 92.8% server prefix-cache hit)
-#     before dying to `srun: error: Node failure on mia1-p01-g16`, which is
-#     infrastructure, not the kernel. So the arm CAN run with the flag on.
-# Three cells on three nodes produced three different failures, so cluster
-# flakiness is a live confound. Do not treat this as a diagnosed kernel bug
-# until a matched A/B (PREFIX_CACHING=true vs false, same conc) says so.
-# The offload arms keep it on and pass at 3600s.
+# It was briefly defaulted off for kvnone after two cells (c2/g19, c4/g17,
+# run 30412966635) died in warmup with it on, one dump naming the Mamba
+# block-zeroing path (new_block_ids_to_zero=[1615] at 327,936 computed
+# tokens). That was the wrong call on the evidence: c1 in the SAME run, same
+# flag, cleared warmup with 0 errors and profiled 47 minutes clean before
+# dying only to `srun: error: Node failure on mia1-p01-g16`. The arm plainly
+# runs with the flag on, and the cluster was throwing three different
+# failures across three nodes that week. Reverted.
 #
 # Note vLLM resolves the flag's default to False for this model, so ON must be
-# passed explicitly. PREFIX_CACHING=true/false forces either way for an A/B.
-if [ -n "${KV_OFFLOAD_BACKEND:-}" ]; then
-    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
-else
-    PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
-fi
+# passed explicitly. PREFIX_CACHING=false forces it off for a deliberate A/B.
+PREFIX_CACHE_ARGS=(--enable-prefix-caching)
 if [ "${PREFIX_CACHING:-}" = "false" ]; then
     PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
-elif [ "${PREFIX_CACHING:-}" = "true" ]; then
-    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
 fi
 
 # The upstream DSpark config pins "attention_backend": "FLASHINFER_MLA", which
