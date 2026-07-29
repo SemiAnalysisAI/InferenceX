@@ -652,6 +652,25 @@ kimik3-fp4-mi355x-vllm-agentic:
       # far the 2234 GiB host tier extends the concurrency ceiling.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 32] }
 
+kimik3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # DSpark speculative decoding with Inferact/Kimi-K3-DSpark, seven draft
+      # tokens, probabilistic draft sampling, and the committed thinking-on
+      # golden AL. The _mtp wrapper applies the gfx950 settings validated in
+      # PR #2367 as one unit: eager execution, max-num-batched-tokens 1024,
+      # max-num-seqs 32, bf16 KV, and lazy SimpleCPUOffloadConnector allocation.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8kvtest:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3

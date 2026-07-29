@@ -5339,3 +5339,11 @@
     - "Pass --use-chat-template to the benchmark, as required for EAGLE-style speculative decoding"
     - "Validated on the node through the real launcher, every request successful: TEP4 concurrency 64 640/640 at 6895 tok/s (11% above the non-MTP arm's 6198 tok/s, mean TTFT 27.2s to 9.6s), and TEP4 concurrency 1 10/10 at 1233 tok/s (83% above the non-MTP arm's 672 tok/s, mean TPOT 12.6ms to 6.5ms)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the Kimi-K3 MXFP4 MI355X AgentX DSpark variant with Inferact/Kimi-K3-DSpark, seven draft tokens, probabilistic draft sampling, and TRITON_MLA on ROCm."
+    - "Pin throughput to the committed thinking-on golden acceptance length 3.84 with synthetic rejection sampling; eval-only runs retain real block verification."
+    - "Run TP8 with SimpleCPUOffloadConnector at concurrency 1/2/4/8. The _mtp wrapper keeps the gfx950 bring-up settings validated in PR #2367 together: --enforce-eager, --max-num-batched-tokens 1024, --max-num-seqs 32, bf16 KV cache, language-model-only mode, and lazy host allocation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2403
