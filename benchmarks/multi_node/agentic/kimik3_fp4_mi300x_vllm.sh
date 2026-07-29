@@ -219,6 +219,9 @@ VLLM_CMD=(
     # through the oracle's strict is_supported_config check and exposes any
     # remaining rejection reason instead of the generic "no backend" error.
     --moe-backend aiter
+    # Note:(Wenyao Gao) TP8 leaves 12 MLA heads per rank, so ROCM_AITER_MLA
+    # routes decode through mla_gluon, which asserts gfx950.
+    --attention-backend TRITON_MLA
     # The image's AITER custom-allreduce module is gfx950-prebuilt. Its gfx942
     # JIT finishes on both nodes, but the second TP group hangs while
     # initializing the AITER_CUSTOM backend. Fall back to RCCL/PYNCCL for

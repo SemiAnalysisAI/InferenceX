@@ -138,6 +138,7 @@ def test_rank_zero_serves_tp8_pp2_without_headless() -> None:
     assert "--master-addr node-a" in result.stdout
     assert "--disable-custom-all-reduce" in result.stdout
     assert "--moe-backend aiter" in result.stdout
+    assert "--attention-backend TRITON_MLA" in result.stdout
     assert "--headless" not in result.stdout
     assert "FLASHMLA" not in result.stdout
     assert "FLASHINFER" not in result.stdout
@@ -148,6 +149,14 @@ def test_rank_one_is_headless() -> None:
     assert result.returncode == 0, result.stderr
     assert "--node-rank 1" in result.stdout
     assert "--headless" in result.stdout
+
+
+@pytest.mark.parametrize("node_rank", [0, 1])
+def test_every_rank_pairs_triton_mla_with_aiter_moe(node_rank: int) -> None:
+    result = run_server(server_env(node_rank))
+    assert result.returncode == 0, result.stderr
+    assert "--attention-backend TRITON_MLA" in result.stdout
+    assert "--moe-backend aiter" in result.stdout
 
 
 @pytest.mark.parametrize(
