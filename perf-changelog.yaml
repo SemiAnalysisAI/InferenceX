@@ -5173,3 +5173,10 @@
   description:
     - "Add Day-0 Kimi K3 MXFP4 GB200 AgentX performance points following the official vLLM recipe: TP16 (conc 1-8), TEP16 (conc 8-32), and TP4 x DP4 = EP16 (conc 32-256). https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2354
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  description:
+    - "Test vLLM Simple CPU KV offloading on the Kimi K3 GB200 DEP16 throughput profile at AgentX concurrency 128, 192, 256, and 384."
+    - "Correct the pure TP16 result identity to EP1 so it remains distinct from the TEP16 point at concurrency 8."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2404
