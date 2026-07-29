@@ -32,6 +32,13 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# Force the eval framework to lm-eval (gsm8k) for this recipe. run_eval derives
+# its default as swebench for agentic scenarios (scenario_default=swebench when
+# IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but EVAL_FRAMEWORK takes precedence
+# over that default (benchmark_lib.sh: framework=${EVAL_FRAMEWORK:-...}), so
+# setting it here makes the effective framework always lm-eval, never swebench.
+export EVAL_FRAMEWORK="lm-eval"
+
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 # The 2.8T MXFP4 checkpoint only fits across all 8 B300s (see header).
@@ -67,12 +74,34 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- Kimi-K3 production serving environment ---------------------------------
+# B300 NVLink / NCCL tuning. VLLM_USE_NCCL_SYMM_MEM=0: the container's
+# CUDA-graph capture path enters vLLM's nccl_symm_mem_context without
+# set_graph_pool_id, causing a capture assert; disabling it makes the context a
+# no-op so capture proceeds (fixed in newer vLLM cuda_graph.py).
+export VLLM_USE_NCCL_SYMM_MEM=0
+export TORCH_SYMMMEM=NVSHMEM
+export NCCL_CUMEM_ENABLE=1
+export NCCL_MNNVL_ENABLE=1
+export NCCL_NVLS_ENABLE=1
+export NCCL_P2P_LEVEL=NVL
 export NCCL_DMABUF_ENABLE=0
+# vLLM server & engine flags
+export VLLM_USE_V2_MODEL_RUNNER=1
 export VLLM_ALLREDUCE_USE_FLASHINFER=1
 export VLLM_USE_RUST_FRONTEND=1
 # Loading ~1.5 TB of MXFP4 shards off the staged mount takes well past the
 # default readiness window even with fastsafetensors.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_RPC_TIMEOUT=600000
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
+export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=0
+export VLLM_SPARSE_INDEXER_MAX_LOGITS_MB=1024
+export TILELANG_CLEANUP_TEMP_FILES=1
+# UCX transport settings for DRAM offload
+export UCX_MEMTYPE_CACHE=n
+export UCX_MEMTYPE_REG_WHOLE=n
+export UCX_RCACHE_MAX_UNRELEASED=1024
+export UCX_TLS=cuda_copy,cuda_ipc,tcp
 export PYTHONNOUSERSITE=1
 # AIPerf pins one pooled keep-alive connection per agentic session and reuses it
 # across turns, while the Rust frontend's default VLLM_HTTP_TIMEOUT_KEEP_ALIVE is
@@ -93,38 +122,35 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 # ---- KV offloading ----------------------------------------------------------
-# The generated TOTAL_CPU_DRAM_GB budget is the aggregate host-DRAM pool for the
-# node; SimpleCPUOffloadConnector is sized per rank. At dram-utilization 0.63 on
-# cluster:b300-nv this resolves to ~220 GiB per rank across the 8 TP ranks.
+GMU=0.93
 OFFLOAD_ARGS=()
 case "${KV_OFFLOAD_BACKEND:-}" in
     "")
         require_agentic_kv_offload_none
         ;;
-    vllm-simple)
-        require_agentic_kv_offload_backend vllm-simple
-        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / TP ))
+    native)
+        GMU=0.90
+        require_agentic_kv_offload_backend native
         # Identical prefixes must hash to identical block keys run-to-run.
         export PYTHONHASHSEED=42
-        # lazy_offload must be a JSON boolean, not a quoted string: the
-        # connector does bool(extra_config.get("lazy_offload", False)), and
-        # bool("false") is True in Python — a quoted "false" would silently
-        # turn lazy offload ON. Eager offload keeps block-hash behaviour
-        # aligned with the other B300 vllm-simple arms.
+        # VLLM_USE_SIMPLE_KV_OFFLOAD=1 tells vLLM to auto-wire the
+        # SimpleCPUOffloadConnector when --kv-offloading-backend native is set.
+        # kv-offloading-size is the total GiB pool across all TP ranks; use the
+        # full TOTAL_CPU_DRAM_GB budget passed in by the launcher. On failure to
+        # load a KV block from DRAM, recompute rather than fail the request.
+        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false}}"
+            --kv-offloading-backend native
+            --kv-offloading-size "$TOTAL_CPU_DRAM_GB"
+            --kv-transfer-config '{"kv_load_failure_policy":"fail"}'
         )
         ;;
     *)
-        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty or vllm-simple)" >&2
+        echo "Error: unsupported KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND' (expected empty or native)" >&2
         exit 1
         ;;
 esac
 
-# Agentic fan-out: keep the scheduler headroom convention shared by the other
-# agentic recipes. Capture decode graphs only up to that batch size — a 93-layer
-# 2.8T model makes capturing vLLM's full 2048-wide ladder prohibitively slow.
 MAX_NUM_SEQS=$((2 * CONC))
 
 echo "Starting vllm server..."
@@ -135,21 +161,28 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --tensor-parallel-size "$TP"
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization "$GMU"
     --max-num-seqs "$MAX_NUM_SEQS"
     # Agentic replays run at the model's native context limit.
     --max-model-len 1048576
     --trust-remote-code
+    --tokenizer-mode kimi_k3
+    --language-model-only
     --load-format fastsafetensors
     --moe-backend auto
     --enable-prefix-caching
+    --enable-cumem-allocator
+    --no-enable-flashinfer-autotune
     --kv-cache-dtype fp8
     --reasoning-parser kimi_k3
     --tool-call-parser kimi_k3
     --enable-auto-tool-choice
     # FP8 KV cache requires the prefill query quantization flag; MLA prefill
     # runs on FlashInfer per the production recipe.
+    --attention-backend FLASHINFER_MLA
     --attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
+    --prefix-match-unit 64
+    --max-num-batched-tokens 16384
     --max-cudagraph-capture-size "$MAX_NUM_SEQS"
     --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"

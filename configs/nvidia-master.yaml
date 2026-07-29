@@ -1604,10 +1604,9 @@ kimik3-fp4-b300-vllm-agentic:
       # for MLA KV after weights at gpu-memory-utilization 0.90.
       # Both arms share one ladder so GPU-resident and DRAM-offload are directly
       # comparable at equal concurrency (same shape as the kimik2.5 B300 sister).
-      # TP8 GPU-resident
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      # TP8 SimpleCPUOffload (host DRAM)
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24] }
+      # TP8 GPU-resident baseline
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 18, 20] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 12, 16, 20, 24, 28, 30] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
