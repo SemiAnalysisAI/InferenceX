@@ -100,7 +100,8 @@ class MatrixTests(unittest.TestCase):
                 if precision in sweep_matrix.BACKEND_PRECISIONS[cell[1]]
             }
             self.assertEqual(precisions, expected, cell)
-        # Every backend (deepep-v2, mori, uccl-ep) realizes BF16 and FP8.
+        # Every backend that lists FP8 (deepep-v2, mori, uccl-ep) realizes BF16 and FP8;
+        # nccl-ep is BF16-only, so the cross-cell union of realized precisions stays {bf16, fp8}.
         self.assertEqual(
             {precision for precisions in by_cell.values() for precision in precisions},
             {"bf16", "fp8"},
@@ -201,6 +202,67 @@ class MatrixTests(unittest.TestCase):
             and item["case"]["mode"] == "low-latency"
         }
         self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-dgxc"})
+
+    def test_nccl_ep_rollout_shape(self):
+        # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
+        #   * RDMA scale-out SKUs (h100/h200/b200/b300): EP8 runnable, EP16 an UNSUPPORTED coverage
+        #     row. EP16 cross-node rides NCCL's kernel-initiated GDAKI GIN, which faults identically
+        #     on RoCE (h100/b200/b300) and InfiniBand (h200) — a reproducible NCCL-EP v0.1.0 internode
+        #     limitation, so EP16 is scoped out like uccl-ep's.
+        #   * GB NVL72 SKUs (gb200/gb300, MNNVL, gb-nv launcher, 4 GPU/node): EP8 AND EP16 runnable —
+        #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),
+        #     so EP16 works over MNNVL where the RDMA-GIN path walls.
+        #   * AMD SKUs: no rows (NCCL EP is NVIDIA-only; AMD runs mori).
+        #   * LOW-LATENCY: no rows on ANY SKU. The wheel's LL count/flag protocol consumes stale
+        #     double-buffer signals (values carry no generation, so a signal from two calls earlier is
+        #     bit-identical at a repeating workload); a rank that slips one parity cycle gets lapped and
+        #     the pipeline wedges on dispatch/combine receive timeouts, ending in cudaErrorLaunchFailure.
+        #     Reported as NVIDIA/nccl#2303, fixed by NVIDIA/nccl#2306, unfixable here (we install the
+        #     published wheel). Observed first on GB, then reproduced on every x86 SKU — 5/5 over SSH and
+        #     4/4 in sweep 30155842613 — so ll_backends carries no nccl-ep row anywhere until a fixed
+        #     wheel ships. Restore per-SKU rows only alongside a spec bump that contains the fix.
+        # BF16 only — no FP8 case (NCCL EP FP8 unsupported this release).
+        document = matrix(backend="all")
+        runnable = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "runnable"
+        }
+        unsupported = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "unsupported"
+        }
+        rdma_skus = {"h100-dgxc", "h200-dgxc", "b200-dgxc", "b300"}
+        gb_skus = {"gb200", "gb300"}
+        # RDMA SKUs: EP8 runnable + EP16 unsupported. GB SKUs: EP8 and EP16 both runnable.
+        self.assertEqual(
+            runnable,
+            {(sku, 8) for sku in rdma_skus} | {(sku, ep) for sku in gb_skus for ep in (8, 16)},
+        )
+        self.assertEqual(unsupported, {(sku, 16) for sku in rdma_skus})
+        # Offered on the six NVIDIA SKUs; never on AMD.
+        offered = {sku for sku, _ in runnable | unsupported}
+        self.assertEqual(offered, rdma_skus | gb_skus)
+        for absent in ("mi355x", "mi325x-tw", "mi300x-tw"):
+            self.assertNotIn(absent, offered)
+        # Every nccl-ep case is BF16 (FP8 unsupported this release).
+        self.assertEqual(
+            {
+                item["case"]["precision"]
+                for item in document["requested_cases"]
+                if item["case"]["backend"] == "nccl-ep"
+            },
+            {"bf16"},
+        )
+        # Low-latency: no nccl-ep case on any SKU while the wheel carries the stale-signal wedge.
+        ll = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "nccl-ep"
+            and item["case"]["mode"] == "low-latency"
+        }
+        self.assertEqual(ll, set())
 
     def test_invalid_filters_fail_closed(self):
         for options in (
