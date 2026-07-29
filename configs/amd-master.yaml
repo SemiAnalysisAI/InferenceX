@@ -652,6 +652,24 @@ kimik3-fp4-mi355x-vllm-agentic:
       # far the 2234 GiB host tier extends the concurrency ceiling.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 32] }
 
+kimik3-fp4-mi355x-vllm-agentic-bf16kvtest:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+      # 0.80 of the runner's available-cpu-dram-mib (3_095_781), capped by the
+      # matrix generator at the 2,861,022 MiB / 3 TB-decimal agentic limit ->
+      # 2399 GB aggregate at TP8, which SimpleCPUOffloadConnector divides into
+      # 279.28 GB per rank.
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8] }
+
 # LMCache server-profile A/B for Kimi-K3. NOT shipped -- delete once one profile
 # wins. Both cells are conc 8 with prefix caching forced on, --max-num-batched-tokens
 # 768 and --chunk-size 768 (all three are hard Mamba-hybrid requirements the recipe
