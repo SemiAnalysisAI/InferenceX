@@ -141,7 +141,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         OFFLOAD_ARGS=(
             --kv-offloading-backend native
             --kv-offloading-size "$TOTAL_CPU_DRAM_GB"
-            --kv-transfer-config '{"kv_load_failure_policy":"fail"}'
+            --kv-transfer-config '{"kv_load_failure_policy":"recompute"}'
         )
         ;;
     *)
@@ -181,7 +181,6 @@ VLLM_CMD=(
     --attention-backend FLASHINFER_MLA
     --attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}'
     --prefix-match-unit 64
-    --max-num-batched-tokens 16384
     --max-cudagraph-capture-size "$MAX_NUM_SEQS"
     --disable-uvicorn-access-log
     "${OFFLOAD_ARGS[@]}"
