@@ -402,9 +402,14 @@ fi
 # DP ranks runs its own scheduler and the router spreads sessions across them,
 # so size the per-rank cap as 2*CONC/TP (aggregate = 2*CONC). In pure-TP there
 # is a single scheduler across all GPUs that sees all CONC sessions, so use
-# 2*CONC directly. 
+# 2*CONC directly. Floor-divide can yield 0 for small CONC under DP-attention
+# (e.g. CONC=1, TP=8 -> 2/8=0), which vLLM rejects (SchedulerConfig requires
+# max_num_seqs >= 1), so clamp the per-rank cap to a minimum of 1.
 if [ "$DP_ATTENTION" = "true" ]; then
     MAX_NUM_SEQS=$((2 * CONC / TP))
+    if [ "$MAX_NUM_SEQS" -lt 1 ]; then
+        MAX_NUM_SEQS=1
+    fi
 else
     MAX_NUM_SEQS=$((2 * CONC))
 fi
