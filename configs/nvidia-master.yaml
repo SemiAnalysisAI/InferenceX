@@ -1523,23 +1523,7 @@ kimik3-fp4-h200-vllm-agentic:
           tp: 8
           ep: 32
           dp-attn: true
-      # Throughput-oriented: TP8 x DP4 with EP32 across four H200 nodes.
-      - spec-decoding: mtp
-        kv-offloading: none
-        conc-list: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
-        prefill:
-          num-worker: 4
-          tp: 8
-          ep: 32
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp8dp4ep32-throughput-agentic.yaml"
-        decode:
-          num-worker: 0
-          tp: 8
-          ep: 32
-          dp-attn: true
-      # High-concurrency hybrid TP/DEP/EP with vLLM's host-DRAM KV tier.
+      # Throughput-oriented hybrid TP/DEP/EP with vLLM's host-DRAM KV tier.
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
