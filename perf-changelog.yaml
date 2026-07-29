@@ -5201,3 +5201,11 @@
     - "Update vllm image, remove setting trtllm allreduce backend"
     - "Use fp8 indexer cache dtype for the B200/B300 non-eagle configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2120
+
+- config-keys:
+    - minimaxm3-fp4-b200-dynamo-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 B200 Dynamo-vLLM disaggregated benchmarks at 8k/1k."
+    - "Use configurations from concurrency 1 through 1024 with spread worker placement for CI transport validation."
+    - "Image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; Dynamo: 1.3.0.dev20260710."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2230
