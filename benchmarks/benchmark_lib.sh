@@ -1764,6 +1764,9 @@ build_replay_cmd() {
     # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
     # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
     export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
+    # Headless realtime metrics are opt-in on current AIPerf main. Enable the
+    # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
+    export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
     REPLAY_CMD+=" --url http://localhost:$PORT"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
@@ -1772,6 +1775,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --model $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
     # Fail runs once more than 10% of requests error. This keeps known
     # transient low-rate failures from killing long sweeps while still

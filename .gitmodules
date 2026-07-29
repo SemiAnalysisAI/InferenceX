@@ -1,4 +1,4 @@
 [submodule "utils/aiperf"]
 	path = utils/aiperf
 	url = https://github.com/SemiAnalysisAI/aiperf.git
-	branch = cquil11/deterministic-agentic-warmup-count
+	branch = cquil11/deterministic-agentic-warmup-count-main
