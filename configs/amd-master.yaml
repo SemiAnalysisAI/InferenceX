@@ -652,7 +652,7 @@ kimik3-fp4-mi355x-vllm-agentic:
       # far the 2234 GiB host tier extends the concurrency ceiling.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 32] }
 
-kimik3-fp4-mi355x-vllm-agentic-bf16kvtest:
+kimik3-fp4-mi355x-vllm-agentic-fp8kvtest:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -668,7 +668,7 @@ kimik3-fp4-mi355x-vllm-agentic-bf16kvtest:
       # 279.28 GB per rank.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: none, conc-list: [8] }
 
 # LMCache server-profile A/B for Kimi-K3. NOT shipped -- delete once one profile
 # wins. Both cells are conc 8 with prefix caching forced on, --max-num-batched-tokens
