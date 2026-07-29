@@ -2285,7 +2285,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
       - spec-decoding: "none"
-        conc-list: [ 64, 96, 128 ]
+        conc-list: [ 96, 128 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
