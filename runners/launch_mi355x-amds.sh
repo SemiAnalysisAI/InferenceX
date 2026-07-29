@@ -276,14 +276,22 @@ else
     # 30331297999, and the same node did the same thing to the kimik2.7 -tune2
     # cells.
     #
-    # The denylist is OFF by default. It did not work: after excluding
-    # g11/g14/g15/g18, run 30412966635 still lost all three cells -- to g19
-    # (hipErrorIllegalAddress), g17 (warmup_failure) and g16 (srun node
-    # failure), none of them on the list. Free memory on these nodes varies
-    # hour to hour, so a static list mostly just shrinks an already-contended
-    # pool and lengthens queue time. Set SALLOC_EXCLUDE_NODES to a
-    # comma-separated list to re-enable it for a specific run.
-    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-}"
+    # A BROAD denylist did not work: after excluding g11/g14/g15/g18, run
+    # 30412966635 still lost all three cells -- to g19 (hipErrorIllegalAddress),
+    # g17 (warmup_failure) and g16 (srun node failure), none of them on the
+    # list. Free memory on these nodes varies hour to hour, so a wide static
+    # list mostly just shrinks an already-contended pool and lengthens queue
+    # time. Don't reintroduce one.
+    #
+    # g11 is the exception and is excluded by default. It is not a
+    # free-memory-headroom case; it fails hard and across unrelated configs:
+    #   - kimik3 kvnone c2, run 30425820793: warmup_failure
+    #   - kimik3 vllm-simple-fp8 c8, run 30428781263: forward passes stalled
+    #     (returned=5 for 13 min at zero throughput), then EngineCore died
+    #   - plus the earlier kimik2.7 -tune2 cells noted above
+    # Four configs, one node, same outcome. Set SALLOC_EXCLUDE_NODES="" to
+    # clear it, or to a comma-separated list to widen it for a specific run.
+    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-mia1-p01-g11}"
     EXCLUDE_ARG=""
     if [ -n "$SALLOC_EXCLUDE_NODES" ]; then
         EXCLUDE_ARG="--exclude=$SALLOC_EXCLUDE_NODES"
