@@ -541,14 +541,22 @@ fi
 # tokens) while improving ITL (484 vs 577 ms) -- so ON is the right default
 # wherever it is stable.
 #
-# It is not stable on the no-offload arm. K3 is a hybrid model (69 KDA layers +
-# 24 gated MLA), and enabling prefix caching activates vLLM's Mamba-state block
-# reuse path. Every kvnone cell run with --enable-prefix-caching has died in
-# warmup with hipErrorIllegalAddress and a scheduler dump naming that path
-# (new_block_ids_to_zero), on two different nodes (g11, g19) -- so it is a
-# kernel bug, not bad hardware. The one kvnone cell that ever completed
-# (run 30322098513, c8) predates the flag. The offload arms pass with it on
-# because the connector owns block lifetime instead.
+# It is SUSPECTED-unstable on the no-offload arm -- suspected, not proven, and
+# the default is off there only to remove a variable while we get a clean
+# baseline. K3 is hybrid (69 KDA layers + 24 gated MLA), and prefix caching
+# activates vLLM's Mamba-state block reuse path. Evidence for:
+#   - kvnone c2 (g19) and c4 (g17), run 30412966635, both died during aiperf
+#     warmup; c2 with hipErrorIllegalAddress and a scheduler dump naming that
+#     path (new_block_ids_to_zero=[1615] at num_computed_tokens=327936).
+# Evidence against -- this is why it is not settled:
+#   - kvnone c1 (g16), same run, same flag, cleared warmup with 0 errors and
+#     profiled 47 min clean (12 trajectories, 92.8% server prefix-cache hit)
+#     before dying to `srun: error: Node failure on mia1-p01-g16`, which is
+#     infrastructure, not the kernel. So the arm CAN run with the flag on.
+# Three cells on three nodes produced three different failures, so cluster
+# flakiness is a live confound. Do not treat this as a diagnosed kernel bug
+# until a matched A/B (PREFIX_CACHING=true vs false, same conc) says so.
+# The offload arms keep it on and pass at 3600s.
 #
 # Note vLLM resolves the flag's default to False for this model, so ON must be
 # passed explicitly. PREFIX_CACHING=true/false forces either way for an A/B.
