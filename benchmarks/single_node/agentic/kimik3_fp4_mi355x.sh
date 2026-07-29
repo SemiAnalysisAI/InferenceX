@@ -45,7 +45,7 @@ set -x
 #   MAX_NUM_BATCHED_TOKENS   4096   (reference)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
-#   KV_CACHE_DTYPE           auto   (unset -> flag not passed at all)
+#   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
 #   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
 #   SPEC_DECODE              false  (DSpark; UNVALIDATED on ROCm)
 

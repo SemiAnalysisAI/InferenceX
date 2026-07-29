@@ -729,6 +729,33 @@ kimik3-fp4-mi355x-vllm-agentic-fp8sweep:
       # fp8 pushes the concurrency ceiling past the bf16 collapse at c16.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8, 16] }
 
+kimik3-fp4-mi355x-vllm-agentic-fp8retry:
+  # Retry of the two cells that died in run 30453589555, plus a new none c16.
+  #
+  # Both deaths were GPU faults (hipErrorUnknown), not timeouts -- no guard was
+  # anywhere near firing (VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200 vs a ~180s
+  # stall; warmup-grace-period 1800 vs 420s elapsed). GPU faults have hit every
+  # arm on this cluster today (bf16 kvnone on g11/g17/g18/g19, fp8 kvnone on
+  # g10, fp8+connector on g11/g19), so these are retried unchanged on the
+  # assumption they are the cluster's background fault rate rather than config.
+  #
+  # none c16 is new: the no-offload arm has never been measured above c8, and
+  # fp8 roughly halves KV per token, so the concurrency ceiling should have
+  # moved up.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8kv:
   # fp8 KV on the OFFLOAD arm. This is the fp8kvtest arm (run 30442578333:
   # 696 total tok/s/GPU, TTFT 2.6s, the first clean fp8 result) plus the
