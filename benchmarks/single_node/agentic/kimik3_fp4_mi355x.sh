@@ -47,7 +47,8 @@ set -x
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
 #   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
-#   SPEC_DECODE              false  (DSpark; UNVALIDATED on ROCm)
+#   SPEC_DECODE              false  (enabled by the _mtp DSpark wrapper)
+#   ENFORCE_EAGER            false  (enabled by the _mtp DSpark wrapper)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -543,6 +544,11 @@ if [ -n "${MAX_MODEL_LEN:-}" ] && [ "${MAX_MODEL_LEN}" != "0" ]; then
     MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
 fi
 
+EAGER_ARGS=()
+if [ "${ENFORCE_EAGER:-false}" = "true" ]; then
+    EAGER_ARGS=(--enforce-eager)
+fi
+
 # The reference command passes neither --enable-prefix-caching nor
 # --no-enable-prefix-caching, and this build's default is None (vLLM decides
 # internally), so by default we pass nothing and stay aligned. Two reasons this
@@ -579,17 +585,36 @@ fi
 
 # The upstream DSpark config pins "attention_backend": "FLASHINFER_MLA", which
 # is CUDA-only and cannot be used verbatim on gfx950; SPEC_ATTN_BACKEND
-# overrides it. Golden AL on B300 is 3.78 at 7 draft tokens
-# (golden_al_distribution/kimik3_dspark.yaml), so this is the largest decode-side
-# lever if it can be made to run here.
+# overrides it. AgentX throughput uses synthetic acceptance pinned to the
+# committed golden curve. Eval-only runs use real block verification because
+# synthetic acceptance bypasses correctness verification.
 SPEC_ARGS=()
 if [ "${SPEC_DECODE:-false}" = "true" ]; then
     SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
     SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-TRITON_MLA}"
+    SPEC_GOLDEN_AL="${SPEC_GOLDEN_AL:-3.84}"
+    SPEC_GOLDEN_AL_FILE="${SPEC_GOLDEN_AL_FILE:-golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml}"
+    FILE_GOLDEN_AL=$(awk -v k="$SPEC_NUM_TOKENS" '
+        /^kimi-k3:/                { in_model = 1; next }
+        /^[^[:space:]#]/           { in_model = 0 }
+        in_model && /thinking_on:/ { in_thinking = 1; next }
+        in_thinking && $1 == k":"  { print $2; exit }
+    ' "$SPEC_GOLDEN_AL_FILE" 2>/dev/null)
+    if [ "$FILE_GOLDEN_AL" != "$SPEC_GOLDEN_AL" ]; then
+        echo "Error: DSpark golden AL mismatch: $SPEC_GOLDEN_AL_FILE gives" >&2
+        echo "       '${FILE_GOLDEN_AL:-<unreadable>}' for k=$SPEC_NUM_TOKENS," >&2
+        echo "       but the recipe pins $SPEC_GOLDEN_AL." >&2
+        exit 1
+    fi
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
+        SPEC_REJECTION_CONFIG="\"rejection_sample_method\":\"block\""
+    else
+        SPEC_REJECTION_CONFIG="\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SPEC_GOLDEN_AL"
+    fi
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+        "{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",$SPEC_REJECTION_CONFIG}"
     )
 fi
 
@@ -694,6 +719,7 @@ VLLM_CMD=(
     "${MAX_MODEL_LEN_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
+    "${EAGER_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${EVAL_SERVE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"

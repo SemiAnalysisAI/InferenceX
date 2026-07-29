@@ -5230,3 +5230,11 @@
     - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-gb300-vllm-fixes.sh setup patch (shipped in the nightly image)"
     - "Collapse the 2xDEP8 decode into a single DEP16 worker (decode_workers 2->1, gpus_per_decode 8->16, data-parallel-size 8->16); recipe renamed 3p2d-dep2-dep8 -> 3p1d-dep2-dep16 (conc 512). The remaining decodes are 1xDEP8 or TEP and are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2340
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add the Kimi-K3 MXFP4 MI355X AgentX DSpark variant with Inferact/Kimi-K3-DSpark, seven draft tokens, probabilistic draft sampling, and TRITON_MLA on ROCm."
+    - "Pin throughput to the committed thinking-on golden acceptance length 3.84 with synthetic rejection sampling; eval-only runs retain real block verification."
+    - "Run TP8 with SimpleCPUOffloadConnector at concurrency 1/2/4/8. The _mtp wrapper keeps the gfx950 bring-up settings validated in PR #2367 together: --enforce-eager, --max-num-batched-tokens 1024, --max-num-seqs 32, bf16 KV cache, language-model-only mode, and lazy host allocation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2403
