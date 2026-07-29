@@ -2295,9 +2295,12 @@ kimik3-fp4-mi300x-vllm-agentic:
           # independently of that node-fabric problem.
           - "NCCL_IB_DISABLE=1"
           # AMD vLLM #50319 converts K3 MXFP4 experts to groupwise INT4 on
-          # gfx942. Keep the legacy MXFP4/LDS overlay out of this canary.
+          # gfx942. Keep the legacy MXFP4/LDS overlay out of this canary, but
+          # preserve the K3 image's working SITU runtime and patch only its
+          # gfx942/SITU capability declaration.
           - "KIMIK3_AMD_PR50319_ENABLED=1"
           - "KIMIK3_AITER_OVERLAY_ENABLED=0"
+          - "KIMIK3_VLLM_GFX942_GATE_PATCH=1"
         decode:
           num-worker: 0
           tp: 8

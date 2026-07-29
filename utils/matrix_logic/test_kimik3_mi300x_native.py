@@ -84,13 +84,19 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         "NCCL_IB_DISABLE=1",
         "KIMIK3_AMD_PR50319_ENABLED=1",
         "KIMIK3_AITER_OVERLAY_ENABLED=0",
+        "KIMIK3_VLLM_GFX942_GATE_PATCH=1",
     ]
     assert {row["image"] for row in rows} == {IMAGE}
 
 
-def test_amd_pr_canary_disables_legacy_runtime_patches() -> None:
+def test_amd_pr_canary_preserves_image_situ_runtime() -> None:
     launcher_source = NATIVE_LAUNCHER.read_text()
     server_source = SERVER_SCRIPT.read_text()
+    config_source = (REPO_ROOT / "configs" / "amd-master.yaml").read_text()
+    rocm_aiter_overlay_line = (
+        "vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py "
+        "f758af920c10e3fbf010e6505360963ce2e6b84e7feec56879f9cc62190324fa"
+    )
 
     assert (
         'KIMIK3_AMD_PR50319_REF="c8654181d160dc08931ec6881ce622b2baa10e49"'
@@ -106,11 +112,15 @@ def test_amd_pr_canary_disables_legacy_runtime_patches() -> None:
     assert (
         'if [[ "$KIMIK3_AITER_OVERLAY_ENABLED" == "1" ]]; then' in launcher_source
     )
-    assert "KIMIK3_VLLM_GFX942_GATE_PATCH=1" not in (
-        REPO_ROOT / "configs" / "amd-master.yaml"
-    ).read_text()
+    assert rocm_aiter_overlay_line not in launcher_source
+    assert (
+        "\nvllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py\n"
+        not in server_source
+    )
+    assert "KIMIK3_VLLM_GFX942_GATE_PATCH=1" in config_source
     assert 'if [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" == "1" ]]; then' in server_source
     assert "K3_AMD_PR50319_APPLIED" in server_source
+    assert "image_situ_runtime=preserved" in server_source
     assert "--attention-backend TRITON_MLA" in server_source
 
 

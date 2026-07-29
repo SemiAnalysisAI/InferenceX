@@ -125,7 +125,6 @@ if [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" == "1" ]]; then
             fail "missing pinned vLLM source: $source_path"
         install -m 0644 "$source_path" "$target_path"
     done <<'EOF'
-vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py
 vllm/model_executor/layers/fused_moe/router/gate_linear.py
 vllm/model_executor/layers/fused_moe/runner/shared_experts.py
 vllm/model_executor/layers/quantization/mxfp4.py
@@ -140,7 +139,7 @@ version = importlib.metadata.version("amd-aiter")
 if not version.startswith("0.1.19"):
     raise SystemExit(f"expected amd-aiter 0.1.19, got {version}")
 PY
-    echo "K3_AMD_PR50319_APPLIED ref=$KIMIK3_AMD_PR50319_REF aiter=0.1.19"
+    echo "K3_AMD_PR50319_APPLIED ref=$KIMIK3_AMD_PR50319_REF aiter=0.1.19 image_situ_runtime=preserved"
 fi
 
 # Canary-only companion to the exact-shape gfx942 AITER overlay. The image's

@@ -261,7 +261,6 @@ if [[ "${KIMIK3_AMD_PR50319_ENABLED:-0}" == "1" ]]; then
             "$KIMIK3_AMD_PR50319_HOST/$relative_path" \
             "$expected_sha256"
     done <<'EOF'
-vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py f758af920c10e3fbf010e6505360963ce2e6b84e7feec56879f9cc62190324fa
 vllm/model_executor/layers/fused_moe/router/gate_linear.py 6fca8c7fba361ac79418dd56d6d3c281ef04f34ebfdd2044cb1d12e1fa9e70d7
 vllm/model_executor/layers/fused_moe/runner/shared_experts.py f47474638508ac2a4dad361cf7c704a2cdd151a83defb35c4e2c14c6a06e1687
 vllm/model_executor/layers/quantization/mxfp4.py b6e9a238989e7c20be709059f62ae1592ff04c4a2d64c7d9bc586ce5fa078f6e
