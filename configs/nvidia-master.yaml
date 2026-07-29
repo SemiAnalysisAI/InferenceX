@@ -1490,7 +1490,7 @@ kimik3-fp4-h200-vllm-agentic:
       # Latency-oriented: one TP8/PP2 engine spanning two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [1, 2, 4, 8]
+        conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
         prefill:
           num-worker: 1
           tp: 8
@@ -1508,7 +1508,7 @@ kimik3-fp4-h200-vllm-agentic:
       # Balanced: TP4/PP2 with DP2/EP8 across two H200 nodes.
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [4, 8, 16, 32]
+        conc-list: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
         prefill:
           num-worker: 2
           tp: 4
@@ -1526,7 +1526,7 @@ kimik3-fp4-h200-vllm-agentic:
       # Throughput-oriented: TP2/PP2 with DP8/EP16 across four H200 nodes.
       - spec-decoding: none
         kv-offloading: none
-        conc-list: [16]
+        conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24]
         prefill:
           num-worker: 8
           tp: 2
@@ -1545,7 +1545,7 @@ kimik3-fp4-h200-vllm-agentic:
       - spec-decoding: none
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple }
-        conc-list: [32, 64, 128]
+        conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
         prefill:
           num-worker: 8
           tp: 2
