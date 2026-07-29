@@ -16,14 +16,14 @@ def _benchmark_job_name() -> str:
     return workflow["jobs"]["benchmark"]["name"]
 
 
-def test_non_disaggregated_multinode_job_name_uses_neutral_worker_label():
+def test_non_disaggregated_multinode_job_name_omits_worker_role_label():
     job_name = _benchmark_job_name()
 
-    assert "format('workers={0}', inputs.prefill-num-worker)" in job_name
     assert (
-        "inputs.disagg == 'true' && format('{0}P', inputs.prefill-num-worker)"
+        "inputs.disagg == 'true' && format('{0}P ', inputs.prefill-num-worker)"
         in job_name
     )
+    assert "workers=" not in job_name
 
 
 def test_decode_topology_is_only_shown_for_disaggregated_jobs():
