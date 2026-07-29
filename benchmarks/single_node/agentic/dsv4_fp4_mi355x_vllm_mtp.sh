@@ -433,9 +433,15 @@ fi
 # free at init, independent of the KV-offload backend (observed identically on
 # both the lmcache and GPU-resident kv-none arms). At
 # --gpu-memory-utilization 0.95 vLLM requests 273.6 GiB and every DP worker
-# hard-fails ("Free memory ... less than desired GPU memory utilization"), so
-# cap utilization at 0.85 (244.8 GiB, ~11 GiB headroom).
-GPU_MEM_UTIL=0.85
+# hard-fails ("Free memory ... less than desired GPU memory utilization").
+# But 0.85 (244.8 GiB) leaves only ~23.9 GiB for KV, which is below the
+# 24.06 GiB one request at max_model_len=1M needs once the MTP draft layer's
+# extra per-token KV is counted -- engine init then dies with
+# "available KV cache memory ... larger than ..." on the tighter (eval-only)
+# relaunch. 0.86 (247.7 GiB) adds ~2.6 GiB, nearly all to KV (~26.5 GiB), so
+# the KV check clears with margin while still keeping ~8 GiB free-mem headroom
+# below the ~256 GiB hard-fail ceiling.
+GPU_MEM_UTIL=0.86
 
 echo "Starting vllm server..."
 set -x
