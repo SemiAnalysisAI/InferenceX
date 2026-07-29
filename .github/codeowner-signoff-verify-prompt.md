@@ -329,18 +329,38 @@ Verify BOTH:
     (fractional values allowed — e.g. golden AL 3.5 -> 2.5).
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance — name the
   config/script and line.
-- (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
-  model in `golden_al_distribution/` (default-branch checkout; e.g. `qwen3.5_mtp.yaml`,
-  `kimik2.5_eagle3.yaml`) and confirm the pinned AL equals the golden value for that
-  model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
-  qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare
-  the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
-  golden AL (the env var excludes the bonus token). A submission may choose any
+- (b) AL VALUE MATCHES THE EXACT GOLDEN CURVE. From the launch config, identify the
+  target model and exact canonical draft-model identifier (for example the vLLM
+  `--speculative-config` `model` field or an SGLang draft-model
+  argument/environment value), plus the thinking mode and config's
+  `num_speculative_tokens` / MTP level. If the runtime field contains a local path,
+  trace the script/config variable back to the model ID downloaded into that path;
+  do not treat the machine-local path as the draft-model identity. Read the committed
+  curves in `golden_al_distribution/` from the default-branch checkout. When multiple
+  curves serve the same target model, select only the YAML whose
+  `_metadata.draft-model` exactly matches the runtime draft identifier; missing,
+  ambiguous, unknown, or duplicate draft-model metadata is a FAIL.
+
+  Normalize the config's pinned value to golden-AL semantics first: use the pinned
+  value directly for vLLM/SGLang; for TRT-LLM, add 1 to
+  `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` because that env var excludes the
+  bonus token. Then validate the complete key and pinned value with:
+  ```bash
+  uv run --with pyyaml python utils/validate_golden_al.py \
+    --directory golden_al_distribution \
+    --model <target-model-key> \
+    --draft-model <exact-runtime-draft-model-id> \
+    --thinking-mode <thinking_on|thinking_off> \
+    --num-speculative-tokens <draft-length> \
+    --expected-al <normalized-pinned-golden-al>
+  ```
+  For a legacy target with exactly one curve and no draft metadata, omit
+  `--draft-model`; never omit it to bypass ambiguity. A submission may choose any
   supported draft length, but it may NOT substitute a different acceptance target.
-  FAIL on a mismatch — name the config, the pinned value, and the expected golden
-  value. If the model has no committed golden curve yet, do not guess: the sign-off's
-  additional detail section must state the source of the AL value (e.g. a pending
-  golden-curve collection run); FAIL if it does not.
+  FAIL on a mismatch — name the config, target model, draft model, pinned value, and
+  expected golden value. If the target/draft pair has no committed golden curve yet,
+  do not guess: the sign-off's additional detail section must state the source of the
+  AL value (e.g. a pending golden-curve collection run); FAIL if it does not.
 - Also FAIL (as a benchmark hack) if simulated/synthetic-acceptance knobs appear on a
   NON-agentic spec-decode config, where Check 8's real-traffic AL standard applies —
   unless the sign-off documents a sanctioned exception.

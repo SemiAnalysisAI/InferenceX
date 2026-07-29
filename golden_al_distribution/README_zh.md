@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-本目录包含今后用于在 InferenceX 中标准化推测解码的黄金接受长度（Acceptance Length，AL）曲线。每个 YAML 按模型、思考模式和草稿长度（`num_speculative_tokens`），记录在 SPEED-Bench Qualitative split 的 **coding** 类别上测得的平均 AL。
+本目录包含今后用于在 InferenceX 中标准化推测解码的黄金接受长度（Acceptance Length，AL）曲线。每个 YAML 对应一组目标模型与草稿模型，并按思考模式和草稿长度（`num_speculative_tokens`）记录在 SPEED-Bench Qualitative split 的 **coding** 类别上测得的平均 AL。
 
 ## 为什么选择 SPEED-Bench
 
@@ -22,7 +22,20 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 ## AgentX 公平性指南
 
-根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线；所有评估同一模型和模式的提交都使用同一条曲线。
+根据 AgentX 指南，每组目标模型、草稿模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同的目标模型与草稿模型组合保留各自基于 SPEED-Bench 测得的曲线；所有评估同一组合和模式的提交都使用同一条曲线。
+
+当多个草稿模型服务于同一个目标模型时，每个目标模型相同的 YAML 都必须在 `_metadata.draft-model` 中声明草稿模型的规范标识，即启动配置直接使用的模型 ID，或用于填充本地运行时路径的模型 ID。审阅者和 CI 便可根据目标模型、草稿模型、思考模式及 `num_speculative_tokens` 确定性地选择曲线。校验器会输出选中的黄金 AL；如果提供 `--expected-al`，当配置中固定的数值与黄金曲线不一致时，校验器会失败：
+
+```bash
+uv run --with pyyaml python utils/validate_golden_al.py \
+  --model minimax-m3 \
+  --draft-model Inferact/MiniMax-M3-EAGLE3-GQA \
+  --thinking-mode thinking_on \
+  --num-speculative-tokens 3 \
+  --expected-al 2.78
+```
+
+基准配置仍应固定经审阅的 AL 数值，不得在运行时加载可变曲线。固定序列长度的基准测试和评估任务使用真实 MTP/EAGLE 接受行为，不会使用这些合成接受目标。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
@@ -111,7 +124,8 @@ gh workflow run speedbench-al.yml \
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
-| MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3（`Inferact/MiniMax-M3-EAGLE3`） | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3 GQA（`Inferact/MiniMax-M3-EAGLE3-GQA`） | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 
 ## 主要参考资料
 

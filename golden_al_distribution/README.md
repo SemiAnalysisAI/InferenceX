@@ -2,7 +2,7 @@
 
 English | [中文](README_zh.md)
 
-This directory contains the golden acceptance-length (AL) curves used to standardize speculative decoding moving forward in InferenceX. Each YAML maps a model, thinking mode, and draft length (`num_speculative_tokens`) to a mean AL measured on the **coding** category of the SPEED-Bench Qualitative split.
+This directory contains the golden acceptance-length (AL) curves used to standardize speculative decoding moving forward in InferenceX. Each YAML identifies a target/draft-model pair and maps its thinking mode and draft length (`num_speculative_tokens`) to a mean AL measured on the **coding** category of the SPEED-Bench Qualitative split.
 
 ## Why SPEED-Bench
 
@@ -22,7 +22,20 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 ## Fairness Guidelines for AgentX
 
-Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves; all submissions evaluating the same model and mode use the same curve.
+Under the AgentX Guidelines, each target model, draft model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different target/draft-model pairs keep their own SPEED-Bench-derived curves; all submissions evaluating the same pair and mode use the same curve.
+
+When more than one draft model serves the same target model, each overlapping YAML must declare the canonical draft-model identifier under `_metadata.draft-model`. This is the model ID used directly by the launch config or used to populate its local runtime path. Reviewers and CI can then resolve the curve deterministically from the target model, draft model, thinking mode, and `num_speculative_tokens`. The validator prints the selected golden AL and, when `--expected-al` is provided, fails if a config's pinned value differs:
+
+```bash
+uv run --with pyyaml python utils/validate_golden_al.py \
+  --model minimax-m3 \
+  --draft-model Inferact/MiniMax-M3-EAGLE3-GQA \
+  --thinking-mode thinking_on \
+  --num-speculative-tokens 3 \
+  --expected-al 2.78
+```
+
+The benchmark configuration should continue to pin the reviewed numeric AL; it must not load a mutable curve at runtime. Fixed-sequence benchmark and eval jobs use real MTP/EAGLE acceptance and do not consume these synthetic targets.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
@@ -111,7 +124,8 @@ Before accepting an updated curve, reviewers should verify:
 | DeepSeek V4 Pro | MTP | [`dsv4_mtp.yaml`](dsv4_mtp.yaml) | [27180633016](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27180633016) |
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
-| MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3 (`Inferact/MiniMax-M3-EAGLE3`) | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| MiniMax-M3 | EAGLE3 GQA (`Inferact/MiniMax-M3-EAGLE3-GQA`) | [`minimaxm3_eagle3_gqa.yaml`](minimaxm3_eagle3_gqa.yaml) | [29784780049](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/29784780049) |
 
 ## Primary references
 
