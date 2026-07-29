@@ -5225,6 +5225,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2339
 
 - config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-gb300-vllm-fixes.sh setup patch (shipped in the nightly image)"
+    - "Collapse the 2xDEP8 decode into a single DEP16 worker (decode_workers 2->1, gpus_per_decode 8->16, data-parallel-size 8->16); recipe renamed 3p2d-dep2-dep8 -> 3p1d-dep2-dep16 (conc 512). The remaining decodes are 1xDEP8 or TEP and are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2340
+
+- config-keys:
     - kimik3-fp4-gb200-dynamo-vllm-agentic
   description:
     - "Add Kimi K3 MXFP4 GB200 AgentX performance points following the official vLLM recipe: TP16 (conc 1-8), TEP16 (conc 8-32), and TP4 x DP4 = EP16 (conc 32-256). https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200"
