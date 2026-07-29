@@ -21,6 +21,8 @@ dynamo:
   hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
   install: true
 
+setup_script: kimik3-dspark-config-compat.sh
+
 environment:
   ETCD_LEASE_TTL: "7200"
 
@@ -95,7 +97,7 @@ backend:
       gpu-memory-utilization: 0.92
       max-num-seqs: 8
       max-num-batched-tokens: 8192
-      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
+      speculative-config: '{"method":"dspark","model":"/tmp/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
       compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24]}'
       block-size: 64
       language-model-only: true

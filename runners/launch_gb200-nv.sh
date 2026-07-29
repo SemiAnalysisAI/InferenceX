@@ -383,6 +383,8 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
         mkdir -p recipes/vllm/kimi-k3/agentic
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
             recipes/vllm/kimi-k3/agentic
+        cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/kimik3-dspark-config-compat.sh" \
+            configs/kimik3-dspark-config-compat.sh
     else
         git checkout de59739b172e507e15ebf145bfe305f606e82fbf
         mkdir -p recipes/vllm/deepseek-v4/agentic
