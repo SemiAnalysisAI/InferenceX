@@ -535,15 +535,32 @@ fi
 # and hash sizes only align with prefix caching on -- an omission has been
 # reported to trip "tokens_per_block not divisible by tokens_per_hash" at load.
 # Set PREFIX_CACHING=true/false to force it either way.
-# ON by default for every arm. Agentic trace replay exists to exercise large
-# shared prefixes, so measuring it with reuse disabled is not a useful baseline.
-# It also costs essentially no KV (measured: 1,414,660 vs 1,420,824 tokens) and
-# improves ITL (484 vs 577 ms). Note vLLM resolves the flag's default to False
-# for this model, so it must be passed explicitly. PREFIX_CACHING=false remains
-# available for a deliberate A/B.
-PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+# ON by default for the KV-offload arms, which require it, and OFF for the
+# no-offload baseline. Agentic trace replay exists to exercise large shared
+# prefixes, and reuse costs essentially no KV (measured: 1,414,660 vs 1,420,824
+# tokens) while improving ITL (484 vs 577 ms) -- so ON is the right default
+# wherever it is stable.
+#
+# It is not stable on the no-offload arm. K3 is a hybrid model (69 KDA layers +
+# 24 gated MLA), and enabling prefix caching activates vLLM's Mamba-state block
+# reuse path. Every kvnone cell run with --enable-prefix-caching has died in
+# warmup with hipErrorIllegalAddress and a scheduler dump naming that path
+# (new_block_ids_to_zero), on two different nodes (g11, g19) -- so it is a
+# kernel bug, not bad hardware. The one kvnone cell that ever completed
+# (run 30322098513, c8) predates the flag. The offload arms pass with it on
+# because the connector owns block lifetime instead.
+#
+# Note vLLM resolves the flag's default to False for this model, so ON must be
+# passed explicitly. PREFIX_CACHING=true/false forces either way for an A/B.
+if [ -n "${KV_OFFLOAD_BACKEND:-}" ]; then
+    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+else
+    PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
+fi
 if [ "${PREFIX_CACHING:-}" = "false" ]; then
     PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
+elif [ "${PREFIX_CACHING:-}" = "true" ]; then
+    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
 fi
 
 # The upstream DSpark config pins "attention_backend": "FLASHINFER_MLA", which
