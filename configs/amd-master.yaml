@@ -1736,7 +1736,7 @@ minimaxm3-fp4-mi355x-vllm-disagg:
 # MiniMax-M3 MXFP4 MI355X vLLM disaggregated agentic (1P1D TP8, Mooncake DRAM KV offload).
 # Mooncake v0.3.11.post1 is installed at job runtime by server_vllm.sh (not baked into image).
 minimaxm3-fp4-mi355x-vllm-disagg-agentic:
-  image: rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625
+  image: vllm/vllm-openai-rocm:nightly-dd72658e7db0c6a674f473f6f9f0f5c2ebe7e523
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: cluster:mi355x-amds
