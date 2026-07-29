@@ -448,6 +448,11 @@ fi
 # below the ~256 GiB hard-fail ceiling.
 GPU_MEM_UTIL=0.86
 
+# Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
+# vLLM's default 300s worker RPC timeout, killing the engine with
+# "RPC call to sample_tokens timed out". Widen it.
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
