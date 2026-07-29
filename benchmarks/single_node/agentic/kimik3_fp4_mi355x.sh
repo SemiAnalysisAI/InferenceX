@@ -644,7 +644,7 @@ export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:
 # exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
 if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
-    MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/mla_gluon.py"
+    MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/4b0088c5fecbeffa6544d2da1006b45380aac896/mla_gluon.py"
     if [ -f "$MLA_GLUON_DST" ]; then
         echo "Patching $MLA_GLUON_DST from gist..."
         curl --silent --fail --location "$MLA_GLUON_SRC" -o "$MLA_GLUON_DST" \
