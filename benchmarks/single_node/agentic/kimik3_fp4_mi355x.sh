@@ -178,6 +178,8 @@ wait_for_lmcache_ready() {
 # benchmarks/single_node/agentic/README.md it must be consumed as given and
 # never replaced with a model-specific constant.
 OFFLOAD_ARGS=()
+# (srok), enforce fp8 kv
+KV_CACHE_DTYPE="fp8"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
@@ -633,22 +635,25 @@ MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
-## Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
-## vLLM's default 300s worker RPC timeout, killing the engine with
-## "RPC call to sample_tokens timed out". Widen it.
-#export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
-#
-## Patch aiter's Gluon MLA kernel with a fixed version.
-#MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
-#MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/mla_gluon.py"
-#if [ -f "$MLA_GLUON_DST" ]; then
-#    echo "Patching $MLA_GLUON_DST from gist..."
-#    curl --silent --fail --location "$MLA_GLUON_SRC" -o "$MLA_GLUON_DST" \
-#        && echo "Patched mla_gluon.py" \
-#        || echo "WARN: failed to patch mla_gluon.py; leaving the image version in place" >&2
-#else
-#    echo "WARN: $MLA_GLUON_DST not found; skipping mla_gluon.py patch" >&2
-#fi
+# Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
+# vLLM's default 300s worker RPC timeout, killing the engine with
+# "RPC call to sample_tokens timed out". Widen it.
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+
+# Patch aiter's Gluon MLA kernel with a fixed version. The b128 kernel is only
+# exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
+if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+    MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
+    MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/mla_gluon.py"
+    if [ -f "$MLA_GLUON_DST" ]; then
+        echo "Patching $MLA_GLUON_DST from gist..."
+        curl --silent --fail --location "$MLA_GLUON_SRC" -o "$MLA_GLUON_DST" \
+            && echo "Patched mla_gluon.py" \
+            || echo "WARN: failed to patch mla_gluon.py; leaving the image version in place" >&2
+    else
+        echo "WARN: $MLA_GLUON_DST not found; skipping mla_gluon.py patch" >&2
+    fi
+fi
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
