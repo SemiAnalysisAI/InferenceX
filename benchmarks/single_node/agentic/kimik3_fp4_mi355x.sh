@@ -633,6 +633,11 @@ MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
+# Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
+# vLLM's default 300s worker RPC timeout, killing the engine with
+# "RPC call to sample_tokens timed out". Widen it.
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
+
 # Patch aiter's Gluon MLA kernel with a fixed version.
 MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
 MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/mla_gluon.py"
