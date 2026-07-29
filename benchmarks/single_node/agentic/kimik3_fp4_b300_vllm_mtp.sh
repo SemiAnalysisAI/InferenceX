@@ -3,8 +3,19 @@ set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for Kimi-K3 (MXFP4) on B300 using vLLM with
-# DSpark speculative decoding at level 7 (probabilistic drafting + block
-# rejection sampling).
+# DSpark speculative decoding at level 2, probabilistic drafting, synthetic
+# acceptance pinned to the committed golden AL (real verification for evals).
+#
+# MEASURED, for anyone reading the throughput numbers: this draft head's REAL
+# acceptance collapses on the agentic corpus. Its native window is 32k
+# (rope_parameters yarn, factor 32, original_max_position_embeddings 32768,
+# stretched to the declared 1M), and at the corpus's 100k-330k ISL the measured
+# acceptance length is 1.16-2.01 with 13-41% position-1 acceptance -- versus 4.18
+# AL and 0.826 position-1 on short-context work under the identical image, draft
+# and spec config. Synthetic acceptance is the AgentX-prescribed way to measure
+# system performance at a fixed acceptance target (see the SPEC_CONFIG block), so
+# these throughput numbers are NOT evidence that the draft predicts well at
+# agentic context lengths. It does not.
 #
 # MTP sibling of kimik3_fp4_b300_vllm.sh. Everything about the target server is
 # identical; the deltas are:
@@ -138,20 +149,46 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 esac
 
 # ---- DSpark speculative decoding -------------------------------------------
-# Probabilistic drafting + block rejection sampling, at DSpark level 7. This is
-# the acceptance-rate configuration from PR #2366, whose golden curve lives in
-# golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml
-# (thinking_on: AL 3.84 at num_speculative_tokens=7, vs 3.78 for the default
-# greedy/standard curve in kimik3_dspark.yaml).
-NUM_SPEC_TOKENS=7
+# Probabilistic drafting at DSpark level 2, with synthetic acceptance pinned to
+# the committed golden AL, per the AgentX policy in
+# golden_al_distribution/README.md: "a submission may choose any supported draft
+# length, but it may not substitute a different acceptance target", because
+# "InferenceX is evaluating inference-system performance, not the ability to
+# fine-tune a benchmark-specific speculative head". AL is workload-dependent by
+# the README's own admission, so the prescribed acceptance -- not the acceptance
+# this corpus happens to produce -- is what makes submissions comparable.
+#
+# Level 2 rather than 7. Draft length IS ours to choose, and the verify width is
+# a real system cost that synthetic acceptance does not remove: at K=7 the target
+# verifies 8 positions per step, which loses to no-speculation once the GPU
+# saturates even at the forced golden AL of 3.84. Using cost ~ 1 + m(K-1) + f,
+# K=2 clears break-even at both ends of the m range while K=3 is a wash at
+# saturation and K=7 is negative:
+#     K=2  golden AL 2.51  ->  ~1.7x low conc, ~1.2x saturated
+#     K=3  golden AL 3.00  ->  ~1.7x low conc, ~0.95x saturated
+#     K=7  golden AL 3.84  ->  ~1.3x low conc, ~0.54x saturated
+# The drafter's KV footprint (~25% of GPU KV) is unaffected by K and remains a
+# genuine cost of running spec decoding at all on 100k+ prompts.
+NUM_SPEC_TOKENS=2
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
+# Committed golden AL at K=2 on the probabilistic curve we run
+# (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml:
+# thinking_on 2 -> 2.51). The greedy/standard curve's K=2 value is 2.45 -- do not
+# mix curves.
+SYNTHETIC_ACCEPT_LEN=2.51
 
-# rejection_sample_method=block does REAL target verification, so unlike the
-# dsv4/kimik2.5 MTP recipes there is no synthetic-acceptance shortcut and no
-# throughput-vs-EVAL_ONLY split: one config serves both, and the SWE-bench eval
-# stays valid. Note vLLM rejects synthetic_acceptance_length unless
-# rejection_sample_method is 'synthetic', so it must not be set here.
-SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASHINFER_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+# Throughput runs pin synthetic acceptance; the EVAL_ONLY accuracy run must use
+# real target verification instead. Synthetic acceptance commits drafted tokens
+# regardless of the target's logits, so the generated text is wrong and the
+# SWE-bench eval scores 0.0000 -- the same split dsv4_fp4_b300_vllm_mtp.sh makes
+# (and which kimik2.5_fp4_b300_mtp.sh omits; follow dsv4, not kimik2.5).
+# rejection_sample_method=block does real verification, so it is what EVAL_ONLY
+# uses. vLLM rejects synthetic_acceptance_length unless the method is 'synthetic'.
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASHINFER_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"block\"}"
+else
+    SPEC_CONFIG="{\"method\": \"dspark\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASHINFER_MLA\", \"draft_sample_method\": \"probabilistic\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+fi
 
 # Agentic fan-out: the scheduler headroom convention shared by the other agentic
 # recipes. Upstream pins 32 instead, but the aligned flag set crashed the engine
