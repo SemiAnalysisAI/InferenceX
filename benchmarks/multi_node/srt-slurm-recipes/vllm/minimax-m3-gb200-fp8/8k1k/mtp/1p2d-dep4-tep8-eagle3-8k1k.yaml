@@ -60,8 +60,8 @@ backend:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
-      tensor-parallel-size: 1
-      data-parallel-size: 4
+      tensor-parallel-size: 2
+      data-parallel-size: 2
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
