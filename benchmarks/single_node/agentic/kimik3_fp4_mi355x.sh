@@ -243,43 +243,32 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (reference values)"
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
-    # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
-    # bind-mounted /workspace, so a later job's `clean: true` checkout does not
-    # trip over root-owned build artifacts.
+    # CLI), so build it from source against ROCm -- the same path as the dsv4
+    # recipe (dsv4_fp4_mi355x_vllm_mtp.sh): git clone + checkout + a hipcc/HIP
+    # editable build. This replaces the previous PyPI `lmcache==0.5.1` install.
     #
-    # The matrix passes kv-offload-backend as JSON in KV_OFFLOAD_BACKEND_METADATA
-    # (e.g. {"name":"lmcache","version":"<sha>"}). Honour its `version` as the
-    # build ref so a version A/B is a config change rather than a recipe edit;
-    # an explicit LMCACHE_GIT_REF still wins, and the pin below is the fallback.
-    LMCACHE_CFG_VERSION=""
-    if [ -n "${KV_OFFLOAD_BACKEND_METADATA:-}" ]; then
-        LMCACHE_CFG_VERSION=$(KV_META="$KV_OFFLOAD_BACKEND_METADATA" python3 -c '
-import json, os
-try:
-    d = json.loads(os.environ["KV_META"])
-    print(d.get("version", "") if isinstance(d, dict) else "")
-except Exception:
-    print("")
-' 2>/dev/null || true)
-    fi
-
-    # The AMD reference recipe pins a PyPI release: `uv pip install
-    # "lmcache==0.5.1"`. Do not substitute a git build of dev HEAD -- dev
-    # (v0.5.3.dev47) carries a LazyMemoryAllocator that expands the pinned L1
-    # pool ~10 GB per ~17 s DURING serving, which starves the vLLM worker until
-    # the executor RPC deadline fires ("RPC call to sample_tokens timed out",
-    # observed on g09 and g11). It also adds Mamba-hybrid constraints
-    # (block_size <= max_num_batched_tokens < 2*block_size, and
-    # chunk_size % block_size == 0) that the reference command does not satisfy.
-    LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-0.5.1}}"
+    # ALWAYS build the LMCache `dev` branch HEAD (its default/development
+    # branch), so every run tracks the latest source rather than a pinned
+    # release. LMCACHE_GIT_REF still overrides for a one-off manual pin.
+    #
+    # Clone to a container-local dir, NOT the bind-mounted /workspace, so a later
+    # job's `clean: true` checkout does not trip over root-owned build artifacts.
+    #
+    # Note dev HEAD carries Mamba-hybrid constraints (block_size <=
+    # max_num_batched_tokens < 2*block_size, and chunk_size % block_size == 0)
+    # that the AMD reference command does not satisfy; the LMCache arms above
+    # already pin --max-num-batched-tokens and --chunk-size to 768 to meet them.
+    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-dev}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
-        echo "Installing lmcache==$LMCACHE_VERSION"
-        if command -v uv >/dev/null 2>&1; then
-            uv pip install --system "lmcache==$LMCACHE_VERSION" \
-                || agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
-        else
-            agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
-        fi
+        echo "Building lmcache from source at ref $LMCACHE_GIT_REF"
+        LMCACHE_BUILD_DIR="${LMCACHE_BUILD_DIR:-/tmp/lmcache-build}"
+        rm -rf "$LMCACHE_BUILD_DIR"
+        git clone https://github.com/LMCache/LMCache.git "$LMCACHE_BUILD_DIR"
+        pushd "$LMCACHE_BUILD_DIR" >/dev/null
+        git checkout "$LMCACHE_GIT_REF"
+        pip install -r requirements/build.txt
+        CXX=hipcc BUILD_WITH_HIP=1 pip install -e . --no-build-isolation
+        popd >/dev/null
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
     fi
     python3 -c "import lmcache; print('lmcache', getattr(lmcache,'__version__','?'))" || true
@@ -292,7 +281,11 @@ except Exception:
     # SHM and falls back to a pickle path that crashes at load. Cap at 90% of
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
     # is the number that actually backs the run.
-    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
+    #
+    # dsv4 (dsv4_fp4_mi355x_vllm_mtp.sh) sizes L1 to the full host-DRAM budget;
+    # match that here (the /dev/shm cap below and the optional LMCACHE_L1_MAX_GB
+    # ceiling still apply).
+    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
 
     # Optional ceiling on the eager allocation. Memory pinning is unavailable in
     # the ROCm container ("CudaPinMemoryBackend: neither torch cudart nor
@@ -324,15 +317,13 @@ except Exception:
     fi
 
     LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
-    # --max-gpu-workers 1 avoids concurrent-GPU-transfer stalls under heavy
-    # async-load pressure; CPU-side workers stay at 8.
-    LMCACHE_MAX_GPU_WORKERS="${LMCACHE_MAX_GPU_WORKERS:-1}"
-    LMCACHE_MAX_CPU_WORKERS="${LMCACHE_MAX_CPU_WORKERS:-8}"
+    # chunk-size stays at the K3 Mamba constraint (a multiple of block_size=768),
+    # NOT dsv4's 1024, which vLLM would reject on this hybrid model. Already
+    # pinned to 768 above; the :-1024 fallback only applies if that pin is unset.
     LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-1024}"
-    LMCACHE_L1_ALIGN_BYTES="${LMCACHE_L1_ALIGN_BYTES:-16384}"
-    LMCACHE_EVICTION_WATERMARK="${LMCACHE_EVICTION_WATERMARK:-0.85}"
-    LMCACHE_EVICTION_RATIO="${LMCACHE_EVICTION_RATIO:-0.10}"
-    LMCACHE_MQ_TIMEOUT="${LMCACHE_MQ_TIMEOUT:-300}"
+    # dsv4 connector defaults: a longer MP queue timeout and the ZMQ-style host.
+    LMCACHE_MQ_TIMEOUT="${LMCACHE_MQ_TIMEOUT:-6000}"
+    LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
     # Identical prefixes must hash to identical block keys across ranks.
     export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
 
@@ -364,6 +355,11 @@ except Exception:
         )
         ;;
       reference)
+        # dsv4 (dsv4_fp4_mi355x_vllm_mtp.sh) LMCache server command: a single
+        # --max-workers pool (=$TP) instead of the split gpu/cpu workers, a
+        # lookup-to-retrieve read lease, and no align-bytes/eviction-watermark
+        # flags. Long forward passes can exceed the default MP blocking timeout.
+        export LMCACHE_BLOCKING_TIMEOUT_SECS="${LMCACHE_BLOCKING_TIMEOUT_SECS:-1200}"
         LMCACHE_CMD=(
             lmcache server
             --host "$LMCACHE_HOST"
@@ -372,12 +368,9 @@ except Exception:
             --http-port "$LMCACHE_HTTP_PORT"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
             --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
-            --max-gpu-workers "$LMCACHE_MAX_GPU_WORKERS"
-            --max-cpu-workers "$LMCACHE_MAX_CPU_WORKERS"
+            --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
             --chunk-size "$LMCACHE_CHUNK_SIZE"
-            --l1-align-bytes "$LMCACHE_L1_ALIGN_BYTES"
-            --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
-            --eviction-ratio "$LMCACHE_EVICTION_RATIO"
+            --max-workers "${LMCACHE_MAX_WORKERS:-$TP}"
             --eviction-policy LRU
             --supported-transfer-mode lmcache_driven
         )
@@ -394,12 +387,11 @@ except Exception:
     echo "LMCache server PID: $LMCACHE_PID"
     wait_for_lmcache_ready
 
-    # LMCacheMPConnector is registered in this image's vLLM (verified against
-    # KVConnectorFactory), so the reference profile needs no
-    # kv_connector_module_path. The k2.7 profile passes it (and the ZMQ-style
-    # lmcache.mp.host) exactly as kimik2.7_fp4_mi355x.sh does.
+    # Both profiles pass kv_connector_module_path and the ZMQ-style
+    # lmcache.mp.host explicitly. The reference profile now mirrors dsv4
+    # (dsv4_fp4_mi355x_vllm_mtp.sh), which also sends lmcache.mp.mq_timeout; the
+    # k2.7 profile matches kimik2.7_fp4_mi355x.sh (no mq_timeout).
     if [ "$LMCACHE_PROFILE" = "k2.7" ]; then
-        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         OFFLOAD_ARGS=(
             --kv-transfer-config
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
@@ -407,7 +399,7 @@ except Exception:
     else
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
         )
     fi
     ;;
