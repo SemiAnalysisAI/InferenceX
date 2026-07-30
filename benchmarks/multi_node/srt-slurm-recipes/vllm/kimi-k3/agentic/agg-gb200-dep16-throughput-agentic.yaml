@@ -134,6 +134,7 @@ benchmark:
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
     IS_MULTINODE: "true"

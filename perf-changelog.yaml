@@ -5358,4 +5358,5 @@
     - "Use FlashInfer TRT-LLM MoE for DSpark DEP to avoid DeepGEMM grid-barrier failures under MRV2."
     - "Load DEP weights with standard safetensors to avoid fastsafetensors transient HBM exhaustion with FlashInfer MoE."
     - "Size DEP CUDA-graph captures to the actual per-engine frontier concurrency (64 regular, 96 offload), using even-sequence captures for the high-concurrency offload arm to preserve the full 1M context while leaving FlashInfer runtime workspace."
+    - "Pin the Qwen B200/B300 AgentX AIPerf warmup-handoff revision, cap recorded per-trace idle gaps at 300 seconds, and report vLLM cached prompt tokens."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2404
