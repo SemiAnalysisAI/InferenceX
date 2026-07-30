@@ -156,7 +156,7 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 
         git clone https://github.com/kvcache-ai/Mooncake.git
         cd Mooncake
-        git checkout ac5ec1dce9ec2619a6f5f96c6f63cbbfb883d999
+        git checkout v0.3.12
         bash dependencies.sh
         mkdir build
         cd build
@@ -167,8 +167,6 @@ case "${KV_OFFLOAD_BACKEND:-}" in
         cd ..
 
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -292,7 +290,8 @@ EOF
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
-        git checkout v0.5.2
+        #git checkout v0.5.2
+        git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
         pip install -r requirements/build.txt
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
@@ -446,8 +445,8 @@ fi
 # "available KV cache memory ... larger than ..." on the tighter (eval-only)
 # relaunch. 0.86 (247.7 GiB) adds ~2.6 GiB, nearly all to KV (~26.5 GiB), so
 # the KV check clears with margin while still keeping ~8 GiB free-mem headroom
-# below the ~256 GiB hard-fail ceiling.
-GPU_MEM_UTIL=0.86
+# below the ~256 GiB hard-fail ceiling. Additional 0.9 for mooncake headroom
+GPU_MEM_UTIL=0.90
 
 # Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
 # vLLM's default 300s worker RPC timeout, killing the engine with
