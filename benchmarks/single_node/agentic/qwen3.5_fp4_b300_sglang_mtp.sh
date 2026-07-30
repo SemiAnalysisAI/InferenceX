@@ -94,7 +94,6 @@ SGLANG_CMD=(
     --tokenizer-path "$MODEL"
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
-    --enable-auto-tool-choice
     --speculative-algorithm NEXTN
     --speculative-num-steps 3
     --speculative-eagle-topk 1
