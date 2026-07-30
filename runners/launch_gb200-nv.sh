@@ -10,6 +10,12 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 
+# PR2 dcgm-power canary seam: default-off, flipped by additional-settings on
+# exactly one staged qwen3.5 job. Defaults reproduce today's behavior.
+ENABLE_DCGM_POWER_CANARY="${ENABLE_DCGM_POWER_CANARY:-0}"
+SRT_SLURM_REPO_URL="${SRT_SLURM_REPO_URL:-https://github.com/NVIDIA/srt-slurm.git}"
+SRT_SLURM_REF="${SRT_SLURM_REF:-main}"
+
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
@@ -282,6 +288,15 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE"
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
+if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    DCGM_EXPORTER_SQSH="${SQUASH_DIR}/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+fi
+
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
@@ -401,8 +416,13 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    git clone "$SRT_SLURM_REPO_URL" "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
+    git checkout "$SRT_SLURM_REF" || exit 1
+    if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+        # The canary must run the exact frozen PR2 SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$SRT_SLURM_REF" || { echo "Error: srt-slurm HEAD does not match SRT_SLURM_REF=$SRT_SLURM_REF" >&2; exit 1; }
+    fi
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
@@ -492,6 +512,11 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
   ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
 fi
 
+DCGM_EXPORTER_CONTAINER_LINE=""
+if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+    DCGM_EXPORTER_CONTAINER_LINE="  dcgm-exporter: ${DCGM_EXPORTER_SQSH}"
+fi
+
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB200
@@ -517,6 +542,7 @@ containers:
   dynamo-sglang: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+${DCGM_EXPORTER_CONTAINER_LINE}
 # srtctl defaults this to true, which adds #SBATCH --segment=<total_nodes>.
 # On watchtower the whole batch partition (blue-cn01-18) is a single NVL72
 # rack, so segment contiguity buys nothing for MNNVL — but it DOES make
@@ -631,6 +657,13 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
+    # Canary provenance markers travel inside the server-logs bundle so the
+    # offline audit can tie artifacts to the exact producer SHA and exporter.
+    if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+        git rev-parse HEAD > "$LOGS_DIR/power/pr2-canary-sha.txt"
+    fi
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else
