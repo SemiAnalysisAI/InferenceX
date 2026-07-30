@@ -44,6 +44,12 @@ def test_dspark_defaults_to_real_block_rejection() -> None:
     assert "synthetic_acceptance_length" not in spec_section
 
 
+def test_dspark_diagnostic_serializes_rocm_kernels() -> None:
+    wrapper = MTP_WRAPPER.read_text()
+
+    assert _shell_default(wrapper, "AMD_SERIALIZE_KERNEL") == "3"
+
+
 def test_reference_prefix_cache_mode_emits_no_override() -> None:
     recipe = BASE_RECIPE.read_text()
     prefix_section = recipe.split("# The upstream DSpark config", maxsplit=1)[0].split(

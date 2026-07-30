@@ -17,5 +17,8 @@ export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"
 export PREFIX_CACHING="${PREFIX_CACHING:-auto}"
 export ENFORCE_EAGER="${ENFORCE_EAGER:-false}"
+# Diagnostic-only synchronization: surface the exact ROCm kernel that raises
+# the asynchronous HSA 0x1016 / hipErrorLaunchFailure seen in run 30519967494.
+export AMD_SERIALIZE_KERNEL="${AMD_SERIALIZE_KERNEL:-3}"
 
 exec "$(dirname "$0")/kimik3_fp4_mi355x.sh" "$@"
