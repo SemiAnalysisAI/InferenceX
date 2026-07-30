@@ -436,17 +436,22 @@ except Exception:
         )
     fi
     ;;
-  vllm-simple|vllm-simple-fp8|vllm-simple-fp8-b64)
+  vllm-simple|vllm-simple-fp8|vllm-simple-fp8-lazy)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
-    # vllm-simple-fp8-b64 is vllm-simple-fp8 with the KV page pinned to 64
-    # tokens. Under fp8 vLLM otherwise picks 128, which routes MLA into aiter's
-    # Gluon b128 kernel; fp8 survives that alone but every fp8 cell that also
-    # ran this connector died with a GPU fault (3/3, g17/g19/g12, at <10% pool
-    # usage) while bf16 + the same connector ran to 99.9%. 64 is the page bf16
-    # used, so this holds the one geometry that is known to work with the
-    # connector while keeping fp8.
-    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8-b64" ]; then
-        KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-64}"
+    # vllm-simple-fp8-lazy is vllm-simple-fp8 with lazy offload. In eager mode
+    # the connector stores every completed block to CPU immediately; in lazy
+    # mode it only stores under GPU-block pressure (manager.py _lazy_mode /
+    # _estimate_lazy_target_blocks walk the GPU free queue). Every fp8+connector
+    # cell so far has died while the GPU pool was nearly EMPTY -- 11.6% usage
+    # with a 0.0% external hit rate in run 30505656455, i.e. mid store-storm
+    # with nothing yet to gain from the host tier -- so the store path is where
+    # to look, and lazy removes almost all of it in that regime.
+    #
+    # Also the mode Wenyao's kimik3_fp4_mi355x_mtp.sh pins (SIMPLE_LAZY_OFFLOAD
+    # =true) as part of the gfx950 bundle validated in PR #2367 against an
+    # eight-rank GPU memory access fault.
+    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8-lazy" ]; then
+        SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-true}"
     fi
     # vllm-simple-fp8 is the same connector with an fp8 KV cache. fp8 halves
     # bytes/token in the GPU pool, which on this KV-bound corpus moves the
@@ -456,7 +461,7 @@ except Exception:
     # state and gated-MLA latent, and fp8 support across both spec types is
     # unconfirmed on this build.
     case "$KV_OFFLOAD_BACKEND" in
-      vllm-simple-fp8|vllm-simple-fp8-b64)
+      vllm-simple-fp8|vllm-simple-fp8-lazy)
         KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
         ;;
     esac
@@ -558,17 +563,17 @@ if [ -n "${KV_CACHE_DTYPE:-}" ] && [ "${KV_CACHE_DTYPE}" != "auto" ]; then
     KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
 fi
 
-# Unset by default: vLLM sizes the KV page itself. Under fp8 it picks a 128-token
-# page (bf16 gets 64) -- measured as an identical 14122 CPU blocks in the offload
-# connector across both dtypes while GPU token capacity went 1,957,290 ->
-# 3,859,490, which per manager.py:199 (num_cpu_blocks scales with num_gpu_blocks)
-# can only mean the block count held and tokens/block doubled.
+# INERT ON K3 -- kept only so the override stays discoverable. K3 is hybrid, and
+# vLLM raises the attention block size until the attention page is at least the
+# mamba/KDA page (interface.py:911, "Setting attention block size to N tokens to
+# ensure that attention page size is >= mamba page size"). Measured: bf16 -> 768
+# tokens, fp8 -> 1536. --block-size 64 was silently overridden to 1536 in run
+# 30505656455, so this knob cannot move the page on this model; only
+# kv_cache_dtype can.
 #
-# A 128-token page routes MLA into aiter's Gluon b128 kernel. That path is fine
-# on its own (the gist patch above; fp8 kvnone cells pass), but every fp8 cell
-# that ALSO ran SimpleCPUOffloadConnector has died with a GPU fault -- 3/3 on
-# g17/g19/g12, at <10% pool usage, while the same connector on bf16 ran to 99.9%.
-# Set KV_BLOCK_SIZE=64 to hold fp8 on the geometry bf16 used.
+# That also explains the connector's identical 14122 CPU blocks across dtypes:
+# fp8 halves bytes/token but the page doubles in tokens, so page BYTES are
+# unchanged and manager.py:199 derives the same pool.
 KV_BLOCK_SIZE_ARGS=()
 if [ -n "${KV_BLOCK_SIZE:-}" ] && [ "${KV_BLOCK_SIZE}" != "0" ]; then
     KV_BLOCK_SIZE_ARGS=(--block-size "$KV_BLOCK_SIZE")
