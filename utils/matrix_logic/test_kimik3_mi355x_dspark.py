@@ -26,7 +26,7 @@ def test_dspark_wrapper_matches_oren_rocm_baseline() -> None:
 
     assert _shell_default(wrapper, "KV_CACHE_DTYPE") == "auto"
     assert _shell_default(wrapper, "GPU_MEM_UTIL") == "0.95"
-    assert _shell_default(wrapper, "MAX_NUM_SEQS") == "128"
+    assert _shell_default(wrapper, "MAX_NUM_SEQS") == "16"
     assert _shell_default(wrapper, "EVAL_MAX_NUM_SEQS") == "128"
     assert _shell_default(wrapper, "MAX_NUM_BATCHED_TOKENS") == "4096"
     assert _shell_default(wrapper, "LANGUAGE_MODEL_ONLY") == "false"
