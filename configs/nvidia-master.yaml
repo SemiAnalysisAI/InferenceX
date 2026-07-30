@@ -7006,8 +7006,8 @@ qwen3.5-fp8-h100-sglang-mtp:
 
     # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
 qwen3.5-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
-  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  image: lmsysorg/sglang:v0.5.14-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4-V2
   model-prefix: qwen3.5
   runner: gb300
   precision: fp4
