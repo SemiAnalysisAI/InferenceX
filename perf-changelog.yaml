@@ -5275,6 +5275,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2363
 
 - config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Update the GB200 DeepSeek-V4-Pro Dynamo-vLLM stack to Dynamo 1.3.0.dev1, vLLM 0.25.1, and the MXFP4 checkpoint"
+    - "Enable multiple frontends and MessagePack request-plane encoding, and reduce 1P4D decode GPU memory utilization to 0.85"
+    - "Drop the recipe setup_script entirely (removes the DeepGEMM NVLink barrier timeout patch); required container deps now ship in vLLM 0.25.1, on NVIDIA/srt-slurm v1.0.31"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2139
+
+- config-keys:
     - qwen3.5-fp4-b200-sglang
     - qwen3.5-fp4-b200-sglang-mtp
     - qwen3.5-fp4-b300-sglang
