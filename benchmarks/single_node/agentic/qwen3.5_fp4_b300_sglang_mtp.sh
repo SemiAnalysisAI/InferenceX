@@ -9,7 +9,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
-    MODEL TP CONC EP_SIZE DP_ATTENTION KV_OFFLOADING \
+    MODEL TP CONC EP_SIZE KV_OFFLOADING \
     TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-10}
@@ -75,17 +75,6 @@ if require_agentic_kv_offload_backend hicache; then
     )
 fi
 
-USE_SGLANG_ROUTER=false
-SGLANG_BACKEND_PORT="$PORT"
-ROUTER_LOG="$RESULT_DIR/router.log"
-if [ "$DP_ATTENTION" = "true" ]; then
-    USE_SGLANG_ROUTER=true
-    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
-    SGLANG_BACKEND_PORT=$((PORT + 1))
-    SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
-    SGLANG_ROUTER_CMD=(python3 -m sglang_router.launch_router)
-fi
-
 PARALLEL_ARGS=(
     --tp "$TP"
     --dp 1
@@ -93,20 +82,6 @@ PARALLEL_ARGS=(
 )
 TOKENIZER_WORKERS=6
 STREAM_INTERVAL=50
-if [ "$DP_ATTENTION" = "true" ]; then
-    PARALLEL_ARGS=(
-        --tp "$TP"
-        --dp "$TP"
-        --ep-size "$EP_SIZE"
-        --enable-dp-attention
-        --enable-dp-attention-local-control-broadcast
-        --enable-dp-lm-head
-        --dist-init-addr "127.0.0.1:$((PORT + 2000))"
-        --incremental-streaming-output
-    )
-    TOKENIZER_WORKERS="$TP"
-    STREAM_INTERVAL=20
-fi
 
 # AgentX concurrency counts live session trees rather than individual HTTP
 # requests. Leave room for subagent fan-out and avoid spending HBM on graphs
@@ -132,7 +107,7 @@ SGLANG_CMD=(
     --model-path "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
-    --port "$SGLANG_BACKEND_PORT"
+    --port "$PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --enable-symm-mem
@@ -170,32 +145,14 @@ SERVER_PID=$!
 capture_cache_metrics() {
     {
         echo "=== SGLang cache metrics snapshot $(date --iso-8601=seconds) ==="
-        curl -fsS "http://localhost:$SGLANG_BACKEND_PORT/metrics" 2>/dev/null \
+        curl -fsS "http://localhost:$PORT/metrics" 2>/dev/null \
             | grep -E '^(sglang:(cache_hit_rate|cached_tokens_total|prompt_tokens_total|hicache_host_used_tokens|hicache_host_total_tokens|token_usage|num_requests_running|num_requests_waiting))' \
             || true
         echo "============================================================"
     } >> "$SERVER_LOG"
 }
 
-wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
-if [ "$USE_SGLANG_ROUTER" = "true" ]; then
-    "${SGLANG_ROUTER_CMD[@]}" \
-        --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
-        --request-id-headers x-correlation-id \
-        --dp-aware \
-        --host 0.0.0.0 \
-        --port "$PORT" \
-        --prometheus-host 127.0.0.1 \
-        --prometheus-port "$SGLANG_ROUTER_METRICS_PORT" \
-        --connect-timeout-secs 900 \
-        --request-timeout-secs 14400 \
-        --disable-health-check \
-        --disable-retries > "$ROUTER_LOG" 2>&1 &
-    ROUTER_PID=$!
-    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
-fi
+wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 capture_cache_metrics
 trap capture_cache_metrics EXIT
@@ -204,6 +161,6 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
-    REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
+    REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
