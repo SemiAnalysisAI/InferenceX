@@ -114,7 +114,6 @@ backend:
       language-model-only: true
       disable-custom-all-reduce: true
       enable-prefix-caching: true
-      enable-prompt-tokens-details: true
       scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
       dyn-tool-call-parser: "kimi_k3"
       reasoning-parser: "kimi_k3"
