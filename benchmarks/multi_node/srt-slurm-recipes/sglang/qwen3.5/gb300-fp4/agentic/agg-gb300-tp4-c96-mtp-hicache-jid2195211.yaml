@@ -1,0 +1,114 @@
+name: "agg-gb300-tp4-c96-mtp-hicache-jid2195211"
+
+# Agentic-coding SGLang aggregated recipe for Qwen3.5-397B-A17B-NVFP4 on GB300
+# (single aggregated worker, TP4, NEXTN MTP + hierarchical cache).
+#
+# Ported from the manually-run srtctl base:/zip_override_conc: starter to the
+# flat single-variant agentic schema. Pure sglang (no dynamo): frontend.type
+# sglang serves directly. Concurrency comes from the GHA matrix (exported as
+# CONC into agentic_srt.sh), not the recipe. Serving tuning preserved verbatim
+# from the source run; only CI scaffolding is added.
+
+model:
+  path: "qwen3.5-fp4"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 4
+
+infra:
+  nats_max_payload_mb: 8
+
+frontend:
+  type: sglang
+
+backend:
+  type: sglang
+  aggregated_environment:
+    SGLANG_SIMULATE_ACC_LEN: '3.39'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+    TORCH_CUDA_ARCH_LIST: '10.0'
+    PYTHONNOUSERSITE: '1'
+    NCCL_NVLS_ENABLE: '1'
+    SGL_ENABLE_JIT_DEEPGEMM: 'false'
+    SGLANG_ENABLE_FLASHINFER_GEMM: 'true'
+  sglang_config:
+    aggregated:
+      served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
+      model-path: /model/
+      trust-remote-code: true
+      tensor-parallel-size: 4
+      data-parallel-size: 1
+      expert-parallel-size: 1
+      enable-symm-mem: true
+      quantization: modelopt_fp4
+      kv-cache-dtype: fp8_e4m3
+      mamba-ssm-dtype: bfloat16
+      mamba-scheduler-strategy: extra_buffer
+      mamba-track-interval: 8192
+      attention-backend: trtllm_mha
+      moe-runner-backend: flashinfer_trtllm
+      speculative-algorithm: NEXTN
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      cuda-graph-max-bs: 256
+      max-running-requests: 1024
+      max-prefill-tokens: 16384
+      chunked-prefill-size: 16384
+      mem-fraction-static: 0.8
+      max-mamba-cache-size: 1024
+      allow-auto-truncate: true
+      stream-interval: 50
+      scheduler-recv-interval: 10
+      tokenizer-worker-num: 6
+      page-size: 64
+      enable-hierarchical-cache: true
+      hicache-ratio: 1.05
+      hicache-io-backend: kernel
+      hicache-mem-layout: page_first_direct
+      hicache-write-policy: write_through
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "144"
+
+srun_options:
+  mem: "0"
+  # gb300-nv: pyxis maps the calling user into the container as a non-root uid;
+  # agentic_srt.sh's apt-get install git step needs EUID 0. Remap to uid 0 inside
+  # the container. srt-slurm renders empty-string values as flag-only srun args.
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    # Aggregated: one worker serves both prefill and decode, so GPU accounting is
+    # the single-worker form num_gpus = TP (not the disagg prefill+decode sum).
+    # Force the single-node post-proc path; TP must match sglang_config tp-size.
+    IS_MULTINODE: "false"
+    TP: "4"
+    # Match the source run's dataset (256k cc-traces-with-subagents variant).
+    WEKA_LOADER_OVERRIDE: semianalysis_cc_traces_weka_062126_256k
+    # Container-side path of the aiperf mmap dataset cache; host-side mount wired
+    # via launch_gb300-nv.sh srtslurm.yaml default_mounts.
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    # Persistent HF hub cache (also via default_mounts).
+    HF_HUB_CACHE: "/hf_hub_cache"
