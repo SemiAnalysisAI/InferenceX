@@ -946,9 +946,11 @@ def test_main_accepts_all_evals_with_non_canary_full_sweep_label(
     assert outputs["reuse-enabled"] == "true"
 
 
-def test_main_rejects_evals_only_for_reuse(
+@pytest.mark.parametrize("incompatible_label", ["evals-only", "agentx-fast"])
+def test_main_rejects_incompatible_label_for_reuse(
     monkeypatch,
     tmp_path,
+    incompatible_label,
 ) -> None:
     comments = [
         {
@@ -966,7 +968,7 @@ def test_main_rejects_evals_only_for_reuse(
                 "merged_at": "2026-05-13T00:01:00Z",
                 "labels": [
                     {"name": "full-sweep-enabled"},
-                    {"name": "evals-only"},
+                    {"name": incompatible_label},
                 ],
                 "head": {"sha": "abc123"},
             }
@@ -999,7 +1001,10 @@ def test_main_rejects_evals_only_for_reuse(
         ],
     )
 
-    with pytest.raises(RuntimeError, match=r"reuse-incompatible.*evals-only"):
+    with pytest.raises(
+        RuntimeError,
+        match=rf"reuse-incompatible.*{incompatible_label}",
+    ):
         reuse.main()
 
 
