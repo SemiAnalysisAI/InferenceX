@@ -7198,7 +7198,7 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64, 72, 80, 88] }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 68, 72, 76] }
-      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64] }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 60, 64, 68, 72, 76, 80] }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
