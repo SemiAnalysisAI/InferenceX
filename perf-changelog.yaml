@@ -5265,3 +5265,11 @@
     - "Add 5 checked-in srt-slurm recipes selected one-to-one by the STP search space"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2362
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-mtp
+  description:
+    - "Add DSV4 B300 disaggregated Dynamo SGLang MTP configuration for 8k/1k"
+    - "Add 8 checked-in srt-slurm recipes with EAGLE speculative decoding and chat-template inputs"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2363
