@@ -10,8 +10,9 @@ dynamo:
   wheel: "1.2.0.dev20260426"
 
 setup_script: vllm-container-deps.sh
+
 health_check:
-  max_attempts: 90 
+  max_attempts: 90
   interval_seconds: 10
 sbatch_directives:
   segment: "1"
@@ -76,7 +77,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       enforce-eager: true
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       attention-config: '{"use_fp4_indexer_cache":true}'
       moe-backend: "deep_gemm_amxf4_mega_moe"
       max-model-len: 9280
@@ -103,9 +104,9 @@ backend:
       data-parallel-hybrid-lb: true
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       attention-config: '{"use_fp4_indexer_cache":true}'
-      moe-backend: "deep_gemm_amxf4_mega_moe"   
+      moe-backend: "deep_gemm_amxf4_mega_moe"
       max-model-len: 9280
       max-num-seqs: 512
       max-cudagraph-capture-size: 512

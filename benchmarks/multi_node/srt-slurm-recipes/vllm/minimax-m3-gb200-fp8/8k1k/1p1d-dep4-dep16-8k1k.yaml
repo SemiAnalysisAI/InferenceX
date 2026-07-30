@@ -1,18 +1,18 @@
-name: "minimax-m3-vllm-disagg-gb300-3p2d-dep2-dep8-fp8-8k1k"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-dep4-dep16-fp8-8k1k"
 
-# 3P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 2D DEP8 decode (TP1 DP8 EP, 8 GPU/worker = 2 nodes each).
-# GB300 has 4 GPUs/node. Adapted from NV B300 PR #1863.
-# Nodes: 2 prefill + 4 decode (+ head/infra).
+# 1P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 2D DEP8 decode (TP1 DP8 EP, 8 GPU/worker = 2 nodes each).
+# GB200 has 4 GPUs/node.
+# Nodes: 1 prefill + 4 decode (+ head/infra).
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+  container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: "fp8"
 
 
 dynamo:
   install: true
-  version: 1.3.0.dev20260614
+  version: 1.3.0.dev20260710
 
 health_check:
   max_attempts: 720
@@ -26,14 +26,14 @@ srun_options:
   mem: "0"
 
 resources:
-  gpu_type: "gb300"
+  gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 2
+  prefill_nodes: 1
   decode_nodes: 4
-  prefill_workers: 3
-  decode_workers: 2
-  gpus_per_prefill: 2
-  gpus_per_decode: 8
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -66,7 +66,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
-      data-parallel-size: 2
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
@@ -84,7 +84,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true

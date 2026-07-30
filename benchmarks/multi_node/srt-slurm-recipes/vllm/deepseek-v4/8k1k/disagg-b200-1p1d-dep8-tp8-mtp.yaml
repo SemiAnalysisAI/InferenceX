@@ -10,10 +10,11 @@ dynamo:
   wheel: "1.2.0.dev20260426"
 
 setup_script: vllm-container-deps.sh
+
 sbatch_directives:
   segment: "1"
 health_check:
-  max_attempts: 90 
+  max_attempts: 90
   interval_seconds: 10
 resources:
   gpu_type: "b200"
@@ -68,12 +69,12 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-model-len: 9280 
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      max-model-len: 9280
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       attention-config: '{"use_fp4_indexer_cache":true}'
       moe-backend: "deep_gemm_amxf4_mega_moe"
       max-num-seqs: 16
-      max-num-batched-tokens: 16384 
+      max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
@@ -91,7 +92,7 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       max-model-len: 16384
-      speculative-config: '{"method":"mtp","num_speculative_tokens":3,"rejection_sample_method":"synthetic","synthetic_acceptance_length":2.49}'
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
       max-num-seqs: 256
       max-cudagraph-capture-size: 64
       max-num-batched-tokens: 256
