@@ -1675,6 +1675,17 @@ install_agentic_deps() {
     rm -rf "$AIPERF_VENV"
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
+    # Request an explicit interpreter version rather than binding to whatever
+    # `python3` resolves to in the server container. aiperf's pyproject.toml
+    # dropped Python 3.10 support (SemiAnalysisAI/aiperf#1107); the sglang-rocm
+    # /vllm-rocm images still ship 3.10.12 as their default python3, so
+    # `--python "$(command -v python3)"` pinned the venv to an interpreter that
+    # can no longer satisfy `requires-python = ">=3.11,<3.14"`, leaving the venv
+    # without aiperf/hf installed (silent until the aiperf/hf calls below hit
+    # "No such file or directory"). uv auto-downloads a standalone build of the
+    # requested version when the system doesn't have one (same network path
+    # already used to fetch uv itself above), so this doesn't depend on the
+    # container image bundling a new-enough Python.
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
