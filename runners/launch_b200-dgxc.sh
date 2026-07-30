@@ -11,8 +11,8 @@ set -x
 # portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
 # downloading on every dgxc node. Runs for both single-node and multinode
 # launches.
-# NOTE: per-node /raid/models/* would be faster but is only populated on a
-# subset of dgxc nodes today, so we use Lustre for reliability.
+# Single-node Qwen3.5 FP4 runs probe the allocated node for a complete local
+# /raid checkpoint below and use this shared path only as the fallback.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -437,10 +437,6 @@ EOF
 else
 
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    # Point the bench script at the local MODEL_PATH resolved above instead of
-    # pulling from the HF hub cache. Bench scripts skip `hf download` when
-    # MODEL is a local path.
-    export MODEL="$MODEL_PATH"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -473,6 +469,28 @@ else
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # Qwen3.5 FP4 is staged on local NVMe on some, but not all, DGXC nodes.
+    # Resolve this only after Slurm assigns the node; checking on the login
+    # host would select the wrong filesystem. A config plus the safetensor
+    # index are required so a partial staging directory is never selected.
+    if [[ "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" ]]; then
+        LOCAL_MODEL_PATH="/raid/models/Qwen3.5-397B-A17B-NVFP4"
+        if srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 \
+            test -f "$LOCAL_MODEL_PATH/config.json" -a \
+                 -f "$LOCAL_MODEL_PATH/model.safetensors.index.json"; then
+            MODEL_PATH="$LOCAL_MODEL_PATH"
+            export MODEL_PATH
+            echo "Using node-local NVMe checkpoint: $MODEL_PATH"
+        else
+            echo "Node-local Qwen3.5 FP4 checkpoint unavailable; using shared checkpoint: $MODEL_PATH"
+        fi
+    fi
+
+    # Point the bench script at the resolved local/shared MODEL_PATH instead of
+    # pulling from the HF hub cache. Bench scripts skip `hf download` when
+    # MODEL is a local path.
+    export MODEL="$MODEL_PATH"
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
