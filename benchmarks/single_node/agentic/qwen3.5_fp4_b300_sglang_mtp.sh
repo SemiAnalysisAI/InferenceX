@@ -168,6 +168,7 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --trace-idle-gap-cap-seconds 300"
     REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
