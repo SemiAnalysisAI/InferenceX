@@ -43,14 +43,28 @@ if require_agentic_kv_offload_backend hicache; then
         exit 1
     fi
     TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
-    HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
-    MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
+    # SGLang applies --hicache-size independently to Qwen's target KV and
+    # Mamba pools. Native NEXTN also creates a draft KV pool with the same
+    # slot count; its one attention layer adds 1/15 of the target KV bytes.
+    # Reserve 1 GB/rank for page alignment and enforce H * 31/15 per rank.
+    HICACHE_ALIGNMENT_RESERVE_GB=$TP
+    HICACHE_USABLE_TOTAL_GB=$((TOTAL_CPU_DRAM_GB - HICACHE_ALIGNMENT_RESERVE_GB))
+    if [ "$HICACHE_USABLE_TOTAL_GB" -lt 1 ]; then
+        echo "Error: insufficient DRAM after HiCache alignment reserve" >&2
+        exit 1
+    fi
+    MAX_HICACHE_SIZE_GB=$((HICACHE_USABLE_TOTAL_GB * 15 / TP / 31))
     HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
     if [ "$HICACHE_SIZE_GB" -lt 1 ] || [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
         echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB outside 1..$MAX_HICACHE_SIZE_GB" >&2
         exit 1
     fi
-    echo "HiCache CPU pools: ${HICACHE_SIZE_GB} GB per rank per pool across TP=${TP}, pools=${HICACHE_HOST_POOL_COUNT}; node total <= ${TOTAL_CPU_DRAM_GB} GB"
+    PROJECTED_HICACHE_TOTAL_GB=$(((HICACHE_SIZE_GB * TP * 31 + 14) / 15 + HICACHE_ALIGNMENT_RESERVE_GB))
+    if [ "$PROJECTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
+        echo "Error: projected HiCache use ${PROJECTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
+        exit 1
+    fi
+    echo "HiCache CPU pools: ${HICACHE_SIZE_GB} GB target + Mamba + 1/15 draft per rank across TP=${TP}; projected node total ${PROJECTED_HICACHE_TOTAL_GB} GB <= ${TOTAL_CPU_DRAM_GB} GB"
     CACHE_ARGS=(
         --page-size 64
         --enable-hierarchical-cache
