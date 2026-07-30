@@ -702,7 +702,11 @@ fi
 # overhead and transient co-tenancy are counted. This is not a denylist problem:
 # g11 and g16 each measured both above and below the line hours apart. 0.88
 # (253.4 GiB) clears every observation except the two genuinely occupied nodes.
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+# 2026-07-30: raised 0.88 -> 0.90 (259.2 GiB). fp8 KV halves the per-token KV
+# cost, so the extra 5.8 GiB of pool is worth more than it was at bf16, and
+# every 0.88 observation above had >= 256 GiB free except the two occupied
+# nodes. Drop back to 0.88 if bring-up failures reappear at engine init.
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 
