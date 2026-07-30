@@ -5341,6 +5341,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
 
 - config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+  description:
+    - "Add Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration."
+    - "Add seven checked-in srt-slurm recipes selected one-to-one by the 8K/1K prefill/decode topology and concurrency entries."
+    - "Image: vllm/vllm-openai:v0.25.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2360
+
+- config-keys:
     - kimik3-fp4-h200-vllm-agentic
   description:
     - "Add Day-0 Kimi K3 FP4 AgentX H200 performance recipes from the official vLLM guidance, using fit-safe TP/DP/EP topologies with optional SimpleCPU KV offload"
