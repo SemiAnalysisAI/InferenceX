@@ -41,6 +41,9 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     fi
     export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-sglang" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
+    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -54,7 +57,7 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dy
     export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm or dynamo-sglang, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
     exit 1
 fi
 
@@ -76,6 +79,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml ]]; then
     git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -94,9 +103,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECIS
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    if [[ $PRECISION == "fp8" ]]; then
-        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
-    fi
     # NVIDIA/srt-slurm#38
     git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
     if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
@@ -184,10 +190,18 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+# Resolve the recipe path before editing it. CONFIG_FILE may include an
+# srt-slurm matrix selector such as :zip_override_dep4_dep8[0].
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+    echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
+    exit 1
+fi
+
+# Override the job name in the recipe with the runner name.
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
-    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
+    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_PATH"
 fi
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
@@ -199,6 +213,9 @@ SRTCTL_APPLY_ARGS=(
 # the login host cannot stat it even though workers can. Keep this bypass
 # scoped to those recipe sets; runtime model loading still validates the path.
 if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && ( "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/mtp/*.yaml || "$CONFIG_FILE" == recipes/vllm/minimax-m3/b300-fp4/8k1k/*-tp1-*.yaml ) ]]; then
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$MODEL_PATH" == /scratch/models/* ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
