@@ -8482,7 +8482,7 @@ minimaxm3-fp8-h200-vllm-agentic:
 # target FP8 KV is 15,360 bytes/token before the native MTP layer. TP4
 # replicates the two KV heads and measured 30.5 KB/token node-wide; TP2
 # measured 15.3 KB/token. Against the 256k trace's 88.8k median and 148.8k
-# p75 ISL, measured TP2 reaches 98% GPU KV at c16 and collapses by c24.
+# p75 ISL, TP2 remains useful at c18 but is dominated by c22.
 # TP4 retains 83.9% prefix hits at c64 but falls to 0% at c72, so the
 # no-offload grid resolves c64-70 densely and HiCache takes over at the cliff.
 qwen3.5-fp4-b200-sglang-agentic-mtp:
@@ -8499,7 +8499,7 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64, 66, 68, 70] }
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72, 76, 80, 88, 96] }
-      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14, 16, 18, 20, 22] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14, 16, 18, 20] }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32, 40, 48] }
 
 dsv4-fp4-b200-sglang-agentic-hicache:
