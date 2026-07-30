@@ -5259,6 +5259,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2316
 
 - config-keys:
+    - dsv4-fp4-b300-dynamo-sglang
+  description:
+    - "Add DSV4 B300 disaggregated Dynamo SGLang STP configuration for 8k/1k"
+    - "Add 5 checked-in srt-slurm recipes selected one-to-one by the STP search space"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2362
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-trt-mtp
   description:
     - "Add Qwen3.5-397B-A17B-NVFP4 GB300 disaggregated TensorRT-LLM+Dynamo MTP (3-token) benchmarks for 8k1k."
