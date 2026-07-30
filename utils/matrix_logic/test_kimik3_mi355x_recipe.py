@@ -10,9 +10,11 @@ MTP_RECIPE = (
 ).read_text()
 
 
-def test_dspark_routes_target_mla_away_from_rocm_aiter() -> None:
-    assert 'ATTENTION_BACKEND="${ATTENTION_BACKEND:-TRITON_MLA}"' in MTP_RECIPE
-    assert 'ATTENTION_BACKEND_ARGS=(--attention-backend "$ATTENTION_BACKEND")' in (
-        BASE_RECIPE
+def test_dspark_patches_rocm_aiter_mla_for_multi_token_queries() -> None:
+    assert (
+        'if [ "${KV_CACHE_DTYPE:-}" = "fp8" ] '
+        '|| [ "${SPEC_DECODE:-false}" = "true" ]; then'
+        in BASE_RECIPE
     )
-    assert '"${ATTENTION_BACKEND_ARGS[@]}"' in BASE_RECIPE
+    assert "MTP-aware qlen/q_pos indexing" in BASE_RECIPE
+    assert "ATTENTION_BACKEND" not in MTP_RECIPE

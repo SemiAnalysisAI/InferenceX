@@ -549,11 +549,6 @@ if [ "${ENFORCE_EAGER:-false}" = "true" ]; then
     EAGER_ARGS=(--enforce-eager)
 fi
 
-ATTENTION_BACKEND_ARGS=()
-if [ -n "${ATTENTION_BACKEND:-}" ]; then
-    ATTENTION_BACKEND_ARGS=(--attention-backend "$ATTENTION_BACKEND")
-fi
-
 # The reference command passes neither --enable-prefix-caching nor
 # --no-enable-prefix-caching, and this build's default is None (vLLM decides
 # internally), so by default we pass nothing and stay aligned. Two reasons this
@@ -685,9 +680,11 @@ export PYTHONNOUSERSITE=1
 # "RPC call to sample_tokens timed out". Widen it.
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 
-# Patch aiter's Gluon MLA kernel with a fixed version. The b128 kernel is only
-# exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
-if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+# Patch aiter's Gluon MLA kernel with a fixed version. The pinned revision adds
+# MTP-aware qlen/q_pos indexing, causal masking, strides, and grid dimensions
+# required by DSpark's multi-token queries. It also fixes the b128 kernel used
+# by the fp8 KV path, so apply it for either consumer.
+if [ "${KV_CACHE_DTYPE:-}" = "fp8" ] || [ "${SPEC_DECODE:-false}" = "true" ]; then
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
     # Pinned to the exact gist revision that produced the first clean fp8 KV
     # run (30442578333: c8, 3600s, 696 total tok/s/GPU, TTFT 2.6s). The
@@ -725,7 +722,6 @@ VLLM_CMD=(
     "${PREFIX_CACHE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
     "${EAGER_ARGS[@]}"
-    "${ATTENTION_BACKEND_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${EVAL_SERVE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
