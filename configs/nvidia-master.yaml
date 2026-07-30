@@ -7140,6 +7140,12 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
+# Qwen3.5 target FP8 KV is 15,360 bytes/token before the native MTP layer.
+# TP4 replicates the model's two KV heads and measured 30.5 KB/token node-wide;
+# TP2 measured 15.3 KB/token. Against the 256k trace's 88.8k median and 148.8k
+# p75 ISL, the measured 9.56M-token TP2 pool should bend around conc 56-80,
+# while the 14.88M-token TP4 pool should bend around conc 88-128. DEP8 covers
+# the throughput end with session-sticky routing across attention-DP ranks.
 qwen3.5-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -7154,6 +7160,7 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 16, 32, 64, 96, 128] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8, 16, 32, 64, 96, 128, 192, 256] }
+      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], router: { name: sglang-router, version: "0.3.2" } }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.22.0
