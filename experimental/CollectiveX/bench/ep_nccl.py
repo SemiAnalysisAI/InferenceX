@@ -114,6 +114,9 @@ class NCCLEPBackend(EPBackend):
         self._combine_cfg = CombineConfig(send_only=0)
         self._comm = None
         self._ep_group = None
+        # Exactly ONE handle per group, rebound per problem shape — see _ensure_handle.
+        self._handle = None
+        self._bound = None
 
     def buffer_cap(self, args):
         if self._ll:
@@ -238,15 +241,34 @@ class NCCLEPBackend(EPBackend):
             self._ht_disp_counts_t = self._t(self._ht_disp_counts)
 
     def _ensure_handle(self, p):
-        """Create (once, cached on the problem) the reusable per-step handle for p's routing.
+        """Bind the group's single handle to p's routing, creating it on first use.
 
-        create_handle is collective and, in HT, performs the metadata exchange that fixes the
-        received-token count — so it must run in the same order on every rank. It first runs
-        inside Pass 1's untimed warm (ladder order, identical across ranks); the timed passes
-        then reuse the cached handle and never enter a collective here.
+        ONE handle per group, rebound per shape — never one handle per shape. `buffer_idx`, the
+        LL double-buffer parity selector, is per-HANDLE state, but the buffers it selects are
+        offsets into the per-GROUP rdma_buffer: two handles built from the same group config
+        resolve to the SAME parity-0/parity-1 count+flag slots and advance their parity
+        independently, so one handle's "next buffer, safe to clean" is the other's "current
+        buffer, in flight". Interleaving handles therefore corrupts the signalling even when it
+        does not hang outright, which makes every latency drawn from such a run suspect. Filed
+        upstream as NVIDIA/nccl#2303; reproduced on a stock wheel by ladder [1] (one handle,
+        clean) vs ladder [1, 2] (two handles, 64 dispatch + 6 combine receive timeouts -> 719).
+
+        `ncclEpInitHandle` takes no token count and `ncclEpUpdateHandle` is documented as a
+        "per-step collective: prepare the handle for the given top-k routing decisions", so
+        rebinding IS the intended lifecycle. This also matches the other three backends, which
+        each allocate one object sized to the ladder maximum and vary the token count per call.
+
+        Both create_handle and update are collective, and HT additionally performs the metadata
+        exchange that fixes the received-token count, so they must run in the same order on
+        every rank. They only ever run on a shape CHANGE, and every timed component is preceded
+        by an untimed warm() on its own problem — so the collective always lands in warm (or in
+        the oracle passes), never inside a timed window. Re-entering with the already-bound
+        problem returns immediately without a collective or a sync.
         """
         cached = getattr(p, "_nccl", None)
         if cached is not None:
+            if self._bound is not cached:
+                self._rebind(cached)
             return cached
         stream = self._stream()
         topk_idx_t = self._t(p.topk_idx)
@@ -271,18 +293,45 @@ class NCCLEPBackend(EPBackend):
                 expert_counters=self._t(h.recv_experts),
                 recv_total_counter=self._t(h.recv_total),
             )
-        h.handle = self._ep_group.create_handle(
-            self._layout,
-            topk_idx_t,
-            layout_info=ht_layout_info,
-            config=HandleConfig(),
-            stream=stream,
+        # LL takes layout_info only on dispatch (the API forbids it on create/update); HT needs
+        # it here so this problem's counters receive its own metadata-exchange results.
+        h.layout_info = ht_layout_info
+        if self._handle is None:
+            self._handle = self._ep_group.create_handle(
+                self._layout,
+                topk_idx_t,
+                layout_info=ht_layout_info,
+                config=HandleConfig(),
+                stream=stream,
+            )
+            h.handle = self._handle
+            torch.cuda.synchronize()
+            if not self._ll:
+                h.count = int(h.recv_total.item())
+            self._bound = h
+        else:
+            h.handle = self._handle
+            self._rebind(h)
+        p._nccl = h
+        return h
+
+    def _rebind(self, h):
+        """Point the single handle at h's routing (collective; untimed callers only).
+
+        Rebinding does not reallocate: `Handle.update` only swaps in the new top-k indices.
+        HT re-reads its received-token count because the metadata exchange recomputes it for
+        this routing; the value is deterministic per problem, so a later rebind to the same
+        problem reproduces it.
+        """
+        self._handle.update(
+            h.topk_idx_t,
+            layout_info=None if self._ll else h.layout_info,
+            stream=self._stream(),
         )
         torch.cuda.synchronize()
         if not self._ll:
             h.count = int(h.recv_total.item())
-        p._nccl = h
-        return h
+        self._bound = h
 
     # ---- transport contract ------------------------------------------------------------------
 
@@ -464,8 +513,11 @@ class NCCLEPBackend(EPBackend):
         return rc
 
     def _destroy_handles(self):
-        # Per-problem handles are cached on the problem namespaces; the group keeps no registry,
-        # so there is nothing to walk here. Handles are released when their problems are GC'd
-        # (Handle.destroy runs in the binding's __del__); the group/comm destroy below reclaims
-        # the device buffers. Kept as a seam in case bring-up needs explicit handle teardown.
-        return
+        # One handle for the whole group, so teardown is a single explicit destroy rather than
+        # waiting on per-problem GC. The problem namespaces still hold a reference to it for
+        # their dispatch/combine calls; dropping _bound first keeps a late rebind from touching
+        # a destroyed handle. The group/comm destroy below reclaims the device buffers.
+        self._bound = None
+        if self._handle is not None:
+            self._handle.destroy()
+            self._handle = None

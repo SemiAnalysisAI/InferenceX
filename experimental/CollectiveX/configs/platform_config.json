@@ -10,7 +10,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 2x200GbE", "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"},
       "operator": {
         "partition": "hpc-gpu-1",
@@ -34,7 +34,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
       "operator": {
         "partition": "main",
@@ -54,7 +54,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 400GbE", "switch": "Whitebox Tomahawk3 leaf + Tomahawk4 (RoCE)"},
       "operator": {
         "partition": "gpu-2",
@@ -77,6 +77,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8]},
+      "ll_backends": {"nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-8 2x400GbE", "switch": "NVIDIA Spectrum-X SN5600 (51.2T)"},
       "operator": {
         "partition": "batch_1",
@@ -101,6 +102,7 @@
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
+      "ll_backends": {"nccl-ep": [8]},
       "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
       "operator": {
         "partition": "batch",
@@ -120,6 +122,7 @@
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
+      "ll_backends": {"nccl-ep": [8]},
       "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
       "operator": {
         "partition": "batch_1",
