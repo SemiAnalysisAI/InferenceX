@@ -1852,6 +1852,9 @@ build_replay_cmd() {
     # this as a ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
     REPLAY_CMD+=" --num-dataset-entries 393"
+    if declare -p AIPERF_TRACE_IDLE_GAP_CAP_SECONDS >/dev/null 2>&1; then
+        REPLAY_CMD+=" --trace-idle-gap-cap-seconds $AIPERF_TRACE_IDLE_GAP_CAP_SECONDS"
+    fi
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
