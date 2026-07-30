@@ -188,6 +188,9 @@ wait_for_lmcache_ready() {
 # benchmarks/single_node/agentic/README.md it must be consumed as given and
 # never replaced with a model-specific constant.
 OFFLOAD_ARGS=()
+# Only the LMCache arms set this (to `--mamba-cache-mode align`); every other
+# arm leaves vLLM to pick the mode.
+LMCACHE_MAMBA_CACHE_MODE_ARGS=()
 
 # fp8 KV is the DEFAULT for every arm on this model.
 #
@@ -208,8 +211,18 @@ KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
-  lmcache|lmcache-k27|lmcache-budget)
+  lmcache|lmcache-k27|lmcache-budget|lmcache-k3)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # lmcache-k3: LMCache's OWN validated K3 server command
+    # (docs/source/recipes/kimi_k3.rst, PR #4277). Deliberately minimal --
+    # the `reference` profile's flags (--max-gpu-workers, --l1-align-bytes,
+    # --eviction-trigger-watermark, --supported-transfer-mode) are not part of
+    # what upstream validated on K3, and an unrecognised flag is a silent
+    # server-start failure. Start from the known-good command; add tuning
+    # flags only once this arm produces a number.
+    if [ "$KV_OFFLOAD_BACKEND" = "lmcache-k3" ]; then
+        LMCACHE_PROFILE=k3upstream
+    fi
     # The server profile has to be selectable from config: the agentic matrix
     # has no per-cell env channel, so the backend NAME carries it.
     #   lmcache      -> AMD K3 reference server command
@@ -261,11 +274,59 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # Worth keeping in view either way: at ~106k-token average ISL, 768 would
     # mean ~138 chunked-prefill steps per turn versus ~26 at 4096, so the two
     # settings are not performance-equivalent.
-    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
-    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-768}"
+    # Both values derive from vLLM's UNIFIED block size N, which is NOT a
+    # constant: it depends on TP and on the KV dtype. Upstream's recipe quotes
+    # N=768 for K3 at TP8, but that is the bf16 figure, and it explicitly says
+    # to "re-read N from vLLM's `Setting attention block size to N tokens`
+    # startup log line" after changing anything. Measured on this fleet with
+    # --kv-cache-dtype fp8 at TP8, three independent runs (30453589555,
+    # 30521327099, 30525206671) all log:
+    #     Setting attention block size to 1536 tokens
+    # fp8 halves the element size, so twice as many tokens fit one page. Since
+    # fp8 is this recipe's default, hardcoding 768 would violate BOTH LMCache
+    # constraints on every default run.
+    #
+    # Constraints (lmcache/integration/vllm, and upstream's recipe):
+    #   chunk_size % N == 0                  -> chunk_size = N
+    #   N <= max_num_batched_tokens < 2 * N  -> sit just under 2N
+    # `align` snapshots the KDA state only on a block boundary at the end of a
+    # scheduler step, so the per-step budget must cover at least one full block
+    # but stay below two. Upstream validated 1500 against N=768 (just under
+    # 2N); 3000 against N=1536 is the same ratio.
+    if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+        LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-1536}"
+    else
+        LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-768}"
+    fi
+    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-$LMCACHE_UNIFIED_BLOCK}"
+    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-$(( LMCACHE_UNIFIED_BLOCK * 2 - 72 ))}"
     LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
     LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
-    echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (reference values)"
+    # Guard the derivation rather than trusting it: a wrong N is a 20-minute
+    # engine-init failure after a 1.56 TB weight load.
+    if [ $(( LMCACHE_K3_CHUNK_SIZE % LMCACHE_UNIFIED_BLOCK )) -ne 0 ]; then
+        echo "Error: LMCache chunk-size $LMCACHE_K3_CHUNK_SIZE is not a multiple of N=$LMCACHE_UNIFIED_BLOCK." >&2
+        exit 1
+    fi
+    if [ "$MAX_NUM_BATCHED_TOKENS" -lt "$LMCACHE_UNIFIED_BLOCK" ] \
+       || [ "$MAX_NUM_BATCHED_TOKENS" -ge $(( LMCACHE_UNIFIED_BLOCK * 2 )) ]; then
+        echo "Error: --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS outside [N, 2N) for N=$LMCACHE_UNIFIED_BLOCK." >&2
+        exit 1
+    fi
+    echo "LMCache: N=$LMCACHE_UNIFIED_BLOCK (kv-cache-dtype=${KV_CACHE_DTYPE:-auto})" \
+         "--max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE"
+
+    # Required by upstream's K3 recipe, and by the KDA backend generally:
+    # `align` is the only Mamba cache mode the KDA backend supports, and it is
+    # the mode that keeps reusable state snapshots. vLLM picks it implicitly
+    # when prefix caching is on, but upstream passes it explicitly and so do
+    # we -- an implicit default that silently flips to 'none' is exactly how
+    # this arm failed before.
+    LMCACHE_MAMBA_CACHE_MODE_ARGS=(--mamba-cache-mode align)
+
+    # Upstream's K3 recipe requires this on the LMCache path. It defaults to 0
+    # and gates the fused latent-MoE tail in the K3 model definition.
+    export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION="${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-1}"
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
@@ -288,26 +349,91 @@ except Exception:
 ' 2>/dev/null || true)
     fi
 
-    # The AMD reference recipe pins a PyPI release: `uv pip install
-    # "lmcache==0.5.1"`. Do not substitute a git build of dev HEAD -- dev
-    # (v0.5.3.dev47) carries a LazyMemoryAllocator that expands the pinned L1
-    # pool ~10 GB per ~17 s DURING serving, which starves the vLLM worker until
-    # the executor RPC deadline fires ("RPC call to sample_tokens timed out",
-    # observed on g09 and g11). It also adds Mamba-hybrid constraints
-    # (block_size <= max_num_batched_tokens < 2*block_size, and
-    # chunk_size % block_size == 0) that the reference command does not satisfy.
-    LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-0.5.1}}"
+    # LMCache K3 support is NOT in any PyPI release yet (latest is 0.5.2,
+    # 2026-07-22). Upstream's own recipe -- docs/source/recipes/kimi_k3.rst,
+    # added by LMCache PR #4277 -- says: "use a nightly build from 2026-07-27
+    # or newer; stable LMCache releases include K3 support starting from
+    # 0.5.3". Two commits on dev are what make K3 work at all:
+    #   #4206 (2026-07-23) _MambaUnifiedViewEdit -- re-views a Mamba/KDA
+    #         UNIFIED state tensor as a single attention tensor. This is the
+    #         fix for our long-standing blocker
+    #         "ValueError: expected a Mamba [conv_state, ssm_state] tensor
+    #          list, got Tensor" (run 30350911388): K3's Kimi Delta Attention
+    #         supplies one fused state tensor, and before #4206 the adapter
+    #         only understood the [conv_state, ssm_state] pair.
+    #   #4278 (2026-07-28) _SubpagedMLAAttentionViewEdit -- re-views K3's
+    #         kernel-paged MLA tensor [N*12, 64, 576] as logical pages
+    #         [N, 768, 576].
+    # 0.5.1 predates BOTH, which is why every LMCache attempt on this model
+    # has died at engine init. The historical "pin 0.5.1, never build dev"
+    # note in this file was correct for its date and is now obsolete.
+    #
+    # Nightly WHEELS are CUDA-only, so ROCm must build from source. Flags are
+    # upstream's (docs/source/getting_started/installation.rst): gfx950 is
+    # MI355X/MI350X.
+    #
+    # LMCACHE_GIT_REF pins the build. Default is the #4278 merge commit rather
+    # than dev HEAD so the build is reproducible and cannot drift under us.
+    # A config-supplied `version` that looks like a release (0.5.3+) still
+    # installs from PyPI once such a release exists.
+    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-1dfa07772b8b2ae79653c830d63e297da39c970f}"
+    LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-git}}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
-        echo "Installing lmcache==$LMCACHE_VERSION"
-        if command -v uv >/dev/null 2>&1; then
-            uv pip install --system "lmcache==$LMCACHE_VERSION" \
-                || agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+        if [ "$LMCACHE_VERSION" = "git" ]; then
+            # Clone to a container-local dir, NOT the bind-mounted /workspace:
+            # a later job's `clean: true` checkout trips over root-owned build
+            # artifacts left behind there.
+            LMCACHE_SRC="${LMCACHE_SRC:-/opt/lmcache-src}"
+            echo "Building lmcache from source at ref $LMCACHE_GIT_REF (ROCm/gfx950)"
+            rm -rf "$LMCACHE_SRC"
+            git clone --filter=blob:none https://github.com/LMCache/LMCache.git "$LMCACHE_SRC"
+            git -C "$LMCACHE_SRC" checkout --detach "$LMCACHE_GIT_REF"
+            git -C "$LMCACHE_SRC" --no-pager log -1 --oneline
+            (
+                cd "$LMCACHE_SRC"
+                export PYTORCH_ROCM_ARCH="gfx942,gfx950"
+                export TORCH_DONT_CHECK_COMPILER_ABI=1
+                export CXX=hipcc
+                export BUILD_WITH_HIP=1
+                if command -v uv >/dev/null 2>&1; then
+                    uv pip install --system -e . --no-build-isolation \
+                        || python3 -m pip install -e . --no-build-isolation
+                else
+                    python3 -m pip install -e . --no-build-isolation
+                fi
+            )
         else
-            agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+            echo "Installing lmcache==$LMCACHE_VERSION"
+            if command -v uv >/dev/null 2>&1; then
+                uv pip install --system "lmcache==$LMCACHE_VERSION" \
+                    || agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+            else
+                agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+            fi
         fi
+        # Fail here, loudly, rather than 20 minutes later inside vLLM: this
+        # runs before the engine loads 1.56 TB of weights.
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
     fi
     python3 -c "import lmcache; print('lmcache', getattr(lmcache,'__version__','?'))" || true
+    # Assert the two K3 fixes are actually present in whatever got installed.
+    # A silently-old build would otherwise fail much later with the original
+    # Mamba ValueError and look like a fresh bug.
+    python3 - <<'PYEOF'
+import sys
+try:
+    from lmcache.integration.vllm import kv_cache_group_edits as e
+except Exception as exc:
+    sys.exit(f"FATAL: cannot import kv_cache_group_edits: {exc}")
+names = {type(x).__name__ for x in getattr(e, "_EDITS", ())}
+missing = {"_MambaUnifiedViewEdit", "_SubpagedMLAAttentionViewEdit"} - names
+if missing:
+    sys.exit(
+        f"FATAL: installed lmcache lacks K3 support: missing {sorted(missing)}. "
+        f"Registered edits: {sorted(names)}. Needs dev >= #4278 (2026-07-28)."
+    )
+print(f"lmcache K3 edits present: {sorted(names)}")
+PYEOF
 
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
     LMCACHE_PORT="${LMCACHE_PORT:-5555}"
@@ -317,7 +443,11 @@ except Exception:
     # SHM and falls back to a pickle path that crashes at load. Cap at 90% of
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
     # is the number that actually backs the run.
-    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
+    if [ "${LMCACHE_PROFILE:-}" = "k3upstream" ]; then
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-100}"   # upstream K3 recipe
+    else
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
+    fi
 
     # Optional ceiling on the eager allocation. Memory pinning is unavailable in
     # the ROCm container ("CudaPinMemoryBackend: neither torch cudart nor
@@ -388,6 +518,30 @@ except Exception:
             --eviction-policy LRU
         )
         ;;
+      k3upstream)
+        # Upstream's validated K3 command, verbatim apart from --host and the
+        # --http-* pair, which this recipe's healthcheck needs and which every
+        # other profile already passes:
+        #   lmcache server --port 6555 --chunk-size 768 --max-workers 4 \
+        #                  --l1-size-gb 100 --eviction-policy LRU
+        # --chunk-size comes from the N derivation above (1536 under fp8, not
+        # upstream's bf16 768). L1 defaults to upstream's 100 GB here rather
+        # than the reference 512 GB: memory pinning is unavailable in the ROCm
+        # container, so LMCache allocates the WHOLE L1 pool before serving,
+        # and a smaller pool means a much shorter and more predictable
+        # bring-up. Raise it via LMCACHE_L1_SIZE_GB once the arm is green.
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$LMCACHE_PORT"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$LMCACHE_HTTP_PORT"
+            --chunk-size "$LMCACHE_CHUNK_SIZE"
+            --max-workers "${LMCACHE_MAX_WORKERS:-4}"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --eviction-policy LRU
+        )
+        ;;
       reference)
         LMCACHE_CMD=(
             lmcache server
@@ -408,7 +562,7 @@ except Exception:
         )
         ;;
       *)
-        echo "Error: unsupported LMCACHE_PROFILE '$LMCACHE_PROFILE' (expected: reference, k2.7)" >&2
+        echo "Error: unsupported LMCACHE_PROFILE '$LMCACHE_PROFILE' (expected: reference, k2.7, k3upstream)" >&2
         exit 1
         ;;
     esac
@@ -770,6 +924,7 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     "${MAX_MODEL_LEN_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
+    "${LMCACHE_MAMBA_CACHE_MODE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
     "${KV_BLOCK_SIZE_ARGS[@]}"
     "${EAGER_ARGS[@]}"
