@@ -7183,7 +7183,7 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
 # hits by c96, placing its useful no-offload/offload crossover below c64.
 # TP4 remains healthy at c64; HiCache sustains 87% prefix hits and 234k input
 # tok/s at c80, so resolve the crossover densely and carry offload past it.
-# DEP8 probes the throughput end with session-sticky attention-DP routing.
+# DEP8 was rejected after fragmenting the trace across eight radix caches.
 qwen3.5-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -7200,7 +7200,6 @@ qwen3.5-fp4-b300-sglang-agentic-mtp:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 72, 80, 88, 96, 104, 112] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64] }
       - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [40, 48, 56, 60, 64, 68, 72] }
-      - { tp: 8, ep: 8, dp-attn: true, spec-decoding: mtp, kv-offloading: none, conc-list: [64, 128, 256], router: { name: sglang-router, version: "0.3.2" } }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.22.0
