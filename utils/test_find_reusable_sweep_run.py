@@ -413,6 +413,59 @@ def test_validate_reusable_run_rejects_failed_run_by_default(monkeypatch) -> Non
         raise AssertionError("expected an unpinned failed run to be rejected")
 
 
+def test_validate_reusable_run_accepts_cancelled_run_when_explicitly_allowed(
+    monkeypatch,
+) -> None:
+    """A fail-fast sweep concludes ``cancelled`` once a job is cut short.
+
+    Its completed benchmark jobs still uploaded usable artifacts, so a pinned
+    ``cancelled`` run is reusable on the same terms as a pinned failure.
+    """
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
+
+    reuse.validate_reusable_run(
+        "SemiAnalysisAI/InferenceX",
+        "run-sweep.yml",
+        1321,
+        {
+            "id": 25763404168,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "path": ".github/workflows/run-sweep.yml",
+            "head_sha": "abc123",
+        },
+        "token",
+        allow_failed=True,
+    )
+
+
+def test_validate_reusable_run_rejects_cancelled_run_by_default(monkeypatch) -> None:
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
+
+    try:
+        reuse.validate_reusable_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            1321,
+            {
+                "id": 25763404168,
+                "event": "pull_request",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "path": ".github/workflows/run-sweep.yml",
+                "head_sha": "abc123",
+            },
+            "token",
+        )
+    except RuntimeError as error:
+        assert "expected success" in str(error)
+    else:
+        raise AssertionError("expected an unpinned cancelled run to be rejected")
+
+
 def test_validate_reusable_run_accepts_run_for_older_pr_commit(monkeypatch) -> None:
     """Regression: pinned run survives an additional commit landing on the PR.
 
@@ -893,9 +946,11 @@ def test_main_accepts_all_evals_with_non_canary_full_sweep_label(
     assert outputs["reuse-enabled"] == "true"
 
 
-def test_main_rejects_evals_only_for_reuse(
+@pytest.mark.parametrize("incompatible_label", ["evals-only", "agentx-fast"])
+def test_main_rejects_incompatible_label_for_reuse(
     monkeypatch,
     tmp_path,
+    incompatible_label,
 ) -> None:
     comments = [
         {
@@ -913,7 +968,7 @@ def test_main_rejects_evals_only_for_reuse(
                 "merged_at": "2026-05-13T00:01:00Z",
                 "labels": [
                     {"name": "full-sweep-enabled"},
-                    {"name": "evals-only"},
+                    {"name": incompatible_label},
                 ],
                 "head": {"sha": "abc123"},
             }
@@ -946,7 +1001,10 @@ def test_main_rejects_evals_only_for_reuse(
         ],
     )
 
-    with pytest.raises(RuntimeError, match=r"reuse-incompatible.*evals-only"):
+    with pytest.raises(
+        RuntimeError,
+        match=rf"reuse-incompatible.*{incompatible_label}",
+    ):
         reuse.main()
 
 

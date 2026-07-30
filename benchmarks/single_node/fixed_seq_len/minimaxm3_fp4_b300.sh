@@ -38,7 +38,6 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
@@ -57,6 +56,7 @@ start_gpu_monitor
 set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $PORT \
 $PARALLEL_ARGS \
+--attention_config.indexer_kv_dtype fp8 \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
