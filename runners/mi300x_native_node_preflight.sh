@@ -104,7 +104,17 @@ PY
 #    tree. /home and /nvme_home are the same nearly-full NFS export, and
 #    gharunner cannot create /raid/squash.
 mkdir -p "$KIMIK3_SQUASH_DIR"
-squash_file="$KIMIK3_SQUASH_DIR/$(printf '%s' "$KIMIK3_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+if [[ -n "${KIMIK3_SQUASH_FILE_OVERRIDE:-}" ]]; then
+    if [[ "$KIMIK3_SQUASH_FILE_OVERRIDE" != /*.sqsh ]]; then
+        fail "KIMIK3_SQUASH_FILE_OVERRIDE must be an absolute .sqsh path"
+    fi
+    if [[ ! "${KIMIK3_CANARY_SQUASH_SHA256:-}" =~ ^[0-9a-f]{64}$ ]]; then
+        fail "a squash override requires a lowercase KIMIK3_CANARY_SQUASH_SHA256"
+    fi
+    squash_file="$KIMIK3_SQUASH_FILE_OVERRIDE"
+else
+    squash_file="$KIMIK3_SQUASH_DIR/$(printf '%s' "$KIMIK3_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+fi
 
 # 6. Keep Enroot's scratch on the same node-local filesystem, never under $HOME.
 export ENROOT_CACHE_PATH="$KIMIK3_SQUASH_DIR/.enroot-cache"
@@ -120,8 +130,19 @@ fi
 
 # 8/9. Reuse a valid image; otherwise import into a sibling temporary file,
 #      validate it, and only then swap it in atomically.
-if [[ -s "$squash_file" ]] && unsquashfs -s "$squash_file" >/dev/null 2>&1; then
+if [[ -n "${KIMIK3_SQUASH_FILE_OVERRIDE:-}" ]]; then
+    if [[ ! -s "$squash_file" ]] ||
+        ! unsquashfs -s "$squash_file" >/dev/null 2>&1; then
+        fail "staged squash override is missing or invalid: $squash_file"
+    fi
+    squash_sha256=$(sha256sum "$squash_file" | awk '{print $1}')
+    if [[ "$squash_sha256" != "$KIMIK3_CANARY_SQUASH_SHA256" ]]; then
+        fail "staged squash override sha256 mismatch: expected=$KIMIK3_CANARY_SQUASH_SHA256 actual=$squash_sha256"
+    fi
+    echo "[$(hostname)] reusing verified canary image $squash_file"
+elif [[ -s "$squash_file" ]] && unsquashfs -s "$squash_file" >/dev/null 2>&1; then
     echo "[$(hostname)] reusing validated image $squash_file"
+    squash_sha256=unverified
 else
     rm -f "$squash_file"
     TMP_SQUASH=$(mktemp "${squash_file}.XXXXXX")
@@ -133,6 +154,7 @@ else
     fi
     mv "$TMP_SQUASH" "$squash_file"
     TMP_SQUASH=""
+    squash_sha256=unverified
 fi
 
 squash_size_bytes=$(wc -c < "$squash_file" | tr -d '[:space:]')
@@ -141,5 +163,5 @@ if [[ "$squash_size_bytes" -le 0 ]]; then
 fi
 
 # 10. The launcher parses only this line.
-printf 'INFERENCEX_KIMIK3_PREFLIGHT hostname=%s revision=%s gpu_count=%s gpu_arch=gfx942 squash_size_bytes=%s\n' \
-    "$(hostname)" "$revision" "$gpu_count" "$squash_size_bytes"
+printf 'INFERENCEX_KIMIK3_PREFLIGHT hostname=%s revision=%s gpu_count=%s gpu_arch=gfx942 squash_size_bytes=%s squash_sha256=%s\n' \
+    "$(hostname)" "$revision" "$gpu_count" "$squash_size_bytes" "$squash_sha256"

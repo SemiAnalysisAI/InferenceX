@@ -87,25 +87,6 @@ export VLLM_USE_V2_MODEL_RUNNER=0
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 export PYTHONNOUSERSITE=1
 
-if [[ -n "${KIMIK3_AITER_OVERLAY_DIR:-}" ]]; then
-    aiter_root=$(python -c \
-        "import pathlib, aiter; print(pathlib.Path(aiter.__file__).resolve().parent)")
-    install -m 0644 \
-        "$KIMIK3_AITER_OVERLAY_DIR/fused_moe.py" \
-        "$aiter_root/fused_moe.py"
-    for filename in \
-        mixed_moe_gemm_2stage.py \
-        mfma_preshuffle_pipeline.py \
-        lds_dma_policy.py \
-        mfma_policy.py; do
-        install -m 0644 \
-            "$KIMIK3_AITER_OVERLAY_DIR/$filename" \
-            "$aiter_root/ops/flydsl/kernels/$filename"
-    done
-    python -m compileall -q "$aiter_root/ops/flydsl/kernels"
-    echo "K3_AITER_OVERLAY_APPLIED root=$aiter_root ref=${KIMIK3_AITER_OVERLAY_REF:-unknown}"
-fi
-
 # Canary-only companion to the exact-shape gfx942 AITER overlay. The image's
 # vLLM oracle rejects the deployment before loading weights because its AITER
 # capability declaration both limits MXFP4 to gfx950 and omits the already

@@ -2295,14 +2295,12 @@ kimik3-fp4-mi300x-vllm-agentic:
           # status=12/vendor_err=10. Force sockets to prove the K3/model path
           # independently of that node-fabric problem.
           - "NCCL_IB_DISABLE=1"
-          # Canary-only: the AITER overlay validates gfx942 MXFP4 numerics, but
-          # this image's vLLM oracle still hard-rejects MXFP4 outside gfx950.
-          - "KIMIK3_VLLM_GFX942_GATE_PATCH=1"
-          # Diagnostic mode: take one node and one GPU, run the A16W4 SiTUv2
-          # MoE probe, and skip the server entirely. The job still ends red
-          # because no result file is produced; the evidence is the probe JSON
-          # in the always() log artifact. Set to 0 to run the real canary.
-          - "KIMIK3_PROBE_ONLY=1"
+          # Canary-only immutable image built from vLLM #50319 at 85c84a8 and
+          # AITER v0.1.19 on chi-mi300x-034. Each allocated node downloads it
+          # over the cluster-private network and verifies the digest before use.
+          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-aiter-v0.1.19.sqsh"
+          - "KIMIK3_CANARY_SQUASH_SHA256=9c1bc2ff83812e814b75237558e762460828edaa904b8a71bc0f412c0de2e730"
+          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-aiter-v0.1.19.sqsh"
         decode:
           num-worker: 0
           tp: 8

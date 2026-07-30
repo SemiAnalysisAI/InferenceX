@@ -46,47 +46,6 @@ HF_HUB_CACHE_MOUNT="${HF_HUB_CACHE_MOUNT:-/raid/hf-hub-cache/inferencex/agentx-h
 # Not exported: only the client container has this path mounted.
 HF_HUB_CACHE_CONTAINER="${HF_HUB_CACHE:-/hf-hub-cache}"
 
-# Canary-only compatibility overlay. This branch pins immutable source and
-# checksums; the production PR will instead depend on an image containing the
-# corresponding AITER commit.
-KIMIK3_AITER_OVERLAY_REF="ccf22af6ead6196b473eba3d2a81825d01c44e55"
-KIMIK3_AITER_OVERLAY_HOST="$GITHUB_WORKSPACE/.aiter-k3-gfx942-overlay"
-export KIMIK3_AITER_OVERLAY_REF
-export KIMIK3_AITER_OVERLAY_DIR="/workspace/.aiter-k3-gfx942-overlay"
-
-download_aiter_overlay() {
-    local relative_path="$1"
-    local expected_sha256="$2"
-    local output="$KIMIK3_AITER_OVERLAY_HOST/$(basename "$relative_path")"
-    local url="https://raw.githubusercontent.com/edwingao28/aiter/${KIMIK3_AITER_OVERLAY_REF}/${relative_path}"
-
-    python3 - "$url" "$output" "$expected_sha256" <<'PY'
-import hashlib
-import os
-import pathlib
-import sys
-import urllib.request
-
-url, output, expected = sys.argv[1:]
-destination = pathlib.Path(output)
-destination.parent.mkdir(parents=True, exist_ok=True)
-payload = urllib.request.urlopen(url, timeout=120).read()
-actual = hashlib.sha256(payload).hexdigest()
-if actual != expected:
-    raise SystemExit(
-        f"AITER overlay checksum mismatch for {url}: "
-        f"expected={expected} actual={actual}"
-    )
-temporary = destination.with_suffix(destination.suffix + ".tmp")
-temporary.write_bytes(payload)
-os.replace(temporary, destination)
-print(
-    f"K3_AITER_OVERLAY_DOWNLOAD file={destination.name} "
-    f"sha256={actual} bytes={len(payload)}"
-)
-PY
-}
-
 fail_with() {
     local rc="$1"
     shift
@@ -172,21 +131,22 @@ if [[ -n "${AITER_SITUV2_A8W4+set}" ]]; then
     fi
 fi
 
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py" \
-    "ed809fce18da00bf98de6385b7b934bd97fbc52cc9dc8b6306280e235b4d3fae"
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/mfma_preshuffle_pipeline.py" \
-    "12ecefe55e188232166ddc34fe182464c26d1bff278196f7f72078ac5cab9cdd"
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/lds_dma_policy.py" \
-    "cfeca166acba58f789c61cb78a77a5cb8fad12a71cfbd3cbe428ea8c83a5fdc9"
-download_aiter_overlay \
-    "aiter/ops/flydsl/kernels/mfma_policy.py" \
-    "dac7aa6b2cf0e25adb2119072ca80fd708855c637efc3b98cfd8f998762d8f04"
-download_aiter_overlay \
-    "aiter/fused_moe.py" \
-    "341dd12f028ead0bf90e156b50a7894926f9fef32752c858f1792f0fa6eb9d51"
+canary_image_values=0
+for name in KIMIK3_CANARY_SQUASH_URL KIMIK3_CANARY_SQUASH_SHA256 \
+    KIMIK3_SQUASH_FILE_OVERRIDE; do
+    [[ -n "${!name:-}" ]] && canary_image_values=$(( canary_image_values + 1 ))
+done
+if (( canary_image_values != 0 && canary_image_values != 3 )); then
+    fail "KIMIK3_CANARY_SQUASH_URL, KIMIK3_CANARY_SQUASH_SHA256, and KIMIK3_SQUASH_FILE_OVERRIDE must be set together"
+fi
+if (( canary_image_values == 3 )); then
+    if [[ ! "$KIMIK3_CANARY_SQUASH_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+        fail "KIMIK3_CANARY_SQUASH_SHA256 must be a lowercase sha256 digest"
+    fi
+    if [[ "$KIMIK3_SQUASH_FILE_OVERRIDE" != /*.sqsh ]]; then
+        fail "KIMIK3_SQUASH_FILE_OVERRIDE must be an absolute .sqsh path"
+    fi
+fi
 
 # --- Lifecycle state and cleanup -------------------------------------------
 
@@ -502,6 +462,35 @@ if [[ -z "$HEAD_NODE" || -z "$HEAD_ADDR" || -n "${extra:-}" ]]; then
 fi
 echo "Rank 0 runs on $HEAD_NODE at $HEAD_ADDR"
 
+# --- Canary image staging --------------------------------------------------
+
+if (( canary_image_values == 3 )); then
+    stage_output=$(
+        srun --jobid="$JOB_ID" --nodes=2 --ntasks=2 --ntasks-per-node=1 \
+            --export=ALL \
+            bash runners/mi300x_stage_canary_squash.sh
+    )
+    printf '%s\n' "$stage_output"
+    printf '%s\n' "$stage_output" | python3 -c '
+import os
+import sys
+
+records = []
+for line in sys.stdin:
+    if line.startswith("INFERENCEX_KIMIK3_IMAGE_STAGE "):
+        records.append(
+            dict(item.split("=", 1) for item in line.split()[1:] if "=" in item)
+        )
+if len(records) != 2:
+    sys.exit(f"ERROR: expected two image-stage records, got {len(records)}")
+if len({record.get("hostname") for record in records}) != 2:
+    sys.exit(f"ERROR: image staging did not cover two distinct nodes: {records}")
+expected = os.environ["KIMIK3_CANARY_SQUASH_SHA256"]
+if {record.get("sha256") for record in records} != {expected}:
+    sys.exit(f"ERROR: staged image digest mismatch: {records}")
+'
+fi
+
 # --- Per-node verification -------------------------------------------------
 
 preflight_output=$(
@@ -509,6 +498,7 @@ preflight_output=$(
         bash runners/mi300x_native_node_preflight.sh
 )
 REVISION=$(printf '%s\n' "$preflight_output" | python3 -c '
+import os
 import sys
 
 records = []
@@ -543,11 +533,19 @@ sizes = {record.get("squash_size_bytes") for record in records}
 if len(sizes) != 1:
     sys.exit(f"ERROR: nodes imported different builds of the image: {sorted(sizes)} bytes")
 
+expected_sha256 = os.environ.get("KIMIK3_CANARY_SQUASH_SHA256")
+if expected_sha256:
+    hashes = {record.get("squash_sha256") for record in records}
+    if hashes != {expected_sha256}:
+        sys.exit(
+            f"ERROR: nodes hold a different canary image digest: {sorted(hashes)}"
+        )
+
 print(revisions.pop())
 ')
 echo "Both nodes verified at model revision $REVISION"
 
-IMAGE_PATH="$KIMIK3_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+IMAGE_PATH="${KIMIK3_SQUASH_FILE_OVERRIDE:-$KIMIK3_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh}"
 MODEL_CACHE_CONTAINER_PATH="/models-cache"
 MODEL_CONTAINER_PATH="$MODEL_CACHE_CONTAINER_PATH/snapshots/$REVISION"
 

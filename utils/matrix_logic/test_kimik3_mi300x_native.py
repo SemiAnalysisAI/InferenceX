@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -25,9 +26,18 @@ SERVER_SCRIPT = (
     REPO_ROOT / "benchmarks" / "multi_node" / "agentic" / "kimik3_fp4_mi300x_vllm.sh"
 )
 PREFLIGHT_SCRIPT = REPO_ROOT / "runners" / "mi300x_native_node_preflight.sh"
+CANARY_IMAGE_STAGE_SCRIPT = (
+    REPO_ROOT / "runners" / "mi300x_stage_canary_squash.sh"
+)
 DEFAULT_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds.sh"
 NATIVE_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds-native-multinode.sh"
 IMAGE = "vllm/vllm-openai-rocm:kimi-k3"
+CANARY_IMAGE_NAME = "k3-gfx942-vllm-85c84a8-aiter-v0.1.19.sqsh"
+CANARY_IMAGE_PATH = f"/raid/hf-hub-cache/inferencex/squash/{CANARY_IMAGE_NAME}"
+CANARY_IMAGE_URL = f"http://10.162.224.35:18080/{CANARY_IMAGE_NAME}"
+CANARY_IMAGE_SHA256 = (
+    "9c1bc2ff83812e814b75237558e762460828edaa904b8a71bc0f412c0de2e730"
+)
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
 STAGING_COMMANDS = ("hf download", "huggingface-cli download", "wget", "curl")
@@ -83,8 +93,12 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         "NCCL_DEBUG=INFO",
         "NCCL_DEBUG_SUBSYS=INIT,NET",
         "NCCL_IB_DISABLE=1",
-        "KIMIK3_VLLM_GFX942_GATE_PATCH=1",
+        f"KIMIK3_CANARY_SQUASH_URL={CANARY_IMAGE_URL}",
+        f"KIMIK3_CANARY_SQUASH_SHA256={CANARY_IMAGE_SHA256}",
+        f"KIMIK3_SQUASH_FILE_OVERRIDE={CANARY_IMAGE_PATH}",
     ]
+    assert not any("KIMIK3_PROBE_ONLY" in setting for setting in settings)
+    assert not any("KIMIK3_VLLM_GFX942_GATE_PATCH" in setting for setting in settings)
 
 
 def server_env(rank: int = 0) -> dict[str, str]:
@@ -233,15 +247,13 @@ def test_canary_patch_extends_vllm_mxfp4_capabilities_for_gfx942_k3(
     assert source.read_text().count("MoEActivation.SITU,") == 1
 
 
-def test_canary_overlay_pins_the_gfx942_lds_safe_fallback_dispatch() -> None:
+def test_canary_uses_built_image_without_legacy_runtime_overlays() -> None:
     launcher_source = NATIVE_LAUNCHER.read_text()
     server_source = SERVER_SCRIPT.read_text()
 
-    assert f'KIMIK3_AITER_OVERLAY_REF="{AITER_LDS_SAFE_REF}"' in launcher_source
-    assert '"aiter/fused_moe.py"' in launcher_source
-    assert f'"{AITER_FUSED_MOE_SHA256}"' in launcher_source
-    assert '"$KIMIK3_AITER_OVERLAY_DIR/fused_moe.py"' in server_source
-    assert '"$aiter_root/fused_moe.py"' in server_source
+    assert f'KIMIK3_AITER_OVERLAY_REF="{AITER_LDS_SAFE_REF}"' not in launcher_source
+    assert AITER_FUSED_MOE_SHA256 not in launcher_source
+    assert "KIMIK3_AITER_OVERLAY_DIR" not in server_source
 
 
 def write_executable(path: Path, body: str) -> None:
@@ -371,6 +383,28 @@ def run_preflight(node: dict[str, object]) -> subprocess.CompletedProcess:
     )
 
 
+def run_canary_image_stage(
+    node: dict[str, object],
+    *,
+    source: Path,
+    expected_sha256: str,
+) -> subprocess.CompletedProcess:
+    target = node["squash_dir"] / CANARY_IMAGE_NAME
+    env = {
+        **node["env"],
+        "KIMIK3_CANARY_SQUASH_URL": source.as_uri(),
+        "KIMIK3_CANARY_SQUASH_SHA256": expected_sha256,
+        "KIMIK3_SQUASH_FILE_OVERRIDE": str(target),
+    }
+    return subprocess.run(
+        ["bash", str(CANARY_IMAGE_STAGE_SCRIPT)],
+        cwd=str(REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+
 def preflight_records(stdout: str) -> list[str]:
     return [
         line
@@ -414,6 +448,70 @@ def test_preflight_reuses_a_valid_squash_without_import(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert len(preflight_records(result.stdout)) == 1
+    assert "enroot import" not in node["cmd_log"].read_text()
+
+
+def test_canary_image_stage_validates_and_atomically_installs(
+    tmp_path: Path,
+) -> None:
+    node = make_node(tmp_path / "node")
+    source = tmp_path / "canary.sqsh"
+    source.write_bytes(b"verified canary squash\n")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+
+    result = run_canary_image_stage(
+        node,
+        source=source,
+        expected_sha256=digest,
+    )
+
+    assert result.returncode == 0, result.stderr
+    target = node["squash_dir"] / CANARY_IMAGE_NAME
+    assert target.read_bytes() == source.read_bytes()
+    assert not list(node["squash_dir"].glob(f"{CANARY_IMAGE_NAME}.tmp.*"))
+
+
+def test_canary_image_stage_preserves_existing_image_on_digest_mismatch(
+    tmp_path: Path,
+) -> None:
+    node = make_node(tmp_path / "node")
+    source = tmp_path / "canary.sqsh"
+    source.write_bytes(b"damaged download\n")
+    target = node["squash_dir"] / CANARY_IMAGE_NAME
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"previous verified image\n")
+
+    result = run_canary_image_stage(
+        node,
+        source=source,
+        expected_sha256="0" * 64,
+    )
+
+    assert result.returncode != 0
+    assert "sha256" in result.stderr.lower()
+    assert target.read_bytes() == b"previous verified image\n"
+    assert not list(node["squash_dir"].glob(f"{CANARY_IMAGE_NAME}.tmp.*"))
+
+
+def test_preflight_reuses_verified_canary_override_without_registry_import(
+    tmp_path: Path,
+) -> None:
+    node = make_node(tmp_path)
+    target = node["squash_dir"] / CANARY_IMAGE_NAME
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"verified canary squash\n")
+    digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    node["env"].update(
+        {
+            "KIMIK3_SQUASH_FILE_OVERRIDE": str(target),
+            "KIMIK3_CANARY_SQUASH_SHA256": digest,
+        }
+    )
+
+    result = run_preflight(node)
+
+    assert result.returncode == 0, result.stderr
+    assert f"squash_sha256={digest}" in result.stdout
     assert "enroot import" not in node["cmd_log"].read_text()
 
 
@@ -481,6 +579,12 @@ if [[ "$args" == *mi300x_native_node_preflight.sh* ]]; then
     exit 0
 fi
 
+if [[ "$args" == *mi300x_stage_canary_squash.sh* ]]; then
+    printf 'INFERENCEX_KIMIK3_IMAGE_STAGE hostname=node-a action=reuse sha256=%s bytes=35729113088\n' "$KIMIK3_CANARY_SQUASH_SHA256"
+    printf 'INFERENCEX_KIMIK3_IMAGE_STAGE hostname=node-b action=reuse sha256=%s bytes=35729113088\n' "$KIMIK3_CANARY_SQUASH_SHA256"
+    exit 0
+fi
+
 if [[ "$args" == *--kill-on-bad-exit=1* ]]; then
     printf 'server_master_addr=%s\n' "$MULTINODE_MASTER_ADDR" >> "$FAKE_CMD_LOG"
     printf 'server_gloo_ifname=%s\n' "${GLOO_SOCKET_IFNAME:-}" >> "$FAKE_CMD_LOG"
@@ -526,7 +630,8 @@ exit 0
 def preflight_record(hostname: str, revision: str) -> str:
     return (
         f"INFERENCEX_KIMIK3_PREFLIGHT hostname={hostname} revision={revision} "
-        "gpu_count=8 gpu_arch=gfx942 squash_size_bytes=33076838400"
+        "gpu_count=8 gpu_arch=gfx942 squash_size_bytes=33076838400 "
+        f"squash_sha256={CANARY_IMAGE_SHA256}"
     )
 
 
@@ -700,6 +805,37 @@ def test_native_launcher_uses_two_full_nodes_and_all_node_preflight(
     assert "--container-writable" in server
 
     assert f"scancel {JOB_ID}" in cluster["cmd_log"].read_text()
+
+
+def test_native_launcher_stages_canary_image_before_preflight(
+    tmp_path: Path,
+) -> None:
+    cluster = make_cluster(tmp_path)
+    cluster["env"].update(
+        {
+            "KIMIK3_CANARY_SQUASH_URL": CANARY_IMAGE_URL,
+            "KIMIK3_CANARY_SQUASH_SHA256": CANARY_IMAGE_SHA256,
+            "KIMIK3_SQUASH_FILE_OVERRIDE": CANARY_IMAGE_PATH,
+        }
+    )
+
+    result = run_launcher(cluster)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    lines = cluster["cmd_log"].read_text().splitlines()
+    stage_index = next(
+        index
+        for index, line in enumerate(lines)
+        if "mi300x_stage_canary_squash.sh" in line
+    )
+    preflight_index = next(
+        index
+        for index, line in enumerate(lines)
+        if "mi300x_native_node_preflight.sh" in line
+    )
+    assert stage_index < preflight_index
+    server = next(line for line in lines if "--kill-on-bad-exit=1" in line)
+    assert f"--container-image={CANARY_IMAGE_PATH}" in server
 
 
 def test_native_launcher_rejects_topology_before_salloc(tmp_path: Path) -> None:
