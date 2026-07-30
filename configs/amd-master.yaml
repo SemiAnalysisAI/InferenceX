@@ -462,6 +462,33 @@ qwen3.5-fp8-mi300x-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# First Qwen3.5 AgentX (agentic-coding) recipe on MI300X, shipped spec-decode-only
+# per the AgentX policy that new agentic arms enable speculative decoding rather
+# than running a separate STP baseline (MODELS.md). SGLang EAGLE MTP (num-steps 3,
+# eagle-topk 1, 4 draft tokens = 3 speculative tokens), matching the other gfx942
+# Qwen3.5 MTP entry (qwen3.5-fp8-mi325x-sglang-mtp), with simulated acceptance
+# pinned to the golden AL 3.39 (golden_al_distribution/qwen3.5_mtp.yaml,
+# thinking_on, K=3). Image is lmsysorg/sglang:v0.5.16-rocm720-mi30x because
+# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from v0.5.16. The replay path
+# follows the MI355X Qwen3.5 AgentX recipe (triton attention, HiCache on the
+# page_size=1 direct/layer_first copy path required by Qwen3.5's hybrid Mamba
+# no_buffer scheduler on ROCm), with mem-fraction-static 0.75 as on the
+# fixed-seq-len MI300X entry. TP8-only: 192 GB per GPU is the tight SKU.
+qwen3.5-fp8-mi300x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:mi300x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 16, 24, 32] }
+
 kimik2.5-int4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.24.0
   model: moonshotai/Kimi-K2.5
