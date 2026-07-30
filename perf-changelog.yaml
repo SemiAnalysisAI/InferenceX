@@ -5281,3 +5281,13 @@
     - "Enable multiple frontends and MessagePack request-plane encoding, and reduce 1P4D decode GPU memory utilization to 0.85"
     - "Drop the recipe setup_script entirely (removes the DeepGEMM NVLink barrier timeout patch); required container deps now ship in vLLM 0.25.1, on NVIDIA/srt-slurm v1.0.31"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2139
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Switch Qwen3.5 FP4 SGLang configs to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint"
+    - "Model pre-staged on all clusters as Qwen3.5-397B-A17B-NVFP4-V2"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2205
