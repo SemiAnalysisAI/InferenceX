@@ -122,7 +122,6 @@ SGLANG_CMD=(
     --mem-fraction-static 0.80
     --stream-interval 50
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
-    --tokenizer-worker-num 6
     --tokenizer-path "$MODEL"
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
