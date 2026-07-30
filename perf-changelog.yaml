@@ -5296,3 +5296,9 @@
     - "Enable multiple frontends and MessagePack request-plane encoding, and reduce 1P4D decode GPU memory utilization to 0.85"
     - "Drop the recipe setup_script entirely (removes the DeepGEMM NVLink barrier timeout patch); required container deps now ship in vLLM 0.25.1, on NVIDIA/srt-slurm v1.0.31"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2139
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic
+  description:
+    - "Initial B300 submission after corrected AIPerf AgentX harness."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2417
