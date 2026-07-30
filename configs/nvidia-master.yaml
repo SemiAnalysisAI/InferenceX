@@ -8592,10 +8592,14 @@ minimaxm3-fp8-h200-vllm-agentic:
 # measured 15.3 KB/token. Against the 256k trace's 88.8k median and 148.8k
 # p75 ISL, TP2 no-offload is already GPU-KV-bound by c18; measured c20
 # HiCache improves both its throughput and latency, so offload takes over
-# after c14 rather than repeating dominated no-offload points.
+# after c14 rather than repeating dominated no-offload points. TP2 c40 is
+# capped to 25 running requests by the available HBM and matches c32 throughput
+# with 15-second median TTFT, so the HiCache arm ends at c32.
 # TP4 retains 83.9% prefix hits at c64. No-offload c66 and c68 are already
 # throughput/latency dominated, while c70 collapses to 6% hits and 96% KV
-# usage, so HiCache takes over at c64 and densely covers the boundary.
+# usage, so HiCache takes over at c64 and densely covers the boundary through
+# c76. At c80 GPU KV reaches 100% with 19-second median TTFT, and c88 falls to
+# 10% prefix hits, so the dominated upper tail is excluded.
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -8609,9 +8613,9 @@ qwen3.5-fp4-b200-sglang-agentic-mtp:
     - dram-utilization: 0.80
       search-space:
       - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64] }
-      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72, 76, 80, 88, 96] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72, 76] }
       - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14] }
-      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32, 40, 48] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32] }
 
 dsv4-fp4-b200-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233

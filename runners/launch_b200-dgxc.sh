@@ -486,15 +486,28 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    # Qwen3.5 FP4 is staged on local NVMe on some, but not all, DGXC nodes.
+    # Qwen3.5 FP4 may be staged on local NVMe on a DGXC node.
     # Resolve this only after Slurm assigns the node; checking on the login
-    # host would select the wrong filesystem. A config plus the safetensor
-    # index are required so a partial staging directory is never selected.
+    # host would select the wrong filesystem. Validate every shard named by
+    # the safetensor index so a partial staging directory is never selected.
     if [[ "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" ]]; then
         LOCAL_MODEL_PATH="/raid/models/Qwen3.5-397B-A17B-NVFP4"
         if srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 \
-            test -f "$LOCAL_MODEL_PATH/config.json" -a \
-                 -f "$LOCAL_MODEL_PATH/model.safetensors.index.json"; then
+            python3 - "$LOCAL_MODEL_PATH" <<'PY'; then
+import json
+from pathlib import Path
+import sys
+
+model_path = Path(sys.argv[1])
+index_path = model_path / "model.safetensors.index.json"
+if not (model_path / "config.json").is_file() or not index_path.is_file():
+    raise SystemExit(1)
+
+with index_path.open() as index_file:
+    shards = set(json.load(index_file).get("weight_map", {}).values())
+if not shards or any(not (model_path / shard).is_file() for shard in shards):
+    raise SystemExit(1)
+PY
             MODEL_PATH="$LOCAL_MODEL_PATH"
             export MODEL_PATH
             echo "Using node-local NVMe checkpoint: $MODEL_PATH"
