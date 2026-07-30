@@ -148,6 +148,16 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     num_prefill_gpu = prefill_num_workers * prefill_tp * prefill_pp * prefill_pcp_size
     num_decode_gpu = decode_num_workers * decode_tp * decode_pp * decode_pcp_size
     num_gpus = num_prefill_gpu + num_decode_gpu
+    # Aggregated configs set decode num-worker 0 (prefill+decode co-located on one
+    # worker), so there are no separate decode GPUs. Mirror process_result.py and drop
+    # the decode-side parallelism, so TP/EP and the per-GPU throughput denominator
+    # reflect the single aggregated worker instead of double-counting its GPUs.
+    if num_decode_gpu <= 0:
+        decode_tp = 0
+        decode_ep = 0
+        decode_pp = 1
+        decode_dcp_size = 1
+        decode_pcp_size = 1
     tp = prefill_tp + decode_tp
     ep = max(prefill_ep, decode_ep)
     dp_attention = (

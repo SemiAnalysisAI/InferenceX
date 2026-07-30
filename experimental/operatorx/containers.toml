@@ -1,0 +1,32 @@
+[nvidia.torch]
+image = "nvcr.io/nvidia/pytorch:26.03-py3"
+
+[nvidia.flashinfer]
+image = "lmsysorg/sglang:latest"
+
+[nvidia.deepgemm]
+image = "lmsysorg/sglang:latest"
+
+[nvidia.sglang]
+image = "lmsysorg/sglang:latest"
+
+[nvidia.deepep]
+image = "lmsysorg/sglang:latest"
+
+[nvidia.flashinfer_comm]
+image = "lmsysorg/sglang:latest"
+
+[nvidia.sglang_comm]
+image = "lmsysorg/sglang:latest"
+
+[amd.torch]
+image = "vllm/vllm-openai-rocm:v0.19.0"
+
+[amd.aiter]
+image = "vllm/vllm-openai-rocm:v0.19.0"
+
+[tpu.jax]
+image = "us-central1-docker.pkg.dev/jax-image-build/jax-tpu/jax-tpu:latest"
+
+[trainium.neuronx]
+image = "public.ecr.aws/neuron/pytorch-training-neuronx:2.5.1-neuronx-py310-sdk2.21.0-ubuntu22.04"

@@ -266,6 +266,40 @@ def test_multinode_agentic_identity_fields_match() -> None:
             assert identity({**default_row, field: 2}) != identity(default_row)
 
 
+def test_agentic_identity_freezes_nested_kv_offload_backend() -> None:
+    row = {
+        **agentic_result(),
+        "kv_offloading": "dram",
+        "kv_offload_backend": {
+            "name": "native",
+            "options": {"layers": ["cpu", "gpu"]},
+        },
+    }
+    row.pop("offloading")
+
+    identity = agentic_key(row)
+
+    assert isinstance(hash(identity), int)
+    assert identity == agentic_key(
+        {
+            **row,
+            "kv_offload_backend": {
+                "options": {"layers": ["cpu", "gpu"]},
+                "name": "native",
+            },
+        }
+    )
+    assert identity != agentic_key(
+        {
+            **row,
+            "kv_offload_backend": {
+                "name": "native",
+                "options": {"layers": ["cpu"]},
+            },
+        }
+    )
+
+
 def write_agentic_artifacts(
     root: Path,
     conc: int = 16,
@@ -513,6 +547,25 @@ def test_agentic_validation_rejects_duplicate_point_identity(
     result_path.write_text(
         json.dumps([agentic_result(), agentic_result()])
     )
+
+    errors = validate_agentic_artifacts(tmp_path)
+
+    assert "agentic point artifacts contain 1 duplicate row(s)" in errors
+
+
+def test_agentic_validation_handles_mapping_kv_offload_backend(
+    tmp_path: Path,
+) -> None:
+    row = {
+        **agentic_result(),
+        "kv_offloading": "dram",
+        "kv_offload_backend": {"name": "native"},
+    }
+    row.pop("offloading")
+    point_dir = tmp_path / "bmk_agentic_native_offload"
+    point_dir.mkdir()
+    (point_dir / "result.json").write_text(json.dumps([row, row]))
+    (tmp_path / "agentic_native_offload").mkdir()
 
     errors = validate_agentic_artifacts(tmp_path)
 

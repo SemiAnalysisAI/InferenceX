@@ -104,6 +104,7 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     argv = [
         "--backend", str(case["backend"]),
         "--mode", str(case["mode"]),
+        "--precision", str(case["precision"]),
         "--phase", str(case["phase"]),
         "--routing", str(case["routing"]),
         "--gpus-per-node", str(case["gpus_per_node"]),
@@ -127,7 +128,13 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     iters, trials, warmup = str(case["timing"]).split(":")
     for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
         argv += [flag, value]
-    out = f"results/{runner}_{case['backend']}_{case['phase']}_{ts}-c{index:03d}.json"
+    # precision is part of the filename so a cell's bf16 and fp8 legs (distinct shards
+    # sharing runner/backend/phase and each numbering cases from index 0) cannot collide
+    # when they land in the shared results/ dir under the same second-resolution ts.
+    out = (
+        f"results/{runner}_{case['backend']}_{case['precision']}_{case['phase']}"
+        f"_{ts}-c{index:03d}.json"
+    )
     argv += ["--out", out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 
