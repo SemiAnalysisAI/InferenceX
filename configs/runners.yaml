@@ -321,6 +321,9 @@ hardware:
   cluster:gb200-nv:
     available-cpu-dram-mib: 860_160
     gpus-per-node: 4
+  cluster:gb300-nv:
+    available-cpu-dram-mib: 860_160
+    gpus-per-node: 4
   cluster:rtx6000pro-lat:
     available-cpu-dram-mib: 1_500_000
     gpus-per-node: 8
