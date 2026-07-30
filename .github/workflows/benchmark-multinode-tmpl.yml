@@ -155,7 +155,7 @@ on:
         required: false
         default: "3600"
       agentx-fast:
-        description: "Use the AgentX 5-minute warmup and 20-minute profiling preset"
+        description: "Use one warmup request per AgentX lane and a 20-minute profile"
         type: boolean
         required: false
         default: false

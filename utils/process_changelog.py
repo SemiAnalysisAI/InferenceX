@@ -16,6 +16,17 @@ from matrix_logic.validation import (
 SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
 
 
+def _freeze_config_value(value):
+    """Convert JSON-shaped config values into deterministic hashable values."""
+    if isinstance(value, dict):
+        return tuple(
+            sorted((key, _freeze_config_value(item)) for key, item in value.items())
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_config_value(item) for item in value)
+    return value
+
+
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     result = subprocess.run(
         ["git", "diff", base_ref, head_ref, "--", filepath],
@@ -54,8 +65,8 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     the source ordering of ``conc-list`` / ``conc-start``.
 
     Input comes from ``json.loads(subprocess.stdout)`` so ``conc`` is always
-    ``int`` (single-node) or ``list`` (multi-node); other single-node fields
-    are hashable scalars.
+    ``int`` (single-node) or ``list`` (multi-node). Other fields may contain
+    nested dictionaries or lists, such as KV-offload backend metadata.
 
     - Single-node entries: group by every other field and keep only the entry
       with the lowest ``conc`` per group.
@@ -72,7 +83,13 @@ def trim_conc(entries: list[dict]) -> list[dict]:
             out.append(entry)
             continue
 
-        key = tuple(sorted((k, v) for k, v in entry.items() if k != "conc"))
+        key = tuple(
+            sorted(
+                (k, _freeze_config_value(v))
+                for k, v in entry.items()
+                if k != "conc"
+            )
+        )
         groups.setdefault(key, []).append(len(out))
         out.append(entry)
 

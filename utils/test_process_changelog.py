@@ -15,6 +15,34 @@ def _scenario_values(command):
     return command[index:]
 
 
+def test_trim_conc_supports_nested_backend_metadata():
+    common = {
+        "model": "moonshotai/Kimi-K3",
+        "kv-offloading": "dram",
+        "kv-offload-backend": {
+            "name": "vllm-simple",
+            "settings": {"tiers": ["cpu", "gpu"]},
+        },
+    }
+    entries = [
+        {**common, "conc": 8},
+        {**common, "conc": 2},
+        {
+            **common,
+            "kv-offload-backend": {"name": "lmcache"},
+            "conc": 4,
+        },
+    ]
+
+    trimmed = process_changelog.trim_conc(entries)
+
+    assert [entry["conc"] for entry in trimmed] == [2, 4]
+    assert [entry["kv-offload-backend"]["name"] for entry in trimmed] == [
+        "vllm-simple",
+        "lmcache",
+    ]
+
+
 def test_config_key_expansion_is_deterministic_and_deduplicated():
     master_config = {
         "config-b": {},
