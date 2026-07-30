@@ -63,7 +63,7 @@ backend:
       gpu-memory-utilization: 0.95
       max-num-seqs: 8
       max-num-batched-tokens: 2048
-      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"attention_backend":"FLASHMLA","draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12]}'
       enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
