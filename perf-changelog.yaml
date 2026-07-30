@@ -5177,6 +5177,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2397
 
 - config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add the DSpark speculative-decoding variant of kimik3-fp4-b300-vllm-agentic: Kimi-K3 (MXFP4, 2.8T MoE, KDA/MLA hybrid, 1M native context) on B300 with vLLM, agentic-coding scenario only -- no fixed-seq-len (1k1k / 8k1k) arms."
+    - "Speculative config: method dspark on the Inferact/Kimi-K3-DSpark draft head, num_speculative_tokens 2, attention_backend FLASHINFER_MLA, draft_sample_method probabilistic, with rejection_sample_method synthetic and synthetic_acceptance_length 2.51 -- the committed golden AL at K=2 on the probabilistic curve (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml). This follows the AgentX policy in golden_al_distribution/README.md: a submission may choose any supported draft length but may not substitute a different acceptance target, because InferenceX measures inference-system performance rather than the fitness of a benchmark-specific speculative head. The greedy/standard curve gives 2.45 at K=2; the curves are not mixed."
+    - "EVAL_ONLY runs switch to real block verification. Synthetic acceptance commits drafted tokens regardless of the target logits, so generated text is wrong and SWE-bench scores 0.0000 -- the same split dsv4_fp4_b300_vllm_mtp.sh makes, and which kimik2.5_fp4_b300_mtp.sh omits; dsv4 is the pattern followed here."
+    - "Level 2 rather than 7. Draft length is the submission's choice and verify width is a real system cost synthetic acceptance does not remove: at K=7 the target verifies 8 positions per step, which loses to no-speculation once the GPU saturates even at the forced golden AL of 3.84 (K=2 clears break-even at both ends of the cost range; K=3 is a wash at saturation; K=7 is negative). cudagraph capture consequently enumerates multiples of (1+2)=3, since vLLM rounds configured sizes to multiples of (1+N) and would otherwise cover only MAX_NUM_SEQS/3 sequences. The drafter's KV footprint costs ~25% of GPU KV regardless of K and remains a genuine cost of enabling spec decoding on 100k+ prompts."
+    - "The Inferact/Kimi-K3-DSpark draft is not pre-staged on the B300 cluster, so it is downloaded once to the launcher's writable models dir (/data/models, same placement as DeepSeek-V4-Pro-DSpark) and cached across the sweep. It must not go next to the target: Kimi-K3 is in STAGED_MODELS, so dirname(MODEL_PATH) is the read-only /scratch/models mount."
+    - "Config key uses the -dspark suffix rather than the repo-wide -mtp convention, to name the actual speculative method. Note the schema field stays spec-decoding: mtp (its Literal has no dspark member), so generated exp-names, artifacts and job labels still read _spec-mtp, and the benchmark script remains kimik3_fp4_b300_vllm_mtp.sh because the launcher derives its _mtp suffix from that field rather than from the key."
+    - "Serve flags stay on the values that ran 12/12 green in run 30326393603, with one exception adopted from recipes.vllm.ai/moonshotai/Kimi-K3: --attention-config mla_prefill_backend=TRTLLM_RAGGED (the non-DSpark sibling gets the same swap in #2385). Adopting the rest of the upstream Blackwell/NVIDIA block at the same time -- gpu-memory-utilization 0.95, max-num-seqs 32, max-model-len 1000000, max-num-batched-tokens 32768, --no-enable-flashinfer-autotune, VLLM_USE_V2_MODEL_RUNNER=1 -- killed the engine core on every completed concurrency (c1/c2/c4/c8, both KV arms, run 30378755933) about 13-16 min in during agentic warmup, with an assertion in the FlashInfer MoE runner's shared-experts output buffer (vllm/model_executor/layers/fused_moe/runner/shared_experts.py:165, assert self._output[self._output_idx] is None) firing on all 8 TP ranks at once. So max-num-seqs stays at 2*CONC and cudagraph capture enumerates 2*CONC token-multiples of (1+7)=8 rather than a fixed 32/256 ladder."
+    - "Measured acceptance does NOT reproduce the golden curve on this workload. A partial run (30337911387, 8 of 24 jobs before an unrelated enroot/pyxis flake cancelled the rest) recorded mean acceptance length 1.18-1.68 against the golden 3.84, per-position acceptance decaying 0.26 / 0.12 / 0.087 / 0.056 / 0.037 / 0.019 / 0.007 and an 8-10% average draft acceptance rate -- drafting 489-515 tok/s to accept 41-48. Throughput regressed 20-63% vs the non-MTP arms at conc 4 and 8. The spec config itself matches upstream exactly, and the draft supports the full 1M context (max_position_embeddings 1048576), so the gap is workload: the golden curve was collected on SPEED-Bench coding at max_model_len 16384 with short single-turn prompts, whereas agentic replays 118-230k-token multi-turn tool-calling traces. Treat the SPEED-Bench curve as non-transferable here and re-measure AL on the agentic corpus before trusting a level-7 configuration. Note rejection_sample_method=block is what exposed this: a synthetic_acceptance_length pinned to 3.84 would have reported a phantom speedup."
+    - "Search space mirrors the non-MTP entry's KV arms -- TP8 GPU-resident and TP8 host-DRAM offload -- so the spec-decoding delta is readable at equal concurrency, but stops at conc 16 rather than 24. The non-MTP bring-up sweep (run 30326393603) showed the GPU-resident arm already thrashing at conc >= 16 (prefix cache hit rate 2.7%, TTFT p50 86-191s) because GPU KV holds only ~3.1 max-length requests, so conc 24 would spend a full job per arm re-measuring that regime; conc 16 still exercises the DRAM tier meaningfully (62% external prefix cache hit rate). TP8-only for the same memory reason: a ~1.5 TB MXFP4 checkpoint needs ~188 GB/GPU across 8 B300s and does not fit below 8 GPUs."
+    - "Sets VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1, which the upstream recipe requires on both its blackwell and nvidia paths and which this repo had never set. It defaults to 0 and is threaded into LatentMoERunner as runner_args={\"enable_k3_latent_moe_tail_fusion\": ...} at vllm/models/kimi_k3/nvidia/model.py:549 -- the same runner whose shared-experts output buffer asserted (fused_moe/runner/shared_experts.py:165, all 8 TP ranks at once) when the wider flag alignment was attempted, so every K3 run here so far has been exercising a MoE tail path upstream does not use. Enabled on its own, ahead of re-attempting gpu-memory-utilization 0.95, max-num-seqs 32, --no-enable-flashinfer-autotune or VLLM_USE_V2_MODEL_RUNNER=1, to isolate its effect."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2380
+
+- config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic
   description:
     - "Add Kimi-K3 MXFP4 B200 aggregated multinode Dynamo-vLLM agentic-coding bring-up (new model on B200; first kimik3 benchmark config)"
@@ -5230,6 +5245,100 @@
     - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-gb300-vllm-fixes.sh setup patch (shipped in the nightly image)"
     - "Collapse the 2xDEP8 decode into a single DEP16 worker (decode_workers 2->1, gpus_per_decode 8->16, data-parallel-size 8->16); recipe renamed 3p2d-dep2-dep8 -> 3p1d-dep2-dep16 (conc 512). The remaining decodes are 1xDEP8 or TEP and are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2340
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; consolidate --attention-config with indexer_kv_dtype fp8; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
+    - "EAGLE3 draft head Inferact/MiniMax-M3-EAGLE3 -> Inferact/MiniMax-M3-EAGLE3-GQA; speculative attention_backend TRITON_ATTN -> FLASH_ATTN; num_speculative_tokens kept at 3"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2337
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 FP4 GB300 SGLang AgentX Pareto-frontier benchmarks via the srtctl/dynamo stack"
+    - "agg: single aggregated node (TP4, MTP/NEXTN, hierarchical KV cache), concurrencies [1, 96]"
+    - "disagg: 1P1D-4P1D (TP4/DEP4 prefill, TP4/DEP4/DEP8 decode, MTP/NEXTN, hicache, conv-aware routing) over 7 Pareto points at concurrency 32-384"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2121
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 GB300 disaggregated Dynamo-SGLang MTP configurations for 8k/1k."
+    - "Cover 1P1D TP4/TP4, 1P1D TEP8/TEP8, and 3P/4P/6P/7P/8P DEP4/DEP16 topologies."
+    - "Enable chat-formatted benchmark inputs for every MTP recipe."
+    - "Use Mooncake KV transfer and lmsysorg/sglang:v0.5.14-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2316
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang
+  description:
+    - "Add DSV4 B300 disaggregated Dynamo SGLang STP configuration for 8k/1k"
+    - "Add 5 checked-in srt-slurm recipes selected one-to-one by the STP search space"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2362
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-mtp
+  description:
+    - "Add DSV4 B300 disaggregated Dynamo SGLang MTP configuration for 8k/1k"
+    - "Add 8 checked-in srt-slurm recipes with EAGLE speculative decoding and chat-template inputs"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2363
+
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-vllm
+  description:
+    - "Update the GB200 DeepSeek-V4-Pro Dynamo-vLLM stack to Dynamo 1.3.0.dev1, vLLM 0.25.1, and the MXFP4 checkpoint"
+    - "Enable multiple frontends and MessagePack request-plane encoding, and reduce 1P4D decode GPU memory utilization to 0.85"
+    - "Drop the recipe setup_script entirely (removes the DeepGEMM NVLink barrier timeout patch); required container deps now ship in vLLM 0.25.1, on NVIDIA/srt-slurm v1.0.31"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2139
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Add the DSpark speculative-decoding variant of kimik3-fp4-b300-vllm-agentic: Kimi-K3 (MXFP4, 2.8T MoE, KDA/MLA hybrid, 1M native context) on B300 with vLLM, agentic-coding scenario only -- no fixed-seq-len (1k1k / 8k1k) arms."
+    - "Speculative config: method dspark on the Inferact/Kimi-K3-DSpark draft head, num_speculative_tokens 2, attention_backend FLASHINFER_MLA, draft_sample_method probabilistic, with rejection_sample_method synthetic and synthetic_acceptance_length 2.51 -- the committed golden AL at K=2 on the probabilistic curve (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml). This follows the AgentX policy in golden_al_distribution/README.md: a submission may choose any supported draft length but may not substitute a different acceptance target, because InferenceX measures inference-system performance rather than the fitness of a benchmark-specific speculative head. The greedy/standard curve gives 2.45 at K=2; the curves are not mixed."
+    - "EVAL_ONLY runs switch to real block verification. Synthetic acceptance commits drafted tokens regardless of the target logits, so generated text is wrong and SWE-bench scores 0.0000 -- the same split dsv4_fp4_b300_vllm_mtp.sh makes, and which kimik2.5_fp4_b300_mtp.sh omits; dsv4 is the pattern followed here."
+    - "Level 2 rather than 7. Draft length is the submission's choice and verify width is a real system cost synthetic acceptance does not remove: at K=7 the target verifies 8 positions per step, which loses to no-speculation once the GPU saturates even at the forced golden AL of 3.84 (K=2 clears break-even at both ends of the cost range; K=3 is a wash at saturation; K=7 is negative). cudagraph capture consequently enumerates multiples of (1+2)=3, since vLLM rounds configured sizes to multiples of (1+N) and would otherwise cover only MAX_NUM_SEQS/3 sequences. The drafter's KV footprint costs ~25% of GPU KV regardless of K and remains a genuine cost of enabling spec decoding on 100k+ prompts."
+    - "The Inferact/Kimi-K3-DSpark draft is not pre-staged on the B300 cluster, so it is downloaded once to the launcher's writable models dir (/data/models, same placement as DeepSeek-V4-Pro-DSpark) and cached across the sweep. It must not go next to the target: Kimi-K3 is in STAGED_MODELS, so dirname(MODEL_PATH) is the read-only /scratch/models mount."
+    - "Config key uses the -dspark suffix rather than the repo-wide -mtp convention, to name the actual speculative method. Note the schema field stays spec-decoding: mtp (its Literal has no dspark member), so generated exp-names, artifacts and job labels still read _spec-mtp, and the benchmark script remains kimik3_fp4_b300_vllm_mtp.sh because the launcher derives its _mtp suffix from that field rather than from the key."
+    - "Serve flags stay on the values that ran 12/12 green in run 30326393603, with one exception adopted from recipes.vllm.ai/moonshotai/Kimi-K3: --attention-config mla_prefill_backend=TRTLLM_RAGGED (the non-DSpark sibling gets the same swap in #2385). Adopting the rest of the upstream Blackwell/NVIDIA block at the same time -- gpu-memory-utilization 0.95, max-num-seqs 32, max-model-len 1000000, max-num-batched-tokens 32768, --no-enable-flashinfer-autotune, VLLM_USE_V2_MODEL_RUNNER=1 -- killed the engine core on every completed concurrency (c1/c2/c4/c8, both KV arms, run 30378755933) about 13-16 min in during agentic warmup, with an assertion in the FlashInfer MoE runner's shared-experts output buffer (vllm/model_executor/layers/fused_moe/runner/shared_experts.py:165, assert self._output[self._output_idx] is None) firing on all 8 TP ranks at once. So max-num-seqs stays at 2*CONC and cudagraph capture enumerates 2*CONC token-multiples of (1+7)=8 rather than a fixed 32/256 ladder."
+    - "Measured acceptance does NOT reproduce the golden curve on this workload. A partial run (30337911387, 8 of 24 jobs before an unrelated enroot/pyxis flake cancelled the rest) recorded mean acceptance length 1.18-1.68 against the golden 3.84, per-position acceptance decaying 0.26 / 0.12 / 0.087 / 0.056 / 0.037 / 0.019 / 0.007 and an 8-10% average draft acceptance rate -- drafting 489-515 tok/s to accept 41-48. Throughput regressed 20-63% vs the non-MTP arms at conc 4 and 8. The spec config itself matches upstream exactly, and the draft supports the full 1M context (max_position_embeddings 1048576), so the gap is workload: the golden curve was collected on SPEED-Bench coding at max_model_len 16384 with short single-turn prompts, whereas agentic replays 118-230k-token multi-turn tool-calling traces. Treat the SPEED-Bench curve as non-transferable here and re-measure AL on the agentic corpus before trusting a level-7 configuration. Note rejection_sample_method=block is what exposed this: a synthetic_acceptance_length pinned to 3.84 would have reported a phantom speedup."
+    - "Search space mirrors the non-MTP entry's KV arms -- TP8 GPU-resident and TP8 host-DRAM offload -- so the spec-decoding delta is readable at equal concurrency, but stops at conc 16 rather than 24. The non-MTP bring-up sweep (run 30326393603) showed the GPU-resident arm already thrashing at conc >= 16 (prefix cache hit rate 2.7%, TTFT p50 86-191s) because GPU KV holds only ~3.1 max-length requests, so conc 24 would spend a full job per arm re-measuring that regime; conc 16 still exercises the DRAM tier meaningfully (62% external prefix cache hit rate). TP8-only for the same memory reason: a ~1.5 TB MXFP4 checkpoint needs ~188 GB/GPU across 8 B300s and does not fit below 8 GPUs."
+    - "Sets VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1, which the upstream recipe requires on both its blackwell and nvidia paths and which this repo had never set. It defaults to 0 and is threaded into LatentMoERunner as runner_args={\"enable_k3_latent_moe_tail_fusion\": ...} at vllm/models/kimi_k3/nvidia/model.py:549 -- the same runner whose shared-experts output buffer asserted (fused_moe/runner/shared_experts.py:165, all 8 TP ranks at once) when the wider flag alignment was attempted, so every K3 run here so far has been exercising a MoE tail path upstream does not use. Enabled on its own, ahead of re-attempting gpu-memory-utilization 0.95, max-num-seqs 32, --no-enable-flashinfer-autotune or VLLM_USE_V2_MODEL_RUNNER=1, to isolate its effect."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2418
+
+- config-keys:
+    - qwen3.5-fp4-rtx6000pro-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 single-node SGLang benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both TP4 and TEP4 (TP4 attention with EP4 MoE, without DP attention)"
+    - "Pin SGLang v0.5.16-cu130, the first tag whose auto backend resolution knows that trtllm-gen MoE is SM100-only and routes modelopt_fp4 experts to FlashInfer CUTLASS on SM120"
+    - "Use FlashInfer CUTLASS for both the NVFP4 GEMMs and the routed experts and the FlashInfer attention backend on SM120, with FP8 KV cache, bf16 Mamba SSM state, the no_buffer Mamba scheduler strategy, radix cache disabled, and decode CUDA graph capture capped to each tested concurrency"
+    - "Use standard NCCL collectives on the PCIe topology (custom all-reduce disabled explicitly) and disable IB/RoCE probing to avoid the node's NCCL 2.28.9 bnxt_re initialization crash while preserving local CUDA P2P/SHM"
+    - "Deviate from the B300 SGLang recipe where 96 GiB per GPU forces it: mem-fraction-static 0.7 with a 2-request prefill chunk (0.8 with a 32k chunk sized the KV pool at 2.2M tokens and OOM'd on the first 8k prefill), and a single tokenizer worker (the B300 recipe's six each pin a ~0.7 GiB CUDA context on GPU 0)"
+    - "Teach the RTX PRO 6000 launcher to prefer a framework-tagged benchmark script so vLLM and SGLang recipes for the same model can coexist"
+    - "Validated on the node through the real launcher at all four corners of the sweep, every request successful: TEP4 concurrency 64 640/640 at 6198 tok/s, TP4 concurrency 64 640/640 at 5999 tok/s, TEP4 concurrency 1 10/10 at 672 tok/s, TP4 concurrency 1 10/10 at 658 tok/s"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+
+- config-keys:
+    - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add an MTP arm to the Qwen3.5-397B-A17B NVFP4 RTX PRO 6000 SGLang sweep, driving the checkpoint's built-in MTP draft head through SGLang's EAGLE path with 3 steps, top-k 1, and 4 draft tokens"
+    - "Sweep the same 8k/1k grid as the non-MTP config: concurrency 1, 4, 16, and 64 for both TP4 and TEP4"
+    - "Raise mem-fraction-static to 0.80 for this arm: the fraction bounds weights plus the KV and Mamba pools, so the 4.05 GiB per-rank draft head has to be paid for by raising it, not lowering it (0.65 and 0.75 both left the pools empty on this 96 GiB SKU, and 0.85 came up with only 4.56 GiB free per rank)"
+    - "Size max-running-requests to the tested concurrency instead of a fixed 128, since the client never opens more connections and the oversized Mamba state pool is what starved the draft head"
+    - "Pass --use-chat-template to the benchmark, as required for EAGLE-style speculative decoding"
+    - "Validated on the node through the real launcher, every request successful: TEP4 concurrency 64 640/640 at 6895 tok/s (11% above the non-MTP arm's 6198 tok/s, mean TTFT 27.2s to 9.6s), and TEP4 concurrency 1 10/10 at 1233 tok/s (83% above the non-MTP arm's 672 tok/s, mean TPOT 12.6ms to 6.5ms)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
 
 - config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
