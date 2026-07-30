@@ -89,7 +89,9 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
-      load-format: "fastsafetensors"
+      # FlashInfer's larger TP4 MoE representation leaves too little transient
+      # HBM for fastsafetensors' GPU-staging path when DSpark is loaded.
+      load-format: "safetensors"
       safetensors-load-strategy: "lazy"
       kv-cache-dtype: "fp8"
       attention-backend: "FLASHINFER_MLA"

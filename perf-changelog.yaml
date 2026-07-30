@@ -5320,4 +5320,5 @@
     - "Correct the pure TP16 result identity to EP1 so it remains distinct from the TEP16 point at concurrency 8."
     - "Use the upstream vllm/vllm-openai:kimi-k3 image with the official Dynamo v1.4.0-kimi-k3-dev.1 preview installed in-container, and enable Kimi K3 DSpark level 2 with the prescribed 2.51 golden acceptance length."
     - "Use FlashInfer TRT-LLM MoE for DSpark DEP to avoid DeepGEMM grid-barrier failures under MRV2."
+    - "Load DEP weights with standard safetensors to avoid fastsafetensors transient HBM exhaustion with FlashInfer MoE."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2404
