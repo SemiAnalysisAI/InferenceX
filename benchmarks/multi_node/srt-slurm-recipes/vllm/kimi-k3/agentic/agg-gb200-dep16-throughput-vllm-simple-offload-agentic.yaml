@@ -106,11 +106,12 @@ backend:
       all2all-backend: "flashinfer_nvlink_one_sided"
       gpu-memory-utilization: 0.94
       # The largest offload point is c384 / DP4 = 96 sequences per engine.
-      # Do not reserve graph memory for the unused 97-128 sequence range.
+      # Capture even sequence counts: all configured DP4 steady-state batch
+      # sizes are exact hits, while odd loads pad by at most one sequence.
       max-num-seqs: 96
       max-num-batched-tokens: 16384
       speculative-config: '{"method":"dspark","model":"/tmp/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
-      compilation-config: '{"cudagraph_mode":"PIECEWISE","cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90,93,96,99,102,105,108,111,114,117,120,123,126,129,132,135,138,141,144,147,150,153,156,159,162,165,168,171,174,177,180,183,186,189,192,195,198,201,204,207,210,213,216,219,222,225,228,231,234,237,240,243,246,249,252,255,258,261,264,267,270,273,276,279,282,285,288]}'
+      compilation-config: '{"cudagraph_mode":"PIECEWISE","cudagraph_capture_sizes":[6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288]}'
       block-size: 64
       language-model-only: true
       disable-custom-all-reduce: true
