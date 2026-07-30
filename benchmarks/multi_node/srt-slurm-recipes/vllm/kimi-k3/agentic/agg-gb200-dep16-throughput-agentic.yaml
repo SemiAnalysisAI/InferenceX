@@ -94,7 +94,9 @@ backend:
       kv-cache-dtype: "fp8"
       attention-backend: "FLASHINFER_MLA"
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
-      moe-backend: "deep_gemm_mega_moe"
+      # DeepGEMM mega-MoE grid barriers time out under DSpark MRV2 with the
+      # one-sided all-to-all worker; use the supported Kimi K3 FlashInfer path.
+      moe-backend: "flashinfer_trtllm"
       kda-prefill-backend: "flashkda"
       kernel-config: '{"enable_cutedsl_warmup":true}'
       all2all-backend: "flashinfer_nvlink_one_sided"
