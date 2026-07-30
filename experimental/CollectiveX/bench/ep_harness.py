@@ -229,17 +229,28 @@ def _write_json_atomic(path: str, value) -> None:
 def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[float]:
     """Per-iteration CUDA-event latencies (µs) for THIS rank.
 
-    Without `pre`: times `fn()`. With `pre`: runs `pre()` UNTIMED each iteration (sync
-    before the start event so its GPU work can't bleed in), then times `fn(pre_result)`.
-    `post(result)` runs after the end event and synchronization, so stateful backends can
-    consume/reset a timed operation without charging that cleanup to its latency. Returns
-    the raw per-iteration series; the caller reduces across ranks per iteration before
+    Without `pre`: times `fn()`. With `pre`: runs `pre()` UNTIMED each iteration, then times
+    `fn(pre_result)`. `post(result)` runs after the end event and synchronization, so stateful
+    backends can consume/reset a timed operation without charging that cleanup to its latency.
+    Returns the raw per-iteration series; the caller reduces across ranks per iteration before
     percentiling.
+
+    There is deliberately NO host sync between `pre()` and the start event. Stream ordering
+    already keeps pre()'s work out of the s->e window: `s` is enqueued behind pre()'s kernels,
+    so the event timestamps when the stream REACHES it, not when the host recorded it. The sync
+    that used to sit here did not add that guarantee -- it drained the GPU, which put the host's
+    launch of `fn` inside the measured window and, because `fn` is a collective, let per-rank
+    launch jitter desynchronise ranks that pre() had just aligned. Each rank then blocked on the
+    slowest peer and run_sweep's cross-rank MAX reported that stagger as latency. Measured on
+    b200 uccl-ep low-latency combine: 113.4us -> 87.4us at T=1 with the ranks aligned, and no
+    change at T=32, which is what produced a *falling* latency curve as tokens grew.
+
+    The end-of-iteration sync stays: the warmup note below documents why iterations must not
+    overlap (iter N+1's dispatch races iter N's combine on the persistent comm buffer), so only
+    one pre/fn pair is ever in flight.
     """
     def sample():
         arg = pre() if pre is not None else None
-        if pre is not None:
-            torch.cuda.synchronize()
         s = torch.cuda.Event(enable_timing=True)
         e = torch.cuda.Event(enable_timing=True)
         s.record()
@@ -882,6 +893,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
     comb_pool = {T: [] for T in ladder}     # ... combine
     rt_pool = {T: [] for T in ladder}       # independently measured round trip
+    spread_pool = {T: [] for T in ladder}   # cross-rank (max-min) of the round trip, per iter
+    # Cross-rank MIN per component. The LAST rank to enter a collective is the one that waited
+    # least -- it started when its peers were already there -- so its duration is the closest
+    # estimate of the operation's cost with entry skew excluded. MAX (reported as the latency)
+    # is that cost PLUS the skew, i.e. what the earliest-entering rank observed.
+    dmin_pool = {T: [] for T in ladder}
+    cmin_pool = {T: [] for T in ladder}
+    rtmin_pool = {T: [] for T in ladder}
     for trial_index in range(args.trials):
         order = trial_order(list(ladder), trial_index)
         for T in order:
@@ -903,7 +922,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 comb_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MAX)
             if measured["stage"]:
                 stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
-            rt_pool[T] += _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
+            rt_max = _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
+            rt_pool[T] += rt_max
+            # Cross-rank SPREAD (max-min) of the same iterations. A collective cannot finish
+            # before its slowest participant, so when ranks enter together every rank measures
+            # nearly the same duration and the spread is small; a large spread means the ranks
+            # were staggered and the reported MAX is charging one rank's wait for the others.
+            # Emitted as a diagnostic so a skew-inflated point is visible in the artifact
+            # instead of being mistaken for the operation getting slower.
+            rt_min = _reduce_vec(torch, dist, device, measured["roundtrip"], MIN)
+            spread_pool[T] += [hi - lo for hi, lo in zip(rt_max, rt_min)]
+            rtmin_pool[T] += rt_min
+            if measured["dispatch"]:
+                dmin_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
+                cmin_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
     # ---- Pass 3: prove timed inputs were immutable and repeat the full oracle. ----
     for T in ladder:
@@ -969,6 +1001,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
+        spread = spread_pool[T]
         rows.append({
             "components": {
                 "combine": _component(cp, len(c)),
@@ -977,6 +1010,19 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "roundtrip": _component(rtp, len(rt)),
                 "stage": _component(sp, len(s)),
             },
+            # Skew-excluded companion to `components`: same iterations reduced with cross-rank
+            # MIN instead of MAX. Compare against `components` to see how much of a point is the
+            # operation and how much is rank stagger; a curve that dips in MAX but not in MIN was
+            # never the operation getting faster.
+            "cross_rank_min_us": {
+                "combine": _component(_pcts(cmin_pool[T]), len(cmin_pool[T])),
+                "dispatch": _component(_pcts(dmin_pool[T]), len(dmin_pool[T])),
+                "roundtrip": _component(_pcts(rtmin_pool[T]), len(rtmin_pool[T])),
+            },
+            # Diagnostic, NOT a latency: per-iteration cross-rank (max-min) of the round trip.
+            # Small => ranks entered together and the reported MAX is the operation's cost.
+            # Large relative to the roundtrip => the point is skew-inflated; read it with care.
+            "cross_rank_spread_us": _component(_pcts(spread), len(spread)),
             "correctness": {
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
