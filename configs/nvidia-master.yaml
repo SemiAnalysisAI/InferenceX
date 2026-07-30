@@ -1249,6 +1249,21 @@ qwen3.5-fp8-b200-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
+qwen3.5-fp4-b200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:b200-dgxc
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8] }
+      - { tp: 2, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 16] }
+
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
