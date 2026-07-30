@@ -53,6 +53,14 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# Force the eval framework to lm-eval, matching minimaxm3_fp4_mi355x.sh.
+# run_eval derives its default as swebench for agentic scenarios
+# (scenario_default=swebench when IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but
+# EVAL_FRAMEWORK takes precedence over that default
+# (benchmark_lib.sh:1471 framework=${EVAL_FRAMEWORK:-...}). Left overridable so
+# the SWE-bench path below can still be selected with EVAL_FRAMEWORK=swebench.
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
+
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
