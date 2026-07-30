@@ -2295,12 +2295,12 @@ kimik3-fp4-mi300x-vllm-agentic:
           # status=12/vendor_err=10. Force sockets to prove the K3/model path
           # independently of that node-fabric problem.
           - "NCCL_IB_DISABLE=1"
-          # Canary-only immutable image built from vLLM #50319 at 85c84a8 and
-          # AITER v0.1.19 on chi-mi300x-034. Each allocated node downloads it
-          # over the cluster-private network and verifies the digest before use.
-          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-aiter-v0.1.19.sqsh"
-          - "KIMIK3_CANARY_SQUASH_SHA256=9c1bc2ff83812e814b75237558e762460828edaa904b8a71bc0f412c0de2e730"
-          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-aiter-v0.1.19.sqsh"
+          # Canary-only immutable image built from vLLM #50319 at 85c84a8,
+          # AITER v0.1.19, and the SiTUv2 stage1 backport from AITER #4471.
+          # Each node downloads it privately and verifies the digest before use.
+          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-aiter-v0.1.19-situv2-4471.sqsh"
+          - "KIMIK3_CANARY_SQUASH_SHA256=0c7cbbce8e5a18a56729c4ef806e1143e52dc22eef4426c0f79dc0810b29585d"
+          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-aiter-v0.1.19-situv2-4471.sqsh"
         decode:
           num-worker: 0
           tp: 8

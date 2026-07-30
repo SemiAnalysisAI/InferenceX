@@ -42,8 +42,9 @@ INTER_DIM = 512
 EXPERTS = 896
 TOPK = 16
 GROUP = 32  # per_1x32
-SITU_BETA = 2.0
-SITU_LINEAR_BETA = 1.5
+# moonshotai/Kimi-K3 config.json is the source of truth for these parameters.
+SITU_BETA = 4.0
+SITU_LINEAR_BETA = 25.0
 # Note:(Wenyao Gao) SiTUv2 is unclamped. The +-7.0 bound belongs to swiglu only:
 # in mixed_moe_gemm_2stage.py the constant lives inside _swiglu_mul_vec4 /
 # _act_elem's swiglu branch, while _situ_mul_vec4 applies no clamp, and

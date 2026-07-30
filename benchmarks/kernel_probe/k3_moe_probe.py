@@ -146,11 +146,16 @@ def build_aiter_inputs(case):
     """
     from aiter.ops.shuffle import shuffle_scale_a16w4, shuffle_weight_a16w4
 
+    # shuffle_scale_a16w4 operates on the flattened [E*N, K/32] view used by
+    # AITER's own a16w4 tests; the oracle intentionally keeps [E, N, K/32].
+    w1_scale = case.w1_scale.view(-1, case.w1_scale.shape[-1])
+    w2_scale = case.w2_scale.view(-1, case.w2_scale.shape[-1])
+
     return dict(
         w1=shuffle_weight_a16w4(case.w1_packed, 16, True),
-        w1_scale=shuffle_scale_a16w4(case.w1_scale, oracle.EXPERTS, True),
+        w1_scale=shuffle_scale_a16w4(w1_scale, oracle.EXPERTS, True),
         w2=shuffle_weight_a16w4(case.w2_packed, 16, False),
-        w2_scale=shuffle_scale_a16w4(case.w2_scale, oracle.EXPERTS, False),
+        w2_scale=shuffle_scale_a16w4(w2_scale, oracle.EXPERTS, False),
     )
 
 
