@@ -5,16 +5,17 @@ set -euo pipefail
 # spec-decoding=mtp rows to this suffix, while the shared base recipe owns the
 # model, KV-offload, AgentX replay, and eval plumbing.
 #
-# These overrides are the DSpark + SimpleCPUOffloadConnector combination
-# validated on gfx950 in PR #2367. Keep them together: widening the batch or
-# re-enabling CUDA graphs reproduced an eight-rank GPU memory access fault.
+# Keep this wrapper aligned with the upstream AMD Kimi-K3 DSpark reproducer.
+# The first AgentX validation is deliberately GPU-only at c1 so a server or
+# kernel failure cannot be attributed to a KV-offload connector.
 export SPEC_DECODE=true
 export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
-export MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
-export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-32}"
-export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-1024}"
-export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-true}"
-export SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-true}"
-export ENFORCE_EAGER="${ENFORCE_EAGER:-true}"
+export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
+export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
+export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
+export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"
+export PREFIX_CACHING="${PREFIX_CACHING:-auto}"
+export ENFORCE_EAGER="${ENFORCE_EAGER:-false}"
 
 exec "$(dirname "$0")/kimik3_fp4_mi355x.sh" "$@"
