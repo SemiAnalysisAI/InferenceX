@@ -138,7 +138,24 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.22: the two features the
+    # cquil11 fork was pinned for are merged upstream (present in v1.0.22) —
+    #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
+    #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
+    #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
+    #     the Path.is_dir() preflight would fail before sbatch is ever
+    #     called. The engine still fails loudly at runtime if the path is
+    #     genuinely missing on the compute node.
+    #   - benchmark_stage propagates srun_options (container-remap-root must
+    #     reach the agentic_srt.sh srun).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.22
+    mkdir -p recipes/sglang/qwen3.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
+        recipes/sglang/qwen3.5
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm v1.0.10 has the nginx
     # client_max_body_size fix (>1 MiB agentic warmup bodies), the
     # session-affinity frontend, and the BenchmarkType.CUSTOM / extra_mount
@@ -150,38 +167,16 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
 elif [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic multi-node uses cquil11/srt-slurm-nv@cam/no-preflight-flag,
-    # a thin branch off NVIDIA/srt-slurm@127597c that adds one CLI flag
-    # (`srtctl apply --no-preflight`) — needed because:
-    #
-    #   - We want MODEL_PATH=/scratch/models/DeepSeek-V4-Pro (node-local
-    #     NVMe, fast) instead of the NFS path under /data/home/sa-shared.
-    #   - /scratch only exists on GB300 compute nodes; it is NOT mounted
-    #     on the GHA runner pod that invokes srtctl.
-    #   - srtctl's pre-submit model check (_preflight_model in
-    #     src/srtctl/core/validation.py) does a Path.is_dir() in-process
-    #     on the invoking node — so it fails before sbatch is ever
-    #     called with "Model alias 'X' resolved to '/scratch/...',
-    #     but that path is unavailable".
-    #   - --no-preflight skips just the optional Python-level FS check.
-    #     vLLM still fails loudly at runtime if the path is genuinely
-    #     missing on the compute node.
-    #
-    # All other upstream schema features we need are inherited from
-    # NVIDIA HEAD:
-    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
-    #     (hook that hands off to benchmarks/multi_node/agentic_srt.sh)
-    #   - DynamoConfig.wheel (so vllm recipes can pin the ai-dynamo wheel)
-    #   - sbatch_directives / srun_options (top-level recipe fields)
-    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    # 854b3fd = --no-preflight flag
-    # 6e34b8b = benchmark_stage propagates srun_options (needed for
-    #           container-remap-root to reach the agentic_srt.sh srun)
-    git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
-    mkdir -p recipes/vllm/deepseek-v4/agentic
+    # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
+    # version validated in InferenceX PR #2302 and includes per-node DP,
+    # matching Dynamo health counts, multi-node TP port handling, and
+    # Mooncake compatibility. Keep it pinned so sweeps are reproducible.
+    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+
+    mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
-        recipes/vllm/deepseek-v4/agentic
+        recipes/vllm/deepseek-v4/agentic || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -234,10 +229,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3-gb300-fp8
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
-    SRTCTL_SETUP_SCRIPT="minimax-m3-gb300-vllm-fixes.sh"
-    cp \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT"
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"

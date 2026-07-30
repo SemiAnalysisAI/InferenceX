@@ -18,6 +18,7 @@ from validation import (
     SingleNodeMasterConfigEntry,
     MultiNodeMasterConfigEntry,
     ChangelogEntry,
+    ChangelogMatrixEntry,
     validate_matrix_entry,
     validate_master_config,
     validate_runner_config,
@@ -1397,6 +1398,49 @@ class TestChangelogEntry:
                 "description": ["Invalid scenario filter"],
                 "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
                 "scenario-type": scenario_type,
+            })
+
+
+# =============================================================================
+# Test ChangelogMatrixEntry
+# =============================================================================
+
+AGENTIC_EVAL_ROW = {
+    "image": "vllm/vllm-openai:nightly", "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "model-prefix": "dsv4", "precision": "fp4", "framework": "vllm",
+    "runner": "cluster:b300-nv", "tp": 8, "pp": 1, "dcp-size": 1,
+    "pcp-size": 1, "ep": 8, "dp-attn": True, "spec-decoding": "mtp",
+    "conc": 224, "kv-offloading": "none", "total-cpu-dram-gb": 0,
+    "duration": 3600, "exp-name": "dsv4_tp8_conc224_kvnone_spec-mtp",
+    "scenario-type": "agentic-coding", "run-eval": True, "eval-only": True,
+}
+
+CHANGELOG_METADATA = {
+    "base_ref": "base", "head_ref": "head",
+    "entries": [{
+        "config-keys": ["test-config"], "description": ["Test entry"],
+        "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+    }],
+}
+
+
+class TestChangelogMatrixEntry:
+    """Tests for the final search-space contract consumed by run-sweep.yml."""
+
+    def test_agentic_eval_rows_live_in_agentic_evals_only(self):
+        """`evals` is dispatched with fixed-seq-len inputs (isl/osl/
+        max-model-len), so agentic rows must only validate in agentic_evals."""
+        entry = ChangelogMatrixEntry.model_validate({
+            "agentic_evals": [AGENTIC_EVAL_ROW],
+            "changelog_metadata": CHANGELOG_METADATA,
+        })
+        assert entry.agentic_evals[0].run_eval is True
+        assert entry.agentic_evals[0].eval_only is True
+
+        with pytest.raises(ValueError):
+            ChangelogMatrixEntry.model_validate({
+                "evals": [AGENTIC_EVAL_ROW],
+                "changelog_metadata": CHANGELOG_METADATA,
             })
 
 

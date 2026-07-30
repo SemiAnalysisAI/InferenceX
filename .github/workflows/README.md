@@ -157,6 +157,15 @@ they run all evals only. The primary label still controls canary/fail-fast.
 with both modifiers, are not. Default full sweeps, including default evals,
 are also reusable.
 
+## AgentX Fast Mode
+
+Add `agentx-fast` alongside one primary sweep label to run one additional
+warmup request per AgentX lane after mandatory primers and a 20-minute profile
+for single- and multi-node AgentX throughput jobs. Fixed-sequence throughput
+and eval jobs retain their canonical settings. Adding or removing the modifier
+restarts the active sweep. Fast-mode runs are not eligible for artifact reuse
+after merge.
+
 ## Reusing an Approved PR Full Sweep
 
 `[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
@@ -177,21 +186,21 @@ in the PR. A run ID can pin an eligible successful or failed run:
 /reuse-sweep-run <run_id>
 ```
 
-Failed-run artifacts must still validate. The latest matching comment by an
-`OWNER`, `MEMBER`, or `COLLABORATOR` wins. Comments do not trigger or cancel
-sweeps; later commits skip a new sweep after changelog/matrix validation.
+The latest matching comment by an `OWNER`, `MEMBER`, or `COLLABORATOR` wins.
+Comments do not trigger or cancel sweeps; later commits skip a new sweep after
+changelog/matrix validation.
 Remove and re-add the sweep label to force one.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
 pushes a synchronization commit, waits for checks, then merges.
 
-The main run verifies the source, validates and uploads its ingest artifacts,
-then ingests them with merge-run changelog metadata. Source coverage is
+The main run passes the selected source run ID and its own merge run ID directly
+to InferenceX-app. The app downloads source artifacts, keeps the newest upload
+for each exact artifact name, and ingests them with changelog metadata from the
+merge run. The normal ingestion code skips failed benchmark rows. Benchmark
+rows and public links retain source-run provenance. Source coverage is
 authoritative, so later matrix/eval policy changes do not invalidate reuse.
-Validation rejects duplicate fixed rows, missing run stats, inconsistent
-agentic artifacts, malformed eval metadata, and raw/aggregate eval mismatches.
-Batched evals use only `completed_eval_concs`.
 
 Reuse fails closed when authorized but ineligible or invalid; without
 authorization, `main` runs the normal full sweep.

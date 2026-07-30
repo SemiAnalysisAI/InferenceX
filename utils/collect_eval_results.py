@@ -165,7 +165,8 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
             # Extract metrics for each filter
             for f in filter_list:
                 fname = f['name']
-                if 'strict' in fname:
+                # SWE-bench uses resolved rate as its primary score.
+                if 'strict' in fname or 'resolved' in fname:
                     strict_val, strict_se = get_val_se(fname)
                 elif 'flex' in fname or 'extract' in fname:
                     flex_val, flex_se = get_val_se(fname)

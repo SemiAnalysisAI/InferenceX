@@ -6,13 +6,13 @@ name: "minimax-m3-vllm-disagg-gb300-2p2d-dep2-tep8-fp8-8k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+  container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: "fp8"
 
 
 dynamo:
   install: true
-  version: 1.3.0.dev20260614
+  version: 1.3.0.dev20260710
 
 health_check:
   max_attempts: 720

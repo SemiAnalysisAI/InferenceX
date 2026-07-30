@@ -61,6 +61,8 @@ class SglangBackend(ServerMetricsBackend):
 
         flat["server_gpu_cache_hit_rate"] = rate(device_hits, prompt_total)
         flat["server_cpu_cache_hit_rate"] = rate(host_hits, prompt_total)
+        # HiCache host hits are external to the GPU cache.
+        flat["server_external_cache_hit_rate"] = flat["server_cpu_cache_hit_rate"]
         flat["server_overall_cache_hit_rate"] = rate(total_cached, prompt_total)
 
         if flat["server_overall_cache_hit_rate"] is None:
