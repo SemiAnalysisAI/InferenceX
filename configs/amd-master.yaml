@@ -828,6 +828,15 @@ kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
+      # PAIRED. Run 30511545046 tried lazy alone and is uninterpretable: it
+      # landed after #2415 swapped the agentic warmup from
+      # --agentic-cache-warmup-duration 600 to --warmup-requests-per-lane 10
+      # (benchmark_lib.sh:1793, new utils/aiperf pin), so it moved two variables
+      # at once and died inside the new warmup -- its "0 successful, OSL=1" is
+      # that warmup's one-token primers, not a lazy symptom. Every earlier
+      # failure used the old time-based warmup, so none of them is a baseline
+      # any more. Run the eager control on the SAME warmup as lazy.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8-lazy }, conc-list: [8] }
 
 kimik3-fp4-mi355x-vllm-agentic-fp8kv:
