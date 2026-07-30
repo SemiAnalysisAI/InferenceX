@@ -796,8 +796,8 @@ kimik3-fp4-mi355x-vllm-agentic-fp8eval:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
 
-kimik3-fp4-mi355x-vllm-agentic-fp8none-gmu90:
-  # GPU-only (no offload) fp8-KV concurrency curve at GMU 0.90.
+kimik3-fp4-mi355x-vllm-agentic-fp8none:
+  # GPU-only (no offload) fp8-KV concurrency curve at GMU 0.88.
   #
   # One key, one curve: c1/c4/c8/c16 with --kv-cache-dtype fp8 (the recipe
   # default) and no KV connector, so the whole curve shares a KV dtype, a
@@ -805,9 +805,11 @@ kimik3-fp4-mi355x-vllm-agentic-fp8none-gmu90:
   # it has failed 4/4 under fp8 (see the fp8lazy key below), and mixing it in
   # would put failure-prone cells in the same dispatch as the control curve.
   #
-  # GMU is 0.90 rather than the earlier 0.88: it is set by the recipe default
-  # (GPU_MEM_UTIL in kimik3_fp4_mi355x.sh), because the agentic matrix has no
-  # per-cell env channel.
+  # GMU comes from the recipe default (GPU_MEM_UTIL in kimik3_fp4_mi355x.sh),
+  # because the agentic matrix has no per-cell env channel. The first dispatch
+  # of this key ran at 0.90 and lost c4/c8/c16 to a prefill-workspace OOM at
+  # ~362K context on three separate nodes; see the comment on GPU_MEM_UTIL for
+  # the evidence. 0.88 is the proven setting.
   #
   # c16 is the open question. The bf16 no-offload arm was never measured above
   # c8, and the bf16 vllm-simple curve collapsed at c16 (TTFT 295 s). fp8
