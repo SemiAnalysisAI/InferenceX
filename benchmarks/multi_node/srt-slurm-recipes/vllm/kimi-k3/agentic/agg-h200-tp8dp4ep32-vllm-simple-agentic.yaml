@@ -66,7 +66,6 @@ backend:
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       compilation-config: '{"cudagraph_capture_sizes":[4,17],"pass_config":{"fuse_allreduce_rms":false}}'
       enable-prefix-caching: true
-      enable-prompt-tokens-details: true
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":154250000000,"lazy_offload":false}}'
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
