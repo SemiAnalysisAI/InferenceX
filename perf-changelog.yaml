@@ -5341,6 +5341,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
 
 - config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+  description:
+    - "Add Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration."
+    - "Add seven checked-in srt-slurm recipes selected one-to-one by the 8K/1K prefill/decode topology and concurrency entries."
+    - "Image: vllm/vllm-openai:v0.25.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2360
+
+- config-keys:
     - qwen3.5-fp4-b300-sglang-agentic-mtp
   description:
     - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B300 with SGLang native NEXTN MTP"
