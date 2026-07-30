@@ -852,9 +852,31 @@ kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
   # were never validated on K3 and an unrecognised flag is a silent
   # server-start failure.
   #
-  # c8 only. It is the peak of the no-offload fp8 curve (682.63 tok/s/GPU,
-  # run 30525206671), so it is the point where an offload tier has to prove
-  # itself.
+  # c8 and c16.
+  #
+  # c8 is the peak of the no-offload fp8 curve (682.63 tok/s/GPU, run
+  # 30525206671) and is now measured with LMCache: 601.64 tok/s/GPU, -11.9%
+  # (run 30579846678). The reason it loses is that there is no work for a
+  # host tier at this concurrency -- the LMCache server logged 67,827 stores
+  # against 80 retrievals with only 217 evictions, because the GPU pool never
+  # fills (52.4% usage) so vLLM never has to spill. LMCache still pays to
+  # store every block and drags the GPU tier down with it (prefix hit
+  # 88.4% -> 58.3%).
+  #
+  # c16 is the case that should invert that. Without offload, c16 is where
+  # the no-offload arm collapses: 412.21 tok/s/GPU, GPU prefix hit 3.9%, KV
+  # pinned at 100.0%, TTFT mean 323 s (run 30525206671). The working set no
+  # longer fits, so the GPU tier thrashes -- which is exactly the regime a
+  # host tier exists for. If LMCache cannot win at c16 it has no case on this
+  # model.
+  #
+  # max_num_seqs stays 32. aiperf bounds in-flight requests by --concurrency,
+  # so c16 never presents more than 16 sequences; 32 is still 2x headroom and
+  # raising it would re-inflate the chunked MLA workspace that caused the
+  # attempt-1 OOM.
+  #
+  # c8 repeats deliberately: it gives a same-run, same-code pair against c16
+  # rather than a cross-run comparison.
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -866,7 +888,7 @@ kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8, 16] }
 
 kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
   # fp8 KV + SimpleCPUOffloadConnector in LAZY mode. One variable off the cell
