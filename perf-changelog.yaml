@@ -5313,6 +5313,34 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2418
 
 - config-keys:
+    - qwen3.5-fp4-rtx6000pro-sglang
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 single-node SGLang benchmarking using four GPUs per job on the 8x RTX PRO 6000 Blackwell Latitude runner"
+    - "Sweep 8k/1k at concurrency 1, 4, 16, and 64 for both TP4 and TEP4 (TP4 attention with EP4 MoE, without DP attention)"
+    - "Pin SGLang v0.5.16-cu130, the first tag whose auto backend resolution knows that trtllm-gen MoE is SM100-only and routes modelopt_fp4 experts to FlashInfer CUTLASS on SM120"
+    - "Use FlashInfer CUTLASS for both the NVFP4 GEMMs and the routed experts and the FlashInfer attention backend on SM120, with FP8 KV cache, bf16 Mamba SSM state, the no_buffer Mamba scheduler strategy, radix cache disabled, and decode CUDA graph capture capped to each tested concurrency"
+    - "Use standard NCCL collectives on the PCIe topology (custom all-reduce disabled explicitly) and disable IB/RoCE probing to avoid the node's NCCL 2.28.9 bnxt_re initialization crash while preserving local CUDA P2P/SHM"
+    - "Deviate from the B300 SGLang recipe where 96 GiB per GPU forces it: mem-fraction-static 0.7 with a 2-request prefill chunk (0.8 with a 32k chunk sized the KV pool at 2.2M tokens and OOM'd on the first 8k prefill), and a single tokenizer worker (the B300 recipe's six each pin a ~0.7 GiB CUDA context on GPU 0)"
+    - "Teach the RTX PRO 6000 launcher to prefer a framework-tagged benchmark script so vLLM and SGLang recipes for the same model can coexist"
+    - "Validated on the node through the real launcher at all four corners of the sweep, every request successful: TEP4 concurrency 64 640/640 at 6198 tok/s, TP4 concurrency 64 640/640 at 5999 tok/s, TEP4 concurrency 1 10/10 at 672 tok/s, TP4 concurrency 1 10/10 at 658 tok/s"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+
+- config-keys:
+    - qwen3.5-fp4-rtx6000pro-sglang-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add an MTP arm to the Qwen3.5-397B-A17B NVFP4 RTX PRO 6000 SGLang sweep, driving the checkpoint's built-in MTP draft head through SGLang's EAGLE path with 3 steps, top-k 1, and 4 draft tokens"
+    - "Sweep the same 8k/1k grid as the non-MTP config: concurrency 1, 4, 16, and 64 for both TP4 and TEP4"
+    - "Raise mem-fraction-static to 0.80 for this arm: the fraction bounds weights plus the KV and Mamba pools, so the 4.05 GiB per-rank draft head has to be paid for by raising it, not lowering it (0.65 and 0.75 both left the pools empty on this 96 GiB SKU, and 0.85 came up with only 4.56 GiB free per rank)"
+    - "Size max-running-requests to the tested concurrency instead of a fixed 128, since the client never opens more connections and the oversized Mamba state pool is what starved the draft head"
+    - "Pass --use-chat-template to the benchmark, as required for EAGLE-style speculative decoding"
+    - "Validated on the node through the real launcher, every request successful: TEP4 concurrency 64 640/640 at 6895 tok/s (11% above the non-MTP arm's 6198 tok/s, mean TTFT 27.2s to 9.6s), and TEP4 concurrency 1 10/10 at 1233 tok/s (83% above the non-MTP arm's 672 tok/s, mean TPOT 12.6ms to 6.5ms)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+
+- config-keys:
     - minimaxm3-fp4-b300-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
