@@ -10,6 +10,12 @@ set -x
 # minimax_m3 parsers, VLLM_USE_BREAKABLE_CUDAGRAPH=0), so the spec-decode delta
 # is readable at equal concurrency.
 #
+# One deliberate exception: --gpu-memory-utilization is 0.90, not the non-MTP
+# sibling's 0.95. fixed_seq_len/minimaxm3_fp8_mi300x_mtp.sh passes no gmu flag at
+# all, i.e. it runs vLLM's 0.90 default, and that is the proven MTP setting here.
+# The H100 twin of this recipe died mid-warmup at 0.95 with torch.OutOfMemoryError
+# on every rank once the EAGLE3 head and its KV were resident (run 30515793863).
+#
 # Speculative config: Inferact/MiniMax-M3-EAGLE3 draft head, 3 speculative
 # tokens. Unlike the CUDA recipes the drafter needs no attention_backend
 # override — the FlashInfer "page size 128 requires GQA/MQA" limitation that
@@ -229,7 +235,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization 0.90 \
     --block-size 128 \
     --language-model-only \
     --attention-backend TRITON_ATTN \
