@@ -796,6 +796,36 @@ kimik3-fp4-mi355x-vllm-agentic-fp8eval:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
 
+kimik3-fp4-mi355x-vllm-agentic-fp8none-gmu90:
+  # GPU-only (no offload) fp8-KV concurrency curve at GMU 0.90.
+  #
+  # One key, one curve: c1/c4/c8/c16 with --kv-cache-dtype fp8 (the recipe
+  # default) and no KV connector, so the whole curve shares a KV dtype, a
+  # memory fraction and a warmup. The offload arm is deliberately absent --
+  # it has failed 4/4 under fp8 (see the fp8lazy key below), and mixing it in
+  # would put failure-prone cells in the same dispatch as the control curve.
+  #
+  # GMU is 0.90 rather than the earlier 0.88: it is set by the recipe default
+  # (GPU_MEM_UTIL in kimik3_fp4_mi355x.sh), because the agentic matrix has no
+  # per-cell env channel.
+  #
+  # c16 is the open question. The bf16 no-offload arm was never measured above
+  # c8, and the bf16 vllm-simple curve collapsed at c16 (TTFT 295 s). fp8
+  # roughly halves KV per token, so the ceiling should have moved up; this
+  # cell is what says whether it did.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
   # fp8 KV + SimpleCPUOffloadConnector in LAZY mode. One variable off the cell
   # that has now failed 4/4 (g17/g19/g12/g12), and the block-size attempt in run
