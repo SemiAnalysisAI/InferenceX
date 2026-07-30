@@ -9,6 +9,12 @@ set -x
 # --kv-cache-dtype fp8, TRITON_ATTN, minimax_m3 parsers, vllm-router for
 # DP-attention), so the spec-decode delta is readable at equal concurrency.
 #
+# One deliberate exception: --gpu-memory-utilization is 0.90, not the non-MTP
+# sibling's 0.95. That matches fixed_seq_len/minimaxm3_fp8_h100_mtp.sh, the
+# proven MTP configuration on this SKU. At 0.95 the EAGLE3 head and its KV leave
+# no runtime headroom on an 80 GB H100 and the engine core dies mid-warmup with
+# torch.OutOfMemoryError (96 MiB short on every rank; run 30515793863, TP8/EP8 c9).
+#
 # Speculative config: Inferact/MiniMax-M3-EAGLE3 draft head, 3 speculative
 # tokens — the same draft/level every merged MiniMax-M3 MTP recipe uses
 # (fixed_seq_len/minimaxm3_fp8_{h100,h200,mi300x,mi325x}_mtp.sh).
@@ -162,7 +168,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization 0.90 \
     --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
