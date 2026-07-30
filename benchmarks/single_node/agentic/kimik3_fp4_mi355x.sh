@@ -702,11 +702,25 @@ fi
 # overhead and transient co-tenancy are counted. This is not a denylist problem:
 # g11 and g16 each measured both above and below the line hours apart. 0.88
 # (253.4 GiB) clears every observation except the two genuinely occupied nodes.
-# 2026-07-30: raised 0.88 -> 0.90 (259.2 GiB). fp8 KV halves the per-token KV
-# cost, so the extra 5.8 GiB of pool is worth more than it was at bf16, and
-# every 0.88 observation above had >= 256 GiB free except the two occupied
-# nodes. Drop back to 0.88 if bring-up failures reappear at engine init.
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+# 2026-07-30: 0.90 (259.19 GiB) was tried and REVERTED. It does not fail at
+# engine init -- it comes up clean with a 4,302,357-token pool -- and then dies
+# mid-prefill. Run 30521327099 lost c4, c8 and c16 on three separate nodes with
+# an identical signature: HSA_STATUS_ERROR_OUT_OF_RESOURCES / "Available Free
+# mem : 0 MB" on 4 of 8 ranks, surfacing as hipErrorUnknown at
+# gpu_model_runner.py:314. Every death was at num_computed_tokens 360,960 to
+# 364,032 with num_running_reqs=1 and kv_cache_usage only ~21%, so it is not
+# concurrency and not KV exhaustion: the transient chunked-prefill workspace
+# scales with context and needs more than the ~22 GiB of unreserved headroom
+# 0.90 leaves. 0.88 leaves ~28 GiB and served 987 requests at ISL p90 374,550 /
+# p95 511,146 with a 0/165 error rate (run 30453589555, byte-identical serve
+# command apart from this one flag).
+#
+# The extra 443K tokens of pool 0.90 buys are unusable anyway -- peak usage at
+# death was 21%. Raising this again requires bounding the prefill workspace
+# first (the build_mla_chunked_context_metadata aggregate-chunk cap that only
+# exists in hyukjleeamd/kimi-k3-mla-b128:fp8-kv-fixed, not in the mla_gluon
+# gist patched below, which is a decode-path fix only).
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 
