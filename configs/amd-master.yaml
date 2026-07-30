@@ -775,6 +775,29 @@ kimik3-fp4-mi355x-vllm-agentic-fp8retry:
       - { tp: 8, kv-offloading: none, conc-list: [1, 16] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8] }
 
+kimik3-fp4-mi355x-vllm-agentic-fp8eval:
+  # lm-eval on the one config that is actually proven on this stack: fp8 KV,
+  # no offload, c8 -- the control cell from run 30442578333 (696 tok/s/GPU),
+  # repeated clean in 30453589555. The offload arm is excluded on purpose: it
+  # has failed 3/3 under fp8 (see the fp8b64 key below).
+  #
+  # The recipe pins EVAL_FRAMEWORK=lm-eval, so this runs lm-eval rather than
+  # run_eval's swebench default for agentic scenarios. Dispatch with
+  # --evals-only; mark_eval_entries flips single-node agentic rows to
+  # run-eval=True (generate_sweep_configs.py:360).
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8b64:
   # One variable off the cell that has now failed 3/3: fp8 KV + the
   # SimpleCPUOffloadConnector, with the KV page pinned to 64 tokens.
