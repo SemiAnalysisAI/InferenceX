@@ -5238,3 +5238,13 @@
     - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; consolidate --attention-config with indexer_kv_dtype fp8; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
     - "EAGLE3 draft head Inferact/MiniMax-M3-EAGLE3 -> Inferact/MiniMax-M3-EAGLE3-GQA; speculative attention_backend TRITON_ATTN -> FLASH_ATTN; num_speculative_tokens kept at 3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2337
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 FP4 GB300 SGLang AgentX Pareto-frontier benchmarks via the srtctl/dynamo stack"
+    - "agg: single aggregated node (TP4, MTP/NEXTN, hierarchical KV cache), concurrencies [1, 96]"
+    - "disagg: 1P1D-4P1D (TP4/DEP4 prefill, TP4/DEP4/DEP8 decode, MTP/NEXTN, hicache, conv-aware routing) over 7 Pareto points at concurrency 32-384"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2121
