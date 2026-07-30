@@ -85,7 +85,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     echo "Configs available at: $SRT_REPO_DIR/"
 
     # Map container images to local squash files based on framework
-    NGINX_IMAGE="nginx:1.27.4"
     NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
@@ -96,31 +95,6 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-    fi
-
-    if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-        # This path intentionally tracks a recent public SGLang image instead
-        # of assuming the H200 cluster has already cached it. Import on a
-        # compute node and serialize concurrent jobs that share the cache.
-        import_squash() {
-            local squash="$1" image="$2"
-            local lock="${squash}.lock"
-            srun -N 1 --account="$SLURM_ACCOUNT" --partition="$SLURM_PARTITION" \
-                --exclusive --time=180 bash -c "
-                exec 9>\"$lock\"
-                flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
-                if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
-                    echo 'Squash file already exists and is valid, skipping import: $squash'
-                else
-                    rm -f \"$squash\"
-                    enroot import -o \"$squash\" docker://$image
-                    unsquashfs -l \"$squash\" > /dev/null 2>&1
-                fi
-            "
-        }
-
-        import_squash "$SQUASH_FILE" "$IMAGE"
-        import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
     fi
 
     export ISL="$ISL"
