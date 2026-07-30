@@ -47,7 +47,7 @@ def test_dspark_defaults_to_real_block_rejection() -> None:
 def test_dspark_diagnostic_serializes_rocm_kernels() -> None:
     wrapper = MTP_WRAPPER.read_text()
 
-    assert _shell_default(wrapper, "AMD_SERIALIZE_KERNEL") == "3"
+    assert _shell_default(wrapper, "AMD_SERIALIZE_KERNEL") == "2"
 
 
 def test_reference_prefix_cache_mode_emits_no_override() -> None:
