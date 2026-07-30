@@ -2213,8 +2213,10 @@ minimaxm3-fp8-mi300x-vllm-agentic:
 # runs TRITON_ATTN, which serves the MHA EAGLE3 head. The pinned ROCm nightly is
 # built from upstream 2026-06-23, after vllm-project/vllm#45546 landed
 # SupportsEagle3 on the AMD MiniMax-M3 model, so no in-place patch is needed.
-# Same TP8-only arms as the non-MTP entry (gfx942 192 GB is memory-tight),
-# trimmed at the extreme-conc end for the draft head's extra KV footprint.
+# GPU-resident only: no Mooncake on AMD. The HIP-built Mooncake transfer engine's
+# TCP transport collapses mid-run on gfx942 (run 30517360090), so the host-DRAM
+# offload arms the non-MTP entry carries are dropped here rather than shipped
+# broken. TP8-only, as on the non-MTP entry (gfx942 192 GB is memory-tight).
 minimaxm3-fp8-mi300x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -2225,12 +2227,9 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
-      search-space:
+    - search-space:
       - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
       - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [4, 8, 12, 16] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [4, 8, 12, 16] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
