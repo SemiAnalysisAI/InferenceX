@@ -5032,6 +5032,14 @@
     - "dsv4-fp4-b300-vllm-agentic-mtp: MTP twins (--speculative-config {\"method\":\"mtp\",\"num_speculative_tokens\":3}) of the aggregate arms plus a new TP8 GPU-resident arm -- TP8 GPU-resident [1,2,4,6,8], TP4 GPU-resident [1,2,4,6,8,12,16,20], TP4 SimpleCPU [20,24,28,32,36,40], DEP4 [32,40,48,56], DEP8 [64,96,112,128,144,160,176,192,224]; routed via spec-decoding=mtp to dsv4_fp4_b300_vllm_mtp.sh (FULL_DECODE_ONLY cudagraph capture sizes in TOKENS = num_seqs*4)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2258
   
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Close the high-concurrency gap vs the ATOM recipe on MiniMax-M3 MXFP4 MI355X single-node vLLM STP. Bump image to latest nightly vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1."
+    - "Add INT4 quantized all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0, VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256) and fp8 KV cache (--kv-cache-dtype fp8). No --hf-overrides indexer-skipping knobs (disallowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)."
+    - "Simplify search space to a single TP4 conc 1-512 sweep for 8k1k (drop TP8, TP4/EP4, TP2/EP2, and dp-attn variants), matching minimaxm3-fp8-mi355x-vllm (#2003); 1k1k deprecated per #2263."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2104
+  
 
 - config-keys:
     - dsv4-fp4-b200-vllm-agentic-mtp
@@ -5183,6 +5191,72 @@
     - "Agentic experiment Variant K (probe, of the #2374 Variant G): REMOVES the kimi-k3-container-deps.sh in-container patch (setup_script, script file, and launcher copy) to verify whether the mamba_hybrid index_fill_ dtype patch is still required by the current vllm/vllm-openai:kimi-k3 image — expected to fail at the first decode step if it is"
     - "Recipe: benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-agentic.yaml on the cluster:b200-dgxc pool"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2391
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+    - minimaxm3-fp4-b200-vllm-mtp
+    - minimaxm3-fp4-b300-vllm
+    - minimaxm3-fp4-b300-vllm-mtp
+  description:
+    - "Update vllm image, remove setting trtllm allreduce backend"
+    - "Use fp8 indexer cache dtype for the B200/B300 non-eagle configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2120
+
+- config-keys:
+    - minimaxm3-fp4-b200-dynamo-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 B200 Dynamo-vLLM disaggregated benchmarks at 8k/1k."
+    - "Use configurations from concurrency 1 through 1024 with spread worker placement for CI transport validation."
+    - "Image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; Dynamo: 1.3.0.dev20260710."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2230
+
+- config-keys:
+    - minimaxm3-fp8-b300-dynamo-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-vllm-fixes.sh setup patch (shipped in the nightly image)"
+    - "conc 4096: drop the 4p2d-dep2-tep4 arm; add a 3p2d-dep2-dep8 arm for conc [1024, 2048] (prefill 3xDEP2, decode 2xDEP8)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2338
+
+- config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-gb200-vllm-fixes.sh setup patch (shipped in the nightly image)"
+    - "Collapse every 2xDEP8 decode into a single DEP16 worker (decode_workers 2->1, gpus_per_decode 8->16, data-parallel-size 8->16); recipes renamed Xp2d-dep4-dep8 -> Xp1d-dep4-dep16 (1p2d/2p2d/3p2d/5p2d)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2339
+
+- config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9 and dynamo to 1.3.0.dev20260710; drop the minimax-m3-gb300-vllm-fixes.sh setup patch (shipped in the nightly image)"
+    - "Collapse the 2xDEP8 decode into a single DEP16 worker (decode_workers 2->1, gpus_per_decode 8->16, data-parallel-size 8->16); recipe renamed 3p2d-dep2-dep8 -> 3p1d-dep2-dep16 (conc 512). The remaining decodes are 1xDEP8 or TEP and are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2340
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Bump image to vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9; set --stream-interval 32; consolidate --attention-config with indexer_kv_dtype fp8; drop the sparse_attention_msa contiguity patch (shipped in the nightly image)"
+    - "EAGLE3 draft head Inferact/MiniMax-M3-EAGLE3 -> Inferact/MiniMax-M3-EAGLE3-GQA; speculative attention_backend TRITON_ATTN -> FLASH_ATTN; num_speculative_tokens kept at 3"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2337
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 FP4 GB300 SGLang AgentX Pareto-frontier benchmarks via the srtctl/dynamo stack"
+    - "agg: single aggregated node (TP4, MTP/NEXTN, hierarchical KV cache), concurrencies [1, 96]"
+    - "disagg: 1P1D-4P1D (TP4/DEP4 prefill, TP4/DEP4/DEP8 decode, MTP/NEXTN, hicache, conv-aware routing) over 7 Pareto points at concurrency 32-384"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2121
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 GB300 disaggregated Dynamo-SGLang MTP configurations for 8k/1k."
+    - "Cover 1P1D TP4/TP4, 1P1D TEP8/TEP8, and 3P/4P/6P/7P/8P DEP4/DEP16 topologies."
+    - "Enable chat-formatted benchmark inputs for every MTP recipe."
+    - "Use Mooncake KV transfer and lmsysorg/sglang:v0.5.14-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2316
 
 - config-keys:
     - dsv4-fp4-b300-dynamo-sglang

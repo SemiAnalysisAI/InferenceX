@@ -324,7 +324,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--reuse-incompatible-label",
-        default="evals-only",
+        default="evals-only,agentx-fast",
         help="Comma-separated PR labels that make sweep artifacts ineligible for reuse.",
     )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
