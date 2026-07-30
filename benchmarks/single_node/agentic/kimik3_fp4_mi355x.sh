@@ -489,13 +489,31 @@ PYEOF
         # consistent with vLLM releasing blocks to an external tier that then
         # threw them away.
         #
-        # Size from the matrix's DRAM budget instead, which is what
-        # benchmarks/single_node/agentic/README.md asks recipes to do and what
-        # the lmcache-budget name already did. The /dev/shm cap below is the
-        # real ceiling: 1512 GB free was observed on this fleet, so this
-        # lands near 1360 GB -- ~13.6x attempt 2 and comfortably above the
-        # GPU pool. kimik2.7 ran a 1199 GB pool on this same fleet.
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        # Attempt 3 (run 30575475359) then sized L1 from TOTAL_CPU_DRAM_GB,
+        # which the /dev/shm cap landed at 1360 GB, and that BROKE GPU IPC:
+        #   Error handling request RequestType.REGISTER_KV_CACHE
+        #     torch.UntypedStorage._new_shared_cuda(...)
+        #     torch.AcceleratorError: CUDA error: invalid device pointer
+        #                             (hipErrorInvalidDevicePointer)
+        # once per TP rank, so all 8 vLLM workers then died on
+        # "LMCache server did not respond to register_kv_caches within 300.0s".
+        # The timeout was the symptom; the registration itself failed.
+        #
+        # Attempt 2 at 100 GB logged ZERO IPC errors and registered cleanly.
+        # L1 size was the only difference between the two runs, so pinning
+        # ~1.36 TB of host memory is what exhausts the driver's mapping
+        # resources and makes the subsequent GPU IPC import invalid. Note the
+        # lazy allocator was NOT the problem here: 134 expansions completed in
+        # 3m37s and the pool was fully allocated long before vLLM finished
+        # loading weights.
+        #
+        # So L1 has a working range, and the target is above the GPU tier but
+        # well below the IPC ceiling. GPU KV is ~52 GiB/rank at GMU 0.85, so
+        # ~416 GB across TP8 for the 3.32M-token pool. 512 GB -- the AMD
+        # reference value -- clears that while staying at ~38% of the size
+        # that broke IPC. If 512 also fails to register, bisect downward
+        # (256, then 128) rather than assuming the connector is broken.
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"
     else
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
     fi
