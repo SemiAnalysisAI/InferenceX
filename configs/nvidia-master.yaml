@@ -1609,6 +1609,50 @@ kimik3-fp4-b300-vllm-agentic:
       # TP8 SimpleCPUOffload (host DRAM)
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24] }
 
+kimik3-fp4-b300-vllm-agentic-dspark:
+  # DSpark speculative decoding on the Inferact/Kimi-K3-DSpark draft head, at
+  # level 2 with probabilistic drafting and synthetic acceptance pinned to the
+  # committed golden AL 2.51 (golden_al_distribution/
+  # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
+  # thinking_on 2 -> 2.51), per the AgentX policy in that directory's README:
+  # draft length is the submission's choice, the acceptance target is not.
+  # EVAL_ONLY runs switch to real block verification, since synthetic acceptance
+  # commits drafts regardless of target logits and would zero the SWE-bench score.
+  #
+  # Level 2 not 7: verify width is a real system cost synthetic acceptance does
+  # not remove, and at K=7 the 8-position verify loses to no-speculation once the
+  # GPU saturates even at the forced golden AL of 3.84.
+  #
+  # The draft's REAL acceptance on this corpus is 1.16-2.01 (13-41% position-1) --
+  # its native window is 32k YaRN-stretched to 1M, and the same image/draft/config
+  # reaches AL 4.18 on short-context work. These throughput numbers measure the
+  # system at a prescribed acceptance, not the draft's fitness at 100k+ context.
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
+    agentic-coding:
+    - dram-utilization: 0.63
+      search-space:
+      # Mirrors the non-MTP entry's KV arms so the spec-decoding delta is
+      # readable at equal concurrency, but stops at conc 16 rather than 24: the
+      # non-MTP bring-up sweep (run 30326393603) showed the GPU-resident arm
+      # already thrashing at conc >= 16 (prefix cache hit 2.7%, TTFT p50 86-191s)
+      # because GPU KV holds only ~3.1 max-length requests, so conc 24 costs a
+      # full job per arm to re-measure that regime. conc 16 still exercises the
+      # DRAM tier meaningfully (62% external prefix cache hit rate there).
+      # TP8-only for the same memory reason: a ~1.5 TB MXFP4 checkpoint does not
+      # fit below 8 GPUs.
+      # TP8 GPU-resident
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
+      # TP8 SimpleCPUOffload (host DRAM)
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
