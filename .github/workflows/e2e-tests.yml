@@ -22,7 +22,7 @@ on:
                 type: string
                 default: ""
             agentx-fast:
-                description: "AgentX fast feedback: 5-minute cache warmup and 20-minute profile."
+                description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
                 type: boolean
                 default: false
@@ -56,7 +56,7 @@ on:
                 type: string
                 default: ""
             agentx-fast:
-                description: "AgentX fast feedback: 5-minute cache warmup and 20-minute profile."
+                description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
                 type: boolean
                 default: false
