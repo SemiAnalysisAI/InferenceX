@@ -6,8 +6,14 @@ set -x
 # decoding — the spec-decoding=mtp variant of agentic/minimaxm3_fp8_h200.sh.
 # Everything outside the speculative block mirrors the non-MTP agentic sibling
 # (Mooncake host-DRAM KV offload, --block-size 128, --language-model-only,
-# --kv-cache-dtype fp8, TRITON_ATTN, gmu 0.92, minimax_m3 parsers, vllm-router
-# for DP-attention), so the spec-decode delta is readable at equal concurrency.
+# --kv-cache-dtype fp8, TRITON_ATTN, minimax_m3 parsers, vllm-router for
+# DP-attention), so the spec-decode delta is readable at equal concurrency.
+#
+# One deliberate exception: --gpu-memory-utilization is 0.90, not the non-MTP
+# sibling's 0.92. That matches fixed_seq_len/minimaxm3_fp8_h200_mtp.sh, the
+# proven MTP configuration on this SKU. The H100 twin of this recipe died
+# mid-warmup at the sibling's higher value with torch.OutOfMemoryError on every
+# rank once the EAGLE3 head and its KV were resident (run 30515793863).
 #
 # Speculative config: Inferact/MiniMax-M3-EAGLE3 draft head, 3 speculative
 # tokens — the same draft/level as every merged MiniMax-M3 MTP recipe. The
@@ -202,7 +208,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.92 \
+    --gpu-memory-utilization 0.90 \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --block-size 128 \
