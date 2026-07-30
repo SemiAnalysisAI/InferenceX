@@ -549,6 +549,11 @@ if [ "${ENFORCE_EAGER:-false}" = "true" ]; then
     EAGER_ARGS=(--enforce-eager)
 fi
 
+ATTENTION_BACKEND_ARGS=()
+if [ -n "${ATTENTION_BACKEND:-}" ]; then
+    ATTENTION_BACKEND_ARGS=(--attention-backend "$ATTENTION_BACKEND")
+fi
+
 # The reference command passes neither --enable-prefix-caching nor
 # --no-enable-prefix-caching, and this build's default is None (vLLM decides
 # internally), so by default we pass nothing and stay aligned. Two reasons this
@@ -720,6 +725,7 @@ VLLM_CMD=(
     "${PREFIX_CACHE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
     "${EAGER_ARGS[@]}"
+    "${ATTENTION_BACKEND_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${EVAL_SERVE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
