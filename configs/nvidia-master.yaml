@@ -8456,8 +8456,7 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
     # engine-level CPU KV budget. GPU-resident points receive a zero budget.
     - dram-utilization: 0.683
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2] }
-      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [2] }
+      - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 5] }
       - { tp: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 6] }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [40] }
 
