@@ -129,6 +129,11 @@ on:
         required: false
         type: string
         default: '3600'
+      agentx-fast:
+        description: "Use the AgentX 5-minute warmup and 20-minute profiling preset"
+        required: false
+        type: boolean
+        default: false
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -184,6 +189,7 @@ env:
   KV_P2P_TRANSFER: ${{ inputs.kv-p2p-transfer }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
   EVAL_TASKS_DIR: ${{ inputs.eval-tasks }}

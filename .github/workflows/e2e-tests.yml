@@ -21,6 +21,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            agentx-fast:
+                description: "AgentX fast feedback: 5-minute cache warmup and 20-minute profile."
+                required: false
+                type: boolean
+                default: false
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
@@ -60,6 +65,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            agentx-fast:
+                description: "AgentX fast feedback: 5-minute cache warmup and 20-minute profile."
+                required: false
+                type: boolean
+                default: false
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
@@ -284,7 +294,8 @@ jobs:
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
-            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
+            duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
+            agentx-fast: ${{ inputs.agentx-fast }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
@@ -321,7 +332,8 @@ jobs:
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
-            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
+            duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
+            agentx-fast: ${{ inputs.agentx-fast }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
@@ -425,7 +437,8 @@ jobs:
             kv-offloading: ${{ matrix.config.kv-offloading }}
             kv-offload-backend: ${{ matrix.config['kv-offload-backend'].name }}
             kv-offload-backend-metadata: ${{ matrix.config['kv-offload-backend'] && toJson(matrix.config['kv-offload-backend']) || '' }}
-            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
+            duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
+            agentx-fast: ${{ inputs.agentx-fast }}
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
