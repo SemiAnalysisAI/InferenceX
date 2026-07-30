@@ -2227,10 +2227,10 @@ minimaxm3-fp8-mi300x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
-      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
-      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [4, 8, 12, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [4, 8, 12, 16] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
