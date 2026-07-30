@@ -222,25 +222,26 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     fi
     PREFIX_CACHING=true
 
-    # --max-num-batched-tokens and --chunk-size stay at the AMD reference
-    # values (4096 / 1024). They were briefly pinned to 768 because LMCache
-    # dev HEAD (v0.5.3.dev47) rejects the reference values on this hybrid model:
+    # --max-num-batched-tokens and --chunk-size must satisfy LMCache's
+    # Mamba-hybrid alignment on K3, which vLLM enforces at KV-transfer init:
     #   ValueError: Mamba-hybrid models with LMCache require
-    #     block_size <= max_num_batched_tokens < 2 * block_size ... block_size=768
+    #     block_size <= max_num_batched_tokens < 2 * block_size ...
     #   AssertionError: LMCache chunk size should be a multiple of vLLM block size
-    # CONFIRMED on 0.5.1 as well (run 30348060242, g09): the pinned release
-    # raises the same ValueError, so these are properties of the LMCache/vLLM
-    # Mamba-hybrid integration, not of dev HEAD. Only the LazyMemoryAllocator
-    # stall was dev-specific. Both stay pinned to 768 for the LMCache arms.
+    # The binding constant is vLLM's derived attention block_size, and the
+    # current kimi-k3 image sets it to 1536 ("Setting attention block size to
+    # 1536 tokens to ensure that attention page size is >= mamba page size",
+    # run 30512572306, j90780184051) -- NOT the 768 an earlier build used. So
+    # both pins move to 1536: max_num_batched_tokens=1536 satisfies
+    # 1536 <= MNBT < 3072, and chunk-size=1536 is a multiple of block_size=1536.
     #
-    # Worth keeping in view either way: at ~106k-token average ISL, 768 would
-    # mean ~138 chunked-prefill steps per turn versus ~26 at 4096, so the two
-    # settings are not performance-equivalent.
-    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
-    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-768}"
+    # Worth keeping in view: at ~106k-token average ISL, 1536 means ~69
+    # chunked-prefill steps per turn versus ~26 at the 4096 AMD reference, so
+    # the LMCache arms are not throughput-equivalent to the kvnone reference.
+    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-1536}"
+    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-1536}"
     LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
     LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
-    echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (reference values)"
+    echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (block_size=1536)"
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it from source against ROCm -- the same path as the dsv4
@@ -257,7 +258,8 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # Note dev HEAD carries Mamba-hybrid constraints (block_size <=
     # max_num_batched_tokens < 2*block_size, and chunk_size % block_size == 0)
     # that the AMD reference command does not satisfy; the LMCache arms above
-    # already pin --max-num-batched-tokens and --chunk-size to 768 to meet them.
+    # already pin --max-num-batched-tokens and --chunk-size to 1536 (the current
+    # build's derived attention block_size) to meet them.
     LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-dev}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
         echo "Building lmcache from source at ref $LMCACHE_GIT_REF"
@@ -317,9 +319,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     fi
 
     LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
-    # chunk-size stays at the K3 Mamba constraint (a multiple of block_size=768),
+    # chunk-size stays at the K3 Mamba constraint (a multiple of block_size=1536),
     # NOT dsv4's 1024, which vLLM would reject on this hybrid model. Already
-    # pinned to 768 above; the :-1024 fallback only applies if that pin is unset.
+    # pinned to 1536 above; the :-1024 fallback only applies if that pin is unset.
     LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-1024}"
     # dsv4 connector defaults: a longer MP queue timeout and the ZMQ-style host.
     LMCACHE_MQ_TIMEOUT="${LMCACHE_MQ_TIMEOUT:-6000}"
