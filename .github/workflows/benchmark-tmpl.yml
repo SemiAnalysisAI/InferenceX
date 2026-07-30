@@ -134,6 +134,11 @@ on:
         required: false
         type: boolean
         default: false
+      agentx-fast:
+        description: "Use one warmup request per AgentX lane and a 20-minute profile"
+        required: false
+        type: boolean
+        default: false
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -180,6 +185,7 @@ env:
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
+  AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
