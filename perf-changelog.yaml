@@ -5240,6 +5240,41 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2337
 
 - config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 FP4 GB300 SGLang AgentX Pareto-frontier benchmarks via the srtctl/dynamo stack"
+    - "agg: single aggregated node (TP4, MTP/NEXTN, hierarchical KV cache), concurrencies [1, 96]"
+    - "disagg: 1P1D-4P1D (TP4/DEP4 prefill, TP4/DEP4/DEP8 decode, MTP/NEXTN, hicache, conv-aware routing) over 7 Pareto points at concurrency 32-384"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1; runner: gb300-nv"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2121
+
+- config-keys:
+    - qwen3.5-fp8-gb300-dynamo-sglang-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 GB300 disaggregated Dynamo-SGLang MTP configurations for 8k/1k."
+    - "Cover 1P1D TP4/TP4, 1P1D TEP8/TEP8, and 3P/4P/6P/7P/8P DEP4/DEP16 topologies."
+    - "Enable chat-formatted benchmark inputs for every MTP recipe."
+    - "Use Mooncake KV transfer and lmsysorg/sglang:v0.5.14-cu130."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2316
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang
+  description:
+    - "Add DSV4 B300 disaggregated Dynamo SGLang STP configuration for 8k/1k"
+    - "Add 5 checked-in srt-slurm recipes selected one-to-one by the STP search space"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2362
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-sglang-mtp
+  description:
+    - "Add DSV4 B300 disaggregated Dynamo SGLang MTP configuration for 8k/1k"
+    - "Add 8 checked-in srt-slurm recipes with EAGLE speculative decoding and chat-template inputs"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2363
+
+- config-keys:
     - qwen3.5-fp4-b200-sglang
     - qwen3.5-fp4-b200-sglang-mtp
     - qwen3.5-fp4-b300-sglang

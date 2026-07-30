@@ -1810,7 +1810,11 @@ build_replay_cmd() {
     # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
     # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
     # (they moved to router/routing_constraints/agent_context). Default stays on.
-    if [[ "${FRAMEWORK:-}" == dynamo-* && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
+    # New recipes instead set AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    # to route by X-Dynamo-Session-ID header, which needs no routing CLI flag.
+    if [[ "${FRAMEWORK:-}" == dynamo-* \
+          && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" \
+          && "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID:-false}" != "true" ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
         # The upstream 300s affinity TTL is shorter than an overloaded
         # high-concurrency agentic request. Keep bindings alive across long
