@@ -290,8 +290,7 @@ EOF
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
-        #git checkout v0.5.2
-        git checkout 9229067cec0b3a63bb8a39368d101db7ac0bc3c1
+        git checkout v0.5.2
         pip install -r requirements/build.txt
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
@@ -400,13 +399,11 @@ fi
 
 # --max-num-seqs is applied PER scheduler. Under DP-attention each of the $TP
 # DP ranks runs its own scheduler and the router spreads sessions across them,
-# so size the per-rank cap as 2*CONC/TP (aggregate = 2*CONC). In pure-TP there
-# is a single scheduler across all GPUs that sees all CONC sessions, so use
-# 2*CONC directly. Floor-divide can yield 0 for small CONC under DP-attention
-# (e.g. CONC=1, TP=8 -> 2/8=0), which vLLM rejects (SchedulerConfig requires
-# max_num_seqs >= 1), so clamp the per-rank cap to a minimum of 1.
+# but size the per-rank cap as CONC directly (not CONC/TP) so each rank can
+# hold the full session count. In pure-TP there is a single scheduler across
+# all GPUs that sees all CONC sessions, so use 2*CONC directly.
 if [ "$DP_ATTENTION" = "true" ]; then
-    MAX_NUM_SEQS=$((2 * CONC / TP))
+    MAX_NUM_SEQS=$((CONC))
     if [ "$MAX_NUM_SEQS" -lt 1 ]; then
         MAX_NUM_SEQS=1
     fi
