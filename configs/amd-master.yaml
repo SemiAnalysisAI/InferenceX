@@ -798,28 +798,27 @@ kimik3-fp4-mi355x-vllm-agentic-fp8eval:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
 
-kimik3-fp4-mi355x-vllm-agentic-fp8b64:
-  # One variable off the cell that has now failed 3/3: fp8 KV + the
-  # SimpleCPUOffloadConnector, with the KV page pinned to 64 tokens.
+kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
+  # fp8 KV + SimpleCPUOffloadConnector in LAZY mode. One variable off the cell
+  # that has now failed 4/4 (g17/g19/g12/g12), and the block-size attempt in run
+  # 30505656455 is void: vLLM overrode --block-size 64 to 1536 because K3's
+  # attention page must be >= its mamba/KDA page (interface.py:911), so that
+  # cell was byte-identical to the eager failures.
   #
-  # Runs 30453589555 and 30457683686 killed every fp8+connector cell with a GPU
-  # fault (g17/g19/g12) at under 10% pool usage, while the SAME connector on
-  # bf16 (run 30431115226) ran to 99.9% with zero faults, and fp8 WITHOUT the
-  # connector passes (kvnone c4/c8/c16). The two runs are config-identical
-  # except kv_cache_dtype -- same vLLM g5f76ae224, GMU 0.88, max-num-seqs 128,
-  # same cpu_bytes_to_use_per_rank -- and diffing vllm_command.txt leaves
-  # --kv-transfer-config as the only delta.
+  # Why lazy. Eager stores every completed block to CPU immediately. Every
+  # fp8+connector death has happened while the GPU pool was nearly empty --
+  # 11.6% usage, 0.0% external hit rate in 30505656455 -- i.e. deep in a store
+  # storm with nothing yet to gain from the host tier, and the last two deaths
+  # were a 600 s RCCL _ALLGATHER_BASE hang rather than an OOM. Lazy only stores
+  # under GPU-block pressure, so it removes nearly all connector traffic in
+  # exactly the regime that is killing the cell.
   #
-  # Both runs allocate an identical 14122 CPU blocks while GPU token capacity
-  # goes 1,957,290 -> 3,859,490. manager.py:199 scales num_cpu_blocks with
-  # num_gpu_blocks, so the block count held and tokens/block doubled: fp8 picks
-  # a 128-token page, bf16 gets 64. A 128 page routes MLA into aiter's Gluon
-  # b128 kernel -- survivable alone (the gist patch; run 30442578333 got 696
-  # tok/s/GPU) but not, so far, alongside block-granular connector copies.
+  # It is also the mode kimik3_fp4_mi355x_mtp.sh already pins for gfx950
+  # (PR #2367) against an eight-rank GPU memory access fault.
   #
-  # If this passes, the b128 page is the culprit and fp8 keeps the host tier.
-  # If it dies the same way, the page is not the variable and the next step is
-  # reading the worker-side copy path rather than guessing at geometry.
+  # Control: bf16 + the same connector in EAGER mode ran to 99.9% pool usage
+  # with zero faults (run 30431115226), and fp8 WITHOUT the connector peaks at
+  # 754 tok/s/GPU at c8 (run 30453589555).
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -831,7 +830,7 @@ kimik3-fp4-mi355x-vllm-agentic-fp8b64:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8-b64 }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8-lazy }, conc-list: [8] }
 
 kimik3-fp4-mi355x-vllm-agentic-fp8kv:
   # fp8 KV on the OFFLOAD arm. This is the fp8kvtest arm (run 30442578333:
