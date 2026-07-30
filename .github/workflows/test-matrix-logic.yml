@@ -5,6 +5,9 @@ on:
   pull_request:
     paths:
       - 'utils/matrix_logic/**'
+      - 'runners/launch_mi300x-amds*.sh'
+      - 'runners/mi300x_native_node_preflight.sh'
+      - 'benchmarks/multi_node/agentic/kimik3_fp4_mi300x_vllm.sh'
 
 permissions:
   contents: read
@@ -39,3 +42,8 @@ jobs:
         run: |
           cd utils/matrix_logic
           pytest test_validation.py -v
+
+      - name: test_kimik3_mi300x_native tests
+        run: |
+          cd utils/matrix_logic
+          pytest test_kimik3_mi300x_native.py -v

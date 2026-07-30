@@ -2,8 +2,8 @@
 set -euo pipefail
 set -x
 
-# Client-only agentic trace replay for srt-slurm multinode jobs.
-# srt-slurm owns server startup; this script runs as benchmark.type=custom
+# Client-only agentic trace replay for externally managed multi-node jobs.
+# The caller owns server startup; this script runs as benchmark.type=custom
 # against the already-ready frontend on the head node.
 
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/infmax-workspace}"
