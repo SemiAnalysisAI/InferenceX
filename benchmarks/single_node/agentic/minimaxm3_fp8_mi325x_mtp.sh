@@ -230,10 +230,12 @@ fi
 # capture is left at the sibling's default: the ROCm MiniMax-M3 MTP recipes run
 # with VLLM_USE_BREAKABLE_CUDAGRAPH=0 and no explicit capture ceiling.
 MAX_NUM_SEQS=$((2 * CONC))
-GPU_MEMORY_UTILIZATION=0.95
-if (( TP == 4 )); then
-    GPU_MEMORY_UTILIZATION=0.98
-fi
+# 0.90, not the non-MTP sibling's 0.95/0.98: fixed_seq_len/minimaxm3_fp8_mi325x_mtp.sh
+# passes no gmu flag at all (vLLM's 0.90 default), which is the proven MTP setting
+# here. The H100 twin of this recipe died mid-warmup at 0.95 with
+# torch.OutOfMemoryError on every rank once the EAGLE3 head and its KV were
+# resident (run 30515793863), so the TP4 0.98 bump is dropped as well.
+GPU_MEMORY_UTILIZATION=0.90
 
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 \
