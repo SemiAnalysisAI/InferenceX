@@ -828,6 +828,46 @@ kimik3-fp4-mi355x-vllm-agentic-fp8none:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16] }
 
+kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
+  # LMCache on Kimi-K3, fp8 KV, c8 -- the first attempt with an LMCache build
+  # that actually supports this model.
+  #
+  # Every prior LMCache attempt died at engine init with
+  #   ValueError: expected a Mamba [conv_state, ssm_state] tensor list, got Tensor
+  # because K3's Kimi Delta Attention supplies ONE fused state tensor. That is
+  # now fixed upstream: LMCache #4206 (2026-07-23) added _MambaUnifiedViewEdit
+  # for unified Mamba state, and #4278 (2026-07-28) added
+  # _SubpagedMLAAttentionViewEdit for K3's kernel-paged MLA tensor. LMCache
+  # also shipped its own validated K3 recipe (#4277,
+  # docs/source/recipes/kimi_k3.rst). None of that is in 0.5.1, which is what
+  # this recipe pinned, and none of it is in any PyPI release (latest 0.5.2).
+  #
+  # version: "git" makes the recipe build from source at the #4278 merge
+  # commit with ROCm flags, since nightly wheels are CUDA-only. The recipe
+  # asserts both edit classes are registered before loading 1.56 TB of
+  # weights, so a stale build fails in seconds rather than 20 minutes.
+  #
+  # backend name lmcache-k3 selects upstream's minimal validated server
+  # command instead of this recipe's `reference` flag set -- those extra flags
+  # were never validated on K3 and an unrecognised flag is a silent
+  # server-start failure.
+  #
+  # c8 only. It is the peak of the no-offload fp8 curve (682.63 tok/s/GPU,
+  # run 30525206671), so it is the point where an offload tier has to prove
+  # itself.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
   # fp8 KV + SimpleCPUOffloadConnector in LAZY mode. One variable off the cell
   # that has now failed 4/4 (g17/g19/g12/g12), and the block-size attempt in run
