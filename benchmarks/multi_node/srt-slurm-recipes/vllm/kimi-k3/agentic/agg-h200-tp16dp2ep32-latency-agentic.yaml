@@ -60,12 +60,12 @@ backend:
       load-format: fastsafetensors
       moe-backend: marlin
       attention-backend: FLASHMLA
-      gpu-memory-utilization: 0.98
+      gpu-memory-utilization: 0.975
       max-num-seqs: 5
       max-num-batched-tokens: 4096
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       enable-prefix-caching: true
-      compilation-config: '{"cudagraph_capture_sizes":[3,6],"pass_config":{"fuse_allreduce_rms":false}}'
+      compilation-config: '{"cudagraph_capture_sizes":[4,17],"pass_config":{"fuse_allreduce_rms":false}}'
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
       enable-auto-tool-choice: true
