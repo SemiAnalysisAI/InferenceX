@@ -328,6 +328,36 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # and gates the fused latent-MoE tail in the K3 model definition.
     export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION="${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-1}"
 
+    # GPU-memory headroom for the LMCache arm specifically.
+    #
+    # Attempt 1 (run 30559676068) cleared every LMCache-specific hurdle -- the
+    # source build, both K3 edit classes, `align`, N=1536, a healthy server --
+    # and then died on the SAME allocation wall the no-offload arm hits:
+    # HSA_STATUS_ERROR_OUT_OF_RESOURCES / "Available Free mem : 0 MB" on the
+    # workers. But it hit it at num_computed_tokens=184,320 with kv_cache_usage
+    # at 5.2%, against 360,960-373,248 at 10-21% without the connector. The
+    # threshold roughly HALVED, because LMCacheMPConnector holds GPU-side
+    # staging buffers on top of the transient chunked-prefill workspace.
+    #
+    # Two levers, both scoped to this arm so the no-offload curve is untouched:
+    #
+    # 1. max_num_seqs 128 -> 32. This is the structural one. The chunked MLA
+    #    workspace is sized from max_num_seqs, and under fp8 it had already
+    #    doubled (98,304 -> 196,608 rows) because the page went 768 -> 1536.
+    #    128 slots was never meaningful at concurrency 8 -- the widest tree
+    #    fan-out observed in the trace is 13 live streams in one lane, so 32
+    #    leaves real headroom while cutting the workspace 4x.
+    # 2. gpu_memory_utilization 0.88 -> 0.85 (244.8 GiB, ~36 GiB free vs ~28).
+    #    An arm with an extra GPU-side consumer needs more slack than one
+    #    without; 0.88 is calibrated for the no-offload case.
+    #
+    # Both are overridable, and both should be walked back toward the
+    # no-offload values once this arm produces a number -- a like-for-like
+    # comparison against 682.63 tok/s/GPU eventually needs matching
+    # max_num_seqs.
+    MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.85}"
+
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
     # bind-mounted /workspace, so a later job's `clean: true` checkout does not
