@@ -5317,4 +5317,5 @@
   description:
     - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B200 with SGLang native NEXTN MTP"
     - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
