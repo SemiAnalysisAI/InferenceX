@@ -5321,4 +5321,5 @@
     - "Use the upstream vllm/vllm-openai:kimi-k3 image with the official Dynamo v1.4.0-kimi-k3-dev.1 preview installed in-container, and enable Kimi K3 DSpark level 2 with the prescribed 2.51 golden acceptance length."
     - "Use FlashInfer TRT-LLM MoE for DSpark DEP to avoid DeepGEMM grid-barrier failures under MRV2."
     - "Load DEP weights with standard safetensors to avoid fastsafetensors transient HBM exhaustion with FlashInfer MoE."
+    - "Size DEP CUDA-graph captures to the actual per-engine frontier concurrency (64 regular, 96 offload), preserving the full 1M context while leaving FlashInfer runtime workspace."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2404
