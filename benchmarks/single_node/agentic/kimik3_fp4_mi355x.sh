@@ -474,7 +474,28 @@ PYEOF
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
     # is the number that actually backs the run.
     if [ "${LMCACHE_PROFILE:-}" = "k3upstream" ]; then
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-100}"   # upstream K3 recipe
+        # Upstream's recipe says --l1-size-gb 100, but that is a
+        # does-it-work value, not a capacity value. Attempt 2 (run
+        # 30563325963) ran the whole 3600 s green at 100 GB and the host tier
+        # did NOTHING: 122,770 chunks stored, 1,879 evictions, and an external
+        # prefix cache hit rate of 0.0%. A write-only cache.
+        #
+        # The arithmetic says it could not have worked. K3 costs ~217 KiB of
+        # KV per token at bf16, ~108 KiB at fp8, so 100 GB holds well under
+        # 1M tokens -- SMALLER than the 3,322,266-token GPU pool it is meant
+        # to back. An offload tier below the size of the GPU pool can only
+        # evict before reuse. Worse, it dragged the GPU tier down with it:
+        # GPU prefix hit fell 88.4% -> 33.6% and GPU KV usage 87.5% -> 52.7%,
+        # consistent with vLLM releasing blocks to an external tier that then
+        # threw them away.
+        #
+        # Size from the matrix's DRAM budget instead, which is what
+        # benchmarks/single_node/agentic/README.md asks recipes to do and what
+        # the lmcache-budget name already did. The /dev/shm cap below is the
+        # real ceiling: 1512 GB free was observed on this fleet, so this
+        # lands near 1360 GB -- ~13.6x attempt 2 and comfortably above the
+        # GPU pool. kimik2.7 ran a 1199 GB pool on this same fleet.
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
     else
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
     fi
