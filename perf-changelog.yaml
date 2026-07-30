@@ -5344,6 +5344,6 @@
     - kimik3-fp4-mi355x-vllm-agentic-mtp
   description:
     - "Add the Kimi-K3 MXFP4 MI355X AgentX DSpark variant with Inferact/Kimi-K3-DSpark, seven draft tokens, probabilistic draft sampling, and TRITON_MLA on ROCm."
-    - "Pin throughput to the committed thinking-on golden acceptance length 3.84 with synthetic rejection sampling; eval-only runs retain real block verification."
-    - "Run TP8 with SimpleCPUOffloadConnector at concurrency 1/2/4/8. The _mtp wrapper keeps the gfx950 bring-up settings validated in PR #2367 together: --enforce-eager, --max-num-batched-tokens 1024, --max-num-seqs 32, bf16 KV cache, language-model-only mode, and lazy host allocation."
+    - "Align the first AgentX validation with the upstream AMD reproducer: GPU-only TP8 at concurrency 1, real block rejection, --gpu-memory-utilization 0.95, --max-num-batched-tokens 4096, --max-num-seqs 128, multimodal encoder data parallelism, and no --enforce-eager or explicit prefix-cache override."
+    - "Use VLLM_ROCM_USE_AITER=1, SAFETENSORS_FAST_GPU=1, AITER_SITUV2_A8W4=1, AITER_BF16_FP8_MOE_BOUND=0, and VLLM_USE_BREAKABLE_CUDAGRAPH=0 with the stock vllm/vllm-openai-rocm:kimi-k3 image."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2403

@@ -49,7 +49,7 @@ set -x
 #   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
 #   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
 #   SPEC_DECODE              false  (enabled by the _mtp DSpark wrapper)
-#   ENFORCE_EAGER            false  (enabled by the _mtp DSpark wrapper)
+#   ENFORCE_EAGER            false  (reference; DSpark wrapper keeps it false)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -600,7 +600,7 @@ fi
 # and hash sizes only align with prefix caching on -- an omission has been
 # reported to trip "tokens_per_block not divisible by tokens_per_hash" at load.
 # Set PREFIX_CACHING=true/false to force it either way.
-# ON by default for EVERY arm. This trace is built around large shared
+# ON by default for non-DSpark arms. This trace is built around large shared
 # prefixes -- theoretical prefix-cache hit is 98.1%, and a live kvnone cell
 # measured 92.8% server-side -- so a run with reuse disabled is not measuring
 # the workload. Reuse also costs essentially no KV (1,414,660 vs 1,420,824
@@ -620,43 +620,35 @@ fi
 #
 # Note vLLM resolves the flag's default to False for this model, so ON must be
 # passed explicitly. PREFIX_CACHING=false forces it off for a deliberate A/B.
-PREFIX_CACHE_ARGS=(--enable-prefix-caching)
-if [ "${PREFIX_CACHING:-}" = "false" ]; then
-    PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
-fi
+case "${PREFIX_CACHING:-true}" in
+    true)
+        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+        ;;
+    false)
+        PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
+        ;;
+    auto)
+        # Match the upstream AMD command by letting vLLM resolve its default.
+        PREFIX_CACHE_ARGS=()
+        ;;
+    *)
+        echo "Error: PREFIX_CACHING must be true, false, or auto." >&2
+        exit 1
+        ;;
+esac
 
 # The upstream DSpark config pins "attention_backend": "FLASHINFER_MLA", which
 # is CUDA-only and cannot be used verbatim on gfx950; SPEC_ATTN_BACKEND
-# overrides it. AgentX throughput uses synthetic acceptance pinned to the
-# committed golden curve. Eval-only runs use real block verification because
-# synthetic acceptance bypasses correctness verification.
+# overrides it. Use real block rejection for both throughput and evaluation so
+# this path is the exact AMD reproducer and exercises target-model verification.
 SPEC_ARGS=()
 if [ "${SPEC_DECODE:-false}" = "true" ]; then
     SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
     SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-TRITON_MLA}"
-    SPEC_GOLDEN_AL="${SPEC_GOLDEN_AL:-3.84}"
-    SPEC_GOLDEN_AL_FILE="${SPEC_GOLDEN_AL_FILE:-golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml}"
-    FILE_GOLDEN_AL=$(awk -v k="$SPEC_NUM_TOKENS" '
-        /^kimi-k3:/                { in_model = 1; next }
-        /^[^[:space:]#]/           { in_model = 0 }
-        in_model && /thinking_on:/ { in_thinking = 1; next }
-        in_thinking && $1 == k":"  { print $2; exit }
-    ' "$SPEC_GOLDEN_AL_FILE" 2>/dev/null)
-    if [ "$FILE_GOLDEN_AL" != "$SPEC_GOLDEN_AL" ]; then
-        echo "Error: DSpark golden AL mismatch: $SPEC_GOLDEN_AL_FILE gives" >&2
-        echo "       '${FILE_GOLDEN_AL:-<unreadable>}' for k=$SPEC_NUM_TOKENS," >&2
-        echo "       but the recipe pins $SPEC_GOLDEN_AL." >&2
-        exit 1
-    fi
-    if [ "${EVAL_ONLY:-false}" = "true" ]; then
-        SPEC_REJECTION_CONFIG="\"rejection_sample_method\":\"block\""
-    else
-        SPEC_REJECTION_CONFIG="\"rejection_sample_method\":\"synthetic\",\"synthetic_acceptance_length\":$SPEC_GOLDEN_AL"
-    fi
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",$SPEC_REJECTION_CONFIG}"
+        "{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
     )
 fi
 

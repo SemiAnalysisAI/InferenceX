@@ -664,12 +664,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      # DSpark speculative decoding with Inferact/Kimi-K3-DSpark, seven draft
-      # tokens, probabilistic draft sampling, and the committed thinking-on
-      # golden AL. The _mtp wrapper applies the gfx950 settings validated in
-      # PR #2367 as one unit: eager execution, max-num-batched-tokens 1024,
-      # max-num-seqs 32, bf16 KV, and lazy SimpleCPUOffloadConnector allocation.
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+      # Exact upstream AMD DSpark reproducer: GPU-only TP8, seven draft tokens,
+      # probabilistic draft sampling, TRITON_MLA, and real block rejection.
+      # Start at c1; expand only after the AgentX-fast preflight is healthy.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1] }
 
 kimik3-fp4-mi355x-vllm-agentic-fp8kvtest:
   image: vllm/vllm-openai-rocm:kimi-k3
