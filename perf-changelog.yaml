@@ -5361,4 +5361,4 @@
   description:
     - "Add MiniMax M3 MXFP8 GB200 Dynamo-vLLM disaggregated EAGLE3 MTP recipes"
     - "Fix comment errors in minimaxm3-fp8-gb200-dynamo-vllm (Xp2d DEP8 -> Xp1d DEP16, remove phantom Marlin entry, bump router to 1.3.0.dev20260710)"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2432
