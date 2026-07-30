@@ -80,7 +80,6 @@ PARALLEL_ARGS=(
     --dp 1
     --ep-size "$EP_SIZE"
 )
-TOKENIZER_WORKERS=6
 STREAM_INTERVAL=50
 
 # AgentX concurrency counts live session trees rather than individual HTTP
@@ -124,7 +123,6 @@ SGLANG_CMD=(
     --mem-fraction-static 0.80
     --stream-interval "$STREAM_INTERVAL"
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
-    --tokenizer-worker-num "$TOKENIZER_WORKERS"
     --tokenizer-path "$MODEL"
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
