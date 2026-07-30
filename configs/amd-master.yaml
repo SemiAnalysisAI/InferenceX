@@ -1507,7 +1507,7 @@ qwen3.5-fp8-mi325x-sglang-mtp:
 # required by Qwen3.5's hybrid Mamba no_buffer scheduler on ROCm). Conc bands run
 # past the MI300X entry's because 256 GB per GPU holds a larger KV pool.
 qwen3.5-fp8-mi325x-sglang-agentic-mtp:
-  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi30x-20260730
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: cluster:mi325x-amds
