@@ -1343,6 +1343,42 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
+# Qwen3.5-397B-A17B NVFP4 single-node SGLang sweep using 4 of 8 RTX PRO
+# 6000 Blackwell GPUs. Both arms use ordinary NCCL collectives on PCIe.
+qwen3.5-fp4-rtx6000pro-sglang:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: rtx6000pro-lat
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-list: [1, 4, 16, 64] }
+      - { tp: 4, ep: 4, conc-list: [1, 4, 16, 64] }
+
+# Same sweep with the built-in MTP draft head driven through SGLang's EAGLE
+# speculative path.
+qwen3.5-fp4-rtx6000pro-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: rtx6000pro-lat
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-list: [1, 4, 16, 64], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 4, 16, 64], spec-decoding: mtp }
+
 qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -1608,6 +1644,50 @@ kimik3-fp4-b300-vllm-agentic:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
       # TP8 SimpleCPUOffload (host DRAM)
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 24] }
+
+kimik3-fp4-b300-vllm-agentic-dspark:
+  # DSpark speculative decoding on the Inferact/Kimi-K3-DSpark draft head, at
+  # level 2 with probabilistic drafting and synthetic acceptance pinned to the
+  # committed golden AL 2.51 (golden_al_distribution/
+  # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml,
+  # thinking_on 2 -> 2.51), per the AgentX policy in that directory's README:
+  # draft length is the submission's choice, the acceptance target is not.
+  # EVAL_ONLY runs switch to real block verification, since synthetic acceptance
+  # commits drafts regardless of target logits and would zero the SWE-bench score.
+  #
+  # Level 2 not 7: verify width is a real system cost synthetic acceptance does
+  # not remove, and at K=7 the 8-position verify loses to no-speculation once the
+  # GPU saturates even at the forced golden AL of 3.84.
+  #
+  # The draft's REAL acceptance on this corpus is 1.16-2.01 (13-41% position-1) --
+  # its native window is 32k YaRN-stretched to 1M, and the same image/draft/config
+  # reaches AL 4.18 on short-context work. These throughput numbers measure the
+  # system at a prescribed acceptance, not the draft's fitness at 100k+ context.
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
+    agentic-coding:
+    - dram-utilization: 0.63
+      search-space:
+      # Mirrors the non-MTP entry's KV arms so the spec-decoding delta is
+      # readable at equal concurrency, but stops at conc 16 rather than 24: the
+      # non-MTP bring-up sweep (run 30326393603) showed the GPU-resident arm
+      # already thrashing at conc >= 16 (prefix cache hit 2.7%, TTFT p50 86-191s)
+      # because GPU KV holds only ~3.1 max-length requests, so conc 24 costs a
+      # full job per arm to re-measure that regime. conc 16 still exercises the
+      # DRAM tier meaningfully (62% external prefix cache hit rate there).
+      # TP8-only for the same memory reason: a ~1.5 TB MXFP4 checkpoint does not
+      # fit below 8 GPUs.
+      # TP8 GPU-resident
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
+      # TP8 SimpleCPUOffload (host DRAM)
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
 
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -4982,7 +5062,7 @@ dsv4-fp4-b200-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:v0.25.1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
@@ -5220,6 +5300,99 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # Aggregate low latency: TP=8, max-num-seqs=4.
+      - conc-list: [1]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-gb200-low-latency-mtp2.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # Low-latency bridge: 1 prefill (DEP=8) + 4 decode (TP=8), no offload.
+      - conc-list: [16, 32, 64]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-latency-mtp2.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+      # MegaMOE mid curve: 1 prefill (DEP=8) + 1 decode (DEP=8).
+      # 5 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [128, 256, 512, 1024]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # MegaMOE high throughput: 2 prefill (DEP=8 each) + 1 decode (DEP=8).
+      # 7 nodes total with a dedicated NATS/etcd infra node.
+      - conc-list: [1024]
+        spec-decoding: mtp
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe-mtp2.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+# Baseline (no synthetic acceptance) variant of dsv4-fp4-gb200-dynamo-vllm-mtp2
+# for before/after Pareto comparison. Identical topology and recipes, only the
+# SYNTHETIC_ACCEPTANCE envs are removed.
+dsv4-fp4-gb200-dynamo-vllm-mtp2-nosynthetic:
+  image: vllm/vllm-openai:v0.20.1-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.2.0.dev20260426" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -5674,6 +5847,97 @@ dsv4-fp4-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b300-high-tpt-megamoe.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+# DSV4 B300 disaggregated dynamo-sglang STP configuration.
+# Each search-space entry maps one-to-one to a checked-in srt-slurm recipe under
+# recipes/sglang/deepseek-v4/8k1k/. Runs on the b300 pool via
+# runners/launch_b300-nv.sh. Prefill workers are TP4/DEP4 (two workers per
+# 8-GPU B300 node); the decode worker is a single DEP8 node.
+dsv4-fp4-b300-dynamo-sglang:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: dynamo-sglang
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p1d-tp4-tp4 (pure TP, no dp-attn). 2 nodes (1P + 1D).
+      - conc-list: [1, 8, 16, 32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-1p1d-tp4-tp4.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p1d-dep4-dep8: 1x DEP4 prefill + DEP8 decode. 2 nodes (1P + 1D).
+      - conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-1p1d-dep4-dep8.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 2p1d-dep4-dep8: 2x DEP4 prefill + DEP8 decode. 2 nodes (1P + 1D).
+      - conc-list: [768]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-2p1d-dep4-dep8.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4p1d-dep4-dep8: 4x DEP4 prefill + DEP8 decode. 3 nodes (2P + 1D).
+      - conc-list: [2048]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-4p1d-dep4-dep8.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 6p1d-dep4-dep8: 6x DEP4 prefill + DEP8 decode. 4 nodes (3P + 1D).
+      - conc-list: [3072]
+        prefill:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-6p1d-dep4-dep8.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -6441,6 +6705,149 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
 
+# DSV4 B300 disaggregated dynamo-sglang MTP configuration.
+# Each search-space entry maps one-to-one to a checked-in srt-slurm recipe under
+# recipes/sglang/deepseek-v4/8k1k/. Runs on the b300 pool via
+# runners/launch_b300-nv.sh. Prefill workers are TP4/DEP4 (two workers per
+# 8-GPU B300 node); decode is DEP8 (one full node) except the TP4 topologies.
+# EAGLE draft depth is tapered down as concurrency grows
+# (3 steps / 4 draft tokens -> 2/3 at 6p1d -> 1/2 at 8p1d).
+dsv4-fp4-b300-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260721-8905cbd4
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: dynamo-sglang
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p1d-tp4-tp4 (pure TP, no dp-attn). 2 nodes (1P + 1D).
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-1p1d-tp4-tp4-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # Scale-out: 1x DEP4 prefill + 6x TP4 decode. 4 nodes (1P + 3D).
+      - spec-decoding: "mtp"
+        conc-list: [8, 32, 64]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-1p6d-dep4-tp4-mtp.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p1d-dep4-dep8: 1x DEP4 prefill + DEP8 decode. 2 nodes (1P + 1D).
+      - spec-decoding: "mtp"
+        conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-1p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 1p2d-dep4-dep8: 1x DEP4 prefill + 2x DEP8 decode. 3 nodes (1P + 2D).
+      - spec-decoding: "mtp"
+        conc-list: [256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-1p2d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 2p1d-dep4-dep8: 2x DEP4 prefill + DEP8 decode. 2 nodes (1P + 1D).
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-2p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4p1d-dep4-dep8: 4x DEP4 prefill + DEP8 decode. 3 nodes (2P + 1D).
+      - spec-decoding: "mtp"
+        conc-list: [1024]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-4p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 6p1d-dep4-dep8: 6x DEP4 prefill + DEP8 decode. 4 nodes (3P + 1D).
+      - spec-decoding: "mtp"
+        conc-list: [2048]
+        prefill:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-6p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 8p1d-dep4-dep8. 5 nodes (4P + 1D).
+      - spec-decoding: "mtp"
+        conc-list: [3072]
+        prefill:
+          num-worker: 8
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/deepseek-v4/8k1k/disagg-b300-8p1d-dep4-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 kimik2.5-int4-h100-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
@@ -6575,6 +6982,184 @@ qwen3.5-fp4-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp4-c1-mtp-hicache-jid2191933.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [96]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp4-c96-mtp-hicache-jid2195211.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+
+qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1
+  model: nvidia/Qwen3.5-397B-A17B-NVFP4
+  model-prefix: qwen3.5
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "8e4bfa69ba486f07f6083fbe8cd026f432f520bc" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # 1P1D STP (TP4 prefill / TP4 decode). 2 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [32]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c32-mtp-hicache-convaware-jid2212783.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [64]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c64-mtp-convaware-jid2214439.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [96]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c96-mtp-convaware-jid2214440.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1P1D wide-EP (DEP4 prefill / DEP4 decode). 2 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [128]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-dep4-c128-mtp-hicache-convaware-jid2220685.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+      # 2P1D wide-EP (2x DEP4 prefill / DEP4 decode). 3 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [192]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-2p1d-dep4-dep4-c192-mtp-hicache-convaware-jid2230562.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+      # 3P1D wide-EP (3x DEP4 prefill / DEP8 decode). 5 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [256]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p1d-dep4-dep8-c256-mtp-hicache-convaware-jid2228613.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4P1D wide-EP (4x DEP4 prefill / DEP8 decode). 6 GB300 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [384]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-4p1d-dep4-dep8-c384-mtp-hicache-convaware-jid2239740.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
 qwen3.5-fp8-b300-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
@@ -6693,11 +7278,106 @@ qwen3.5-fp8-h100-sglang-agentic:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
+minimaxm3-fp4-b200-dynamo-vllm:
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: b200-multinode
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0.dev20260710" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - conc-list: [1, 4, 8, 16]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b200-fp4/8k1k/1p1d-dep2-tp4-c1-c16-8k1k.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [64]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b200-fp4/8k1k/1p2d-dep2-tp4-c64-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [128]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b200-fp4/8k1k/2p2d-dep2-tp4-c128-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [256]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b200-fp4/8k1k/3p2d-dep2-tp4-c256-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [512]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b200-fp4/8k1k/3p2d-dep2-tp4-c512-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [1024]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b200-fp4/8k1k/4p2d-dep2-tp4-c1024-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 # MiniMax-M3 NVFP4 disagg sweep on the same B300 topology matrix as the MXFP8
 # baseline above. The image includes vLLM PR #46380, so no runtime patch is
 # needed.
 minimaxm3-fp8-b300-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
@@ -6764,19 +7444,19 @@ minimaxm3-fp8-b300-dynamo-vllm:
           tp: 4
           ep: 1
           dp-attn: false
-      - conc-list: [4096]
+      - conc-list: [1024, 2048]
         prefill:
-          num-worker: 4
+          num-worker: 3
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/4p2d-dep2-tep4-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/3p2d-dep2-dep8-8k1k.yaml"
         decode:
           num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: false
+          tp: 8
+          ep: 8
+          dp-attn: true
       - conc-list: [16, 32, 64, 128]
         prefill:
           num-worker: 1
@@ -7101,7 +7781,7 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4:
 # All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: DEP4, TEP8, DEP8, TEP4.
 # 4 GPU/node (GB300 NVL72). kv-cache-dtype=fp8. srun_options mem=0 required.
 minimaxm3-fp8-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: gb300-nv
@@ -7221,7 +7901,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-      # 3p2d DEP2+DEP8, 6n: conc 512
+      # 3p1d DEP2+DEP16, 6n: conc 512
       - conc-list: [512]
         prefill:
           num-worker: 3
@@ -7229,11 +7909,11 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/3p2d-dep2-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/3p1d-dep2-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 6p1d DEP2+DEP8, 5n: conc 2048
@@ -7275,7 +7955,7 @@ qwen3.5-fp4-b200-trt:
 # All prefill DEP4 (TP1 DP4 EP, 4 GPU/worker). Decode: Marlin, TEP8, DEP8, TEP4.
 # 4 GPU/node (GB200 NVL72). FLASHINFER attention with FP8 KV cache.
 minimaxm3-fp8-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: gb200
@@ -7298,11 +7978,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 1p2d DEP4+TEP4, 3n: conc 4
@@ -7343,11 +8023,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/2p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/2p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 3p2d DEP4+DEP8, 7n: conc 4096
@@ -7358,11 +8038,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/3p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/3p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
       # 5p2d DEP4+DEP8, 9n: conc 4096
@@ -7373,11 +8053,11 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/5p2d-dep4-dep8-8k1k.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/5p1d-dep4-dep16-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
 qwen3.5-fp4-b200-trt-mtp:
@@ -7434,7 +8114,7 @@ minimaxm3-fp8-b300-vllm:
 # weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
 # the STAGED_MODELS allow-list in launch_b300-nv.sh).
 minimaxm3-fp4-b300-vllm:
-  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -7460,7 +8140,7 @@ minimaxm3-fp4-b300-vllm:
 # /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
 # launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -7515,7 +8195,7 @@ minimaxm3-fp8-b200-vllm:
 # (MSA sparse/index cache); weights are pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4
 # (launch_b200-dgxc.sh resolves MODEL_PATH for minimaxm3-fp4).
 minimaxm3-fp4-b200-vllm:
-  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b200-dgxc
@@ -7541,7 +8221,7 @@ minimaxm3-fp4-b200-vllm:
 # precedent: spec decode pays off at low/mid concurrency while acceptance
 # dilutes in big batches, and the draft weights + draft KV shave headroom.
 minimaxm3-fp8-b200-vllm-mtp:
-  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b200-dgxc
@@ -7557,7 +8237,6 @@ minimaxm3-fp8-b200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of MiniMax-M3 NVFP4
@@ -7570,7 +8249,7 @@ minimaxm3-fp8-b200-vllm-mtp:
 # resolves MODEL_PATH for minimaxm3-fp4); the EAGLE3 draft is fetched next to
 # the target weights.
 minimaxm3-fp4-b200-vllm-mtp:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b200-dgxc
@@ -7597,7 +8276,7 @@ minimaxm3-fp4-b200-vllm-mtp:
 # big batches, and the draft weights + draft KV shave headroom — tp2-ep2 is
 # dropped entirely since its KV headroom was already thin without a draft.
 minimaxm3-fp8-b300-vllm-mtp:
-  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
@@ -7613,7 +8292,6 @@ minimaxm3-fp8-b300-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
@@ -8433,3 +9111,125 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
           pp: 2
           ep: 1
           dp-attn: false
+
+qwen3.5-fp8-gb300-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: gb300
+  precision: fp8
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "46520ca59afe992fb5ef61b3197b2316f8df9b2b" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1P1D TP4/TP4. 8 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [1, 2, 8]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_lowlat_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1P1D TEP8/TEP8. 16 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [32, 48, 80]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_lowlat_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+      # 3P1D DEP4/DEP16. 28 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [480]
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 4P1D DEP4/DEP16. 32 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [768]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 6P1D DEP4/DEP16. 40 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [1280]
+        prefill:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 7P1D DEP4/DEP16. 44 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [1344]
+        prefill:
+          num-worker: 7
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_3.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 8P1D DEP4/DEP16. 48 worker GPUs.
+      - spec-decoding: "mtp"
+        conc-list: [1920, 2304]
+        prefill:
+          num-worker: 8
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp8/8k1k/disagg/mtp/8k1k_mtp_maxtpt_4.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true

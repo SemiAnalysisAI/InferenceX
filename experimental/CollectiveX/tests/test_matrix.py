@@ -213,14 +213,15 @@ class MatrixTests(unittest.TestCase):
         #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),
         #     so EP16 works over MNNVL where the RDMA-GIN path walls.
         #   * AMD SKUs: no rows (NCCL EP is NVIDIA-only; AMD runs mori).
-        #   * LOW-LATENCY: no rows on ANY SKU. The wheel's LL count/flag protocol consumes stale
-        #     double-buffer signals (values carry no generation, so a signal from two calls earlier is
-        #     bit-identical at a repeating workload); a rank that slips one parity cycle gets lapped and
-        #     the pipeline wedges on dispatch/combine receive timeouts, ending in cudaErrorLaunchFailure.
-        #     Reported as NVIDIA/nccl#2303, fixed by NVIDIA/nccl#2306, unfixable here (we install the
-        #     published wheel). Observed first on GB, then reproduced on every x86 SKU — 5/5 over SSH and
-        #     4/4 in sweep 30155842613 — so ll_backends carries no nccl-ep row anywhere until a fixed
-        #     wheel ships. Restore per-SKU rows only alongside a spec bump that contains the fix.
+        #   * LOW-LATENCY: EP8 on all six NVIDIA SKUs. These rows were dropped while every LL leg
+        #     wedged, on the reading that only a fixed wheel could restore them. That reading was
+        #     wrong about the cause: the wedge needed TWO LL handles live on one group. `buffer_idx`
+        #     is per-handle but its buffers are offsets into the per-group rdma_buffer, so same-config
+        #     handles alias one another's parity count/flag slots. The adapter now binds a single
+        #     handle and rebinds it per shape, which removes the aliasing without a wheel bump —
+        #     proven on a stock wheel by ladder [1] (one handle, clean) vs [1, 2] (two handles,
+        #     64 dispatch + 6 combine receive timeouts). LL is decode-only and EP8-only: GB stays at
+        #     EP8 here even though normal mode runs EP16, because LL adds no EP16 row on any SKU.
         # BF16 only — no FP8 case (NCCL EP FP8 unsupported this release).
         document = matrix(backend="all")
         runnable = {
@@ -255,14 +256,16 @@ class MatrixTests(unittest.TestCase):
             },
             {"bf16"},
         )
-        # Low-latency: no nccl-ep case on any SKU while the wheel carries the stale-signal wedge.
+        # Low-latency: EP8 on every NVIDIA SKU, and EP8 only — a stray EP16 LL row would dispatch a
+        # shape the mode does not define.
         ll = {
             (item["sku"], item["case"]["ep"])
             for item in document["requested_cases"]
             if item["case"]["backend"] == "nccl-ep"
             and item["case"]["mode"] == "low-latency"
+            and item["disposition"] == "runnable"
         }
-        self.assertEqual(ll, set())
+        self.assertEqual(ll, {(sku, 8) for sku in rdma_skus | gb_skus})
 
     def test_invalid_filters_fail_closed(self):
         for options in (
