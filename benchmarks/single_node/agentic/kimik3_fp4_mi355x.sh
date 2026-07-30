@@ -46,6 +46,7 @@ set -x
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
 #   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
+#   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
 #   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
 #   SPEC_DECODE              false  (enabled by the _mtp DSpark wrapper)
 #   ENFORCE_EAGER            false  (enabled by the _mtp DSpark wrapper)
@@ -427,8 +428,18 @@ except Exception:
         )
     fi
     ;;
-  vllm-simple|vllm-simple-fp8)
+  vllm-simple|vllm-simple-fp8|vllm-simple-fp8-b64)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # vllm-simple-fp8-b64 is vllm-simple-fp8 with the KV page pinned to 64
+    # tokens. Under fp8 vLLM otherwise picks 128, which routes MLA into aiter's
+    # Gluon b128 kernel; fp8 survives that alone but every fp8 cell that also
+    # ran this connector died with a GPU fault (3/3, g17/g19/g12, at <10% pool
+    # usage) while bf16 + the same connector ran to 99.9%. 64 is the page bf16
+    # used, so this holds the one geometry that is known to work with the
+    # connector while keeping fp8.
+    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8-b64" ]; then
+        KV_BLOCK_SIZE="${KV_BLOCK_SIZE:-64}"
+    fi
     # vllm-simple-fp8 is the same connector with an fp8 KV cache. fp8 halves
     # bytes/token in the GPU pool, which on this KV-bound corpus moves the
     # eviction wall itself rather than just adding headroom (measured: the pool
@@ -436,9 +447,11 @@ except Exception:
     # UNVALIDATED on K3's hybrid geometry: the pool spans Kimi Delta Attention
     # state and gated-MLA latent, and fp8 support across both spec types is
     # unconfirmed on this build.
-    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8" ]; then
+    case "$KV_OFFLOAD_BACKEND" in
+      vllm-simple-fp8|vllm-simple-fp8-b64)
         KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-    fi
+        ;;
+    esac
     # vLLM's own SimpleCPUOffloadConnector -- the AMD reference's native
     # offload path. Unlike LMCache it does not go through the Mamba
     # [conv_state, ssm_state] adapter that K3's Kimi Delta Attention breaks
@@ -535,6 +548,22 @@ fi
 KV_CACHE_DTYPE_ARGS=()
 if [ -n "${KV_CACHE_DTYPE:-}" ] && [ "${KV_CACHE_DTYPE}" != "auto" ]; then
     KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
+fi
+
+# Unset by default: vLLM sizes the KV page itself. Under fp8 it picks a 128-token
+# page (bf16 gets 64) -- measured as an identical 14122 CPU blocks in the offload
+# connector across both dtypes while GPU token capacity went 1,957,290 ->
+# 3,859,490, which per manager.py:199 (num_cpu_blocks scales with num_gpu_blocks)
+# can only mean the block count held and tokens/block doubled.
+#
+# A 128-token page routes MLA into aiter's Gluon b128 kernel. That path is fine
+# on its own (the gist patch above; fp8 kvnone cells pass), but every fp8 cell
+# that ALSO ran SimpleCPUOffloadConnector has died with a GPU fault -- 3/3 on
+# g17/g19/g12, at <10% pool usage, while the same connector on bf16 ran to 99.9%.
+# Set KV_BLOCK_SIZE=64 to hold fp8 on the geometry bf16 used.
+KV_BLOCK_SIZE_ARGS=()
+if [ -n "${KV_BLOCK_SIZE:-}" ] && [ "${KV_BLOCK_SIZE}" != "0" ]; then
+    KV_BLOCK_SIZE_ARGS=(--block-size "$KV_BLOCK_SIZE")
 fi
 
 # Left unset by default so vLLM derives K3's native 1M context, which is what
@@ -719,6 +748,7 @@ VLLM_CMD=(
     "${MAX_MODEL_LEN_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
+    "${KV_BLOCK_SIZE_ARGS[@]}"
     "${EAGER_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${EVAL_SERVE_ARGS[@]}"
