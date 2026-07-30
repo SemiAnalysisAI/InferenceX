@@ -5311,3 +5311,10 @@
     - "Search space mirrors the non-MTP entry's KV arms -- TP8 GPU-resident and TP8 host-DRAM offload -- so the spec-decoding delta is readable at equal concurrency, but stops at conc 16 rather than 24. The non-MTP bring-up sweep (run 30326393603) showed the GPU-resident arm already thrashing at conc >= 16 (prefix cache hit rate 2.7%, TTFT p50 86-191s) because GPU KV holds only ~3.1 max-length requests, so conc 24 would spend a full job per arm re-measuring that regime; conc 16 still exercises the DRAM tier meaningfully (62% external prefix cache hit rate). TP8-only for the same memory reason: a ~1.5 TB MXFP4 checkpoint needs ~188 GB/GPU across 8 B300s and does not fit below 8 GPUs."
     - "Sets VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1, which the upstream recipe requires on both its blackwell and nvidia paths and which this repo had never set. It defaults to 0 and is threaded into LatentMoERunner as runner_args={\"enable_k3_latent_moe_tail_fusion\": ...} at vllm/models/kimi_k3/nvidia/model.py:549 -- the same runner whose shared-experts output buffer asserted (fused_moe/runner/shared_experts.py:165, all 8 TP ranks at once) when the wider flag alignment was attempted, so every K3 run here so far has been exercising a MoE tail path upstream does not use. Enabled on its own, ahead of re-attempting gpu-memory-utilization 0.95, max-num-seqs 32, --no-enable-flashinfer-autotune or VLLM_USE_V2_MODEL_RUNNER=1, to isolate its effect."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2418
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B300 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2421
