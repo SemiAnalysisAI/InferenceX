@@ -3,15 +3,15 @@
 # MiniMax-M3 MXFP8 B200 single-node vLLM recipe with EAGLE3 speculative
 # decoding — the repo's spec-decoding=mtp variant of minimaxm3_fp8_b200.sh
 # (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3). Adds the
-# Inferact/MiniMax-M3-EAGLE3 draft head via --speculative-config with 3
+# Inferact/MiniMax-M3-EAGLE3-GQA draft head via --speculative-config with 3
 # speculative tokens. Everything else keeps the non-MTP serve shape:
 # --block-size 128 is mandatory (MSA sparse_block_size is 128; the default 16
 # misaligns sparse indexing), and --language-model-only skips the vision
 # encoder for the text-only benchmark. dp-attn=true maps to DP×EP (DEP);
 # ep>1 maps to TP+EP (TEP).
 #
-# The target uses the FlashInfer TRT-LLM attention path. The EAGLE3 drafter is
-# pinned separately to TRITON_ATTN.
+# The target uses the FlashInfer TRT-LLM attention path. The EAGLE3-GQA drafter
+# is pinned separately to FLASH_ATTN.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -27,40 +27,7 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-# The 0618 image keeps MiniMax M3 top-k indices in a persistent
-# [head_kv, max_tokens, topK] buffer for CUDA graphs. Slicing that buffer to
-# the actual prefill length is non-contiguous when TP leaves multiple local KV
-# heads, and the MSA CSR builder rejects it. Materialize the slice until the
-# image includes this fix.
-python3 - <<'PYEOF' || { echo "MiniMax M3 MSA contiguity patch failed" >&2; exit 1; }
-import importlib.util
-import pathlib
-
-spec = importlib.util.find_spec("vllm")
-if spec is None or not spec.submodule_search_locations:
-    raise RuntimeError("Could not locate the installed vllm package")
-
-target = (
-    pathlib.Path(next(iter(spec.submodule_search_locations)))
-    / "models"
-    / "minimax_m3"
-    / "nvidia"
-    / "sparse_attention_msa.py"
-)
-src = target.read_text()
-old = "            prefill_topk = topk[:, nd:num_tokens, :]\n"
-new = "            prefill_topk = topk[:, nd:num_tokens, :].contiguous()\n"
-
-if new in src:
-    print(f"[minimax-m3-msa-patch] already applied: {target}")
-elif src.count(old) == 1:
-    target.write_text(src.replace(old, new, 1))
-    print(f"[minimax-m3-msa-patch] patched: {target}")
-else:
-    raise RuntimeError(f"Expected exactly one patch anchor in {target}")
-PYEOF
-
-DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -116,14 +83,13 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
---attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true}' \
---attention-config.indexer_kv_dtype "fp8" \
+--attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}' \
 --kv-cache-dtype fp8 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
---speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}" \
---stream-interval 20 --no-enable-prefix-caching \
+--speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
+--stream-interval 32 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

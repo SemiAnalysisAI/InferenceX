@@ -138,7 +138,24 @@ SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RU
 SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
-if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.22: the two features the
+    # cquil11 fork was pinned for are merged upstream (present in v1.0.22) —
+    #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
+    #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
+    #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
+    #     the Path.is_dir() preflight would fail before sbatch is ever
+    #     called. The engine still fails loudly at runtime if the path is
+    #     genuinely missing on the compute node.
+    #   - benchmark_stage propagates srun_options (container-remap-root must
+    #     reach the agentic_srt.sh srun).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.22
+    mkdir -p recipes/sglang/qwen3.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
+        recipes/sglang/qwen3.5
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 GB300 sglang agentic: NVIDIA/srt-slurm v1.0.10 has the nginx
     # client_max_body_size fix (>1 MiB agentic warmup bodies), the
     # session-affinity frontend, and the BenchmarkType.CUSTOM / extra_mount
