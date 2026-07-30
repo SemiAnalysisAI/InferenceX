@@ -44,12 +44,12 @@ backend:
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
     NCCL_SOCKET_IFNAME: "eth0"
     NCCL_CUMEM_ENABLE: "1"
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     PYTHONHASHSEED: "42"
     PYTHONNOUSERSITE: "1"
     TRANSFORMERS_CACHE: "/hf_hub_cache"
     VLLM_ENGINE_READY_TIMEOUT_S: "7200"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
-    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
   vllm_config:
     aggregated:
@@ -62,10 +62,10 @@ backend:
       moe-backend: marlin
       attention-backend: FLASHMLA
       gpu-memory-utilization: 0.95
-      max-num-seqs: 16
+      max-num-seqs: 5
       max-num-batched-tokens: 4096
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33]}'
+      compilation-config: '{"cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33],"pass_config":{"fuse_allreduce_rms":false}}'
       enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector":"SimpleCPUOffloadConnector","kv_role":"kv_both","kv_connector_extra_config":{"cpu_bytes_to_use_per_rank":154250000000,"lazy_offload":false}}'
       no-enable-flashinfer-autotune: true
