@@ -5339,3 +5339,11 @@
     - "Pass --use-chat-template to the benchmark, as required for EAGLE-style speculative decoding"
     - "Validated on the node through the real launcher, every request successful: TEP4 concurrency 64 640/640 at 6895 tok/s (11% above the non-MTP arm's 6198 tok/s, mean TTFT 27.2s to 9.6s), and TEP4 concurrency 1 10/10 at 1233 tok/s (83% above the non-MTP arm's 672 tok/s, mean TPOT 12.6ms to 6.5ms)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
+
+- config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+  description:
+    - "Add Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration."
+    - "Add seven checked-in srt-slurm recipes selected one-to-one by the 8K/1K prefill/decode topology and concurrency entries."
+    - "Image: vllm/vllm-openai:v0.25.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2360

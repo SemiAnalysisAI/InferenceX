@@ -6,13 +6,11 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
-# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
+# MODEL_PATH: Override with pre-downloaded paths on cluster-accessible storage.
 # Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
-# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
+# portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every dgxc node. Runs for both single-node and multinode
 # launches.
-# NOTE: per-node /raid/models/* would be faster but is only populated on a
-# subset of dgxc nodes today, so we use Lustre for reliability.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -54,6 +52,9 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
+elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
@@ -127,6 +128,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+        git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
+        mkdir -p recipes/vllm/kimi-k2.6
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -299,7 +306,14 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+
+    SRTCTL_PREFLIGHT_ARGS=()
+    # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
+    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+        SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
+    fi
+
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
