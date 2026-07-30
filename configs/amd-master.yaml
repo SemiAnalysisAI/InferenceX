@@ -2204,6 +2204,34 @@ minimaxm3-fp8-mi300x-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
+# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
+# minimaxm3-fp8-mi300x-vllm-agentic, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens) and pinning
+# synthetic acceptance to the golden AL 2.83
+# (golden_al_distribution/minimaxm3_eagle3.yaml, thinking_on, K=3). Unlike the
+# CUDA recipes the drafter needs no attention_backend override: the whole server
+# runs TRITON_ATTN, which serves the MHA EAGLE3 head. The pinned ROCm nightly is
+# built from upstream 2026-06-23, after vllm-project/vllm#45546 landed
+# SupportsEagle3 on the AMD MiniMax-M3 model, so no in-place patch is needed.
+# Same TP8-only arms as the non-MTP entry (gfx942 192 GB is memory-tight),
+# trimmed at the extreme-conc end for the draft head's extra KV footprint.
+minimaxm3-fp8-mi300x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: cluster:mi300x-amds
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 14, 16] }
+
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
