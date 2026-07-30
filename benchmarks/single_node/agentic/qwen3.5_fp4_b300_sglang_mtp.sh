@@ -82,6 +82,14 @@ PARALLEL_ARGS=(
 )
 STREAM_INTERVAL=50
 
+# TP4 needs parallel tokenization to keep 256k AgentX warmups below the client
+# request timeout. Keep TP2 on SGLang's single-worker default: multi-tokenizer
+# startup races with the TP2 HiCache shared-memory initialization path.
+TOKENIZER_ARGS=()
+if [ "$TP" -ge 4 ]; then
+    TOKENIZER_ARGS=(--tokenizer-worker-num 6)
+fi
+
 # AgentX concurrency counts live session trees rather than individual HTTP
 # requests. Leave room for subagent fan-out and avoid spending HBM on graphs
 # above the batch sizes that remain useful for this long-context workload.
@@ -123,6 +131,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.80
     --stream-interval "$STREAM_INTERVAL"
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
+    "${TOKENIZER_ARGS[@]}"
     --tokenizer-path "$MODEL"
     --reasoning-parser qwen3
     --tool-call-parser qwen3_coder
