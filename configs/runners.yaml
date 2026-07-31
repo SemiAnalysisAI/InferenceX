@@ -154,6 +154,7 @@ labels:
     - b300-nv_15
     - b300-nv_16
     - b300-nv_17
+    - b300-nv_18
   b300-p1:
     - b300-nv_13
     - b300-nv_14
@@ -247,6 +248,7 @@ labels:
     - b300-nv_15
     - b300-nv_16
     - b300-nv_17
+    - b300-nv_18
   cluster:gb200-nv:
     - gb200-nv_0
     - gb200-nv_1
