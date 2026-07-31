@@ -27,7 +27,7 @@ environment:
   ETCD_LEASE_TTL: "7200"
 
 slurm:
-  time_limit: "8:00:00"
+  time_limit: "12:00:00"
 
 health_check:
   max_attempts: 2160
