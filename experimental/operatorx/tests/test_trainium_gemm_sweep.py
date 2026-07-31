@@ -105,3 +105,57 @@ def test_checked_in_trainium_dataset_passes_contract() -> None:
     assert all(row["correctness"]["validated"] for row in rows)
     assert all(row["placement"]["compiler_info_lnc"] == 2 for row in rows)
     assert all(row["compiled_program"]["lnc"] == 2 for row in rows)
+
+
+def test_tile_boundary_corpus_has_expected_plateaus_and_exact_controls() -> None:
+    operatorx = SCRIPT.parents[1]
+    corpus = MODULE.load_rows(
+        operatorx / "testlists" / "trainium_gemm_tile_boundaries.json"
+    )
+    executed = {MODULE.executed_shape(row) for row in corpus}
+    exact = [
+        row
+        for row in corpus
+        if MODULE.executed_shape(row)
+        == tuple(int(row["args"][dimension]) for dimension in ("m", "n", "k"))
+    ]
+
+    assert len(corpus) == 20
+    assert len(executed) == 11
+    assert len(exact) == 8
+    assert MODULE.executed_shape(corpus[1]) == (2048, 2048, 1024)
+    assert MODULE.executed_shape(corpus[2]) == (4096, 2048, 1024)
+
+
+def test_checked_in_tile_boundary_dataset_passes_contract() -> None:
+    operatorx = SCRIPT.parents[1]
+    dataset = json.loads(
+        (
+            operatorx
+            / "data"
+            / "trn3_lnc2_gemm_tile_boundaries_20260731.json"
+        ).read_text()
+    )
+    corpus = json.loads(
+        (
+            operatorx
+            / "testlists"
+            / "trainium_gemm_tile_boundaries.json"
+        ).read_text()
+    )
+    rows = dataset["rows"]
+
+    assert [row["name"] for row in rows] == [row["name"] for row in corpus]
+    assert len(rows) == 20
+    assert len(
+        {
+            tuple(row["executed_shape"][dimension] for dimension in ("m", "n", "k"))
+            for row in rows
+        }
+    ) == 11
+    assert sum(row["padding_flops_ratio"] == 1.0 for row in rows) == 8
+    assert dataset["methodology"]["full_artifacts_retained"] is False
+    assert all(row["device_execution_us"]["count"] == 21 for row in rows)
+    assert all(len(row["samples"]) == 21 for row in rows)
+    assert all(row["correctness"]["validated"] for row in rows)
+    assert all(row["placement"]["compiler_info_lnc"] == 2 for row in rows)

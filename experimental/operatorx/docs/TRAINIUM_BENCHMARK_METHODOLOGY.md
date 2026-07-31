@@ -43,6 +43,12 @@ row records both requested and executed shapes, logical and executed FLOPs/bytes
 and the padding FLOPs ratio. SimulatorX projects the requested logical shape, so NKI
 padding remains visible as implementation overhead.
 
+The follow-on `testlists/trainium_gemm_tile_boundaries.json` corpus contains 20
+requests around the 2048-row, 2048-column, and 1024-reduction padding boundaries.
+It resolves to 11 executables and includes eight exact controls. Requests immediately
+below, at, and above a boundary deliberately form shared-executable latency plateaus;
+the exact controls separate native component behavior from padding effects.
+
 ## Acceptance gates
 
 An executable is accepted only when:
@@ -103,3 +109,13 @@ python scripts/trainium_gemm_sweep.py \
 
 The command prints each distinct executable as it runs, writes the compact result,
 and confirms deletion of its temporary profile root.
+
+The tile-boundary follow-on uses the same contract:
+
+```bash
+python scripts/trainium_gemm_sweep.py \
+  --testlist testlists/trainium_gemm_tile_boundaries.json \
+  --json-out data/trn3_lnc2_gemm_tile_boundaries_20260731.json \
+  --samples 21 \
+  --warmup 10
+```

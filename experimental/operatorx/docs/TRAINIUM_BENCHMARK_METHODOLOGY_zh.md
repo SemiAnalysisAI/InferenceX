@@ -40,6 +40,12 @@
 执行 FLOPs/字节数，以及 padding FLOPs 比例。SimulatorX 预测请求的逻辑 shape，
 因此 NKI padding 会作为实现开销保留在误差中。
 
+后续的 `testlists/trainium_gemm_tile_boundaries.json` 集合包含 20 个请求，覆盖
+2048 行、2048 列和 1024 reduction 维度的 padding 边界，共对应 11 个可执行
+程序，并包含八个完全对齐的对照 shape。边界前一位、边界值及边界后一位的请求会
+有意形成共享可执行程序的延迟平台；完全对齐的对照组用于区分原生组件行为与
+padding 影响。
+
 ## 验收门槛
 
 只有满足下列条件的可执行程序才会被接受：
@@ -95,3 +101,13 @@ python scripts/trainium_gemm_sweep.py \
 ```
 
 命令会逐个打印不同的可执行程序，写入精简结果，并确认临时 profile 根目录已删除。
+
+边界后续扫描采用相同的测量契约：
+
+```bash
+python scripts/trainium_gemm_sweep.py \
+  --testlist testlists/trainium_gemm_tile_boundaries.json \
+  --json-out data/trn3_lnc2_gemm_tile_boundaries_20260731.json \
+  --samples 21 \
+  --warmup 10
+```

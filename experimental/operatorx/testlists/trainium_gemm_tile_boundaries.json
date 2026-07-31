@@ -1,0 +1,22 @@
+[
+  {"name":"base-m2048-n2048-k1024","type":"gemm","args":{"m":2048,"n":2048,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"m-boundary-2047","type":"gemm","args":{"m":2047,"n":2048,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"m-boundary-2049","type":"gemm","args":{"m":2049,"n":2048,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"n-boundary-2047","type":"gemm","args":{"m":2048,"n":2047,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"n-boundary-2049","type":"gemm","args":{"m":2048,"n":2049,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"k-boundary-1023","type":"gemm","args":{"m":2048,"n":2048,"k":1023,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"k-boundary-1025","type":"gemm","args":{"m":2048,"n":2048,"k":1025,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"m-boundary-4095","type":"gemm","args":{"m":4095,"n":2048,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"m-exact-4096","type":"gemm","args":{"m":4096,"n":2048,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"m-boundary-4097","type":"gemm","args":{"m":4097,"n":2048,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"n-boundary-4095","type":"gemm","args":{"m":2048,"n":4095,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"n-exact-4096","type":"gemm","args":{"m":2048,"n":4096,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"n-boundary-4097","type":"gemm","args":{"m":2048,"n":4097,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"k-boundary-2047","type":"gemm","args":{"m":2048,"n":2048,"k":2047,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"k-exact-2048","type":"gemm","args":{"m":2048,"n":2048,"k":2048,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"k-boundary-2049","type":"gemm","args":{"m":2048,"n":2048,"k":2049,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"exact-m4096-n4096-k1024","type":"gemm","args":{"m":4096,"n":4096,"k":1024,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"exact-m4096-n2048-k2048","type":"gemm","args":{"m":4096,"n":2048,"k":2048,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"exact-m2048-n4096-k2048","type":"gemm","args":{"m":2048,"n":4096,"k":2048,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}},
+  {"name":"exact-m4096-n4096-k2048","type":"gemm","args":{"m":4096,"n":4096,"k":2048,"dtype_a":"bf16","dtype_b":"bf16","dtype_out":"bf16"}}
+]
