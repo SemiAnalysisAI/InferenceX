@@ -852,7 +852,7 @@ kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
   # were never validated on K3 and an unrecognised flag is a silent
   # server-start failure.
   #
-  # c8 and c16.
+  # c8, c16, and c32.
   #
   # c8 is the peak of the no-offload fp8 curve (682.63 tok/s/GPU, run
   # 30525206671) and is now measured with LMCache: 601.64 tok/s/GPU, -11.9%
@@ -870,10 +870,14 @@ kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
   # host tier exists for. If LMCache cannot win at c16 it has no case on this
   # model.
   #
+  # c32 extends the capacity-pressure curve after LMCache recovered c16 from
+  # 441.99 to 607.45 tok/s/GPU when L1 grew from 512 to 907 GB. This tests
+  # whether the larger host tier can keep helping once the live working set
+  # doubles again.
+  #
   # max_num_seqs stays 32. aiperf bounds in-flight requests by --concurrency,
-  # so c16 never presents more than 16 sequences; 32 is still 2x headroom and
-  # raising it would re-inflate the chunked MLA workspace that caused the
-  # attempt-1 OOM.
+  # so it provides 2x headroom at c16 and exactly covers c32. Raising it would
+  # re-inflate the chunked MLA workspace that caused the attempt-1 OOM.
   #
   # c8 repeats deliberately: it gives a same-run, same-code pair against c16
   # rather than a cross-run comparison.
@@ -888,7 +892,7 @@ kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8, 16, 32] }
 
 kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
   # fp8 KV + SimpleCPUOffloadConnector in LAZY mode. One variable off the cell
