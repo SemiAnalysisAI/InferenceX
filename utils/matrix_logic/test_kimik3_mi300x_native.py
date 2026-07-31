@@ -268,6 +268,16 @@ def test_canary_uses_built_image_without_legacy_runtime_overlays() -> None:
     assert "KIMIK3_AITER_OVERLAY_DIR" not in server_source
 
 
+def test_probe_preflight_sees_full_node_but_kernel_step_uses_one_gpu() -> None:
+    launcher_source = NATIVE_LAUNCHER.read_text()
+
+    probe_block = launcher_source.split(
+        'if [[ "${KIMIK3_PROBE_ONLY:-0}" == "1" ]]; then', maxsplit=1
+    )[1].split("# --- Allocation", maxsplit=1)[0]
+    assert "--gres=gpu:8" in probe_block
+    assert 'srun --overlap --jobid="$JOB_ID" \\\n        --nodes=1 \\\n        --ntasks=1 \\\n        --gres=gpu:1 \\\n' in probe_block
+
+
 def write_executable(path: Path, body: str) -> None:
     path.write_text(body)
     path.chmod(0o755)

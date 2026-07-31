@@ -287,7 +287,7 @@ if [[ "${KIMIK3_PROBE_ONLY:-0}" == "1" ]]; then
             --nodelist="$PROBE_NODE" \
             --nodes=1 \
             --ntasks-per-node=1 \
-            --gres=gpu:1 \
+            --gres=gpu:8 \
             --cpus-per-task=32 \
             --time="${KIMIK3_PROBE_TIME_MINUTES:-60}" \
             --no-shell \
@@ -329,6 +329,7 @@ if [[ "${KIMIK3_PROBE_ONLY:-0}" == "1" ]]; then
     srun --overlap --jobid="$JOB_ID" \
         --nodes=1 \
         --ntasks=1 \
+        --gres=gpu:1 \
         --container-image="$IMAGE_PATH" \
         --container-remap-root \
         --container-writable \
