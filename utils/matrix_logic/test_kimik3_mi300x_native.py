@@ -32,11 +32,13 @@ CANARY_IMAGE_STAGE_SCRIPT = (
 DEFAULT_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds.sh"
 NATIVE_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds-native-multinode.sh"
 IMAGE = "vllm/vllm-openai-rocm:kimi-k3"
-CANARY_IMAGE_NAME = "k3-gfx942-vllm-85c84a8-aiter-v0.1.19-situv2-4471.sqsh"
+CANARY_IMAGE_NAME = (
+    "k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471.sqsh"
+)
 CANARY_IMAGE_PATH = f"/raid/hf-hub-cache/inferencex/squash/{CANARY_IMAGE_NAME}"
 CANARY_IMAGE_URL = f"http://10.162.224.35:18080/{CANARY_IMAGE_NAME}"
 CANARY_IMAGE_SHA256 = (
-    "0c7cbbce8e5a18a56729c4ef806e1143e52dc22eef4426c0f79dc0810b29585d"
+    "d2e3b7ee34aac7c53ddf48b6e4ede887f0c9861df1d4fa9c6dd1978fde84f9a9"
 )
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
@@ -89,6 +91,7 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         "NATIVE_MULTINODE=1",
         "KIMIK3_NODELIST=chi-mi300x-054,chi-mi300x-043",
         "AITER_SITUV2_A8W4=0",
+        "VLLM_K3_GFX942_INT4=1",
         "KIMIK3_STARTUP_TIMEOUT_SECONDS=7200",
         "NCCL_DEBUG=INFO",
         "NCCL_DEBUG_SUBSYS=INIT,NET",
@@ -121,6 +124,7 @@ def server_env(rank: int = 0) -> dict[str, str]:
         "MULTINODE_GPUS_PER_NODE": "8",
         "MULTINODE_NODE_RANK": str(rank),
         "MULTINODE_MASTER_ADDR": "node-a",
+        "VLLM_K3_GFX942_INT4": "1",
         "KIMIK3_VLLM_DRY_RUN": "1",
         # The server script runs Python-based source guards inside the vLLM
         # image. Make the active test interpreter discoverable when pytest was
@@ -183,6 +187,7 @@ def test_every_rank_pairs_triton_mla_with_aiter_moe(node_rank: int) -> None:
         ("CONC_LIST", "4 8", "one concurrency"),
         ("CONC_LIST", "16", "1, 2, 4, or 8"),
         ("AITER_SITUV2_A8W4", "auto", "0 or 1"),
+        ("VLLM_K3_GFX942_INT4", "0", "must be explicitly enabled"),
     ],
 )
 def test_server_rejects_out_of_contract_values(
@@ -204,6 +209,12 @@ def test_aiter_mode_is_not_defaulted_and_accepts_both_modes() -> None:
         result = run_server(env)
         assert result.returncode == 0
         assert f"AITER_SITUV2_A8W4={value}" in result.stdout
+
+
+def test_gfx942_int4_requantization_is_explicitly_enabled() -> None:
+    result = run_server(server_env())
+    assert result.returncode == 0, result.stderr
+    assert "VLLM_K3_GFX942_INT4=1" in result.stdout
 
 
 def test_canary_patch_extends_vllm_mxfp4_capabilities_for_gfx942_k3(

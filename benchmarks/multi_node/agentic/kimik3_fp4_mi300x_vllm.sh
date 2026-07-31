@@ -79,7 +79,15 @@ if [[ -n "${AITER_SITUV2_A8W4+set}" ]]; then
     fi
 fi
 
+# gfx942 cannot execute K3's native scaled-MXFP4 expert GEMM. The canary image
+# carries #50319's explicit load-time conversion to groupwise int4; require the
+# opt-in rather than silently falling back to the known-broken WFP4 path.
+if [[ "${VLLM_K3_GFX942_INT4:-}" != "1" ]]; then
+    fail "VLLM_K3_GFX942_INT4=1 must be explicitly enabled for gfx942 K3"
+fi
+
 export VLLM_ROCM_USE_AITER=1
+export VLLM_K3_GFX942_INT4
 export SAFETENSORS_FAST_GPU=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
@@ -224,6 +232,7 @@ if [[ "$MULTINODE_NODE_RANK" == "1" ]]; then
 fi
 
 echo "AITER_SITUV2_A8W4=${AITER_SITUV2_A8W4-unset}"
+echo "VLLM_K3_GFX942_INT4=$VLLM_K3_GFX942_INT4"
 printf 'vLLM command:'
 printf ' %q' "${VLLM_CMD[@]}"
 printf '\n'

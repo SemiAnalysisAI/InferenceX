@@ -2256,8 +2256,9 @@ minimaxm3-fp4-mi355x-vllm-agentic:
 #
 # NATIVE_MULTINODE=1 opts this config into
 # runners/launch_mi300x-amds-native-multinode.sh; every other MI300X config
-# keeps the existing single-node launcher untouched. The exact-shape gfx942
-# kernel gate validates the A16W4 path, so AITER_SITUV2_A8W4 is pinned to 0.
+# keeps the existing single-node launcher untouched. gfx942 has no native
+# scaled-MXFP4 matmul, so this canary explicitly opts into #50319's load-time
+# groupwise-int4 conversion; AITER_SITUV2_A8W4 remains pinned to 0.
 kimik3-fp4-mi300x-vllm-agentic:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
@@ -2285,6 +2286,7 @@ kimik3-fp4-mi300x-vllm-agentic:
           # hang from a physical-node RCCL transport failure.
           - "KIMIK3_NODELIST=chi-mi300x-054,chi-mi300x-043"
           - "AITER_SITUV2_A8W4=0"
+          - "VLLM_K3_GFX942_INT4=1"
           # Canary-only diagnostic bound; production keeps the 7200s default.
           - "KIMIK3_STARTUP_TIMEOUT_SECONDS=7200"
           # Canary-only RCCL bootstrap evidence. Remove after the transport
@@ -2295,12 +2297,12 @@ kimik3-fp4-mi300x-vllm-agentic:
           # status=12/vendor_err=10. Force sockets to prove the K3/model path
           # independently of that node-fabric problem.
           - "NCCL_IB_DISABLE=1"
-          # Canary-only immutable image built from vLLM #50319 at 85c84a8,
-          # AITER v0.1.19, and the SiTUv2 stage1 backport from AITER #4471.
-          # Each node downloads it privately and verifies the digest before use.
-          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-aiter-v0.1.19-situv2-4471.sqsh"
-          - "KIMIK3_CANARY_SQUASH_SHA256=0c7cbbce8e5a18a56729c4ef806e1143e52dc22eef4426c0f79dc0810b29585d"
-          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-aiter-v0.1.19-situv2-4471.sqsh"
+          # Canary-only immutable image based on vLLM #50319 at 85c84a8, with
+          # the current #50319 K3 method routing/int4 conversion and AITER
+          # #4471's SiTUv2 stage1 fix. Each node verifies the digest before use.
+          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471.sqsh"
+          - "KIMIK3_CANARY_SQUASH_SHA256=d2e3b7ee34aac7c53ddf48b6e4ede887f0c9861df1d4fa9c6dd1978fde84f9a9"
+          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471.sqsh"
         decode:
           num-worker: 0
           tp: 8
