@@ -276,6 +276,19 @@ else
     export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
 
     # =========================================================================
+    # GLM-5.2-MXFP4 disagg (benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg.sh)
+    # Ionic MSN-safe MoRI IO QP tuning; overrides global MoRI defaults only when
+    # this model runs in PD/disagg mode (DISAGG=true). Other models/topologies unchanged.
+    # =========================================================================
+    if [[ "$MODEL_NAME" == "GLM-5.2-MXFP4" && "${DISAGG:-false}" == "true" ]]; then
+        export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+        export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-8192}"
+        export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-16384}"
+        export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-2}"
+        export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
+    fi
+
+    # =========================================================================
     # DeepSeek-V4-Pro PD recipe overrides
     # Placed at the end of the SGLang env block so it wins over the global
     # MoRI/SGLang defaults set above. Mirrors the validated DSv4 manual PD
