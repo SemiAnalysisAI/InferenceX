@@ -828,6 +828,39 @@ kimik3-fp4-mi355x-vllm-agentic-fp8none:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16] }
 
+kimik3-fp4-mi355x-vllm-agentic-fp8none-c1:
+  # The one missing point on the fp8 no-offload curve.
+  #
+  # c1 has NO result at any memory fraction. It died at num_computed_tokens
+  # 373,248 at 0.88 (runs 30453589555 and 30525206671) and at 0.90 (run
+  # 30521327099), every time with num_running_reqs=1 and KV usage 10-21% --
+  # the probabilistic chunked-prefill workspace OOM, not KV exhaustion.
+  # c1 is the WORST case for it: one lane replays the deepest trajectories
+  # with nothing to interleave, so it reaches the fatal band early and every
+  # time.
+  #
+  # The recipe now drops GPU_MEM_UTIL to 0.85 for CONC=1 only. At c1 the pool
+  # is hugely oversized anyway (13 requests sustained against a 1.96M-token
+  # pool in the bf16 run), so the ~530K tokens given up were never usable,
+  # while the extra ~13 GiB/rank of headroom goes to the allocation that is
+  # actually killing the cell.
+  #
+  # If this still dies, the memory fraction is not the lever and the
+  # aggregate-chunk cap in mla_attention.py is required -- do not keep
+  # shaving GMU.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1] }
+
 kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
   # LMCache on Kimi-K3, fp8 KV, c8 -- the first attempt with an LMCache build
   # that actually supports this model.
