@@ -22,10 +22,15 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail single-node fixed-sequence jobs when GPU power is invalid"
+                description: "Fail fixed-sequence jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
+            power-producer-sha:
+                description: "Expected srt-slurm producer git commit for power validation"
+                required: false
+                type: string
+                default: ""
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -61,10 +66,15 @@ on:
                 type: string
                 default: ""
             require-power:
-                description: "Fail single-node fixed-sequence jobs when GPU power is invalid"
+                description: "Fail fixed-sequence jobs when GPU power is invalid"
                 required: false
                 type: boolean
                 default: false
+            power-producer-sha:
+                description: "Expected srt-slurm producer git commit for power validation"
+                required: false
+                type: string
+                default: ""
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -196,6 +206,8 @@ jobs:
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
+            power-producer-sha: ${{ inputs.power-producer-sha }}
             ref: ${{ inputs.ref }}
 
     test-sweep-multi-node-evals:
