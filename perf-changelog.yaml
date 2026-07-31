@@ -5355,3 +5355,9 @@
     - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
+
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Update DSpark recipe: K=7 (AL 3.84), native offload, GPU-resident conc [1,2,4,8,12,14,16,18], offload conc [14,16,18,20,22,24], prefix-match-unit 64 (GPU-resident only), gsm8k eval."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2419
