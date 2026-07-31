@@ -321,7 +321,7 @@ if [[ "${KIMIK3_PROBE_ONLY:-0}" == "1" ]]; then
     printf '%s\n' "$probe_preflight" | grep -q '^INFERENCEX_KIMIK3_PREFLIGHT ' ||
         fail "probe node $PROBE_NODE produced no preflight record"
 
-    IMAGE_PATH="$KIMIK3_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    IMAGE_PATH="${KIMIK3_SQUASH_FILE_OVERRIDE:-$KIMIK3_SQUASH_DIR/$(printf '%s' "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh}"
     PROBE_LOG="$SERVER_LOG_DIR/kernel_probe.log"
     probe_rc=0
 

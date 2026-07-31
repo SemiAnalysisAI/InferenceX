@@ -341,12 +341,18 @@ def selftest_situ_fp32(device: str = "cpu") -> float:
         (0.5, 2.0, 7.0),
         (1.5, 0.8, 7.0),
     ):
-        vec = situ_v2(g.to(device=device, dtype=torch.float32),
-                      u.to(device=device, dtype=torch.float32),
-                      beta, lbeta, limit).double().cpu()
+        # Compare both implementations at the exact same representable inputs.
+        # Using the original float64 samples for the scalar path also measures
+        # float64-to-float32 input rounding, which is not a formula error and is
+        # large enough to make this frozen 1e-5 gate host-dependent.
+        g32 = g.to(device=device, dtype=torch.float32)
+        u32 = u.to(device=device, dtype=torch.float32)
+        vec = situ_v2(g32, u32, beta, lbeta, limit).double().cpu()
         sca = torch.tensor(
             [_situ_v2_scalar(float(a), float(b), beta, lbeta, limit)
-             for a, b in zip(g.tolist(), u.tolist())],
+             for a, b in zip(
+                 g32.double().cpu().tolist(), u32.double().cpu().tolist()
+             )],
             dtype=torch.float64,
         )
         worst = max(worst, float((vec - sca).abs().max()))

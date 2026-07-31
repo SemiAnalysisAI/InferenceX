@@ -276,6 +276,26 @@ def test_probe_preflight_sees_full_node_but_kernel_step_uses_one_gpu() -> None:
     )[1].split("# --- Allocation", maxsplit=1)[0]
     assert "--gres=gpu:8" in probe_block
     assert 'srun --overlap --jobid="$JOB_ID" \\\n        --nodes=1 \\\n        --ntasks=1 \\\n        --gres=gpu:1 \\\n' in probe_block
+    assert (
+        'IMAGE_PATH="${KIMIK3_SQUASH_FILE_OVERRIDE:-'
+        "$KIMIK3_SQUASH_DIR/"
+    ) in probe_block
+
+
+def test_situ_selftest_compares_scalar_and_vector_paths_at_identical_fp32_inputs() -> None:
+    oracle_source = (
+        REPO_ROOT / "benchmarks" / "kernel_probe" / "k3_oracle.py"
+    ).read_text()
+    selftest_source = oracle_source.split(
+        "def selftest_situ_fp32", maxsplit=1
+    )[1].split("def selftest_quant_roundtrip", maxsplit=1)[0]
+
+    assert "g32 = g.to(device=device, dtype=torch.float32)" in selftest_source
+    assert "u32 = u.to(device=device, dtype=torch.float32)" in selftest_source
+    assert "situ_v2(g32, u32," in selftest_source
+    assert "g32.double().cpu().tolist()" in selftest_source
+    assert "u32.double().cpu().tolist()" in selftest_source
+    assert "zip(g.tolist(), u.tolist())" not in selftest_source
 
 
 def write_executable(path: Path, body: str) -> None:
