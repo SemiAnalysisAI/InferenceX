@@ -1531,6 +1531,24 @@ dsv4-fp4-mi355x-vllm-agentic:
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [64, 72], router: { name: vllm-router, version: "0.1.14" } }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "9229067cec0b3a63bb8a39368d101db7ac0bc3c1" }, conc-list: [32, 40, 48] }
 
+dsv4-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai:nightly-0f17394564fa2fccd332cf63321314884c15ee37
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      #- { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "v0.3.12" }, spec-decoding: mtp, conc-list: [48], router: { name: vllm-router, version: "0.1.14" } }
+      #- { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "v0.5.2" }, spec-decoding: mtp, conc-list: [48], router: { name: vllm-router, version: "0.1.14" } }
+      # DP+TP 160.9 GiB   
+      # TP    134.9 GiB   
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64] }
+
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
