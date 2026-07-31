@@ -39,6 +39,7 @@ backend:
   type: vllm
   connector: null
   aggregated_environment:
+    CUDA_LAUNCH_BLOCKING: "1"
     GLOO_SOCKET_IFNAME: "eth0"
     HF_HUB_CACHE: "/hf_hub_cache"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
