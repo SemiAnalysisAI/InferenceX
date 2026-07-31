@@ -5362,4 +5362,4 @@
     - "Run the Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration on the b200-new runner."
     - "Remove the 1P/1D DEP4-to-DEP8 concurrency-1024 configuration."
     - "Image: vllm/vllm-openai:v0.25.1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2438
