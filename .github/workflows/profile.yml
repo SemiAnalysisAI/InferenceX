@@ -49,13 +49,30 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
+      - name: Checkout priority scheduler tooling
+        if: ${{ inputs.ref && inputs.ref != '' }}
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-priority
+          persist-credentials: false
 
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - id: gen
         name: Generate matrix via script
         run: |
-          pip install pydantic
           CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
-          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
+          PRIORITY_ROOT="${GITHUB_WORKSPACE}"
+          if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
+            PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
+          fi
+          CONFIG_JSON=$(printf '%s' "$CONFIG_JSON" | uv run --no-project --with pyyaml --python 3.12 \
+            "${PRIORITY_ROOT}/utils/ci_priority.py" \
+            --policy "${PRIORITY_ROOT}/configs/ci-priority.yaml" \
+            --event-name "${{ github.event_name }}" \
+            --queue-namespace "${{ github.run_id }}:${{ github.run_attempt }}" \
+            --labels-json '${{ inputs.moe-debug && '["ci-patchwork"]' || '[]' }}')
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
@@ -99,9 +116,23 @@ jobs:
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     name: >-
-      ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
+      p${{ matrix.config.priority }} | ${{ matrix.config.model-prefix }} ${{ matrix.config.precision }} ${{ matrix.config.runner }} ${{ matrix.config.framework }}
       TP${{ matrix.config.tp }}${{ matrix.config.pp != '' && matrix.config.pp != '1' && format('/PP{0}', matrix.config.pp) || '' }}${{ matrix.config.dcp-size != '' && matrix.config.dcp-size != '1' && format('/DCP{0}', matrix.config.dcp-size) || '' }}${{ matrix.config.pcp-size != '' && matrix.config.pcp-size != '1' && format('/PCP{0}', matrix.config.pcp-size) || '' }} c${{ matrix.config.conc }}
-    runs-on: ${{ matrix.config.runner }}
+    runs-on: >-
+      ${{ fromJSON(
+        vars.PRIORITY_SCHEDULER_ENABLED == 'true' &&
+        format(
+          '["self-hosted",{0},{1},{2}]',
+          toJSON(matrix.config.runner),
+          toJSON(format(
+            'ci-job-{0}-{1}',
+            matrix.config.priority,
+            matrix.config['queue-token']
+          )),
+          toJSON(format('ci-attempt-{0}', github.run_attempt))
+        ) ||
+        format('[{0}]', toJSON(matrix.config.runner))
+      ) }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}

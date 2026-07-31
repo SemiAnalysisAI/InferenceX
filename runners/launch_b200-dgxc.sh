@@ -6,14 +6,11 @@ SLURM_ACCOUNT="benchmark"
 
 set -x
 
-# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
+# MODEL_PATH: Override with pre-downloaded paths on cluster-accessible storage.
 # Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
-# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
+# portability, but we resolve to pre-staged paths here to avoid repeated
 # downloading on every dgxc node. Runs for both single-node and multinode
 # launches.
-# NOTE: per-node /raid/models/* would be faster but is only populated on a
-# subset of dgxc nodes today, so we use Lustre for reliability.
-PREFLIGHT_ARGS=()
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
@@ -23,7 +20,6 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     if [[ $FRAMEWORK == "dynamo-sglang" && $SPEC_DECODING == "mtp" ]]; then
         export MODEL_PATH="/scratch/fsw/models/DeepSeek-V4-Pro-NVFP4"
-        PREFLIGHT_ARGS=(--no-preflight)
     else
         SELECTED_MODEL_PATH=""
         if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
@@ -60,6 +56,9 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
+elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
@@ -75,9 +74,12 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
-    # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
     export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
+elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+    # Native MXFP4 checkpoint, pre-staged on the SRE-managed Lustre tree.
+    export MODEL_PATH="/lustre/fsw/models/Kimi-K3"
+    export SRT_SLURM_MODEL_PREFIX="kimik3"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"
@@ -110,9 +112,20 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
+        # Direct-vLLM agentic experiment (Variant D): srt-slurm PR #278
+        # (kylliang/direct-aggregate-vllm) adds frontend.type: vllm — `vllm
+        # serve` owns the OpenAI port itself, no Dynamo layer. The fork branch
+        # carries PR #278 plus the multi-node extension (vLLM-native
+        # --master-addr/--nnodes/--node-rank serve + headless non-leader
+        # ranks) so the 2-node TP8xPP2 topology can run.
+        git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
         cd "$SRT_REPO_DIR" || exit 1
+        if [[ $MODEL_PREFIX == "kimik3" ]]; then
+            mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+            cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+                recipes/vllm/kimi-k3/agentic || exit 1
+        fi
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -125,6 +138,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout main
         mkdir -p recipes/sglang/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+        git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
+        mkdir -p recipes/vllm/kimi-k2.6
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        mkdir -p recipes/vllm/minimax-m3/b200-fp4
+        cp -rT \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b200-fp4" \
+            recipes/vllm/minimax-m3/b200-fp4
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -140,6 +166,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout a98738de9b2233459b5456e9ed71af09ce893f92
         mkdir -p recipes/sglang/dsr1/b200-fp4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
+    elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout v1.0.29
+        mkdir -p recipes/trtllm/kimi-k25-nvfp4/b200-fp4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/kimi-k2.5/disagg/trtllm_dynamo/b200-fp4" recipes/trtllm/kimi-k25-nvfp4/b200-fp4
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -148,7 +180,23 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    UV_VERSION="0.12.0"
+    UV_TARGET="uv-x86_64-unknown-linux-gnu"
+    UV_ARCHIVE="$GITHUB_WORKSPACE/.local/${UV_TARGET}.tar.gz"
+    mkdir -p "$UV_INSTALL_DIR"
+    curl -fL \
+        --retry 3 \
+        --retry-delay 2 \
+        --connect-timeout 15 \
+        --max-time 120 \
+        -o "$UV_ARCHIVE" \
+        "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TARGET}.tar.gz"
+    echo "eaf842262aa1c418d8ecc5605f02ee1ebfd369124fa48548e85f9481a47831a9  $UV_ARCHIVE" | sha256sum -c -
+    tar -xzf "$UV_ARCHIVE" \
+        -C "$UV_INSTALL_DIR" \
+        --strip-components=1 \
+        "${UV_TARGET}/uv" \
+        "${UV_TARGET}/uvx"
     export PATH="$UV_INSTALL_DIR:$PATH"
 
     if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -213,6 +261,22 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export OSL="$OSL"
     export EVAL_ONLY="${EVAL_ONLY:-false}"
 
+    # Agentic runs bind-mount two persistent caches into every worker
+    # container (Lustre, shared across nodes): aiperf's content-addressed
+    # dataset mmap cache and the HF hub cache holding the trace dataset
+    # download. The container-side paths are referenced by the agentic
+    # recipes' benchmark.env (AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache,
+    # HF_HUB_CACHE=/hf_hub_cache).
+    DEFAULT_MOUNTS_BLOCK=""
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        HF_HUB_CACHE_HOST_PATH="/lustre/fsw/gharunners/hf-hub-cache"
+        mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
+        chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+        DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    fi
+
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
     echo "Creating srtslurm.yaml configuration..."
@@ -240,6 +304,7 @@ containers:
   "${IMAGE}": "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
 use_exclusive_sbatch_directive: true
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
     echo "Generated srtslurm.yaml:"
@@ -267,7 +332,14 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_PREFLIGHT_ARGS=()
+    # These weights are staged on the Slurm compute nodes, not the login node.
+    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]] ||
+       [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $SPEC_DECODING == "mtp" ]]; then
+        SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
+    fi
+
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output

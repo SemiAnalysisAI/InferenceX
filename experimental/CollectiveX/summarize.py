@@ -29,11 +29,14 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
     return documents
 
 
-def _identity(document: dict) -> tuple[str, str, str, str, int]:
+def _identity(document: dict) -> tuple[str, str, str, str, str, int, str]:
     factors = document["identity"]["case_factors"]
     case = factors["case"]
+    # backend and precision are part of the sort key so a cell's per-backend and
+    # per-precision (bf16/fp8) attempts sort adjacently instead of interleaving.
     return (
-        factors["sku"], case["suite"], case["routing"], case["phase"], case["ep"],
+        factors["sku"], case["backend"], case["suite"], case["routing"],
+        case["phase"], case["ep"], case["precision"],
     )
 
 
@@ -57,15 +60,14 @@ def render(documents: list[dict]) -> str:
         )
         lines.append("")
     lines += [
-        "| ver | sku | backend | suite | phase | routing | ep | outcome | T* | p50 us | p99 us |",
-        "|--:|---|---|---|---|---|--:|---|--:|--:|--:|",
+        "| ver | sku | backend | precision | suite | phase | routing | ep | outcome | T* | p50 us | p99 us |",
+        "|--:|---|---|---|---|---|---|--:|---|--:|--:|--:|",
     ]
     for document in documents:
-        sku, suite, routing, phase, ep = _identity(document)
-        backend = document["identity"]["case_factors"]["case"]["backend"]
+        sku, backend, suite, routing, phase, ep, precision = _identity(document)
         token, p50, p99 = _headline(document)
         lines.append(
-            f"| {document['version']} | {sku} | `{backend}` | {suite} | {phase} | "
+            f"| {document['version']} | {sku} | `{backend}` | {precision} | {suite} | {phase} | "
             f"{routing} | {ep} | "
             f"{document['outcome']['status']} | {token} | {p50} | {p99} |"
         )
