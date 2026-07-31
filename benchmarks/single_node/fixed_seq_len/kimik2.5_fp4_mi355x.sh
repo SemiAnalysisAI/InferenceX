@@ -35,6 +35,10 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
+if [ "$MAX_MODEL_LEN" -lt 9472 ]; then
+    MAX_MODEL_LEN=9472
+fi
+
 # If the machine runs a MEC FW older than 177, RCCL
 # cannot reclaim some memory.
 # Disable that features to avoid crashes.
@@ -47,6 +51,12 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+export VLLM_ROCM_USE_SKINNY_GEMM=0
+export AITER_MXFP4_INTERMEDIATE=1
+export AITER_BYPASS_TUNE_CONFIG=0
+export AITER_MOE_SORT_BACKEND=auto
+export OMP_NUM_THREADS=1
 
 # Disable AITER RMSNorm for TP < 8 due to accuracy issues
 if [ "${TP}" -lt 8 ]; then
@@ -59,9 +69,6 @@ else
   EP=" "
 fi
 
-# following AMD andy luo's recipe
-# https://x.com/linluo77/status/2017024513595301985
-
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -69,10 +76,13 @@ set -x
 vllm serve $MODEL --port $PORT \
 --tensor-parallel-size=$TP \
 $EP \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization 0.85 \
 --max-model-len $MAX_MODEL_LEN \
---block-size=1 \
---no-enable-prefix-caching \
+--kv-cache-dtype fp8 \
+--block-size 16 \
+--max-num-batched-tokens 16384 \
+--max-num-seqs 512 \
+--async-scheduling \
 --trust-remote-code \
 --no-enable-prefix-caching \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
