@@ -46,6 +46,12 @@
 有意形成共享可执行程序的延迟平台；完全对齐的对照组用于区分原生组件行为与
 padding 影响。
 
+用于模型开发的后续集合 `testlists/trainium_gemm_exact_holdout.json` 包含 24 个
+完全对齐的可执行程序：M/N 取 {2048, 4096, 6144, 8192}，K 取
+{1024, 2048, 3072, 4096}，每个 K 恰好出现六次。其中 16 行标记为 `train`；
+另外八行完整留出四组 M/N 组合，每组包含两个 K。冻结后的数据划分可确保输出
+wave 尾项不会在拟合时看到用于评估的 M/N 组合。
+
 ## 验收门槛
 
 只有满足下列条件的可执行程序才会被接受：
@@ -57,8 +63,9 @@ padding 影响。
 3. **编译程序：**保留 NEFF 与 compiler-info 的 SHA-256；每份 profile 都包含
    matmul 指令。
 4. **工作量身份：**每份 profile 的 `hardware_flops` 与执行 shape 的
-   `2*M*N*K` 偏差不超过 0.01%。profiler 的推导计数器可能遗漏边界 tile；
-   编译 shape 和输出正确性仍由独立门槛验证。
+   `2*M*N*K` 偏差不超过 0.01%，或绝对差不超过单个 M 行平面的
+   `2*N*K` FLOPs。后一上限覆盖已观测到的推导计数器边界遗漏；编译 shape 和
+   输出正确性仍由独立门槛验证。
 5. **计时：**精确保留 21 个正数 `total_time` 样本，并给出
    p10/p50/p90/min/max。
 6. **流量证据：**每份 profile 都包含正数 HBM 读写计数。
@@ -108,6 +115,16 @@ python scripts/trainium_gemm_sweep.py \
 python scripts/trainium_gemm_sweep.py \
   --testlist testlists/trainium_gemm_tile_boundaries.json \
   --json-out data/trn3_lnc2_gemm_tile_boundaries_20260731.json \
+  --samples 21 \
+  --warmup 10
+```
+
+完全对齐的训练/留出网格同样采用一次性测量契约：
+
+```bash
+python scripts/trainium_gemm_sweep.py \
+  --testlist testlists/trainium_gemm_exact_holdout.json \
+  --json-out data/trn3_lnc2_gemm_exact_holdout_20260731.json \
   --samples 21 \
   --warmup 10
 ```

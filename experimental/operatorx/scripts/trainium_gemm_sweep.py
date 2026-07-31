@@ -186,8 +186,13 @@ def validate_summary(
     # neuron-profile's derived hardware counter can omit a small boundary-tile
     # contribution even when the compiled GEMM and output are complete. Keep
     # this as a tight diagnostic gate rather than treating it as an exact ABI.
-    relative_flops_error = abs(observed_flops - expected_flops) / expected_flops
-    if relative_flops_error > 1e-4:
+    absolute_flops_error = abs(observed_flops - expected_flops)
+    relative_flops_error = absolute_flops_error / expected_flops
+    # Larger exact shapes can lose exactly one M-row plane in the profiler's
+    # derived counter (2*N*K FLOPs). Correctness and compiler-shape gates remain
+    # independent, so accept no more than that explicit counter boundary effect.
+    allowed_flops_error = max(expected_flops * 1e-4, 2 * n * k)
+    if absolute_flops_error > allowed_flops_error:
         raise RuntimeError(
             "profile hardware FLOPs do not match the executed padded GEMM: "
             f"expected {expected_flops}, got {observed_flops} "
@@ -362,6 +367,7 @@ def build_rows(
                 "dtype": "bf16",
                 "backend": "nkilib",
                 "profile_backend": "nki-native-spike",
+                "evaluation_split": row.get("evaluation_split", "unspecified"),
                 "logical_flops": logical_flops,
                 "executed_flops": executed_flops,
                 "padding_flops_ratio": executed_flops / logical_flops,

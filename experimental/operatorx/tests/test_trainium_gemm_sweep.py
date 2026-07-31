@@ -61,6 +61,11 @@ def test_validate_summary_requires_executed_flops() -> None:
     MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
     valid["hardware_flops"] -= 1
     MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
+    valid["hardware_flops"] = 2 * 2048 * 2048 * 1024 - 2 * 2048 * 1024
+    MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
+    valid["hardware_flops"] -= 1
+    with pytest.raises(RuntimeError, match="hardware FLOPs"):
+        MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
     valid["hardware_flops"] = 1
     with pytest.raises(RuntimeError, match="hardware FLOPs"):
         MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
@@ -159,3 +164,68 @@ def test_checked_in_tile_boundary_dataset_passes_contract() -> None:
     assert all(len(row["samples"]) == 21 for row in rows)
     assert all(row["correctness"]["validated"] for row in rows)
     assert all(row["placement"]["compiler_info_lnc"] == 2 for row in rows)
+
+
+def test_exact_holdout_corpus_is_balanced_and_holds_out_mn_pairs() -> None:
+    operatorx = SCRIPT.parents[1]
+    corpus = MODULE.load_rows(
+        operatorx / "testlists" / "trainium_gemm_exact_holdout.json"
+    )
+    split_counts = {
+        split: sum(row["evaluation_split"] == split for row in corpus)
+        for split in ("train", "holdout")
+    }
+    k_counts = {
+        k: sum(int(row["args"]["k"]) == k for row in corpus)
+        for k in (1024, 2048, 3072, 4096)
+    }
+    train_pairs = {
+        (int(row["args"]["m"]), int(row["args"]["n"]))
+        for row in corpus
+        if row["evaluation_split"] == "train"
+    }
+    holdout_pairs = {
+        (int(row["args"]["m"]), int(row["args"]["n"]))
+        for row in corpus
+        if row["evaluation_split"] == "holdout"
+    }
+
+    assert len(corpus) == 24
+    assert len({MODULE.executed_shape(row) for row in corpus}) == 24
+    assert all(
+        MODULE.executed_shape(row)
+        == tuple(int(row["args"][dimension]) for dimension in ("m", "n", "k"))
+        for row in corpus
+    )
+    assert split_counts == {"train": 16, "holdout": 8}
+    assert k_counts == {1024: 6, 2048: 6, 3072: 6, 4096: 6}
+    assert train_pairs.isdisjoint(holdout_pairs)
+    assert len(holdout_pairs) == 4
+
+
+def test_checked_in_exact_holdout_dataset_passes_contract() -> None:
+    operatorx = SCRIPT.parents[1]
+    dataset = json.loads(
+        (
+            operatorx
+            / "data"
+            / "trn3_lnc2_gemm_exact_holdout_20260731.json"
+        ).read_text()
+    )
+    corpus = json.loads(
+        (operatorx / "testlists" / "trainium_gemm_exact_holdout.json").read_text()
+    )
+    rows = dataset["rows"]
+
+    assert [row["name"] for row in rows] == [row["name"] for row in corpus]
+    assert len(rows) == 24
+    assert {row["evaluation_split"] for row in rows} == {"train", "holdout"}
+    assert sum(row["evaluation_split"] == "train" for row in rows) == 16
+    assert sum(row["evaluation_split"] == "holdout" for row in rows) == 8
+    assert all(row["shape"] == row["executed_shape"] for row in rows)
+    assert dataset["methodology"]["full_artifacts_retained"] is False
+    assert all(row["device_execution_us"]["count"] == 21 for row in rows)
+    assert all(len(row["samples"]) == 21 for row in rows)
+    assert all(row["correctness"]["validated"] for row in rows)
+    assert all(row["placement"]["compiler_info_lnc"] == 2 for row in rows)
+    assert all(row["compiled_program"]["lnc"] == 2 for row in rows)

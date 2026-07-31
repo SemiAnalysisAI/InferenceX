@@ -49,6 +49,13 @@ It resolves to 11 executables and includes eight exact controls. Requests immedi
 below, at, and above a boundary deliberately form shared-executable latency plateaus;
 the exact controls separate native component behavior from padding effects.
 
+The model-development follow-on `testlists/trainium_gemm_exact_holdout.json`
+contains 24 exact executables over M/N in {2048, 4096, 6144, 8192} and K in
+{1024, 2048, 3072, 4096}. Every K occurs six times. Sixteen rows are labeled
+`train`; eight rows hold out four complete M/N pairs, with two K values per pair.
+The frozen split prevents an output-wave tail from being evaluated on an M/N
+combination it saw during fitting.
+
 ## Acceptance gates
 
 An executable is accepted only when:
@@ -60,9 +67,10 @@ An executable is accepted only when:
 3. **Compiled program:** the NEFF and compiler-info SHA-256 values are retained;
    each profile contains matmul instructions.
 4. **Work identity:** every profile's `hardware_flops` matches `2*M*N*K` for the
-   executed padded shape within 0.01%. The derived profiler counter can omit a
-   boundary-tile contribution; the compiled shape and output correctness remain
-   separately gated.
+   executed padded shape within 0.01%, or differs by no more than the explicit
+   `2*N*K` FLOPs of one M-row plane. The latter bound covers an observed derived-
+   counter boundary omission; compiled shape and output correctness remain
+   independently gated.
 5. **Timing:** exactly 21 positive `total_time` samples are retained, with
    p10/p50/p90/min/max.
 6. **Traffic evidence:** every profile contains positive HBM read and write counts.
@@ -116,6 +124,16 @@ The tile-boundary follow-on uses the same contract:
 python scripts/trainium_gemm_sweep.py \
   --testlist testlists/trainium_gemm_tile_boundaries.json \
   --json-out data/trn3_lnc2_gemm_tile_boundaries_20260731.json \
+  --samples 21 \
+  --warmup 10
+```
+
+The exact train/holdout grid also uses the same one-shot contract:
+
+```bash
+python scripts/trainium_gemm_sweep.py \
+  --testlist testlists/trainium_gemm_exact_holdout.json \
+  --json-out data/trn3_lnc2_gemm_exact_holdout_20260731.json \
   --samples 21 \
   --warmup 10
 ```
