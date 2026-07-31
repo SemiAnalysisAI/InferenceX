@@ -342,15 +342,52 @@ def case_m4096(capture):
 def case_seq(capture):
     """M=4096 then M=2 in ONE process: the state reuse hypothesis.
 
-    The second step runs even though the first was verified, because the point
-    is the transition, not either shape alone.
+    Both calls reuse the same converted weight tensors, matching a model layer
+    whose profile-forward shape changes while its parameters stay resident.
     """
-    steps = [eager_step(4096, capture)]
-    if steps[0]["fault"]:
-        print("PROBE_ABORT_SEQ first step faulted; the context is poisoned and "
-              "the M=2 step would report garbage", flush=True)
+    case4096 = oracle.make_case(4096, device="cuda")
+    shuffled = build_aiter_inputs(case4096)
+    case2 = oracle.Case(
+        m=2,
+        device=case4096.device,
+        inp=case4096.inp[:2],
+        w1_packed=case4096.w1_packed,
+        w1_scale=case4096.w1_scale,
+        w2_packed=case4096.w2_packed,
+        w2_scale=case4096.w2_scale,
+        topk_ids=case4096.topk_ids[:2],
+        topk_w=case4096.topk_w[:2],
+    )
+
+    def run(active_case):
+        got = launch_aiter(active_case, shuffled)
+        torch.cuda.synchronize()
+        del got
+        return blank_numeric()
+
+    steps = [
+        measure(
+            "sequence_m4096",
+            4096,
+            capture,
+            lambda: run(case4096),
+        )
+    ]
+    if steps[0]["crashed"]:
+        print(
+            "PROBE_ABORT_SEQ first step crashed; the context may be poisoned "
+            "and the M=2 step would report garbage",
+            flush=True,
+        )
         return steps
-    steps.append(eager_step(2, capture))
+    steps.append(
+        measure(
+            "sequence_m2",
+            2,
+            capture,
+            lambda: run(case2),
+        )
+    )
     return steps
 
 

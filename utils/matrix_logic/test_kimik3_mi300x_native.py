@@ -100,7 +100,7 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         f"KIMIK3_CANARY_SQUASH_SHA256={CANARY_IMAGE_SHA256}",
         f"KIMIK3_SQUASH_FILE_OVERRIDE={CANARY_IMAGE_PATH}",
         "KIMIK3_PROBE_ONLY=1",
-        "KIMIK3_PROBE_CASES=m2",
+        "KIMIK3_PROBE_CASES=seq",
     ]
     assert not any("KIMIK3_VLLM_GFX942_GATE_PATCH" in setting for setting in settings)
 
@@ -316,6 +316,12 @@ def test_m2_probe_reproduces_pr50319_gfx942_int4_conversion_path() -> None:
     assert "shuffle_weight(" in conversion_source
     assert "shuffle_weight_a16w4" not in conversion_source
     assert "return [eager_step(2, capture, verify=False)]" in probe_source
+    assert "case2 = oracle.Case(" in probe_source
+    assert "w1_packed=case4096.w1_packed" in probe_source
+    assert "shuffled = build_aiter_inputs(case4096)" in probe_source
+    assert "got = launch_aiter(active_case, shuffled)" in probe_source
+    assert "lambda: run(case4096)" in probe_source
+    assert "lambda: run(case2)" in probe_source
 
 
 def write_executable(path: Path, body: str) -> None:
