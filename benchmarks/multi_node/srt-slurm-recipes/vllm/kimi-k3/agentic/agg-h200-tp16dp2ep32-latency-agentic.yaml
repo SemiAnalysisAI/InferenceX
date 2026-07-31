@@ -64,7 +64,7 @@ backend:
       gpu-memory-utilization: 0.975
       max-num-seqs: 5
       max-num-batched-tokens: 4096
-      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
+      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
       enforce-eager: true
       compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
       enable-prefix-caching: true
