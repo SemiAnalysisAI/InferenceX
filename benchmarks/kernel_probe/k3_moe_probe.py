@@ -136,26 +136,79 @@ def provenance() -> dict:
 
 
 def build_aiter_inputs(case):
-    """Shuffle the oracle's canonical tensors into the layout aiter expects.
+    """Reproduce #50319's gfx942 MXFP4-to-groupwise-int4 load-time conversion.
 
-    The gate_up flag is not cosmetic: A16W4 stage1 reads w1 gate/up interleaved
-    and w2 plain, so w1 and its scale take True while w2 and its scale take
-    False. op_tests/test_moe_2stage.py's a16w4 branch is the reference. Feeding
-    the wrong flag produces out-of-range reads that look exactly like the bug
-    under investigation.
+    Calling AITER directly with the original MXFP4 tensors selects its dynamic
+    MX quantizer, which cannot emit fp4x2 on gfx942 and aborts before the K3
+    SiTUv2 kernel. The production vLLM path never does that: it dequantizes
+    MXFP4, requantizes to groupwise int4, and shuffles the packed tensors once
+    at model load. Keep this conversion byte-for-byte aligned with
+    ``Mxfp4MoEMethod._setup_kernel_k3_situ_gfx942`` from vLLM #50319.
     """
-    from aiter.ops.shuffle import shuffle_scale_a16w4, shuffle_weight_a16w4
+    import inspect
 
-    # shuffle_scale_a16w4 operates on the flattened [E*N, K/32] view used by
-    # AITER's own a16w4 tests; the oracle intentionally keeps [E, N, K/32].
-    w1_scale = case.w1_scale.view(-1, case.w1_scale.shape[-1])
-    w2_scale = case.w2_scale.view(-1, case.w2_scale.shape[-1])
+    from aiter import dtypes as aiter_dtypes
+    from aiter.ops.flydsl.kernels.moe_gemm_2stage import compile_moe_gemm1
+    from aiter.ops.quant import per_1x32_i4_quant
+    from aiter.ops.shuffle import (
+        pack_int8_to_packed_int4,
+        shuffle_scale_for_int4,
+        shuffle_weight,
+    )
+    from aiter.utility import fp4_utils
+
+    if "act" not in inspect.signature(compile_moe_gemm1).parameters:
+        raise RuntimeError(
+            "probe AITER lacks ROCm/aiter#4471 SiTUv2 packed-int4 support"
+        )
+
+    fp4_dtype = torch.float4_e2m1fn_x2
+    e8m0_dtype = torch.float8_e8m0fnu
+
+    def convert(weight, scale):
+        weight_f32 = fp4_utils.mxfp4_to_f32(weight.view(fp4_dtype))
+        scale_f32 = fp4_utils.e8m0_to_f32(scale.view(e8m0_dtype))
+        num_experts, output_size, input_size = weight_f32.shape
+        weight_bf16 = (
+            (
+                weight_f32.view(
+                    num_experts, output_size, input_size // 32, 32
+                )
+                * scale_f32.view(
+                    num_experts, output_size, input_size // 32, 1
+                )
+            )
+            .view(num_experts, output_size, input_size)
+            .to(torch.bfloat16)
+        )
+        del weight_f32, scale_f32
+
+        weight_int4, weight_scale = per_1x32_i4_quant(weight_bf16)
+        del weight_bf16
+        weight_int4 = weight_int4.view(aiter_dtypes.i4x2).view(
+            num_experts, output_size, input_size
+        )
+        weight_packed = pack_int8_to_packed_int4(
+            shuffle_weight(weight_int4.view(aiter_dtypes.i8), (16, 16))
+        )
+        weight_packed = weight_packed.view(
+            num_experts, output_size, input_size // 2
+        ).view(aiter_dtypes.i4x2)
+        weight_scale = (
+            shuffle_scale_for_int4(weight_scale, group_size=32)
+            .view(-1)
+            .contiguous()
+        )
+        return weight_packed, weight_scale
+
+    w1, w1_scale = convert(case.w1_packed, case.w1_scale)
+    w2, w2_scale = convert(case.w2_packed, case.w2_scale)
 
     return dict(
-        w1=shuffle_weight_a16w4(case.w1_packed, 16, True),
-        w1_scale=shuffle_scale_a16w4(w1_scale, oracle.EXPERTS, True),
-        w2=shuffle_weight_a16w4(case.w2_packed, 16, False),
-        w2_scale=shuffle_scale_a16w4(w2_scale, oracle.EXPERTS, False),
+        w1=w1,
+        w1_scale=w1_scale,
+        w2=w2,
+        w2_scale=w2_scale,
     )
 
 
@@ -276,7 +329,10 @@ def graph_step(m: int, capture: KernelNameCapture) -> dict:
 
 
 def case_m2(capture):
-    return [eager_step(2, capture)]
+    # This attribution pass asks only whether the exact production dispatch
+    # faults. The load-time MXFP4->int4 conversion is intentionally lossy, so
+    # the original MXFP4 oracle is not a valid numerical reference afterward.
+    return [eager_step(2, capture, verify=False)]
 
 
 def case_m4096(capture):

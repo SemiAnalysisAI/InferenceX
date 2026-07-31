@@ -300,6 +300,24 @@ def test_situ_selftest_compares_scalar_and_vector_paths_at_identical_fp32_inputs
     assert "zip(g.tolist(), u.tolist())" not in selftest_source
 
 
+def test_m2_probe_reproduces_pr50319_gfx942_int4_conversion_path() -> None:
+    probe_source = (
+        REPO_ROOT / "benchmarks" / "kernel_probe" / "k3_moe_probe.py"
+    ).read_text()
+    conversion_source = probe_source.split(
+        "def build_aiter_inputs", maxsplit=1
+    )[1].split("def launch_aiter", maxsplit=1)[0]
+
+    assert "torch.float4_e2m1fn_x2" in conversion_source
+    assert "torch.float8_e8m0fnu" in conversion_source
+    assert "per_1x32_i4_quant" in conversion_source
+    assert "pack_int8_to_packed_int4" in conversion_source
+    assert "shuffle_scale_for_int4" in conversion_source
+    assert "shuffle_weight(" in conversion_source
+    assert "shuffle_weight_a16w4" not in conversion_source
+    assert "return [eager_step(2, capture, verify=False)]" in probe_source
+
+
 def write_executable(path: Path, body: str) -> None:
     path.write_text(body)
     path.chmod(0o755)
