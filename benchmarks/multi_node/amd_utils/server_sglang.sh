@@ -545,14 +545,14 @@ if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     # ever sending a request.
     HICACHE_RATIO="${HICACHE_RATIO:-5}"
     HICACHE_SIZING_FLAGS="--hicache-ratio ${HICACHE_RATIO}"
-    # DeepSeek V4's hybrid HiCache pool rejects --hicache-size (requires
-    # --hicache-ratio), so the absolute per-node budget cannot be applied to it.
+    # DeepSeek V4 / GLM-5.2 hybrid or DSA HiCache pools reject --hicache-size
+    # (require --hicache-ratio). GB-based sizing also OOMs GLM-5.2 on MI355X.
     # See sglang _deepseek_v4_num_host_pages() (raises ValueError when
     # server_args.hicache_size > 0):
     # https://github.com/sgl-project/sglang/blob/9dd57ef8c48e2cd82292d849f01e2130c5203e67/python/sglang/srt/mem_cache/hybrid_cache/hybrid_pool_assembler.py#L262-L266
     # FORCE_HICACHE_RATIO additionally lets a recipe opt into ratio-based sizing
     # for any other model without unsetting TOTAL_CPU_DRAM_GB (see comment above).
-    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* ]]; then
+    if [[ "${FORCE_HICACHE_RATIO:-0}" != "1" && -n "${TOTAL_CPU_DRAM_GB:-}" && "${TOTAL_CPU_DRAM_GB}" -gt 0 && "${MODEL_NAME}" != *DeepSeek-V4* && "${MODEL_NAME}" != *GLM-5.2* ]]; then
         # TOTAL_CPU_DRAM_GB is the prefill worker's per-node budget (only prefill
         # offloads KV to CPU DRAM today); --hicache-size is per rank per host
         # pool. A prefill server may span nodes (PREFILL_TP_SIZE is its total
