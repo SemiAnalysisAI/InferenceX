@@ -8169,7 +8169,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
 
 minimaxm3-fp8-gb200-dynamo-vllm-mtp:
-  image: vllm/vllm-openai:v0.26.0
+  image: vllm/vllm-openai:nightly-6f91edf96d3f3272945809c04702380053bff4de
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: gb200
