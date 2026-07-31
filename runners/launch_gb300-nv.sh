@@ -8,6 +8,13 @@ export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
+# PR2 dcgm-power canary seam: default-off, flipped by additional-settings on
+# exactly one staged qwen3.5 job. Defaults reproduce today's behavior
+# (SRT_SLURM_REF empty -> the per-precision pinned checkout below).
+ENABLE_DCGM_POWER_CANARY="${ENABLE_DCGM_POWER_CANARY:-0}"
+SRT_SLURM_REPO_URL="${SRT_SLURM_REPO_URL:-https://github.com/NVIDIA/srt-slurm.git}"
+SRT_SLURM_REF="${SRT_SLURM_REF:-}"
+
 # Host-side directory holding aiperf's content-addressed dataset mmap cache.
 # Bind-mounted into worker containers at /aiperf_mmap_cache via the
 # default_mounts: block in srtslurm.yaml below; aiperf reads it via
@@ -127,6 +134,16 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE"
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
+if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    # import_squash validates the squash with unsquashfs inside the compute-node
+    # srun (the x86 login node cannot inspect the aarch64 image).
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+fi
+
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
@@ -214,9 +231,13 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Same branch the identical gb200-fp8 recipes run on. fp4 recipes pin
     # dynamo by version (pip install) and stay on the submission branch they
     # were validated against.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    git clone "$SRT_SLURM_REPO_URL" "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    if [[ $PRECISION == "fp8" ]]; then
+    if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+        git checkout "$SRT_SLURM_REF" || exit 1
+        # The canary must run the exact frozen PR2 SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$SRT_SLURM_REF" || { echo "Error: srt-slurm HEAD does not match SRT_SLURM_REF=$SRT_SLURM_REF" >&2; exit 1; }
+    elif [[ $PRECISION == "fp8" ]]; then
         git checkout v1.0.25
     else
         git checkout sa-submission-q2-2026
@@ -272,6 +293,11 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${SRT_REPO_DIR}"
+DCGM_EXPORTER_CONTAINER_LINE=""
+if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+    DCGM_EXPORTER_CONTAINER_LINE="  dcgm-exporter: ${DCGM_EXPORTER_SQSH}"
+fi
+
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB300
@@ -309,6 +335,7 @@ containers:
   v0.5.13.post1: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+${DCGM_EXPORTER_CONTAINER_LINE}
 use_segment_sbatch_directive: false
 EOF
 
@@ -432,6 +459,13 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
+    # Canary provenance markers travel inside the server-logs bundle so the
+    # offline audit can tie artifacts to the exact producer SHA and exporter.
+    if [[ "$ENABLE_DCGM_POWER_CANARY" == "1" ]]; then
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+        git rev-parse HEAD > "$LOGS_DIR/power/pr2-canary-sha.txt"
+    fi
     # Tarball + LOGS copy are produced by the EXIT trap defined near
     # JOB_ID extraction (so cancel paths also get them); just log here.
     echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
