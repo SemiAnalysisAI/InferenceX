@@ -5355,3 +5355,11 @@
     - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
+
+- config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+  description:
+    - "Run the Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration on the b200-new runner."
+    - "Remove the 1P/1D DEP4-to-DEP8 concurrency-1024 configuration."
+    - "Image: vllm/vllm-openai:v0.25.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
