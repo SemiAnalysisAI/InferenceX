@@ -13,7 +13,7 @@ set -uo pipefail
 # Fail the node if any single GPU still has >= this many GB used.
 GPU_BUSY_GB="${GPU_BUSY_GB:-8}"
 # Poll a few times to give docker stop time to release VRAM before judging.
-GPU_DRAIN_TRIES="${GPU_DRAIN_TRIES:-24}"
+GPU_DRAIN_TRIES="${GPU_DRAIN_TRIES:-48}"
 
 if ! command -v rocm-smi >/dev/null 2>&1; then
     echo "[gpu-sanity] rocm-smi not found on $(hostname); skipping GPU check" >&2
