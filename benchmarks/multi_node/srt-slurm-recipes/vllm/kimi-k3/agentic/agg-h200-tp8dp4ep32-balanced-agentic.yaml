@@ -69,6 +69,7 @@ backend:
       no-async-scheduling: true
       compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
       enable-prefix-caching: true
+      enable-prompt-tokens-details: true
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
       enable-auto-tool-choice: true
