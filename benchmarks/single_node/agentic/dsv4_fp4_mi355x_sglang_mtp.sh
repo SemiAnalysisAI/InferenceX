@@ -87,7 +87,6 @@ CHUNKED_PREFILL_SIZE=4096
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
-    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     SGLANG_ROUTER_CMD=(python3 -m sglang_router.launch_router)
@@ -194,9 +193,20 @@ wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" -
 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
+    # cache_aware routes each request to the DP rank whose radix tree holds the
+    # longest matching prefix, giving prefix-affinity across DP ranks. This
+    # replaces consistent_hashing on x-correlation-id: that key is per-request
+    # unique, so turns of the same session hashed to different ranks and the
+    # radix cache could not be reused (GPU cache hit ~67% vs ~97% theoretical).
+    # --cache-threshold: min prefix-match ratio to prefer the cached rank;
+    # below it, fall back to load balancing. --balance-*-threshold bound how far
+    # cache affinity may skew per-rank load before rebalancing.
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy consistent_hashing \
+        --policy cache_aware \
+        --cache-threshold 0.3 \
+        --balance-abs-threshold 64 \
+        --balance-rel-threshold 1.5 \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
