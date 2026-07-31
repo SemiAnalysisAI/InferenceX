@@ -1532,7 +1532,7 @@ dsv4-fp4-mi355x-vllm-agentic:
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "9229067cec0b3a63bb8a39368d101db7ac0bc3c1" }, conc-list: [32, 40, 48] }
 
 dsv4-fp4-mi355x-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-0f17394564fa2fccd332cf63321314884c15ee37
+  image: vllm/vllm-openai-rocm:nightly-0f17394564fa2fccd332cf63321314884c15ee37
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
