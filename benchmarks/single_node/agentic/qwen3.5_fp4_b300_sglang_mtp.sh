@@ -102,6 +102,9 @@ export PYTHONNOUSERSITE=1
 export NCCL_NVLS_ENABLE=1
 export SGL_ENABLE_JIT_DEEPGEMM=false
 export SGLANG_ENABLE_FLASHINFER_GEMM=true
+# Keep server-side connections alive beyond AIPerf's 300-second client pool
+# timeout so bursty AgentX trajectories cannot reuse a closing idle socket.
+export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
