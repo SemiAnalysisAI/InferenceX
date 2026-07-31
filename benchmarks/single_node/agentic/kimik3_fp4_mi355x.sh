@@ -507,13 +507,35 @@ PYEOF
         # 3m37s and the pool was fully allocated long before vLLM finished
         # loading weights.
         #
-        # So L1 has a working range, and the target is above the GPU tier but
-        # well below the IPC ceiling. GPU KV is ~52 GiB/rank at GMU 0.85, so
-        # ~416 GB across TP8 for the 3.32M-token pool. 512 GB -- the AMD
-        # reference value -- clears that while staying at ~38% of the size
-        # that broke IPC. If 512 also fails to register, bisect downward
-        # (256, then 128) rather than assuming the connector is broken.
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"
+        # So L1 has a working range: above the GPU tier (GPU KV is ~52 GiB/rank
+        # at GMU 0.85, ~416 GB across TP8) and below the IPC ceiling somewhere
+        # under 1360 GB. 512 GB registered cleanly (run 30579846678) and lifted
+        # external hits 0.00% -> 0.82%, but throughput did not move.
+        #
+        # LMCACHE_L1_SHM_FRACTION sizes L1 as a fraction of FREE /dev/shm,
+        # which is the resource that actually binds (shm was 1512 GB free on
+        # this fleet, so 0.60 -> ~907 GB). Sizing off shm rather than
+        # TOTAL_CPU_DRAM_GB is deliberate: the DRAM budget is 2399 GB, so any
+        # fraction of it lands past the shm cap and straight back on the 1360
+        # GB value that broke IPC.
+        #
+        # 0.60 bisects the known range -- 1.8x the 512 GB that works, 0.67x
+        # the 1360 GB that fails -- so this run locates the IPC ceiling as
+        # well as testing whether more cache changes the throughput picture.
+        # If it fails to register, the ceiling is between 512 and 907 and the
+        # next step is 0.45 (~680 GB), not a return to 512.
+        LMCACHE_L1_SHM_FRACTION="${LMCACHE_L1_SHM_FRACTION:-0.60}"
+        _shm_free_gb=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+        if [ -n "$_shm_free_gb" ] && [ "${_shm_free_gb:-0}" -gt 0 ]; then
+            _l1_from_shm=$(awk -v f="$LMCACHE_L1_SHM_FRACTION" -v s="$_shm_free_gb" \
+                'BEGIN { printf "%d", f * s }')
+            LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$_l1_from_shm}"
+            echo "LMCache L1 sized from /dev/shm: ${LMCACHE_L1_SHM_FRACTION} x ${_shm_free_gb}G free = ${LMCACHE_L1_SIZE_GB}G"
+        else
+            # df failed -- fall back to the value already proven to register.
+            LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"
+            echo "WARNING: could not read free /dev/shm; falling back to L1=${LMCACHE_L1_SIZE_GB}G" >&2
+        fi
     else
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
     fi
