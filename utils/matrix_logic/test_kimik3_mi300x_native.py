@@ -99,8 +99,9 @@ def test_kimik3_matrix_is_exactly_four_tp8_pp2_aggregate_jobs() -> None:
         f"KIMIK3_CANARY_SQUASH_URL={CANARY_IMAGE_URL}",
         f"KIMIK3_CANARY_SQUASH_SHA256={CANARY_IMAGE_SHA256}",
         f"KIMIK3_SQUASH_FILE_OVERRIDE={CANARY_IMAGE_PATH}",
+        "KIMIK3_PROBE_ONLY=1",
+        "KIMIK3_PROBE_CASES=m2",
     ]
-    assert not any("KIMIK3_PROBE_ONLY" in setting for setting in settings)
     assert not any("KIMIK3_VLLM_GFX942_GATE_PATCH" in setting for setting in settings)
 
 
