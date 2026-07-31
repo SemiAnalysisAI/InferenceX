@@ -7482,7 +7482,7 @@ minimaxm3-fp4-b200-dynamo-vllm:
           dp-attn: false
 
 minimaxm3-fp4-b200-dynamo-vllm-mtp:
-  image: vllm/vllm-openai:v0.26.0
+  image: vllm/vllm-openai:nightly-6f91edf96d3f3272945809c04702380053bff4de
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b200-multinode
