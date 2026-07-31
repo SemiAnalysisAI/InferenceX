@@ -550,25 +550,28 @@ cat srtslurm.yaml
 echo "Running make setup..."
 make setup ARCH=aarch64 || exit 1
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
+# Export eval-related env vars for srt-slurm post-benchmark eval. Current
+# Watchtower runners keep GITHUB_WORKSPACE on Lustre, so compute nodes can
+# mount it directly; avoid copying the checkout from Lustre back to Lustre.
+# Retain staging as a fallback for runners whose workspace is node-local.
 export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
-# Watchtower: pyxis mounts INFMAX_WORKSPACE into the container, but
-# GITHUB_WORKSPACE is under /home/slurm-shared/ which compute nodes
-# can't see. Stage the relevant subset to shared FS and repoint
-# INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
-# on shared FS) and .git (not needed in container) for speed.
 if uses_watchtower_shared_fs; then
-    SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
-    mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
-    rsync -a --delete \
-        --exclude='.git/' \
-        --exclude='srt-slurm*/' \
-        --exclude='outputs/' \
-        --exclude='LOGS/' \
-        --exclude='*.sqsh' \
-        "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/" || exit 1
-    export INFMAX_WORKSPACE="$SHARED_INFMAX_WORKSPACE"
-    echo "Using shared-FS INFMAX_WORKSPACE=$INFMAX_WORKSPACE (compute-visible)"
+    WORKSPACE_FS_TYPE=$(findmnt -n -o FSTYPE -T "$GITHUB_WORKSPACE" 2>/dev/null || true)
+    if [[ "$WORKSPACE_FS_TYPE" == "lustre" ]]; then
+        echo "Using existing Lustre-backed INFMAX_WORKSPACE=$INFMAX_WORKSPACE"
+    else
+        SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
+        mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
+        rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='srt-slurm*/' \
+            --exclude='outputs/' \
+            --exclude='LOGS/' \
+            --exclude='*.sqsh' \
+            "${GITHUB_WORKSPACE}/" "${SHARED_INFMAX_WORKSPACE}/" || exit 1
+        export INFMAX_WORKSPACE="$SHARED_INFMAX_WORKSPACE"
+        echo "Staged node-local workspace to INFMAX_WORKSPACE=$INFMAX_WORKSPACE"
+    fi
 fi
 
 echo "Submitting job with srtctl..."
