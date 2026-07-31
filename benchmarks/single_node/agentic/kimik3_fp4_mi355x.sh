@@ -610,9 +610,10 @@ PYEOF
         )
         ;;
       k3upstream)
-        # Upstream's validated K3 command, verbatim apart from --host and the
-        # --http-* pair, which this recipe's healthcheck needs and which every
-        # other profile already passes:
+        # Upstream's validated K3 command, plus the worker and eviction tuning
+        # needed by this TP8 agentic workload. The pinned LMCache revision
+        # supports these flags, and four workers serialize pairs of TP ranks.
+        # Upstream's original command was:
         #   lmcache server --port 6555 --chunk-size 768 --max-workers 4 \
         #                  --l1-size-gb 100 --eviction-policy LRU
         # --chunk-size comes from the N derivation above (1536 under fp8, not
@@ -628,8 +629,10 @@ PYEOF
             --http-host "$LMCACHE_HOST"
             --http-port "$LMCACHE_HTTP_PORT"
             --chunk-size "$LMCACHE_CHUNK_SIZE"
-            --max-workers "${LMCACHE_MAX_WORKERS:-4}"
+            --max-workers "${LMCACHE_MAX_WORKERS:-$TP}"
             --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
+            --eviction-ratio "$LMCACHE_EVICTION_RATIO"
             --eviction-policy LRU
         )
         ;;
