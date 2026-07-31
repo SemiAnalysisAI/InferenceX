@@ -33,12 +33,12 @@ DEFAULT_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds.sh"
 NATIVE_LAUNCHER = REPO_ROOT / "runners" / "launch_mi300x-amds-native-multinode.sh"
 IMAGE = "vllm/vllm-openai-rocm:kimi-k3"
 CANARY_IMAGE_NAME = (
-    "k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471.sqsh"
+    "k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471-nosplit-v4.sqsh"
 )
 CANARY_IMAGE_PATH = f"/raid/hf-hub-cache/inferencex/squash/{CANARY_IMAGE_NAME}"
 CANARY_IMAGE_URL = f"http://10.162.224.35:18080/{CANARY_IMAGE_NAME}"
 CANARY_IMAGE_SHA256 = (
-    "d2e3b7ee34aac7c53ddf48b6e4ede887f0c9861df1d4fa9c6dd1978fde84f9a9"
+    "9680afaa97b1d68f4d6f575fc05cd16951fe5d314570097203f6ebaf07afa394"
 )
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"

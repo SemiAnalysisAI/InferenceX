@@ -2299,10 +2299,12 @@ kimik3-fp4-mi300x-vllm-agentic:
           - "NCCL_IB_DISABLE=1"
           # Canary-only immutable image based on vLLM #50319 at 85c84a8, with
           # the current #50319 K3 method routing/int4 conversion and AITER
-          # #4471's SiTUv2 stage1 fix. Each node verifies the digest before use.
-          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471.sqsh"
-          - "KIMIK3_CANARY_SQUASH_SHA256=d2e3b7ee34aac7c53ddf48b6e4ede887f0c9861df1d4fa9c6dd1978fde84f9a9"
-          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471.sqsh"
+          # #4471's SiTUv2 stage1 fix. SiTUv2 uses the direct stage1 path because
+          # AITER's split-K post-activation currently supports SwiGLU only.
+          # Each node verifies the digest before use.
+          - "KIMIK3_CANARY_SQUASH_URL=http://10.162.224.35:18080/k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471-nosplit-v4.sqsh"
+          - "KIMIK3_CANARY_SQUASH_SHA256=9680afaa97b1d68f4d6f575fc05cd16951fe5d314570097203f6ebaf07afa394"
+          - "KIMIK3_SQUASH_FILE_OVERRIDE=/raid/hf-hub-cache/inferencex/squash/k3-gfx942-vllm-85c84a8-50319-int4-aiter-v0.1.19-situv2-4471-nosplit-v4.sqsh"
         decode:
           num-worker: 0
           tp: 8
