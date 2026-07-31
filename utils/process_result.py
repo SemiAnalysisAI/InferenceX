@@ -61,6 +61,10 @@ def record_power_internal_error(
             "joules_per_input_token",
             "joules_per_output_token",
             "joules_per_total_token",
+            "prefill_gpu_energy_j",
+            "decode_gpu_energy_j",
+            "prefill_joules_per_input_token",
+            "decode_joules_per_output_token",
         ):
             agg_data.pop(key, None)
         agg_data["power_valid"] = 0
@@ -275,18 +279,41 @@ agg_path = Path(f'agg_{result_filename}.json')
 with open(agg_path, 'w') as f:
     json.dump(data, f, indent=2)
 
-# Single-node measured power is best-effort by default. Power studies can set
+# Measured power is best-effort by default. Power studies can set
 # REQUIRE_POWER=1 to fail closed after the validation sidecar has been written.
 _require_power = os.environ.get('REQUIRE_POWER', '').lower() in {'1', 'true', 'yes'}
 _power_status = 0
 if is_multinode:
-    if _require_power:
-        print(
-            '[process_result] Power validation failed: PR1 supports only '
-            'single-node non-disaggregated telemetry',
-            file=sys.stderr,
+    _power_dir = Path(os.environ.get('POWER_ARTIFACT_DIR', 'LOGS/power'))
+    _logs_root = Path(os.environ.get('POWER_RESULT_ROOT', 'LOGS'))
+    _bench_path = Path(f'{result_filename}.json')
+    _validation_path = Path(f'power_validation_{result_filename}.json')
+    try:
+        from aggregate_power_multinode import run as _aggregate_power_multinode_run
+
+        _power_status = _aggregate_power_multinode_run(
+            _power_dir,
+            _bench_path,
+            agg_path,
+            prefill_gpus=prefill_gpus,
+            decode_gpus=decode_gpus,
+            expected_producer_sha=os.environ.get('POWER_PRODUCER_SHA') or None,
+            logs_root=_logs_root,
+            validation_result=_validation_path,
+            require_power=_require_power,
         )
-        _power_status = 1
+    except Exception as exc:  # noqa: BLE001 — preserve ordinary benchmark behavior
+        print(f'[process_result] power aggregation failed: {exc}', file=sys.stderr)
+        record_power_internal_error(
+            csv_path=_power_dir,
+            bench_result=_bench_path,
+            agg_result=agg_path,
+            validation_result=_validation_path,
+            expected_num_gpus=prefill_gpus + decode_gpus,
+            error=exc,
+        )
+        if _require_power:
+            _power_status = 1
 else:
     _csv_candidates = [
         os.environ.get('GPU_METRICS_CSV'),
