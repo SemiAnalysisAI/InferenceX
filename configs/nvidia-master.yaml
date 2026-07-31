@@ -1509,7 +1509,9 @@ kimik2.5-int4-h200-vllm-agentic:
 # Wider TP is latency-oriented, while progressively wider DP is balanced or
 # throughput-oriented. EP32 keeps the model shards within HBM and preserves
 # the native 1M context on four H200 nodes. All profiles use the official
-# Kimi K3 DSpark K7 probabilistic/block recipe.
+# The latency arm uses the official Kimi K3 DSpark K7 probabilistic/block
+# recipe. The TP8 arms use K2 because the current image has an unresolved
+# long-context K7 race when a large chunked prefill overlaps decode.
 # The existing `mtp` matrix label covers speculative-decoding methods; the
 # checked-in recipes select DSpark explicitly. The H200 runner supplies
 # cluster paths while srt-slurm owns allocation, direct vLLM startup,
