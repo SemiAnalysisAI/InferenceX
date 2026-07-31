@@ -40,9 +40,27 @@ def _patch(path: str, replacements: list[tuple[str, str, str]], label: str) -> b
     return True
 
 
+
+def _patch_swerex_environment(path: str) -> bool:
+    return _patch(
+        path,
+        [
+            (
+                '        command = action.get("command", "") if isinstance(action, dict) else action\n'
+                "        try:",
+                '        command = action.get("command", "") if isinstance(action, dict) else action\n'
+                '        command = f"exec </dev/null\\n{command}"  # close inherited server stdin (SWE-ReX #281)\n'
+                "        try:",
+                "# close inherited server stdin (SWE-ReX #281)",
+            ),
+        ],
+        "swebench-agentic",
+    )
+
 def main() -> int:
     import minisweagent.run.benchmarks.swebench as mini_swebench
     import swerex.deployment.modal as rex_modal
+    import minisweagent.environments.extra.swerex_modal as mini_rex_modal
 
     mini_ok = _patch(
         mini_swebench.__file__,
@@ -100,6 +118,8 @@ def main() -> int:
         ],
         "swebench-agentic",
     )
+    mini_env_ok = _patch_swerex_environment(mini_rex_modal.__file__)
+
 
     app_name = os.environ.get("SWEBENCH_MODAL_APP_NAME", "infx-evals-swe")
     rex_ok = _patch(
@@ -137,7 +157,7 @@ def main() -> int:
         ],
         "swebench-agentic",
     )
-    return 0 if mini_ok and rex_ok else 1
+    return 0 if mini_ok and mini_env_ok and rex_ok else 1
 
 
 if __name__ == "__main__":
