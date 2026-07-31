@@ -49,6 +49,7 @@ backend:
     TRANSFORMERS_CACHE: "/hf_hub_cache"
     VLLM_ENGINE_READY_TIMEOUT_S: "7200"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_ROUTED_DOWN_PROJ_STREAM_TOKEN_THRESHOLD: "0"
     VLLM_USE_V2_MODEL_RUNNER: "1"
   vllm_config:
     aggregated:
@@ -64,7 +65,7 @@ backend:
       max-num-seqs: 8
       max-num-batched-tokens: 4096
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":7,"draft_sample_method":"probabilistic","rejection_sample_method":"block"}'
-      compilation-config: '{"cudagraph_capture_sizes":[4,17],"pass_config":{"fuse_allreduce_rms":false}}'
+      enforce-eager: true
       enable-prefix-caching: true
       no-enable-flashinfer-autotune: true
       disable-custom-all-reduce: true
