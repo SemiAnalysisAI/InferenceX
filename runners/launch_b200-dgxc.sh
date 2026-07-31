@@ -19,7 +19,7 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     if [[ $FRAMEWORK == "dynamo-sglang" && $SPEC_DECODING == "mtp" ]]; then
-        export MODEL_PATH="/scratch/fsw/models/DeepSeek-V4-Pro-NVFP4"
+        export MODEL_PATH="/scratch/fsw/models/DeepSeek-V4-Pro"
     else
         SELECTED_MODEL_PATH=""
         if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then

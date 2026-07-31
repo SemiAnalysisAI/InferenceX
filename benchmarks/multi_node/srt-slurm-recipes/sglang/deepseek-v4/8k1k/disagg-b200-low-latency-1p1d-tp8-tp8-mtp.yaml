@@ -40,7 +40,6 @@ backend:
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: "max"
-    SGLANG_DSV4_MHC_PREWARM: "false"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -55,7 +54,6 @@ backend:
     SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: "max"
-    SGLANG_DSV4_MHC_PREWARM: "false"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -70,8 +68,6 @@ backend:
       model-path: "/model/"
       trust-remote-code: true
       tool-call-parser: deepseekv4
-      json-model-override-args: '{"quantization_config":{"activation_scheme":"dynamic","fmt":"e4m3","moe_quant_algo":"NVFP4","quant_method":"fp8","scale_fmt":"ue8m0","weight_block_size":[128,128],"quant_algo":"MIXED_PRECISION","group_size":16,"ignore":["*.attn.*","*.ffn.shared_experts.*","head","mtp.*"]}}'
-
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
       disaggregation-ib-device: "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
@@ -80,7 +76,7 @@ backend:
       data-parallel-size: 1
       expert-parallel-size: 1
 
-      moe-runner-backend: "flashinfer_trtllm_routed"
+      moe-runner-backend: "flashinfer_mxfp4"
       disable-flashinfer-autotune: true
 
       mem-fraction-static: 0.9
@@ -93,8 +89,6 @@ backend:
       model-path: "/model/"
       trust-remote-code: true
       tool-call-parser: deepseekv4
-      json-model-override-args: '{"quantization_config":{"activation_scheme":"dynamic","fmt":"e4m3","moe_quant_algo":"NVFP4","quant_method":"fp8","scale_fmt":"ue8m0","weight_block_size":[128,128],"quant_algo":"MIXED_PRECISION","group_size":16,"ignore":["*.attn.*","*.ffn.shared_experts.*","head","mtp.*"]}}'
-
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
       disaggregation-ib-device: "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
@@ -103,7 +97,7 @@ backend:
       data-parallel-size: 1
       expert-parallel-size: 1
 
-      moe-runner-backend: "flashinfer_trtllm_routed"
+      moe-runner-backend: "flashinfer_mxfp4"
       disable-flashinfer-autotune: true
 
       speculative-algo: "EAGLE"

@@ -5359,10 +5359,11 @@
 - config-keys:
     - dsv4-fp4-b200-dynamo-sglang-mtp
   description:
-    - "Add DSV4 NVFP4 B200 disaggregated dynamo-sglang MTP configuration for 8k1k"
-    - "Register five recipe-backed topologies and B200 launcher support"
-    - "Provide SGLang with hybrid FP8/NVFP4 quantization metadata and select the routed NVFP4 MoE backend"
-    - "Disable MHC prewarm and use standard RDMA Mooncake transport pinned to the B200 devices"
+    - "Add DSV4 B200 disaggregated Dynamo SGLang MTP configuration for 8k/1k"
+    - "Add five checked-in srt-slurm recipes with EAGLE speculative decoding and chat-template inputs"
+    - "Use the staged DSV4 checkpoint and its native quantization metadata"
+    - "Use the checkpoint-compatible MoE backend and remove loader-isolation overrides"
+    - "Use standard RDMA Mooncake transport pinned to the B200 devices"
     - "Pin the B200 launcher bootstrap to the official uv 0.12.0 release with checksum verification"
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2252
