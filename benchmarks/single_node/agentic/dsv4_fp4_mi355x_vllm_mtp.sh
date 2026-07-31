@@ -408,7 +408,7 @@ fi
 # hold the full session count. In pure-TP there is a single scheduler across
 # all GPUs that sees all CONC sessions, so use 2*CONC directly.
 if [ "$DP_ATTENTION" = "true" ]; then
-    MAX_NUM_SEQS=$((CONC))
+    MAX_NUM_SEQS=$((2 * CONC / TP))
     if [ "$MAX_NUM_SEQS" -lt 1 ]; then
         MAX_NUM_SEQS=1
     fi
