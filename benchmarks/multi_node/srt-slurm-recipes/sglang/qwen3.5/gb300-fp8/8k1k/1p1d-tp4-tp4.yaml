@@ -131,4 +131,6 @@ telemetry:
   collector_join_timeout_seconds: 10
   dcgm_exporter:
     container_image: dcgm-exporter
-    port: 9401
+    # 9401 is already bound on im-gb300 nodes (cluster-level exporter);
+    # run 30652263274 died on bind. Use a port outside the exporter range.
+    port: 19401
