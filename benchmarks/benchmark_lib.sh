@@ -1745,9 +1745,9 @@ build_replay_cmd() {
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
 
     # Fast mode retains the canonical 10-request-per-lane warmup while
-    # shortening profiling to 20 minutes.
+    # shortening profiling to 10 minutes.
     if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
-        duration=1200
+        duration=600
         warmup_requests_per_lane=10
     fi
 
