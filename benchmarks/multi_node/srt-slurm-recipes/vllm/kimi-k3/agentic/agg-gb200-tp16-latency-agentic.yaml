@@ -124,6 +124,7 @@ benchmark:
   env:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
+    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD: "0.25"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
     IS_MULTINODE: "true"

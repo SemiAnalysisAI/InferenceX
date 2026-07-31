@@ -1577,6 +1577,7 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
+AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -1788,11 +1789,11 @@ build_replay_cmd() {
         fi
         REPLAY_CMD+=" --trace-idle-gap-cap-seconds $trace_idle_gap_cap_seconds"
     fi
-    # Fail runs once more than 10% of requests error. This keeps known
-    # transient low-rate failures from killing long sweeps while still
-    # catching malformed payloads or server crashes before they get aggregated
-    # as benchmarkable data.
-    REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
+    # Fail runs early once the live error ratio crosses the configured limit.
+    # Recipes with correlated low-concurrency trajectories may allow a larger
+    # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
+    # post-run validity gate below.
+    REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
     # least one profile turn after warmup.
