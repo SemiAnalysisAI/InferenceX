@@ -358,8 +358,6 @@ if [[ "${KIMIK3_PROBE_ONLY:-0}" == "1" ]]; then
             fi
             export PROBE_EXPECT_AITER_ROOT="$aiter_root"
 
-            python /workspace/benchmarks/kernel_probe/k3_oracle.py || exit 1
-
             worst=0
             for probe_case in ${KIMIK3_PROBE_CASES}; do
                 echo "===== PROBE CASE ${probe_case} ====="

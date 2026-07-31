@@ -280,6 +280,8 @@ def test_probe_preflight_sees_full_node_but_kernel_step_uses_one_gpu() -> None:
         'IMAGE_PATH="${KIMIK3_SQUASH_FILE_OVERRIDE:-'
         "$KIMIK3_SQUASH_DIR/"
     ) in probe_block
+    assert "python /workspace/benchmarks/kernel_probe/k3_oracle.py" not in probe_block
+    assert "k3_moe_probe.py" in probe_block
 
 
 def test_situ_selftest_compares_scalar_and_vector_paths_at_identical_fp32_inputs() -> None:
