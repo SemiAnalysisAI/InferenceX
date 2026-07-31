@@ -395,7 +395,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$IS_DEP8" = "true" ]; then
         MODE_ARGS+=(
             --max-num-batched-tokens $((MNBT * 2))
-            --long-prefill-token-threshold 16384
+            --long-prefill-token-threshold 4096
         )
     else
         MODE_ARGS+=(--max-num-batched-tokens $MNBT)
