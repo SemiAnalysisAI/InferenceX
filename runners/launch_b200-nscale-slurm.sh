@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-export SLURM_PARTITION="batch_1"
+export SLURM_PARTITION="batch_2"
 export SLURM_ACCOUNT="benchmark"
 export MODEL_PATH="/scratch/models/Kimi-K2.6-NVFP4"
 
