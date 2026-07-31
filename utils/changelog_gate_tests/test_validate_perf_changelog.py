@@ -320,10 +320,12 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         == "${{ steps.sweep_policy.outputs.skip-pr-sweep }}"
     )
     assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
-    assert jobs["setup"]["needs"] == [
-        "check-changelog",
-        "reuse-sweep-gate",
-    ]
+    assert "classify-priority" not in jobs
+    assert jobs["setup"]["needs"] == ["check-changelog", "reuse-sweep-gate"]
+    classifier = next(
+        step for step in jobs["setup"]["steps"] if step.get("id") == "classify"
+    )
+    assert classifier["if"] == "vars.PRIORITY_SCHEDULER_ENABLED == 'true'"
     assert (
         "needs.check-changelog.result == 'success'"
         in jobs["reuse-sweep-gate"]["if"]
@@ -349,6 +351,10 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     assert "--evals-only" in setup_script
     assert (
         "!contains(github.event.pull_request.labels.*.name, 'evals-only')"
+        in jobs["reuse-sweep-gate"]["if"]
+    )
+    assert (
+        "!contains(github.event.pull_request.labels.*.name, 'agentx-fast')"
         in jobs["reuse-sweep-gate"]["if"]
     )
     assert (
@@ -381,6 +387,8 @@ def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
     assert "prepare_perf_changelog_merge.py" in script
     assert "git commit --allow-empty" in script
     assert "uses all-evals, which is not eligible for artifact reuse" not in script
-    assert "uses evals-only, which is not eligible for artifact reuse" in script
+    assert '. == "evals-only" or . == "agentx-fast"' in script
+    assert "which is not eligible for artifact reuse" in script
+    assert "agentx-fast" in script
     assert script.count('CURRENT_HEAD="$(gh pr view') == 2
     assert "must have exactly one sweep label" in script

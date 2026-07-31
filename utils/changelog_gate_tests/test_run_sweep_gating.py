@@ -4,8 +4,8 @@ The simulation jobs in `.github/workflows/test-changelog-gate.yml` hand-copy
 two of the gating `if` conditions and exercise two scenarios. This test parses
 the real `check-changelog` -> `reuse-sweep-gate` -> `setup` conditions out of
 `run-sweep.yml` and evaluates them with a minimal GitHub Actions expression
-engine, so it cannot drift from production and it covers every distinct
-skip/run decision.
+engine, so it cannot drift from production and covers every distinct skip/run
+decision.
 """
 
 from __future__ import annotations
@@ -25,6 +25,9 @@ _WF = yaml.load(
 )
 CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
+CLASSIFIER_IF = next(
+    step["if"] for step in _WF["jobs"]["setup"]["steps"] if step.get("id") == "classify"
+)
 SETUP_IF = _WF["jobs"]["setup"]["if"]
 PR_TYPES = set(_WF["on"]["pull_request"]["types"])
 
@@ -38,10 +41,16 @@ SWEEP_LABELS = {
     "full-sweep-fail-fast",
     "full-sweep-fail-fast-no-canary",
 }
-MODIFIER_LABELS = {"all-evals", "evals-only"}
-RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS
+MODIFIER_LABELS = {"all-evals", "evals-only", "agentx-fast", "skip_queue"}
+POLICY_LABELS = {
+    "ci-patchwork",
+    "engine-patch",
+    "ci-patchwork-waived",
+    "ci-checklist-complete",
+}
+RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS | POLICY_LABELS
 REUSE_ELIGIBLE_LABELS = SWEEP_LABELS - {"sweep-enabled"}
-REUSE_INCOMPATIBLE_LABELS = {"evals-only"}
+REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
 
 
 # --------------------------------------------------------------------------
@@ -196,6 +205,7 @@ def _ctx(sc: dict) -> dict:
         "github.event.pull_request.draft": sc.get("draft", False),
         "github.event.pull_request.labels.*.name": sc.get("labels", []),
         "github.event.label.name": sc.get("label_name"),
+        "vars.PRIORITY_SCHEDULER_ENABLED": sc.get("scheduler_enabled", "true"),
         "github.event.head_commit.message": sc.get("msg", ""),
     }
 
@@ -222,6 +232,7 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
         skip = "true" if sc.get("reuse_auth") else ""
     ctx["needs.reuse-sweep-gate.result"] = gate_result
     ctx["needs.reuse-sweep-gate.outputs.skip-pr-sweep"] = skip
+
 
     setup = "RUN" if _eval(SETUP_IF, ctx) else "SKIP"
     return check_result, gate_result, setup
@@ -253,6 +264,9 @@ CASES = [
     ("PR-sync-evals-only-without-sweep-label",
      {**_PR, "action": "synchronize", "labels": ["evals-only"]},
      ("success", "skipped", "SKIP")),
+    ("PR-sync-agentx-fast-without-sweep-label",
+     {**_PR, "action": "synchronize", "labels": ["agentx-fast"]},
+     ("success", "skipped", "SKIP")),
     ("PR-sync-full-with-all-evals-uses-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "all-evals"],
@@ -260,6 +274,10 @@ CASES = [
     ("PR-sync-full-with-evals-only-ignores-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "evals-only"],
+      "reuse_auth": True}, ("success", "skipped", "RUN")),
+    ("PR-sync-full-with-agentx-fast-ignores-reuse",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "agentx-fast"],
       "reuse_auth": True}, ("success", "skipped", "RUN")),
     ("PR-sync-full-with-both-modifiers-ignores-reuse",
      {**_PR, "action": "synchronize",
@@ -277,6 +295,9 @@ CASES = [
     ("PR-labeled-with-evals-only-without-sweep-label",
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["evals-only"]}, ("success", "skipped", "SKIP")),
+    ("PR-labeled-with-agentx-fast-without-sweep-label",
+     {**_PR, "action": "labeled", "label_name": "agentx-fast",
+      "labels": ["agentx-fast"]}, ("success", "skipped", "SKIP")),
     ("PR-labeled-all-evals-modifies-full-sweep",
      {**_PR, "action": "labeled", "label_name": "all-evals",
       "labels": ["full-sweep-enabled", "all-evals"]},
@@ -284,6 +305,26 @@ CASES = [
     ("PR-labeled-evals-only-modifies-full-sweep",
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["full-sweep-enabled", "evals-only"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-agentx-fast-modifies-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "agentx-fast",
+      "labels": ["full-sweep-enabled", "agentx-fast"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-skip-queue-restarts-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "skip_queue",
+      "labels": ["full-sweep-enabled", "skip_queue"]},
+     ("success", "skipped", "RUN")),
+    ("PR-unlabeled-skip-queue-restarts-numeric-sweep",
+     {**_PR, "action": "unlabeled", "label_name": "skip_queue",
+      "labels": ["full-sweep-enabled"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-patchwork-restarts-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "ci-patchwork",
+      "labels": ["full-sweep-enabled", "ci-patchwork"]},
+     ("success", "skipped", "RUN")),
+    ("PR-unlabeled-patchwork-restarts-full-sweep",
+     {**_PR, "action": "unlabeled", "label_name": "ci-patchwork",
+      "labels": ["full-sweep-enabled"]},
      ("success", "skipped", "RUN")),
     ("PR-labeled-with-unrelated-label",
      {**_PR, "action": "labeled", "label_name": "documentation",
@@ -345,6 +386,42 @@ def test_trigger_types_enable_gated_events() -> None:
     # that already carries a sweep label does not start a sweep.
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
+
+def test_agentx_fast_label_only_reaches_agentx_throughput_jobs() -> None:
+    jobs = _WF["jobs"]
+    expression = "${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}"
+
+    assert jobs["sweep-agentic"]["with"]["agentx-fast"] == expression
+    assert jobs["sweep-multi-node-agentic"]["with"]["agentx-fast"] == expression
+
+    for job_name, job in jobs.items():
+        if job_name in {"sweep-agentic", "sweep-multi-node-agentic"}:
+            continue
+        assert "agentx-fast" not in job.get("with", {})
+
+
+def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
+    workflow = (REPO_ROOT / ".github/workflows/e2e-tests.yml").read_text()
+
+    assert "trigger-agentic-ingest" not in workflow
+    assert "ingest-agentic-results" not in workflow
+    assert "InferenceX-app/dispatches" not in workflow
+    assert "INFX_FRONTEND_PAT" not in workflow
+
+
+def test_priority_classifier_runs_for_enabled_actions() -> None:
+    scenario = {
+        **_PR,
+        "action": "synchronize",
+        "labels": ["full-sweep-enabled"],
+    }
+    disabled = _ctx({**scenario, "scheduler_enabled": "false"})
+    enabled_pr = _ctx({**scenario, "scheduler_enabled": "true"})
+    enabled_push = _ctx({"event": "push", "scheduler_enabled": "true"})
+
+    assert not _eval(CLASSIFIER_IF, disabled)
+    assert _eval(CLASSIFIER_IF, enabled_pr)
+    assert _eval(CLASSIFIER_IF, enabled_push)
 
 def test_reuse_dispatches_source_directly_without_artifact_relay() -> None:
     jobs = _WF["jobs"]
@@ -444,6 +521,7 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-fail-fast-no-canary"],
         ["all-evals"],
         ["evals-only"],
+        ["agentx-fast"],
         ["all-evals", "evals-only"],
         ["documentation"],
         ["sweep-enabled", "full-sweep-enabled"],
@@ -452,8 +530,12 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-enabled", "all-evals"],
         ["sweep-enabled", "evals-only"],
         ["full-sweep-enabled", "evals-only"],
+        ["sweep-enabled", "agentx-fast"],
+        ["full-sweep-enabled", "agentx-fast"],
         ["sweep-enabled", "all-evals", "evals-only"],
         ["full-sweep-enabled", "all-evals", "evals-only"],
+        ["skip_queue"],
+        ["full-sweep-enabled", "skip_queue"],
     ]
     pr_axes = itertools.product(
         ["ready_for_review", "synchronize", "labeled", "unlabeled"],  # action
@@ -464,6 +546,12 @@ def _all_scenarios() -> list[dict]:
             "sweep-enabled",
             "all-evals",
             "evals-only",
+            "agentx-fast",
+            "skip_queue",
+            "ci-patchwork",
+            "engine-patch",
+            "ci-patchwork-waived",
+            "ci-checklist-complete",
             "documentation",
             None,
         ],                                  # label.name
@@ -492,9 +580,9 @@ def test_exhaustive_cross_product() -> None:
     ]
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
-    # (4 actions x 2 draft x 18 label-configs x 6 label-names x 2 reuse x
-    # 2 changelog outcomes x 2 messages = 6912 PR cases, plus 2 push cases).
-    assert len(scenarios) == 6914
+    # (4 actions x 2 draft x 23 label-configs x 12 label-names x 2 reuse x
+    # 2 changelog outcomes x 2 messages = 17664 PR cases, plus 2 push cases).
+    assert len(scenarios) == 17666
 
 
 def test_named_cases_match_reference_spec() -> None:

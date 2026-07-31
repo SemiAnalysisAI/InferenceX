@@ -100,7 +100,8 @@ class MatrixTests(unittest.TestCase):
                 if precision in sweep_matrix.BACKEND_PRECISIONS[cell[1]]
             }
             self.assertEqual(precisions, expected, cell)
-        # Both current backends realize BF16 and FP8.
+        # Every backend that lists FP8 (deepep-v2, mori, uccl-ep) realizes BF16 and FP8;
+        # nccl-ep is BF16-only, so the cross-cell union of realized precisions stays {bf16, fp8}.
         self.assertEqual(
             {precision for precisions in by_cell.values() for precision in precisions},
             {"bf16", "fp8"},
@@ -160,6 +161,111 @@ class MatrixTests(unittest.TestCase):
                     self.assertIn(backend, platform["backends"])
                     self.assertTrue(degrees)
                     self.assertLessEqual(set(degrees), set(platform["backends"][backend]))
+
+    def test_uccl_ep_rollout_shape(self):
+        # UCCL-EP's rollout, locked here: EP8 runnable on exactly the six supported SKUs, and
+        # EP16 an unsupported coverage row on every one of them. uccl-ep is EP8-only: the
+        # -tw pair has no cross-node fabric, and on the fabric SKUs cross-node EP16 is
+        # functional but its CPU-proxy throughput overruns the standardized per-case
+        # wall-clock budget (the internode Config fix landed; EP16 stays scoped out of the
+        # sweep, mirroring the mori EP16 re-wall). No rows at all on b300/gb200/gb300, where
+        # the backend is not offered. LL (decode) on every NVIDIA supported SKU at EP8.
+        document = matrix(backend="all")
+        runnable = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "uccl-ep" and item["disposition"] == "runnable"
+        }
+        unsupported = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "uccl-ep" and item["disposition"] == "unsupported"
+        }
+        supported_skus = {
+            "h100-dgxc", "h200-dgxc", "b200-dgxc", "mi355x", "mi325x-tw", "mi300x-tw",
+        }
+        # EP8 runnable on all six; nothing runnable at EP16.
+        self.assertEqual({sku for sku, _ in runnable}, supported_skus)
+        self.assertEqual({sku for sku, ep in runnable if ep == 8}, supported_skus)
+        self.assertEqual({sku for sku, ep in runnable if ep == 16}, set())
+        # EP16 is an honest unsupported coverage row on every supported SKU.
+        self.assertEqual(unsupported, {(sku, 16) for sku in supported_skus})
+        offered = {sku for sku, _ in runnable | unsupported}
+        for absent in ("b300", "gb200", "gb300"):
+            self.assertNotIn(absent, offered)
+        # uccl-ep low-latency is enabled only on NVIDIA; the AMD SKUs keep normal mode but drop
+        # LL (UCCL's low-latency kernel trips a warp-group assertion on AMD's CU count).
+        ll_skus = {
+            item["sku"]
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "uccl-ep"
+            and item["case"]["mode"] == "low-latency"
+        }
+        self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-dgxc"})
+
+    def test_nccl_ep_rollout_shape(self):
+        # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
+        #   * RDMA scale-out SKUs (h100/h200/b200/b300): EP8 runnable, EP16 an UNSUPPORTED coverage
+        #     row. EP16 cross-node rides NCCL's kernel-initiated GDAKI GIN, which faults identically
+        #     on RoCE (h100/b200/b300) and InfiniBand (h200) — a reproducible NCCL-EP v0.1.0 internode
+        #     limitation, so EP16 is scoped out like uccl-ep's.
+        #   * GB NVL72 SKUs (gb200/gb300, MNNVL, gb-nv launcher, 4 GPU/node): EP8 AND EP16 runnable —
+        #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),
+        #     so EP16 works over MNNVL where the RDMA-GIN path walls.
+        #   * AMD SKUs: no rows (NCCL EP is NVIDIA-only; AMD runs mori).
+        #   * LOW-LATENCY: EP8 on all six NVIDIA SKUs. These rows were dropped while every LL leg
+        #     wedged, on the reading that only a fixed wheel could restore them. That reading was
+        #     wrong about the cause: the wedge needed TWO LL handles live on one group. `buffer_idx`
+        #     is per-handle but its buffers are offsets into the per-group rdma_buffer, so same-config
+        #     handles alias one another's parity count/flag slots. The adapter now binds a single
+        #     handle and rebinds it per shape, which removes the aliasing without a wheel bump —
+        #     proven on a stock wheel by ladder [1] (one handle, clean) vs [1, 2] (two handles,
+        #     64 dispatch + 6 combine receive timeouts). LL is decode-only and EP8-only: GB stays at
+        #     EP8 here even though normal mode runs EP16, because LL adds no EP16 row on any SKU.
+        # BF16 only — no FP8 case (NCCL EP FP8 unsupported this release).
+        document = matrix(backend="all")
+        runnable = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "runnable"
+        }
+        unsupported = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "unsupported"
+        }
+        rdma_skus = {"h100-dgxc", "h200-dgxc", "b200-dgxc", "b300"}
+        gb_skus = {"gb200", "gb300"}
+        # RDMA SKUs: EP8 runnable + EP16 unsupported. GB SKUs: EP8 and EP16 both runnable.
+        self.assertEqual(
+            runnable,
+            {(sku, 8) for sku in rdma_skus} | {(sku, ep) for sku in gb_skus for ep in (8, 16)},
+        )
+        self.assertEqual(unsupported, {(sku, 16) for sku in rdma_skus})
+        # Offered on the six NVIDIA SKUs; never on AMD.
+        offered = {sku for sku, _ in runnable | unsupported}
+        self.assertEqual(offered, rdma_skus | gb_skus)
+        for absent in ("mi355x", "mi325x-tw", "mi300x-tw"):
+            self.assertNotIn(absent, offered)
+        # Every nccl-ep case is BF16 (FP8 unsupported this release).
+        self.assertEqual(
+            {
+                item["case"]["precision"]
+                for item in document["requested_cases"]
+                if item["case"]["backend"] == "nccl-ep"
+            },
+            {"bf16"},
+        )
+        # Low-latency: EP8 on every NVIDIA SKU, and EP8 only — a stray EP16 LL row would dispatch a
+        # shape the mode does not define.
+        ll = {
+            (item["sku"], item["case"]["ep"])
+            for item in document["requested_cases"]
+            if item["case"]["backend"] == "nccl-ep"
+            and item["case"]["mode"] == "low-latency"
+            and item["disposition"] == "runnable"
+        }
+        self.assertEqual(ll, {(sku, 8) for sku in rdma_skus | gb_skus})
 
     def test_invalid_filters_fail_closed(self):
         for options in (

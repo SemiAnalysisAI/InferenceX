@@ -35,6 +35,10 @@ SWEEP_BACKENDS = tuple(dict.fromkeys(
 BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
+    "uccl-ep": ("bf16", "fp8"),
+    # NCCL EP is BF16-only this release: its FP8 machinery exists upstream but RELEASE.md
+    # lists it unsupported/untested, so no FP8 case is emitted (see bench/ep_nccl.py).
+    "nccl-ep": ("bf16",),
 }
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
