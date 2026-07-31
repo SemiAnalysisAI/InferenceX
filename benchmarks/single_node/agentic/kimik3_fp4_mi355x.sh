@@ -968,7 +968,29 @@ fi
 # first (the build_mla_chunked_context_metadata aggregate-chunk cap that only
 # exists in hyukjleeamd/kimi-k3-mla-b128:fp8-kv-fixed, not in the mla_gluon
 # gist patched below, which is a decode-path fix only).
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+# c1 is the exception, and it gets 0.85. It is the ONE cell with no result at
+# any memory fraction: it died at num_computed_tokens 373,248 at BOTH 0.88
+# (runs 30453589555, 30525206671) and 0.90 (run 30521327099), always with
+# num_running_reqs=1. A single lane replays the deepest trajectories with
+# nothing to interleave, so it reaches the fatal band early and reliably --
+# c1 is the worst case for this failure, not the mildest.
+#
+# Trading pool for headroom is close to free at c1 specifically. One
+# trajectory cannot fill the pool: the bf16 c1 cell sustained 13 requests at
+# ~291K average ISL against a 1.96M-token pool, and every fp8 death happened
+# at 10-21% KV usage. So the ~530K tokens that 0.85 gives up were never going
+# to be used, while the ~13 GiB/rank of extra headroom goes straight to the
+# transient chunked-prefill allocation that is actually killing the cell.
+#
+# This makes c1 not strictly like-for-like with the rest of the curve. That is
+# the right trade while c1 has no data at all; revisit once the
+# build_mla_chunked_context_metadata aggregate cap lands and the whole curve
+# can return to one fraction.
+if [ "${CONC:-}" = "1" ]; then
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.85}"
+else
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+fi
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 
