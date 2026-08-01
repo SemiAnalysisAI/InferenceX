@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-gb200-1p2d-dep4-tep8-fp8-8k1k-eagle3"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-dep4-dep32-fp8-8k1k-eagle3"
 
 model:
   path: "minimax-m3-mxfp8"
@@ -24,11 +24,11 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 1
-  decode_nodes: 4
+  decode_nodes: 8
   prefill_workers: 1
-  decode_workers: 2
+  decode_workers: 1
   gpus_per_prefill: 4
-  gpus_per_decode: 8
+  gpus_per_decode: 32
 
 frontend:
   type: dynamo
@@ -60,8 +60,8 @@ backend:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
-      tensor-parallel-size: 2
-      data-parallel-size: 2
+      tensor-parallel-size: 1
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
@@ -79,7 +79,9 @@ backend:
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
+      data-parallel-size: 32
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
       no-enable-prefix-caching: true
@@ -89,16 +91,16 @@ backend:
       language-model-only: true
       kv-cache-dtype: fp8
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
-      stream-interval: 32
+      stream-interval: 100
       max-num-seqs: 1024
       max-num-batched-tokens: 16384
-      max-cudagraph-capture-size: 4096
+      max-cudagraph-capture-size: 2048
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "16x64x128"
+  concurrencies: "1x2x4x8x16x32x64x128x256x512x1024"
   req_rate: "inf"
   random_range_ratio: 0.8
   use_chat_template: true
