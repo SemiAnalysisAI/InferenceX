@@ -104,7 +104,11 @@ backend:
       language-model-only: true
       gpu-memory-utilization: 0.95
       moe-backend: "auto"
-      enable-prefix-caching: true
+      # vLLM's NIXL P/D speculative-decode path loads the draft on prefill so
+      # both workers register the same hybrid KDA/MLA cache topology. Kimi's
+      # prefix-cache align mode is incompatible with speculative DS-layout
+      # state copies in this image, so keep both P and D in cache mode "none".
+      no-enable-prefix-caching: true
       max-model-len: 1048576
       max-num-batched-tokens: 16384
       no-disable-hybrid-kv-cache-manager: true
@@ -112,6 +116,10 @@ backend:
       enforce-eager: true
       stream-interval: 10
       attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+      # Prefill never drafts output tokens. K=1 is the minimal topology-only
+      # config used by vLLM's NIXL P/D speculative-decoding integration test;
+      # the measured decode worker below retains K=2 and synthetic AL 2.51.
+      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":1,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
     decode:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "moonshotai/Kimi-K3"
@@ -140,8 +148,8 @@ backend:
       # committed golden acceptance length 2.51 from the matching block-
       # verification SPEED-Bench curve. Synthetic acceptance controls draft
       # quality while retaining the real draft-model and verification costs.
-      # P/D prefill does not draft tokens and must remain non-speculative:
-      # Kimi's DS conv-state layout rejects speculative align copies there.
+      # P/D prefill loads the same draft topology at K=1 but does not draft
+      # output tokens; this K=2 config is the measured decode policy.
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
 
 sbatch_directives:
