@@ -1,9 +1,10 @@
-name: "kimi-k3-vllm-disagg-gb300-1p1d-tep8-tp8-dspark-mooncake-agentic"
+name: "kimi-k3-vllm-disagg-gb300-1p2d-tep8-tp8-dspark-mooncake-agentic"
 
 # Mooncake-offload counterpart to the passing Kimi-K3 GB300 DSpark profile.
-# It follows the current recipes.vllm.ai nodes=4 / pd_cluster / decode_mode=tp /
-# kv_store_distributed_mooncake profile: NIXL remains the direct P/D path and
-# Mooncake adds a distributed embedded host-DRAM cache through MultiConnector.
+# It follows the current recipes.vllm.ai pd_cluster / decode_mode=tp /
+# kv_store_distributed_mooncake profile. The TEP8 prefill feeds two TP8 decode
+# replicas, matching Dynamo's Kimi-K3 GB300 reference topology; NIXL remains
+# the direct P/D path and Mooncake adds host DRAM through MultiConnector.
 model:
   path: "kimi-k3"
   container: "vllm/vllm-openai:kimi-k3"
@@ -38,9 +39,9 @@ resources:
   het_jobs: false
   spread_workers: false
   prefill_nodes: 2
-  decode_nodes: 2
+  decode_nodes: 4
   prefill_workers: 1
-  decode_workers: 1
+  decode_workers: 2
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -56,6 +57,14 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   args:
+    # Match the direct-vLLM B300 reference's Kimi response protocol. Parsing
+    # belongs at the Dynamo frontend; the headless workers reject these flags.
+    dyn-chat-processor: "vllm"
+    enable-auto-tool-choice: true
+    tool-call-parser: "kimi_k3"
+    reasoning-parser: "kimi_k3"
+    tokenizer-mode: "kimi_k3"
+    trust-remote-code: true
     router-mode: "random"
     router-session-affinity-ttl-secs: 900
   env:

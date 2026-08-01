@@ -24,3 +24,8 @@ python3 /configs/patches/patch_kimi_k3_v2_ds_prefix_cache.py
 # external load loses a block to store eviction. Kimi has hybrid KDA/MLA groups,
 # so backport the conservative full-prefix recompute fallback for that rare path.
 python3 /configs/patches/patch_kimi_k3_mooncake_hma_recompute.py
+
+# The July 27 Kimi image can occasionally hand Mooncake an incomplete hybrid
+# block-table tuple after a full external hit. Reject that decode-side save
+# before it publishes partial per-group keys; prefill offload remains intact.
+python3 /configs/patches/patch_kimi_k3_mooncake_save_groups.py
