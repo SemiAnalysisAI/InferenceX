@@ -140,6 +140,26 @@ NEW_WORKER_PAIRING = """                if _is_ssm_spec(self._group_spec_types[i
                         local_block_ids[i] = local_block_ids[i][:num_blocks]
 """
 
+OLD_REMOTE_PREFILL_MATCH = """        if params is not None and params.get("do_remote_prefill"):
+            # Remote prefill: get all prompt blocks from remote.
+            token_ids = request.prompt_token_ids or []
+            actual = self._get_remote_prefill_token_count(len(token_ids))
+"""
+
+NEW_REMOTE_PREFILL_MATCH = """        if (
+            params is not None
+            and params.get("do_remote_prefill")
+            and params.get("remote_block_ids")
+            and any(params["remote_block_ids"])
+        ):
+            # Remote prefill: get all prompt blocks from remote. A producer can
+            # export empty NIXL block groups after satisfying the complete prefix
+            # from another MultiConnector child (for example Mooncake). Do not
+            # claim that request through NIXL: the next connector must load it.
+            token_ids = request.prompt_token_ids or []
+            actual = self._get_remote_prefill_token_count(len(token_ids))
+"""
+
 
 def replace_once(
     target: Path,
@@ -242,6 +262,17 @@ def patch_nixl_connector(package_dir: Path) -> None:
             raise RuntimeError(f"Unexpected vLLM source layout in {target}")
         compile(source, str(target), "exec")
         target.write_text(source)
+
+    source = pull_scheduler.read_text()
+    source = replace_once(
+        pull_scheduler,
+        source,
+        OLD_REMOTE_PREFILL_MATCH,
+        NEW_REMOTE_PREFILL_MATCH,
+        already_patched_marker="A producer can\n            # export empty NIXL block groups",
+    )
+    compile(source, str(pull_scheduler), "exec")
+    pull_scheduler.write_text(source)
 
     print(f"[kimi-k3-ds-prefix-cache] Patched NIXL connector in {nixl_dir}")
 
