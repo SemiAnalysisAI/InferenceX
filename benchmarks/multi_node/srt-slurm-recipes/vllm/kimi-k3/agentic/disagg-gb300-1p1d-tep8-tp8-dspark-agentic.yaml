@@ -5,14 +5,14 @@ name: "kimi-k3-vllm-disagg-gb300-1p1d-tep8-tp8-dspark-agentic"
 # speculative-decoding delta is directly comparable.
 model:
   path: "kimi-k3"
-  container: "vllm/vllm-openai:nightly-124154a8843d1f8e4d4e2d5d466e2d3ebc3716da"
+  container: "vllm/vllm-openai:kimi-k3"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:nightly-124154a8843d1f8e4d4e2d5d466e2d3ebc3716da"
+    image: "vllm/vllm-openai:kimi-k3"
   frameworks:
     dynamo: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
 
@@ -20,7 +20,7 @@ dynamo:
   hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
   install: true
 
-setup_script: "vllm-container-deps.sh"
+setup_script: "kimi-k3-v2-ds-prefix-cache.sh"
 
 slurm:
   time_limit: "8:00:00"
@@ -75,9 +75,9 @@ backend:
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_USE_NCCL_SYMM_MEM: "0"
-    # Kimi-K3's three-read KDA conv transfer requires DS layout. This pinned
-    # nightly contains vLLM #49291, which adds DS align-state copies for
-    # speculative prefix caching; the layout must match on P and D for NIXL.
+    # Kimi-K3's three-read KDA conv transfer requires DS layout. The setup
+    # script backports vLLM #49291's V2 DS align-state enablement; the layout
+    # must match on P and D for NIXL.
     VLLM_SSM_CONV_STATE_LAYOUT: "DS"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -109,8 +109,8 @@ backend:
       moe-backend: "auto"
       # vLLM's NIXL P/D speculative-decode path loads the draft on prefill so
       # both workers register the same hybrid KDA/MLA cache topology. Prefix
-      # reuse lives on prefill; the pinned nightly supports DS align-mode state
-      # copies with speculative decoding.
+      # reuse lives on prefill; the setup script enables DS align-mode state
+      # copies with speculative decoding on the Kimi image's V2 runner.
       enable-prefix-caching: true
       max-model-len: 1048576
       max-num-batched-tokens: 16384

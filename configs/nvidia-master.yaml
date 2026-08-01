@@ -1698,7 +1698,7 @@ kimik3-fp4-b300-vllm-agentic-dspark:
 # K=2, probabilistic draft sampling, and synthetic AL=2.51 follow PR #2380 so
 # the result measures system performance at the committed acceptance target.
 kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
-  image: vllm/vllm-openai:nightly-124154a8843d1f8e4d4e2d5d466e2d3ebc3716da
+  image: vllm/vllm-openai:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:gb300-nv

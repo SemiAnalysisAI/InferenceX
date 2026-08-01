@@ -180,6 +180,9 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == 
     mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
         recipes/vllm/kimi-k3/agentic || exit 1
+    mkdir -p configs/patches || exit 1
+    cp -R "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/patches/." \
+        configs/patches/ || exit 1
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
     # version validated in InferenceX PR #2302 and includes per-node DP,
