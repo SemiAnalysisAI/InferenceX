@@ -80,6 +80,10 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
+elif [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+    # Matches model.path in the checked-in Kimi-K3 AgentX recipes.
+    export MODEL_PATH=/scratch/models/Kimi-K3
+    export SRT_SLURM_MODEL_PREFIX="kimi-k3"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
     # Qwen3.5 sglang recipes (qwen3.5-fp4).
@@ -91,7 +95,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-FP8
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4, qwen3.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, kimik3-fp4, qwen3.5-fp4, qwen3.5-fp8"
     exit 1
 fi
 
@@ -166,6 +170,16 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     mkdir -p recipes/sglang/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
+elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik3" ]]; then
+    # Overlay the GB300 Kimi-K3 recipes onto the pinned AgentX srt-slurm
+    # release. Keeping this separate from the generic DSv4 overlay prevents
+    # recipe paths from silently resolving to upstream defaults.
+    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+
+    mkdir -p recipes/vllm/kimi-k3/agentic || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+        recipes/vllm/kimi-k3/agentic || exit 1
 elif [[ "$IS_AGENTIC" == "1" ]]; then
     # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
     # version validated in InferenceX PR #2302 and includes per-node DP,
@@ -329,12 +343,21 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Override the job name in the config file with the runner name.
+# Namespace the Slurm job so cleanup from another repository sharing the same
+# physical runner name cannot terminate an active InferenceX allocation. This
+# was the likely cause of the simultaneous SIGTERM failures in PR #2373.
 # CONFIG_FILE may carry a ":zip_override_...[i]" selector suffix that only
 # `srtctl apply -f` parses; strip it to the real path for the sed. srtctl
 # below still receives the full CONFIG_FILE (with selector).
 CONFIG_PATH="${CONFIG_FILE%%:*}"
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+SRT_SLURM_JOB_NAME="inferencex-${RUNNER_NAME}"
+if command -v squeue >/dev/null 2>&1; then
+    scancel --user="$USER" --name="$SRT_SLURM_JOB_NAME" 2>/dev/null || true
+    while [[ -n "$(squeue --user="$USER" --name="$SRT_SLURM_JOB_NAME" --noheader --format='%i')" ]]; do
+        sleep 5
+    done
+fi
+sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
 # --no-preflight skips srtctl's pre-submit model-path stat, which runs on
 # the GHA runner host (im-gb300-login-02, an x86 login node). It's required
@@ -397,7 +420,16 @@ _snapshot_server_logs() {
         tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . 2>/dev/null || true
     fi
 }
-trap _snapshot_server_logs EXIT
+
+_cleanup_on_exit() {
+    local rc=$?
+    _snapshot_server_logs
+    scancel "$JOB_ID" 2>/dev/null || true
+    return "$rc"
+}
+trap _cleanup_on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 # Wait for log file to appear (also check job is still alive)
 while ! ls "$LOG_FILE" &>/dev/null; do

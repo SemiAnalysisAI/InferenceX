@@ -1689,6 +1689,74 @@ kimik3-fp4-b300-vllm-agentic-dspark:
       # TP8 SimpleCPUOffload (host DRAM)
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
 
+# Kimi-K3 MXFP4 GB300 disaggregated AgentX profile aligned with the vLLM
+# recipe site's pd_cluster, nodes=2, decode_mode=tp selection. `nodes=2`
+# means two 4-GPU trays per role for this model: one TEP8 prefill worker and
+# one pure TP8 decode worker, four trays / 16 GPUs total. The checked-in recipe
+# keeps Dynamo's session-aware routing and kv_both connector contract while
+# matching the site's engine topology and P/D tuning.
+kimik3-fp4-gb300-dynamo-vllm-agentic-disagg:
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        conc-list: [1, 2, 4, 8, 16]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p1d-tep8-tp8-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+# Topology-identical DSpark arm. The schema value remains `mtp` because the
+# matrix Literal has no `dspark` member; the srt-slurm recipe invokes DSpark.
+# K=2, probabilistic draft sampling, and synthetic AL=2.51 follow PR #2380 so
+# the result measures system performance at the committed acceptance target.
+kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-disagg:
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: mtp
+        conc-list: [1, 2, 4, 8, 16]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/disagg-gb300-1p1d-tep8-tp8-dspark-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
