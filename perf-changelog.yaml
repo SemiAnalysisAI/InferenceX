@@ -5358,12 +5358,11 @@
 
 - config-keys:
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
-    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-disagg
   scenario-type:
     - agentic-coding
   description:
-    - "Add Kimi-K3 MXFP4 GB300 disaggregated AgentX sweeps aligned with the vLLM recipe site's pd_cluster nodes=2 decode_mode=tp profile: one TEP8 prefill worker and one TP8 decode worker, each spanning two 4-GPU trays."
-    - "Sweep concurrency [1, 4, 8, 16, 64] for DSpark with NIXL transfer alone and with the distributed embedded Mooncake DRAM tier. Both arms follow PR #2380 with K=2, probabilistic draft sampling, synthetic rejection sampling, and synthetic acceptance length 2.51."
-    - "Configure the Mooncake arm through MultiConnector with NIXL for P/D transfer, a 100 GB-per-GPU embedded RDMA store, deterministic cross-process prefix hashes, asynchronous loads and lookups, the CUDA 13 mooncake-transfer-engine 0.3.12.post1 package, and Mooncake's official CUDA 13 multi-arch master image."
+    - "Add a Kimi-K3 MXFP4 GB300 disaggregated AgentX sweep aligned with the vLLM recipe site's pd_cluster nodes=2 decode_mode=tp profile: one TEP8 prefill worker and one TP8 decode worker, each spanning two 4-GPU trays."
+    - "Sweep concurrency [1, 4, 8, 16, 64] for DSpark with NIXL P/D transfer and no Mooncake offload. Follow PR #2380 with K=2, probabilistic draft sampling, synthetic rejection sampling, and synthetic acceptance length 2.51."
+    - "Match the earlier working Kimi-K3 P/D runs by omitting data-parallel-hybrid-lb, which vLLM rejects for Dynamo headless workers."
     - "Inherit the workflow RESULT_FILENAME and write aggregate JSON directly to /infmax-workspace, fixing the closed GB300 branches' false failures after successful profiles; namespace Slurm jobs and scope generic cleanup to the current user to prevent cross-repository SIGTERM collisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2444

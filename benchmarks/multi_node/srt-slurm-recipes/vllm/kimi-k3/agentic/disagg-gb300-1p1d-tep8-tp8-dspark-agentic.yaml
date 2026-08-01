@@ -136,7 +136,6 @@ backend:
       max-num-batched-tokens: 32
       no-disable-hybrid-kv-cache-manager: true
       no-enable-flashinfer-autotune: true
-      data-parallel-hybrid-lb: true
       # With K=2, each sequence captures three target positions. Enumerating
       # 3..96 preserves one graph per decode batch up to max-num-seqs=32;
       # PR #2380 documents why an unscaled 1..32 ladder only covers 10 seqs.
