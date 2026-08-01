@@ -75,7 +75,10 @@ backend:
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_USE_NCCL_SYMM_MEM: "0"
-    VLLM_SSM_CONV_STATE_LAYOUT: "DS"
+    # The current Kimi-K3 image predates vLLM #49291. Its DS layout asserts
+    # when align-mode prefix caching and speculative decoding are combined;
+    # SD is the supported layout and must match on both P and D for NIXL.
+    VLLM_SSM_CONV_STATE_LAYOUT: "SD"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -105,10 +108,10 @@ backend:
       gpu-memory-utilization: 0.95
       moe-backend: "auto"
       # vLLM's NIXL P/D speculative-decode path loads the draft on prefill so
-      # both workers register the same hybrid KDA/MLA cache topology. Kimi's
-      # prefix-cache align mode is incompatible with speculative DS-layout
-      # state copies in this image, so keep both P and D in cache mode "none".
-      no-enable-prefix-caching: true
+      # both workers register the same hybrid KDA/MLA cache topology. Prefix
+      # reuse lives on prefill; SD layout supports its align-mode state copies
+      # with speculative decoding in the current image.
+      enable-prefix-caching: true
       max-model-len: 1048576
       max-num-batched-tokens: 16384
       no-disable-hybrid-kv-cache-manager: true
@@ -133,6 +136,8 @@ backend:
       language-model-only: true
       gpu-memory-utilization: 0.95
       moe-backend: "auto"
+      # Match the upstream P/D recipe: decode receives external KV and does
+      # not perform its own prefix lookup.
       no-enable-prefix-caching: true
       max-model-len: 1048576
       max-num-seqs: 32
