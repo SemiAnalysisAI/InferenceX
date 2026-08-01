@@ -105,7 +105,12 @@ backend:
       enable-cumem-allocator: true
       trust-remote-code: true
       language-model-only: true
-      gpu-memory-utilization: 0.95
+      # AgentX cache-pressure warmup drives TRTLLM_RAGGED through large
+      # kv_nope dtype-conversion workspaces outside vLLM's KV allocation. At
+      # 0.95, run 30702475025 left only 2.6 GiB free and OOMed on a 3.07 GiB
+      # allocation at c8. 0.90 matches the working Kimi-K3 B300 AgentX recipe
+      # and leaves enough transient prefill workspace.
+      gpu-memory-utilization: 0.90
       moe-backend: "auto"
       # vLLM's NIXL P/D speculative-decode path loads the draft on prefill so
       # both workers register the same hybrid KDA/MLA cache topology. Prefix
