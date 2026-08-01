@@ -129,7 +129,7 @@ backend:
       trust-remote-code: true
       language-model-only: true
       gpu-memory-utilization: 0.95
-      moe-backend: "deep_gemm_mega_moe"
+      moe-backend: "auto"
       no-enable-prefix-caching: true
       max-model-len: 1048576
       max-num-seqs: 32

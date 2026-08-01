@@ -5365,5 +5365,6 @@
     - "Sweep concurrency [1, 4, 8, 16, 64] for DSpark with NIXL P/D transfer and no Mooncake offload. Follow PR #2380 with K=2, probabilistic draft sampling, synthetic rejection sampling, and synthetic acceptance length 2.51."
     - "Match the earlier working Kimi-K3 P/D runs by omitting data-parallel-hybrid-lb, which vLLM rejects for Dynamo headless workers."
     - "Leave decode max-num-batched-tokens at the vLLM default, as PR #2380 does: an explicit value of 32 is fully consumed by the K=2 draft slots at max-num-seqs 32 and leaves max_num_scheduled_tokens at zero."
+    - "Use moe-backend auto on the pure-TP decode worker, matching both the upstream base recipe and the earlier green GB300 TP8 P/D run; deep_gemm_mega_moe is the upstream DEP override and requires expert parallelism."
     - "Inherit the workflow RESULT_FILENAME and write aggregate JSON directly to /infmax-workspace, fixing the closed GB300 branches' false failures after successful profiles; namespace Slurm jobs and scope generic cleanup to the current user to prevent cross-repository SIGTERM collisions."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2444
