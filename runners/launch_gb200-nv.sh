@@ -631,7 +631,10 @@ if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
 elif [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
     SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
+# srtctl gives the GitHub-provided RUNNER_NAME precedence over config.name.
+# Override it only for submission so the rendered #SBATCH job name retains
+# the InferenceX namespace used above.
+SRTCTL_OUTPUT=$(RUNNER_NAME="$SRT_SLURM_JOB_NAME" srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
