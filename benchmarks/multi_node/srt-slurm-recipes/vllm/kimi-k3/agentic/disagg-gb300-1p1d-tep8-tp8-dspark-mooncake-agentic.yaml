@@ -161,8 +161,10 @@ backend:
       language-model-only: true
       gpu-memory-utilization: 0.95
       moe-backend: "auto"
-      # Decode receives external state and does not perform a local prefix lookup.
-      no-enable-prefix-caching: true
+      # MooncakeStoreConnector registers Kimi's hybrid Mamba state only when
+      # prefix caching remains enabled; disabling it forces align mode back to
+      # "none" during vLLM config normalization and the connector rejects it.
+      enable-prefix-caching: true
       max-model-len: 1048576
       max-num-seqs: 32
       no-disable-hybrid-kv-cache-manager: true
