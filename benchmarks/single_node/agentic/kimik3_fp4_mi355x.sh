@@ -45,11 +45,21 @@ set -x
 #   MAX_NUM_BATCHED_TOKENS   4096   (reference)
 #   AITER_A8W4               1      (reference; 0 = aiter a16w4 MoE path)
 #   LANGUAGE_MODEL_ONLY      false  (reference loads the vision tower)
-#   KV_CACHE_DTYPE           auto   (unset -> flag not passed at all)
+#   KV_CACHE_DTYPE           fp8    (default for every arm; =auto for a bf16 A/B)
+#   KV_BLOCK_SIZE            unset  (unset -> vLLM sizes the page; 128 under fp8)
 #   MAX_MODEL_LEN            unset  (unset -> vLLM derives K3's 1M context)
-#   SPEC_DECODE              false  (DSpark; UNVALIDATED on ROCm)
+#   SPEC_DECODE              false  (enabled by the _mtp DSpark wrapper)
+#   ENFORCE_EAGER            false  (reference; DSpark wrapper keeps it false)
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
+
+# Force the eval framework to lm-eval, matching minimaxm3_fp4_mi355x.sh.
+# run_eval derives its default as swebench for agentic scenarios
+# (scenario_default=swebench when IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but
+# EVAL_FRAMEWORK takes precedence over that default
+# (benchmark_lib.sh:1471 framework=${EVAL_FRAMEWORK:-...}). Left overridable so
+# the SWE-bench path below can still be selected with EVAL_FRAMEWORK=swebench.
+export EVAL_FRAMEWORK="${EVAL_FRAMEWORK:-lm-eval}"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
@@ -178,13 +188,41 @@ wait_for_lmcache_ready() {
 # benchmarks/single_node/agentic/README.md it must be consumed as given and
 # never replaced with a model-specific constant.
 OFFLOAD_ARGS=()
-# (srok), enforce fp8 kv
-#KV_CACHE_DTYPE="fp8"
+# Only the LMCache arms set this (to `--mamba-cache-mode align`); every other
+# arm leaves vLLM to pick the mode.
+LMCACHE_MAMBA_CACHE_MODE_ARGS=()
+
+# fp8 KV is the DEFAULT for every arm on this model.
+#
+# It is the first thing that made the trace run well: run 30442578333 (c8,
+# kvnone, 3600s) scored 32.59 output tok/s / 696 total tok/s/GPU at TTFT 2.6s,
+# against 19.17 / 535 / 69.1s for the bf16 offload cell in the same window.
+# K3 costs ~217 KiB KV/token -- 3x K2.7 -- so halving the KV element size is
+# the single largest lever available, exactly as in
+# [[fp8-kv-cache-mandatory]] for kimik2.7.
+#
+# This is set here, before the KV_OFFLOAD_BACKEND case below, for two reasons:
+# the agentic matrix has no per-cell env channel (so a kvnone cell has no other
+# way to ask for fp8), and the mla_gluon patch further down gates on
+# KV_CACHE_DTYPE=fp8 and must see it already set.
+#
+# Set KV_CACHE_DTYPE=auto for a bf16 A/B.
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
-  lmcache|lmcache-k27|lmcache-budget)
+  lmcache|lmcache-k27|lmcache-budget|lmcache-k3)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # lmcache-k3: LMCache's OWN validated K3 server command
+    # (docs/source/recipes/kimi_k3.rst, PR #4277). Deliberately minimal --
+    # the `reference` profile's flags (--max-gpu-workers, --l1-align-bytes,
+    # --eviction-trigger-watermark, --supported-transfer-mode) are not part of
+    # what upstream validated on K3, and an unrecognised flag is a silent
+    # server-start failure. Start from the known-good command; add tuning
+    # flags only once this arm produces a number.
+    if [ "$KV_OFFLOAD_BACKEND" = "lmcache-k3" ]; then
+        LMCACHE_PROFILE=k3upstream
+    fi
     # The server profile has to be selectable from config: the agentic matrix
     # has no per-cell env channel, so the backend NAME carries it.
     #   lmcache      -> AMD K3 reference server command
@@ -236,11 +274,89 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     # Worth keeping in view either way: at ~106k-token average ISL, 768 would
     # mean ~138 chunked-prefill steps per turn versus ~26 at 4096, so the two
     # settings are not performance-equivalent.
-    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-768}"
-    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-768}"
+    # Both values derive from vLLM's UNIFIED block size N, which is NOT a
+    # constant: it depends on TP and on the KV dtype. Upstream's recipe quotes
+    # N=768 for K3 at TP8, but that is the bf16 figure, and it explicitly says
+    # to "re-read N from vLLM's `Setting attention block size to N tokens`
+    # startup log line" after changing anything. Measured on this fleet with
+    # --kv-cache-dtype fp8 at TP8, three independent runs (30453589555,
+    # 30521327099, 30525206671) all log:
+    #     Setting attention block size to 1536 tokens
+    # fp8 halves the element size, so twice as many tokens fit one page. Since
+    # fp8 is this recipe's default, hardcoding 768 would violate BOTH LMCache
+    # constraints on every default run.
+    #
+    # Constraints (lmcache/integration/vllm, and upstream's recipe):
+    #   chunk_size % N == 0                  -> chunk_size = N
+    #   N <= max_num_batched_tokens < 2 * N  -> sit just under 2N
+    # `align` snapshots the KDA state only on a block boundary at the end of a
+    # scheduler step, so the per-step budget must cover at least one full block
+    # but stay below two. Upstream validated 1500 against N=768 (just under
+    # 2N); 3000 against N=1536 is the same ratio.
+    if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+        LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-1536}"
+    else
+        LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-768}"
+    fi
+    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-$LMCACHE_UNIFIED_BLOCK}"
+    MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-$(( LMCACHE_UNIFIED_BLOCK * 2 - 72 ))}"
     LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
     LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
-    echo "LMCache: --max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE (reference values)"
+    # Guard the derivation rather than trusting it: a wrong N is a 20-minute
+    # engine-init failure after a 1.56 TB weight load.
+    if [ $(( LMCACHE_K3_CHUNK_SIZE % LMCACHE_UNIFIED_BLOCK )) -ne 0 ]; then
+        echo "Error: LMCache chunk-size $LMCACHE_K3_CHUNK_SIZE is not a multiple of N=$LMCACHE_UNIFIED_BLOCK." >&2
+        exit 1
+    fi
+    if [ "$MAX_NUM_BATCHED_TOKENS" -lt "$LMCACHE_UNIFIED_BLOCK" ] \
+       || [ "$MAX_NUM_BATCHED_TOKENS" -ge $(( LMCACHE_UNIFIED_BLOCK * 2 )) ]; then
+        echo "Error: --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS outside [N, 2N) for N=$LMCACHE_UNIFIED_BLOCK." >&2
+        exit 1
+    fi
+    echo "LMCache: N=$LMCACHE_UNIFIED_BLOCK (kv-cache-dtype=${KV_CACHE_DTYPE:-auto})" \
+         "--max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE"
+
+    # Required by upstream's K3 recipe, and by the KDA backend generally:
+    # `align` is the only Mamba cache mode the KDA backend supports, and it is
+    # the mode that keeps reusable state snapshots. vLLM picks it implicitly
+    # when prefix caching is on, but upstream passes it explicitly and so do
+    # we -- an implicit default that silently flips to 'none' is exactly how
+    # this arm failed before.
+    LMCACHE_MAMBA_CACHE_MODE_ARGS=(--mamba-cache-mode align)
+
+    # Upstream's K3 recipe requires this on the LMCache path. It defaults to 0
+    # and gates the fused latent-MoE tail in the K3 model definition.
+    export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION="${VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION:-1}"
+
+    # GPU-memory headroom for the LMCache arm specifically.
+    #
+    # Attempt 1 (run 30559676068) cleared every LMCache-specific hurdle -- the
+    # source build, both K3 edit classes, `align`, N=1536, a healthy server --
+    # and then died on the SAME allocation wall the no-offload arm hits:
+    # HSA_STATUS_ERROR_OUT_OF_RESOURCES / "Available Free mem : 0 MB" on the
+    # workers. But it hit it at num_computed_tokens=184,320 with kv_cache_usage
+    # at 5.2%, against 360,960-373,248 at 10-21% without the connector. The
+    # threshold roughly HALVED, because LMCacheMPConnector holds GPU-side
+    # staging buffers on top of the transient chunked-prefill workspace.
+    #
+    # Two levers, both scoped to this arm so the no-offload curve is untouched:
+    #
+    # 1. max_num_seqs 128 -> 32. This is the structural one. The chunked MLA
+    #    workspace is sized from max_num_seqs, and under fp8 it had already
+    #    doubled (98,304 -> 196,608 rows) because the page went 768 -> 1536.
+    #    128 slots was never meaningful at concurrency 8 -- the widest tree
+    #    fan-out observed in the trace is 13 live streams in one lane, so 32
+    #    leaves real headroom while cutting the workspace 4x.
+    # 2. gpu_memory_utilization 0.88 -> 0.85 (244.8 GiB, ~36 GiB free vs ~28).
+    #    An arm with an extra GPU-side consumer needs more slack than one
+    #    without; 0.88 is calibrated for the no-offload case.
+    #
+    # Both are overridable, and both should be walked back toward the
+    # no-offload values once this arm produces a number -- a like-for-like
+    # comparison against 682.63 tok/s/GPU eventually needs matching
+    # max_num_seqs.
+    MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.85}"
 
     # LMCache is NOT in the kimi-k3 image (verified: no `lmcache` module and no
     # CLI), so build it against ROCm. Clone to a container-local dir, NOT the
@@ -263,26 +379,91 @@ except Exception:
 ' 2>/dev/null || true)
     fi
 
-    # The AMD reference recipe pins a PyPI release: `uv pip install
-    # "lmcache==0.5.1"`. Do not substitute a git build of dev HEAD -- dev
-    # (v0.5.3.dev47) carries a LazyMemoryAllocator that expands the pinned L1
-    # pool ~10 GB per ~17 s DURING serving, which starves the vLLM worker until
-    # the executor RPC deadline fires ("RPC call to sample_tokens timed out",
-    # observed on g09 and g11). It also adds Mamba-hybrid constraints
-    # (block_size <= max_num_batched_tokens < 2*block_size, and
-    # chunk_size % block_size == 0) that the reference command does not satisfy.
-    LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-0.5.1}}"
+    # LMCache K3 support is NOT in any PyPI release yet (latest is 0.5.2,
+    # 2026-07-22). Upstream's own recipe -- docs/source/recipes/kimi_k3.rst,
+    # added by LMCache PR #4277 -- says: "use a nightly build from 2026-07-27
+    # or newer; stable LMCache releases include K3 support starting from
+    # 0.5.3". Two commits on dev are what make K3 work at all:
+    #   #4206 (2026-07-23) _MambaUnifiedViewEdit -- re-views a Mamba/KDA
+    #         UNIFIED state tensor as a single attention tensor. This is the
+    #         fix for our long-standing blocker
+    #         "ValueError: expected a Mamba [conv_state, ssm_state] tensor
+    #          list, got Tensor" (run 30350911388): K3's Kimi Delta Attention
+    #         supplies one fused state tensor, and before #4206 the adapter
+    #         only understood the [conv_state, ssm_state] pair.
+    #   #4278 (2026-07-28) _SubpagedMLAAttentionViewEdit -- re-views K3's
+    #         kernel-paged MLA tensor [N*12, 64, 576] as logical pages
+    #         [N, 768, 576].
+    # 0.5.1 predates BOTH, which is why every LMCache attempt on this model
+    # has died at engine init. The historical "pin 0.5.1, never build dev"
+    # note in this file was correct for its date and is now obsolete.
+    #
+    # Nightly WHEELS are CUDA-only, so ROCm must build from source. Flags are
+    # upstream's (docs/source/getting_started/installation.rst): gfx950 is
+    # MI355X/MI350X.
+    #
+    # LMCACHE_GIT_REF pins the build. Default is the #4278 merge commit rather
+    # than dev HEAD so the build is reproducible and cannot drift under us.
+    # A config-supplied `version` that looks like a release (0.5.3+) still
+    # installs from PyPI once such a release exists.
+    LMCACHE_GIT_REF="${LMCACHE_GIT_REF:-1dfa07772b8b2ae79653c830d63e297da39c970f}"
+    LMCACHE_VERSION="${LMCACHE_VERSION:-${LMCACHE_CFG_VERSION:-git}}"
     if ! python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null 2>&1; then
-        echo "Installing lmcache==$LMCACHE_VERSION"
-        if command -v uv >/dev/null 2>&1; then
-            uv pip install --system "lmcache==$LMCACHE_VERSION" \
-                || agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+        if [ "$LMCACHE_VERSION" = "git" ]; then
+            # Clone to a container-local dir, NOT the bind-mounted /workspace:
+            # a later job's `clean: true` checkout trips over root-owned build
+            # artifacts left behind there.
+            LMCACHE_SRC="${LMCACHE_SRC:-/opt/lmcache-src}"
+            echo "Building lmcache from source at ref $LMCACHE_GIT_REF (ROCm/gfx950)"
+            rm -rf "$LMCACHE_SRC"
+            git clone --filter=blob:none https://github.com/LMCache/LMCache.git "$LMCACHE_SRC"
+            git -C "$LMCACHE_SRC" checkout --detach "$LMCACHE_GIT_REF"
+            git -C "$LMCACHE_SRC" --no-pager log -1 --oneline
+            (
+                cd "$LMCACHE_SRC"
+                export PYTORCH_ROCM_ARCH="gfx942,gfx950"
+                export TORCH_DONT_CHECK_COMPILER_ABI=1
+                export CXX=hipcc
+                export BUILD_WITH_HIP=1
+                if command -v uv >/dev/null 2>&1; then
+                    uv pip install --system -e . --no-build-isolation \
+                        || python3 -m pip install -e . --no-build-isolation
+                else
+                    python3 -m pip install -e . --no-build-isolation
+                fi
+            )
         else
-            agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+            echo "Installing lmcache==$LMCACHE_VERSION"
+            if command -v uv >/dev/null 2>&1; then
+                uv pip install --system "lmcache==$LMCACHE_VERSION" \
+                    || agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+            else
+                agentic_pip_install --quiet "lmcache==$LMCACHE_VERSION"
+            fi
         fi
+        # Fail here, loudly, rather than 20 minutes later inside vLLM: this
+        # runs before the engine loads 1.56 TB of weights.
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
     fi
     python3 -c "import lmcache; print('lmcache', getattr(lmcache,'__version__','?'))" || true
+    # Assert the two K3 fixes are actually present in whatever got installed.
+    # A silently-old build would otherwise fail much later with the original
+    # Mamba ValueError and look like a fresh bug.
+    python3 - <<'PYEOF'
+import sys
+try:
+    from lmcache.integration.vllm import kv_cache_group_edits as e
+except Exception as exc:
+    sys.exit(f"FATAL: cannot import kv_cache_group_edits: {exc}")
+names = {type(x).__name__ for x in getattr(e, "_EDITS", ())}
+missing = {"_MambaUnifiedViewEdit", "_SubpagedMLAAttentionViewEdit"} - names
+if missing:
+    sys.exit(
+        f"FATAL: installed lmcache lacks K3 support: missing {sorted(missing)}. "
+        f"Registered edits: {sorted(names)}. Needs dev >= #4278 (2026-07-28)."
+    )
+print(f"lmcache K3 edits present: {sorted(names)}")
+PYEOF
 
     LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
     LMCACHE_PORT="${LMCACHE_PORT:-5555}"
@@ -292,7 +473,72 @@ except Exception:
     # SHM and falls back to a pickle path that crashes at load. Cap at 90% of
     # free /dev/shm so SHM stays enabled, and say so loudly -- the capped value
     # is the number that actually backs the run.
-    LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
+    if [ "${LMCACHE_PROFILE:-}" = "k3upstream" ]; then
+        # Upstream's recipe says --l1-size-gb 100, but that is a
+        # does-it-work value, not a capacity value. Attempt 2 (run
+        # 30563325963) ran the whole 3600 s green at 100 GB and the host tier
+        # did NOTHING: 122,770 chunks stored, 1,879 evictions, and an external
+        # prefix cache hit rate of 0.0%. A write-only cache.
+        #
+        # The arithmetic says it could not have worked. K3 costs ~217 KiB of
+        # KV per token at bf16, ~108 KiB at fp8, so 100 GB holds well under
+        # 1M tokens -- SMALLER than the 3,322,266-token GPU pool it is meant
+        # to back. An offload tier below the size of the GPU pool can only
+        # evict before reuse. Worse, it dragged the GPU tier down with it:
+        # GPU prefix hit fell 88.4% -> 33.6% and GPU KV usage 87.5% -> 52.7%,
+        # consistent with vLLM releasing blocks to an external tier that then
+        # threw them away.
+        #
+        # Attempt 3 (run 30575475359) then sized L1 from TOTAL_CPU_DRAM_GB,
+        # which the /dev/shm cap landed at 1360 GB, and that BROKE GPU IPC:
+        #   Error handling request RequestType.REGISTER_KV_CACHE
+        #     torch.UntypedStorage._new_shared_cuda(...)
+        #     torch.AcceleratorError: CUDA error: invalid device pointer
+        #                             (hipErrorInvalidDevicePointer)
+        # once per TP rank, so all 8 vLLM workers then died on
+        # "LMCache server did not respond to register_kv_caches within 300.0s".
+        # The timeout was the symptom; the registration itself failed.
+        #
+        # Attempt 2 at 100 GB logged ZERO IPC errors and registered cleanly.
+        # L1 size was the only difference between the two runs, so pinning
+        # ~1.36 TB of host memory is what exhausts the driver's mapping
+        # resources and makes the subsequent GPU IPC import invalid. Note the
+        # lazy allocator was NOT the problem here: 134 expansions completed in
+        # 3m37s and the pool was fully allocated long before vLLM finished
+        # loading weights.
+        #
+        # So L1 has a working range: above the GPU tier (GPU KV is ~52 GiB/rank
+        # at GMU 0.85, ~416 GB across TP8) and below the IPC ceiling somewhere
+        # under 1360 GB. 512 GB registered cleanly (run 30579846678) and lifted
+        # external hits 0.00% -> 0.82%, but throughput did not move.
+        #
+        # LMCACHE_L1_SHM_FRACTION sizes L1 as a fraction of FREE /dev/shm,
+        # which is the resource that actually binds (shm was 1512 GB free on
+        # this fleet, so 0.60 -> ~907 GB). Sizing off shm rather than
+        # TOTAL_CPU_DRAM_GB is deliberate: the DRAM budget is 2399 GB, so any
+        # fraction of it lands past the shm cap and straight back on the 1360
+        # GB value that broke IPC.
+        #
+        # 0.60 bisects the known range -- 1.8x the 512 GB that works, 0.67x
+        # the 1360 GB that fails -- so this run locates the IPC ceiling as
+        # well as testing whether more cache changes the throughput picture.
+        # If it fails to register, the ceiling is between 512 and 907 and the
+        # next step is 0.45 (~680 GB), not a return to 512.
+        LMCACHE_L1_SHM_FRACTION="${LMCACHE_L1_SHM_FRACTION:-0.60}"
+        _shm_free_gb=$(df -BG --output=avail /dev/shm 2>/dev/null | tail -1 | tr -dc '0-9')
+        if [ -n "$_shm_free_gb" ] && [ "${_shm_free_gb:-0}" -gt 0 ]; then
+            _l1_from_shm=$(awk -v f="$LMCACHE_L1_SHM_FRACTION" -v s="$_shm_free_gb" \
+                'BEGIN { printf "%d", f * s }')
+            LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$_l1_from_shm}"
+            echo "LMCache L1 sized from /dev/shm: ${LMCACHE_L1_SHM_FRACTION} x ${_shm_free_gb}G free = ${LMCACHE_L1_SIZE_GB}G"
+        else
+            # df failed -- fall back to the value already proven to register.
+            LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"
+            echo "WARNING: could not read free /dev/shm; falling back to L1=${LMCACHE_L1_SIZE_GB}G" >&2
+        fi
+    else
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-512}"   # reference value
+    fi
 
     # Optional ceiling on the eager allocation. Memory pinning is unavailable in
     # the ROCm container ("CudaPinMemoryBackend: neither torch cudart nor
@@ -363,6 +609,33 @@ except Exception:
             --eviction-policy LRU
         )
         ;;
+      k3upstream)
+        # Upstream's validated K3 command, plus the worker and eviction tuning
+        # needed by this TP8 agentic workload. The pinned LMCache revision
+        # supports these flags, and four workers serialize pairs of TP ranks.
+        # Upstream's original command was:
+        #   lmcache server --port 6555 --chunk-size 768 --max-workers 4 \
+        #                  --l1-size-gb 100 --eviction-policy LRU
+        # --chunk-size comes from the N derivation above (1536 under fp8, not
+        # upstream's bf16 768). L1 defaults to upstream's 100 GB here rather
+        # than the reference 512 GB: memory pinning is unavailable in the ROCm
+        # container, so LMCache allocates the WHOLE L1 pool before serving,
+        # and a smaller pool means a much shorter and more predictable
+        # bring-up. Raise it via LMCACHE_L1_SIZE_GB once the arm is green.
+        LMCACHE_CMD=(
+            lmcache server
+            --host "$LMCACHE_HOST"
+            --port "$LMCACHE_PORT"
+            --http-host "$LMCACHE_HOST"
+            --http-port "$LMCACHE_HTTP_PORT"
+            --chunk-size "$LMCACHE_CHUNK_SIZE"
+            --max-workers "${LMCACHE_MAX_WORKERS:-$TP}"
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
+            --eviction-trigger-watermark "$LMCACHE_EVICTION_WATERMARK"
+            --eviction-ratio "$LMCACHE_EVICTION_RATIO"
+            --eviction-policy LRU
+        )
+        ;;
       reference)
         LMCACHE_CMD=(
             lmcache server
@@ -383,7 +656,7 @@ except Exception:
         )
         ;;
       *)
-        echo "Error: unsupported LMCACHE_PROFILE '$LMCACHE_PROFILE' (expected: reference, k2.7)" >&2
+        echo "Error: unsupported LMCACHE_PROFILE '$LMCACHE_PROFILE' (expected: reference, k2.7, k3upstream)" >&2
         exit 1
         ;;
     esac
@@ -411,8 +684,23 @@ except Exception:
         )
     fi
     ;;
-  vllm-simple|vllm-simple-fp8)
+  vllm-simple|vllm-simple-fp8|vllm-simple-fp8-lazy)
     require_agentic_kv_offload_backend "$KV_OFFLOAD_BACKEND"
+    # vllm-simple-fp8-lazy is vllm-simple-fp8 with lazy offload. In eager mode
+    # the connector stores every completed block to CPU immediately; in lazy
+    # mode it only stores under GPU-block pressure (manager.py _lazy_mode /
+    # _estimate_lazy_target_blocks walk the GPU free queue). Every fp8+connector
+    # cell so far has died while the GPU pool was nearly EMPTY -- 11.6% usage
+    # with a 0.0% external hit rate in run 30505656455, i.e. mid store-storm
+    # with nothing yet to gain from the host tier -- so the store path is where
+    # to look, and lazy removes almost all of it in that regime.
+    #
+    # Also the mode Wenyao's kimik3_fp4_mi355x_mtp.sh pins (SIMPLE_LAZY_OFFLOAD
+    # =true) as part of the gfx950 bundle validated in PR #2367 against an
+    # eight-rank GPU memory access fault.
+    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8-lazy" ]; then
+        SIMPLE_LAZY_OFFLOAD="${SIMPLE_LAZY_OFFLOAD:-true}"
+    fi
     # vllm-simple-fp8 is the same connector with an fp8 KV cache. fp8 halves
     # bytes/token in the GPU pool, which on this KV-bound corpus moves the
     # eviction wall itself rather than just adding headroom (measured: the pool
@@ -420,9 +708,11 @@ except Exception:
     # UNVALIDATED on K3's hybrid geometry: the pool spans Kimi Delta Attention
     # state and gated-MLA latent, and fp8 support across both spec types is
     # unconfirmed on this build.
-    if [ "$KV_OFFLOAD_BACKEND" = "vllm-simple-fp8" ]; then
+    case "$KV_OFFLOAD_BACKEND" in
+      vllm-simple-fp8|vllm-simple-fp8-lazy)
         KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-    fi
+        ;;
+    esac
     # vLLM's own SimpleCPUOffloadConnector -- the AMD reference's native
     # offload path. Unlike LMCache it does not go through the Mamba
     # [conv_state, ssm_state] adapter that K3's Kimi Delta Attention breaks
@@ -521,11 +811,32 @@ if [ -n "${KV_CACHE_DTYPE:-}" ] && [ "${KV_CACHE_DTYPE}" != "auto" ]; then
     KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
 fi
 
+# INERT ON K3 -- kept only so the override stays discoverable. K3 is hybrid, and
+# vLLM raises the attention block size until the attention page is at least the
+# mamba/KDA page (interface.py:911, "Setting attention block size to N tokens to
+# ensure that attention page size is >= mamba page size"). Measured: bf16 -> 768
+# tokens, fp8 -> 1536. --block-size 64 was silently overridden to 1536 in run
+# 30505656455, so this knob cannot move the page on this model; only
+# kv_cache_dtype can.
+#
+# That also explains the connector's identical 14122 CPU blocks across dtypes:
+# fp8 halves bytes/token but the page doubles in tokens, so page BYTES are
+# unchanged and manager.py:199 derives the same pool.
+KV_BLOCK_SIZE_ARGS=()
+if [ -n "${KV_BLOCK_SIZE:-}" ] && [ "${KV_BLOCK_SIZE}" != "0" ]; then
+    KV_BLOCK_SIZE_ARGS=(--block-size "$KV_BLOCK_SIZE")
+fi
+
 # Left unset by default so vLLM derives K3's native 1M context, which is what
 # the unfiltered corpus needs. Set explicitly only to test truncation effects.
 MAX_MODEL_LEN_ARGS=()
 if [ -n "${MAX_MODEL_LEN:-}" ] && [ "${MAX_MODEL_LEN}" != "0" ]; then
     MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
+fi
+
+EAGER_ARGS=()
+if [ "${ENFORCE_EAGER:-false}" = "true" ]; then
+    EAGER_ARGS=(--enforce-eager)
 fi
 
 # The reference command passes neither --enable-prefix-caching nor
@@ -537,7 +848,7 @@ fi
 # and hash sizes only align with prefix caching on -- an omission has been
 # reported to trip "tokens_per_block not divisible by tokens_per_hash" at load.
 # Set PREFIX_CACHING=true/false to force it either way.
-# ON by default for EVERY arm. This trace is built around large shared
+# ON by default for non-DSpark arms. This trace is built around large shared
 # prefixes -- theoretical prefix-cache hit is 98.1%, and a live kvnone cell
 # measured 92.8% server-side -- so a run with reuse disabled is not measuring
 # the workload. Reuse also costs essentially no KV (1,414,660 vs 1,420,824
@@ -557,16 +868,27 @@ fi
 #
 # Note vLLM resolves the flag's default to False for this model, so ON must be
 # passed explicitly. PREFIX_CACHING=false forces it off for a deliberate A/B.
-PREFIX_CACHE_ARGS=(--enable-prefix-caching)
-if [ "${PREFIX_CACHING:-}" = "false" ]; then
-    PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
-fi
+case "${PREFIX_CACHING:-true}" in
+    true)
+        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+        ;;
+    false)
+        PREFIX_CACHE_ARGS=(--no-enable-prefix-caching)
+        ;;
+    auto)
+        # Match the upstream AMD command by letting vLLM resolve its default.
+        PREFIX_CACHE_ARGS=()
+        ;;
+    *)
+        echo "Error: PREFIX_CACHING must be true, false, or auto." >&2
+        exit 1
+        ;;
+esac
 
 # The upstream DSpark config pins "attention_backend": "FLASHINFER_MLA", which
 # is CUDA-only and cannot be used verbatim on gfx950; SPEC_ATTN_BACKEND
-# overrides it. Golden AL on B300 is 3.78 at 7 draft tokens
-# (golden_al_distribution/kimik3_dspark.yaml), so this is the largest decode-side
-# lever if it can be made to run here.
+# overrides it. Use real block rejection for both throughput and evaluation so
+# this path is the exact AMD reproducer and exercises target-model verification.
 SPEC_ARGS=()
 if [ "${SPEC_DECODE:-false}" = "true" ]; then
     SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
@@ -628,7 +950,47 @@ fi
 # overhead and transient co-tenancy are counted. This is not a denylist problem:
 # g11 and g16 each measured both above and below the line hours apart. 0.88
 # (253.4 GiB) clears every observation except the two genuinely occupied nodes.
-GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+# 2026-07-30: 0.90 (259.19 GiB) was tried and REVERTED. It does not fail at
+# engine init -- it comes up clean with a 4,302,357-token pool -- and then dies
+# mid-prefill. Run 30521327099 lost c4, c8 and c16 on three separate nodes with
+# an identical signature: HSA_STATUS_ERROR_OUT_OF_RESOURCES / "Available Free
+# mem : 0 MB" on 4 of 8 ranks, surfacing as hipErrorUnknown at
+# gpu_model_runner.py:314. Every death was at num_computed_tokens 360,960 to
+# 364,032 with num_running_reqs=1 and kv_cache_usage only ~21%, so it is not
+# concurrency and not KV exhaustion: the transient chunked-prefill workspace
+# scales with context and needs more than the ~22 GiB of unreserved headroom
+# 0.90 leaves. 0.88 leaves ~28 GiB and served 987 requests at ISL p90 374,550 /
+# p95 511,146 with a 0/165 error rate (run 30453589555, byte-identical serve
+# command apart from this one flag).
+#
+# The extra 443K tokens of pool 0.90 buys are unusable anyway -- peak usage at
+# death was 21%. Raising this again requires bounding the prefill workspace
+# first (the build_mla_chunked_context_metadata aggregate-chunk cap that only
+# exists in hyukjleeamd/kimi-k3-mla-b128:fp8-kv-fixed, not in the mla_gluon
+# gist patched below, which is a decode-path fix only).
+# c1 is the exception, and it gets 0.85. It is the ONE cell with no result at
+# any memory fraction: it died at num_computed_tokens 373,248 at BOTH 0.88
+# (runs 30453589555, 30525206671) and 0.90 (run 30521327099), always with
+# num_running_reqs=1. A single lane replays the deepest trajectories with
+# nothing to interleave, so it reaches the fatal band early and reliably --
+# c1 is the worst case for this failure, not the mildest.
+#
+# Trading pool for headroom is close to free at c1 specifically. One
+# trajectory cannot fill the pool: the bf16 c1 cell sustained 13 requests at
+# ~291K average ISL against a 1.96M-token pool, and every fp8 death happened
+# at 10-21% KV usage. So the ~530K tokens that 0.85 gives up were never going
+# to be used, while the ~13 GiB/rank of extra headroom goes straight to the
+# transient chunked-prefill allocation that is actually killing the cell.
+#
+# This makes c1 not strictly like-for-like with the rest of the curve. That is
+# the right trade while c1 has no data at all; revisit once the
+# build_mla_chunked_context_metadata aggregate cap lands and the whole curve
+# can return to one fraction.
+if [ "${CONC:-}" = "1" ]; then
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.85}"
+else
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+fi
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 
@@ -644,7 +1006,11 @@ export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:
 # exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
 if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
-    MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/mla_gluon.py"
+    # Pinned to the exact gist revision that produced the first clean fp8 KV
+    # run (30442578333: c8, 3600s, 696 total tok/s/GPU, TTFT 2.6s). The
+    # unpinned .../raw/mla_gluon.py URL silently follows the gist HEAD, so a
+    # later edit would change the kernel under us with no diff in this repo.
+    MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/4b0088c5fecbeffa6544d2da1006b45380aac896/mla_gluon.py"
     if [ -f "$MLA_GLUON_DST" ]; then
         echo "Patching $MLA_GLUON_DST from gist..."
         curl --silent --fail --location "$MLA_GLUON_SRC" -o "$MLA_GLUON_DST" \
@@ -674,7 +1040,10 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     "${MAX_MODEL_LEN_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
+    "${LMCACHE_MAMBA_CACHE_MODE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
+    "${KV_BLOCK_SIZE_ARGS[@]}"
+    "${EAGER_ARGS[@]}"
     "${SPEC_ARGS[@]}"
     "${EVAL_SERVE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"

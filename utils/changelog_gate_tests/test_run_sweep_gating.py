@@ -41,7 +41,7 @@ SWEEP_LABELS = {
     "full-sweep-fail-fast",
     "full-sweep-fail-fast-no-canary",
 }
-MODIFIER_LABELS = {"all-evals", "evals-only", "skip_queue"}
+MODIFIER_LABELS = {"all-evals", "evals-only", "agentx-fast", "skip_queue"}
 POLICY_LABELS = {
     "ci-patchwork",
     "engine-patch",
@@ -50,7 +50,7 @@ POLICY_LABELS = {
 }
 RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS | POLICY_LABELS
 REUSE_ELIGIBLE_LABELS = SWEEP_LABELS - {"sweep-enabled"}
-REUSE_INCOMPATIBLE_LABELS = {"evals-only"}
+REUSE_INCOMPATIBLE_LABELS = {"evals-only", "agentx-fast"}
 
 
 # --------------------------------------------------------------------------
@@ -264,6 +264,9 @@ CASES = [
     ("PR-sync-evals-only-without-sweep-label",
      {**_PR, "action": "synchronize", "labels": ["evals-only"]},
      ("success", "skipped", "SKIP")),
+    ("PR-sync-agentx-fast-without-sweep-label",
+     {**_PR, "action": "synchronize", "labels": ["agentx-fast"]},
+     ("success", "skipped", "SKIP")),
     ("PR-sync-full-with-all-evals-uses-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "all-evals"],
@@ -271,6 +274,10 @@ CASES = [
     ("PR-sync-full-with-evals-only-ignores-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "evals-only"],
+      "reuse_auth": True}, ("success", "skipped", "RUN")),
+    ("PR-sync-full-with-agentx-fast-ignores-reuse",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "agentx-fast"],
       "reuse_auth": True}, ("success", "skipped", "RUN")),
     ("PR-sync-full-with-both-modifiers-ignores-reuse",
      {**_PR, "action": "synchronize",
@@ -288,6 +295,9 @@ CASES = [
     ("PR-labeled-with-evals-only-without-sweep-label",
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["evals-only"]}, ("success", "skipped", "SKIP")),
+    ("PR-labeled-with-agentx-fast-without-sweep-label",
+     {**_PR, "action": "labeled", "label_name": "agentx-fast",
+      "labels": ["agentx-fast"]}, ("success", "skipped", "SKIP")),
     ("PR-labeled-all-evals-modifies-full-sweep",
      {**_PR, "action": "labeled", "label_name": "all-evals",
       "labels": ["full-sweep-enabled", "all-evals"]},
@@ -295,6 +305,10 @@ CASES = [
     ("PR-labeled-evals-only-modifies-full-sweep",
      {**_PR, "action": "labeled", "label_name": "evals-only",
       "labels": ["full-sweep-enabled", "evals-only"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-agentx-fast-modifies-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "agentx-fast",
+      "labels": ["full-sweep-enabled", "agentx-fast"]},
      ("success", "skipped", "RUN")),
     ("PR-labeled-skip-queue-restarts-full-sweep",
      {**_PR, "action": "labeled", "label_name": "skip_queue",
@@ -373,6 +387,19 @@ def test_trigger_types_enable_gated_events() -> None:
     assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
+def test_agentx_fast_label_only_reaches_agentx_throughput_jobs() -> None:
+    jobs = _WF["jobs"]
+    expression = "${{ contains(github.event.pull_request.labels.*.name, 'agentx-fast') }}"
+
+    assert jobs["sweep-agentic"]["with"]["agentx-fast"] == expression
+    assert jobs["sweep-multi-node-agentic"]["with"]["agentx-fast"] == expression
+
+    for job_name, job in jobs.items():
+        if job_name in {"sweep-agentic", "sweep-multi-node-agentic"}:
+            continue
+        assert "agentx-fast" not in job.get("with", {})
+
+
 def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
     workflow = (REPO_ROOT / ".github/workflows/e2e-tests.yml").read_text()
 
@@ -380,6 +407,23 @@ def test_e2e_workflow_cannot_dispatch_database_ingest() -> None:
     assert "ingest-agentic-results" not in workflow
     assert "InferenceX-app/dispatches" not in workflow
     assert "INFX_FRONTEND_PAT" not in workflow
+
+
+def test_e2e_agentic_eval_preserves_matrix_transport_settings() -> None:
+    workflow = yaml.load(
+        (REPO_ROOT / ".github/workflows/e2e-tests.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    inputs = workflow["jobs"]["test-sweep-agentic-evals"]["with"]
+
+    assert inputs["kv-offload-backend"] == (
+        "${{ matrix.config['kv-offload-backend'].name }}"
+    )
+    assert inputs["kv-offload-backend-metadata"] == (
+        "${{ matrix.config['kv-offload-backend']"
+        " && toJson(matrix.config['kv-offload-backend']) || '' }}"
+    )
+    assert inputs["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
 
 
 def test_priority_classifier_runs_for_enabled_actions() -> None:
@@ -494,6 +538,7 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-fail-fast-no-canary"],
         ["all-evals"],
         ["evals-only"],
+        ["agentx-fast"],
         ["all-evals", "evals-only"],
         ["documentation"],
         ["sweep-enabled", "full-sweep-enabled"],
@@ -502,6 +547,8 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-enabled", "all-evals"],
         ["sweep-enabled", "evals-only"],
         ["full-sweep-enabled", "evals-only"],
+        ["sweep-enabled", "agentx-fast"],
+        ["full-sweep-enabled", "agentx-fast"],
         ["sweep-enabled", "all-evals", "evals-only"],
         ["full-sweep-enabled", "all-evals", "evals-only"],
         ["skip_queue"],
@@ -516,6 +563,7 @@ def _all_scenarios() -> list[dict]:
             "sweep-enabled",
             "all-evals",
             "evals-only",
+            "agentx-fast",
             "skip_queue",
             "ci-patchwork",
             "engine-patch",
@@ -549,9 +597,9 @@ def test_exhaustive_cross_product() -> None:
     ]
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
-    # (4 actions x 2 draft x 20 label-configs x 11 label-names x 2 reuse x
-    # 2 changelog outcomes x 2 messages = 14080 PR cases, plus 2 push cases).
-    assert len(scenarios) == 14082
+    # (4 actions x 2 draft x 23 label-configs x 12 label-names x 2 reuse x
+    # 2 changelog outcomes x 2 messages = 17664 PR cases, plus 2 push cases).
+    assert len(scenarios) == 17666
 
 
 def test_named_cases_match_reference_spec() -> None:

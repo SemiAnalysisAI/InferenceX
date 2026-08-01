@@ -652,6 +652,23 @@ kimik3-fp4-mi355x-vllm-agentic:
       # far the 2234 GiB host tier extends the concurrency ceiling.
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 32] }
 
+kimik3-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Exact upstream AMD DSpark reproducer: GPU-only TP8, seven draft tokens,
+      # probabilistic draft sampling, TRITON_MLA, and real block rejection.
+      # Start at c1; expand only after the AgentX-fast preflight is healthy.
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8kvtest:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
@@ -668,7 +685,10 @@ kimik3-fp4-mi355x-vllm-agentic-fp8kvtest:
       # 279.28 GB per rank.
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: none, conc-list: [8] }
+      # kv-offloading: none, NOT `kv-offload-backend: none` -- YAML parses a
+      # bare `none` as the string 'none', which fails KVOffloadBackendMetadata
+      # validation and takes the whole master config down with it.
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
 
 # LMCache server-profile A/B for Kimi-K3. NOT shipped -- delete once one profile
 # wins. Both cells are conc 8 with prefix caching forced on, --max-num-batched-tokens
@@ -698,12 +718,277 @@ kimik3-fp4-mi355x-vllm-agentic-lmprofile:
 # node carrying another tenant's allocation. Delete once it has a result.
 # fp8 KV-cache probe: identical to the winning vllm-simple c8 cell except for
 # --kv-cache-dtype fp8, which should roughly double the 1,957,290-token GPU pool.
+kimik3-fp4-mi355x-vllm-agentic-fp8sweep:
+  # Full fp8-KV sweep. Supersedes the bf16 numbers: fp8 is now the recipe
+  # default (see kimik3_fp4_mi355x.sh), so every cell here runs
+  # --kv-cache-dtype fp8 with prefix caching on, and the mla_gluon kernel is
+  # patched from the pinned gist revision that run 30442578333 used.
+  #
+  # Stock image on purpose -- 30442578333 proved the patched stock image runs
+  # fp8 clean; the custom hyukjleeamd/kimi-k3-mla-b128 image is the fallback.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # No-offload arm. c8 repeats 30442578333 (696 tok/s/GPU) as a control;
+      # c1/c4 replace the bf16 points (159 / 421 tok/s/GPU) from run
+      # 30430688459 so the whole curve is one KV dtype.
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8] }
+      # Offload arm at the same dtype -- isolates what
+      # SimpleCPUOffloadConnector costs or buys under fp8. c16 probes whether
+      # fp8 pushes the concurrency ceiling past the bf16 collapse at c16.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8, 16] }
+
+kimik3-fp4-mi355x-vllm-agentic-fp8retry:
+  # Retry of the two cells that died in run 30453589555, plus a new none c16.
+  #
+  # Both deaths were GPU faults (hipErrorUnknown), not timeouts -- no guard was
+  # anywhere near firing (VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200 vs a ~180s
+  # stall; warmup-grace-period 1800 vs 420s elapsed). GPU faults have hit every
+  # arm on this cluster today (bf16 kvnone on g11/g17/g18/g19, fp8 kvnone on
+  # g10, fp8+connector on g11/g19), so these are retried unchanged on the
+  # assumption they are the cluster's background fault rate rather than config.
+  #
+  # none c16 is new: the no-offload arm has never been measured above c8, and
+  # fp8 roughly halves KV per token, so the concurrency ceiling should have
+  # moved up.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 16] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8] }
+
+kimik3-fp4-mi355x-vllm-agentic-fp8eval:
+  # lm-eval on the one config that is actually proven on this stack: fp8 KV,
+  # no offload, c8 -- the control cell from run 30442578333 (696 tok/s/GPU),
+  # repeated clean in 30453589555. The offload arm is excluded on purpose: it
+  # has failed 3/3 under fp8 (see the fp8b64 key below).
+  #
+  # The recipe pins EVAL_FRAMEWORK=lm-eval, so this runs lm-eval rather than
+  # run_eval's swebench default for agentic scenarios. Dispatch with
+  # --evals-only; mark_eval_entries flips single-node agentic rows to
+  # run-eval=True (generate_sweep_configs.py:360).
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
+
+kimik3-fp4-mi355x-vllm-agentic-fp8none:
+  # GPU-only (no offload) fp8-KV concurrency curve at GMU 0.88.
+  #
+  # One key, one curve: c1/c4/c8/c16 with --kv-cache-dtype fp8 (the recipe
+  # default) and no KV connector, so the whole curve shares a KV dtype, a
+  # memory fraction and a warmup. The offload arm is deliberately absent --
+  # it has failed 4/4 under fp8 (see the fp8lazy key below), and mixing it in
+  # would put failure-prone cells in the same dispatch as the control curve.
+  #
+  # GMU comes from the recipe default (GPU_MEM_UTIL in kimik3_fp4_mi355x.sh),
+  # because the agentic matrix has no per-cell env channel. The first dispatch
+  # of this key ran at 0.90 and lost c4/c8/c16 to a prefill-workspace OOM at
+  # ~362K context on three separate nodes; see the comment on GPU_MEM_UTIL for
+  # the evidence. 0.88 is the proven setting.
+  #
+  # c16 is the open question. The bf16 no-offload arm was never measured above
+  # c8, and the bf16 vllm-simple curve collapsed at c16 (TTFT 295 s). fp8
+  # roughly halves KV per token, so the ceiling should have moved up; this
+  # cell is what says whether it did.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16] }
+
+kimik3-fp4-mi355x-vllm-agentic-fp8none-c1:
+  # The one missing point on the fp8 no-offload curve.
+  #
+  # c1 has NO result at any memory fraction. It died at num_computed_tokens
+  # 373,248 at 0.88 (runs 30453589555 and 30525206671) and at 0.90 (run
+  # 30521327099), every time with num_running_reqs=1 and KV usage 10-21% --
+  # the probabilistic chunked-prefill workspace OOM, not KV exhaustion.
+  # c1 is the WORST case for it: one lane replays the deepest trajectories
+  # with nothing to interleave, so it reaches the fatal band early and every
+  # time.
+  #
+  # The recipe now drops GPU_MEM_UTIL to 0.85 for CONC=1 only. At c1 the pool
+  # is hugely oversized anyway (13 requests sustained against a 1.96M-token
+  # pool in the bf16 run), so the ~530K tokens given up were never usable,
+  # while the extra ~13 GiB/rank of headroom goes to the allocation that is
+  # actually killing the cell.
+  #
+  # If this still dies, the memory fraction is not the lever and the
+  # aggregate-chunk cap in mla_attention.py is required -- do not keep
+  # shaving GMU.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1] }
+
+kimik3-fp4-mi355x-vllm-agentic-lmcachek3:
+  # LMCache on Kimi-K3, fp8 KV, c8 -- the first attempt with an LMCache build
+  # that actually supports this model.
+  #
+  # Every prior LMCache attempt died at engine init with
+  #   ValueError: expected a Mamba [conv_state, ssm_state] tensor list, got Tensor
+  # because K3's Kimi Delta Attention supplies ONE fused state tensor. That is
+  # now fixed upstream: LMCache #4206 (2026-07-23) added _MambaUnifiedViewEdit
+  # for unified Mamba state, and #4278 (2026-07-28) added
+  # _SubpagedMLAAttentionViewEdit for K3's kernel-paged MLA tensor. LMCache
+  # also shipped its own validated K3 recipe (#4277,
+  # docs/source/recipes/kimi_k3.rst). None of that is in 0.5.1, which is what
+  # this recipe pinned, and none of it is in any PyPI release (latest 0.5.2).
+  #
+  # version: "git" makes the recipe build from source at the #4278 merge
+  # commit with ROCm flags, since nightly wheels are CUDA-only. The recipe
+  # asserts both edit classes are registered before loading 1.56 TB of
+  # weights, so a stale build fails in seconds rather than 20 minutes.
+  #
+  # backend name lmcache-k3 selects upstream's minimal validated server
+  # command instead of this recipe's `reference` flag set -- those extra flags
+  # were never validated on K3 and an unrecognised flag is a silent
+  # server-start failure.
+  #
+  # c8, c16, and c32.
+  #
+  # c8 is the peak of the no-offload fp8 curve (682.63 tok/s/GPU, run
+  # 30525206671) and is now measured with LMCache: 601.64 tok/s/GPU, -11.9%
+  # (run 30579846678). The reason it loses is that there is no work for a
+  # host tier at this concurrency -- the LMCache server logged 67,827 stores
+  # against 80 retrievals with only 217 evictions, because the GPU pool never
+  # fills (52.4% usage) so vLLM never has to spill. LMCache still pays to
+  # store every block and drags the GPU tier down with it (prefix hit
+  # 88.4% -> 58.3%).
+  #
+  # c16 is the case that should invert that. Without offload, c16 is where
+  # the no-offload arm collapses: 412.21 tok/s/GPU, GPU prefix hit 3.9%, KV
+  # pinned at 100.0%, TTFT mean 323 s (run 30525206671). The working set no
+  # longer fits, so the GPU tier thrashes -- which is exactly the regime a
+  # host tier exists for. If LMCache cannot win at c16 it has no case on this
+  # model.
+  #
+  # c32 extends the capacity-pressure curve after LMCache recovered c16 from
+  # 441.99 to 607.45 tok/s/GPU when L1 grew from 512 to 907 GB. This tests
+  # whether the larger host tier can keep helping once the live working set
+  # doubles again.
+  #
+  # max_num_seqs stays 32. aiperf bounds in-flight requests by --concurrency,
+  # so it provides 2x headroom at c16 and exactly covers c32. Raising it would
+  # re-inflate the chunked MLA workspace that caused the attempt-1 OOM.
+  #
+  # c8 repeats deliberately: it gives a same-run, same-code pair against c16
+  # rather than a cross-run comparison.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8, 16, 32] }
+
+kimik3-fp4-mi355x-vllm-agentic-fp8lazy:
+  # fp8 KV + SimpleCPUOffloadConnector in LAZY mode. One variable off the cell
+  # that has now failed 4/4 (g17/g19/g12/g12), and the block-size attempt in run
+  # 30505656455 is void: vLLM overrode --block-size 64 to 1536 because K3's
+  # attention page must be >= its mamba/KDA page (interface.py:911), so that
+  # cell was byte-identical to the eager failures.
+  #
+  # Why lazy. Eager stores every completed block to CPU immediately. Every
+  # fp8+connector death has happened while the GPU pool was nearly empty --
+  # 11.6% usage, 0.0% external hit rate in 30505656455 -- i.e. deep in a store
+  # storm with nothing yet to gain from the host tier, and the last two deaths
+  # were a 600 s RCCL _ALLGATHER_BASE hang rather than an OOM. Lazy only stores
+  # under GPU-block pressure, so it removes nearly all connector traffic in
+  # exactly the regime that is killing the cell.
+  #
+  # It is also the mode kimik3_fp4_mi355x_mtp.sh already pins for gfx950
+  # (PR #2367) against an eight-rank GPU memory access fault.
+  #
+  # Control: bf16 + the same connector in EAGER mode ran to 99.9% pool usage
+  # with zero faults (run 30431115226), and fp8 WITHOUT the connector peaks at
+  # 754 tok/s/GPU at c8 (run 30453589555).
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # PAIRED. Run 30511545046 tried lazy alone and is uninterpretable: it
+      # landed after #2415 swapped the agentic warmup from
+      # --agentic-cache-warmup-duration 600 to --warmup-requests-per-lane 10
+      # (benchmark_lib.sh:1793, new utils/aiperf pin), so it moved two variables
+      # at once and died inside the new warmup -- its "0 successful, OSL=1" is
+      # that warmup's one-token primers, not a lazy symptom. Every earlier
+      # failure used the old time-based warmup, so none of them is a baseline
+      # any more. Run the eager control on the SAME warmup as lazy.
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8 }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple-fp8-lazy }, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-fp8kv:
-  # Custom image with the MLA decode kernel tuned for batch 128. The stock
-  # vllm/vllm-openai-rocm:kimi-k3 routes fp8 KV into AITER's mla_gluon path,
-  # which asserts `mla_gluon[bh16bn128] requires batch_size=1, got 128`
-  # (run 30411594835). This image is built to accept b128 so fp8 KV can run.
-  image: hyukjleeamd/kimi-k3-mla-b128:fp8-kv-fixed
+  # fp8 KV on the OFFLOAD arm. This is the fp8kvtest arm (run 30442578333:
+  # 696 total tok/s/GPU, TTFT 2.6s, the first clean fp8 result) plus the
+  # SimpleCPUOffloadConnector, so it isolates what the connector costs under
+  # fp8.
+  #
+  # Stock image on purpose. The stock image routes fp8 KV into AITER's
+  # mla_gluon path and asserts `mla_gluon[bh16bn128] requires batch_size=1,
+  # got 128` (run 30411594835) -- but the recipe now patches that kernel from
+  # a pinned gist revision whenever KV_CACHE_DTYPE=fp8, which is exactly how
+  # 30442578333 passed. Using stock keeps this cell one variable away from
+  # that proven run.
+  #
+  # hyukjleeamd/kimi-k3-mla-b128:fp8-kv-fixed bakes the same kernel in and is
+  # the alternative, but its only trial (run 30434731504) cleared init and the
+  # full 600s warmup and then died at the profiling transition with an async
+  # hipErrorIllegalAddress on g14 -- unattributed, possibly the node. Swap the
+  # image back to compare once this cell has a number.
+  image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds
@@ -1976,7 +2261,7 @@ minimaxm3-fp4-mi355x-vllm-disagg:
 # language-model path and mirror the MXFP8 MI355X search space for a direct
 # precision comparison.
 minimaxm3-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -1988,10 +2273,7 @@ minimaxm3-fp4-mi355x-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 512 }
 
 # EAGLE3 speculative-decoding variant of minimaxm3-fp4-mi355x-vllm. Pair the
 # amd/MiniMax-M3-MXFP4 target with Inferact/MiniMax-M3-EAGLE3 and three draft
