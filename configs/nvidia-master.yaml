@@ -1749,7 +1749,7 @@ kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-disagg:
       search-space:
       - spec-decoding: mtp
         kv-offloading: dram
-        kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }
+        kv-offload-backend: { name: mooncake, version: "0.3.12.post1" }
         conc-list: [1, 4, 8, 16, 64]
         prefill:
           num-worker: 1

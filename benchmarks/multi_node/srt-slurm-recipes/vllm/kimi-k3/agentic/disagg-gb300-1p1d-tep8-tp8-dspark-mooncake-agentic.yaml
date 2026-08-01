@@ -25,8 +25,8 @@ dynamo:
   hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
   install: true
 
-# The official profile requires mooncake-transfer-engine>=0.3.10; pin the
-# current validated 0.3.11.post1 release so repeated sweeps do not drift.
+# Pin the CUDA 13 Mooncake 0.3.12.post1 release. The Kimi-K3 image is based on
+# CUDA 13, while its generic Mooncake package contains a CUDA 12-linked master.
 setup_script: "vllm-container-deps-mooncake.sh"
 
 slurm:
@@ -72,6 +72,9 @@ backend:
   kv_events_config:
     prefill: true
   mooncake_kv_store:
+    # srt-slurm starts the master before running the worker setup script, so
+    # use Mooncake's official CUDA 13 multi-arch image for the master itself.
+    container: "kvcacheai/mooncake:0.3.12.post1-cuda13"
     store_config:
       metadata_server: "P2PHANDSHAKE"
       # Matches the official default. This is per GPU, or 400 GB per tray,
