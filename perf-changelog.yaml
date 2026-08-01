@@ -5360,4 +5360,4 @@
     - kimik2.6-fp4-b200-dynamo-vllm
   description:
     - "Remove no-enable-flashinfer-autotune from Kimi K2.6 B200 disagg recipes, target runner b200-new"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2445
