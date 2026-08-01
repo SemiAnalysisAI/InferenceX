@@ -373,6 +373,16 @@ class TestSampleGates:
         pkg = build_package(tmp_path, power_fn=lambda host, idx, ts: 9e307)
         assert_invalid(pkg, "non_finite_power_metric")
 
+        # The sidecar must stay strict RFC 8259 JSON: the overflowed per-GPU
+        # energies are nulled, never serialized as bare Infinity tokens.
+        def reject_constant(value):
+            raise AssertionError(f"non-finite JSON constant in sidecar: {value}")
+
+        sidecar = json.loads(
+            pkg.validation_result.read_text(), parse_constant=reject_constant
+        )
+        assert set(sidecar["per_gpu_energy_j"].values()) == {None}
+
 
 class TestWindowAndResultGates:
     def test_result_path_escape_rejected(self, tmp_path):

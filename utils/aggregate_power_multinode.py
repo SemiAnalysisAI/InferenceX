@@ -1202,7 +1202,12 @@ def _sidecar_payload(
         "observed_gpu_count": audit.observed_gpu_count,
         "per_gpu_role": audit.per_gpu_role,
         "per_gpu_max_sample_gap_s": audit.per_gpu_max_sample_gap_s,
-        "per_gpu_energy_j": audit.per_gpu_energy_j,
+        # Overflowed integrations reach here as inf; json.dumps would emit a
+        # bare Infinity token, which strict RFC 8259 parsers reject.
+        "per_gpu_energy_j": {
+            key: value if math.isfinite(value) else None
+            for key, value in audit.per_gpu_energy_j.items()
+        },
         "metrics": {
             key: round(value, 6)
             for key, value in audit.metrics.items()
