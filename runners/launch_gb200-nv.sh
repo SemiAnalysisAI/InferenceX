@@ -584,8 +584,17 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 
-# Keep the Slurm job name aligned with the GitHub runner name.
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+# Namespace InferenceX allocations so other repositories using the same
+# physical runner names cannot cancel them with `scancel --name=gb200-nv_*`.
+# Clean up any stale allocation from this InferenceX runner before submitting.
+SRT_SLURM_JOB_NAME="inferencex-${RUNNER_NAME}"
+if command -v squeue >/dev/null 2>&1; then
+    scancel --user="$USER" --name="$SRT_SLURM_JOB_NAME" 2>/dev/null || true
+    while [[ -n "$(squeue --user="$USER" --name="$SRT_SLURM_JOB_NAME" --noheader --format='%i')" ]]; do
+        sleep 5
+    done
+fi
+sed -i "s/^name:.*/name: \"${SRT_SLURM_JOB_NAME}\"/" "$CONFIG_PATH"
 
 # Optionally inject synthetic acceptance into the recipe's speculative-config
 # when SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
@@ -635,6 +644,18 @@ if [ -z "$JOB_ID" ]; then
 fi
 
 echo "Extracted JOB_ID: $JOB_ID"
+
+# The workflow-level cleanup keys off the physical runner name, while this
+# launcher uses a repository-specific Slurm name to avoid cross-repo
+# collisions. Always clean up the exact submitted allocation on exit.
+cleanup_srt_job() {
+    local rc=$?
+    scancel "$JOB_ID" 2>/dev/null || true
+    return "$rc"
+}
+trap cleanup_srt_job EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 
 # Use the JOB_ID to find the logs directory
 # srtctl creates logs in outputs/JOB_ID/logs/

@@ -34,6 +34,15 @@ copy_to_workspace() {
     local source_file="$1"
     local destination_file="$2"
 
+    # A compute-visible runner workspace may be mounted directly into the
+    # benchmark container. In that case the staged result already is the
+    # workflow artifact, so copying it onto itself would fail with cp's
+    # "same file" error even though the benchmark succeeded.
+    if [[ -e "$destination_file" && "$source_file" -ef "$destination_file" ]]; then
+        echo "Result already present at $destination_file"
+        return 0
+    fi
+
     if ! cp "$source_file" "$destination_file"; then
         echo "ERROR: failed to copy $source_file to $destination_file" >&2
         return 1
