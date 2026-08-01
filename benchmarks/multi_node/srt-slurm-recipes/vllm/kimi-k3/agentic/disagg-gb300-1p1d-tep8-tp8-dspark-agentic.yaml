@@ -76,8 +76,8 @@ backend:
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
     VLLM_USE_NCCL_SYMM_MEM: "0"
     # Kimi-K3's three-read KDA conv transfer requires DS layout. The setup
-    # script backports vLLM #49291's V2 DS align-state enablement; the layout
-    # must match on P and D for NIXL.
+    # script backports vLLM #49291's V2 DS align-state enablement and #50153's
+    # NIXL multi-slot SSM pairing fix; the layout must match on P and D.
     VLLM_SSM_CONV_STATE_LAYOUT: "DS"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -110,7 +110,7 @@ backend:
       # vLLM's NIXL P/D speculative-decode path loads the draft on prefill so
       # both workers register the same hybrid KDA/MLA cache topology. Prefix
       # reuse lives on prefill; the setup script enables DS align-mode state
-      # copies with speculative decoding on the Kimi image's V2 runner.
+      # copies and correct NIXL SSM-slot pairing on the image's V2 runner.
       enable-prefix-caching: true
       max-model-len: 1048576
       max-num-batched-tokens: 16384
