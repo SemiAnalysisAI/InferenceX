@@ -119,7 +119,7 @@ backend:
       # Prefill never drafts output tokens. K=1 is the minimal topology-only
       # config used by vLLM's NIXL P/D speculative-decoding integration test;
       # the measured decode worker below retains K=2 and synthetic AL 2.51.
-      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":1,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
+      speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":1,"attention_backend":"FLASHINFER_MLA"}'
     decode:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}}'
       served-model-name: "moonshotai/Kimi-K3"
