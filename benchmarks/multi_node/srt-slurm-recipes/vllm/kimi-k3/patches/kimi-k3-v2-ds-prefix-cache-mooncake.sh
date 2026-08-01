@@ -19,3 +19,8 @@ python3 -m pip install --no-deps 'mooncake-transfer-engine-cuda13==0.3.12.post1'
 # Apply the same Kimi V2 DS prefix-cache and NIXL SSM-state fixes as the
 # no-offload arm after dependency setup, so both arms run identical vLLM code.
 python3 /configs/patches/patch_kimi_k3_v2_ds_prefix_cache.py
+
+# The current Kimi image still assumes a single KV-cache group when an async
+# external load loses a block to store eviction. Kimi has hybrid KDA/MLA groups,
+# so backport the conservative full-prefix recompute fallback for that rare path.
+python3 /configs/patches/patch_kimi_k3_mooncake_hma_recompute.py

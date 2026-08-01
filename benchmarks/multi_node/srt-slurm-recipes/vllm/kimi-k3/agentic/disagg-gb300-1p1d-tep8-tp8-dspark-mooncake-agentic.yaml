@@ -71,6 +71,12 @@ backend:
     # srt-slurm launches the master before worker setup, so its container must
     # carry the CUDA 13-linked binary independently of the Kimi worker image.
     container: "kvcacheai/mooncake:0.3.12.post1-cuda13"
+    # Match the upstream vLLM Mooncake recipe. Compared with srt-slurm's
+    # 90%/5% defaults, each pass frees twice as much headroom and avoids the
+    # rapid eviction loop observed once the c16 warmup reached 1.38 TB.
+    master_extra_args:
+      - "--eviction_high_watermark_ratio=0.95"
+      - "--eviction_ratio=0.10"
     store_config:
       metadata_server: "P2PHANDSHAKE"
       # Per GPU: four segments reserve 400 GB on each 4-GPU GB300 tray.
@@ -120,7 +126,7 @@ backend:
     prefill:
       # Dynamo workers register as kv_both. NIXL carries the live P/D state;
       # Mooncake performs asynchronous distributed prefix lookup and storage.
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: "fastsafetensors"
@@ -149,7 +155,7 @@ backend:
       # drafts output tokens. Decode retains the measured K=2 policy below.
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":1,"attention_backend":"FLASHINFER_MLA"}'
     decode:
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: "fastsafetensors"
