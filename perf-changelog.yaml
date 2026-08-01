@@ -5357,13 +5357,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
 - config-keys:
-    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
     - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-mooncake-disagg
   scenario-type:
     - agentic-coding
   description:
     - "Add Kimi-K3 MXFP4 GB300 disaggregated AgentX sweeps aligned with the vLLM recipe site's pd_cluster nodes=4 decode_mode=tp profile: one TEP8 prefill worker and one TP8 decode worker, each spanning two 4-GPU trays."
-    - "Sweep concurrency [1, 4, 8, 16, 64] for DSpark with NIXL P/D transfer alone and with the distributed embedded Mooncake host-DRAM tier. Both arms follow PR #2380 with K=2, probabilistic draft sampling, synthetic rejection sampling, and synthetic acceptance length 2.51."
+    - "Run an offload-only bring-up at concurrency [1, 4, 8, 16, 64] with the distributed embedded Mooncake host-DRAM tier. Do not trigger the no-offload arm until Mooncake works; its definition is retained for later comparison but capped at c16 because GB300 HBM cannot hold the c64 AgentX KV working set. Follow PR #2380 with K=2, probabilistic draft sampling, synthetic rejection sampling, and synthetic acceptance length 2.51."
     - "Match the earlier working Kimi-K3 P/D runs by omitting data-parallel-hybrid-lb, which vLLM rejects for Dynamo headless workers."
     - "Keep vllm/vllm-openai:kimi-k3 on every model worker and compose NIXL with MooncakeStoreConnector through MultiConnector. Use the CUDA 13 mooncake-transfer-engine 0.3.12.post1 worker package and kvcacheai/mooncake:0.3.12.post1-cuda13 only for the standalone master. Run 30691665566 failed because the generic master's libcudart.so.12 dependency did not exist in the CUDA 13 Kimi image; run 30692944287 proved the CUDA 13 master starts and the worker package installs, then failed solely because the stale data-parallel-hybrid-lb flag was invalid at DP=1."
     - "Leave decode max-num-batched-tokens at the vLLM default, as PR #2380 does: an explicit value of 32 is fully consumed by the K=2 draft slots at max-num-seqs 32 and leaves max_num_scheduled_tokens at zero."
