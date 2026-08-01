@@ -1843,7 +1843,7 @@ minimaxm3-fp4-mi355x-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 1, conc-end: 512 }
+      - { tp: 2, conc-start: 1, conc-end: 512 }
 
 # EAGLE3 speculative-decoding variant of minimaxm3-fp4-mi355x-vllm. Pair the
 # amd/MiniMax-M3-MXFP4 target with Inferact/MiniMax-M3-EAGLE3 and three draft
