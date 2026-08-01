@@ -509,7 +509,7 @@ kimik2.5-int4-mi300x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.24.0
+  image: vllm/vllm-openai-rocm:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
@@ -521,8 +521,8 @@ kimik2.5-fp4-mi355x-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
 
 kimik2.5-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0
