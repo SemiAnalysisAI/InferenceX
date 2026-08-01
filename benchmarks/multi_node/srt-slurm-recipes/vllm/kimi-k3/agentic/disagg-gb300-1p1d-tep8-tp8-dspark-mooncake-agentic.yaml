@@ -124,9 +124,9 @@ backend:
 
   vllm_config:
     prefill:
-      # Dynamo workers register as kv_both. NIXL carries the live P/D state;
-      # Mooncake performs asynchronous distributed prefix lookup and storage.
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      # Match vLLM's P/D connector contract: NIXL produces the live handoff on
+      # prefill while Mooncake performs shared async lookup and storage.
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_producer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: "fastsafetensors"
@@ -155,7 +155,7 @@ backend:
       # drafts output tokens. Decode retains the measured K=2 policy below.
       speculative-config: '{"method":"dspark","model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":1,"attention_backend":"FLASHINFER_MLA"}'
     decode:
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true,"lookup_async":true,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "moonshotai/Kimi-K3"
       tokenizer-mode: "kimi_k3"
       load-format: "fastsafetensors"
