@@ -5363,7 +5363,8 @@
     - "Add five checked-in srt-slurm recipes with EAGLE speculative decoding and chat-template inputs"
     - "Use the staged DSV4 checkpoint and its native quantization metadata"
     - "Use the checkpoint-compatible MoE backend and remove loader-isolation overrides"
-    - "Use standard RDMA Mooncake transport pinned to the B200 devices"
+    - "Use Mooncake's registered-memory pool with MNNVL transport selection"
     - "Pin the B200 launcher bootstrap to the official uv 0.12.0 release with checksum verification"
-    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+    - "Use the SGLang DSV4 disaggregated MTP state-transfer fix"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2252

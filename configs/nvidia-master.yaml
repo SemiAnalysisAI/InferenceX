@@ -5170,7 +5170,7 @@ dsv4-fp4-b200-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-b200-dynamo-sglang-mtp:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494
+  image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-multinode

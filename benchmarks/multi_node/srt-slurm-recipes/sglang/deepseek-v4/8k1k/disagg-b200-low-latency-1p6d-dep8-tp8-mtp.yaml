@@ -11,7 +11,7 @@ dynamo:
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8"
   precision: "fp4"
 
 sbatch_directives:
@@ -49,6 +49,8 @@ backend:
 
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
@@ -62,6 +64,8 @@ backend:
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
@@ -74,7 +78,6 @@ backend:
       tool-call-parser: deepseekv4
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
-      disaggregation-ib-device: "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
 
       tensor-parallel-size: 8
       data-parallel-size: 8
@@ -98,7 +101,6 @@ backend:
       tool-call-parser: deepseekv4
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
-      disaggregation-ib-device: "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
 
       tensor-parallel-size: 8
       data-parallel-size: 1
