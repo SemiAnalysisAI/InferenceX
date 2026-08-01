@@ -5355,3 +5355,14 @@
     - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
+
+- config-keys:
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-disagg
+    - kimik3-fp4-gb300-dynamo-vllm-agentic-dspark-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3 MXFP4 GB300 disaggregated AgentX sweeps aligned with the vLLM recipe site's pd_cluster nodes=2 decode_mode=tp profile: one TEP8 prefill worker and one TP8 decode worker, each spanning two 4-GPU trays."
+    - "Sweep concurrency [1, 2, 4, 8, 16] for topology-identical baseline and DSpark arms. DSpark follows PR #2380 with K=2, probabilistic draft sampling, synthetic rejection sampling, and synthetic acceptance length 2.51."
+    - "Inherit the workflow RESULT_FILENAME and write aggregate JSON directly to /infmax-workspace, fixing the closed GB300 branches' false failures after successful profiles; namespace Slurm jobs and scope generic cleanup to the current user to prevent cross-repository SIGTERM collisions."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2444
