@@ -12,6 +12,21 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+if [ "${DP_ATTENTION:-false}" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+fi
+
+EP_ARGS=()
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
+PREFILL_SCHEDULE_ARGS=()
+if [ "${DP_ATTENTION:-false}" = "true" ]; then
+    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
+fi
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
@@ -41,7 +56,9 @@ export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---tensor-parallel-size=$TP \
+"${PARALLEL_ARGS[@]}" \
+"${EP_ARGS[@]}" \
+"${PREFILL_SCHEDULE_ARGS[@]}" \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
