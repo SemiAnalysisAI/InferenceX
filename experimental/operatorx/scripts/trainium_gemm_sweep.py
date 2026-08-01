@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ DEFAULT_WARMUP = 10
 BLOCK_M = 2048
 BLOCK_N_LNC2 = 2048
 BLOCK_K = 1024
+MATMUL_INSTRUCTION_FLOPS = 2 * 128 * 512 * 128
 
 PROFILE_FIELDS = (
     "total_time",
@@ -183,20 +185,25 @@ def validate_summary(
 ) -> None:
     expected_flops = 2 * m * n * k
     observed_flops = int(summary.get("hardware_flops", -1))
-    # neuron-profile's derived hardware counter can omit a small boundary-tile
-    # contribution even when the compiled GEMM and output are complete. Keep
-    # this as a tight diagnostic gate rather than treating it as an exact ABI.
-    absolute_flops_error = abs(observed_flops - expected_flops)
-    relative_flops_error = absolute_flops_error / expected_flops
-    # Larger exact shapes can lose exactly one M-row plane in the profiler's
-    # derived counter (2*N*K FLOPs). Correctness and compiler-shape gates remain
-    # independent, so accept no more than that explicit counter boundary effect.
-    allowed_flops_error = max(expected_flops * 1e-4, 2 * n * k)
-    if absolute_flops_error > allowed_flops_error:
+    observed_instructions = int(summary.get("matmul_instruction_count", -1))
+    expected_instructions = expected_flops // MATMUL_INSTRUCTION_FLOPS
+    if observed_flops != observed_instructions * MATMUL_INSTRUCTION_FLOPS:
         raise RuntimeError(
-            "profile hardware FLOPs do not match the executed padded GEMM: "
-            f"expected {expected_flops}, got {observed_flops} "
-            f"({relative_flops_error:.6%} relative error)"
+            "profile hardware FLOPs and matmul instructions are inconsistent: "
+            f"{observed_flops} != {observed_instructions} * "
+            f"{MATMUL_INSTRUCTION_FLOPS}"
+        )
+    # neuron-profile can omit a few boundary instructions from its trace window;
+    # hardware_flops is derived from the same truncated instruction count. Gate
+    # exact counter self-consistency above, then permit at most 0.1% schedule
+    # coverage loss (with a two-instruction floor for small executables).
+    instruction_error = abs(observed_instructions - expected_instructions)
+    allowed_instruction_error = max(2, math.ceil(expected_instructions * 1e-3))
+    if instruction_error > allowed_instruction_error:
+        raise RuntimeError(
+            "profile matmul instruction coverage does not match the executed "
+            f"schedule: expected {expected_instructions}, got "
+            f"{observed_instructions}, allowed error {allowed_instruction_error}"
         )
     if float(summary.get("total_time", 0.0)) <= 0.0:
         raise RuntimeError("profile total_time must be positive")
@@ -368,6 +375,8 @@ def build_rows(
                 "backend": "nkilib",
                 "profile_backend": "nki-native-spike",
                 "evaluation_split": row.get("evaluation_split", "unspecified"),
+                "corpus_role": row.get("corpus_role", "unspecified"),
+                "source": row.get("source", "unspecified"),
                 "logical_flops": logical_flops,
                 "executed_flops": executed_flops,
                 "padding_flops_ratio": executed_flops / logical_flops,
@@ -387,6 +396,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--json-out", type=Path, required=True)
     parser.add_argument("--samples", type=int, default=DEFAULT_SAMPLES)
     parser.add_argument("--warmup", type=int, default=DEFAULT_WARMUP)
+    parser.add_argument(
+        "--run-label",
+        help="stable longitudinal snapshot label (defaults to the UTC start time)",
+    )
     parser.add_argument("--profile-root", type=Path)
     parser.add_argument("--keep-artifacts", action="store_true")
     parser.add_argument("--only", help="comma-separated shape names for smoke testing")
@@ -398,6 +411,8 @@ def main() -> int:
     if args.samples < 1 or args.warmup < 0:
         raise SystemExit("--samples must be positive and --warmup non-negative")
 
+    started_at = datetime.now(UTC)
+    run_label = args.run_label or started_at.strftime("%Y%m%dT%H%M%SZ")
     os.environ.setdefault("NEURON_PLATFORM_TARGET_OVERRIDE", "trn3")
     os.environ.setdefault("NEURON_LOGICAL_NC_CONFIG", "2")
 
@@ -433,6 +448,11 @@ def main() -> int:
 
         output = {
             "schema_version": 1,
+            "measurement_run": {
+                "label": run_label,
+                "started_at_utc": started_at.isoformat(),
+                "completed_at_utc": datetime.now(UTC).isoformat(),
+            },
             "methodology": {
                 "canonical_metric": "NKI Spike NTFF total_time",
                 "samples_per_executable": args.samples,

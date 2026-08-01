@@ -1,0 +1,1444 @@
+[
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-0-m8192-n8192-k8192",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#0"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2831-m4096-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2831"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2832-m4096-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2832"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2833-m4096-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2833"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2834-m4096-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2834"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2835-m4096-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2835"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2836-m4-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2836"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2837-m4-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2837"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2838-m4-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2838"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2839-m4-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2839"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2840-m4-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2840"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2841-m8192-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2841"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2842-m8192-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2842"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2843-m8192-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2843"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2844-m8192-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2844"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2845-m8192-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2845"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2846-m8-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2846"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2847-m8-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2847"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2848-m8-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2848"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2849-m8-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2849"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2850-m8-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2850"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2856-m16-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2856"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2857-m16-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2857"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2858-m16-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2858"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2859-m16-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2859"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2860-m16-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2860"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2866-m32-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2866"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2867-m32-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2867"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2868-m32-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2868"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2869-m32-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2869"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2870-m32-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2870"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2876-m64-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2876"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2877-m64-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2877"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2878-m64-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2878"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2879-m64-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2879"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2880-m64-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2880"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2896-m128-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2896"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2897-m128-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2897"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2898-m128-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2898"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2899-m128-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2899"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-2900-m128-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#2900"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3329-m4096-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3329"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3330-m4096-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3330"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3331-m4096-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3331"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3332-m4-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3332"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3333-m4-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3333"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3334-m4-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3334"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3335-m8192-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3335"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3336-m8192-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3336"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3337-m8192-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3337"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3338-m8-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3338"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3339-m8-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3339"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3340-m8-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3340"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3344-m16-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3344"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3345-m16-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3345"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 16,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3346-m16-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3346"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3350-m32-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3350"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3351-m32-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3351"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 32,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3352-m32-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3352"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3356-m64-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3356"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3357-m64-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3357"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 64,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3358-m64-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3358"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 2048,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3368-m128-n2048-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3368"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 4096,
+      "k": 2048,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3369-m128-n4096-k2048",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3369"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 128,
+      "n": 4096,
+      "k": 256,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-3370-m128-n4096-k256",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#3370"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6856-m256-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6856"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6857-m256-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6857"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6858-m256-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6858"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6859-m256-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6859"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 256,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6860-m256-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6860"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 1024,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6871-m512-n1024-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6871"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 256,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6872-m512-n256-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6872"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 4096,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6873-m512-n4096-k1024",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6873"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 128,
+      "k": 4096,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6874-m512-n128-k4096",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6874"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 512,
+      "n": 4096,
+      "k": 128,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "operatorx-gemm-6875-m512-n4096-k128",
+    "corpus_role": "operatorx-derived-request",
+    "source": "testlists/gemm.json#6875"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 2048,
+      "k": 5120,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m2048-n2048-k5120",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 2048,
+      "k": 6144,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m4096-n2048-k6144",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 2048,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m6144-n2048-k7168",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 2048,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m8192-n2048-k8192",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 4096,
+      "k": 6144,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m2048-n4096-k6144",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m4096-n4096-k7168",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 4096,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m6144-n4096-k8192",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 4096,
+      "k": 5120,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m8192-n4096-k5120",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 6144,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m2048-n6144-k7168",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 6144,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m4096-n6144-k8192",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 6144,
+      "k": 5120,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m6144-n6144-k5120",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 6144,
+      "k": 6144,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m8192-n6144-k6144",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 8192,
+      "k": 8192,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m2048-n8192-k8192",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 8192,
+      "k": 5120,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m4096-n8192-k5120",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 8192,
+      "k": 6144,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m6144-n8192-k6144",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m8192-n8192-k7168",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 10240,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m2048-n10240-k1024",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 10240,
+      "k": 3072,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m4096-n10240-k3072",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 10240,
+      "k": 5120,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m6144-n10240-k5120",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 10240,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m8192-n10240-k7168",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 12288,
+      "k": 3072,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m2048-n12288-k3072",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 12288,
+      "k": 5120,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m4096-n12288-k5120",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 12288,
+      "k": 7168,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m6144-n12288-k7168",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 12288,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "exact-extrapolation-m8192-n12288-k1024",
+    "corpus_role": "exact-extrapolation",
+    "source": "trainium-longitudinal-exact-design-v1"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 2048,
+      "n": 2048,
+      "k": 1024,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "calibration-anchor-m2048-n2048-k1024",
+    "corpus_role": "calibration-anchor",
+    "source": "trainium_gemm_exact_holdout.json"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 4096,
+      "n": 4096,
+      "k": 3072,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "calibration-anchor-m4096-n4096-k3072",
+    "corpus_role": "calibration-anchor",
+    "source": "trainium_gemm_exact_holdout.json"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 6144,
+      "n": 6144,
+      "k": 3072,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "calibration-anchor-m6144-n6144-k3072",
+    "corpus_role": "calibration-anchor",
+    "source": "trainium_gemm_exact_holdout.json"
+  },
+  {
+    "type": "gemm",
+    "args": {
+      "m": 8192,
+      "n": 8192,
+      "k": 3072,
+      "dtype_a": "bf16",
+      "dtype_b": "bf16",
+      "dtype_out": "bf16"
+    },
+    "name": "calibration-anchor-m8192-n8192-k3072",
+    "corpus_role": "calibration-anchor",
+    "source": "trainium_gemm_exact_holdout.json"
+  }
+]

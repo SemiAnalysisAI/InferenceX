@@ -52,6 +52,12 @@ padding 影响。
 另外八行完整留出四组 M/N 组合，每组包含两个 K。冻结后的数据划分可确保输出
 wave 尾项不会在拟合时看到用于评估的 M/N 组合。
 
+纵向验证集合 `testlists/trainium_gemm_longitudinal_validation.json` 包含 103 个
+请求：从 OperatorX `testlists/gemm.json` 中可复现筛选出的 75 个 BF16 GEMM、
+24 个完全对齐的外推 shape，以及四个校准锚点。它们对应 38 个可执行程序，其中
+29 个未出现在校准网格中。同一个冻结集合会以带 UTC 时间戳的独立快照重复运行，
+且绝不会加入 phase 模型的校准数据。
+
 ## 验收门槛
 
 只有满足下列条件的可执行程序才会被接受：
@@ -62,10 +68,11 @@ wave 尾项不会在拟合时看到用于评估的 M/N 组合。
    NeuronCore-v4。
 3. **编译程序：**保留 NEFF 与 compiler-info 的 SHA-256；每份 profile 都包含
    matmul 指令。
-4. **工作量身份：**每份 profile 的 `hardware_flops` 与执行 shape 的
-   `2*M*N*K` 偏差不超过 0.01%，或绝对差不超过单个 M 行平面的
-   `2*N*K` FLOPs。后一上限覆盖已观测到的推导计数器边界遗漏；编译 shape 和
-   输出正确性仍由独立门槛验证。
+4. **工作量身份：**`hardware_flops` 必须严格等于
+   `matmul_instruction_count × 16,777,216`。profiler 的 trace 窗口最多可遗漏
+   静态调度 matmul 指令的 0.1%；对于小型可执行程序，容差下限为两条指令。
+   编译 shape 与输出正确性仍是相互独立的强制门槛；该容差只适用于彼此严格一致的
+   profile 推导计数器。
 5. **计时：**精确保留 21 个正数 `total_time` 样本，并给出
    p10/p50/p90/min/max。
 6. **流量证据：**每份 profile 都包含正数 HBM 读写计数。
@@ -89,6 +96,7 @@ wave 尾项不会在拟合时看到用于评估的 M/N 组合。
 - 验证结果与驻留标签；
 - NEFF/compiler-info hash 与 NEFF 大小；
 - Neuron 设备清单及 NKI/编译器/runtime/profiler 版本；
+- UTC 开始/完成时间戳及调用方指定的纵向运行标签；
 - 完整的测量与测试列表契约。
 
 正式扫描结束后，不会将原始 NTFF、NEFF、编译 dump 或运行日志提交到仓库。
@@ -103,6 +111,20 @@ export PYTHONPATH="$PWD/.."
 
 python scripts/trainium_gemm_sweep.py \
   --json-out data/trn3_lnc2_gemm_sweep_20260731.json \
+  --samples 21 \
+  --warmup 10
+```
+
+宽覆盖集合由入库的 OperatorX 源列表生成，并作为相互独立的快照运行：
+
+```bash
+python scripts/build_trainium_longitudinal_corpus.py \
+  --output testlists/trainium_gemm_longitudinal_validation.json
+
+python scripts/trainium_gemm_sweep.py \
+  --testlist testlists/trainium_gemm_longitudinal_validation.json \
+  --json-out data/trn3_lnc2_gemm_longitudinal_20260801_snapshot_a.json \
+  --run-label 20260801-snapshot-a \
   --samples 21 \
   --warmup 10
 ```

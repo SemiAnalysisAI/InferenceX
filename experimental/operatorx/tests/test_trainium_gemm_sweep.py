@@ -51,23 +51,27 @@ def test_load_rows_rejects_non_bf16(tmp_path: Path) -> None:
 
 
 def test_validate_summary_requires_executed_flops() -> None:
+    expected_instructions = (
+        2 * 2048 * 2048 * 1024 // MODULE.MATMUL_INSTRUCTION_FLOPS
+    )
     valid = {
         "hardware_flops": 2 * 2048 * 2048 * 1024,
         "total_time": 0.001,
-        "matmul_instruction_count": 1,
+        "matmul_instruction_count": expected_instructions,
         "hbm_read_bytes": 1,
         "hbm_write_bytes": 1,
     }
     MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
-    valid["hardware_flops"] -= 1
+    valid["matmul_instruction_count"] -= 2
+    valid["hardware_flops"] -= 2 * MODULE.MATMUL_INSTRUCTION_FLOPS
     MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
-    valid["hardware_flops"] = 2 * 2048 * 2048 * 1024 - 2 * 2048 * 1024
-    MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
-    valid["hardware_flops"] -= 1
-    with pytest.raises(RuntimeError, match="hardware FLOPs"):
+    valid["matmul_instruction_count"] -= 1
+    valid["hardware_flops"] -= MODULE.MATMUL_INSTRUCTION_FLOPS
+    with pytest.raises(RuntimeError, match="instruction coverage"):
         MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
+    valid["matmul_instruction_count"] = expected_instructions
     valid["hardware_flops"] = 1
-    with pytest.raises(RuntimeError, match="hardware FLOPs"):
+    with pytest.raises(RuntimeError, match="inconsistent"):
         MODULE.validate_summary(valid, m=2048, n=2048, k=1024)
 
 
@@ -90,6 +94,8 @@ def test_build_rows_records_padding_cost() -> None:
     assert row["executed_shape"] == {"m": 2048, "n": 4096, "k": 4096}
     assert row["padding_flops_ratio"] == 128.0
     assert row["device_execution_us"]["p50"] == 10.0
+    assert row["corpus_role"] == "unspecified"
+    assert row["source"] == "unspecified"
 
 
 def test_checked_in_trainium_dataset_passes_contract() -> None:

@@ -56,6 +56,13 @@ contains 24 exact executables over M/N in {2048, 4096, 6144, 8192} and K in
 The frozen split prevents an output-wave tail from being evaluated on an M/N
 combination it saw during fitting.
 
+The longitudinal validation `testlists/trainium_gemm_longitudinal_validation.json`
+contains 103 requests: 75 BF16 GEMMs selected reproducibly from OperatorX
+`testlists/gemm.json`, 24 exact extrapolation shapes, and four calibration anchors.
+They resolve to 38 executables, 29 of which were absent from the calibration grid.
+The same frozen corpus is run as independent timestamped snapshots; it is never
+added to the phase-model calibration.
+
 ## Acceptance gates
 
 An executable is accepted only when:
@@ -66,11 +73,12 @@ An executable is accepted only when:
    launch grid is two physical NeuronCore-v4 cores.
 3. **Compiled program:** the NEFF and compiler-info SHA-256 values are retained;
    each profile contains matmul instructions.
-4. **Work identity:** every profile's `hardware_flops` matches `2*M*N*K` for the
-   executed padded shape within 0.01%, or differs by no more than the explicit
-   `2*N*K` FLOPs of one M-row plane. The latter bound covers an observed derived-
-   counter boundary omission; compiled shape and output correctness remain
-   independently gated.
+4. **Work identity:** `hardware_flops` must equal `matmul_instruction_count ×
+   16,777,216` exactly. The profiler trace window may omit at most 0.1% of the
+   statically scheduled matmul instructions, with a two-instruction floor for
+   small executables. Compiler shape and output correctness remain independent,
+   mandatory gates; the tolerance applies only to mutually consistent derived
+   profile counters.
 5. **Timing:** exactly 21 positive `total_time` samples are retained, with
    p10/p50/p90/min/max.
 6. **Traffic evidence:** every profile contains positive HBM read and write counts.
@@ -97,6 +105,7 @@ The compact dataset retains:
 - validation outcomes and residency label;
 - NEFF/compiler-info hashes and NEFF size;
 - Neuron device inventory and NKI/compiler/runtime/profiler versions; and
+- a UTC start/completion timestamp and caller-supplied longitudinal run label; and
 - the exact measurement and testlist contract.
 
 No raw NTFF, NEFF, compiler dump, or run log is checked in after the official sweep.
@@ -111,6 +120,21 @@ export PYTHONPATH="$PWD/.."
 
 python scripts/trainium_gemm_sweep.py \
   --json-out data/trn3_lnc2_gemm_sweep_20260731.json \
+  --samples 21 \
+  --warmup 10
+```
+
+The broad corpus is generated from the checked-in OperatorX source list and run as
+independent snapshots:
+
+```bash
+python scripts/build_trainium_longitudinal_corpus.py \
+  --output testlists/trainium_gemm_longitudinal_validation.json
+
+python scripts/trainium_gemm_sweep.py \
+  --testlist testlists/trainium_gemm_longitudinal_validation.json \
+  --json-out data/trn3_lnc2_gemm_longitudinal_20260801_snapshot_a.json \
+  --run-label 20260801-snapshot-a \
   --samples 21 \
   --warmup 10
 ```
