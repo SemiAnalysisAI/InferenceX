@@ -82,7 +82,11 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=1000000
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
-MEM_FRACTION_STATIC=0.85
+# Lowered from 0.85: long-context agentic warmup (ISL p95 ~433k tokens) with MTP
+# exhausted HBM (HSA_STATUS_ERROR_OUT_OF_RESOURCES, 0 MB free) in the DSv4
+# attention indexer's transient logits buffer, crashing the scheduler. Leave more
+# HBM headroom for those per-request allocations on long prompts.
+MEM_FRACTION_STATIC=0.80
 CHUNKED_PREFILL_SIZE=4096
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -103,6 +107,15 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
     )
+fi
+
+# Cap the prefill batch. The DSv4 attention indexer's per-chunk paged-MQA logits
+# buffer scales with the prefill chunk size, and against long agentic contexts
+# (ISL p95 ~433k tokens) a 32768-token chunk drove HBM to 0 MB free
+# (HSA_STATUS_ERROR_OUT_OF_RESOURCES), crashing the scheduler. Ceiling the chunk
+# at 16384 to bound that transient allocation without rejecting long requests.
+if [ "$CHUNKED_PREFILL_SIZE" -gt 16384 ]; then
+    CHUNKED_PREFILL_SIZE=16384
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
