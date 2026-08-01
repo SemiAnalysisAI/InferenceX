@@ -5361,7 +5361,7 @@
     - kimik2.5-fp4-b300-vllm
   description:
     - "Bump Kimi K2.5 NVFP4 B200/B300 vLLM image from v0.22.0 to v0.26.0"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2441
 
 - config-keys:
     - kimik2.5-fp4-b200-vllm
@@ -5370,4 +5370,4 @@
     - "Bump Kimi K2.5 NVFP4 B200/B300 vLLM image from v0.22.0 to v0.26.0"
     - "Extend TP8/TP4 concurrency sweep to 512"
     - "Add DEP4 arm (tp4 ep4 dp-attn) with --prefill-schedule-interval 4, conc 128-512"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2441
