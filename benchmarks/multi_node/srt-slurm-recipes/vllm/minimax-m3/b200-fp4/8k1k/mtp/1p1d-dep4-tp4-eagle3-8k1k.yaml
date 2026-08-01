@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-b200-1p4d-dep2-tp4-fp4-8k1k-eagle3"
+name: "minimax-m3-vllm-disagg-b200-1p1d-dep4-tp4-fp4-8k1k-eagle3"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
@@ -9,10 +9,10 @@ resources:
   gpu_type: b200
   gpus_per_node: 8
   prefill_nodes: 1
-  decode_nodes: 2
+  decode_nodes: 0
   prefill_workers: 1
-  decode_workers: 4
-  gpus_per_prefill: 2
+  decode_workers: 1
+  gpus_per_prefill: 4
   gpus_per_decode: 4
 
 dynamo:
@@ -44,7 +44,7 @@ backend:
       no-enable-flashinfer-autotune: true
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 2
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
@@ -55,7 +55,7 @@ backend:
       gpu-memory-utilization: 0.95
       max-model-len: 9472
       language-model-only: true
-      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":1,"attention_backend":"FLASH_ATTN"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 16384
@@ -91,4 +91,4 @@ benchmark:
   num_warmup_mult: 0
   random_range_ratio: 0.8
   use_chat_template: true
-  concurrencies: "4x8x64"
+  concurrencies: "1x2x4x8x16x32x64x128x256x512x1024"
