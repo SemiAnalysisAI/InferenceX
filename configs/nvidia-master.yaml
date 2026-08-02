@@ -8638,8 +8638,9 @@ dsv4-fp4-b300-sglang-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 8] }
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [8] }
 
 # DEP8 prefill uses an 8K batch because 16K OOMs in the FP4 MoE intermediate;
 # decode uses FULL_DECODE_ONLY after the controlled graph test restored decode
