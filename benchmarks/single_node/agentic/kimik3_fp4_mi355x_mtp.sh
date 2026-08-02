@@ -3,11 +3,11 @@ set -euo pipefail
 
 # DSpark variant of kimik3_fp4_mi355x.sh. The MI355X launcher routes
 # spec-decoding=mtp rows to this suffix, while the shared base recipe owns the
-# model, KV-offload, AgentX replay, and eval plumbing.
+# model, AgentX replay, and eval plumbing.
 #
 # Keep this wrapper aligned with the upstream AMD Kimi-K3 DSpark reproducer.
 # The first AgentX validation is deliberately GPU-only at c1 so a server or
-# kernel failure cannot be attributed to a KV-offload connector.
+# kernel failure has nowhere else to hide.
 export SPEC_DECODE=true
 export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"

@@ -56,7 +56,7 @@ def test_reference_prefix_cache_mode_emits_no_override() -> None:
 
 def test_dspark_diagnostic_matrix_is_gpu_only_c1() -> None:
     master = yaml.safe_load(MASTER_CONFIG.read_text())
-    search_space = master["kimik3-fp4-mi355x-vllm-agentic-mtp"]["scenarios"][
+    search_space = master["kimik3-fp4-mi355x-vllm-agentic-dspark"]["scenarios"][
         "agentic-coding"
     ][0]["search-space"]
 
