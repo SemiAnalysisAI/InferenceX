@@ -1021,6 +1021,38 @@ if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
     fi
 fi
 
+# vllm-project/vllm#50578 -- "[ROCm][MLA] Use asm decode for non-divisor small
+# head counts". K3 has 96 attention heads, i.e. 12 heads/rank at TP8, which is a
+# non-divisor of 16, so stock vLLM cannot pad it up to the asm persistent decode
+# and falls back to the Gluon decode. Gluon parallelizes only over heads, so a
+# single workgroup marches the whole KV cache and per-token latency grows
+# linearly with context -- exactly the wrong shape for a 1M-context agentic
+# replay whose trace ISL p90 is ~286K. The PR pads 12 -> 16 by tiling the query
+# heads and slicing, and routes the decode through asm. Upstream measures mean
+# TPOT flat at ~23.5 ms across context length instead of 22.9 -> 54.1 ms
+# (2.29x at 32K/32K), on this exact model and SKU.
+#
+# The PR also touches mxfp4.py to force AITER_BF16_FP8_MOE_BOUND=0 under
+# AITER_SITUV2_A8W4; the reference env block above already exports that
+# unconditionally, so that half is a no-op here and is not applied.
+#
+# The gist mla_gluon.py patch above stays. With this patch applied, K3's decode
+# should never reach the Gluon kernel -- but if some path still does, we want
+# the fp8-correct kernel there rather than the image's batch-1 one.
+#
+# MLA_ASM_PAD=0 disables, which is what turns this branch back into the
+# no-offload / LMCache control arm.
+MLA_ASM_PAD="${MLA_ASM_PAD:-1}"
+if [ "$MLA_ASM_PAD" = "1" ]; then
+    # No `|| true`: a failed patch or a failed semantic check must kill the cell
+    # here, ~1 min in, rather than silently produce a control-arm number under
+    # an experiment's name. `set -e` is on in this script.
+    python3 "$(dirname "$0")/patches/vllm_pr50578_asm_pad.py" \
+        --diff-out "$RESULT_DIR/vllm_pr50578.diff" 2>&1 | tee "$RESULT_DIR/vllm_pr50578.log"
+else
+    echo "MLA_ASM_PAD=0: leaving stock AiterMLAHelper in place (Gluon decode)"
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
