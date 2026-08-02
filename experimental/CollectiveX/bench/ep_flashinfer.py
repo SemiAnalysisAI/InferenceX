@@ -76,6 +76,7 @@ class FlashInferEPBackend(EPBackend):
         self._a2a = None
         self._max_tokens = None
         self._recv_shape = None
+        self.experts_per_rank = args.experts // world_size
 
     # ---- setup -------------------------------------------------------------------------------
 
@@ -183,21 +184,29 @@ class FlashInferEPBackend(EPBackend):
         """Compact per-received-row view for the correctness oracle.
 
         The receive is `[ep_size, max_tokens, *]` with a rank's tokens only in the slots the
-        kernel filled, so flatten and keep the rows whose expert-id payload is not the
-        sentinel. Ids come back exactly as sent, i.e. already GLOBAL, which is what the oracle
-        compares against; per-row entries that are not local are still sentinel-stamped, so
-        mask their weights to zero rather than letting them into the expert sum.
+        kernel filled, so flatten and keep rows whose expert-id payload is not the sentinel.
+
+        Ids come back exactly as sent, i.e. GLOBAL and covering the token's whole top-k —
+        including experts owned by OTHER ranks. The oracle builds its expectation as "global id
+        where `id // experts_per_rank == rank`, else -1", so the non-local entries have to be
+        masked out here too, with their weights zeroed, or every row would disagree.
         """
         keep = self._valid_rows(h)
         hidden = h.recv_x.shape[-1]
         payload = h.recv_x.reshape(-1, hidden)[keep]
         ids = h.recv_idx.reshape(-1, h.topk).to(torch.int64)[keep]
         weights = h.recv_w.reshape(-1, h.topk).to(torch.float32)[keep]
-        live = ids != _INVALID_EXPERT
+        local = (ids >= 0) & ((ids // self.experts_per_rank) == self.rank)
+        expert_ids = torch.where(local, ids, torch.full_like(ids, -1))
         return types.SimpleNamespace(
             payload=payload,
-            expert_ids=torch.where(live, ids, torch.full_like(ids, -1)),
-            weights=weights.masked_fill(~live, 0.0),
+            expert_ids=expert_ids,
+            weights=weights.masked_fill(~local, 0.0),
+            # Per-local-expert arrival count; the oracle compares it against its own bincount.
+            local_expert_counts=torch.bincount(
+                (ids[local] - self.rank * self.experts_per_rank),
+                minlength=self.experts_per_rank,
+            ),
         )
 
     def combine_transformed(self, p, h, transformed):
