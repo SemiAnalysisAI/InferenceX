@@ -5355,3 +5355,12 @@
     - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Add DSV4 B200 disaggregated Dynamo SGLang STP configuration for 8k/1k"
+    - "Add checked-in srt-slurm recipes for the configured prefill and decode topologies"
+    - "Use the staged DSV4 checkpoint and its native quantization metadata"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2251

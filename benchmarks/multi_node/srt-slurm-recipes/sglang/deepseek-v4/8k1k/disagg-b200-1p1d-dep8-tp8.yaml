@@ -1,0 +1,145 @@
+name: "disagg-b200-1p1d-dep8-tp8-4-c64"
+
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  precision: "fp4"
+
+dynamo:
+  hash: "92f5b3b8d7dd5ab9179d4b1034bd2c1c0803693e"
+  install: true
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+resources:
+  gpu_type: "b200"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 8
+  decode_nodes: 1
+  decode_workers: 1
+  gpus_per_decode: 8
+
+health_check:
+  max_attempts: 240
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  env:
+    DYN_ROUTER_LOAD_BLOCK_SIZE: "1"
+  args:
+    router-mode: "kv"
+    router-kv-overlap-score-weight: 0
+    router-queue-threshold: 64
+    router-temperature: 0.5
+    no-kv-events: true
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_USE_FAST_MASK_EP: "1"
+    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "8192"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
+    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "1"
+    SGLANG_OPT_FP8_WO_A_GEMM: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_LOG_FORWARD_ITERS: "1"
+    SGLANG_LOG_MS: "1"
+    SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
+
+  decode_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_ENABLE_THINKING: "1"
+    SGLANG_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      watchdog-timeout: 86400
+      skip-tokenizer-init: true
+      stream-interval: 60
+
+      tensor-parallel-size: 8
+      data-parallel-size: 8
+      expert-parallel-size: 8
+
+      enable-dp-attention: true
+      moe-a2a-backend: "megamoe"
+      deepep-config: '{"normal_dispatch":{"num_sms":88,"num_max_nvl_chunked_send_tokens":28,"num_max_nvl_chunked_recv_tokens":512},"normal_combine": {"num_sms":88,"num_max_nvl_chunked_send_tokens":16,"num_max_nvl_chunked_recv_tokens":512}}'
+      moe-dense-tp-size: 1
+
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: mooncake
+
+      mem-fraction-static: 0.80
+      max-running-requests: 1024
+      chunked-prefill-size: 65536
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      disable-radix-cache: true
+
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: mooncake
+
+      tensor-parallel-size: 8
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+
+      mem-fraction-static: 0.9
+      max-running-requests: 1024
+      cuda-graph-max-bs:    512
+      swa-full-tokens-ratio: 0.1
+      context-length: 16384
+
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "32x64"
+  req_rate: "inf"
+  use_chat_template: false
