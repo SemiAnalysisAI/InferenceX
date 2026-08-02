@@ -38,6 +38,7 @@ def _project_local_metadata(torch_module, raw_expert_ids, raw_weights, rank, exp
 
 class MoRIBackend(EPBackend):
     name = "mori"
+    maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     combine_needs_redispatch = True

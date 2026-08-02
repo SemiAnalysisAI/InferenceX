@@ -123,6 +123,7 @@ def _normal_num_sms() -> int:
 
 class UCCLEPBackend(EPBackend):
     name = "uccl-ep"
+    maturity = "candidate"  # no engine exposes a UCCL-EP all-to-all selector
     # One legacy Buffer under two modes, selected by args.mode:
     #   normal      -> get_dispatch_layout/dispatch/combine; unweighted rank-sum combine.
     #   low-latency -> low_latency_dispatch/combine decode kernels; source-side weighted combine.

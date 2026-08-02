@@ -1,4 +1,5 @@
 {
+  "backend_maturity": {"deepep-v2": "production", "mori": "production", "uccl-ep": "candidate", "nccl-ep": "candidate"},
   "platforms": {
     "h100-dgxc": {
       "arch": "sm90",
