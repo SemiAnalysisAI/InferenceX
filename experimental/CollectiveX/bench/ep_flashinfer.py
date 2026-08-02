@@ -61,7 +61,8 @@ class FlashInferEPBackend(EPBackend):
     # second input_payload and validated against the oracle's cast round-trip; not this pass.
     SUPPORTED_PRECISIONS = ("bf16",)
     kernel_generation = "flashinfer-mnnvl-one-sided"
-    stage_device_work = False
+    # stage() now copies the received payload into the workspace combine region.
+    stage_device_work = True
     # The kernel scatters expert outputs back to the supplying rank; it does not multiply by
     # the routing weights (those ride along as a caller payload, and vLLM applies them in the
     # MoE layer, not in the A2A). Verified against the oracle during bring-up.
@@ -164,11 +165,27 @@ class FlashInferEPBackend(EPBackend):
         )
 
     def stage(self, p, h):
-        # BF16 needs no conversion: the received workspace tensor is the combine input.
-        h.combine_input = h.recv_x
+        """Materialise the combine payload in the workspace region the API designates.
+
+        The kernel accepts exactly two payload forms: a caller-owned tensor with
+        `payload_in_workspace=False` (vLLM passes its expert-GEMM output this way), or the
+        view returned by `get_combine_payload_tensor_in_workspace` with the flag True. Handing
+        it the dispatch-RECEIVE view instead — which is what this adapter did — is a third
+        form no upstream caller uses: it makes the kernel stage-copy out of MNNVL
+        peer-writable memory that peers wrote during dispatch.
+        """
+        buffer = self._combine_buffer(h)
+        buffer.copy_(h.recv_x)
+        h.combine_input = buffer
+
+    def _combine_buffer(self, h):
+        """The workspace-resident combine payload region for this rung."""
+        return self._a2a.get_combine_payload_tensor_in_workspace(
+            h.tokens, h.recv_x.shape[-1], h.recv_x.dtype
+        )
 
     def combine(self, p, h):
-        out = self._a2a.combine(h.combine_input, h.tokens)
+        out = self._a2a.combine(h.combine_input, h.tokens, payload_in_workspace=True)
         h.out = out
         return out
 
@@ -215,26 +232,16 @@ class FlashInferEPBackend(EPBackend):
     def combine_transformed(self, p, h, transformed):
         """Combine an oracle-transformed payload through the same kernel as the timed path.
 
-        `transformed` holds one row per row `inspect_dispatch` returned, so scatter it back
-        into the padded workspace-shaped buffer at exactly the slots those rows came from.
-        Unfilled slots stay zero and contribute nothing to the sum.
+        Scattered into the workspace combine region (see stage) and submitted with
+        `payload_in_workspace=True`, so the kernel reads the slots from the region the API
+        designates for them rather than from the dispatch-receive buffer.
         """
-        # Write straight into the RECEIVED workspace tensor rather than a fresh buffer.
-        #
-        # A separate `zeros_like` buffer was measured to give a combine output that is not the
-        # sum of the staged messages: summing every rank's staged contribution for one token
-        # gave 0.2555847168, the oracle expected BF16-nearest of that (0.255859375, bit-exact),
-        # and the kernel returned 0.2578125. No summation model reaches that value -- fp32
-        # sequential, fp32 tree, bf16 tree and both rounding modes all land on 0.255859375 --
-        # so the kernel was reading different bytes than were written. The remaining difference
-        # between the two paths is the buffer: recv_x is workspace-backed, and a fresh
-        # allocation has to be copied in, which is where a layout reinterpretation can happen.
-        # Writing in place removes that copy: the values sit exactly where dispatch left them.
-        flat = h.recv_x.view(-1, h.recv_x.shape[-1])
+        buffer = self._combine_buffer(h)
+        flat = buffer.view(-1, buffer.shape[-1])
         keep = self._valid_rows(h)
-        flat[keep] = transformed.to(h.recv_x.dtype)
-        flat[~keep] = 0            # slots the kernel never filled must contribute nothing
-        return self._a2a.combine(h.recv_x, h.tokens)
+        flat[keep] = transformed.to(buffer.dtype)
+        flat[~keep] = 0            # slots the kernel never filled contribute nothing
+        return self._a2a.combine(buffer, h.tokens, payload_in_workspace=True)
 
 
 def _ep_group():
