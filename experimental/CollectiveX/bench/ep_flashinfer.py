@@ -119,8 +119,11 @@ class FlashInferEPBackend(EPBackend):
             top_k=top_k,
             num_experts=self.args.experts,
             workspace_size_per_rank=workspace_size,
-            mnnvl_config=MnnvlConfig(comm_backend=_TorchDistCommunicator()),
+            mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
         )
+        # Every rank must finish mapping its workspace before any peer writes into it;
+        # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
+        torch.distributed.barrier(group=_ep_group())
         self._recv_shape = (self.world_size, self._max_tokens, hidden)
 
     # ---- transport contract ------------------------------------------------------------------
@@ -173,29 +176,56 @@ class FlashInferEPBackend(EPBackend):
         return self._a2a.combine(padded, h.tokens)
 
 
-class _TorchDistCommunicator:
+def _ep_group():
+    """The process group spanning the EP world. CollectiveX runs one group per case and the
+    default group IS the EP group, so this is the default — named for the kernel's assert
+    (`workspace.size(0) == moe_ep_size`), which a wider group would silently violate."""
+    import torch.distributed as dist
+
+    return dist.group.WORLD
+
+def _communicator(group):
     """Bridge MnnvlConfig to the process group the harness already established.
 
-    FlashInfer needs a communicator covering exactly the EP group to exchange MNNVL handles;
-    the harness has one in torch.distributed, so wrap that rather than standing up a second.
+    FlashInfer needs a communicator spanning exactly the EP group to exchange MNNVL fabric
+    handles; the harness has one in torch.distributed, so wrap that rather than standing up a
+    second. The contract is `flashinfer.comm.mnnvl.CommBackend` and it is not optional in any
+    part: an earlier version of this adapter implemented only rank/size/allgather/Split and
+    the first dispatch died with `CUDA error: unspecified launch failure` (sticky 719) on
+    gb200. `barrier` is the reason — handle exchange has to complete on every rank before any
+    rank's kernel touches peer memory, and without it the writes land on memory the peer has
+    not mapped yet. Built as a subclass of the upstream ABC so a future interface change is an
+    import-time error here rather than another asynchronous fault on the cluster.
     """
+    import torch.distributed as dist
+    from flashinfer.comm.mnnvl import CommBackend
 
-    def __init__(self):
-        import torch.distributed as dist
+    class _TorchDistCommunicator(CommBackend):
+        def __init__(self, process_group):
+            self._group = process_group
 
-        self._dist = dist
+        def Get_rank(self) -> int:
+            return self._group.rank()
 
-    def Get_rank(self):
-        return self._dist.get_rank()
+        def Get_size(self) -> int:
+            return self._group.size()
 
-    def Get_size(self):
-        return self._dist.get_world_size()
+        def allgather(self, data):
+            gathered = [None] * self.Get_size()
+            dist.all_gather_object(gathered, data, group=self._group)
+            return gathered
 
-    def allgather(self, data):
-        gathered = [None] * self._dist.get_world_size()
-        self._dist.all_gather_object(gathered, data)
-        return gathered
+        def bcast(self, data, root):
+            # broadcast_object_list mutates the list in place.
+            payload = [data]
+            dist.broadcast_object_list(payload, src=root, group=self._group)
+            return payload[0]
 
-    def Split(self, color, key):
-        # The harness's group already IS the EP group, so a split returns the same view.
-        return self
+        def barrier(self) -> None:
+            dist.barrier(group=self._group)
+
+        def Split(self, color, key):
+            # The harness's group already IS the EP group, so a split returns the same view.
+            return self
+
+    return _TorchDistCommunicator(group)
