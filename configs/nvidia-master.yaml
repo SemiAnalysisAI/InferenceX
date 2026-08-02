@@ -8626,6 +8626,20 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128], router: { name: sglang-router, version: "0.3.2" } }
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [52, 72, 100, 128, 144, 196, 512], router: { name: sglang-router, version: "0.3.2" } }
 
+dsv4-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260802-131bd51b
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+
 # DEP8 prefill uses an 8K batch because 16K OOMs in the FP4 MoE intermediate;
 # decode uses FULL_DECODE_ONLY after the controlled graph test restored decode
 # throughput. Dynamo KV routing and AIPerf conversation-aware routing remain
