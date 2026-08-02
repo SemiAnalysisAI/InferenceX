@@ -25,7 +25,8 @@ The PR touches two files:
 
   1. vllm/v1/attention/backends/mla/rocm_aiter_mla.py -- the whole diff is
      confined to `class AiterMLAHelper`. This script replaces that class
-     wholesale with the PR's version, verbatim. Replacing the entire class
+     wholesale with the PR's version, verbatim apart from the one-line
+     contiguity fix documented under LOCAL FIX below. Replacing the entire class
      (rather than applying a context diff) is deliberate: the kimi-k3 preview
      image reports vLLM 0.1.dev19253+g5f76ae224, and that sha is not resolvable
      in vllm-project/vllm, so the installed file cannot be assumed byte-equal to
@@ -37,6 +38,31 @@ The PR touches two files:
      applied**: kimik3_fp4_mi355x.sh already does `export
      AITER_BF16_FP8_MOE_BOUND=0` unconditionally (reference env block), which is
      strictly broader than the PR's in-process os.environ write. Nothing to do.
+
+LOCAL FIX ON TOP OF THE PR (2026-08-02)
+--------------------------------------
+`get_mla_padded_q` here adds a `.contiguous()` that the PR head does not have.
+The PR returns `q.repeat(1, reps, 1)[:, :m, :]`, which is a narrow along dim 1 of
+a wider tensor and is therefore **not contiguous for exactly the non-divisor head
+counts the branch exists to serve** (12 heads -> reps 2 -> 24 heads sliced to 16;
+6 -> 18 sliced to 16). Divisor counts are contiguous only by accident, because
+reps * num_heads == m makes the slice a no-op. The asm kernel rejects it:
+
+    [AITER] aiter_meta/csrc/py_itfs_cu/asm_mla.cu:805
+    mla_decode_stage1_asm_fwd: only support Q.is_contiguous() for now
+
+all eight ranks, during determine_available_memory() at engine init. Reproduced
+deterministically on three separate MI355X nodes (g18, g10, g15) in runs
+30732340435 / 30732344885 / 30732348935.
+
+This is almost certainly a regression inside the PR's own review cycle: the
+original padding "appended the leading query heads" (a torch.cat, which returns a
+contiguous tensor), and the TP16 under-padding fix in e1656b6 replaced it with
+tile-and-slice. The TPOT table in the PR description was measured on the
+pre-e1656b6 append version, so the current head has never run on this kernel.
+
+The extra copy is one [B, 16, 576] tensor per decode step -- negligible against
+the KV walk it enables.
 
 This script FAILS LOUDLY. A silently-unpatched run would produce a "no perf lift"
 number that means nothing, which is the one outcome worth spending a node on
@@ -98,7 +124,13 @@ PR_CLASS = '''class AiterMLAHelper:
         # padding heads cannot affect heads [0:num_heads]; they are sliced back
         # off in get_mla_unpadded_o.
         reps = -(-m // num_heads)  # ceil(m / num_heads)
-        return q.repeat(1, reps, 1)[:, :m, :]
+        # DEVIATION FROM PR HEAD c5d4f2f6c -- see LOCAL FIX in the module
+        # docstring. The PR returns the bare slice, which is NOT contiguous for
+        # exactly the non-divisor counts this branch serves, and the asm kernel
+        # rejects it:
+        #   asm_mla.cu:805 mla_decode_stage1_asm_fwd:
+        #     only support Q.is_contiguous() for now
+        return q.repeat(1, reps, 1)[:, :m, :].contiguous()
 
     @staticmethod
     def get_mla_unpadded_o(num_heads: int, o: torch.Tensor) -> torch.Tensor:
@@ -246,6 +278,14 @@ def verify(target: str) -> None:
         if padded.shape[1] != 16:
             failures.append(f"get_mla_padded_q({nh}) -> {padded.shape[1]} heads, want 16")
             continue
+        # mla_decode_stage1_asm_fwd asserts Q.is_contiguous() (asm_mla.cu:805).
+        # Without this check the failure surfaces 30 min later, on all eight
+        # ranks, as an engine-init death in determine_available_memory().
+        if not padded.is_contiguous():
+            failures.append(
+                f"get_mla_padded_q({nh}) is not contiguous -- the asm kernel "
+                "rejects it at asm_mla.cu:805"
+            )
         back = helper.get_mla_unpadded_o(nh, padded)
         if back.shape != q.shape or not torch.equal(back, q):
             failures.append(f"round trip lost data at num_heads={nh}")
