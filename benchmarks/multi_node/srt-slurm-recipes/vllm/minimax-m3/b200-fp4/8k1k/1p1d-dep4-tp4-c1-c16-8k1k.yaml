@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-b200-1p1d-fp4-dep2-tp4-8k1k"
+name: "minimax-m3-vllm-disagg-b200-1p1d-fp4-dep4-tp4-8k1k"
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
   container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
@@ -10,7 +10,7 @@ resources:
   decode_nodes: 1
   prefill_workers: 1
   decode_workers: 1
-  gpus_per_prefill: 2
+  gpus_per_prefill: 4
   gpus_per_decode: 4
 dynamo: {install: true, version: 1.3.0.dev20260710}
 frontend: {type: dynamo, enable_multiple_frontends: false}
@@ -25,7 +25,7 @@ backend:
       served-model-name: nvidia/MiniMax-M3-NVFP4
       no-enable-flashinfer-autotune: true
       tensor-parallel-size: 1
-      data-parallel-size: 2
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true

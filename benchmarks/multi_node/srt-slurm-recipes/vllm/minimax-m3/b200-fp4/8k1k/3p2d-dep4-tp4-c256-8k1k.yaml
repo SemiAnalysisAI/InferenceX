@@ -1,13 +1,13 @@
-name: "minimax-m3-vllm-disagg-b200-3p2d-fp4-dep2-tp4-c512-8k1k"
+name: "minimax-m3-vllm-disagg-b200-3p2d-fp4-dep4-tp4-c256-8k1k"
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
   container: "vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9"
   precision: "fp4"
 resources:
   gpu_type: "b200"
-  prefill_nodes: 3
+  prefill_nodes: 2
   prefill_workers: 3
-  gpus_per_prefill: 2
+  gpus_per_prefill: 4
   decode_nodes: 2
   decode_workers: 2
   spread_workers: true
@@ -70,7 +70,7 @@ backend:
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
       enable-expert-parallel: true
-      data-parallel-size: 2
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       data-parallel-hybrid-lb: true
       max-model-len: 9472
@@ -96,7 +96,7 @@ backend:
       pipeline-parallel-size: 1
       enable-expert-parallel: false
       max-model-len: 9472
-      max-num-seqs: 256
+      max-num-seqs: 128
       gpu-memory-utilization: 0.9
       max-num-batched-tokens: 16384
       max-cudagraph-capture-size: 2048
@@ -121,5 +121,5 @@ benchmark:
   isl: 8192
   osl: 1024
   random_range_ratio: 0.8
-  concurrencies: "512"
+  concurrencies: "256"
   req_rate: "inf"
