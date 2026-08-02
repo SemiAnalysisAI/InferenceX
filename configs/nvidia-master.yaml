@@ -8136,6 +8136,39 @@ glm5.2-fp4-b300-sglang-agentic:
       # strictly dominated by conc 48 on both throughput and interactivity.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], router: { name: sglang-router, version: "0.3.2" } }
 
+# GLM-5.2 B300 NVFP4 AgentX with EAGLE/MTP speculative decoding — the arm that
+# replaces the STP entry above once agentic non-MTP is deprecated (MODELS.md,
+# 2026-08-03). SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps 3,
+# eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
+# to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
+# K=3) through SGLANG_SIMULATE_ACC_*. Image is bumped to v0.5.16-cu130: it is
+# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE, and it is the
+# tag the GLM-5.2 GB300 dynamo-sglang agentic recipes already run.
+#
+# Cookbook low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM) only, on the AgentX
+# MTP concurrency grid [1, 4, 8, 12, 16]: steps of at least 2 because
+# single-step sampling cannot separate configurations by more than run-to-run
+# noise on the agentic corpus, and a hard stop at conc 16. The STP entry's DEP
+# throughput arm is deliberately not carried over — its frontier peak is conc
+# 48, well above that cap, and at conc <= 16 attention-DP leaves 2 sessions per
+# rank and is strictly dominated by TP8, so it would spend a GPU job per point
+# to re-measure a worse curve. Both arms of the STP entry offload to host DRAM,
+# so this one does too: without HiCache the working set outgrows HBM past conc
+# 8 and the radix hit rate collapses to <0.1.
+glm5.2-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
   model: Qwen/Qwen3.5-397B-A17B-FP8
