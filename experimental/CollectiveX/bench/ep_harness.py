@@ -54,17 +54,11 @@ COMBINE_MAG_FLOOR = 2e-2
 # unweighted per-expert transform and the kernel multiplies by the gate), whereas MoRI's
 # decode kernels (IntraNodeLL/AsyncLL) keep the plain additive rank sum and reduce the
 # gate weights in parallel ("unweighted-rank-sum", identical to normal mode). Normal mode
-# is frozen to the unweighted v1 contract. A third contract, "bf16-rank-sum", is the
-# unweighted rank sum performed at REDUCED precision: FlashInfer's one-sided NVLink combine
-# accumulates the per-rank BF16 messages in BF16 rather than FP32. Measured on gb200, 8 ranks:
-# staging 1.0 from rank 0 and 2^-9 from the other seven returns 1.0, where an FP32 accumulate
-# returns 1.015625. That is a property of the kernel, so the oracle has to reproduce it — the
-# alternative is widening the gate, which would blind every other backend to real corruption.
-# The backend declares which it realizes; run_sweep only checks that the declared value is
-# ALLOWED for the mode (so a mislabeled adapter fails closed), and the oracle keys on that
-# same declared value.
+# is frozen to the unweighted v1 contract. The backend declares which it realizes;
+# run_sweep only checks that the declared value is ALLOWED for the mode (so a mislabeled
+# adapter fails closed), and the oracle keys on that same declared value.
 MODE_ALLOWED_SEMANTICS = {
-    "normal": {"unweighted-rank-sum", "bf16-rank-sum"},
+    "normal": {"unweighted-rank-sum"},
     "low-latency": {"weighted-kernel-sum", "unweighted-rank-sum"},
 }
 
@@ -355,9 +349,7 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     """
     valid = expert_ids >= 0
     expert = expert_ids.clamp(min=0).to(torch.int64)
-    if combine_weight_semantics in ("unweighted-rank-sum", "bf16-rank-sum"):
-        # Both are plain summing kernels, so the gate is folded in here; they differ only in
-        # the precision the kernel accumulates at, which is a property of the expectation.
+    if combine_weight_semantics == "unweighted-rank-sum":
         coefficient = weights.to(torch.float32).masked_fill(~valid, 0)
     elif combine_weight_semantics == "weighted-kernel-sum":
         coefficient = valid.to(torch.float32)
@@ -374,8 +366,27 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     return transformed.to(payload.dtype)
 
 
+def _to_payload_dtype(torch, value, dtype, rounding):
+    """Cast an FP32 tensor to the payload dtype the way the KERNEL does.
+
+    torch rounds to nearest-even. Some kernels instead truncate — they keep the high 16 bits
+    of the FP32 word — which is a systematic downward bias of up to one ulp per conversion,
+    not noise that averages out. Measured on gb200: FlashInfer's one-sided combine reduces
+    1.0 + 7 * 2^-9 (exactly 129.75 bf16 ulps) to 1.0078125, i.e. 129 ulps, where round-to-
+    nearest gives 1.015625. Modelling the wrong rounding leaves a few-ulp error on every
+    element, which is exactly the size that fails a tight relative gate.
+    """
+    if rounding == "truncate":
+        as_int = value.float().view(torch.int32)
+        return (as_int & -65536).view(torch.float32).to(dtype)
+    if rounding != "nearest":
+        raise ValueError(f"unknown combine output rounding {rounding!r}")
+    return value.to(dtype)
+
+
 def _expected_transformed_combine(
-    torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+    torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
+    combine_output_rounding="nearest",
 ):
     """Reproduce the reduction combine actually performs so the expectation carries the
     same BF16 rounding a correct backend does rather than hiding it in a wide tolerance.
@@ -417,25 +428,6 @@ def _expected_transformed_combine(
             gate = (weights[:, slot:slot + 1] * valid[:, slot:slot + 1].to(torch.float32))
             expected += gate * transform
         return expected
-    if combine_weight_semantics == "bf16-rank-sum":
-        # Same per-rank BF16 messages as unweighted-rank-sum, but the cross-rank reduction runs
-        # at payload precision instead of FP32, so the accumulator is cast back every step.
-        # Summation ORDER is not observable from outside the kernel; rank order is used here.
-        # That is sound because the modelled quantity is the PRECISION, and reordering a BF16
-        # sum of like-magnitude terms moves the result by about an ulp, far inside the gate —
-        # whereas accumulating in FP32 when the kernel does not is a systematic 6-16 ulp error.
-        destination = expert_ids // experts_per_rank
-        scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
-        accumulator = torch.zeros_like(semantic_x, dtype=dtype)
-        for rank_id in sorted(destination.unique().tolist()):
-            gate = weights * (destination == rank_id)
-            contribution = (
-                semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
-                + (gate * offset_a).sum(dim=1, keepdim=True)
-                + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-            ).to(dtype)
-            accumulator = (accumulator.float() + contribution.float()).to(dtype)
-        return accumulator.float()
     if combine_weight_semantics != "unweighted-rank-sum":
         raise ValueError(f"unknown combine semantics {combine_weight_semantics!r}")
     destination = expert_ids // experts_per_rank
@@ -449,7 +441,10 @@ def _expected_transformed_combine(
             semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
             + (gate * offset_a).sum(dim=1, keepdim=True)
             + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-        ).to(dtype).float()
+        )
+        contribution = _to_payload_dtype(
+            torch, contribution, dtype, combine_output_rounding
+        ).float()
         domain = rank_id // ranks_per_domain
         if domain in domains:
             domains[domain] += contribution
@@ -460,7 +455,9 @@ def _expected_transformed_combine(
     # exact zero through every level (all gates zero) — no mask needed.
     expected = torch.zeros_like(semantic_x, dtype=torch.float32)
     for domain in sorted(domains):
-        expected += domains[domain].to(dtype).float()
+        expected += _to_payload_dtype(
+            torch, domains[domain], dtype, combine_output_rounding
+        ).float()
     return expected
 
 
@@ -598,7 +595,8 @@ def _run_expert_oracle(
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
-        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
+        getattr(backend, "combine_output_rounding", "nearest"),
     )
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
@@ -766,7 +764,8 @@ def _run_ll_expert_oracle(
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
-        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
+        getattr(backend, "combine_output_rounding", "nearest"),
     )
     if combined.shape == expected_combined.shape:
         max_absolute_error = max_elementwise_relative_error = 0.0

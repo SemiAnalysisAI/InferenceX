@@ -483,44 +483,63 @@ class LogicalByteProvenanceTests(unittest.TestCase):
                 ep_harness.logical_byte_provenance(**kwargs)
 
 
+def _require_torch():
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - torch-less test image
+        raise unittest.SkipTest("torch unavailable")
+    return torch
+
+
+class CombineOutputRoundingContract(unittest.TestCase):
+    """The oracle must cast to the payload dtype the way the KERNEL does.
+
+    torch rounds to nearest-even; FlashInfer's one-sided combine truncates. That is a
+    systematic downward bias of up to an ulp per element, not noise, and it is exactly the
+    magnitude a tight relative gate rejects. Pinned here so the two roundings cannot be
+    confused for each other, and so "truncate" cannot silently degrade into "nearest".
+    """
+
+    def test_truncate_differs_from_nearest_on_the_measured_case(self) -> None:
+        torch = _require_torch()
+        # 1.0 + 7 * 2^-9 is exactly 129.75 bf16 ulps: nearest -> 130, truncate -> 129.
+        value = torch.tensor([1.0 + 7 * (2.0 ** -9)], dtype=torch.float32)
+        nearest = ep_harness._to_payload_dtype(
+            torch, value, torch.bfloat16, "nearest"
+        ).float().item()
+        truncated = ep_harness._to_payload_dtype(
+            torch, value, torch.bfloat16, "truncate"
+        ).float().item()
+        self.assertEqual(nearest, 1.015625)
+        self.assertEqual(truncated, 1.0078125)   # the value gb200 actually returns
+        self.assertLess(truncated, nearest)
+
+    def test_truncate_is_exact_when_representable(self) -> None:
+        torch = _require_torch()
+        exact = torch.tensor([1.0, 2.0, 255.0, -0.5], dtype=torch.float32)
+        out = ep_harness._to_payload_dtype(torch, exact, torch.bfloat16, "truncate")
+        self.assertTrue(torch.equal(out.float(), exact))
+
+    def test_unknown_rounding_fails_closed(self) -> None:
+        torch = _require_torch()
+        with self.assertRaises(ValueError):
+            ep_harness._to_payload_dtype(
+                torch, torch.tensor([1.0]), torch.bfloat16, "stochastic"
+            )
+
+
 class ModeSemanticsContract(unittest.TestCase):
     # The combine contract is a backend fact, not a pure function of mode: DeepEP's
     # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is
-    # unweighted-rank-sum, so low-latency must admit both. Normal admits the unweighted rank
-    # sum at either accumulation precision — FlashInfer's one-sided NVLink combine performs the
-    # same summation but accumulates the per-rank BF16 messages in BF16 rather than FP32
-    # (measured on gb200), which the oracle reproduces as bf16-rank-sum instead of absorbing
-    # into a wider tolerance. weighted-kernel-sum stays out of normal mode.
+    # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
     def test_mode_allowed_semantics(self) -> None:
         self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["normal"],
-            {"unweighted-rank-sum", "bf16-rank-sum"},
+            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
         )
         self.assertEqual(
             ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],
             {"weighted-kernel-sum", "unweighted-rank-sum"},
         )
-
-    def test_bf16_rank_sum_is_lower_precision_than_fp32_rank_sum(self) -> None:
-        """The two normal-mode contracts must actually differ, or declaring the new one is
-        a no-op that would silently accept an FP32-accumulating backend as BF16 (and the
-        reverse). Reproduces the gb200 probe in pure python: seven sub-ulp addends vanish
-        under BF16 accumulation and survive under FP32."""
-        import struct
-
-        def bf16(value):  # round-to-nearest-even truncation to bfloat16
-            bits = struct.unpack("<I", struct.pack("<f", value))[0]
-            rounded = (bits + 0x7FFF + ((bits >> 16) & 1)) & 0xFFFF0000
-            return struct.unpack("<f", struct.pack("<I", rounded))[0]
-
-        addend, terms = 2.0 ** -9, 7
-        fp32_then_cast = bf16(1.0 + terms * addend)
-        accumulator = 1.0
-        for _ in range(terms):
-            accumulator = bf16(accumulator + addend)
-        self.assertEqual(accumulator, 1.0)              # every addend rounds away
-        self.assertEqual(fp32_then_cast, 1.015625)      # they survive an FP32 accumulate
-        self.assertNotEqual(accumulator, fp32_then_cast)
 
 
 try:
