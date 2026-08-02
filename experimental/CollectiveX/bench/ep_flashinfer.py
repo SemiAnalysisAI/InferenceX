@@ -40,6 +40,7 @@ phase is still covered — `normal` runs the full decode and prefill ladders.
 """
 from __future__ import annotations
 
+import re
 import types
 
 import torch
@@ -99,6 +100,7 @@ class FlashInferEPBackend(EPBackend):
         The communicator handed to MnnvlConfig must span exactly the EP group: the kernel
         asserts `workspace.size(0) == moe_ep_size`, so a wider group silently mis-sizes it.
         """
+        import flashinfer
         from flashinfer.comm import Mapping
         from flashinfer.comm.mnnvl import MnnvlConfig
         from flashinfer.comm.trtllm_moe_alltoall import (
@@ -134,12 +136,8 @@ class FlashInferEPBackend(EPBackend):
             workspace_size_per_rank=workspace_size,
             mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
         )
-        import flashinfer
-
-        version = tuple(
-            int(part) for part in flashinfer.__version__.split(".post")[0].split(".")[:3]
-        )
-        if version >= _COMBINE_FP32_SINCE:
+        wheel = tuple(int(n) for n in re.findall(r"\d+", flashinfer.__version__)[:3])
+        if wheel >= _COMBINE_FP32_SINCE:
             self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
@@ -174,25 +172,24 @@ class FlashInferEPBackend(EPBackend):
             tokens=p.T, topk=p.topk_idx.shape[1], combine_input=None,
         )
 
-    def stage(self, p, h):
-        """Materialise the combine payload in the workspace region the API designates.
-
-        The kernel accepts exactly two payload forms: a caller-owned tensor with
-        `payload_in_workspace=False` (vLLM passes its expert-GEMM output this way), or the
-        view returned by `get_combine_payload_tensor_in_workspace` with the flag True. Handing
-        it the dispatch-RECEIVE view instead — which is what this adapter did — is a third
-        form no upstream caller uses: it makes the kernel stage-copy out of MNNVL
-        peer-writable memory that peers wrote during dispatch.
-        """
-        buffer = self._combine_buffer(h)
-        buffer.copy_(h.recv_x)
-        h.combine_input = buffer
-
     def _combine_buffer(self, h):
         """The workspace-resident combine payload region for this rung."""
         return self._a2a.get_combine_payload_tensor_in_workspace(
             h.tokens, h.recv_x.shape[-1], h.recv_x.dtype
         )
+
+    def stage(self, p, h):
+        """Materialise the combine payload in the workspace region the API designates.
+
+        A production integration has the expert GEMM write its output straight into this
+        region and submits it with `payload_in_workspace=True`, so combine performs no
+        staging copy. Copying here rather than handing `combine` a caller-owned tensor keeps
+        that copy out of the combine measurement, where production does not pay it; it is
+        still executed and reported, as `stage`.
+        """
+        buffer = self._combine_buffer(h)
+        buffer.copy_(h.recv_x)
+        h.combine_input = buffer
 
     def combine(self, p, h):
         out = self._a2a.combine(h.combine_input, h.tokens, payload_in_workspace=True)
