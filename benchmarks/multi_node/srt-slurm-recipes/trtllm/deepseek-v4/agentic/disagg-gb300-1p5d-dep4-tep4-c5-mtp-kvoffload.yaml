@@ -63,7 +63,7 @@ backend:
         enable_block_reuse: true
         event_buffer_max_size: 0
         free_gpu_memory_fraction: 0.8
-        host_cache_size: 137438953472
+        host_cache_size: 68719476736
         pool_ratio:
         - 0.3
         - 0.4
@@ -108,7 +108,7 @@ backend:
         enable_block_reuse: false
         event_buffer_max_size: 0
         free_gpu_memory_fraction: 0.9
-        host_cache_size: 137438953472
+        host_cache_size: 68719476736
         tokens_per_block: 256
       max_batch_size: 4
       max_num_tokens: 16
