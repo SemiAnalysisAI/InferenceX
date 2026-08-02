@@ -46,6 +46,26 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    # Day-zero on b200-dgxc: GLM-5.2-NVFP4 may not be in the SRE-staged trees
+    # yet. Probe them first (same shape as the dsv4 branch above), then fall
+    # back to the sa-shared-writable gharunners tree, which the bench script's
+    # `hf download` guard populates on first use. The fallback dir is created
+    # here because --container-mounts needs the host path to exist.
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /lustre/fsw/models/GLM-5.2-NVFP4 /scratch/fsw/models/GLM-5.2-NVFP4 /lustre/fsw/gharunners/models/GLM-5.2-NVFP4; do
+            if [[ -d "$candidate" ]]; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/gharunners/models/GLM-5.2-NVFP4}"
+    mkdir -p "$MODEL_PATH"
+    export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5"
