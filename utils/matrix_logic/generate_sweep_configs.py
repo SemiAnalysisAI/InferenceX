@@ -235,6 +235,21 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
     ))
 
 
+# TEMPORARY: agentic (SWE-bench) evals are disabled repo-wide.
+#
+# TODO(@adibarra): fix the agentic eval path and re-enable by flipping this to
+# False (or deleting it and the two `if AGENTIC_EVALS_DISABLED` guards below).
+# Owner is back the week of 2026-08-03; nothing else needs to change to turn
+# them back on, and no throughput coverage is affected either way.
+#
+# This is the single choke point for both dispatch paths: run-sweep.yml's
+# `sweep-agentic-evals` job reads search-space-config.agentic_evals, which
+# process_changelog.py fills from agentic-coding rows carrying run-eval: True,
+# and e2e-tests.yml's `test-sweep-agentic-evals` filters the same flag. If no
+# agentic row is ever marked run-eval, neither job has a matrix and both skip.
+AGENTIC_EVALS_DISABLED = True
+
+
 def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
@@ -247,7 +262,8 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
-    - Agentic evals are opt-in to preserve default throughput coverage.
+    - Agentic evals are opt-in to preserve default throughput coverage, and are
+      currently disabled outright by AGENTIC_EVALS_DISABLED.
     """
     from collections import defaultdict
 
@@ -311,7 +327,7 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         mn_eval_conc[best_idx] = best_eval_conc
 
     # Default sweeps preserve every agentic throughput result.
-    if include_agentic:
+    if include_agentic and not AGENTIC_EVALS_DISABLED:
         ag_sn_groups = defaultdict(list)
         for i, entry in enumerate(matrix_values):
             if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
@@ -356,7 +372,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
-            if Fields.PREFILL.value not in entry:
+            if Fields.PREFILL.value not in entry and not AGENTIC_EVALS_DISABLED:
                 entry[Fields.RUN_EVAL.value] = True
             expanded_entries.append(entry)
             continue

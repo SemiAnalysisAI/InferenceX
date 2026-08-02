@@ -5,6 +5,25 @@ concurrency, kernels, and other throughput optimizations. They run separately
 from throughput; selection lives in `mark_eval_entries()` in
 `utils/matrix_logic/generate_sweep_configs.py`.
 
+## Status: agentic evals are disabled
+
+**Agentic (SWE-bench) evals are turned off repo-wide** by
+`AGENTIC_EVALS_DISABLED` in `utils/matrix_logic/generate_sweep_configs.py`.
+While it is set, no `agentic-coding` row is ever marked `run-eval`, so
+`run-sweep.yml`'s `sweep-agentic-evals` and `e2e-tests.yml`'s
+`test-sweep-agentic-evals` both find an empty matrix and skip — including
+under `--evals-only`, `--all-evals`, and the `evals-only` / `all-evals` PR
+labels. Agentic *throughput* coverage is unaffected, and fixed-sequence
+(`gsm8k`, `gpqa`, `swebench` on 8k1k) evals are unaffected.
+
+TODO(@adibarra): fix the agentic eval path and re-enable by flipping the flag
+to `False`. The selection policy below still has test coverage behind the
+`_agentic_evals_enabled()` helper in `test_generate_sweep_configs.py`, so the
+re-enable is a one-line change.
+
+The rest of this section describes the behaviour that returns when the flag is
+cleared.
+
 ## Selection
 
 - **Single-node:** 8k1k only; highest and median concurrency for every model,
