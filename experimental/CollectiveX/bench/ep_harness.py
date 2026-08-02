@@ -58,7 +58,7 @@ COMBINE_MAG_FLOOR = 2e-2
 # run_sweep only checks that the declared value is ALLOWED for the mode (so a mislabeled
 # adapter fails closed), and the oracle keys on that same declared value.
 MODE_ALLOWED_SEMANTICS = {
-    "normal": {"unweighted-rank-sum", "topk-slot-tree-sum"},
+    "normal": {"unweighted-rank-sum"},
     "low-latency": {"weighted-kernel-sum", "unweighted-rank-sum"},
 }
 
@@ -349,7 +349,7 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     """
     valid = expert_ids >= 0
     expert = expert_ids.clamp(min=0).to(torch.int64)
-    if combine_weight_semantics in ("unweighted-rank-sum", "topk-slot-tree-sum"):
+    if combine_weight_semantics == "unweighted-rank-sum":
         coefficient = weights.to(torch.float32).masked_fill(~valid, 0)
     elif combine_weight_semantics == "weighted-kernel-sum":
         coefficient = valid.to(torch.float32)
@@ -382,54 +382,6 @@ def _to_payload_dtype(torch, value, dtype, rounding):
     if rounding != "nearest":
         raise ValueError(f"unknown combine output rounding {rounding!r}")
     return value.to(dtype)
-
-
-def _topk_slot_tree_combine(
-    torch, semantic_x, expert_ids, weights, experts_per_rank, dtype, pattern, rounding
-):
-    """Reproduce a combine that reduces per TOP-K SLOT with a pairwise tree.
-
-    Derived from the kernel source (flashinfer csrc/nv_internal ... moeAlltoAllKernels.cu,
-    `vectorized_combine_impl`), not inferred from behaviour:
-
-      * one fp32 accumulator per top-k slot, `vec_t<float, N> acc[TOP_K]`;
-      * a slot whose send index is negative -- a DUPLICATE rank for this token, or a dead
-        rank -- is filled with 0, so each distinct destination rank contributes exactly once,
-        at the position of its FIRST top-k slot;
-      * the slots are combined by a pairwise TREE (`acc[0]+=acc[1]; acc[2]+=acc[3]; ...`),
-        not a sequential sweep;
-      * a single narrowing at the end via `cast_store`.
-
-    Sequential and tree summation of the same fp32 terms differ in the low bits, and after the
-    narrowing that shows up as a one-ulp disagreement on a minority of elements -- exactly what
-    the gb200 instrumentation measured. Rank order is irrelevant here; slot order is what counts.
-    """
-    destination = expert_ids // experts_per_rank
-    scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
-    topk = expert_ids.shape[1]
-    # Each distinct rank's full aggregate, placed at that rank's first top-k slot.
-    slots = []
-    for slot in range(topk):
-        rank_id = destination[:, slot:slot + 1]
-        first = torch.ones_like(rank_id, dtype=torch.bool)
-        for earlier in range(slot):
-            first &= destination[:, earlier:earlier + 1] != rank_id
-        live = (expert_ids[:, slot:slot + 1] >= 0) & first
-        gate = weights * (destination == rank_id) * live
-        aggregate = (
-            semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
-            + (gate * offset_a).sum(dim=1, keepdim=True)
-            + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-        )
-        # The message on the wire is payload dtype; the kernel widens it back to fp32.
-        slots.append(torch.where(live, aggregate.to(dtype).float(), torch.zeros_like(aggregate)))
-    # Pairwise tree, matching the kernel's unrolled halving.
-    while len(slots) > 1:
-        nxt = [slots[i] + slots[i + 1] for i in range(0, len(slots) - 1, 2)]
-        if len(slots) % 2:
-            nxt.append(slots[-1])
-        slots = nxt
-    return _to_payload_dtype(torch, slots[0], dtype, rounding).float()
 
 
 def _expected_transformed_combine(
@@ -476,11 +428,6 @@ def _expected_transformed_combine(
             gate = (weights[:, slot:slot + 1] * valid[:, slot:slot + 1].to(torch.float32))
             expected += gate * transform
         return expected
-    if combine_weight_semantics == "topk-slot-tree-sum":
-        return _topk_slot_tree_combine(
-            torch, semantic_x, expert_ids, weights, experts_per_rank, dtype, pattern,
-            combine_output_rounding,
-        )
     if combine_weight_semantics != "unweighted-rank-sum":
         raise ValueError(f"unknown combine semantics {combine_weight_semantics!r}")
     destination = expert_ids // experts_per_rank
