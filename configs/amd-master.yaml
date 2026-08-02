@@ -1030,6 +1030,110 @@ kimik3-fp4-mi355x-vllm-agentic-native:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, conc-list: [8] }
 
+kimik3-fp4-mi355x-vllm-agentic-asmpad-c8:
+  # vllm-project/vllm#50578 A/B, arm 1: no-offload c8, the global best cell.
+  #
+  # The PR pads K3's 12 heads/rank (96 heads / TP8, a non-divisor of 16) up to
+  # 16 and routes MLA decode through the asm persistent kernel instead of
+  # Gluon, whose per-token latency scales linearly with KV length. Upstream
+  # measures mean TPOT flat at ~23.5 ms instead of 22.9 -> 54.1 ms across
+  # 1K..32K context, on Kimi-K3 / 8xMI355X / TP8 -- the same cell this key runs.
+  # The recipe applies it at MLA_ASM_PAD=1 (default on this branch) and aborts
+  # the cell if the patch or its semantic check fails, so a green cell here is
+  # necessarily a patched cell.
+  #
+  # Control: 682.63 tok/s/GPU, TTFT mean 7.0 s, GPU prefix hit 88.4%, KV 87.5%,
+  # 210 requests (run 30525206671, GMU 0.88, fp8 KV, 3600 s). Everything else in
+  # this key is byte-identical to the key that produced it, so the patch is the
+  # only variable.
+  #
+  # Expect the aggregate tok/s/GPU move to be smaller than upstream's TPOT
+  # numbers suggest: this workload is input-dominated (5,425 tok/s in vs 35.7
+  # out at c8) and c8 is prefill-bound at TTFT 7 s, so decode is not the
+  # binding constraint here. ITL / TPOT is the metric that should move cleanly;
+  # aggregate throughput moves only to the extent decode was stealing time from
+  # prefill. c8 is included anyway because it is the cell with the tightest
+  # baseline and a repeat (601.64 vs 568.03) that bounds run-to-run variance
+  # at +-5.6%.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
+
+kimik3-fp4-mi355x-vllm-agentic-asmpad-lmc-c16:
+  # vllm-project/vllm#50578 A/B, arm 2: LMCache c16, the best offload cell.
+  #
+  # c16 is where the decode fix should pay the most. Without offload, c16
+  # collapses (412.21 tok/s/GPU, TTFT 323 s, KV pinned at 100%, GPU prefix hit
+  # 3.9%); LMCache recovers it. Both arms sit at 100% KV occupancy, so anything
+  # that retires requests faster frees blocks faster and should compound: a
+  # 2x-faster decode at ~286K p90 context is not just a TPOT win, it shortens
+  # the reuse interval that the LMCache hit rate is measured against (L1
+  # residency ~707 s vs an e2el mean of ~368 s at c16 -- the margin that makes
+  # c16 hit and c32 miss).
+  #
+  # Control: **570.03 tok/s/GPU, TTFT 147.0 s, external hit 13.97% (run
+  # 30606725572)**. That is the matched control, because the recipe's current
+  # k3upstream defaults are exactly that run's config -- --max-workers $TP (8)
+  # with --eviction-trigger-watermark 0.85 / --eviction-ratio 0.10, L1 = 0.60 x
+  # free /dev/shm (~907 GB), chunk-size 1536, mns 32, mnbt 3000, GMU 0.85.
+  # Do NOT use 607.45: that number came from plain 907 GB with the older worker
+  # settings and a different server command, and the tp8-workers/eviction change
+  # was a -6.2% null result against it. Mixing the two denominators would turn a
+  # flat result into a fake +6% or a fake -6%.
+  #
+  # c16 only. c8 has no work for a host tier and c32 collapses (335.86, hit rate
+  # 2.72% against a 92.69% theoretical) -- both are settled and neither would
+  # tell us anything about this patch.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16] }
+
+kimik3-fp4-mi355x-vllm-agentic-asmpad-eval:
+  # vllm-project/vllm#50578 A/B, arm 3: accuracy on the patched decode path.
+  #
+  # This is the arm that matters most. The PR's correctness argument is that MLA
+  # attention is independent per query head over the shared KV, so the tile
+  # padding heads [12:16] cannot perturb heads [0:12] and can be sliced back
+  # off. That is sound on paper and upstream checked it with a greedy
+  # single-stream A/B, but it has not been checked under batch-128 fp8 decode
+  # with a real agentic workload -- which is exactly where the previous MLA
+  # kernel work on this model found its bugs. A throughput win on a model that
+  # has quietly started emitting garbage is worth nothing.
+  #
+  # Mirrors the fp8eval key (lm-eval, no offload, c8) so the number is directly
+  # comparable to the unpatched eval on the same config. Dispatch with
+  # --evals-only.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
