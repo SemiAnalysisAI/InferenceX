@@ -410,8 +410,18 @@ def _expected_transformed_combine(
     combine ~0.048 off a single-domain reference.
     """
     semantic_x = getattr(problem, "oracle_x", problem.x)
-    expert_ids = problem.topk_idx.to(torch.int64)
-    weights = problem.topk_weights.to(torch.float32)
+    # Sum the top-k axis in the SAME canonical order the staged combine input uses.
+    # _run_expert_oracle normalizes the adapter's view (sorted by global expert id, sentinels
+    # last) before handing it to _expert_transform, so an expectation that sums in raw problem
+    # order is adding the same terms in a different sequence. FP32 addition is not associative:
+    # when one rank owns two or more of a token's experts the two sums can land one BF16 step
+    # apart after the cast. Measured on gb200 flashinfer-ep — every failing element differed by
+    # exactly one ulp of a per-rank contribution, with varying sign. Rows carrying a single
+    # local expert are unaffected, which is why this only ever surfaced on a minority of
+    # elements and never on the padded single-expert low-latency layouts.
+    expert_ids, weights = _normalized_expert_metadata(
+        torch, problem.topk_idx.to(torch.int64), problem.topk_weights.to(torch.float32)
+    )
     pattern = _column_pattern(torch, semantic_x.shape[1], semantic_x.device)
     dtype = semantic_x.dtype
     if combine_weight_semantics == "weighted-kernel-sum":
