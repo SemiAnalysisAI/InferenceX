@@ -1131,6 +1131,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # EPBackend.fp8_consume. Only meaningful when the case dispatches FP8.
             "fp8_consume": getattr(backend, "fp8_consume", None),
             "kernel_generation": kernel_generation(backend),
+            # Whether an inference engine can select this transport today — see
+            # EPBackend.maturity. A "candidate" row measures the library, not a
+            # deployable configuration, and must not be read as one.
+            "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,
         },
         "topology": {

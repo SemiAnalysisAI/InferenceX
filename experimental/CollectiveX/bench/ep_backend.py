@@ -67,6 +67,14 @@ class EPBackend(abc.ABC):
     """
 
     name: str = ""
+    # Whether a production inference engine can actually select this transport today:
+    # "production" = exposed as an all-to-all backend by vLLM (`--all2all-backend`) or
+    # SGLang (`--moe-a2a-backend`); "candidate" = a real transport we benchmark, but one
+    # no engine ships a selector for, so its numbers describe the library rather than a
+    # deployable configuration. Emitted per case-attempt so a reader can tell the two
+    # apart; `configs/platform_config.json` carries the same map for the matrix and the
+    # docs, and tests/test_matrix.py holds the two in agreement.
+    maturity: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     # Dispatch precisions the adapter realizes. BF16 is the universal control; an
     # adapter that also sends an FP8-quantized dispatch payload widens this.

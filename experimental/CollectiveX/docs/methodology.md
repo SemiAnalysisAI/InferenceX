@@ -202,7 +202,11 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks;
 - `measurement`: dispatch/combine dtype (the realized wire formats — combine always BF16, dispatch
   BF16 or the SKU's FP8 format) and semantics, `sampling`, and the per-point `rows`;
-- `implementation`: backend name and kernel generation;
+- `implementation`: backend name, kernel generation, and `maturity` — whether a production
+  inference engine can select this transport today (`production` = exposed by vLLM's
+  `--all2all-backend` or SGLang's `--moe-a2a-backend`; `candidate` = a real transport we
+  benchmark that no engine ships a selector for, so its numbers describe the library rather
+  than a deployable configuration). The same map is in the registry's `backend_maturity`;
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.

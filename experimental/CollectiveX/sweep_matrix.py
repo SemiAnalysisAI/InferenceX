@@ -26,6 +26,10 @@ def _load_config(name: str) -> dict[str, Any]:
 
 SWEEP = _load_config("sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
+# Whether an inference engine can select each transport today (see EPBackend.maturity).
+# Consumed by the docs and the matrix; each adapter carries the same value for the
+# artifact it writes, and tests/test_matrix.py holds the two in agreement.
+BACKEND_MATURITY = _load_config("platform_config.json")["backend_maturity"]
 SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
