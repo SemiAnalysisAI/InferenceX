@@ -381,6 +381,11 @@ def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
     at their ORIGINAL top-k slot -- the kernel blanks duplicate-rank slots in place rather
     than compacting -- so the tree's shape depends on the routing, not just the rank count.
     The generic halving below reproduces the unrolled K=6/8/10 trees exactly.
+
+    Unlike the domain reduction, which folds into one accumulator, this holds a message per
+    rank AND a slot per top-k position, so oracle memory is O(ep_size * tokens * hidden):
+    ~8 GiB at EP16 with the 8192-token prefill rung. Fine against 180+ GiB HBM at the EP
+    sizes here, but it is the term that would need streaming before EP32.
     """
     tokens = torch.arange(destination.shape[0], device=destination.device)
     zero = torch.zeros_like(messages[0])
