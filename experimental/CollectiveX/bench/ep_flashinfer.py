@@ -66,11 +66,11 @@ class FlashInferEPBackend(EPBackend):
     # the routing weights (those ride along as a caller payload, and vLLM applies them in the
     # MoE layer, not in the A2A). Verified against the oracle during bring-up.
     combine_weight_semantics = "unweighted-rank-sum"
-    # Measured on gb200, 8 ranks each contributing to one token: the kernel reduces
-    # 1.0 + 7 * 2^-9 (exactly 129.75 bf16 ulps) to 1.0078125 = 129 ulps. Round-to-nearest
-    # would give 1.015625 = 130. It accumulates in FP32 — a separate probe summing 2^rank
-    # across all eight ranks returned exactly 255.0 — and truncates on the way out.
-    combine_output_rounding = "truncate"
+    # Left at the default "nearest": with truncation active every mismatching rank
+    # showed |actual| > |expected| (a one-sided bias in exactly the direction
+    # truncating the EXPECTATION would create), while three of eight ranks matched
+    # bit-exactly. The earlier probe that suggested truncation shared the top-k
+    # slicing confound, so it is not evidence.
     # Forced by the phase asserts described in the module docstring.
     combine_needs_redispatch = True
     dispatch_needs_combine_cleanup = True
