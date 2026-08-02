@@ -224,6 +224,11 @@ jobs:
             || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
           python3 experimental/CollectiveX/summarize.py \
             --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+          # Second view over the same documents: latency answers how long a point took,
+          # this answers how fast it moved its payload. Both are renderers over the staged
+          # JSON and neither gates the leg, so both are `|| true`.
+          python3 experimental/CollectiveX/bandwidth.py \
+            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
           shopt -s nullglob
           results=(experimental/CollectiveX/results/*.json)
           if [ "${#results[@]}" -eq 0 ]; then
