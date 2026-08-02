@@ -62,10 +62,13 @@ class FlashInferEPBackend(EPBackend):
     SUPPORTED_PRECISIONS = ("bf16",)
     kernel_generation = "flashinfer-mnnvl-one-sided"
     stage_device_work = False
-    # The kernel scatters expert outputs back to the supplying rank; it does not multiply by
-    # the routing weights (those ride along as a caller payload, and vLLM applies them in the
-    # MoE layer, not in the A2A). Verified against the oracle during bring-up.
-    combine_weight_semantics = "unweighted-rank-sum"
+    # A plain rank sum — the kernel scatters expert outputs back to the supplying rank and does
+    # NOT multiply by the routing weights (confirmed on gb200: a gated combine would be ~87%
+    # off with topk=8, the measured error was 2%). But it accumulates those per-rank BF16
+    # messages in BF16, not FP32: staging 1.0 from rank 0 and 2^-9 from seven peers returns
+    # 1.0 where an FP32 accumulate returns 1.015625. Hence bf16-rank-sum rather than
+    # unweighted-rank-sum, which differ only in the precision of the cross-rank reduction.
+    combine_weight_semantics = "bf16-rank-sum"
     # Forced by the phase asserts described in the module docstring.
     combine_needs_redispatch = True
     dispatch_needs_combine_cleanup = True

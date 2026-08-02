@@ -486,15 +486,41 @@ class LogicalByteProvenanceTests(unittest.TestCase):
 class ModeSemanticsContract(unittest.TestCase):
     # The combine contract is a backend fact, not a pure function of mode: DeepEP's
     # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is
-    # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
+    # unweighted-rank-sum, so low-latency must admit both. Normal admits the unweighted rank
+    # sum at either accumulation precision — FlashInfer's one-sided NVLink combine performs the
+    # same summation but accumulates the per-rank BF16 messages in BF16 rather than FP32
+    # (measured on gb200), which the oracle reproduces as bf16-rank-sum instead of absorbing
+    # into a wider tolerance. weighted-kernel-sum stays out of normal mode.
     def test_mode_allowed_semantics(self) -> None:
         self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
+            ep_harness.MODE_ALLOWED_SEMANTICS["normal"],
+            {"unweighted-rank-sum", "bf16-rank-sum"},
         )
         self.assertEqual(
             ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],
             {"weighted-kernel-sum", "unweighted-rank-sum"},
         )
+
+    def test_bf16_rank_sum_is_lower_precision_than_fp32_rank_sum(self) -> None:
+        """The two normal-mode contracts must actually differ, or declaring the new one is
+        a no-op that would silently accept an FP32-accumulating backend as BF16 (and the
+        reverse). Reproduces the gb200 probe in pure python: seven sub-ulp addends vanish
+        under BF16 accumulation and survive under FP32."""
+        import struct
+
+        def bf16(value):  # round-to-nearest-even truncation to bfloat16
+            bits = struct.unpack("<I", struct.pack("<f", value))[0]
+            rounded = (bits + 0x7FFF + ((bits >> 16) & 1)) & 0xFFFF0000
+            return struct.unpack("<f", struct.pack("<I", rounded))[0]
+
+        addend, terms = 2.0 ** -9, 7
+        fp32_then_cast = bf16(1.0 + terms * addend)
+        accumulator = 1.0
+        for _ in range(terms):
+            accumulator = bf16(accumulator + addend)
+        self.assertEqual(accumulator, 1.0)              # every addend rounds away
+        self.assertEqual(fp32_then_cast, 1.015625)      # they survive an FP32 accumulate
+        self.assertNotEqual(accumulator, fp32_then_cast)
 
 
 try:
