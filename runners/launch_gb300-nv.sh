@@ -127,6 +127,33 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE"
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
+# Power lane detection: a recipe opts in via an enabled dcgm-power telemetry
+# block. CONFIG_FILE is srt-slurm-relative; resolve it against the workspace
+# recipe mirror (the same tree the clone step overlays), since the checkout
+# doesn't exist yet. Recipes that only exist upstream stay non-power.
+USES_DCGM_POWER=0
+_RECIPE_REL="${CONFIG_FILE%%:*}"
+_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && grep -q "provider: dcgm-power" "$_RECIPE_SRC" && grep -q "enabled: true" "$_RECIPE_SRC"; then
+    USES_DCGM_POWER=1
+fi
+
+# dcgm-power producer pin — single source of truth for power lanes. Swap
+# URL+PIN here (and identically in launch_gb200-nv.sh) when the upstream
+# srt-slurm merge lands.
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="6609d46a4c74ed66fc2f7014d7e790efe1d23bde"
+
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    # import_squash validates the squash with unsquashfs inside the compute-node
+    # srun (the x86 login node cannot inspect the aarch64 image).
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+fi
+
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
@@ -214,12 +241,21 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Same branch the identical gb200-fp8 recipes run on. fp4 recipes pin
     # dynamo by version (pip install) and stay on the submission branch they
     # were validated against.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
-    if [[ $PRECISION == "fp8" ]]; then
-        git checkout v1.0.25
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        # The power lane must run the exact pinned producer SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
     else
-        git checkout sa-submission-q2-2026
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        if [[ $PRECISION == "fp8" ]]; then
+            git checkout v1.0.25
+        else
+            git checkout sa-submission-q2-2026
+        fi
     fi
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
@@ -311,6 +347,11 @@ containers:
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false
 EOF
+
+# Appended via sed so non-power lanes' generated yaml stays byte-identical.
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+fi
 
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
@@ -432,6 +473,13 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
+    # Power provenance markers travel inside the server-logs bundle so the
+    # offline audit can tie artifacts to the exact producer SHA and exporter.
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+        cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+    fi
     # Tarball + LOGS copy are produced by the EXIT trap defined near
     # JOB_ID extraction (so cancel paths also get them); just log here.
     echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
