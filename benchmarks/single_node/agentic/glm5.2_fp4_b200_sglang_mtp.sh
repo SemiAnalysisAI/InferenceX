@@ -40,14 +40,63 @@ fi
 # B200: runners/launch_b200-dgxc.sh resolves the checkpoint to a cluster-local
 # path and then rewrites MODEL to that path, so `hf download "$MODEL"` cannot
 # work on this runner. Keep the HF repo id separate for the day-zero case where
-# GLM-5.2-NVFP4 has not been staged yet and MODEL_PATH is an empty writable dir
-# (the launcher's fallback under the sa-shared gharunners tree). Once the
-# checkpoint is staged this branch is a no-op, exactly like the B300 script.
-# `hf download` creates the target dir if missing and is itself idempotent.
+# GLM-5.2-NVFP4 has not been staged yet.
 HF_MODEL_ID="${HF_MODEL_ID:-nvidia/GLM-5.2-NVFP4}"
+
+# A non-empty directory is NOT a staged checkpoint. b200-dgxc already had
+# /lustre/fsw/gharunners/models/GLM-5.2-NVFP4 holding config.json,
+# generation_config.json, hf_quant_config.json, chat_template.jinja, README.md
+# and .quant_summary.txt and NOTHING else -- an aborted or metadata-only pull.
+# An `ls -A` emptiness guard accepts that, so all five cells of run 30729467646
+# skipped the download and went straight to serve; SGLang read config.json
+# fine, then died in AutoTokenizer.from_pretrained with "Couldn't instantiate
+# the backend tokenizer" because neither the tokenizer files nor a single
+# weight shard were on disk. Check for a COMPLETE checkpoint instead: the
+# tokenizer, the shard index, and every shard the index names.
+checkpoint_is_complete() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 1
+    [[ -f "$dir/tokenizer_config.json" ]] || return 1
+    [[ -f "$dir/tokenizer.json" || -f "$dir/tokenizer.model" ]] || return 1
+    [[ -f "$dir/model.safetensors.index.json" ]] || return 1
+    CKPT_DIR="$dir" python3 - <<'PYEOF'
+import json, os, sys
+d = os.environ["CKPT_DIR"]
+with open(os.path.join(d, "model.safetensors.index.json")) as fh:
+    shards = sorted(set(json.load(fh)["weight_map"].values()))
+missing = [s for s in shards if not os.path.isfile(os.path.join(d, s))]
+if missing:
+    print(f"{len(missing)}/{len(shards)} shards missing, e.g. {missing[:3]}", file=sys.stderr)
+    sys.exit(1)
+PYEOF
+}
+
 if [[ -n "${MODEL_PATH:-}" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$HF_MODEL_ID" --local-dir "$MODEL_PATH"
+    if ! checkpoint_is_complete "$MODEL_PATH"; then
+        # Every concurrency of this sweep runs as its own allocation against
+        # the same Lustre path, so serialize: one cell pulls the ~433 GB
+        # checkpoint and the rest wait on it rather than five racing writers.
+        # `hf download` resumes into a partially-populated --local-dir, so the
+        # metadata-only stub above is fine to download on top of.
+        mkdir -p "$MODEL_PATH"
+        MODEL_DOWNLOAD_LOCK="${MODEL_PATH%/}.download.lock"
+        echo "Checkpoint at $MODEL_PATH is incomplete; acquiring $MODEL_DOWNLOAD_LOCK"
+        exec 9>"$MODEL_DOWNLOAD_LOCK"
+        flock -w "${MODEL_DOWNLOAD_LOCK_TIMEOUT:-21600}" 9 || {
+            echo "Error: timed out waiting for another cell to stage $MODEL_PATH" >&2
+            exit 1
+        }
+        if checkpoint_is_complete "$MODEL_PATH"; then
+            echo "Another cell staged $MODEL_PATH while we waited"
+        else
+            hf download "$HF_MODEL_ID" --local-dir "$MODEL_PATH"
+        fi
+        flock -u 9
+        exec 9>&-
+        checkpoint_is_complete "$MODEL_PATH" || {
+            echo "Error: $MODEL_PATH is still incomplete after hf download $HF_MODEL_ID." >&2
+            exit 1
+        }
     fi
 else
     hf download "$HF_MODEL_ID"

@@ -52,12 +52,17 @@ elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
     # back to the sa-shared-writable gharunners tree, which the bench script's
     # `hf download` guard populates on first use. The fallback dir is created
     # here because --container-mounts needs the host path to exist.
+    #
+    # A candidate must hold at least one weight shard, not merely exist. The
+    # gharunners path was already there in run 30729467646 holding config.json
+    # and five other metadata files and no weights at all, and a bare -d test
+    # would pick such a stub over a real copy in another tree.
     SELECTED_MODEL_PATH=""
     if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
         SELECTED_MODEL_PATH="$MODEL_PATH"
     else
         for candidate in /lustre/fsw/models/GLM-5.2-NVFP4 /scratch/fsw/models/GLM-5.2-NVFP4 /lustre/fsw/gharunners/models/GLM-5.2-NVFP4; do
-            if [[ -d "$candidate" ]]; then
+            if [[ -d "$candidate" ]] && ls "$candidate"/*.safetensors >/dev/null 2>&1; then
                 SELECTED_MODEL_PATH="$candidate"
                 break
             fi
