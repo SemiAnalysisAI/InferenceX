@@ -56,7 +56,7 @@ backend:
       enforce-eager: true
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
-      max-cudagraph-capture-size: 2048
+      max-cudagraph-capture-size: 32
       max-num-batched-tokens: 16384
       max-num-seqs: 256
 
@@ -75,9 +75,9 @@ backend:
       language-model-only: true
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
-      max-num-seqs: 1024
+      max-num-seqs: 32
       max-num-batched-tokens: 16384
-      max-cudagraph-capture-size: 2048
+      max-cudagraph-capture-size: 32
 
 health_check:
   max_attempts: 360
