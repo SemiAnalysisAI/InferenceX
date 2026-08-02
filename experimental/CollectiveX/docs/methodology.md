@@ -87,12 +87,13 @@ cell-by-cell from the registry's `ll_backends` map rather than assumed wherever 
 currently enabled for DeepEP V2 EP8 on H100/H200/B200, MoRI
 EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency
 kernels over UCCL's CPU-proxy transport; the AMD SKUs keep UCCL-EP normal mode but drop LL, whose
-kernel trips a warp-group assertion on AMD's CU count). NCCL EP implements the mode — its
+kernel trips a warp-group assertion on AMD's CU count), and NCCL EP EP8 on all six NVIDIA SKUs — its
 `LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR receive with a source-side
-weighted-kernel-sum combine — but carries no `ll_backends` row on any SKU: the shipped decode kernels
-consume stale peer signals under a fixed workload and wedge
-([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)), so the cells stay out of the matrix
-until a fixed wheel ships. Whether a given SKU/backend/EP/mode cell is attempted is a capability
+weighted-kernel-sum combine. Those rows were dropped while every LL leg wedged on stale peer signals
+([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)) and restored once the single-handle
+adapter removed the aliasing that caused it. B300, GB200 and GB300 carry NCCL EP as their only
+low-latency row, and it is a `candidate` transport, so those three SKUs publish no production decode
+coverage. Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact; whether it succeeded is decided only by the emitted artifact.
 
 ## Workload Identity

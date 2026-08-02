@@ -312,13 +312,10 @@ class MatrixTests(unittest.TestCase):
 
 
 class BackendMaturityTests(unittest.TestCase):
-    """The registry map and each adapter's `maturity` are two copies of one fact.
-
-    The registry drives the matrix and the docs; the adapter attribute is what lands in
-    every case-attempt artifact. They are read by different consumers and can drift
-    silently, so pin both: complete coverage, a closed vocabulary, and agreement. The
-    adapter side is read from source rather than imported, because importing an adapter
-    pulls in torch and the vendor EP library, which the test image does not carry.
+    """The registry map and each adapter's `maturity` are two copies of one fact, read by
+    different consumers, so they can drift silently: pin coverage, vocabulary and agreement.
+    The adapter side is parsed from source rather than imported — importing an adapter pulls
+    in torch and the vendor EP library, which the test image does not carry.
     """
 
     VOCABULARY = {"production", "candidate"}
