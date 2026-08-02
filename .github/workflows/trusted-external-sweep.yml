@@ -15,8 +15,7 @@ on:
 permissions:
     actions: write
     contents: read
-    issues: write
-    pull-requests: read
+    pull-requests: write
 
 jobs:
     dispatch:
@@ -135,9 +134,15 @@ jobs:
                         `已为获批的外部提交 \`${pull.head.sha}\` 调度${runLink}。`,
                         '后续新提交不会自动获得信任；如需批准新的 SHA，请移除并重新添加主扫描标签。',
                       ].join('\n');
-                      await github.rest.issues.createComment({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        issue_number: pull.number,
-                        body,
-                      });
+                      try {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: pull.number,
+                          body,
+                        });
+                      } catch (error) {
+                        core.warning(
+                          `Sweep dispatched successfully, but the PR comment failed: ${error.message}`,
+                        );
+                      }
