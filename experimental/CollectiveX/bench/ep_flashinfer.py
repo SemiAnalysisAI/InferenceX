@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""FlashInfer one-sided NVLink EP: the transport a GB200/GB300 deployment actually runs.
+
+The GB SKUs are an NVLink-only domain, and vLLM selects a different all-to-all there than it
+does on an RDMA fabric: `--all2all-backend deepep_v2` for RDMA, `flashinfer_nvlink_one_sided`
+for NVLink. Benchmarking the GB racks with DeepEP V2 and NCCL EP therefore measured transports
+no deployment would choose on that hardware. This adapter closes that gap.
+
+ONE-SIDED, not two-sided. The sibling `flashinfer_nvlink_two_sided` backend is deliberately not
+wired: it produces gibberish output on GB200/arm64 (vllm#39722). One-sided means the initiator
+writes straight into the target's workspace and then sets a flag — on MNNVL, where peer memory
+is directly addressable across the 72-GPU domain, that degenerates to ordinary stores over the
+fabric with no rendezvous, which is exactly why it wins on this topology.
+
+Upstream surface (flashinfer.comm.trtllm_moe_alltoall):
+
+    MoeAlltoAll(mapping, max_num_tokens, top_k, num_experts,
+                workspace_size_per_rank=..., mnnvl_config=...)
+    .dispatch(token_selected_experts, input_payloads, runtime_max_tokens_per_rank)
+        -> list of [ep_size, runtime_max_tokens_per_rank, *] workspace-backed receives
+    .combine(payload, runtime_max_tokens_per_rank, output=...)
+        -> [local_num_tokens, elements_per_token]
+
+Three properties of that API shape this adapter:
+
+  * Strict phase pairing. `dispatch` asserts "called twice without combine", `combine` asserts
+    the phase is "dispatched", and the internal state resets after each combine. So a timed
+    combine needs a fresh dispatch and a timed dispatch needs a draining combine — the same
+    contract MoRI and the DeepEP V2 low-latency path already declare.
+  * A PADDED receive. Dispatch returns `[ep_size, runtime_max_tokens_per_rank, hidden]`, not a
+    compact buffer, so every oracle view must read valid slots only. Padding is untouched
+    workspace memory; reading it would feed garbage to the correctness gate.
+  * `runtime_max_tokens_per_rank <= max_num_tokens`, so the workspace is sized once from the
+    ladder maximum and each call passes the current rung.
+
+`normal` mode only. FlashInfer exposes one one-sided A2A kernel family, not a separate
+decode-optimized one, so there is no honest `low-latency` cell to add: an `ll_backends` row
+here would re-measure the same kernel under a mode that promises a different one. The decode
+phase is still covered — `normal` runs the full decode and prefill ladders.
+"""
+from __future__ import annotations
+
+import types
+
+import torch
+
+from ep_backend import EPBackend
+
+
+class FlashInferEPBackend(EPBackend):
+    name = "flashinfer-ep"
+    maturity = "production"  # vLLM --all2all-backend flashinfer_nvlink_one_sided
+    # One kernel family; see the module docstring for why there is no low-latency mode.
+    SUPPORTED_MODES = ("normal",)
+    # BF16 first. The combine side accepts fp8_e4m3fn/uint8 output dtypes and a
+    # use_low_precision accumulate, but dispatch FP8 needs the scale payload plumbed as a
+    # second input_payload and validated against the oracle's cast round-trip; not this pass.
+    SUPPORTED_PRECISIONS = ("bf16",)
+    kernel_generation = "flashinfer-mnnvl-one-sided"
+    stage_device_work = False
+    # The kernel scatters expert outputs back to the supplying rank; it does not multiply by
+    # the routing weights (those ride along as a caller payload, and vLLM applies them in the
+    # MoE layer, not in the A2A). Verified against the oracle during bring-up.
+    combine_weight_semantics = "unweighted-rank-sum"
+    # Forced by the phase asserts described in the module docstring.
+    combine_needs_redispatch = True
+    dispatch_needs_combine_cleanup = True
+    combine_input_attr = "combine_input"
+
+    def __init__(self, args, rank, world_size, local_rank, device):
+        super().__init__(args, rank, world_size, local_rank, device)
+        self._a2a = None
+        self._max_tokens = None
+        self._recv_shape = None
+
+    # ---- setup -------------------------------------------------------------------------------
+
+    def buffer_cap(self, args):
+        # The workspace is sized from the ladder maximum rather than a fixed slot budget, so
+        # there is no cap to clamp the ladder against.
+        return None
+
+    def create_buffer(self, spec):
+        """Build the one MoeAlltoAll for this group, sized to the ladder maximum.
+
+        The communicator handed to MnnvlConfig must span exactly the EP group: the kernel
+        asserts `workspace.size(0) == moe_ep_size`, so a wider group silently mis-sizes it.
+        """
+        from flashinfer.comm import Mapping
+        from flashinfer.comm.mnnvl import MnnvlConfig
+        from flashinfer.comm.trtllm_moe_alltoall import (
+            MoeAlltoAll,
+            moe_a2a_get_workspace_size_per_rank,
+        )
+
+        self._max_tokens = spec.max_tokens_per_rank
+        hidden = self.args.hidden
+        top_k = self.args.topk
+        # Dispatch carries the activation plus the routing metadata the kernel needs per token:
+        # int32 expert ids and fp32 gate weights, top_k of each. Combine carries BF16 hidden.
+        dispatch_bytes = hidden * 2 + top_k * 4 + top_k * 4
+        combine_bytes = hidden * 2
+        workspace_size = moe_a2a_get_workspace_size_per_rank(
+            ep_size=self.world_size,
+            max_num_tokens=self._max_tokens,
+            total_dispatch_payload_size_per_token=dispatch_bytes,
+            combine_payload_size_per_token=combine_bytes,
+        )
+        mapping = Mapping(
+            self.world_size,
+            self.rank,
+            self.args.gpus_per_node,
+            tp_size=self.world_size,
+            moe_ep_size=self.world_size,
+        )
+        self._a2a = MoeAlltoAll(
+            mapping=mapping,
+            max_num_tokens=self._max_tokens,
+            top_k=top_k,
+            num_experts=self.args.experts,
+            workspace_size_per_rank=workspace_size,
+            mnnvl_config=MnnvlConfig(comm_backend=_TorchDistCommunicator()),
+        )
+        self._recv_shape = (self.world_size, self._max_tokens, hidden)
+
+    # ---- transport contract ------------------------------------------------------------------
+
+    def dispatch(self, p):
+        # token_selected_experts must be int32; the payload list is positional, and index 0 is
+        # the activation the combine later sends back.
+        received = self._a2a.dispatch(
+            p.topk_idx.to(torch.int32),
+            [p.dispatch_x],
+            p.T,
+        )
+        return types.SimpleNamespace(recv_x=received[0], tokens=p.T, combine_input=None)
+
+    def stage(self, p, h):
+        # BF16 needs no conversion: the received workspace tensor is the combine input.
+        h.combine_input = h.recv_x
+
+    def combine(self, p, h):
+        out = self._a2a.combine(h.combine_input, h.tokens)
+        h.out = out
+        return out
+
+    def recv_tokens(self, h):
+        # Every rank receives one padded plane per peer; the valid rows are the tokens each
+        # peer actually sent this rung, which for a fixed trace is its own T.
+        return int(h.recv_x.shape[0] * h.tokens)
+
+    # ---- correctness-oracle views ------------------------------------------------------------
+
+    def inspect_dispatch(self, p, h):
+        """Compact (source-rank, slot) view over the padded [ep, max_tokens, hidden] receive.
+
+        Only the first `tokens` rows of each source plane carry data; the rest is untouched
+        workspace memory. Slicing rather than masking keeps the row order the oracle expects.
+        """
+        return h.recv_x[:, : h.tokens, :].reshape(-1, h.recv_x.shape[-1])
+
+    def combine_transformed(self, p, h, transformed):
+        """Combine an oracle-supplied payload through the same kernel as the timed path.
+
+        The transformed rows arrive in the compact layout `inspect_dispatch` returned, so they
+        are scattered back into a padded workspace-shaped buffer before the call; padding stays
+        zero so it cannot contribute to the sum.
+        """
+        padded = torch.zeros(self._recv_shape, dtype=h.recv_x.dtype, device=h.recv_x.device)
+        padded[:, : h.tokens, :] = transformed.view(
+            self.world_size, h.tokens, h.recv_x.shape[-1]
+        )
+        return self._a2a.combine(padded, h.tokens)
+
+
+class _TorchDistCommunicator:
+    """Bridge MnnvlConfig to the process group the harness already established.
+
+    FlashInfer needs a communicator covering exactly the EP group to exchange MNNVL handles;
+    the harness has one in torch.distributed, so wrap that rather than standing up a second.
+    """
+
+    def __init__(self):
+        import torch.distributed as dist
+
+        self._dist = dist
+
+    def Get_rank(self):
+        return self._dist.get_rank()
+
+    def Get_size(self):
+        return self._dist.get_world_size()
+
+    def allgather(self, data):
+        gathered = [None] * self._dist.get_world_size()
+        self._dist.all_gather_object(gathered, data)
+        return gathered
+
+    def Split(self, color, key):
+        # The harness's group already IS the EP group, so a split returns the same view.
+        return self

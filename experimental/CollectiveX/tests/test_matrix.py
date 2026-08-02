@@ -203,6 +203,36 @@ class MatrixTests(unittest.TestCase):
         }
         self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-dgxc"})
 
+    def test_flashinfer_ep_rollout_shape(self):
+        # FlashInfer one-sided is the transport a GB deployment actually runs: vLLM picks
+        # `flashinfer_nvlink_one_sided` on NVLink and `deepep_v2` on RDMA, so it belongs on the
+        # MNNVL SKUs and nowhere else this pass.
+        #   * GB NVL72 (gb200/gb300): EP8 AND EP16, both inside the 72-GPU scale-up domain.
+        #   * No x86 rows. The kernels are grouped upstream under MNNVL and vLLM gates them on an
+        #     MNNVL-availability probe, so an HGX 8-GPU NVSwitch node may not qualify; that is an
+        #     open question, not an assumed capability, and is left unclaimed until measured.
+        #   * No AMD rows (NVIDIA/MNNVL only).
+        #   * No low-latency row anywhere: FlashInfer exposes one one-sided A2A kernel family, not
+        #     a separate decode kernel, so an ll_backends cell would re-measure the same kernel
+        #     under a mode that promises a different one. Decode is still covered by the decode
+        #     phase of normal mode.
+        # BF16 only this pass (FP8 dispatch needs the scale payload plumbed and oracle-validated).
+        document = matrix(backend="all")
+        cases = [
+            item for item in document["requested_cases"]
+            if item["case"]["backend"] == "flashinfer-ep"
+        ]
+        runnable = {
+            (item["sku"], item["case"]["ep"])
+            for item in cases if item["disposition"] == "runnable"
+        }
+        self.assertEqual(runnable, {(sku, ep) for sku in ("gb200", "gb300") for ep in (8, 16)})
+        self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16"})
+        # Normal mode only — no low-latency cell on any SKU.
+        self.assertEqual({item["case"]["mode"] for item in cases}, {"normal"})
+        for platform in sweep_matrix.PLATFORMS.values():
+            self.assertNotIn("flashinfer-ep", platform.get("ll_backends", {}))
+
     def test_nccl_ep_rollout_shape(self):
         # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
         #   * RDMA scale-out SKUs (h100/h200/b200/b300): EP8 runnable, EP16 an UNSUPPORTED coverage
