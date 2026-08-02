@@ -228,13 +228,21 @@ mkdir -p "$RESULT_DIR"
 # cache. Measured on b300 with Kimi-K3 at TP8/EP8: 0.90 leaves -2.36 GiB for
 # KV and the engine refuses to start; 0.96 yields 508,586 KV tokens.
 if [ "$MOONEP_ENABLED" = "1" ]; then
-    # 0.96 fits a short context but leaves only 11.91 GiB of KV, and the
-    # 1M max-model-len this recipe uses needs 16.61 GiB. MoonEP's expert
-    # weights are VMM allocations outside the torch allocator, and the
-    # 128-row expert padding that DeepGEMM's tight scale stride forces costs
-    # ~24 GiB/rank on top -- so this arm needs a higher budget than -dspark.
-    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.98}"
+    # MoonEP's expert weights are VMM allocations outside the torch caching
+    # allocator, and the 128-row expert padding DeepGEMM's tight scale stride
+    # forces costs ~24 GiB/rank on top, so less of the budget is left for KV
+    # than on the -dspark arm. 0.96 is measured good; 0.98 fits the 1M context
+    # with under a GiB of slack, which is not worth the fragility when the
+    # corpus does not need 1M (see MAX_MODEL_LEN below).
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.96}"
+    # The agentic corpus is 100k-330k ISL, so the -dspark arm's 1048576 is
+    # headroom the workload never reaches: capping here does not change which
+    # requests are served, and keeps the comparison against -dspark honest.
+    # At 1M the engine wants 16.61 GiB of KV and only has 11.91, and refuses
+    # to start.
+    MAX_MODEL_LEN="${MAX_MODEL_LEN:-524288}"
 else
+    MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
     GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 fi
 
@@ -360,7 +368,7 @@ VLLM_CMD=(
     # on the values that ran 12/12 green in run 30326393603.
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-model-len 1048576
+    --max-model-len "$MAX_MODEL_LEN"
     --trust-remote-code
     --load-format "$LOAD_FORMAT"
     --moe-backend auto
