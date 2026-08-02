@@ -57,6 +57,8 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+export SGLANG_DEFAULT_THINKING=1
+export SGLANG_DSV4_REASONING_EFFORT=high
 export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
 export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
@@ -125,6 +127,7 @@ else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
+        --enable-deepseek-v4-fp4-indexer
     )
 fi
 
@@ -144,7 +147,7 @@ SPEC_ARGS=(
 # AgentX concurrency counts live session trees, not individual requests.
 # Allow subagent fan-out to exceed CONC without clipping request bursts.
 MAX_RUNNING_REQUESTS=$((2 * CONC))
-CUDA_GRAPH_MAX_BS=$CONC
+CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 export PYTHONNOUSERSITE=1
@@ -189,6 +192,7 @@ SGLANG_CMD=(
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --allow-auto-truncate
+    --enable-cache-report
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
