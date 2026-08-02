@@ -12,7 +12,7 @@ resources:
   decode_workers: 1
   gpus_per_prefill: 4
   gpus_per_decode: 4
-dynamo: {install: true, version: 1.3.0.dev20260710}
+dynamo: {install: true, version: 1.3.0.dev20260713}
 frontend: {type: dynamo, enable_multiple_frontends: false}
 backend:
   type: vllm

@@ -7393,7 +7393,7 @@ minimaxm3-fp4-b200-dynamo-vllm:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260710" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260713" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -7488,7 +7488,7 @@ minimaxm3-fp4-b200-dynamo-vllm-mtp:
   runner: b200-multinode
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260710" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260713" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -7871,7 +7871,7 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260710" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260713" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
@@ -7959,7 +7959,7 @@ minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4:
   runner: b300
   precision: fp4
   framework: dynamo-vllm
-  router: { name: dynamo-router, version: "1.3.0.dev20260710" }
+  router: { name: dynamo-router, version: "1.3.0.dev20260713" }
   kv-p2p-transfer: nixl
   multinode: true
   disagg: true
