@@ -82,11 +82,6 @@ class EPBackend(abc.ABC):
     # Adapters that reduce activations and top-k weights independently must carry
     # the complete local weighted expert sum in the activation tensor.
     combine_weight_semantics = "unweighted-rank-sum"
-    # How the kernel converts its FP32 combine accumulator to the payload dtype.
-    # "nearest" (torch default) or "truncate" (keep the high 16 bits) — a kernel that
-    # truncates is biased down by up to an ulp per element, which a tight relative gate
-    # will catch, so the adapter must declare what its kernel actually does.
-    combine_output_rounding = "nearest"
     roundtrip_only = False
     # Realized wire formats recorded in the artifact. Combine is always BF16;
     # dispatch_dtype is overridden per-run by an FP8 adapter (e.g. "fp8-e4m3fn").

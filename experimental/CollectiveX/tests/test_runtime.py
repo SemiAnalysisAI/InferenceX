@@ -483,51 +483,6 @@ class LogicalByteProvenanceTests(unittest.TestCase):
                 ep_harness.logical_byte_provenance(**kwargs)
 
 
-def _require_torch():
-    try:
-        import torch
-    except ImportError:  # pragma: no cover - torch-less test image
-        raise unittest.SkipTest("torch unavailable")
-    return torch
-
-
-class CombineOutputRoundingContract(unittest.TestCase):
-    """The oracle must cast to the payload dtype the way the KERNEL does.
-
-    torch rounds to nearest-even; FlashInfer's one-sided combine truncates. That is a
-    systematic downward bias of up to an ulp per element, not noise, and it is exactly the
-    magnitude a tight relative gate rejects. Pinned here so the two roundings cannot be
-    confused for each other, and so "truncate" cannot silently degrade into "nearest".
-    """
-
-    def test_truncate_differs_from_nearest_on_the_measured_case(self) -> None:
-        torch = _require_torch()
-        # 1.0 + 7 * 2^-9 is exactly 129.75 bf16 ulps: nearest -> 130, truncate -> 129.
-        value = torch.tensor([1.0 + 7 * (2.0 ** -9)], dtype=torch.float32)
-        nearest = ep_harness._to_payload_dtype(
-            torch, value, torch.bfloat16, "nearest"
-        ).float().item()
-        truncated = ep_harness._to_payload_dtype(
-            torch, value, torch.bfloat16, "truncate"
-        ).float().item()
-        self.assertEqual(nearest, 1.015625)
-        self.assertEqual(truncated, 1.0078125)   # the value gb200 actually returns
-        self.assertLess(truncated, nearest)
-
-    def test_truncate_is_exact_when_representable(self) -> None:
-        torch = _require_torch()
-        exact = torch.tensor([1.0, 2.0, 255.0, -0.5], dtype=torch.float32)
-        out = ep_harness._to_payload_dtype(torch, exact, torch.bfloat16, "truncate")
-        self.assertTrue(torch.equal(out.float(), exact))
-
-    def test_unknown_rounding_fails_closed(self) -> None:
-        torch = _require_torch()
-        with self.assertRaises(ValueError):
-            ep_harness._to_payload_dtype(
-                torch, torch.tensor([1.0]), torch.bfloat16, "stochastic"
-            )
-
-
 class ModeSemanticsContract(unittest.TestCase):
     # The combine contract is a backend fact, not a pure function of mode: DeepEP's
     # low-latency combine is weighted-kernel-sum while MoRI's IntraNodeLL is

@@ -366,24 +366,6 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     return transformed.to(payload.dtype)
 
 
-def _to_payload_dtype(torch, value, dtype, rounding):
-    """Cast an FP32 tensor to the payload dtype the way the KERNEL does.
-
-    torch rounds to nearest-even. Some kernels instead truncate — they keep the high 16 bits
-    of the FP32 word — which is a systematic downward bias of up to one ulp per conversion,
-    not noise that averages out. Measured on gb200: FlashInfer's one-sided combine reduces
-    1.0 + 7 * 2^-9 (exactly 129.75 bf16 ulps) to 1.0078125, i.e. 129 ulps, where round-to-
-    nearest gives 1.015625. Modelling the wrong rounding leaves a few-ulp error on every
-    element, which is exactly the size that fails a tight relative gate.
-    """
-    if rounding == "truncate":
-        as_int = value.float().view(torch.int32)
-        return (as_int & -65536).view(torch.float32).to(dtype)
-    if rounding != "nearest":
-        raise ValueError(f"unknown combine output rounding {rounding!r}")
-    return value.to(dtype)
-
-
 def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
     """Reduce the per-rank messages the way a payload-dtype accumulator does.
 
@@ -411,7 +393,7 @@ def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
         slots.append(torch.where(claimed.unsqueeze(1), messages[rank_id, tokens], zero))
     while len(slots) > 1:
         merged = [
-            _to_payload_dtype(torch, slots[i] + slots[i + 1], dtype, "nearest").float()
+            (slots[i] + slots[i + 1]).to(dtype).float()
             for i in range(0, len(slots) - 1, 2)
         ]
         if len(slots) % 2:
@@ -422,7 +404,7 @@ def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
 
 def _expected_transformed_combine(
     torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
-    combine_output_rounding="nearest", combine_reduction="domain-fp32",
+    combine_reduction="domain-fp32",
 ):
     """Reproduce the reduction combine actually performs so the expectation carries the
     same BF16 rounding a correct backend does rather than hiding it in a wide tolerance.
@@ -478,9 +460,9 @@ def _expected_transformed_combine(
     def rank_message(rank_id):
         """The one BF16 row this destination rank stages back for every token.
 
-        Round-to-nearest on purpose: the ADAPTER produces this with torch when it stages
-        the combine input, so it is not the kernel's narrowing and does not honour
-        combine_output_rounding.
+        The narrowing here is the ADAPTER's — torch producing the staged combine input —
+        not the kernel's, so it is always round-to-nearest regardless of what the kernel
+        does with its own accumulator.
         """
         gate = weights * (destination == rank_id) * valid
         return (
@@ -515,9 +497,7 @@ def _expected_transformed_combine(
     # exact zero through every level (all gates zero) — no mask needed.
     expected = torch.zeros_like(semantic_x, dtype=torch.float32)
     for domain in sorted(domains):
-        expected += _to_payload_dtype(
-            torch, domains[domain], dtype, combine_output_rounding
-        ).float()
+        expected += domains[domain].to(dtype).float()
     return expected
 
 
@@ -656,7 +636,6 @@ def _run_expert_oracle(
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
         torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
-        getattr(backend, "combine_output_rounding", "nearest"),
         getattr(backend, "combine_reduction", "domain-fp32"),
     )
     if combined.shape == expected_combined.shape:
@@ -826,7 +805,6 @@ def _run_ll_expert_oracle(
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
         torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
-        getattr(backend, "combine_output_rounding", "nearest"),
     )
     if combined.shape == expected_combined.shape:
         max_absolute_error = max_elementwise_relative_error = 0.0
@@ -1218,6 +1196,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # EPBackend.fp8_consume. Only meaningful when the case dispatches FP8.
             "fp8_consume": getattr(backend, "fp8_consume", None),
             "kernel_generation": kernel_generation(backend),
+            # Which reduction the correctness oracle held the kernel to. A backend may
+            # pick this per installed library version (flashinfer-ep does), so without it
+            # a wheel bump silently changes the arithmetic behind `passed` with no trace.
+            "combine_reduction": getattr(backend, "combine_reduction", "domain-fp32"),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,
