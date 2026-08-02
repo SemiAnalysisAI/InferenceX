@@ -610,5 +610,46 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
             )
 
 
+
+
+@unittest.skipUnless(_torch is not None, "combine-oracle math checks require torch")
+class TopkSlotTreeReductionTests(unittest.TestCase):
+    """Pin the payload-dtype reduction against a value measured on the real kernel.
+
+    Eight contributions of 1.0 and 7 x 2^-9 reduce to three different answers depending on
+    the model, which is what makes this case worth pinning: FP32-then-narrow gives
+    1.015625, a sequential BF16 sum gives 1.0, and the pairwise BF16 tree gives 1.0078125.
+    gb200 returns 1.0078125.
+    """
+
+    def _tree(self, values):
+        torch = _torch
+        slots = [torch.full((1, 1), v, dtype=torch.float32) for v in values]
+        destination = torch.arange(len(values)).unsqueeze(0)
+        messages = torch.stack(slots)
+        return ep_harness._topk_slot_tree_combine(
+            torch, destination, torch.ones_like(destination, dtype=torch.bool),
+            messages, torch.bfloat16,
+        ).item()
+
+    def test_matches_the_value_the_kernel_returns(self):
+        self.assertEqual(self._tree([1.0] + [2.0**-9] * 7), 1.0078125)
+
+    def test_differs_from_both_rejected_models(self):
+        values = [1.0] + [2.0**-9] * 7
+        self.assertNotEqual(self._tree(values), 1.015625)  # FP32 accumulate, narrow once
+        self.assertNotEqual(self._tree(values), 1.0)       # sequential BF16 accumulate
+
+    def test_a_rank_claimed_by_an_earlier_slot_contributes_once(self):
+        torch = _torch
+        # Both top-k slots route to rank 0; the kernel blanks the later slot in place.
+        destination = torch.zeros((1, 2), dtype=torch.int64)
+        messages = torch.full((1, 1, 1), 0.5)
+        combined = ep_harness._topk_slot_tree_combine(
+            torch, destination, torch.ones_like(destination, dtype=torch.bool),
+            messages, torch.bfloat16,
+        )
+        self.assertEqual(combined.item(), 0.5)
+
 if __name__ == "__main__":
     unittest.main()

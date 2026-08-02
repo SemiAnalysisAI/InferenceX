@@ -50,6 +50,12 @@ from ep_backend import EPBackend
 # -1 is safe: real ids are [0, num_experts).
 _INVALID_EXPERT = -1
 
+# 0.6.16 ("Port the TensorRT-LLM one-sided A2A optimizations") rewrote the combine
+# accumulator from the payload dtype to FP32 with a single narrowing store. Earlier wheels
+# round at every level of the top-k reduction tree, which is a few BF16 ulps the plain
+# FP32 expectation does not carry, so the oracle needs to know which kernel it is facing.
+_COMBINE_FP32_SINCE = (0, 6, 16)
+
 
 class FlashInferEPBackend(EPBackend):
     name = "flashinfer-ep"
@@ -67,11 +73,8 @@ class FlashInferEPBackend(EPBackend):
     # the routing weights (those ride along as a caller payload, and vLLM applies them in the
     # MoE layer, not in the A2A). Verified against the oracle during bring-up.
     combine_weight_semantics = "unweighted-rank-sum"
-    # Left at the default "nearest": with truncation active every mismatching rank
-    # showed |actual| > |expected| (a one-sided bias in exactly the direction
-    # truncating the EXPECTATION would create), while three of eight ranks matched
-    # bit-exactly. The earlier probe that suggested truncation shared the top-k
-    # slicing confound, so it is not evidence.
+    # Set per wheel in create_buffer; see _COMBINE_FP32_SINCE.
+    combine_reduction = "topk-slot-tree"
     # Forced by the phase asserts described in the module docstring.
     combine_needs_redispatch = True
     dispatch_needs_combine_cleanup = True
@@ -131,6 +134,13 @@ class FlashInferEPBackend(EPBackend):
             workspace_size_per_rank=workspace_size,
             mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
         )
+        import flashinfer
+
+        version = tuple(
+            int(part) for part in flashinfer.__version__.split(".post")[0].split(".")[:3]
+        )
+        if version >= _COMBINE_FP32_SINCE:
+            self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
         torch.distributed.barrier(group=_ep_group())

@@ -384,9 +384,45 @@ def _to_payload_dtype(torch, value, dtype, rounding):
     return value.to(dtype)
 
 
+def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
+    """Reduce the per-rank messages the way a payload-dtype accumulator does.
+
+    Most combine kernels accumulate in FP32 and narrow once. FlashInfer's one-sided kernel
+    (<= 0.6.15) instead holds its top-k accumulators IN the payload dtype and reduces them
+    with a hand-unrolled pairwise tree, so every level rounds:
+
+        acc[k] = message of destination[k], or 0 if a lower k already claimed that rank
+        (a0+=a1) (a2+=a3) (a4+=a5) (a6+=a7); (a0+=a2) (a4+=a6); (a0+=a4)   -- and store
+
+    Three BF16 roundings on partials near a contribution's own magnitude is a few ulps of
+    error, which is the whole gap a plain FP32 sum leaves against this backend. Operands sit
+    at their ORIGINAL top-k slot -- the kernel blanks duplicate-rank slots in place rather
+    than compacting -- so the tree's shape depends on the routing, not just the rank count.
+    The generic halving below reproduces the unrolled K=6/8/10 trees exactly.
+    """
+    tokens = torch.arange(destination.shape[0], device=destination.device)
+    zero = torch.zeros_like(messages[0])
+    slots = []
+    for slot in range(destination.shape[1]):
+        rank_id = destination[:, slot]
+        claimed = valid[:, slot].clone()
+        for earlier in range(slot):
+            claimed &= ~(valid[:, earlier] & (destination[:, earlier] == rank_id))
+        slots.append(torch.where(claimed.unsqueeze(1), messages[rank_id, tokens], zero))
+    while len(slots) > 1:
+        merged = [
+            _to_payload_dtype(torch, slots[i] + slots[i + 1], dtype, "nearest").float()
+            for i in range(0, len(slots) - 1, 2)
+        ]
+        if len(slots) % 2:
+            merged.append(slots[-1])
+        slots = merged
+    return slots[0]
+
+
 def _expected_transformed_combine(
     torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
-    combine_output_rounding="nearest",
+    combine_output_rounding="nearest", combine_reduction="domain-fp32",
 ):
     """Reproduce the reduction combine actually performs so the expectation carries the
     same BF16 rounding a correct backend does rather than hiding it in a wide tolerance.
@@ -408,6 +444,10 @@ def _expected_transformed_combine(
     cases) there is a single domain and no scale-out rounding; a multi-node RoCE EP16 group
     has one BF16 partial per node, and omitting that cast is what left the scale-out
     combine ~0.048 off a single-domain reference.
+
+    A backend whose accumulator is the payload dtype rather than FP32 declares
+    ``combine_reduction = "topk-slot-tree"`` and takes the model in
+    :func:`_topk_slot_tree_combine` instead of the domain reduction below.
     """
     semantic_x = getattr(problem, "oracle_x", problem.x)
     expert_ids = problem.topk_idx.to(torch.int64)
@@ -430,23 +470,42 @@ def _expected_transformed_combine(
         return expected
     if combine_weight_semantics != "unweighted-rank-sum":
         raise ValueError(f"unknown combine semantics {combine_weight_semantics!r}")
-    destination = expert_ids // experts_per_rank
-    ranks_per_domain = max(1, scale_up_domain)
-    domains: dict[int, object] = {}
+    valid = expert_ids >= 0
+    destination = torch.where(valid, expert_ids, torch.zeros_like(expert_ids))
+    destination //= experts_per_rank
     scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
-    for rank_id in destination.unique().tolist():
-        gate = weights * (destination == rank_id)
-        # Per-rank BF16 output, FP32-accumulated within its scale-up domain.
-        contribution = (
+
+    def rank_message(rank_id):
+        """The one BF16 row this destination rank stages back for every token.
+
+        Round-to-nearest on purpose: the ADAPTER produces this with torch when it stages
+        the combine input, so it is not the kernel's narrowing and does not honour
+        combine_output_rounding.
+        """
+        gate = weights * (destination == rank_id) * valid
+        return (
             semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
             + (gate * offset_a).sum(dim=1, keepdim=True)
             + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
         ).to(dtype).float()
-        # Round-to-nearest here on purpose: this message is produced by the ADAPTER with
-        # torch when it stages the combine input, not by the kernel. Only the accumulator
-        # -> payload conversion below is the kernel's, so only that one honours
-        # combine_output_rounding.
+
+    present = sorted(destination[valid].unique().tolist())
+    if combine_reduction == "topk-slot-tree":
+        messages = torch.zeros(
+            (max(present, default=0) + 1,) + semantic_x.shape,
+            dtype=torch.float32, device=semantic_x.device,
+        )
+        for rank_id in present:
+            messages[rank_id] = rank_message(rank_id)
+        return _topk_slot_tree_combine(torch, destination, valid, messages, dtype)
+    if combine_reduction != "domain-fp32":
+        raise ValueError(f"unknown combine reduction {combine_reduction!r}")
+    ranks_per_domain = max(1, scale_up_domain)
+    domains: dict[int, object] = {}
+    for rank_id in present:
+        # Per-rank BF16 output, FP32-accumulated within its scale-up domain.
         domain = rank_id // ranks_per_domain
+        contribution = rank_message(rank_id)
         if domain in domains:
             domains[domain] += contribution
         else:
@@ -598,6 +657,7 @@ def _run_expert_oracle(
     expected_combined = _expected_transformed_combine(
         torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
         getattr(backend, "combine_output_rounding", "nearest"),
+        getattr(backend, "combine_reduction", "domain-fp32"),
     )
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
