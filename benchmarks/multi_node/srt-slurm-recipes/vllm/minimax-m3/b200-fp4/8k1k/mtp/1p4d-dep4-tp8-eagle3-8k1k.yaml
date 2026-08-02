@@ -26,8 +26,6 @@ frontend:
 backend:
   type: vllm
   connector: null
-  allow_prefill_decode_colocation: true
-  allow_prefill_decode_colocation_across_nodes: true
 
   prefill_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
