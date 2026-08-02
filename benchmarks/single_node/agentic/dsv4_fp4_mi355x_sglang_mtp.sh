@@ -83,10 +83,11 @@ USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MEM_FRACTION_STATIC=0.9
-CHUNKED_PREFILL_SIZE=4096
+CHUNKED_PREFILL_SIZE=8192
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
+    export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     SGLANG_ROUTER_CMD=(python3 -m sglang_router.launch_router)
@@ -97,11 +98,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DP_USE_REDUCE_SCATTER=1
     export GPU_MAX_HW_QUEUES=5
 
-    CHUNKED_PREFILL_SIZE=$((4096 * TP))
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
-        --enable-dp-attention-local-control-broadcast
+        --enable-prefill-delayer
     )
 fi
 
@@ -193,20 +194,11 @@ wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" -
 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
-    # cache_aware routes each request to the DP rank whose radix tree holds the
-    # longest matching prefix, giving prefix-affinity across DP ranks. This
-    # replaces consistent_hashing on x-correlation-id: that key is per-request
-    # unique, so turns of the same session hashed to different ranks and the
-    # radix cache could not be reused (GPU cache hit ~67% vs ~97% theoretical).
-    # --cache-threshold: min prefix-match ratio to prefer the cached rank;
-    # below it, fall back to load balancing. --balance-*-threshold bound how far
-    # cache affinity may skew per-rank load before rebalancing.
+    # consistent_hashing on x-correlation-id, matching the last known-good run
+    # (29651998085). Routes by request id for a stable rank assignment.
     "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy cache_aware \
-        --cache-threshold 0.3 \
-        --balance-abs-threshold 64 \
-        --balance-rel-threshold 1.5 \
+        --policy consistent_hashing \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
