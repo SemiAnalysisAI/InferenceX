@@ -629,7 +629,7 @@ kimik3-fp4-mi355x-vllm-agentic:
     - dram-utilization: 0.80
       search-space:
       #- { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16] }
-      - { tp: 8, kv-offloading: none, conc-list: [16] }
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
