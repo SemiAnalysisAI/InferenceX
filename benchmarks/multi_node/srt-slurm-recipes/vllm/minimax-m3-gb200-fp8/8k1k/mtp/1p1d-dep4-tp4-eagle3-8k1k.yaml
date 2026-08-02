@@ -71,6 +71,7 @@ backend:
       max-model-len: 9472
       language-model-only: true
       kv-cache-dtype: fp8
+      enforce-eager: true
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
       max-cudagraph-capture-size: 2048
