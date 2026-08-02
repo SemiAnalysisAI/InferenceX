@@ -435,13 +435,19 @@ def _expected_transformed_combine(
     domains: dict[int, object] = {}
     scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
     for rank_id in destination.unique().tolist():
-        gate = weights * (destination == rank_id)
-        # Per-rank BF16 output, FP32-accumulated within its scale-up domain.
-        contribution = (
-            semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
-            + (gate * offset_a).sum(dim=1, keepdim=True)
-            + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-        ).to(dtype).float()
+        # Build this rank's BF16 message through the SAME function that builds the staged
+        # combine input the adapter actually sends (_expert_transform), rather than restating
+        # the formula. The two were mathematically equivalent but not bit-identical: on gb200
+        # flashinfer-ep a minority of messages landed one BF16 step apart, and where the
+        # combine cancels (five contributions of ~0.25 summing to ~0.018) that single step
+        # became 5% of the result. Equivalent expressions are not enough here; the expectation
+        # has to be the same computation.
+        local_ids = torch.where(
+            destination == rank_id, expert_ids, torch.full_like(expert_ids, -1)
+        )
+        contribution = _expert_transform(
+            torch, semantic_x, local_ids, weights, combine_weight_semantics
+        ).float()
         # Round-to-nearest here on purpose: this message is produced by the ADAPTER with
         # torch when it stages the combine input, not by the kernel. Only the accumulator
         # -> payload conversion below is the kernel's, so only that one honours
