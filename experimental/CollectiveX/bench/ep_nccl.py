@@ -65,6 +65,7 @@ _UNIQUE_ID_MAX_BYTES = 256
 
 class NCCLEPBackend(EPBackend):
     name = "nccl-ep"
+    maturity = "candidate"  # NVIDIA's library, but no engine exposes an NCCL-EP selector
     # One library, two algorithms selected by args.mode. kernel_generation and the combine
     # semantics are switched to their LL values in __init__ (mirrors ep_deepep_v2).
     #   normal      -> HT / FLAT layout / unweighted-rank-sum combine.
