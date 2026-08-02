@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-gb200-1p1d-dep4-dep32-fp8-8k1k-eagle3"
+name: "minimax-m3-vllm-disagg-gb200-1p2d-dep4-dep16-fp8-8k1k-eagle3"
 
 model:
   path: "minimax-m3-mxfp8"
@@ -26,9 +26,9 @@ resources:
   prefill_nodes: 1
   decode_nodes: 8
   prefill_workers: 1
-  decode_workers: 1
+  decode_workers: 2
   gpus_per_prefill: 4
-  gpus_per_decode: 32
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -81,7 +81,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
-      data-parallel-size: 32
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
