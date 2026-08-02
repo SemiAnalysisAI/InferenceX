@@ -1042,7 +1042,12 @@ fi
 #
 # MLA_ASM_PAD=0 disables, which is what turns this branch back into the
 # no-offload / LMCache control arm.
-MLA_ASM_PAD="${MLA_ASM_PAD:-1}"
+# CONTROL BRANCH: default flipped to 0. This branch exists only to produce a
+# matched unpatched baseline for the PR 50578 A/B -- it is byte-identical to
+# kimik3-mla-asm-pad in every other respect, so the ONLY difference between a
+# cell run here and the same key run there is whether AiterMLAHelper carries
+# the PR. Do not merge this branch.
+MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
 if [ "$MLA_ASM_PAD" = "1" ]; then
     # No `|| true`: a failed patch or a failed semantic check must kill the cell
     # here, ~1 min in, rather than silently produce a control-arm number under
