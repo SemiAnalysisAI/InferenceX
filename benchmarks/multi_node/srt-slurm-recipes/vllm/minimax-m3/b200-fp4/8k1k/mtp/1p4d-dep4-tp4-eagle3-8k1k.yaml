@@ -56,7 +56,6 @@ backend:
       enforce-eager: true
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       stream-interval: 32
-      max-cudagraph-capture-size: 64
       max-num-batched-tokens: 16384
       max-num-seqs: 256
 
