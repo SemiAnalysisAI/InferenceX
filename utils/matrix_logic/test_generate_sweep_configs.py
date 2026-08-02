@@ -1,7 +1,9 @@
 """Comprehensive tests for generate_sweep_configs.py"""
+import contextlib
 import pytest
 import argparse
 import copy
+import generate_sweep_configs
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
     seq_len_stoi,
@@ -14,6 +16,26 @@ from generate_sweep_configs import (
     apply_node_type_defaults,
     expand_config_keys,
 )
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+@contextlib.contextmanager
+def _agentic_evals_enabled():
+    """Temporarily clear the AGENTIC_EVALS_DISABLED kill switch.
+
+    Agentic evals are disabled repo-wide pending TODO(@adibarra). The
+    underlying selection policy is still tested through this helper so the
+    re-enable is a one-line flip with coverage already in place.
+    """
+    previous = generate_sweep_configs.AGENTIC_EVALS_DISABLED
+    generate_sweep_configs.AGENTIC_EVALS_DISABLED = False
+    try:
+        yield
+    finally:
+        generate_sweep_configs.AGENTIC_EVALS_DISABLED = previous
 
 
 # =============================================================================
@@ -227,11 +249,33 @@ class TestMarkEvalEntries:
             },
         ]
 
-        result = mark_eval_entries(matrix_values, include_agentic=True)
+        # AGENTIC_EVALS_DISABLED is a temporary repo-wide kill switch
+        # (TODO(@adibarra)); this asserts the selection policy that returns
+        # when it is flipped back off.
+        with _agentic_evals_enabled():
+            result = mark_eval_entries(matrix_values, include_agentic=True)
 
         marked = [e for e in result if e.get("run-eval")]
         assert len(marked) == 1
         assert marked[0]["conc"] == 64
+
+    def test_disable_switch_suppresses_agentic_even_when_included(self):
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 64,
+            },
+        ]
+
+        assert generate_sweep_configs.AGENTIC_EVALS_DISABLED is True
+
+        result = mark_eval_entries(matrix_values, include_agentic=True)
+
+        assert [e for e in result if e.get("run-eval")] == [], (
+            "AGENTIC_EVALS_DISABLED must win over include_agentic -- "
+            "--evals-only / --all-evals must not dispatch agentic evals"
+        )
 
     def test_default_mode_does_not_mark_agentic(self):
         matrix_values = [
@@ -673,11 +717,30 @@ class TestMarkAllEvalEntries:
             }
         ]
 
-        result = mark_all_eval_entries(entries)
+        with _agentic_evals_enabled():
+            result = mark_all_eval_entries(copy.deepcopy(entries))
 
         assert result[0]['run-eval'] is True
         assert 'eval-conc' not in result[0]
         assert 'eval-all-concs' not in result[0]
+
+    def test_disable_switch_suppresses_agentic_in_all_evals(self):
+        entries = [
+            {
+                'scenario-type': 'agentic-coding',
+                'model': 'm',
+                'runner': 'r',
+                'conc': 64,
+            }
+        ]
+
+        assert generate_sweep_configs.AGENTIC_EVALS_DISABLED is True
+
+        result = mark_all_eval_entries(entries)
+
+        assert result[0].get('run-eval') is not True, (
+            "AGENTIC_EVALS_DISABLED must win over --all-evals"
+        )
 
 
 # =============================================================================
