@@ -75,7 +75,6 @@ class FlashInferEPBackend(EPBackend):
         super().__init__(args, rank, world_size, local_rank, device)
         self._a2a = None
         self._max_tokens = None
-        self._recv_shape = None
         self.experts_per_rank = args.experts // world_size
 
     # ---- setup -------------------------------------------------------------------------------
@@ -129,7 +128,6 @@ class FlashInferEPBackend(EPBackend):
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.
         torch.distributed.barrier(group=_ep_group())
-        self._recv_shape = (self.world_size, self._max_tokens, hidden)
 
     # ---- transport contract ------------------------------------------------------------------
 
@@ -216,12 +214,12 @@ class FlashInferEPBackend(EPBackend):
         into the padded workspace-shaped buffer at exactly the slots those rows came from.
         Unfilled slots stay zero and contribute nothing to the sum.
         """
-        padded = torch.zeros(
-            (self.world_size * self._max_tokens, h.recv_x.shape[-1]),
-            dtype=h.recv_x.dtype, device=h.recv_x.device,
-        )
-        padded[self._valid_rows(h)] = transformed.to(padded.dtype)
-        return self._a2a.combine(padded.view_as(h.recv_x), h.tokens)
+        # Shaped from the ACTUAL receive, not the ladder maximum: the planes are
+        # [ep_size, runtime_max_tokens_per_rank, hidden], so they shrink with the rung. Sizing
+        # this from max_num_tokens builds a 65536-row buffer for an 8192-row mask.
+        padded = torch.zeros_like(h.recv_x)
+        padded.view(-1, h.recv_x.shape[-1])[self._valid_rows(h)] = transformed.to(padded.dtype)
+        return self._a2a.combine(padded, h.tokens)
 
 
 def _ep_group():
