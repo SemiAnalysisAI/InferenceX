@@ -441,10 +441,11 @@ def _expected_transformed_combine(
             semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
             + (gate * offset_a).sum(dim=1, keepdim=True)
             + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-        )
-        contribution = _to_payload_dtype(
-            torch, contribution, dtype, combine_output_rounding
-        ).float()
+        ).to(dtype).float()
+        # Round-to-nearest here on purpose: this message is produced by the ADAPTER with
+        # torch when it stages the combine input, not by the kernel. Only the accumulator
+        # -> payload conversion below is the kernel's, so only that one honours
+        # combine_output_rounding.
         domain = rank_id // ranks_per_domain
         if domain in domains:
             domains[domain] += contribution
