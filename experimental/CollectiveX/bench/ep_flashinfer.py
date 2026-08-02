@@ -219,12 +219,22 @@ class FlashInferEPBackend(EPBackend):
         into the padded workspace-shaped buffer at exactly the slots those rows came from.
         Unfilled slots stay zero and contribute nothing to the sum.
         """
-        # Shaped from the ACTUAL receive, not the ladder maximum: the planes are
-        # [ep_size, runtime_max_tokens_per_rank, hidden], so they shrink with the rung. Sizing
-        # this from max_num_tokens builds a 65536-row buffer for an 8192-row mask.
-        padded = torch.zeros_like(h.recv_x)
-        padded.view(-1, h.recv_x.shape[-1])[self._valid_rows(h)] = transformed.to(padded.dtype)
-        return self._a2a.combine(padded, h.tokens)
+        # Write straight into the RECEIVED workspace tensor rather than a fresh buffer.
+        #
+        # A separate `zeros_like` buffer was measured to give a combine output that is not the
+        # sum of the staged messages: summing every rank's staged contribution for one token
+        # gave 0.2555847168, the oracle expected BF16-nearest of that (0.255859375, bit-exact),
+        # and the kernel returned 0.2578125. No summation model reaches that value -- fp32
+        # sequential, fp32 tree, bf16 tree and both rounding modes all land on 0.255859375 --
+        # so the kernel was reading different bytes than were written. The remaining difference
+        # between the two paths is the buffer: recv_x is workspace-backed, and a fresh
+        # allocation has to be copied in, which is where a layout reinterpretation can happen.
+        # Writing in place removes that copy: the values sit exactly where dispatch left them.
+        flat = h.recv_x.view(-1, h.recv_x.shape[-1])
+        keep = self._valid_rows(h)
+        flat[keep] = transformed.to(h.recv_x.dtype)
+        flat[~keep] = 0            # slots the kernel never filled must contribute nothing
+        return self._a2a.combine(h.recv_x, h.tokens)
 
 
 def _ep_group():
