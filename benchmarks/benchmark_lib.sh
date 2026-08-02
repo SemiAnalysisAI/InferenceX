@@ -1624,7 +1624,7 @@ install_agentic_deps() {
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "$(command -v python3)" "$AIPERF_VENV"
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
@@ -1736,22 +1736,19 @@ build_replay_cmd() {
     # the worker threads the server's live assistant response back into the
     # session.
     #
-    # The scenario plugin locks: --cache-bust first_turn_prefix and
-    # --trace-idle-gap-cap-seconds 10 (per-trace idle-gap compression
-    # against parent + subagent request-start timestamps; supersedes the
-    # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
-    # and auto-injects them — so we do not pass them. See
-    # utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # The scenario plugin locks --cache-bust first_turn_prefix and a 10-second
+    # whole-system idle cap. Source end-to-start delays remain intact; the cap
+    # shifts all pending timers uniformly only when no request is active or
+    # ready. See utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
-    local cache_warmup_duration="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-600}"
+    local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
 
-    # Fast mode is an e2e-only feedback preset used before canonical one-hour
-    # sweeps. AIPerf already exposes both controls, so no AIPerf patch is
-    # required.
+    # Fast mode minimizes setup by advancing each trajectory lane only once
+    # and shortens profiling to 20 minutes.
     if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
         duration=1200
-        cache_warmup_duration=300
+        warmup_requests_per_lane=1
     fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
@@ -1765,6 +1762,9 @@ build_replay_cmd() {
     # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
     # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
     export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
+    # Headless realtime metrics are opt-in on current AIPerf main. Enable the
+    # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
+    export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
     REPLAY_CMD+=" --url http://localhost:$PORT"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
@@ -1774,6 +1774,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --model $replay_model"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
     # Fail runs once more than 10% of requests error. This keeps known
     # transient low-rate failures from killing long sweeps while still
@@ -1785,10 +1786,12 @@ build_replay_cmd() {
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # After the normal t* snapshot warmup, continue those exact trajectories
-    # with one-token outputs and no idle delays. Profiling begins only after
-    # those requests drain and resumes from the resulting live state.
-    REPLAY_CMD+=" --agentic-cache-warmup-duration $cache_warmup_duration"
+    # After the normal t* snapshot primers, advance every trajectory lane by
+    # this many additional one-token requests with no idle delay. Profiling
+    # begins after those requests drain and resumes from the resulting live
+    # state. Do not pass --burst-phase-starts: AIPerf main's spread default
+    # preserves each lane's recorded phase-start offset.
+    REPLAY_CMD+=" --warmup-requests-per-lane $warmup_requests_per_lane"
     # Give long-context warmup requests up to 30 minutes to drain before
     # declaring warmup failed. Recipes whose saturation arms carry a larger
     # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
@@ -1807,21 +1810,21 @@ build_replay_cmd() {
     # X-Correlation-ID is useful tracing metadata but does not establish that
     # binding by itself. AIPerf emits nvext.session_control bind/close actions
     # keyed by the stable conversation correlation ID when this flag is set.
-    if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
-        # Newer Dynamo versions (>=1.3.0-dev, post #9920) dropped nvext.session_control
-        # in favour of router/routing_constraints/agent_context; set
-        # AIPERF_NEW_DYNAMO_SESSION_CONTROL=1 to use the X-Session-ID path instead.
-        if [[ -n "${AIPERF_NEW_DYNAMO_SESSION_CONTROL:-}" ]]; then
-            export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
-        elif [[ "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" ]]; then
-            # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip.
-            REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
-            # The upstream 300s affinity TTL is shorter than an overloaded
-            # high-concurrency agentic request. Keep bindings alive across long
-            # prefills, generation, and capped inter-turn delay. This controls the
-            # router's inactivity lease; it does not relax HTTP/request failures.
-            REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
-        fi
+    # Opt-out: recipes set AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING=0 to skip this.
+    # aiperf's conv-aware routing emits nvext.session_control, a removed POC field
+    # (dynamo #9920 / v1.3.0-dev) that current dynamo builds reject with a 400
+    # (they moved to router/routing_constraints/agent_context). Default stays on.
+    # New recipes instead set AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID=true
+    # to route by X-Dynamo-Session-ID header, which needs no routing CLI flag.
+    if [[ "${FRAMEWORK:-}" == dynamo-* \
+          && "${AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING:-1}" != "0" \
+          && "${AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID:-false}" != "true" ]]; then
+        REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+        # The upstream 300s affinity TTL is shorter than an overloaded
+        # high-concurrency agentic request. Keep bindings alive across long
+        # prefills, generation, and capped inter-turn delay. This controls the
+        # router's inactivity lease; it does not relax HTTP/request failures.
+        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
     fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
