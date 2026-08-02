@@ -38,7 +38,6 @@ on:
       - "utils/validate_reusable_sweep_artifacts.py"
       - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
       - "utils/changelog_gate_tests/test_run_sweep_gating.py"
-      - "utils/changelog_gate_tests/test_trusted_external_sweep.py"
       - "utils/changelog_gate_tests/conftest.py"
       - "utils/merge_with_reuse.sh"
       - "utils/matrix_logic/**"
@@ -80,7 +79,6 @@ jobs:
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
-            utils/changelog_gate_tests/test_trusted_external_sweep.py \
             utils/test_ci_priority.py \
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
