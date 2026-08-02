@@ -46,6 +46,10 @@ import torch
 
 from ep_backend import EPBackend
 
+# Stamped by the kernel into the expert-id payload of every receive slot it did not fill.
+# -1 is safe: real ids are [0, num_experts).
+_INVALID_EXPERT = -1
+
 
 class FlashInferEPBackend(EPBackend):
     name = "flashinfer-ep"
@@ -129,14 +133,31 @@ class FlashInferEPBackend(EPBackend):
     # ---- transport contract ------------------------------------------------------------------
 
     def dispatch(self, p):
-        # token_selected_experts must be int32; the payload list is positional, and index 0 is
-        # the activation the combine later sends back.
-        received = self._a2a.dispatch(
-            p.topk_idx.to(torch.int32),
-            [p.dispatch_x],
+        """Dispatch the activation together with the routing metadata the oracle needs back.
+
+        Three payloads, not one. The correctness oracle reads a per-received-row view carrying
+        `expert_ids` and `weights` alongside the payload, and the only way to know a received
+        row's routing is for the sender to ship it: the kernel moves opaque bytes. This is the
+        intended shape — the upstream workspace accounting budgets exactly `top_k * 4` for
+        int32 ids plus `top_k * 4` for fp32 weights on top of the hidden bytes.
+
+        `invalid_token_expert_id` + `expert_id_payload_index` are how a receiver tells which
+        rows are real: the receive planes are `[ep_size, max_tokens, *]` and a rank only gets
+        the tokens that selected one of its experts, so the kernel stamps the sentinel into the
+        expert-id payload of every slot it did not fill.
+        """
+        idx32 = p.topk_idx.to(torch.int32)
+        recv_x, recv_idx, recv_w = self._a2a.dispatch(
+            idx32,
+            [p.dispatch_x, idx32, p.topk_weights.to(torch.float32)],
             p.T,
+            invalid_token_expert_id=_INVALID_EXPERT,
+            expert_id_payload_index=1,
         )
-        return types.SimpleNamespace(recv_x=received[0], tokens=p.T, combine_input=None)
+        return types.SimpleNamespace(
+            recv_x=recv_x, recv_idx=recv_idx, recv_w=recv_w,
+            tokens=p.T, topk=p.topk_idx.shape[1], combine_input=None,
+        )
 
     def stage(self, p, h):
         # BF16 needs no conversion: the received workspace tensor is the combine input.
@@ -148,32 +169,50 @@ class FlashInferEPBackend(EPBackend):
         return out
 
     def recv_tokens(self, h):
-        # Every rank receives one padded plane per peer; the valid rows are the tokens each
-        # peer actually sent this rung, which for a fixed trace is its own T.
-        return int(h.recv_x.shape[0] * h.tokens)
+        # Rows the kernel actually filled, across every source plane.
+        return int(self._valid_rows(h).sum().item())
 
     # ---- correctness-oracle views ------------------------------------------------------------
 
-    def inspect_dispatch(self, p, h):
-        """Compact (source-rank, slot) view over the padded [ep, max_tokens, hidden] receive.
+    def _valid_rows(self, h):
+        """Boolean mask over the flattened [ep_size * max_tokens] receive slots."""
+        idx = h.recv_idx.reshape(-1, h.topk)
+        return (idx != _INVALID_EXPERT).any(dim=1)
 
-        Only the first `tokens` rows of each source plane carry data; the rest is untouched
-        workspace memory. Slicing rather than masking keeps the row order the oracle expects.
+    def inspect_dispatch(self, p, h):
+        """Compact per-received-row view for the correctness oracle.
+
+        The receive is `[ep_size, max_tokens, *]` with a rank's tokens only in the slots the
+        kernel filled, so flatten and keep the rows whose expert-id payload is not the
+        sentinel. Ids come back exactly as sent, i.e. already GLOBAL, which is what the oracle
+        compares against; per-row entries that are not local are still sentinel-stamped, so
+        mask their weights to zero rather than letting them into the expert sum.
         """
-        return h.recv_x[:, : h.tokens, :].reshape(-1, h.recv_x.shape[-1])
+        keep = self._valid_rows(h)
+        hidden = h.recv_x.shape[-1]
+        payload = h.recv_x.reshape(-1, hidden)[keep]
+        ids = h.recv_idx.reshape(-1, h.topk).to(torch.int64)[keep]
+        weights = h.recv_w.reshape(-1, h.topk).to(torch.float32)[keep]
+        live = ids != _INVALID_EXPERT
+        return types.SimpleNamespace(
+            payload=payload,
+            expert_ids=torch.where(live, ids, torch.full_like(ids, -1)),
+            weights=weights.masked_fill(~live, 0.0),
+        )
 
     def combine_transformed(self, p, h, transformed):
-        """Combine an oracle-supplied payload through the same kernel as the timed path.
+        """Combine an oracle-transformed payload through the same kernel as the timed path.
 
-        The transformed rows arrive in the compact layout `inspect_dispatch` returned, so they
-        are scattered back into a padded workspace-shaped buffer before the call; padding stays
-        zero so it cannot contribute to the sum.
+        `transformed` holds one row per row `inspect_dispatch` returned, so scatter it back
+        into the padded workspace-shaped buffer at exactly the slots those rows came from.
+        Unfilled slots stay zero and contribute nothing to the sum.
         """
-        padded = torch.zeros(self._recv_shape, dtype=h.recv_x.dtype, device=h.recv_x.device)
-        padded[:, : h.tokens, :] = transformed.view(
-            self.world_size, h.tokens, h.recv_x.shape[-1]
+        padded = torch.zeros(
+            (self.world_size * self._max_tokens, h.recv_x.shape[-1]),
+            dtype=h.recv_x.dtype, device=h.recv_x.device,
         )
-        return self._a2a.combine(padded, h.tokens)
+        padded[self._valid_rows(h)] = transformed.to(padded.dtype)
+        return self._a2a.combine(padded.view_as(h.recv_x), h.tokens)
 
 
 def _ep_group():
