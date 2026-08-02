@@ -25,8 +25,28 @@ set -x
 #                           rejection_sample_method block
 #   - cudagraph capture sizes are expressed in TOKENS, not sequences
 #
+# This script also serves the MoonEP expert-parallel arm
+# (kimik3-fp4-b300-vllm-agentic-dspark-moonep, EP_SIZE=8): the launcher derives
+# the script name from model-prefix/precision/framework/spec-decoding, so both
+# master-config keys resolve here and the EP arm is selected by EP_SIZE. Its
+# deltas relative to the pure-TP8 profile:
+#   - --enable-expert-parallel --all2all-backend moonep  (EP=8: EP = TP x DP,
+#     TP=8, DP=1; the vLLM patch forces sequence-parallel MoE for moonep so the
+#     8 ranks dispatch distinct sequence slices instead of duplicating expert
+#     compute)
+#   - --load-format auto rather than fastsafetensors: fastsafetensors' large
+#     staging buffers OOM against MoonEP's out-of-band VMM expert-weight
+#     allocations. auto loads the 1.5 TB checkpoint in ~231 s off the staged
+#     mount (bring-up run 38792), well inside VLLM_ENGINE_READY_TIMEOUT_S.
+#   - MoonEP itself is built from source at a pinned commit and the vLLM moonep
+#     backend is overlaid onto the image's installed vllm package at runtime
+#     (see setup_moonep) -- the stock vllm/vllm-openai:kimi-k3 image contains
+#     neither.
+#
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION
+# Optional:
+#   EP_SIZE  (unset/1 = pure TP8; 8 = MoonEP expert-parallel arm)
 #
 # TP8 is the only single-node layout. The MXFP4 checkpoint is ~1.5 TB on disk;
 # at TP4 that is ~375 GB of weights per GPU against B300's 288 GB of HBM, so
@@ -47,9 +67,16 @@ if [ "$TP" -ne 8 ]; then
     exit 1
 fi
 
+# EP_SIZE > 1 selects the MoonEP arm. EP = TP x DP and DP=1 on this single-node
+# layout, so the only valid EP is exactly TP (=8); anything else is a config bug.
 if [[ -n "${EP_SIZE:-}" && "${EP_SIZE}" -gt 1 ]]; then
-    echo "Error: this recipe ships the pure-TP8 profile; EP_SIZE='$EP_SIZE' is not wired yet" >&2
-    exit 1
+    if [ "$EP_SIZE" -ne "$TP" ]; then
+        echo "Error: the MoonEP arm requires EP_SIZE == TP (EP = TP x DP with DP=1), got EP_SIZE='$EP_SIZE' TP='$TP'" >&2
+        exit 1
+    fi
+    MOONEP_ENABLED=1
+else
+    MOONEP_ENABLED=0
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
@@ -87,6 +114,81 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
+# ---- MoonEP build + vLLM backend overlay (EP arm only) -----------------------
+# The stock vllm/vllm-openai:kimi-k3 image ships neither the MoonEP package nor
+# a vLLM that knows the moonep all2all backend. Both are added inside the
+# container at runtime (the container filesystem is a discarded overlay), at a
+# pinned MoonEP commit plus a one-line C++ fix, then the checked-in vLLM diff is
+# overlaid onto the installed package. Mirrors the validated bring-up flow in
+# /data/home/sa-shared/moonep-b300/bringup.sbatch on the b300-nv login host.
+MOONEP_COMMIT="0f385f038fc33bec22e3bcf5a07a8a22693e754c"
+MOONEP_SRC="/opt/MoonEP"
+# Resolve to an absolute path before any cd: $0 is relative to the container
+# workdir (/workspace).
+MOONEP_VLLM_PATCH="$(cd "$(dirname "$0")" && pwd)/patches/kimik3_moonep_vllm.patch"
+
+setup_moonep() {
+    if [[ ! -f "$MOONEP_VLLM_PATCH" ]]; then
+        echo "Error: missing vLLM overlay patch at $MOONEP_VLLM_PATCH" >&2
+        exit 1
+    fi
+
+    # install_agentic_deps has already ensured git exists in the image.
+    rm -rf "$MOONEP_SRC"
+    git clone https://github.com/MoonshotAI/MoonEP.git "$MOONEP_SRC"
+    git -C "$MOONEP_SRC" checkout "$MOONEP_COMMIT"
+
+    # torch 2.13 marks freshly-created TensorImpls metadata-immutable;
+    # MoonEP's shared-buffer view constructor must opt back in before
+    # resizing. Idempotent single-line insert.
+    python3 - "$MOONEP_SRC/csrc/nvl_shared_buffer.cuh" <<'PYPATCH'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+anchor = "    impl->set_sizes_contiguous(shape);"
+fix = "    impl->set_allow_tensor_metadata_change(true);\n"
+if "set_allow_tensor_metadata_change" not in s:
+    assert anchor in s, f"anchor line not found in {p}"
+    s = s.replace(anchor, fix + anchor, 1)
+    open(p, "w").write(s)
+    print("PATCHED moonep for torch 2.13")
+else:
+    print("moonep already patched for torch 2.13")
+PYPATCH
+
+    # --no-deps keeps the image's nvidia-cutlass-dsl (4.6.0): MoonEP pins
+    # ==4.4.2, but downgrading breaks vllm_flash_attn/cute (quack needs
+    # cutlass._mlir_helpers) and, below 4.5, flashinfer. MoonEP's own suite
+    # passes on 4.6.0.
+    pip install --no-build-isolation --no-deps -e "$MOONEP_SRC"
+    python3 -c "import flashinfer; print('flashinfer import OK')"
+    python3 -c "import moonep; from moonep._C import nvl_multicast_supported as m; print('moonep ok, multicast', m())"
+
+    # Overlay the vLLM moonep backend onto the image's installed package.
+    # --forward makes a re-run on an already-patched tree a no-op instead of
+    # prompting; any FAILED hunk or .rej is fatal.
+    local patch_log="$RESULT_DIR/moonep_vllm_patch.log"
+    pushd /usr/local/lib/python3.12/dist-packages
+    if ! patch -p1 --forward --batch < "$MOONEP_VLLM_PATCH" > "$patch_log" 2>&1 \
+        || grep -q "FAILED" "$patch_log"; then
+        echo "Error: MoonEP vLLM overlay did not apply cleanly" >&2
+        tail -30 "$patch_log" >&2
+        find . -name "*.rej" -print >&2
+        popd
+        exit 1
+    fi
+    popd
+
+    python3 - <<'PYCHECK'
+from vllm.utils.import_utils import has_moonep
+assert has_moonep(), "has_moonep() is False after install"
+from vllm.model_executor.layers.fused_moe.prepare_finalize.moonep import MoonEPPrepareAndFinalize
+from vllm.model_executor.layers.fused_moe.experts.moonep_deep_gemm_moe import MoonEPDeepGemmFP4Experts
+from vllm.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_moonep_mxfp4 import MoonEPCompressedTensorsMxfp4MoEMethod
+print("moonep backend imports OK")
+PYCHECK
+}
+
 # ---- Kimi-K3 production serving environment ---------------------------------
 export NCCL_DMABUF_ENABLE=0
 export VLLM_ALLREDUCE_USE_FLASHINFER=1
@@ -119,6 +221,28 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
+
+# ---- MoonEP arm: install backend, pick EP flags ------------------------------
+# MoonEP's expert weights are CUDA VMM allocations outside the torch caching
+# allocator, so the utilization budget has to cover them alongside the KV
+# cache. Measured on b300 with Kimi-K3 at TP8/EP8: 0.90 leaves -2.36 GiB for
+# KV and the engine refuses to start; 0.96 yields 508,586 KV tokens.
+if [ "$MOONEP_ENABLED" = "1" ]; then
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.96}"
+else
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+fi
+
+if [ "$MOONEP_ENABLED" = "1" ]; then
+    setup_moonep
+    # fastsafetensors' large staging buffers OOM against MoonEP's out-of-band
+    # VMM expert-weight allocations; plain auto loading fits and takes ~231 s.
+    LOAD_FORMAT=auto
+    EP_ARGS=(--enable-expert-parallel --all2all-backend moonep)
+else
+    LOAD_FORMAT=fastsafetensors
+    EP_ARGS=()
+fi
 
 # ---- KV offloading ----------------------------------------------------------
 # The generated TOTAL_CPU_DRAM_GB budget is the aggregate host-DRAM pool for the
@@ -229,11 +353,11 @@ VLLM_CMD=(
     # (fused_moe/runner/shared_experts.py:165, all 8 TP ranks at once). Only
     # mla_prefill_backend=TRTLLM_RAGGED is retained from that set; the rest stay
     # on the values that ran 12/12 green in run 30326393603.
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
     --max-num-seqs "$MAX_NUM_SEQS"
     --max-model-len 1048576
     --trust-remote-code
-    --load-format fastsafetensors
+    --load-format "$LOAD_FORMAT"
     --moe-backend auto
     --enable-prefix-caching
     --kv-cache-dtype fp8
@@ -246,6 +370,7 @@ VLLM_CMD=(
     --speculative-config "$SPEC_CONFIG"
     --compilation-config "$COMPILATION_CONFIG"
     --disable-uvicorn-access-log
+    "${EP_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"

@@ -1689,6 +1689,48 @@ kimik3-fp4-b300-vllm-agentic-dspark:
       # TP8 SimpleCPUOffload (host DRAM)
       - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
 
+kimik3-fp4-b300-vllm-agentic-dspark-moonep:
+  # MoonEP expert-parallel arm of kimik3-fp4-b300-vllm-agentic-dspark. Same
+  # image, model, draft head, spec config (DSpark level 2, probabilistic,
+  # synthetic acceptance pinned to golden AL 2.51), KV arms, and concurrency
+  # ladder; the deltas are all in how the MoE layers are served:
+  #   - ep: 8 (EP = TP x DP; TP=8, DP=1) selects the MoonEP branch in
+  #     kimik3_fp4_b300_vllm_mtp.sh, which adds --enable-expert-parallel
+  #     --all2all-backend moonep. MoonEP is a load-balanced all2all over NVLink
+  #     symmetric memory (single NVLink domain only, which one B300 node is),
+  #     and the vLLM overlay forces sequence-parallel MoE for it so the 8 ranks
+  #     dispatch distinct sequence slices instead of duplicating expert compute.
+  #   - --load-format auto rather than fastsafetensors: fastsafetensors' large
+  #     staging buffers OOM against MoonEP's out-of-band VMM expert-weight
+  #     allocations. auto loads the checkpoint in ~231 s off the staged mount.
+  #   - The MoonEP package (pinned commit + a one-line torch-2.13 fix) is built
+  #     and the vLLM moonep backend overlaid inside the container at runtime
+  #     (benchmarks/single_node/agentic/patches/kimik3_moonep_vllm.patch); the
+  #     stock vllm/vllm-openai:kimi-k3 image contains neither.
+  # The launcher resolves both this key and the -dspark sibling to the same
+  # benchmark script (model-prefix/precision/framework/spec-decoding determine
+  # the name); EP_SIZE is what routes a job onto the MoonEP branch.
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # Agentic-coding only: no fixed-seq-len (1k1k / 8k1k) arms for this recipe.
+    agentic-coding:
+    - dram-utilization: 0.63
+      search-space:
+      # Mirrors the -dspark sibling's two KV arms and 1-16 ladder exactly, so
+      # the EP delta is readable at equal concurrency against the pure-TP8
+      # cells. TP8-only for the same reason as the siblings: the ~1.5 TB MXFP4
+      # checkpoint does not fit below 8 GPUs.
+      # TP8/EP8 MoonEP, GPU-resident KV
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
+      # TP8/EP8 MoonEP, SimpleCPUOffload (host DRAM)
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16] }
+
 dsr1-fp8-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528

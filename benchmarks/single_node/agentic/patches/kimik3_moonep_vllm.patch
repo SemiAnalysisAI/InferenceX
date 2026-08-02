@@ -1,0 +1,1718 @@
+diff --git a/vllm/config/parallel.py b/vllm/config/parallel.py
+index 2e908ead1..b7b2bc341 100644
+--- a/vllm/config/parallel.py
++++ b/vllm/config/parallel.py
+@@ -47,6 +47,7 @@ All2AllBackend = Literal[
+     "deepep_v2",
+     "mori_high_throughput",
+     "mori_low_latency",
++    "moonep",
+     "nixl_ep",
+     "allgather_reducescatter",
+     "flashinfer_all2allv",  # temporary alias for flashinfer_nvlink_two_sided
+@@ -193,6 +194,8 @@ class ParallelConfig:
+     - "deepep_low_latency": Use deepep low-latency kernels
+     - "mori_high_throughput": MoRI EP with InterNodeV1 for multi-node
+     - "mori_low_latency": MoRI EP with InterNodeV1LL for multi-node
++    - "moonep": MoonEP load-balanced EP over NVLink symmetric memory
++      (single NVLink domain only)
+     - "nixl_ep": Use nixl-ep kernels
+     - "flashinfer_nvlink_two_sided": Use flashinfer two-sided kernels for mnnvl
+     - "flashinfer_nvlink_one_sided": Use flashinfer high-throughput a2a kernels"""
+@@ -671,6 +674,22 @@ class ParallelConfig:
+     #
+     @property
+     def use_sequence_parallel_moe(self) -> bool:
++        if (
++            self.all2all_backend == "moonep"
++            and self.enable_expert_parallel
++            and self.tensor_parallel_size > 1
++            # Match the model-side condition: at PP>1 the model does not
++            # sequence-shard, so claiming SP here would have every TP rank
++            # dispatch the same tokens against a scatter/gather that never
++            # happened.
++            and self.pipeline_parallel_size == 1
++        ):
++            # MoonEP dispatches a distinct slice of the sequence from every
++            # rank, so the MoE input has to be sequence parallel across TP.
++            # Unlike the backends below that is worth doing at DP=1 too: it is
++            # what makes TP=8/EP=8 on one node a real all2all deployment
++            # rather than 8x duplicated expert compute.
++            return True
+         return (
+             self.all2all_backend
+             in (
+diff --git a/vllm/distributed/device_communicators/all2all.py b/vllm/distributed/device_communicators/all2all.py
+index 5abe7568a..733411bb2 100644
+--- a/vllm/distributed/device_communicators/all2all.py
++++ b/vllm/distributed/device_communicators/all2all.py
+@@ -18,7 +18,7 @@ from vllm.utils.flashinfer import (
+     has_flashinfer_nvlink_two_sided,
+ )
+ from vllm.utils.func_utils import supports_kw
+-from vllm.utils.import_utils import has_deep_ep, has_deep_ep_v2, has_mori
++from vllm.utils.import_utils import has_deep_ep, has_deep_ep_v2, has_moonep, has_mori
+ 
+ from .base_device_communicator import All2AllManagerBase, Cache
+ 
+@@ -1090,3 +1090,77 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
+             for _, handle in self.handle_cache._cache.items():
+                 handle.destroy()
+             self.handle_cache._cache.clear()
++
++
++class MoonEPAll2AllManager(All2AllManagerBase):
++    """
++    All2All communication based on MoonEP.
++
++    MoonEP (https://github.com/MoonshotAI/MoonEP) keeps every EP rank at
++    exactly ``S * K`` dispatched tokens regardless of how skewed the router
++    is, by reassigning the surplus of overloaded expert owners onto
++    underloaded ranks. That makes the per-layer expert-GEMM shapes static and
++    removes the host synchronization conventional MoE needs to learn the real
++    per-expert token counts.
++
++    It communicates over CUDA VMM allocations shared as POSIX file
++    descriptors, plus NVSwitch multicast for the barrier metadata, so it works
++    within a single NVLink domain only -- there is no RDMA path. ``internode``
++    deployments must use a different backend.
++    """
++
++    def __init__(self, cpu_group, tcp_store_group=None, device_group=None):
++        assert has_moonep(), (
++            "MoonEP not available. Requires the `moonep` package "
++            "(https://github.com/MoonshotAI/MoonEP) and a device with CUDA "
++            "multicast (NVSwitch) support."
++        )
++        super().__init__(cpu_group, tcp_store_group)
++        if self.internode:
++            raise ValueError(
++                "The moonep all2all backend spans a single NVLink domain "
++                "only (it shares memory via POSIX file descriptors, which do "
++                "not cross hosts), but this EP group spans multiple nodes. "
++                "Use deepep_high_throughput or deepep_v2 instead."
++            )
++        self._device_group = device_group
++        self.handle_cache = Cache()
++
++    def _make_all2all_kwargs(
++        self,
++        max_num_tokens_per_rank: int,
++        token_hidden_size: int,
++        num_topk: int,
++        num_global_experts: int,
++        token_padding: int,
++        num_prefetch_slots: int,
++    ) -> dict:
++        return dict(
++            S=max_num_tokens_per_rank,
++            H=token_hidden_size,
++            K=num_topk,
++            E=num_global_experts,
++            num_ep_ranks=self.world_size,
++            token_padding=token_padding,
++            B=num_prefetch_slots,
++            group=self._device_group
++            if self._device_group is not None
++            else self.cpu_group,
++            # Buffer.destroy() must run before the process group is torn down;
++            # warn instead of doing it from __del__ at interpreter shutdown.
++            explicitly_destroy=True,
++        )
++
++    def get_handle(self, kwargs):
++        from moonep import Buffer  # type: ignore[import-not-found]
++
++        buffer_kwargs = self._make_all2all_kwargs(**kwargs)
++        logger.debug("MoonEP all2all args %s", buffer_kwargs)
++        handle: Buffer = self.handle_cache.get_or_create(buffer_kwargs, Buffer)
++        return handle
++
++    def destroy(self):
++        with self.handle_cache._lock:
++            for _, handle in self.handle_cache._cache.items():
++                handle.destroy()
++            self.handle_cache._cache.clear()
+diff --git a/vllm/distributed/device_communicators/cuda_communicator.py b/vllm/distributed/device_communicators/cuda_communicator.py
+index 06b441c5a..6cf63da9f 100644
+--- a/vllm/distributed/device_communicators/cuda_communicator.py
++++ b/vllm/distributed/device_communicators/cuda_communicator.py
+@@ -172,6 +172,14 @@ class CudaCommunicator(DeviceCommunicatorBase):
+                     tcp_store_group,
+                     device_group=self.device_group,
+                 )
++            elif self.all2all_backend == "moonep":
++                from .all2all import MoonEPAll2AllManager
++
++                self.all2all_manager = MoonEPAll2AllManager(
++                    self.cpu_group,
++                    tcp_store_group,
++                    device_group=self.device_group,
++                )
+             elif self.all2all_backend == "nixl_ep":
+                 from .all2all import NixlEPAll2AllManager
+ 
+diff --git a/vllm/model_executor/layers/fused_moe/all2all_utils.py b/vllm/model_executor/layers/fused_moe/all2all_utils.py
+index 58c9c8d9f..fe271e0b9 100644
+--- a/vllm/model_executor/layers/fused_moe/all2all_utils.py
++++ b/vllm/model_executor/layers/fused_moe/all2all_utils.py
+@@ -33,9 +33,11 @@ from vllm.platforms import current_platform
+ from vllm.utils.import_utils import (
+     has_deep_ep,
+     has_deep_ep_v2,
++    has_moonep,
+     has_mori,
+     has_nixl_ep,
+ )
++from vllm.utils.math_utils import cdiv
+ 
+ logger = init_logger(__name__)
+ 
+@@ -48,6 +50,8 @@ if current_platform.is_cuda_alike():
+         )
+     if has_deep_ep_v2():
+         from .prepare_finalize.deepep_v2 import DeepEPV2PrepareAndFinalize
++    if has_moonep():
++        from .prepare_finalize.moonep import MoonEPPrepareAndFinalize
+     if has_mori():
+         from .prepare_finalize.mori import MoriPrepareAndFinalize
+     if has_nixl_ep():
+@@ -246,6 +250,54 @@ def maybe_make_prepare_finalize(
+             use_cudagraph=use_cudagraph,
+         )
+ 
++    elif moe.use_moonep_kernels:
++        assert moe.dp_size == all2all_manager.dp_world_size
++
++        # MoonEP is bf16 on the wire; activations are quantized after
++        # dispatch by the prepare/finalize receiver.
++        #
++        # token_padding is the multiple every per-expert segment is padded up
++        # to, which fixes the alignment of every segment start. DeepGEMM's
++        # contiguous grouped GEMM reads m_indices once per BLOCK_M rows, so
++        # segment starts must be BLOCK_M aligned; matching the two keeps that
++        # invariant without capping DeepGEMM's tile heuristic.
++        from vllm.utils.deep_gemm import get_mk_alignment_for_contiguous_layout
++
++        token_padding = get_mk_alignment_for_contiguous_layout()[0]
++
++        # One prefetch slot is the minimum MoonEP allows. We never call
++        # prefetch_weight: the experts kernel resolves slot segments back to
++        # their global expert id via plan.experts_to_copy and reads that
++        # expert's row out of the symmetric weight mapping instead.
++        # MoonEP holds exactly S tokens per rank and every dispatch pads to
++        # S, so an oversized S makes each step cost a full max-batch dispatch.
++        # This backend forces sequence-parallel MoE, so a rank never sees more
++        # than ceil(max_num_tokens / sp_size).
++        sp_size = max(1, moe.moe_parallel_config.sp_size)
++        tokens_per_rank = cdiv(moe.max_num_tokens, sp_size)
++
++        all_to_all_args = dict(
++            max_num_tokens_per_rank=tokens_per_rank,
++            token_hidden_size=moe.hidden_dim,
++            num_topk=moe.experts_per_token,
++            num_global_experts=moe.num_experts,
++            token_padding=token_padding,
++            num_prefetch_slots=1,
++        )
++        handle = all2all_manager.get_handle(all_to_all_args)
++
++        prepare_finalize = MoonEPPrepareAndFinalize(
++            buffer=handle,
++            num_dispatchers=all2all_manager.world_size,
++            dp_size=all2all_manager.dp_world_size,
++            rank=all2all_manager.rank,
++            num_experts=moe.num_experts,
++            num_local_experts=moe.num_local_experts,
++            num_topk=moe.experts_per_token,
++            max_num_tokens=tokens_per_rank,
++            token_padding=token_padding,
++        )
++
+     elif moe.use_mori_kernels:
+         assert quant_config is not None
+ 
+diff --git a/vllm/model_executor/layers/fused_moe/config.py b/vllm/model_executor/layers/fused_moe/config.py
+index f2ee520d0..1ae21e34c 100644
+--- a/vllm/model_executor/layers/fused_moe/config.py
++++ b/vllm/model_executor/layers/fused_moe/config.py
+@@ -1109,6 +1109,10 @@ class FusedMoEParallelConfig:
+     def use_deepep_v2_kernels(self):
+         return self.use_all2all_kernels and self.all2all_backend == "deepep_v2"
+ 
++    @property
++    def use_moonep_kernels(self):
++        return self.use_all2all_kernels and self.all2all_backend == "moonep"
++
+     @staticmethod
+     def flatten_tp_across_dp_and_pcp(
+         tp_size: int, dp_size: int, dp_rank: int, pcp_size: int, pcp_rank: int
+@@ -1451,6 +1455,10 @@ class FusedMoEConfig:
+     def use_deepep_v2_kernels(self):
+         return self.moe_parallel_config.use_deepep_v2_kernels
+ 
++    @property
++    def use_moonep_kernels(self):
++        return self.moe_parallel_config.use_moonep_kernels
++
+     @property
+     def needs_round_robin_routing_tables(self):
+         return self.moe_parallel_config.needs_round_robin_routing_tables
+diff --git a/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py b/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
+index 211364d24..998688e5e 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/deep_gemm_moe.py
+@@ -455,9 +455,13 @@ class DeepGemmFP4Experts(mk.FusedMoEExpertsModular):
+ 
+     @staticmethod
+     def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
++        # moonep needs MoonEPDeepGemmFP4Experts: its activations arrive
++        # already expert-grouped, so this class would re-permute them and
++        # apply the routing weights a second time in its unpermute.
+         return not (
+             moe_parallel_config.use_fi_nvl_two_sided_kernels
+             or moe_parallel_config.use_fi_nvl_one_sided_kernels
++            or moe_parallel_config.use_moonep_kernels
+         )
+ 
+     def finalize_weight_and_reduce_impl(self) -> mk.TopKWeightAndReduce:
+diff --git a/vllm/model_executor/layers/fused_moe/experts/moonep_deep_gemm_moe.py b/vllm/model_executor/layers/fused_moe/experts/moonep_deep_gemm_moe.py
+new file mode 100644
+index 000000000..0bd4fe594
+--- /dev/null
++++ b/vllm/model_executor/layers/fused_moe/experts/moonep_deep_gemm_moe.py
+@@ -0,0 +1,182 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""DeepGEMM MXFP4 experts over a MoonEP-dispatched activation buffer."""
++
++import torch
++
++import vllm.model_executor.layers.fused_moe.modular_kernel as mk
++from vllm.logger import init_logger
++from vllm.model_executor.layers.fused_moe.activation import MoEActivation
++from vllm.model_executor.layers.fused_moe.config import (
++    FusedMoEConfig,
++    FusedMoEParallelConfig,
++    FusedMoEQuantConfig,
++)
++from vllm.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
++    DeepGemmFP4Experts,
++)
++from vllm.model_executor.layers.fused_moe.utils import _resize_cache
++from vllm.utils.deep_gemm import (
++    get_mk_alignment_for_contiguous_layout,
++    m_grouped_fp8_fp4_gemm_nt_contiguous,
++    mk_alignment_scope,
++)
++
++logger = init_logger(__name__)
++
++
++class MoonEPDeepGemmFP4Experts(DeepGemmFP4Experts):
++    """MXFP4 experts for the ``moonep`` all2all backend.
++
++    Numerically identical to :class:`DeepGemmFP4Experts` -- the same pair of
++    ``m_grouped_fp8_fp4_gemm_nt_contiguous`` calls with the same recipes --
++    but without the permute/unpermute pair around them, because MoonEP
++    already delivers what those two functions exist to produce:
++
++    * ``deepgemm_moe_permute`` sorts tokens into per-expert contiguous
++      segments and builds ``m_indices``. MoonEP's dispatch writes tokens
++      directly into their expert-grouped destination, and the prepare step
++      hands the per-row expert id over in ``topk_ids[:, 0]``.
++    * ``deepgemm_unpermute_and_reduce`` scatters rows back to token order,
++      applying the routing weights while reducing. MoonEP's combine performs
++      that reduction across ranks, and the routing weights are applied in the
++      prepare/finalize object just before it.
++
++    Consequently ``apply`` writes its second GEMM straight to ``output`` and
++    reports :class:`TopKWeightAndReduceNoOP` (inherited), leaving weighting
++    and reduction to finalize.
++
++    The expert ids are global: ``w1``/``w2`` are the full ``[E, ...]``
++    symmetric-memory mappings, so a segment whose expert is owned by another
++    rank is served by reading that rank's HBM over NVLink.
++    """
++
++    @staticmethod
++    def _supports_parallel_config(moe_parallel_config: FusedMoEParallelConfig) -> bool:
++        return moe_parallel_config.use_moonep_kernels
++
++    def __init__(self, moe_config: FusedMoEConfig, quant_config: FusedMoEQuantConfig):
++        super().__init__(moe_config=moe_config, quant_config=quant_config)
++        # Every per-expert segment MoonEP produces is padded up to this, so
++        # segment starts are multiples of it. DeepGEMM reads m_indices once
++        # per BLOCK_M rows, so BLOCK_M must not exceed it. The all2all factory
++        # sizes the MoonEP buffer from the same source, so the two agree by
++        # construction.
++        self.token_padding = get_mk_alignment_for_contiguous_layout()[0]
++        logger.info_once(
++            "Using MoonEPDeepGemmFP4Experts (token_padding=%d).",
++            self.token_padding,
++        )
++
++    def workspace_shapes(
++        self,
++        M: int,
++        N: int,
++        K: int,
++        topk: int,
++        global_num_experts: int,
++        local_num_experts: int,
++        expert_tokens_meta: mk.ExpertTokensMetadata | None,
++        activation: MoEActivation,
++    ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[int, ...]]:
++        # M is MoonEP's NvS: the buffer is already expert-grouped and padded,
++        # and its size is fixed by (S, K, E, R, token_padding) rather than by
++        # the routing of any particular step. No alignment maths and no
++        # dependence on expert_tokens_meta, which keeps this cudagraph-safe.
++        activation_out_dim = self.adjust_N_for_activation(N, activation)
++        workspace1 = (M, max(activation_out_dim, K))
++        workspace2 = (M, max(N, K))
++        output = (M, K)
++        return (workspace1, workspace2, output)
++
++    def apply(
++        self,
++        output: torch.Tensor,
++        hidden_states: torch.Tensor,
++        w1: torch.Tensor,
++        w2: torch.Tensor,
++        topk_weights: torch.Tensor,
++        topk_ids: torch.Tensor,
++        activation: MoEActivation,
++        global_num_experts: int,
++        expert_map: torch.Tensor | None,
++        a1q_scale: torch.Tensor | None,
++        a2_scale: torch.Tensor | None,
++        workspace13: torch.Tensor,
++        workspace2: torch.Tensor,
++        expert_tokens_meta: mk.ExpertTokensMetadata | None,
++        apply_router_weight_on_input: bool,
++    ):
++        assert a1q_scale is not None
++        assert a2_scale is None
++        assert self.w1_scale is not None
++        assert self.w2_scale is not None
++        # m_indices already carry symmetric-buffer rows in the global expert
++        # space, so the global->local expert_map is deliberately unused here.
++        assert expert_map is None or expert_map.numel() == global_num_experts, (
++            f"MoonEP expects global expert ids, but expert_map covers "
++            f"{expert_map.numel()} of {global_num_experts} experts."
++        )
++
++        a1q = hidden_states
++        _, N, _ = w1.size()
++        # K comes from the activations: w1 is FP4 packed as (E, N, K//2).
++        K = a1q.size(1)
++        M_sum = a1q.size(0)
++        # FC2 writes straight into output, so it must already be the full
++        # dispatched buffer rather than the per-token output shape.
++        assert output.shape == (M_sum, K), (
++            f"expected output {(M_sum, K)} for the MoonEP dispatched buffer, "
++            f"got {tuple(output.shape)}."
++        )
++
++        # prepare() put the per-row expert id here; in dispatched space each
++        # row belongs to exactly one expert, so topk == 1. Rows past the last
++        # segment are -1, which DeepGEMM skips.
++        assert topk_ids.size(1) == 1, (
++            "MoonEP-dispatched activations carry one expert per row, got "
++            f"topk={topk_ids.size(1)}."
++        )
++        expert_ids = topk_ids[:, 0].contiguous()
++
++        with mk_alignment_scope(self.token_padding):
++            # FC1: FP8 activations x FP4 weights.
++            mm1_out = _resize_cache(workspace2, (M_sum, N))
++            m_grouped_fp8_fp4_gemm_nt_contiguous(
++                (a1q, a1q_scale),
++                (w1.view(torch.int8), self.w1_scale),
++                mm1_out,
++                expert_ids,
++                recipe_a=(1, self._ACT_BLOCK_K),
++                recipe_b=(1, self._WEIGHT_BLOCK_K),
++            )
++
++            # Gated activation + FP8 requant.
++            activation_out_dim = self.adjust_N_for_activation(N, activation)
++            quant_out = _resize_cache(
++                workspace13.view(dtype=torch.float8_e4m3fn),
++                (M_sum, activation_out_dim),
++            )
++            a2q, a2q_scale = self._act_mul_quant(
++                input=mm1_out.view(-1, N), output=quant_out, activation=activation
++            )
++
++            # FC2 must NOT write directly into `output`: the modular kernel
++            # carves both workspace13 and fused_out from one allocation at
++            # offset 0, so `output` aliases the buffer holding a2q. Writing
++            # output row m would clobber a2q rows other CTAs have not read
++            # yet -- silent, schedule-dependent corruption. Land in
++            # workspace2, whose mm1_out is dead by now (the parent reuses it
++            # the same way), then copy out.
++            mm2_out = _resize_cache(workspace2, (M_sum, K))
++            m_grouped_fp8_fp4_gemm_nt_contiguous(
++                (a2q, a2q_scale),
++                (w2.view(torch.int8), self.w2_scale),
++                mm2_out,
++                expert_ids,
++                recipe_a=(1, self._ACT_BLOCK_K),
++                recipe_b=(1, self._WEIGHT_BLOCK_K),
++            )
++
++        # Routing weights and the cross-rank reduction are finalize's job.
++        output.copy_(mm2_out)
+diff --git a/vllm/model_executor/layers/fused_moe/experts/trtllm_mxfp4_moe.py b/vllm/model_executor/layers/fused_moe/experts/trtllm_mxfp4_moe.py
+index 315ec9f9c..ba3b4cac3 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/trtllm_mxfp4_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/trtllm_mxfp4_moe.py
+@@ -284,7 +284,10 @@ class TrtLlmMxfp4ExpertsModular(TrtLlmMxfp4ExpertsBase, mk.FusedMoEExpertsModula
+     def _supports_parallel_config(
+         moe_parallel_config: FusedMoEParallelConfig,
+     ) -> bool:
+-        return True
++        # This kernel routes and permutes internally from per-token topk ids.
++        # The moonep backend has already dispatched tokens into per-expert
++        # segments by the time the experts run, so the two cannot compose.
++        return not moe_parallel_config.use_moonep_kernels
+ 
+     @staticmethod
+     def _supports_routing_method(
+diff --git a/vllm/model_executor/layers/fused_moe/moonep_weights.py b/vllm/model_executor/layers/fused_moe/moonep_weights.py
+new file mode 100644
+index 000000000..981cee3f6
+--- /dev/null
++++ b/vllm/model_executor/layers/fused_moe/moonep_weights.py
+@@ -0,0 +1,231 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""MXFP4 expert weights in MoonEP symmetric memory.
++
++MoonEP balances token load by reassigning an overloaded expert owner's surplus
++onto underloaded ranks, so a rank routinely computes experts it does not own.
++Those experts are reached by mapping every rank's shard into one contiguous
++virtual address range with CUDA VMM, which makes ``w[row]`` valid for any
++global expert -- local HBM when the rank owns it, a peer's HBM over NVLink
++otherwise. Each rank still allocates only its own ``E / R`` experts, so the
++resident footprint is unchanged; only the address space is shared.
++
++Two layout constraints shape everything here:
++
++* A VMM chunk must be an exact multiple of the allocation granularity, and
++  DeepGEMM separately rejects a padded scale group stride
++  (``sf.stride(-3) == sf.stride(-1) * sf.size(-1)``). So the *expert* extent
++  absorbs the alignment: each rank reserves :func:`expert_row_pad` rows of
++  which the first ``E / R`` are real. Groups stay tightly packed, and the
++  prepare step emits buffer rows rather than bare expert ids, so the padding
++  never reaches the GEMM.
++* DeepGEMM's weight-scale transform is per-expert independent (verified on
++  B300: transforming a whole group equals stacking per-expert transforms),
++  which is what lets a remote expert's scales be addressed by row at all.
++
++These helpers are shared by every MXFP4 MoE method, since which checkpoint
++format a model uses is independent of whether it runs on the moonep backend.
++"""
++
++import torch
++import torch.distributed as dist
++
++from vllm.logger import init_logger
++from vllm.utils.math_utils import round_up
++
++logger = init_logger(__name__)
++
++# Experts per rank are padded up to a multiple of this. With a 2 MiB VMM
++# granularity, 128 rows align any tensor whose per-expert size is a multiple
++# of 16 KiB, which covers every MXFP4 payload and transformed-scale shape.
++EXPERT_ROW_PAD = 128
++
++
++def expert_row_pad(num_local_experts: int) -> int:
++    """Rows reserved per rank in the symmetric expert buffers."""
++    return round_up(num_local_experts, EXPERT_ROW_PAD)
++
++
++def vmm_granularity() -> int:
++    from moonep._C import get_vmm_granularity  # type: ignore[import-not-found]
++
++    return get_vmm_granularity()
++
++
++def alloc_symmetric(
++    chunk_shape: list[int],
++    dtype: torch.dtype,
++    rank: int,
++    world_size: int,
++    group,
++) -> torch.Tensor:
++    """Map one ``chunk_shape`` per rank into a single ``[R*chunk0, ...]`` VA.
++
++    ``create_nvl_dist_tensor`` silently pads dim 0 when a chunk is not
++    granularity aligned, which would break the "row == expert" invariant every
++    caller depends on and produce wrong numbers rather than an error. Assert
++    instead.
++    """
++    from moonep.buffer import (  # type: ignore[import-not-found]
++        create_nvl_dist_tensor,
++    )
++
++    nbytes = dtype.itemsize
++    for d in chunk_shape:
++        nbytes *= d
++    gran = vmm_granularity()
++    assert nbytes % gran == 0, (
++        f"MoonEP symmetric chunk {chunk_shape} of {dtype} is {nbytes} bytes, "
++        f"not a multiple of the {gran}-byte VMM granularity; dim 0 would be "
++        f"padded and global expert indexing would break."
++    )
++
++    full = create_nvl_dist_tensor(
++        list(chunk_shape), dtype, rank, world_size, group=group
++    )
++    assert full.shape[0] == world_size * chunk_shape[0]
++    return full
++
++
++def alloc_symmetric_uint8(
++    chunk_shape: list[int], rank: int, world_size: int, group
++) -> torch.Tensor:
++    """Allocate a uint8 symmetric tensor.
++
++    MoonEP sizes chunks from a small dtype table that omits uint8, so allocate
++    int32 with a quarter-width last dim and reinterpret. Byte layout and
++    alignment are identical, which keeps this free of any MoonEP-side change.
++    """
++    assert chunk_shape[-1] % 4 == 0, (
++        f"last dim {chunk_shape[-1]} must be divisible by 4 to alias int32"
++    )
++    i32_shape = list(chunk_shape[:-1]) + [chunk_shape[-1] // 4]
++    return alloc_symmetric(i32_shape, torch.int32, rank, world_size, group).view(
++        torch.uint8
++    )
++
++
++class MoonEPExpertWeights:
++    """Owns the symmetric MXFP4 weight mappings for one MoE layer."""
++
++    def __init__(self, ep_rank: int, ep_size: int, ep_device_group):
++        self.ep_rank = ep_rank
++        self.ep_size = ep_size
++        self.ep_device_group = ep_device_group
++        self.w13: torch.Tensor | None = None
++        self.w2: torch.Tensor | None = None
++
++    def own_slice(self, full: torch.Tensor, num_local_experts: int) -> torch.Tensor:
++        """This rank's real experts inside its padded row block."""
++        lo = self.ep_rank * expert_row_pad(num_local_experts)
++        return full[lo : lo + num_local_experts]
++
++    def create_payloads(
++        self,
++        num_local_experts: int,
++        hidden_size: int,
++        intermediate_size: int,
++    ) -> tuple[torch.Tensor, torch.Tensor]:
++        """Allocate the FP4 payload mappings; returns this rank's slices.
++
++        The checkpoint loader writes ``param.data[local_expert_id]``, so the
++        registered Parameter must be the rank's slice. The full mappings are
++        bound onto the layer once loading finishes.
++        """
++        e_pad = expert_row_pad(num_local_experts)
++        args = (self.ep_rank, self.ep_size, self.ep_device_group)
++
++        self.w13 = alloc_symmetric_uint8(
++            [e_pad, 2 * intermediate_size, hidden_size // 2], *args
++        )
++        self.w2 = alloc_symmetric_uint8(
++            [e_pad, hidden_size, intermediate_size // 2], *args
++        )
++        logger.info_once(
++            "MoonEP symmetric expert weights: w13 %s, w2 %s (%d real experts "
++            "per rank in %d padded rows).",
++            tuple(self.w13.shape),
++            tuple(self.w2.shape),
++            num_local_experts,
++            e_pad,
++        )
++        return (
++            self.own_slice(self.w13, num_local_experts),
++            self.own_slice(self.w2, num_local_experts),
++        )
++
++    def _symmetrize_scales(
++        self, local_transformed: torch.Tensor, num_local_experts: int
++    ) -> torch.Tensor:
++        """Publish per-rank transformed scales into a symmetric buffer.
++
++        ``local_transformed`` is ``[E_local, mn, k]`` int32 laid out MN-major,
++        i.e. per expert the backing memory is ``[k, mn]`` contiguous. Groups
++        stay tightly packed; only the expert extent is padded.
++        """
++        e_local, mn, k = local_transformed.shape
++        assert local_transformed.dtype == torch.int32
++        # The permute round trip below assumes the backend transform returned
++        # MN-major, tightly packed scales, i.e. per expert the memory is
++        # [k, mn] contiguous. If it were K-major, or MN-major with a
++        # TMA-padded mn stride, the round trip would silently transpose or
++        # drop the padding -- and DeepGEMM's own
++        # stride(-3) == stride(-1)*size(-1) check passes either way, so it
++        # would not catch it. Assert the premise instead.
++        assert local_transformed.stride() == (mn * k, 1, mn), (
++            f"expected MN-major tight scales with stride {(mn * k, 1, mn)}, "
++            f"got {local_transformed.stride()} for shape {(e_local, mn, k)}."
++        )
++        assert e_local == num_local_experts
++
++        e_pad = expert_row_pad(e_local)
++        gran = vmm_granularity()
++        per_expert = k * mn * local_transformed.element_size()
++        assert (e_pad * per_expert) % gran == 0, (
++            f"scale chunk {e_pad}x{per_expert} bytes is not a multiple of the "
++            f"{gran}-byte VMM granularity"
++        )
++
++        buf = alloc_symmetric(
++            [e_pad, k, mn],
++            torch.int32,
++            self.ep_rank,
++            self.ep_size,
++            self.ep_device_group,
++        )
++        self.own_slice(buf, e_local).copy_(local_transformed.permute(0, 2, 1))
++        # (E_pad_global, mn, k) with the tight group stride k*mn DeepGEMM wants.
++        return buf.permute(0, 2, 1)
++
++    def publish_converted(
++        self,
++        w13_scale: torch.Tensor,
++        w2_scale: torch.Tensor,
++        num_local_experts: int,
++    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
++        """Globalize the weights after vLLM's own backend conversion.
++
++        Called with the scales that ``convert_weight_to_mxfp4_moe_kernel_format``
++        already transformed into DeepGEMM's packed UE8M0 layout for this rank's
++        shard -- that transform is per-expert independent, so publishing its
++        output symmetrically keeps every expert addressable by row.
++
++        The FP4 payloads were allocated symmetrically up front and the
++        conversion passes them through untouched, so they only need swapping
++        from this rank's slice back to the global mapping.
++
++        Returns ``(w13, w2, w13_scale, w2_scale)`` in the global expert space.
++        """
++        assert self.w13 is not None and self.w2 is not None
++
++        # No rank may read a peer's rows until every rank has written its own.
++        if dist.is_initialized():
++            dist.barrier(group=self.ep_device_group)
++
++        w13_scale_full = self._symmetrize_scales(w13_scale, num_local_experts)
++        w2_scale_full = self._symmetrize_scales(w2_scale, num_local_experts)
++
++        if dist.is_initialized():
++            dist.barrier(group=self.ep_device_group)
++
++        return self.w13, self.w2, w13_scale_full, w2_scale_full
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py b/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py
+index 1e1d55ac9..ede709cd0 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/mxfp4.py
+@@ -153,8 +153,14 @@ def backend_to_kernel_cls(
+         from vllm.model_executor.layers.fused_moe.experts.deep_gemm_moe import (
+             DeepGemmFP4Experts,
+         )
++        from vllm.model_executor.layers.fused_moe.experts.moonep_deep_gemm_moe import (
++            MoonEPDeepGemmFP4Experts,
++        )
+ 
+-        return [DeepGemmFP4Experts]
++        # The MoonEP variant only accepts the moonep all2all backend (its
++        # activations arrive already grouped by expert), so it is inert for
++        # every other deployment and DeepGemmFP4Experts remains the default.
++        return [MoonEPDeepGemmFP4Experts, DeepGemmFP4Experts]
+ 
+     elif backend in (
+         Mxfp4MoeBackend.FLASHINFER_TRTLLM_MXFP4_BF16,
+diff --git a/vllm/model_executor/layers/fused_moe/prepare_finalize/moonep.py b/vllm/model_executor/layers/fused_moe/prepare_finalize/moonep.py
+new file mode 100644
+index 000000000..e96bd65b9
+--- /dev/null
++++ b/vllm/model_executor/layers/fused_moe/prepare_finalize/moonep.py
+@@ -0,0 +1,495 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""Prepare/Finalize for the MoonEP all2all backend.
++
++MoonEP dispatches tokens straight into expert-grouped positions on the
++destination rank, so unlike the DeepEP backends there is no permutation left
++for the experts kernel to do: ``prepare`` hands back a contiguous ``[NvS, H]``
++buffer whose rows are already sorted by expert, plus the per-row expert id.
++
++The layout is described by ``cu_seqlens[E + B]``, an inclusive prefix sum of
++padded segment ends. Segment ``g`` occupies rows
++``[cu_seqlens[g - 1], cu_seqlens[g])`` and is served by:
++
++* ``g`` itself, for ``g < E`` -- the global expert id, whose weight row lives
++  in the symmetric mapping (possibly in another rank's HBM).
++* ``plan.experts_to_copy[rank, g - E]``, for ``g >= E`` -- MoonEP's weight
++  prefetch slots. We never call ``prefetch_weight``, so instead of reading the
++  (unpopulated) slot we resolve the slot back to its global expert id and read
++  that expert's real row. ``experts_to_copy`` is a device tensor, so this
++  costs one gather and no host synchronization.
++
++Both cases therefore reduce to "expert id per row", which is exactly the
++``m_indices`` argument DeepGEMM's contiguous grouped GEMM wants.
++
++MoonEP's combine is an unweighted fp32 accumulation, so the routing weights
++must be applied to the expert output before combining; ``dispatch`` scatters
++them alongside the tokens as ``route_weights_nvs[NvS]``.
++"""
++
++from collections.abc import Callable
++
++import torch
++import triton
++import triton.language as tl
++
++import vllm.model_executor.layers.fused_moe.modular_kernel as mk
++from vllm.logger import init_logger
++from vllm.model_executor.layers.fused_moe.config import FusedMoEQuantConfig
++from vllm.model_executor.layers.fused_moe.moonep_weights import (
++    expert_row_pad as moonep_expert_row_pad,
++)
++from vllm.model_executor.layers.fused_moe.topk_weight_and_reduce import (
++    TopKWeightAndReduceNoOP,
++)
++from vllm.model_executor.layers.fused_moe.utils import moe_kernel_quantize_input
++
++logger = init_logger(__name__)
++
++# Profile and warmup runs feed all-padding batches whose routing ids are all
++# -1; only start sampling the invalid fraction once real traffic is flowing.
++_INVALID_CHECK_SKIP_CALLS = 8
++
++
++@triton.jit
++def _moonep_m_indices_kernel(
++    cu_seqlens_ptr,  # [E + B] int32, inclusive padded segment ends
++    slot_experts_ptr,  # [B] int32, global expert id per prefetch slot (-1 empty)
++    m_indices_ptr,  # [NvS] int32, written
++    num_experts: tl.constexpr,
++    experts_per_rank: tl.constexpr,
++    row_pad: tl.constexpr,
++    nvs: tl.constexpr,
++    BLOCK: tl.constexpr,
++):
++    """Expand ``cu_seqlens`` into a per-row weight-buffer index.
++
++    One program per segment. Rows past the last segment keep the ``-1`` the
++    caller pre-filled, which DeepGEMM treats as a block to skip.
++
++    The emitted value is a *row in the symmetric buffer*, not the bare global
++    expert id: each rank's shard occupies ``row_pad`` rows of which only the
++    first ``experts_per_rank`` are real, so global expert ``e`` lives at
++    ``(e // experts_per_rank) * row_pad + e % experts_per_rank``.
++    """
++    g = tl.program_id(0)
++
++    start = tl.where(g == 0, 0, tl.load(cu_seqlens_ptr + g - 1, mask=g > 0, other=0))
++    end = tl.load(cu_seqlens_ptr + g)
++
++    # Prefetch-slot segments carry the global id of the expert they stand in
++    # for; a slot the planner left unused holds -1 and is always empty.
++    expert_id = tl.where(
++        g < num_experts,
++        g,
++        tl.load(
++            slot_experts_ptr + (g - num_experts),
++            mask=g >= num_experts,
++            other=-1,
++        ),
++    )
++    row = (expert_id // experts_per_rank) * row_pad + expert_id % experts_per_rank
++    row = tl.where(expert_id < 0, -1, row)
++
++    for off in tl.range(start, end, BLOCK):
++        idx = off + tl.arange(0, BLOCK)
++        tl.store(m_indices_ptr + idx, row, mask=(idx < end) & (idx < nvs))
++
++
++def _build_m_indices(
++    cu_seqlens: torch.Tensor,
++    experts_to_copy_local: torch.Tensor,
++    num_experts: int,
++    experts_per_rank: int,
++    nvs: int,
++) -> torch.Tensor:
++    """Build the ``[NvS]`` int32 per-row weight-buffer index for DeepGEMM."""
++    m_indices = torch.full((nvs,), -1, dtype=torch.int32, device=cu_seqlens.device)
++    num_groups = cu_seqlens.numel()
++    _moonep_m_indices_kernel[(num_groups,)](
++        cu_seqlens,
++        experts_to_copy_local,
++        m_indices,
++        num_experts=num_experts,
++        experts_per_rank=experts_per_rank,
++        row_pad=moonep_expert_row_pad(experts_per_rank),
++        nvs=nvs,
++        BLOCK=256,
++    )
++    return m_indices
++
++
++def _local_tokens_per_expert(topk_ids: torch.Tensor, num_experts: int) -> torch.Tensor:
++    """Histogram this rank's (token, k) pairs over the global expert space.
++
++    ``torch.bincount`` would synchronize to size its output, so scatter into a
++    pre-sized buffer instead.
++
++    Every id must already be in ``[0, num_experts)`` -- the caller sanitizes.
++    Dropping out-of-range ids here would be actively unsafe: MoonEP's planner
++    needs the histogram to sum to exactly ``S*K`` (its surplus/deficit
++    migration terminates on that conservation invariant), so discarding any
++    entry leaves tokens unallocated.
++    """
++    flat = topk_ids.flatten().to(torch.int64)
++    counts = torch.zeros(num_experts, dtype=torch.int32, device=topk_ids.device)
++    counts.scatter_add_(0, flat, torch.ones_like(flat, dtype=torch.int32))
++    return counts.contiguous()
++
++
++class MoonEPPrepareAndFinalize(mk.FusedMoEPrepareAndFinalizeModular):
++    """Prepare/Finalize using MoonEP's load-balanced NVLink dispatch."""
++
++    def __init__(
++        self,
++        buffer,
++        num_dispatchers: int,
++        dp_size: int,
++        rank: int,
++        num_experts: int,
++        num_local_experts: int,
++        num_topk: int,
++        max_num_tokens: int,
++        token_padding: int,
++    ):
++        super().__init__()
++        self.buffer = buffer
++        self.num_dispatchers_ = num_dispatchers
++        self.dp_size = dp_size
++        self.rank = rank
++        self.num_experts = num_experts
++        self.num_local_experts = num_local_experts
++        self.num_topk = num_topk
++        self.max_num_tokens = max_num_tokens
++        self.token_padding = token_padding
++
++        # dispatch returns a plan that combine needs back, plus the routing
++        # weights in dispatched order. MoonEP's combine does not apply them.
++        #
++        # This is single-microbatch state, and deliberately so: MoonEP's
++        # Buffer has one comm shard and one barrier set, so two concurrent
++        # dispatches would corrupt each other regardless of what Python held.
++        # vLLM's ubatching allowlist (config/vllm.py) does not include moonep,
++        # so DBO cannot reach here; adding it would need per-ubatch buffers,
++        # not just per-ubatch plan state.
++        self._plan = None
++        self._route_weights_nvs: torch.Tensor | None = None
++        self._num_tokens: int | None = None
++        self._checked_invalid = False
++        self._sanitize_calls = 0
++
++    def num_dispatchers(self) -> int:
++        return self.num_dispatchers_
++
++    def output_is_reduced(self) -> bool:
++        # combine sums each token's topk contributions across all EP ranks.
++        return True
++
++    @property
++    def activation_format(self) -> mk.FusedMoEActivationFormat:
++        return mk.FusedMoEActivationFormat.Standard
++
++    def max_num_tokens_per_rank(self) -> int | None:
++        # Standard (non-batched) format.
++        return None
++
++    def topk_indices_dtype(self) -> torch.dtype | None:
++        # MoonEP's planning kernel consumes int32 expert ids.
++        return torch.int32
++
++    def supports_async(self) -> bool:
++        return True
++
++    def prepare_async(
++        self,
++        a1: torch.Tensor,
++        topk_weights: torch.Tensor,
++        topk_ids: torch.Tensor,
++        num_experts: int,
++        expert_map: torch.Tensor | None,
++        apply_router_weight_on_input: bool,
++        quant_config: FusedMoEQuantConfig,
++        defer_input_quant: bool = False,
++    ) -> mk.ReceiverType:
++        if apply_router_weight_on_input:
++            topk = topk_ids.size(1)
++            assert topk == 1, (
++                "apply_router_weight_on_input is only implemented for topk=1"
++            )
++            a1 = a1 * topk_weights.to(a1.dtype)
++
++        # vLLM builds a global->local expert map for EP. MoonEP does not use
++        # it: dispatch takes global expert ids and the weight mapping spans
++        # the global space, so prepare() and the experts kernel both address
++        # experts globally. Check it is the full-space map we expect rather
++        # than silently ignoring something that would mean topk_ids have
++        # already been remapped into local space.
++        assert expert_map is None or expert_map.numel() == num_experts, (
++            f"MoonEP expects global expert ids, but expert_map covers "
++            f"{expert_map.numel()} of {num_experts} experts."
++        )
++        assert a1.dtype == torch.bfloat16, (
++            f"MoonEP dispatches bf16 activations, got {a1.dtype}."
++        )
++        # FusedMoEKernel.apply defaults global_num_experts to -1; that would
++        # make every id compare invalid below and zero the whole batch.
++        assert num_experts == self.num_experts > 0, (
++            f"MoonEP needs the global expert count, got num_experts="
++            f"{num_experts} against a buffer built for {self.num_experts}."
++        )
++
++        # MoonEP's Buffer is built for exactly S tokens per rank and dispatch
++        # asserts it receives exactly that many, so pad the batch up to S.
++        # The padding rows carry weight 0, so they contribute nothing to any
++        # real token, and finalize trims the combined output back down. The
++        # fixed shape is also what keeps this path cudagraph-safe.
++        num_tokens = a1.size(0)
++        pad = self.max_num_tokens - num_tokens
++        assert pad >= 0, (
++            f"MoonEP buffer holds {self.max_num_tokens} tokens per rank but "
++            f"got {num_tokens}."
++        )
++        if pad > 0:
++            topk = topk_ids.size(1)
++            # Zero-filled padding ids would give every padding token the same
++            # expert K times over, which is degenerate for the dedup encoding
++            # (one k-slot bitmask per token over distinct destinations) and
++            # dumps the whole pad batch onto expert 0 as a single huge skew
++            # spike. Spread them instead: distinct within a row, and rotating
++            # across the expert space between rows.
++            pad_ids = (
++                torch.arange(pad * topk, device=topk_ids.device, dtype=torch.int32)
++                % num_experts
++            ).view(pad, topk)
++            a1 = torch.nn.functional.pad(a1, (0, 0, 0, pad))
++            topk_ids = torch.cat([topk_ids, pad_ids.to(topk_ids.dtype)], dim=0)
++            # Weight 0 keeps the padding rows from affecting any real token.
++            topk_weights = torch.nn.functional.pad(topk_weights, (0, 0, 0, pad))
++        self._num_tokens = num_tokens
++
++        # vLLM marks invalid routing slots with -1 (padded tokens, and any
++        # slot EPLB or the router leaves unassigned). MoonEP indexes its
++        # planning arrays directly by expert id, so a negative id is an
++        # out-of-bounds device access -- verified on B300: a dispatch with
++        # any -1 present dies with cudaErrorIllegalAddress. Replace them with
++        # real ids spread across the expert space and zero the matching
++        # weight, so the slot is inert but addressable.
++        # Applied unconditionally: `if invalid.any()` would be a device->host
++        # sync, which is illegal under cudagraph capture and would defeat the
++        # fixed-shape design above. Worse, if capture happened to run on a
++        # batch with no invalid ids the branch would be baked out and every
++        # replay carrying a -1 would fault again. Two elementwise ops on an
++        # [S, K] int32 tensor are free next to the dispatch.
++        invalid = (topk_ids < 0) | (topk_ids >= num_experts)
++        filler = (
++            torch.arange(topk_ids.numel(), device=topk_ids.device, dtype=topk_ids.dtype)
++            % num_experts
++        ).view_as(topk_ids)
++        topk_ids = torch.where(invalid, filler, topk_ids)
++        topk_weights = torch.where(
++            invalid, torch.zeros_like(topk_weights), topk_weights
++        )
++
++        # A few unassigned slots are normal; a large fraction means topk_ids
++        # are in the wrong space (e.g. already remapped to local ids, which is
++        # mostly -1 under EP). Without this the remap would silently zero most
++        # of the routing weights and yield a plausible but badly wrong output
++        # instead of the loud failure that used to occur. Checked once, and
++        # never while capturing, since it syncs.
++        # Skip the first few calls: vLLM's profile/dummy runs mark every token
++        # as padding, and K3's EPLB path sets topk_ids to -1 for padding, so a
++        # dummy run legitimately reads as 100% invalid. Sampling that would
++        # make the check fire on exactly the case it cannot diagnose.
++        self._sanitize_calls += 1
++        if (
++            not self._checked_invalid
++            and self._sanitize_calls > _INVALID_CHECK_SKIP_CALLS
++            and not torch.cuda.is_current_stream_capturing()
++        ):
++            self._checked_invalid = True
++            frac = float(invalid.float().mean().item())
++            if frac > 0.05:
++                logger.warning(
++                    "MoonEP: %.1f%% of topk_ids were outside [0, %d) and have "
++                    "been remapped with zero weight. A large fraction usually "
++                    "means the ids are not in the global expert space; the "
++                    "MoE output will be scaled down accordingly.",
++                    frac * 100.0,
++                    num_experts,
++                )
++
++        tokens_per_expert = _local_tokens_per_expert(topk_ids, num_experts)
++
++        # MoonEP always moves bf16; activations are quantized after dispatch.
++        hidden_nvsh, route_weights_nvs, cu_seqlens, plan = self.buffer.dispatch(
++            a1,
++            topk_weights.to(torch.float32),
++            topk_ids.to(torch.int32),
++            tokens_per_expert,
++        )
++
++        self._plan = plan
++        self._route_weights_nvs = route_weights_nvs
++
++        return lambda: self._receiver(
++            hidden_nvsh=hidden_nvsh,
++            route_weights_nvs=route_weights_nvs,
++            cu_seqlens=cu_seqlens,
++            plan=plan,
++            quant_config=quant_config,
++            defer_input_quant=defer_input_quant,
++        )
++
++    def _receiver(
++        self,
++        hidden_nvsh: torch.Tensor,
++        route_weights_nvs: torch.Tensor,
++        cu_seqlens: torch.Tensor,
++        plan,
++        quant_config: FusedMoEQuantConfig,
++        defer_input_quant: bool,
++    ) -> mk.PrepareResultType:
++        nvs = hidden_nvsh.size(0)
++
++        m_indices = _build_m_indices(
++            cu_seqlens=cu_seqlens,
++            experts_to_copy_local=plan.experts_to_copy[self.rank],
++            num_experts=self.num_experts,
++            experts_per_rank=self.num_local_experts,
++            nvs=nvs,
++        )
++
++        expert_x = hidden_nvsh
++        expert_x_scale = None
++        if not defer_input_quant:
++            expert_x, expert_x_scale = moe_kernel_quantize_input(
++                hidden_nvsh,
++                quant_config.a1_scale,
++                quant_dtype=quant_config.quant_dtype,
++                per_act_token_quant=quant_config.per_act_token_quant,
++                block_shape=quant_config.block_shape,
++                is_scale_swizzled=quant_config.is_scale_swizzled,
++            )
++
++        # In dispatched space each row belongs to exactly one expert with
++        # exactly one routing weight, so the topk dimension is 1. The experts
++        # kernel reads column 0 as DeepGEMM's m_indices (already mapped to
++        # symmetric-buffer rows, not bare expert ids).
++        expert_topk_ids = m_indices.view(nvs, 1)
++        expert_topk_weights = route_weights_nvs.view(nvs, 1)
++
++        # Segment lengths are only known on device and the buffer is sized for
++        # the worst case, so there is no exact per-expert count to report.
++        # The experts kernel sizes its workspaces from NvS instead, which is
++        # static and therefore cudagraph friendly.
++        return (expert_x, expert_x_scale, None, expert_topk_ids, expert_topk_weights)
++
++    def prepare(
++        self,
++        a1: torch.Tensor,
++        topk_weights: torch.Tensor,
++        topk_ids: torch.Tensor,
++        num_experts: int,
++        expert_map: torch.Tensor | None,
++        apply_router_weight_on_input: bool,
++        quant_config: FusedMoEQuantConfig,
++        defer_input_quant: bool = False,
++    ) -> mk.PrepareResultType:
++        receiver = self.prepare_async(
++            a1,
++            topk_weights,
++            topk_ids,
++            num_experts,
++            expert_map,
++            apply_router_weight_on_input,
++            quant_config,
++            defer_input_quant,
++        )
++        return receiver()
++
++    def _finalize(
++        self,
++        output: torch.Tensor,
++        fused_expert_output: torch.Tensor,
++        topk_weights: torch.Tensor,
++        topk_ids: torch.Tensor,
++        apply_router_weight_on_input: bool,
++        weight_and_reduce_impl: mk.TopKWeightAndReduce,
++    ) -> None:
++        assert self._plan is not None, "finalize called before prepare"
++        # The routing weights are applied below, before MoonEP's unweighted
++        # combine. An experts kernel that already applied them (anything other
++        # than a no-op reduction) would make that a double application, so
++        # reject the pairing rather than silently returning wrong numbers.
++        assert isinstance(weight_and_reduce_impl, TopKWeightAndReduceNoOP), (
++            "MoonEP applies routing weights during finalize and expects the "
++            "experts kernel to leave them unapplied, but it requested "
++            f"{type(weight_and_reduce_impl).__name__}."
++        )
++        assert fused_expert_output.dtype == torch.bfloat16, (
++            "MoonEP combine accumulates bf16 expert output, got "
++            f"{fused_expert_output.dtype}."
++        )
++
++        route_weights_nvs = self._route_weights_nvs
++        assert route_weights_nvs is not None
++
++        # MoonEP's combine is an unweighted fp32 accumulation of each token's
++        # topk contributions, so scale by the routing weight here. When the
++        # weight was already folded into the input we must not apply it twice.
++        if not apply_router_weight_on_input:
++            fused_expert_output = fused_expert_output * route_weights_nvs.unsqueeze(
++                1
++            ).to(fused_expert_output.dtype)
++
++        combined, _, _ = self.buffer.combine(
++            plan=self._plan,
++            hidden_nvsh=fused_expert_output.contiguous(),
++            route_weights_nvs=None,
++        )
++        # Trim the padding rows added in prepare.
++        output.copy_(combined[: output.size(0)], non_blocking=True)
++
++        self._plan = None
++        self._route_weights_nvs = None
++        self._num_tokens = None
++
++    def finalize(
++        self,
++        output: torch.Tensor,
++        fused_expert_output: torch.Tensor,
++        topk_weights: torch.Tensor,
++        topk_ids: torch.Tensor,
++        apply_router_weight_on_input: bool,
++        weight_and_reduce_impl: mk.TopKWeightAndReduce,
++    ) -> None:
++        self._finalize(
++            output,
++            fused_expert_output,
++            topk_weights,
++            topk_ids,
++            apply_router_weight_on_input,
++            weight_and_reduce_impl,
++        )
++
++    def finalize_async(
++        self,
++        output: torch.Tensor,
++        fused_expert_output: torch.Tensor,
++        topk_weights: torch.Tensor,
++        topk_ids: torch.Tensor,
++        apply_router_weight_on_input: bool,
++        weight_and_reduce_impl: mk.TopKWeightAndReduce,
++    ) -> Callable:
++        # MoonEP's dispatch/combine are already device-side and asynchronous
++        # with respect to the host; running them eagerly and handing back a
++        # trivial receiver is enough to unlock shared-expert overlap.
++        self._finalize(
++            output,
++            fused_expert_output,
++            topk_weights,
++            topk_ids,
++            apply_router_weight_on_input,
++            weight_and_reduce_impl,
++        )
++        return lambda: None
+diff --git a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe.py b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe.py
+index 78d70d492..ce2f09b9f 100644
+--- a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe.py
++++ b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe.py
+@@ -60,6 +60,16 @@ class CompressedTensorsMoEMethod(FusedMoEMethodBase):
+         format = scheme_dict.get("format")
+ 
+         if quant_config._is_mxfp4(weight_quant):
++            if layer.moe_config.use_moonep_kernels:
++                # MoonEP computes experts it does not own, so its expert
++                # weights live in a cross-rank symmetric mapping rather than
++                # in per-rank tensors.
++                from .compressed_tensors_moe_moonep_mxfp4 import (
++                    MoonEPCompressedTensorsMxfp4MoEMethod,
++                )
++
++                return MoonEPCompressedTensorsMxfp4MoEMethod(layer.moe_config)
++
+             from .compressed_tensors_moe_w4a4_mxfp4 import (
+                 CompressedTensorsW4A4Mxfp4MoEMethod,
+             )
+diff --git a/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_moonep_mxfp4.py b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_moonep_mxfp4.py
+new file mode 100644
+index 000000000..230312390
+--- /dev/null
++++ b/vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors_moe/compressed_tensors_moe_moonep_mxfp4.py
+@@ -0,0 +1,289 @@
++# SPDX-License-Identifier: Apache-2.0
++# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
++"""MXFP4 MoE weights held in MoonEP symmetric memory.
++
++The ``moonep`` all2all backend balances token load by reassigning an
++overloaded expert owner's surplus onto underloaded ranks, so a rank routinely
++has to compute experts it does not own. Those experts' weights are reached by
++mapping every rank's shard into one contiguous virtual address range with
++CUDA VMM, which makes ``w[e]`` valid for any global expert id -- backed by
++local HBM when the rank owns ``e`` and by a peer's HBM over NVLink otherwise.
++
++Each rank still allocates and owns exactly ``E / R`` experts, so the resident
++footprint is unchanged; only the address space is shared.
++
++Two layout constraints drive the code below:
++
++* A VMM chunk must be an exact multiple of the allocation granularity. The
++  FP4 payloads happen to be exact at Kimi-K3's shapes but the
++  DeepGEMM-transformed scales are not, and DeepGEMM rejects a padded scale
++  group stride outright (``sf.stride(-3) == sf.stride(-1) * sf.size(-1)``).
++  So the *expert* extent absorbs the alignment: each rank reserves
++  ``expert_row_pad(E/R)`` rows of which the first ``E/R`` are real.
++  Rows stay tightly packed, and the prepare step emits buffer rows rather
++  than bare expert ids so the padding is invisible to the GEMM.
++* DeepGEMM's scale transform is per-expert independent (verified on B300:
++  transforming the whole group equals stacking per-expert transforms), which
++  is what lets a remote expert's scales be addressed by row at all.
++"""
++
++import torch
++import torch.distributed as dist
++
++from vllm.distributed import get_ep_group
++from vllm.logger import init_logger
++from vllm.model_executor.layers.fused_moe import (
++    FusedMoeWeightScaleSupported,
++    RoutedExperts,
++)
++from vllm.model_executor.layers.fused_moe.experts.moonep_deep_gemm_moe import (
++    MoonEPDeepGemmFP4Experts,
++)
++from vllm.model_executor.layers.fused_moe.moonep_weights import (
++    alloc_symmetric,
++    alloc_symmetric_uint8,
++    expert_row_pad,
++    vmm_granularity,
++)
++from vllm.model_executor.layers.fused_moe.oracle.mxfp4 import (
++    Mxfp4MoeBackend,
++    make_mxfp4_moe_kernel,
++    make_mxfp4_moe_quant_config,
++)
++from vllm.model_executor.layers.quantization.compressed_tensors.compressed_tensors_moe.compressed_tensors_moe_w4a4_mxfp4 import (  # noqa: E501
++    CompressedTensorsW4A4Mxfp4MoEMethod,
++)
++from vllm.model_executor.layers.quantization.utils.fp8_utils import (
++    deepgemm_post_process_weight_scale_block,
++)
++from vllm.model_executor.utils import set_weight_attrs
++
++logger = init_logger(__name__)
++
++# MXFP4 scale group along the reduction dim.
++_MXFP4_GROUP = 32
++
++
++class MoonEPCompressedTensorsMxfp4MoEMethod(CompressedTensorsW4A4Mxfp4MoEMethod):
++    """compressed-tensors MXFP4 MoE backed by MoonEP symmetric memory."""
++
++    def __init__(self, moe):
++        super().__init__(moe)
++        # The parent picks CUTLASS/Marlin from device support alone. MoonEP
++        # pairs with the DeepGEMM FP8xFP4 grouped GEMM, which is also the only
++        # backend whose activation layout matches a MoonEP-dispatched buffer.
++        self.use_cutlass_mxfp4 = False
++        self.mxfp4_backend = Mxfp4MoeBackend.DEEPGEMM_MXFP4
++        self.experts_cls = MoonEPDeepGemmFP4Experts
++
++        ep = get_ep_group()
++        self.ep_rank = ep.rank_in_group
++        self.ep_size = ep.world_size
++        self.ep_device_group = ep.device_group
++
++        # Full [E_global, ...] mappings, bound onto the layer once loading is
++        # complete. Keyed by the final (post-rename) parameter name.
++        self._symmetric: dict[str, torch.Tensor] = {}
++
++        logger.info_once(
++            "Using MoonEP MXFP4 MoE method: expert weights in NVLink "
++            "symmetric memory, DeepGEMM FP8xFP4 grouped GEMM, EP size %d.",
++            self.ep_size,
++        )
++
++    def _own_slice(self, full: torch.Tensor, num_local_experts: int) -> torch.Tensor:
++        """This rank's real experts inside its padded row block."""
++        lo = self.ep_rank * expert_row_pad(num_local_experts)
++        return full[lo : lo + num_local_experts]
++
++    def create_weights(
++        self,
++        layer: torch.nn.Module,
++        num_experts: int,
++        hidden_size: int,
++        intermediate_size_per_partition: int,
++        params_dtype: torch.dtype,
++        **extra_weight_attrs,
++    ):
++        # `num_experts` here is this rank's shard (E / R), not the global E.
++        layer.num_experts = num_experts
++        layer.params_dtype = params_dtype
++
++        rank, world, group = self.ep_rank, self.ep_size, self.ep_device_group
++        n13 = 2 * intermediate_size_per_partition
++        # Rows reserved per rank; only the first `num_experts` are real.
++        e_pad = expert_row_pad(num_experts)
++
++        # FP4 payloads: two values per byte along the reduction dim.
++        w13_full = alloc_symmetric_uint8(
++            [e_pad, n13, hidden_size // 2], rank, world, group
++        )
++        w2_full = alloc_symmetric_uint8(
++            [e_pad, hidden_size, intermediate_size_per_partition // 2],
++            rank,
++            world,
++            group,
++        )
++        self._symmetric["w13_weight"] = w13_full
++        self._symmetric["w2_weight"] = w2_full
++
++        # The checkpoint loader writes `param.data[local_expert_id]`, so the
++        # registered Parameter is this rank's slice of the mapping. Writes
++        # land in the rank's own physical pages; the full view is bound in
++        # process_weights_after_loading.
++        w13_weight = torch.nn.Parameter(
++            self._own_slice(w13_full, num_experts), requires_grad=False
++        )
++        layer.register_parameter("w13_weight_packed", w13_weight)
++        set_weight_attrs(w13_weight, extra_weight_attrs)
++
++        w2_weight = torch.nn.Parameter(
++            self._own_slice(w2_full, num_experts), requires_grad=False
++        )
++        layer.register_parameter("w2_weight_packed", w2_weight)
++        set_weight_attrs(w2_weight, extra_weight_attrs)
++
++        # Raw e8m0 scales stay in ordinary memory: they are consumed by
++        # DeepGEMM's transform during post-load and never read remotely in
++        # this form. The transformed result is what gets a symmetric buffer.
++        w13_weight_scale = torch.nn.Parameter(
++            torch.empty(
++                num_experts,
++                n13,
++                hidden_size // self.group_size,
++                dtype=torch.uint8,
++            ),
++            requires_grad=False,
++        )
++        layer.register_parameter("w13_weight_scale", w13_weight_scale)
++        extra_weight_attrs.update(
++            {"quant_method": FusedMoeWeightScaleSupported.GROUP.value}
++        )
++        set_weight_attrs(w13_weight_scale, extra_weight_attrs)
++
++        w2_weight_scale = torch.nn.Parameter(
++            torch.empty(
++                num_experts,
++                hidden_size,
++                intermediate_size_per_partition // self.group_size,
++                dtype=torch.uint8,
++            ),
++            requires_grad=False,
++        )
++        layer.register_parameter("w2_weight_scale", w2_weight_scale)
++        set_weight_attrs(w2_weight_scale, extra_weight_attrs)
++
++    def _symmetrize_scales(
++        self, local_transformed: torch.Tensor, num_local_experts: int
++    ) -> torch.Tensor:
++        """Copy per-rank transformed scales into a symmetric buffer.
++
++        ``local_transformed`` is ``[E_local, mn, k]`` int32 laid out MN-major,
++        i.e. per expert the memory is ``[k, mn]`` contiguous. Groups stay
++        tightly packed -- DeepGEMM asserts
++        ``sf.stride(-3) == sf.stride(-1) * sf.size(-1)`` -- so alignment is
++        absorbed by reserving padded expert rows instead.
++        """
++        e_local, mn, k = local_transformed.shape
++        assert local_transformed.dtype == torch.int32
++        # The permute round trip below assumes the backend transform returned
++        # MN-major, tightly packed scales, i.e. per expert the memory is
++        # [k, mn] contiguous. If it were K-major, or MN-major with a
++        # TMA-padded mn stride, the round trip would silently transpose or
++        # drop the padding -- and DeepGEMM's own
++        # stride(-3) == stride(-1)*size(-1) check passes either way, so it
++        # would not catch it. Assert the premise instead.
++        assert local_transformed.stride() == (mn * k, 1, mn), (
++            f"expected MN-major tight scales with stride {(mn * k, 1, mn)}, "
++            f"got {local_transformed.stride()} for shape {(e_local, mn, k)}."
++        )
++        assert e_local == num_local_experts
++
++        e_pad = expert_row_pad(e_local)
++        gran = vmm_granularity()
++        per_expert = k * mn * local_transformed.element_size()
++        assert (e_pad * per_expert) % gran == 0, (
++            f"scale chunk {e_pad}x{per_expert} bytes is not a multiple of the "
++            f"{gran}-byte VMM granularity"
++        )
++
++        buf = alloc_symmetric(
++            [e_pad, k, mn],
++            torch.int32,
++            self.ep_rank,
++            self.ep_size,
++            self.ep_device_group,
++        )
++        # local_transformed is (mn, k) per expert with stride (1, mn), so its
++        # backing memory is (k, mn); copy that directly into the real rows.
++        self._own_slice(buf, e_local).copy_(local_transformed.permute(0, 2, 1))
++
++        # (E_pad_global, mn, k) with the tight group stride k*mn DeepGEMM wants.
++        return buf.permute(0, 2, 1)
++
++    def process_weights_after_loading(self, layer: RoutedExperts) -> None:
++        num_local_experts = layer.num_experts
++
++        # Every rank must have finished writing its own shard before any rank
++        # reads a peer's rows through the mapping.
++        if dist.is_initialized():
++            dist.barrier(group=self.ep_device_group)
++
++        # Bind the full mappings under the names the experts kernel uses. The
++        # storage is unchanged; only the visible expert extent grows from the
++        # local shard to the global space, which is what makes m_indices
++        # global expert ids valid.
++        layer.w13_weight = torch.nn.Parameter(
++            self._symmetric["w13_weight"], requires_grad=False
++        )
++        delattr(layer, "w13_weight_packed")
++        layer.w2_weight = torch.nn.Parameter(
++            self._symmetric["w2_weight"], requires_grad=False
++        )
++        delattr(layer, "w2_weight_packed")
++
++        # Transform this rank's raw e8m0 scales into DeepGEMM's packed
++        # UE8M0 layout, then publish them symmetrically. The transform is
++        # per-expert independent, so a peer's rows stay addressable by id.
++        hidden_size = layer.w2_weight.shape[1]
++        intermediate = layer.w2_weight.shape[2] * 2
++        n13 = layer.w13_weight.shape[1]
++
++        w13_local = deepgemm_post_process_weight_scale_block(
++            ws=layer.w13_weight_scale.data,
++            mn=n13,
++            k=hidden_size,
++            quant_block_shape=(1, _MXFP4_GROUP),
++            num_groups=num_local_experts,
++        )
++        w2_local = deepgemm_post_process_weight_scale_block(
++            ws=layer.w2_weight_scale.data,
++            mn=hidden_size,
++            k=intermediate,
++            quant_block_shape=(1, _MXFP4_GROUP),
++            num_groups=num_local_experts,
++        )
++
++        w13_scale_full = self._symmetrize_scales(w13_local, num_local_experts)
++        w2_scale_full = self._symmetrize_scales(w2_local, num_local_experts)
++
++        if dist.is_initialized():
++            dist.barrier(group=self.ep_device_group)
++
++        layer.w13_weight_scale = torch.nn.Parameter(w13_scale_full, requires_grad=False)
++        layer.w2_weight_scale = torch.nn.Parameter(w2_scale_full, requires_grad=False)
++
++        self.moe_quant_config = make_mxfp4_moe_quant_config(
++            mxfp4_backend=self.mxfp4_backend,
++            w1_scale=layer.w13_weight_scale,
++            w2_scale=layer.w2_weight_scale,
++            layer=layer,
++        )
++        assert self.moe_quant_config is not None
++        self.moe_kernel = make_mxfp4_moe_kernel(
++            moe_quant_config=self.moe_quant_config,
++            moe_config=self.moe,
++            experts_cls=self.experts_cls,
++            mxfp4_backend=self.mxfp4_backend,
++            routing_tables=layer._expert_routing_tables(),
++        )
+diff --git a/vllm/model_executor/layers/quantization/mxfp4.py b/vllm/model_executor/layers/quantization/mxfp4.py
+index 1ee1ad75f..107aedfd4 100644
+--- a/vllm/model_executor/layers/quantization/mxfp4.py
++++ b/vllm/model_executor/layers/quantization/mxfp4.py
+@@ -524,6 +524,31 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
+ 
+         self._cache_permute_indices: dict[torch.Size, torch.Tensor] = {}
+         self.moe_kernel: mk.FusedMoEKernel | None = None
++        # MoonEP computes experts it does not own, so its expert weights live
++        # in a cross-rank symmetric mapping rather than per-rank tensors.
++        self._moonep_weights = None
++        logger.info_once(
++            "Mxfp4MoEMethod init: use_moonep_kernels=%s backend=%s use_ep=%s "
++            "dp=%d sp=%d ep=%d",
++            moe.use_moonep_kernels,
++            moe.moe_parallel_config.all2all_backend,
++            moe.moe_parallel_config.use_ep,
++            moe.moe_parallel_config.dp_size,
++            moe.moe_parallel_config.sp_size,
++            moe.moe_parallel_config.ep_size,
++        )
++        if moe.use_moonep_kernels:
++            from vllm.distributed import get_ep_group
++            from vllm.model_executor.layers.fused_moe.moonep_weights import (
++                MoonEPExpertWeights,
++            )
++
++            ep = get_ep_group()
++            self._moonep_weights = MoonEPExpertWeights(
++                ep_rank=ep.rank_in_group,
++                ep_size=ep.world_size,
++                ep_device_group=ep.device_group,
++            )
+ 
+         # Used for triton kernel precision configs
+         self.w13_precision_config = None
+@@ -588,9 +613,19 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
+         self.intermediate_size = intermediate_size_per_partition
+         self.hidden_size = hidden_size
+ 
++        moonep_w13 = moonep_w2 = None
++        if self._moonep_weights is not None:
++            moonep_w13, moonep_w2 = self._moonep_weights.create_payloads(
++                num_local_experts=num_experts,
++                hidden_size=hidden_size,
++                intermediate_size=intermediate_size_per_partition,
++            )
++
+         # Fused gate_up_proj (column parallel)
+         w13_weight = torch.nn.Parameter(
+-            torch.zeros(
++            moonep_w13
++            if moonep_w13 is not None
++            else torch.zeros(
+                 num_experts,
+                 2 * intermediate_size_per_partition,
+                 hidden_size // 2,
+@@ -616,7 +651,9 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
+ 
+         # down_proj (row parallel)
+         w2_weight = torch.nn.Parameter(
+-            torch.zeros(
++            moonep_w2
++            if moonep_w2 is not None
++            else torch.zeros(
+                 num_experts,
+                 hidden_size,
+                 intermediate_size_per_partition // 2,
+@@ -730,6 +767,18 @@ class Mxfp4MoEMethod(FusedMoEMethodBase):
+             )
+         )
+ 
++        if self._moonep_weights is not None:
++            # vLLM has now transformed this rank's scales into the layout the
++            # backend wants. That transform is per-expert independent, so
++            # publish its output symmetrically and swap the payloads from this
++            # rank's slice to the global mapping -- after this, every expert
++            # row is addressable regardless of which rank owns it.
++            w13, w2, w13_scale, w2_scale = self._moonep_weights.publish_converted(
++                w13_scale=w13_scale,
++                w2_scale=w2_scale,
++                num_local_experts=num_experts,
++            )
++
+         # For TRITON backends, weights are wrapped tensors from triton_kernels
+         # that don't support .detach(). Manually assign parameters.
+         from vllm.platforms.rocm import on_gfx1250
+diff --git a/vllm/models/kimi_k3/nvidia/model.py b/vllm/models/kimi_k3/nvidia/model.py
+index 94178c9c7..36640ef13 100644
+--- a/vllm/models/kimi_k3/nvidia/model.py
++++ b/vllm/models/kimi_k3/nvidia/model.py
+@@ -724,11 +724,16 @@ class KimiDecoderLayer(nn.Module):
+         )
+ 
+         use_mega_moe = vllm_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
++        # MoonEP, like MegaMoE, is a single-node EP scheme that dispatches a
++        # distinct slice of the sequence from every rank, so it needs the MoE
++        # input sequence parallel even at DP=1. Without it TP replicates the
++        # input and every rank would dispatch the same tokens.
++        use_moonep = parallel_config.all2all_backend == "moonep"
+         self.use_sequence_parallel = (
+             parallel_config.pipeline_parallel_size == 1
+             and parallel_config.enable_expert_parallel
+             and parallel_config.tensor_parallel_size > 1
+-            and (use_mega_moe or parallel_config.data_parallel_size > 1)
++            and (use_mega_moe or use_moonep or parallel_config.data_parallel_size > 1)
+         )
+         if config.is_kda_layer(layer_idx):
+             kda_config = config.linear_attn_config
+@@ -967,11 +972,16 @@ class KimiLinearModel(nn.Module, EagleModelMixin, SupportsQuant):
+         self.use_attn_res = self.attn_res_block_size is not None
+         parallel_config = vllm_config.parallel_config
+         use_mega_moe = vllm_config.kernel_config.moe_backend == "deep_gemm_mega_moe"
++        # MoonEP, like MegaMoE, is a single-node EP scheme that dispatches a
++        # distinct slice of the sequence from every rank, so it needs the MoE
++        # input sequence parallel even at DP=1. Without it TP replicates the
++        # input and every rank would dispatch the same tokens.
++        use_moonep = parallel_config.all2all_backend == "moonep"
+         self.use_sequence_parallel = (
+             parallel_config.pipeline_parallel_size == 1
+             and parallel_config.enable_expert_parallel
+             and parallel_config.tensor_parallel_size > 1
+-            and (use_mega_moe or parallel_config.data_parallel_size > 1)
++            and (use_mega_moe or use_moonep or parallel_config.data_parallel_size > 1)
+         )
+ 
+         self.vocab_size = config.vocab_size
+diff --git a/vllm/utils/import_utils.py b/vllm/utils/import_utils.py
+index 3df83148c..8830d3e85 100644
+--- a/vllm/utils/import_utils.py
++++ b/vllm/utils/import_utils.py
+@@ -472,6 +472,30 @@ def has_deep_ep_v2() -> bool:
+     return True
+ 
+ 
++def has_moonep() -> bool:
++    """Whether the optional `moonep` package is available.
++
++    MoonEP communicates exclusively over a single NVLink domain (CUDA VMM
++    plus NVSwitch multicast, with handles exchanged as POSIX file
++    descriptors), so it additionally requires multicast support on the
++    current device. Import is cheap; the multicast probe is a driver query.
++    """
++    if not _has_module("moonep"):
++        return False
++    try:
++        from moonep._C import nvl_multicast_supported  # type: ignore[import-not-found]
++
++        if not nvl_multicast_supported():
++            logger.info_once(
++                "moonep is installed but this device does not support CUDA "
++                "multicast (NVSwitch). The moonep backend will not be available."
++            )
++            return False
++    except Exception:
++        return False
++    return True
++
++
+ def has_deep_gemm() -> bool:
+     """Whether the optional `deep_gemm` package is available.
+ 
