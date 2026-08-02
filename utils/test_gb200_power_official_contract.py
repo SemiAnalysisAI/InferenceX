@@ -153,14 +153,15 @@ def test_exactly_two_recipes_opt_into_dcgm_power():
     ]
 
 
-def test_no_canary_or_env_override_residue():
-    # Tokens are split so this tracked file never matches its own greps.
-    for token in (
-        "ENABLE_DCGM_POWER_" + "CANARY",
-        "SRT_SLURM_" + "REPO_URL",
-        "SRT_SLURM_" + "REF",
-    ):
-        assert git_grep_lines("-nF", token) == []
+def test_lane_and_pin_have_no_env_override_backdoor():
+    # All assignments are literals: no environment variable can flip the
+    # lane or redirect the pinned clone.
+    for path in (GB200_LAUNCHER, GB300_LAUNCHER):
+        text = path.read_text()
+        assert re.findall(r"^\s*USES_DCGM_POWER=(\S+)$", text, re.M) == ["0", "1"], path
+        for name in ("POWER_SRT_SLURM_URL", "POWER_SRT_SLURM_PIN"):
+            values = re.findall(rf"^\s*{name}=(.*)$", text, re.M)
+            assert len(values) == 1 and "$" not in values[0], (path, name)
 
 
 def test_workflows_carry_no_producer_sha_literal():
