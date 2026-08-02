@@ -986,12 +986,24 @@ fi
 # the right trade while c1 has no data at all; revisit once the
 # build_mla_chunked_context_metadata aggregate cap lands and the whole curve
 # can return to one fraction.
-if [ "${CONC:-}" = "1" ]; then
-    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.85}"
-else
-    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
-fi
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
+# 2026-08-02: the multi-conc branch is dropped from 0.88 to 0.85 as well, so the
+# whole curve is back on a single fraction. Run 30737023299 (c8, kvnone, fp8 KV,
+# image just bumped to nightly-124154a88) died with the c1 signature in a
+# multi-lane cell: a single deep lane at num_computed_tokens=379,392,
+# num_running_reqs=1, KV usage only 9.6%, HSA_STATUS_ERROR_OUT_OF_RESOURCES /
+# "Available Free mem : 0 MB". A deep enough trajectory reaches the c1 worst case
+# in ANY lane, so the ~13 GiB/rank of extra headroom 0.85 buys is not c1-specific;
+# the pool 0.88 keeps was unusable here anyway (death at 9.6%). Revert to the
+# c1-only split once the build_mla_chunked_context_metadata aggregate-chunk cap
+# lands in the serving image.
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.85}"
+# 128 -> 32: the chunked MLA prefill workspace is sized from max_num_seqs, so
+# trimming it shrinks the transient allocation that OOMs at deep prefill. 128
+# slots is meaningless at these concurrencies -- the widest tree fan-out in the
+# trace is 13 live streams in one lane -- so 32 leaves real headroom while cutting
+# the workspace. Matches the value the LMCache arm already runs; overridable for
+# a like-for-like A/B against the reference's 128.
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-32}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 
 echo "Starting vllm server..."
