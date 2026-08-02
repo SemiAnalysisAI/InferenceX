@@ -1005,6 +1005,35 @@ export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:
 # Patch aiter's Gluon MLA kernel with a fixed version. The b128 kernel is only
 # exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
 if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+
+    # --- update_triton_rocm.sh (inlined) --------------------------------------
+    # Replace the stock image's Triton 3.6.0 with the AMD ROCm triton 3.7.0 build
+    # that aiter's Gluon MLA kernels require: 3.6.0's PaddedSharedLayout has no
+    # `cga_layout` argument, so aiter's mla_gluon.py fails to compile. Must run
+    # before the mla_gluon.py patch below.
+    TRITON_ROCM_VERSION="${TRITON_ROCM_VERSION:-7.2.0}"
+    TRITON_VERSION="${TRITON_VERSION:-3.7.0}"
+    TRITON_INDEX_URL="https://pypi.amd.com/triton/release/rocm-${TRITON_ROCM_VERSION}/simple/"
+    echo "[update-triton] current triton: $(python -c 'import triton; print(triton.__version__)' 2>/dev/null || echo 'not installed')"
+    echo "[update-triton] installing triton==${TRITON_VERSION} from ${TRITON_INDEX_URL}"
+    python -m pip install --extra-index-url "${TRITON_INDEX_URL}" "triton==${TRITON_VERSION}"
+    echo "[update-triton] installing tabulate (needed for op_tests markdown summary)"
+    python -m pip install tabulate
+    echo "[update-triton] installed triton: $(python -c 'import triton; print(triton.__version__)')"
+    # Sanity-check the API that mla_gluon.py depends on.
+    python - <<'PY'
+import triton
+from triton.experimental.gluon.language import PaddedSharedLayout
+import inspect
+params = inspect.signature(PaddedSharedLayout.__init__).parameters
+assert "cga_layout" in params, (
+    f"PaddedSharedLayout still lacks 'cga_layout' (triton {triton.__version__}); "
+    "Gluon MLA kernels will not compile."
+)
+print(f"[update-triton] OK: triton {triton.__version__} exposes PaddedSharedLayout(cga_layout=...)")
+PY
+    # --------------------------------------------------------------------------
+
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
     # Pinned to the exact gist revision that produced the first clean fp8 KV
     # run (30442578333: c8, 3600s, 696 total tok/s/GPU, TTFT 2.6s). The
