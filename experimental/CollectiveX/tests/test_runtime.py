@@ -534,7 +534,8 @@ class ModeSemanticsContract(unittest.TestCase):
     # unweighted-rank-sum, so low-latency must admit both. Normal stays unweighted-only.
     def test_mode_allowed_semantics(self) -> None:
         self.assertEqual(
-            ep_harness.MODE_ALLOWED_SEMANTICS["normal"], {"unweighted-rank-sum"}
+            ep_harness.MODE_ALLOWED_SEMANTICS["normal"],
+            {"unweighted-rank-sum", "topk-slot-tree-sum"},
         )
         self.assertEqual(
             ep_harness.MODE_ALLOWED_SEMANTICS["low-latency"],

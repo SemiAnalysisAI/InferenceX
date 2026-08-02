@@ -65,7 +65,11 @@ class FlashInferEPBackend(EPBackend):
     # The kernel scatters expert outputs back to the supplying rank; it does not multiply by
     # the routing weights (those ride along as a caller payload, and vLLM applies them in the
     # MoE layer, not in the A2A). Verified against the oracle during bring-up.
-    combine_weight_semantics = "unweighted-rank-sum"
+    # Read off the kernel source (vectorized_combine_impl in moeAlltoAllKernels.cu), not
+    # inferred: one fp32 accumulator PER TOP-K SLOT, duplicate/dead slots zeroed so each
+    # distinct rank contributes once at its first slot, a pairwise TREE reduction over
+    # those slots, and a single narrowing at the end.
+    combine_weight_semantics = "topk-slot-tree-sum"
     # Measured on gb200, 8 ranks each contributing to one token: the kernel reduces
     # 1.0 + 7 * 2^-9 (exactly 129.75 bf16 ulps) to 1.0078125 = 129 ulps. Round-to-nearest
     # would give 1.015625 = 130. It accumulates in FP32 — a separate probe summing 2^rank
