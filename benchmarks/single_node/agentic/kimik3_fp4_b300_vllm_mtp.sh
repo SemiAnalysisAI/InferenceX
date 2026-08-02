@@ -228,7 +228,12 @@ mkdir -p "$RESULT_DIR"
 # cache. Measured on b300 with Kimi-K3 at TP8/EP8: 0.90 leaves -2.36 GiB for
 # KV and the engine refuses to start; 0.96 yields 508,586 KV tokens.
 if [ "$MOONEP_ENABLED" = "1" ]; then
-    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.96}"
+    # 0.96 fits a short context but leaves only 11.91 GiB of KV, and the
+    # 1M max-model-len this recipe uses needs 16.61 GiB. MoonEP's expert
+    # weights are VMM allocations outside the torch allocator, and the
+    # 128-row expert padding that DeepGEMM's tight scale stride forces costs
+    # ~24 GiB/rank on top -- so this arm needs a higher budget than -dspark.
+    GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.98}"
 else
     GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 fi

@@ -43,7 +43,7 @@ index 2e908ead1..b7b2bc341 100644
              self.all2all_backend
              in (
 diff --git a/vllm/distributed/device_communicators/all2all.py b/vllm/distributed/device_communicators/all2all.py
-index 5abe7568a..733411bb2 100644
+index 5abe7568a..204dabb4c 100644
 --- a/vllm/distributed/device_communicators/all2all.py
 +++ b/vllm/distributed/device_communicators/all2all.py
 @@ -18,7 +18,7 @@ from vllm.utils.flashinfer import (
@@ -55,7 +55,7 @@ index 5abe7568a..733411bb2 100644
  
  from .base_device_communicator import All2AllManagerBase, Cache
  
-@@ -1090,3 +1090,77 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
+@@ -1090,3 +1090,91 @@ class DeepEPV2All2AllManager(All2AllManagerBase):
              for _, handle in self.handle_cache._cache.items():
                  handle.destroy()
              self.handle_cache._cache.clear()
@@ -131,7 +131,21 @@ index 5abe7568a..733411bb2 100644
 +    def destroy(self):
 +        with self.handle_cache._lock:
 +            for _, handle in self.handle_cache._cache.items():
-+                handle.destroy()
++                try:
++                    handle.destroy()
++                except Exception:  # noqa: BLE001
++                    # Buffer.destroy() synchronizes and frees VMM/NVLink
++                    # resources through the EP process group. vLLM can tear
++                    # that group down first during shutdown, in which case
++                    # MoonEP raises out of destroy() and floods the log with
++                    # tracebacks on every rank. The process is exiting and the
++                    # driver reclaims the mappings, so log and continue.
++                    logger.warning_once(
++                        "MoonEP Buffer.destroy() failed during shutdown; "
++                        "the process group was most likely torn down first. "
++                        "Resources are reclaimed on process exit.",
++                        exc_info=True,
++                    )
 +            self.handle_cache._cache.clear()
 diff --git a/vllm/distributed/device_communicators/cuda_communicator.py b/vllm/distributed/device_communicators/cuda_communicator.py
 index 06b441c5a..6cf63da9f 100644
