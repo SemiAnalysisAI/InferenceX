@@ -28,7 +28,6 @@ backend:
   decode_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
     UCX_TLS: "cuda_copy,rc"
-    VLLM_MINIMAX_M3_MSA_DECODE_BACKEND: cutlass
   vllm_config:
     prefill:
       no-enable-flashinfer-autotune: true
@@ -53,7 +52,7 @@ backend:
       trust-remote-code: true
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
       kv-cache-dtype: fp8
       block-size: 128
       gpu-memory-utilization: 0.90
