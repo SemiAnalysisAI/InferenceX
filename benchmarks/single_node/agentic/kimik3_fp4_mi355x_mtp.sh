@@ -17,11 +17,27 @@ export SPEC_DECODE=true
 # the gist is what lifts that restriction, so fp8 DSpark becomes possible once
 # that combination has actually been validated -- until then, auto.
 export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
-# Keep the DSpark arm off the unmerged vLLM#50578 asm-pad patch. It is inert
-# here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
-# runs at 8, so decode never reaches the asm path), and leaving it out keeps
-# this arm a clean single-variable test of the forward_mqa fix.
-export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
+# EXPERIMENT BRANCH kimik3-dspark-asm-verify -- the ONLY delta from
+# kimik3-mla-asm-pad, which defaults both of these to 0. Same config keys on
+# both branches, so a dispatch of the same key against each is a single-variable
+# A/B. The agentic matrix has no per-cell env channel, which is why this is a
+# branch pair rather than a config knob (same pattern as the asm-pad A/B).
+#
+# Routes DSpark's multi-token verify through vllm#50578's padded asm decode
+# instead of the Gluon flatten branch. Gluon parallelizes only over heads, so
+# per-token latency is linear in KV length -- at our ~306K p90 trace that is the
+# handicap the non-spec arm shed for 5.67x on ITL. The PR's own comment says the
+# asm path has no gqa<16 / qseqlen>1 kernel, but that describes STOCK, where 12
+# heads cannot be padded at all; after tile-padding the count is gqa=16, which
+# is not the excluded case. Testing the claim rather than trusting it.
+#
+# Correctness is NOT established by a throughput number here. Padding is safe
+# for plain decode (MLA is independent per query head, pad heads get sliced
+# off), but verify adds rejection sampling on top, so a bad pad interaction
+# degrades acceptance length silently instead of crashing. Needs gsm8k on the
+# spec path before this goes anywhere near a shipping recipe.
+export MLA_ASM_PAD="${MLA_ASM_PAD:-1}"
+export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-1}"
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
 export MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
 export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
