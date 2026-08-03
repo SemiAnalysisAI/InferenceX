@@ -43,11 +43,32 @@ def _identity(document: dict) -> tuple[str, str, str, str, str, str, int, str]:
     )
 
 
-def _headline(document: dict) -> tuple[int | str, float | str, float | str]:
+def _headline(document: dict) -> tuple:
+    """Headline row, with the skew bracket beside it.
+
+    `p50`/`p99` are the cross-rank MAX: a layer is not finished until its slowest rank is, so
+    MAX is the completion cost. But entry stagger is charged to it, and how much is a property
+    of the BACKEND, not just the fleet — on identical h200 low-latency cells the per-iteration
+    spread is 9.2us for deepep-v2 and uccl-ep (which share a kernel family) against 2.0us for
+    nccl-ep, flat across the whole ladder. So MAX alone taxes some backends more than others,
+    and two cells whose MAX gap is smaller than that spread are not separated by the data.
+    `min50` is the same iterations reduced with MIN — the skew-excluded floor — and `skew` is
+    the per-iteration MAX-MIN. Read the pair as a bracket, not the two ends as rival metrics.
+    """
     rows = document["measurement"]["rows"]
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
     latency = row["components"]["roundtrip"]["percentiles_us"]
-    return row["tokens_per_rank"], latency["p50"], latency["p99"]
+
+    def percentile(block: str, name: str) -> float | str:
+        # Absent on rows measured before the skew diagnostics were emitted.
+        component = (row.get(block) or {}).get(name) or row.get(block) or {}
+        return (component.get("percentiles_us") or {}).get("p50", "-")
+
+    return (
+        row["tokens_per_rank"], latency["p50"], latency["p99"],
+        percentile("cross_rank_min_us", "roundtrip"),
+        percentile("cross_rank_spread_us", ""),
+    )
 
 
 def render(documents: list[dict]) -> str:
@@ -63,16 +84,17 @@ def render(documents: list[dict]) -> str:
         )
         lines.append("")
     lines += [
-        "| ver | sku | backend | mode | precision | suite | phase | routing | ep | outcome | T* | p50 us | p99 us |",
-        "|--:|---|---|---|---|---|---|---|--:|---|--:|--:|--:|",
+        "| ver | sku | backend | mode | precision | suite | phase | routing | ep | outcome "
+        "| T* | p50 us | p99 us | min50 us | skew us |",
+        "|--:|---|---|---|---|---|---|---|--:|---|--:|--:|--:|--:|--:|",
     ]
     for document in documents:
         sku, backend, suite, routing, mode, phase, ep, precision = _identity(document)
-        token, p50, p99 = _headline(document)
+        token, p50, p99, min50, skew = _headline(document)
         lines.append(
             f"| {document['version']} | {sku} | `{backend}` | {mode} | {precision} | {suite} | "
             f"{phase} | {routing} | {ep} | "
-            f"{document['outcome']['status']} | {token} | {p50} | {p99} |"
+            f"{document['outcome']['status']} | {token} | {p50} | {p99} | {min50} | {skew} |"
         )
     if not documents:
         lines.append("\n> No valid native outcome documents found.")

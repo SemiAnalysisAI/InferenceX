@@ -120,7 +120,26 @@ dispatch then combine — the transport — in every row. It is reported as its 
 wherever it does device work. The one exception is the `CX_FP8_CONSUME=dequant` verification hatch,
 which puts the conversion back inside the chain on purpose. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
-`isolated_sum` is derived. The artifact records the mode so a reader can keep distinct measurement
+`isolated_sum` is derived.
+
+Headline latency is the p50 of the per-iteration cross-rank MAX: a layer is not finished until
+its slowest rank is, so MAX is the completion cost, and it charges inter-rank entry stagger to
+whichever component the ranks entered unevenly. How much stagger there is depends on the code
+path AND the precision, not only on the fleet: on identical h200 low-latency decode cells the
+per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they share the legacy
+`Buffer` path) against ~2.6 us for nccl-ep, and it collapses to ~2.8 us for those same two under
+FP8, where the kernel quantises in-kernel and the heavier dispatch self-aligns the ranks. So the
+term is not subtractable in any principled way, and MAX alone taxes some rows more than others.
+
+Every row therefore also carries `cross_rank_min_us` (the same iterations reduced with MIN — the
+skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN
+as a bracket. Two cells whose MAX gap is smaller than the larger contender's spread are not
+separated by the data: rank on roundtrip p50 and call a winner only where MAX and MIN agree on
+the ordering. Do not rank on p99 of MAX for multi-node decode cells, where it is dominated by
+worst-rank stalls rather than transport — p99 of MIN is the synchronized-cost tail beside it. The
+isolated components inherit the preceding operation's per-rank exit stagger, so treat them as
+residual-wait diagnostics rather than per-operation costs; the paired roundtrip is the
+comparable quantity. The artifact records the mode so a reader can keep distinct measurement
 contracts separate.
 
 Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
