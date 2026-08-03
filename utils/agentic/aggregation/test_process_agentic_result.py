@@ -564,6 +564,35 @@ def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
         agg["num_decode_gpu"],
     ) == (2, 4, 1, 32)
 
+def test_multinode_processor_counts_attention_dp_ranks(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    env = {
+        "IS_MULTINODE": "true",
+        "PREFILL_NUM_WORKERS": "1",
+        "PREFILL_TP": "1",
+        "PREFILL_PP_SIZE": "1",
+        "PREFILL_DCP_SIZE": "1",
+        "PREFILL_PCP_SIZE": "1",
+        "PREFILL_EP": "16",
+        "PREFILL_DP_ATTN": "true",
+        "DECODE_NUM_WORKERS": "0",
+        "DECODE_TP": "1",
+        "DECODE_PP_SIZE": "1",
+        "DECODE_DCP_SIZE": "1",
+        "DECODE_PCP_SIZE": "1",
+        "DECODE_EP": "1",
+        "DECODE_DP_ATTN": "false",
+    }
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+
+    fields, num_gpus, tp, ep, dp_attention = _gpu_shape()
+
+    assert fields["num_prefill_gpu"] == 16
+    assert fields["num_decode_gpu"] == 0
+    assert (num_gpus, tp, ep, dp_attention) == (16, 1, 16, "true")
+
 
 def test_multinode_processor_omits_homogeneous_hardware(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)

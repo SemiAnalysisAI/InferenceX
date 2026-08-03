@@ -44,7 +44,8 @@ backend:
   connector: null
   aggregated_environment:
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
-    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    # Cross-node B200 groups lack the MNNVL multicast FlashInfer requires.
+    VLLM_ALLREDUCE_USE_FLASHINFER: "0"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_USE_V2_MODEL_RUNNER: "1"
@@ -69,9 +70,6 @@ backend:
       # OOM at the official 0.95 setting. Preserve the observed-safe headroom.
       gpu-memory-utilization: 0.90
       no-enable-flashinfer-autotune: true
-      # This B200 pool has no cross-node MNNVL multicast. Explicitly bypass
-      # custom collective initialization, which otherwise stalls before load.
-      disable-custom-all-reduce: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"TRTLLM_RAGGED"}'

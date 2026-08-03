@@ -59,6 +59,8 @@ backend:
   type: vllm
   connector: null
   dp_launch_mode: per_node
+  kv_events_config:
+    aggregated: true
   aggregated_environment:
     VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     VLLM_ALLREDUCE_USE_FLASHINFER: "1"
@@ -89,7 +91,6 @@ backend:
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"TRTLLM_RAGGED"}'
       enable-prefix-caching: true
-      enable-auto-tool-choice: true
       dyn-tool-call-parser: kimi_k3
       reasoning-parser: kimi_k3
       dyn-reasoning-parser: kimi_k3
