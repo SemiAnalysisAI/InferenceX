@@ -1053,6 +1053,30 @@ else
     echo "MLA_ASM_PAD=0: leaving stock AiterMLAHelper in place (Gluon decode)"
 fi
 
+# DSpark (spec-decode) multi-token verify runs at max_qo_len = 8, which routes
+# MLA through forward_mqa's "flatten each verify token to a qseqlen=1 gluon
+# decode" branch. That branch is broken three ways -- it is the only caller in
+# the backend that turns on Gluon split-K (because the metadata builder never
+# assigns min_kv_seq_len, so everything else gets NUM_KV_SPLITS=1), it assumes a
+# uniform query length per request, and it rebuilds a sum(seq_len)-sized index
+# expansion on every MLA layer. Those are the HIP 700 / HSA 0x1016 fault, the
+# silent wrong-KV mapping at conc > 1, and the 13.99 GiB OOM respectively. See
+# the patch script's docstring for the full derivation and the run IDs.
+#
+# Only meaningful when spec decode is on: with max_qo_len == 1 the branch is
+# never reached and the patch is inert (FIX 1's qo_indptr change is numerically
+# identical in that case), but there is no reason to touch the file at all.
+DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-1}"
+if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_MQA_FIX" = "1" ]; then
+    # No `|| true`, same reasoning as the asm-pad patch above: an unpatched
+    # DSpark cell reproduces a known crash on a whole MI355X node for nothing.
+    python3 "$(dirname "$0")/patches/dspark_mqa_gluon_fix.py" \
+        --diff-out "$RESULT_DIR/dspark_mqa_fix.diff" 2>&1 \
+        | tee "$RESULT_DIR/dspark_mqa_fix.log"
+elif [ "${SPEC_DECODE:-false}" = "true" ]; then
+    echo "DSPARK_MQA_FIX=0: leaving the stock forward_mqa flatten branch in place"
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
