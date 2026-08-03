@@ -66,12 +66,26 @@ represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; its EP16 InterNodeV1 path is
 configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
-run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80 with
-rdma_block_num 0. These numbers therefore describe the engine-integrated configuration, not MoRI's
-peak -- its own shipped tuning tables reach roughly 1.3-1.4x faster combine at T=256 on gfx950 with a
-config no engine selects, and AUTO would not reproduce those tables anyway (there is no BF16 gfx950
-dispatch rule and no gfx950 IntraNodeLL combine table, so AUTO falls back to hard-coded defaults and
-couples the result to whichever MoRI revision is pinned). UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
+run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
+rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, applied to dispatch and
+combine alike (neither passes a per-call override, so combine inherits the 16). Both also run with an
+external input buffer, which is MoRI's default and which SGLang sets explicitly. Those two settings
+are pinned together deliberately: MoRI's own tuning tables key combine on `zero_copy`, selecting
+roughly 16 warps for external input against 4-8 for a registered buffer, so taking the engines' warp
+count while keeping a registered buffer would match neither. The cost of that mismatch is not
+hypothetical -- measured across MI300X, MI325X and MI355X, 16 warps in registered-buffer mode is
++13-18% combine at T=128 and +61-78% at T=512 against 8, correct in both arms. With an external
+input buffer the kernel does its own staging copy, bounded by the receive count, so BF16 rows hand
+over the dispatch output unchanged and report no `stage` component at all; FP8 rows still stage,
+because the received payload has to be dequantized. These numbers therefore describe the
+engine-integrated configuration, not MoRI's peak: its shipped tuning tables reach a faster combine
+with per-shape block and warp counts no engine selects, and AUTO would not reproduce those tables
+anyway (there is no BF16 gfx950 dispatch rule and no gfx950 IntraNodeLL combine table, so AUTO falls
+back to hard-coded defaults and couples the result to whichever MoRI revision is pinned). One
+asymmetry is worth stating: the low-latency arm has no engine-integrated configuration to match at
+all, because SGLang's low-latency path pins `AsyncLL` at 8 warps while this suite uses `IntraNodeLL`
+(`AsyncLL` is split-phase and fails silently under a single-call harness), so the low-latency launch
+config is inherited from the normal-mode tuple by choice rather than by precedent. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
 `dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
 `libibverbs` — no NVSHMEM/IBGDA — with software message ordering, atomics, and flow control; its
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
