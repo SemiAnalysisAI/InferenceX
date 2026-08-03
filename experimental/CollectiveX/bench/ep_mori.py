@@ -54,9 +54,10 @@ class MoRIBackend(EPBackend):
         # argv. FP8 dispatch is caller-prequantized: MoRI's dispatch kernel keys purely
         # on the passed tensor dtype, so handing it an e4m3 tensor selects the FP8
         # dispatch kernel with no in-kernel cast. Combine stays genuinely BF16 (quant_type
-        # "none"). With use_external_inp_buf False the launcher
-        # takes the zero-copy branch, EpCombineIntraNodeKernel_bf16_p2p; the _nop2p and
-        # _fp8cast variants both sit behind the external-buffer branch we never enter.
+        # "none"). With use_external_inp_buf True (the engines' setting, pinned unconditionally
+        # below) the launcher selects EpCombineIntraNodeKernel_bf16_nop2p; the _p2p variant is the
+        # registered-buffer path this adapter no longer takes, and _fp8cast stays unreachable
+        # because combine's quant_type is "none".
         self._fp8_dtype = None
         if self._fp8:
             arch = torch.cuda.get_device_properties(device).gcnArchName
@@ -304,9 +305,12 @@ class MoRIBackend(EPBackend):
         if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
         if self._external_input:
-            # The kernel's own staging copy is bounded by the receive count, not the buffer
-            # (`EpCombineIntraNodeKernel_body` loops `i < totalRecvTokenNum`, intranode.hpp:542),
-            # so it never reads past `rows` and only the filled rows need converting.
+            # The kernel's own staging copy is bounded by the receive count, not the buffer: with
+            # an external input buffer and combine quant_type "none" the launcher selects
+            # `EpCombineIntraNodeKernel_bf16_nop2p`, whose write-based staging loop is bounded by
+            # `tokenIdx < totalRecvTokenNum` over `args.inpTokenBuf`. (The `UseP2PRead` loop at
+            # intranode.hpp:542 carries the same bound but is compile-time dead on this path.)
+            # So it never reads past `rows` and only the filled rows need converting.
             h.combine_input = (
                 h.dispatch_output[:rows].to(torch.bfloat16) if self._fp8 else h.dispatch_output
             )

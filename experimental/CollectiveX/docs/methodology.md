@@ -26,8 +26,9 @@ supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`
 caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
 DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). Because `normal`-mode FP8 is
 caller-prequantized, that quantize is a cost a production forward pass pays on the critical path, so
-it is charged **inside the measured dispatch** rather than prepared ahead of the timing window; it is
-issued as one fused kernel and guarded bitwise against its eager reference. This means an FP8
+it is charged **inside the measured dispatch** rather than prepared ahead of the timing window. On
+DeepEP V2, UCCL-EP and FlashInfer EP it is issued as one fused kernel and guarded bitwise against its
+eager reference; MoRI needs neither, because its quantize is a single plain dtype cast. This means an FP8
 `normal` dispatch number covers quantize-plus-transport while its BF16 control covers transport
 alone, and it is why FP8 `normal` rows are not comparable to runs published before sweep version 2.
 
@@ -82,7 +83,8 @@ represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; its EP16 InterNodeV1 path is
 configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
-run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
+run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and for the BF16 and FP8 paths this
+suite sweeps both pin block_num 80,
 rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, applied to dispatch and
 combine alike (neither passes a per-call override, so combine inherits the 16). Both also run with an
 external input buffer, which is MoRI's default and which SGLang sets explicitly. Those two settings
@@ -101,9 +103,11 @@ block and a zero sample count, the same way any backend whose staging is a bare 
 reports it. FP8 rows still stage for real, because the received payload has to be dequantized. These
 numbers therefore describe the engine-integrated configuration, not MoRI's peak: its shipped tuning
 tables reach a faster combine with per-shape block and warp counts no engine selects, and AUTO would
-not reproduce those tables anyway (there is no BF16 gfx950 dispatch rule and no gfx950 IntraNodeLL
-combine table, so AUTO falls back to hard-coded defaults and couples the result to whichever MoRI
-revision is pinned). How far off peak is arch-dependent and only partly measured: comparing across
+not reproduce them uniformly anyway: gfx950 ships no IntraNodeLL combine table and no BF16 rule for
+normal-mode IntraNode dispatch, so AUTO falls back to hard-coded defaults for exactly those two and
+couples the result to whichever MoRI revision is pinned. It would find genuinely tuned rules for the
+other two paths, which is its own problem — a config that is tuned on some paths and defaulted on
+others is not one number about the hardware. How far off peak is arch-dependent and only partly measured: comparing across
 buffer modes on MI355X, with the registered mode's excluded BF16 stage added back so the comparison is
 not flattered, a registered buffer at 8 warps is still 15% faster at T=512 decode and 8% at T=8192
 prefill than the shipped pairing. That margin did not reproduce as a clear win on gfx942, so treat
@@ -181,9 +185,11 @@ that as a separate step: the FP8 lands in the expert GEMM, which reads FP8 opera
 BF16, and that GEMM output is what combine receives. This suite deliberately does not run the expert
 GEMM — it measures the collective, not the layer — so `stage` stands in for it. That is why `stage` is
 excluded from `roundtrip`, and it is also why **`stage` must not be summed into a total or compared
-between backends**: each adapter converts a different amount (DeepEP V2 a padded low-latency plane,
-MoRI only the received rows, FlashInfer only the filled slots), so the same component name covers
-three different quantities. The one production path that *does* pay a separate materialised dequant is
+between backends**: each adapter converts a different amount. DeepEP V2 and UCCL-EP convert only the
+received rows in `normal` mode but the whole padded plane in `low-latency`, where the receive buffer is
+`[experts, cap * ranks, hidden]` regardless of token count; MoRI converts only the received rows;
+FlashInfer only the filled slots. So the same component name covers several different quantities, and
+for two of the backends it covers a different one per mode. The one production path that *does* pay a separate materialised dequant is
 a quant-format mismatch fallback (vLLM dequantises when `block_k` disagrees with DeepEP's block size);
 `CX_FP8_CONSUME=dequant` exists to model exactly that case, and it is not the default because it is
 not the fast path.
@@ -200,7 +206,12 @@ availability, origin, and sample count. A paired-only API reports null isolated 
 `isolated_sum` is derived.
 
 Headline latency is the p99 of the per-iteration cross-rank MAX (`p50` is emitted alongside it, and
-`summarize.py` prints both; the p99 is the figure the published cohorts rank on). MAX is the
+`summarize.py` prints both; the p99 is the figure the published cohorts rank on). That is not in
+tension with the guidance below to rank by hand on p50: the published cohorts do not order cells by
+raw p99, they group them into bootstrap equivalence bands, so a cell whose p99 is dominated by
+worst-rank stalls rather than transport lands in a tie band instead of being declared a winner or a
+loser. Reading a single pair of cells yourself has no such machinery, which is why the bracket below
+is the manual procedure. MAX is the
 reduction because a layer is not finished until
 its slowest rank is, so MAX is the completion cost, and it charges inter-rank entry stagger to
 whichever component the ranks entered unevenly. How much stagger there is depends on the code
@@ -270,8 +281,9 @@ Logical payload bandwidth is:
 
 Payload bytes use rank-deduplicated token-rank activations and exclude expert metadata,
 padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale payload; an FP8
-dispatch moves 1 byte per value, plus per-128-block FP32 scales for DeepEP's and UCCL-EP's blockwise
-codec (none for MoRI's plain e4m3 cast), while combine stays BF16 — so the dispatch and combine directions can carry
+dispatch moves 1 byte per value, plus per-128-block FP32 scales for every blockwise codec here —
+DeepEP V2, UCCL-EP and FlashInfer EP, which carries them as a fourth dispatch payload — and none for
+MoRI's plain e4m3 cast, while combine stays BF16 — so the dispatch and combine directions can carry
 different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
 for the normal-mode layout. It is also exact for a low-latency kernel that deduplicates per rank
 (MoRI's `IntraNodeLL`, whose combine is an unweighted rank-sum). The low-latency kernels that apply

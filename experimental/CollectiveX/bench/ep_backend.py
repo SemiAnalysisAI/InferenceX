@@ -462,10 +462,10 @@ class EPBackend(abc.ABC):
         if self.stage_excluded_from_roundtrip:
             # Materialise the expert-output stand-in ONCE, untimed, so the chained
             # measurement is dispatch -> combine and nothing else. Routing is fixed for a
-            # ladder point, so the same staged tensor is valid for every iteration (for MoRI
-            # it IS the registered combine buffer, already filled; for FlashInfer it is the
-            # workspace combine region, which dispatch cannot clobber because that region
-            # sits past the end of every dispatch receive plane).
+            # ladder point, so the same staged tensor is valid for every iteration (for MoRI it is
+            # the dispatch output itself at BF16, or a fresh `[:rows]` BF16 cast under FP8; for
+            # FlashInfer it is the workspace combine region, which dispatch cannot clobber because
+            # that region sits past the end of every dispatch receive plane).
             #
             # Read the staged payload back through `combine_input_attr` rather than
             # constructing one, so whatever the adapter put there round-trips unchanged. No
