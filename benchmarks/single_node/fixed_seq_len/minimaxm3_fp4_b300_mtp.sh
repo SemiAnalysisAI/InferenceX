@@ -98,6 +98,11 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 start_gpu_monitor
 
+CONC_ARGS=""
+if [ "$CONC" -lt 64 ]; then
+    CONC_ARGS="--no-enable-chunked-prefill --attention_config.minimax_m3_msa_decode_backend cutlass"
+fi
+
 set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $PORT \
 $PARALLEL_ARGS \
@@ -109,9 +114,10 @@ $PARALLEL_ARGS \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
---attention_config.minimax_m3_msa_decode_backend cutlass \
 --stream-interval 20 --no-enable-prefix-caching \
---trust-remote-code > $SERVER_LOG 2>&1 &
+--trust-remote-code \
+$CONC_ARGS \
+> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
