@@ -70,7 +70,15 @@ export SPEC_DECODE=true
 # doubling. Note the gist mla_gluon patch is gated on fp8 and will NOT apply
 # here; #4474's anchor is present in the stock image kernel too (verified), and
 # the bf16 regime bh16bn64 has no batch_size assert at all.
-export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
+# fp8 again, but with the drafter backend fixed. The fp8 drafter assert
+# (kimi_k3/nvidia/mla.py: "requires a backend that accepts an fp8 (quantized)
+# query input") checks self.impl.supports_quant_query_input. triton_mla.py sets
+# that False; MLACommonImpl -- which ROCM_AITER_MLA inherits without overriding
+# -- sets it True. TRITON_MLA was only ever a stand-in for upstream's CUDA-only
+# FLASHINFER_MLA, and nobody checked whether the ROCm-native MLA backend takes
+# an fp8 query. It does. Gluon verify (asm verify is closed under fp8).
+export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+export SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-ROCM_AITER_MLA}"
 # Keep the DSpark arm off the unmerged vLLM#50578 asm-pad patch. It is inert
 # here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
 # runs at 8, so decode never reaches the asm path), and leaving it out keeps
