@@ -2361,7 +2361,26 @@ dsv4-fp8-mi325x-vllm-mtp:
       # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
-glm5.2-fp4-mi355x-sglang-agentic:
+# GLM-5.2 MI355X MXFP4 AgentX with EAGLE/MTP speculative decoding. Spec-decode
+# only: agentic recipes are run and published with speculative decoding enabled
+# rather than as an STP/MTP A/B, and GLM-5.2 agentic non-MTP is deprecated after
+# 2026-08-03 (MODELS.md), so no non-MTP arm is onboarded here.
+#
+# SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps 3, eagle-topk 1,
+# 4 draft tokens = 3 speculative tokens), with acceptance pinned to the golden
+# AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on, K=3) through
+# SGLANG_SIMULATE_ACC_*, matching the B300 sibling glm5.2-fp4-b300-sglang-agentic-mtp.
+# v0.5.16-rocm720 is the first ROCm image that reads
+# SGLANG_SIMULATE_ACC_TOKEN_MODE.
+#
+# TP8 + EP8 with host-DRAM HiCache on the AgentX MTP concurrency grid
+# [1, 4, 8, 12, 16]: steps of at least 2 because single-step sampling cannot
+# separate configurations by more than run-to-run noise on the agentic corpus,
+# and a hard stop at conc 16. HiCache on every point -- without it the working
+# set outgrows HBM past conc 8 and the radix hit rate collapses. Mooncake is
+# deliberately not offered as the offload backend on this SKU (the HIP/TCP
+# transfer engine is not stable on gfx942/gfx950 under sustained agentic load).
+glm5.2-fp4-mi355x-sglang-agentic-mtp:
   image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728
   model: amd/GLM-5.2-MXFP4
   model-prefix: glm5.2
@@ -2373,4 +2392,4 @@ glm5.2-fp4-mi355x-sglang-agentic:
     agentic-coding:
     - dram-utilization: 0.85
       search-space:
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
