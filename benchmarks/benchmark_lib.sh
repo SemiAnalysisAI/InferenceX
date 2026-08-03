@@ -1464,7 +1464,6 @@ run_eval() {
     local scenario_default="lm-eval"
     local scenario_is_agentic=0
     if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
-        scenario_default="swebench"
         scenario_is_agentic=1
     fi
 
