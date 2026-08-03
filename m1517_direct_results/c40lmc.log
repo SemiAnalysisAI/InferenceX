@@ -1,0 +1,994 @@
+[waiter] waiting for a slice (c32-none GPUs 0-3 / c40-none GPUs 4-7)...
+[waiter] slice 0,1,2,3 free at 13:51:01 UTC; settling 60s
+[waiter] launching c40-lmc on 0,1,2,3, L1=586G, LMCache ref aaf7c0d3 (matches the c32-lmc datapoint)
+[c40-lmc] LMCache L1=586G, /dev/shm free=838G
+[c40-lmc] physical GPUs=0,1,2,3 -> logical=0,1,2,3  port=8896 conc=40 kv=lmcache dur=3600s image=vllm/vllm-openai-rocm:v0.26.0
+++ dirname benchmarks/single_node/agentic/kimik2.7_fp4_mi355x.sh
++ source benchmarks/single_node/agentic/../../benchmark_lib.sh
+++ export PYTHONDONTWRITEBYTECODE=1
+++ PYTHONDONTWRITEBYTECODE=1
+++ export PYTHONPYCACHEPREFIX=/tmp/inferencex-pycache
+++ PYTHONPYCACHEPREFIX=/tmp/inferencex-pycache
+++ mkdir -p /tmp/inferencex-pycache
+++ export PORT=8896
+++ PORT=8896
+++ _benchmark_caller=benchmarks/single_node/agentic/kimik2.7_fp4_mi355x.sh
+++ [[ benchmarks/single_node/agentic/kimik2.7_fp4_mi355x.sh == */agentic/* ]]
+++ unset MAX_MODEL_LEN
+++ [[ -z x ]]
+++ [[ -z dram ]]
+++ case "$KV_OFFLOADING" in
+++ [[ -z lmcache ]]
+++ [[ lmcache == \n\o\n\e ]]
+++ [[ ! 586 =~ ^[1-9][0-9]*$ ]]
+++ unset _benchmark_caller
+++ GPU_MONITOR_PID=
+++ GPU_METRICS_CSV=/workspace/gpu_metrics.csv
+++ export GPU_METRICS_CSV
+++ INFMAX_CONTAINER_WORKSPACE=/workspace
+++ AGENTIC_DIR=/workspace/utils/agentic-benchmark
+++ AIPERF_DIR=/workspace/utils/aiperf
+++ AIPERF_RUNTIME_DIR=/tmp/inferencex-agentic-1
+++ AIPERF_VENV=/tmp/inferencex-agentic-1/venv
+++ AIPERF_UV_INSTALL_DIR=/tmp/inferencex-agentic-1/uv/bin
+++ AIPERF_UV_CACHE_DIR=/tmp/inferencex-agentic-1/uv-cache
+++ AIPERF_PYTHON=/tmp/inferencex-agentic-1/venv/bin/python
+++ AIPERF_CLI=/tmp/inferencex-agentic-1/venv/bin/aiperf
+++ AIPERF_HF_CLI=/tmp/inferencex-agentic-1/venv/bin/hf
+++ AIPERF_DEPS_READY=0
+++ AIPERF_FAILED_REQUEST_THRESHOLD=0.10
++ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
++ missing_vars=()
++ local missing_vars
++ for var_name in "$@"
++ [[ -z amd/Kimi-K2.7-Code-MXFP4 ]]
++ for var_name in "$@"
++ [[ -z 4 ]]
++ for var_name in "$@"
++ [[ -z 40 ]]
++ for var_name in "$@"
++ [[ -z dram ]]
++ for var_name in "$@"
++ [[ -z 586 ]]
++ for var_name in "$@"
++ [[ -z /workspace/results ]]
++ for var_name in "$@"
++ [[ -z 3600 ]]
++ for var_name in "$@"
++ [[ -z 1 ]]
++ for var_name in "$@"
++ [[ -z false ]]
++ [[ 0 -gt 0 ]]
++ [[ -n '' ]]
++ '[' -n 0,1,2,3 ']'
++ export HIP_VISIBLE_DEVICES=0,1,2,3
++ HIP_VISIBLE_DEVICES=0,1,2,3
++ [[ -n '' ]]
++ hf download amd/Kimi-K2.7-Code-MXFP4
+Fetching 84 files:   0%|          | 0/84 [00:00<?, ?it/s]Fetching 84 files: 100%|██████████| 84/84 [00:00<00:00, 10018.81it/s]
+[32m✓ Downloaded[0m
+  path: /mnt/hf_hub_cache/models--amd--Kimi-K2.7-Code-MXFP4/snapshots/7c86fb37b24dffd50ad2cb52d9af75689703219d
++ export MODEL_PATH=amd/Kimi-K2.7-Code-MXFP4
++ MODEL_PATH=amd/Kimi-K2.7-Code-MXFP4
++ rocm-smi
+
+
+============================================= ROCm System Management Interface =============================================
+======================================================= Concise Info =======================================================
+Device  Node  IDs              Temp        Power     Partitions          SCLK    MCLK     Fan  Perf  PwrCap   VRAM%  GPU%  
+[3m              (DID,     GUID)  (Junction)  (Socket)  (Mem, Compute, ID)                                                    [0m
+============================================================================================================================
+0       3     0x75a3,   42583  49.0°C      224.0W    NPS1, SPX, 0        104Mhz  1900Mhz  0%   auto  1400.0W  0%     0%    
+1       5     0x75a3,   27226  47.0°C      219.0W    NPS1, SPX, 0        94Mhz   1900Mhz  0%   auto  1400.0W  0%     0%    
+2       4     0x75a3,   36479  48.0°C      227.0W    NPS1, SPX, 0        99Mhz   1900Mhz  0%   auto  1400.0W  0%     0%    
+3       2     0x75a3,   17010  47.0°C      226.0W    NPS1, SPX, 0        95Mhz   1900Mhz  0%   auto  1400.0W  0%     0%    
+============================================================================================================================
+=================================================== End of ROCm SMI Log ====================================================
++ amd-smi
++------------------------------------------------------------------------------+
+| AMD-SMI 26.2.2+c2d9476115    amdgpu version: 6.16.13  ROCm version: 7.2.3    |
+| VBIOS version: 00175784                                                      |
+| Platform: Linux Baremetal                                                    |
+|-------------------------------------+----------------------------------------|
+| BDF                        GPU-Name | Mem-Uti   Temp   UEC       Power-Usage |
+| GPU  HIP-ID  OAM-ID  Partition-Mode | GFX-Uti    Fan               Mem-Usage |
+|=====================================+========================================|
+| 0000:05:00.0 AMD Instinct MI355 OAM | 0 %      49 °C   0          224/1400 W |
+|   0       1       6        SPX/NPS1 | 0 %        N/A           283/294896 MB |
+|-------------------------------------+----------------------------------------|
+| 0000:15:00.0 AMD Instinct MI355 OAM | 0 %      47 °C   0          219/1400 W |
+|   1       3       7        SPX/NPS1 | 0 %        N/A           283/294896 MB |
+|-------------------------------------+----------------------------------------|
+| 0000:65:00.0 AMD Instinct MI355 OAM | 0 %      48 °C   0          227/1400 W |
+|   2       2       5        SPX/NPS1 | 0 %        N/A           283/294896 MB |
+|-------------------------------------+----------------------------------------|
+| 0000:75:00.0 AMD Instinct MI355 OAM | 0 %      47 °C   0          226/1400 W |
+|   3       0       4        SPX/NPS1 | 0 %        N/A           283/294896 MB |
++-------------------------------------+----------------------------------------+
++------------------------------------------------------------------------------+
+| Processes:                                                                   |
+|  GPU        PID  Process Name          GTT_MEM  VRAM_MEM  MEM_USAGE     CU % |
+|==============================================================================|
+|  No running processes found                                                  |
++------------------------------------------------------------------------------+
++ resolve_trace_source
++ local default_loader
++ case "${MODEL_PREFIX:-}" in
++ default_loader=semianalysis_cc_traces_weka_062126_256k
++ local loader=semianalysis_cc_traces_weka_062126_256k
++ local dataset
++ case "$loader" in
++ dataset=semianalysisai/cc-traces-weka-062126-256k
++ TRACE_SOURCE_FLAG='--public-dataset semianalysis_cc_traces_weka_062126_256k'
++ echo 'Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_062126_256k (semianalysisai/cc-traces-weka-062126-256k) [MODEL_PREFIX=kimik2.7]'
+Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_062126_256k (semianalysisai/cc-traces-weka-062126-256k) [MODEL_PREFIX=kimik2.7]
++ ensure_hf_cli
++ install_agentic_deps
++ '[' 0 = 1 ']'
++ command -v git
++ ensure_agentic_uv
++ command -v uv
+++ command -v uv
++ AIPERF_UV_BIN=/usr/local/bin/uv
++ return
++ rm -rf /tmp/inferencex-agentic-1/venv
++ mkdir -p /tmp/inferencex-agentic-1/uv-cache
+++ command -v python3
++ UV_CACHE_DIR=/tmp/inferencex-agentic-1/uv-cache
++ /usr/local/bin/uv venv --python /usr/bin/python3 /tmp/inferencex-agentic-1/venv
+Using CPython 3.12.13 interpreter at: /usr/bin/python3
+Creating virtual environment at: /tmp/inferencex-agentic-1/venv
+Activate with: source /tmp/inferencex-agentic-1/venv/bin/activate
++ UV_CACHE_DIR=/tmp/inferencex-agentic-1/uv-cache
++ /usr/local/bin/uv pip install --python /tmp/inferencex-agentic-1/venv/bin/python -r /workspace/utils/agentic-benchmark/requirements.txt -e /workspace/utils/aiperf 'datasets>=4.7.0' 'huggingface_hub[cli]>=0.25.0' urllib3 requests
+Using Python 3.12.13 environment at: /tmp/inferencex-agentic-1/venv
+   Updating https://github.com/huggingface/transformers.git (HEAD)
+    Updated https://github.com/huggingface/transformers.git (f3f0c8b7784f56717e37743cabfc3c51041f24ed)
+Resolved 126 packages in 15.03s
+   Building aiperf @ file:///workspace/utils/aiperf
+   Building transformers @ git+https://github.com/huggingface/transformers.git@f3f0c8b7784f56717e37743cabfc3c51041f24ed
+Downloading numpy (15.9MiB)
+Downloading pandas (11.8MiB)
+Downloading matplotlib (9.6MiB)
+Downloading plotly (9.4MiB)
+Downloading dash (7.5MiB)
+Downloading pillow (6.7MiB)
+Downloading zstandard (5.3MiB)
+Downloading fonttools (4.8MiB)
+Downloading hf-xet (4.2MiB)
+Downloading uvloop (4.2MiB)
+Downloading tokenizers (3.1MiB)
+Downloading pydantic-core (2.0MiB)
+Downloading aiohttp (1.7MiB)
+Downloading kiwisolver (1.4MiB)
+Downloading brotli (1.4MiB)
+Downloading sentencepiece (1.3MiB)
+Downloading soundfile (1.3MiB)
+Downloading pygments (1.2MiB)
+Downloading tiktoken (1.1MiB)
+Downloading crick (1.7MiB)
+Downloading pyarrow (47.8MiB)
+Downloading scipy (33.7MiB)
+ Downloaded tiktoken
+ Downloaded soundfile
+ Downloaded pygments
+ Downloaded brotli
+ Downloaded sentencepiece
+ Downloaded kiwisolver
+ Downloaded aiohttp
+ Downloaded crick
+ Downloaded pydantic-core
+ Downloaded tokenizers
+ Downloaded hf-xet
+ Downloaded uvloop
+ Downloaded fonttools
+ Downloaded zstandard
+ Downloaded pillow
+      Built aiperf @ file:///workspace/utils/aiperf
+ Downloaded dash
+ Downloaded matplotlib
+ Downloaded plotly
+ Downloaded pandas
+ Downloaded numpy
+ Downloaded scipy
+      Built transformers @ git+https://github.com/huggingface/transformers.git@f3f0c8b7784f56717e37743cabfc3c51041f24ed
+ Downloaded pyarrow
+Prepared 125 packages in 2.09s
+Installed 126 packages in 403ms
+ + aiofiles==24.1.0
+ + aiohappyeyeballs==2.7.1
+ + aiohttp==3.13.5
+ + aiosignal==1.4.0
+ + aiperf==0.8.0 (from file:///workspace/utils/aiperf)
+ + annotated-doc==0.0.4
+ + annotated-types==0.8.0
+ + anyio==4.14.2
+ + attrs==26.1.0
+ + blinker==1.9.0
+ + brotli==1.2.0
+ + certifi==2026.7.22
+ + cffi==2.1.0
+ + charset-normalizer==3.4.9
+ + choreographer==1.3.0
+ + click==8.4.2
+ + contourpy==1.3.3
+ + crick==0.0.8
+ + cycler==0.12.1
+ + cyclopts==4.22.2
+ + dash==3.1.1
+ + dash-bootstrap-components==2.0.4
+ + datasets==5.0.0
+ + dill==0.4.1
+ + docstring-parser==0.18.0
+ + fastapi==0.140.1
+ + ffmpeg-python==0.2.0
+ + filelock==3.32.0
+ + flask==3.1.3
+ + fonttools==4.63.0
+ + frozenlist==1.8.0
+ + fsspec==2026.4.0
+ + future==1.0.0
+ + h11==0.16.0
+ + hf-xet==1.5.2
+ + httpcore==1.0.9
+ + httptools==0.8.0
+ + httpx==0.28.1
+ + huggingface-hub==1.25.1
+ + idna==3.18
+ + importlib-metadata==9.0.0
+ + iniconfig==2.3.0
+ + itsdangerous==2.2.0
+ + jinja2==3.1.6
+ + jmespath==1.0.1
+ + kaleido==1.2.0
+ + kiwisolver==1.5.0
+ + linkify-it-py==2.1.0
+ + logistro==2.0.1
+ + markdown-it-py==4.2.0
+ + markupsafe==3.0.3
+ + matplotlib==3.11.1
+ + mdit-py-plugins==0.6.1
+ + mdurl==0.1.2
+ + msgspec==0.21.1
+ + multidict==6.7.1
+ + multiprocess==0.70.19
+ + narwhals==2.24.0
+ + nest-asyncio==1.6.0
+ + numpy==2.5.1
+ + nvidia-ml-py==13.610.43
+ + orjson==3.11.9
+ + packaging==26.2
+ + pandas==2.3.3
+ + pillow==12.1.1
+ + platformdirs==4.11.0
+ + plotly==6.4.0
+ + pluggy==1.6.0
+ + prometheus-client==0.23.1
+ + propcache==0.5.2
+ + protobuf==7.35.1
+ + psutil==7.0.0
+ + pyarrow==25.0.0
+ + pycparser==3.0
+ + pydantic==2.13.4
+ + pydantic-core==2.46.4
+ + pydantic-settings==2.14.2
+ + pygments==2.20.0
+ + pyparsing==3.3.2
+ + pytest==9.1.1
+ + pytest-timeout==2.4.0
+ + python-dateutil==2.9.0.post0
+ + python-dotenv==1.2.2
+ + pytz==2026.3.post1
+ + pyyaml==6.0.3
+ + pyzmq==26.4.0
+ + regex==2026.7.19
+ + requests==2.34.2
+ + retrying==1.4.2
+ + rich==14.1.0
+ + rich-rst==2.1.0
+ + ruamel-yaml==0.18.17
+ + ruamel-yaml-clib==0.2.15
+ + safetensors==0.8.0
+ + scipy==1.18.0
+ + seaborn==0.13.2
+ + sentencepiece==0.2.2
+ + setproctitle==1.3.7
+ + setuptools==83.0.0
+ + shellingham==1.5.4
+ + simplejson==4.1.1
+ + six==1.17.0
+ + soundfile==0.13.1
+ + starlette==1.3.1
+ + starlette-compress==1.8.0
+ + textual==5.3.0
+ + tiktoken==0.13.0
+ + tokenizers==0.22.2
+ + tqdm==4.70.0
+ + transformers==5.15.0.dev0 (from git+https://github.com/huggingface/transformers.git@f3f0c8b7784f56717e37743cabfc3c51041f24ed)
+ + typer==0.27.0
+ + typing-extensions==4.16.0
+ + typing-inspection==0.4.2
+ + tzdata==2026.3
+ + uc-micro-py==2.0.0
+ + urllib3==2.7.0
+ + uvicorn==0.51.0
+ + uvloop==0.22.1
+ + watchfiles==1.2.0
+ + websockets==16.1.1
+ + werkzeug==3.1.8
+ + xlsxwriter==3.2.9
+ + xxhash==3.8.1
+ + yarl==1.24.5
+ + zipp==4.1.0
+ + zstandard==0.25.0
+warning: The package `huggingface-hub==1.25.1` does not have an extra named `cli`
++ '[' '!' -x /tmp/inferencex-agentic-1/venv/bin/aiperf ']'
++ '[' '!' -x /tmp/inferencex-agentic-1/venv/bin/hf ']'
++ AIPERF_DEPS_READY=1
++ /tmp/inferencex-agentic-1/venv/bin/hf download --repo-type dataset semianalysisai/cc-traces-weka-062126-256k
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 2422.70it/s]
+[32m✓ Downloaded[0m
+  path: /mnt/hf_hub_cache/datasets--semianalysisai--cc-traces-weka-062126-256k/snapshots/8fecd2fc56694469f758f0afbbb6335ad3043740
++ install_agentic_deps
++ '[' 1 = 1 ']'
++ return
++ pip install amd-quark
+Requirement already satisfied: amd-quark in /usr/local/lib/python3.12/dist-packages (0.12.post1)
+Requirement already satisfied: evaluate in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.4.6)
+Requirement already satisfied: joblib in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.5.3)
+Requirement already satisfied: ninja in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.13.0)
+Requirement already satisfied: numpy>=2.0 in /usr/local/lib/python3.12/dist-packages (from amd-quark) (2.3.5)
+Requirement already satisfied: onnx<=1.22.0,>=1.21.0 in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.22.0)
+Requirement already satisfied: onnxscript in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.7.1)
+Requirement already satisfied: onnxslim>=0.1.84 in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.1.94)
+Requirement already satisfied: pandas in /usr/local/lib/python3.12/dist-packages (from amd-quark) (3.0.3)
+Requirement already satisfied: plotly in /usr/local/lib/python3.12/dist-packages (from amd-quark) (6.9.0)
+Requirement already satisfied: protobuf in /usr/local/lib/python3.12/dist-packages (from amd-quark) (6.33.6)
+Requirement already satisfied: psutil in /usr/local/lib/python3.12/dist-packages (from amd-quark) (7.2.2)
+Requirement already satisfied: pydantic in /usr/local/lib/python3.12/dist-packages (from amd-quark) (2.13.4)
+Requirement already satisfied: rich in /usr/local/lib/python3.12/dist-packages (from amd-quark) (15.0.0)
+Requirement already satisfied: scipy in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.18.0)
+Requirement already satisfied: sentencepiece in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.2.2)
+Requirement already satisfied: tqdm in /usr/local/lib/python3.12/dist-packages (from amd-quark) (4.69.1)
+Requirement already satisfied: zstandard in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.25.0)
+Requirement already satisfied: typing_extensions>=4.15.0 in /usr/local/lib/python3.12/dist-packages (from onnx<=1.22.0,>=1.21.0->amd-quark) (4.16.0)
+Requirement already satisfied: ml_dtypes>=0.5.4 in /usr/local/lib/python3.12/dist-packages (from onnx<=1.22.0,>=1.21.0->amd-quark) (0.5.4)
+Requirement already satisfied: colorama in /usr/local/lib/python3.12/dist-packages (from onnxslim>=0.1.84->amd-quark) (0.4.6)
+Requirement already satisfied: packaging in /usr/local/lib/python3.12/dist-packages (from onnxslim>=0.1.84->amd-quark) (26.2)
+Requirement already satisfied: sympy>=1.13.1 in /usr/local/lib/python3.12/dist-packages (from onnxslim>=0.1.84->amd-quark) (1.14.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.12/dist-packages (from sympy>=1.13.1->onnxslim>=0.1.84->amd-quark) (1.3.0)
+Requirement already satisfied: datasets>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (5.0.0)
+Requirement already satisfied: dill in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (0.4.1)
+Requirement already satisfied: requests>=2.19.0 in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (2.34.2)
+Requirement already satisfied: xxhash in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (3.8.1)
+Requirement already satisfied: multiprocess in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (0.70.19)
+Requirement already satisfied: fsspec>=2021.05.0 in /usr/local/lib/python3.12/dist-packages (from fsspec[http]>=2021.05.0->evaluate->amd-quark) (2026.4.0)
+Requirement already satisfied: huggingface-hub>=0.7.0 in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (1.24.0)
+Requirement already satisfied: filelock in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (3.32.0)
+Requirement already satisfied: pyarrow>=21.0.0 in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (25.0.0)
+Requirement already satisfied: httpx<1.0.0 in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (0.28.1)
+Requirement already satisfied: pyyaml>=5.1 in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (6.0.3)
+Requirement already satisfied: aiohttp!=4.0.0a0,!=4.0.0a1 in /usr/local/lib/python3.12/dist-packages (from fsspec[http]>=2021.05.0->evaluate->amd-quark) (3.14.3)
+Requirement already satisfied: anyio in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (4.14.2)
+Requirement already satisfied: certifi in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (2026.7.22)
+Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (1.0.9)
+Requirement already satisfied: idna in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (3.18)
+Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.12/dist-packages (from httpcore==1.*->httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (0.16.0)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /usr/local/lib/python3.12/dist-packages (from huggingface-hub>=0.7.0->evaluate->amd-quark) (8.4.2)
+Requirement already satisfied: hf-xet<2.0.0,>=1.5.1 in /usr/local/lib/python3.12/dist-packages (from huggingface-hub>=0.7.0->evaluate->amd-quark) (1.5.2)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (2.7.1)
+Requirement already satisfied: aiosignal>=1.4.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (1.4.0)
+Requirement already satisfied: attrs>=17.3.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (26.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (1.8.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (6.7.1)
+Requirement already satisfied: propcache>=0.2.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (0.5.2)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (1.24.5)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.12/dist-packages (from requests>=2.19.0->evaluate->amd-quark) (3.4.9)
+Requirement already satisfied: urllib3<3,>=1.26 in /usr/local/lib/python3.12/dist-packages (from requests>=2.19.0->evaluate->amd-quark) (2.7.0)
+Requirement already satisfied: onnx_ir<2,>=0.1.16 in /usr/local/lib/python3.12/dist-packages (from onnxscript->amd-quark) (0.2.1)
+Requirement already satisfied: python-dateutil>=2.8.2 in /usr/local/lib/python3.12/dist-packages (from pandas->amd-quark) (2.9.0.post0)
+Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.12/dist-packages (from python-dateutil>=2.8.2->pandas->amd-quark) (1.17.0)
+Requirement already satisfied: narwhals>=1.15.1 in /usr/local/lib/python3.12/dist-packages (from plotly->amd-quark) (2.24.0)
+Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.12/dist-packages (from pydantic->amd-quark) (0.8.0)
+Requirement already satisfied: pydantic-core==2.46.4 in /usr/local/lib/python3.12/dist-packages (from pydantic->amd-quark) (2.46.4)
+Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.12/dist-packages (from pydantic->amd-quark) (0.4.2)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.12/dist-packages (from rich->amd-quark) (4.2.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.12/dist-packages (from rich->amd-quark) (2.20.0)
+Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.12/dist-packages (from markdown-it-py>=2.2.0->rich->amd-quark) (0.1.2)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
++ '[' 4 -lt 8 ']'
++ export VLLM_ROCM_USE_AITER_RMSNORM=0
++ VLLM_ROCM_USE_AITER_RMSNORM=0
+++ rocm-smi --showfw
+++ grep MEC
+++ head -n 1
+++ awk '{print $NF}'
++ version=41
++ [[ 41 == '' ]]
++ [[ 41 -lt 177 ]]
++ export HSA_NO_SCRATCH_RECLAIM=1
++ HSA_NO_SCRATCH_RECLAIM=1
++ export VLLM_ROCM_USE_AITER=1
++ VLLM_ROCM_USE_AITER=1
++ export VLLM_ROCM_USE_AITER_MLA=1
++ VLLM_ROCM_USE_AITER_MLA=1
++ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
++ VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
++ export VLLM_ALLREDUCE_USE_SYMM_MEM=0
++ VLLM_ALLREDUCE_USE_SYMM_MEM=0
++ SERVER_LOG=/workspace/results/server.log
++ LMCACHE_LOG=/workspace/results/lmcache_server.log
++ MOONCAKE_MASTER_LOG=/workspace/results/mooncake_master.log
++ mkdir -p /workspace/results
++ OFFLOAD_ARGS=()
++ PREFIX_CACHE_ARGS=()
++ LMCACHE_PID=
++ MOONCAKE_MASTER_PID=
++ ROUTER_PID=
++ trap cleanup_offload_services EXIT
++ [[ dram == \n\o\n\e ]]
++ OFFLOAD_MODE=lmcache
++ case "$OFFLOAD_MODE" in
++ unset VLLM_USE_SIMPLE_KV_OFFLOAD
++ python3 -c 'import lmcache.integration.vllm.lmcache_mp_connector'
++ LMCACHE_SRC_DIR=/opt/lmcache-src
++ LMCACHE_GIT_REF=aaf7c0d3
++ rm -rf /opt/lmcache-src
++ git clone https://github.com/LMCache/LMCache.git /opt/lmcache-src
+Cloning into '/opt/lmcache-src'...
++ cd /opt/lmcache-src
++ git checkout aaf7c0d3
+Note: switching to 'aaf7c0d3'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at aaf7c0d3 fix macOS FFmpeg (#4047)
++ pip install -r requirements/build.txt
+Requirement already satisfied: ninja in /usr/local/lib/python3.12/dist-packages (from -r requirements/build.txt (line 3)) (1.13.0)
+Requirement already satisfied: packaging>=24.2 in /usr/local/lib/python3.12/dist-packages (from -r requirements/build.txt (line 4)) (26.2)
+Requirement already satisfied: setuptools<81.0.0,>=77.0.3 in /usr/local/lib/python3.12/dist-packages (from -r requirements/build.txt (line 5)) (79.0.1)
+Requirement already satisfied: setuptools_scm>=8 in /usr/local/lib/python3.12/dist-packages (from -r requirements/build.txt (line 6)) (10.2.1)
+Requirement already satisfied: wheel in /usr/local/lib/python3.12/dist-packages (from -r requirements/build.txt (line 10)) (0.47.0)
+Requirement already satisfied: vcs-versioning<3,>=2.0.0.dev0 in /usr/local/lib/python3.12/dist-packages (from setuptools_scm>=8->-r requirements/build.txt (line 6)) (2.2.2)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
++ CXX=hipcc
++ BUILD_WITH_HIP=1
++ pip install -e . --no-build-isolation
+Obtaining file:///opt/lmcache-src
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Collecting aiofile (from lmcache==0.5.2.dev24)
+  Downloading aiofile-3.11.1-py3-none-any.whl.metadata (14 kB)
+Requirement already satisfied: aiofiles in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (25.1.0)
+Requirement already satisfied: blake3 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (1.0.9)
+Requirement already satisfied: aiohttp in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (3.14.3)
+Collecting awscrt (from lmcache==0.5.2.dev24)
+  Downloading awscrt-0.36.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (11 kB)
+Collecting cufile-python (from lmcache==0.5.2.dev24)
+  Downloading cufile_python-0.2.0-py3-none-any.whl.metadata (1.5 kB)
+Requirement already satisfied: fastapi in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.136.3)
+Requirement already satisfied: httpx in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.28.1)
+Requirement already satisfied: huggingface_hub>=1.5.0 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (1.24.0)
+Requirement already satisfied: msgspec in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.21.1)
+Collecting numpy<=2.2.6 (from lmcache==0.5.2.dev24)
+  Downloading numpy-2.2.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (62 kB)
+Requirement already satisfied: numba in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.65.0)
+Collecting nvtx (from lmcache==0.5.2.dev24)
+  Downloading nvtx-0.2.15-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.8 kB)
+Collecting opentelemetry-api<=1.40.0,>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_api-1.40.0-py3-none-any.whl.metadata (1.5 kB)
+Requirement already satisfied: opentelemetry-sdk>=1.20.0 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (1.44.0)
+Requirement already satisfied: opentelemetry-exporter-otlp>=1.20.0 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (1.44.0)
+Collecting opentelemetry-exporter-prometheus<=0.61b0,>=0.50b0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_prometheus-0.61b0-py3-none-any.whl.metadata (2.1 kB)
+Collecting prometheus_client<=0.24.1,>=0.18.0 (from lmcache==0.5.2.dev24)
+  Downloading prometheus_client-0.24.1-py3-none-any.whl.metadata (2.1 kB)
+Requirement already satisfied: psutil in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (7.2.2)
+Requirement already satisfied: py-cpuinfo in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (9.0.0)
+Requirement already satisfied: pytest in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (9.1.1)
+Requirement already satisfied: pyyaml in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (6.0.3)
+Requirement already satisfied: pyzmq>=25.0.0 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (27.1.0)
+Requirement already satisfied: redis in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (8.0.1)
+Requirement already satisfied: safetensors in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.8.0)
+Requirement already satisfied: setuptools<81.0.0,>=77.0.3 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (79.0.1)
+Requirement already satisfied: setuptools_scm>=8 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (10.2.1)
+Collecting sortedcontainers (from lmcache==0.5.2.dev24)
+  Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: torch in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (2.11.0+gitd0c8b1f)
+Requirement already satisfied: transformers>=5.4 in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (5.14.1)
+Requirement already satisfied: uvicorn in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.51.0)
+Requirement already satisfied: httptools in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (0.8.0)
+Requirement already satisfied: cachetools in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (7.1.6)
+Requirement already satisfied: google-api-core in /usr/local/lib/python3.12/dist-packages (from lmcache==0.5.2.dev24) (2.33.0)
+Collecting google-cloud-bigtable (from lmcache==0.5.2.dev24)
+  Downloading google_cloud_bigtable-2.41.0-py3-none-any.whl.metadata (10 kB)
+Collecting cupy-rocm-7-0 (from lmcache==0.5.2.dev24)
+  Downloading cupy_rocm_7_0-14.1.1-cp312-cp312-manylinux2014_x86_64.whl.metadata (2.5 kB)
+Collecting importlib-metadata<8.8.0,>=6.0 (from opentelemetry-api<=1.40.0,>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading importlib_metadata-8.7.1-py3-none-any.whl.metadata (4.7 kB)
+Requirement already satisfied: typing-extensions>=4.5.0 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-api<=1.40.0,>=1.20.0->lmcache==0.5.2.dev24) (4.16.0)
+Collecting zipp>=3.20 (from importlib-metadata<8.8.0,>=6.0->opentelemetry-api<=1.40.0,>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading zipp-4.1.0-py3-none-any.whl.metadata (3.6 kB)
+Collecting opentelemetry-sdk>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_sdk-1.40.0-py3-none-any.whl.metadata (1.6 kB)
+Collecting opentelemetry-semantic-conventions==0.61b0 (from opentelemetry-sdk>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_semantic_conventions-0.61b0-py3-none-any.whl.metadata (2.5 kB)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /usr/local/lib/python3.12/dist-packages (from huggingface_hub>=1.5.0->lmcache==0.5.2.dev24) (8.4.2)
+Requirement already satisfied: filelock>=3.10.0 in /usr/local/lib/python3.12/dist-packages (from huggingface_hub>=1.5.0->lmcache==0.5.2.dev24) (3.32.0)
+Requirement already satisfied: fsspec>=2023.5.0 in /usr/local/lib/python3.12/dist-packages (from huggingface_hub>=1.5.0->lmcache==0.5.2.dev24) (2026.4.0)
+Requirement already satisfied: hf-xet<2.0.0,>=1.5.1 in /usr/local/lib/python3.12/dist-packages (from huggingface_hub>=1.5.0->lmcache==0.5.2.dev24) (1.5.2)
+Requirement already satisfied: packaging>=20.9 in /usr/local/lib/python3.12/dist-packages (from huggingface_hub>=1.5.0->lmcache==0.5.2.dev24) (26.2)
+Requirement already satisfied: tqdm>=4.42.1 in /usr/local/lib/python3.12/dist-packages (from huggingface_hub>=1.5.0->lmcache==0.5.2.dev24) (4.69.1)
+Requirement already satisfied: anyio in /usr/local/lib/python3.12/dist-packages (from httpx->lmcache==0.5.2.dev24) (4.14.2)
+Requirement already satisfied: certifi in /usr/local/lib/python3.12/dist-packages (from httpx->lmcache==0.5.2.dev24) (2026.7.22)
+Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.12/dist-packages (from httpx->lmcache==0.5.2.dev24) (1.0.9)
+Requirement already satisfied: idna in /usr/local/lib/python3.12/dist-packages (from httpx->lmcache==0.5.2.dev24) (3.18)
+Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.12/dist-packages (from httpcore==1.*->httpx->lmcache==0.5.2.dev24) (0.16.0)
+Requirement already satisfied: opentelemetry-exporter-otlp-proto-grpc==1.44.0 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (1.44.0)
+Requirement already satisfied: opentelemetry-exporter-otlp-proto-http==1.44.0 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (1.44.0)
+Requirement already satisfied: googleapis-common-protos~=1.57 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp-proto-grpc==1.44.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (1.75.0)
+Requirement already satisfied: grpcio<2.0.0,>=1.63.2 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp-proto-grpc==1.44.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (1.78.0)
+Requirement already satisfied: opentelemetry-exporter-otlp-proto-common==1.44.0 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp-proto-grpc==1.44.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (1.44.0)
+Requirement already satisfied: opentelemetry-proto==1.44.0 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp-proto-grpc==1.44.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (1.44.0)
+INFO: pip is looking at multiple versions of opentelemetry-exporter-otlp-proto-grpc to determine which version is compatible with other requirements. This could take a while.
+Collecting opentelemetry-exporter-otlp>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp-1.44.0-py3-none-any.whl.metadata (2.4 kB)
+  Downloading opentelemetry_exporter_otlp-1.43.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc==1.43.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_grpc-1.43.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.43.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_http-1.43.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.43.0 (from opentelemetry-exporter-otlp-proto-grpc==1.43.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_common-1.43.0-py3-none-any.whl.metadata (1.8 kB)
+Collecting opentelemetry-proto==1.43.0 (from opentelemetry-exporter-otlp-proto-grpc==1.43.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_proto-1.43.0-py3-none-any.whl.metadata (2.3 kB)
+Collecting opentelemetry-exporter-otlp>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp-1.42.1-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc==1.42.1 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_grpc-1.42.1-py3-none-any.whl.metadata (2.6 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.42.1 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_http-1.42.1-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.42.1 (from opentelemetry-exporter-otlp-proto-grpc==1.42.1->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_common-1.42.1-py3-none-any.whl.metadata (1.8 kB)
+Collecting opentelemetry-proto==1.42.1 (from opentelemetry-exporter-otlp-proto-grpc==1.42.1->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_proto-1.42.1-py3-none-any.whl.metadata (2.3 kB)
+Collecting opentelemetry-exporter-otlp>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp-1.42.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc==1.42.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_grpc-1.42.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.42.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_http-1.42.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.42.0 (from opentelemetry-exporter-otlp-proto-grpc==1.42.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_common-1.42.0-py3-none-any.whl.metadata (1.8 kB)
+Collecting opentelemetry-proto==1.42.0 (from opentelemetry-exporter-otlp-proto-grpc==1.42.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_proto-1.42.0-py3-none-any.whl.metadata (2.3 kB)
+Collecting opentelemetry-exporter-otlp>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp-1.41.1-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc==1.41.1 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_grpc-1.41.1-py3-none-any.whl.metadata (2.6 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.41.1 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_http-1.41.1-py3-none-any.whl.metadata (2.5 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.41.1 (from opentelemetry-exporter-otlp-proto-grpc==1.41.1->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_common-1.41.1-py3-none-any.whl.metadata (1.9 kB)
+Collecting opentelemetry-proto==1.41.1 (from opentelemetry-exporter-otlp-proto-grpc==1.41.1->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_proto-1.41.1-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp-1.41.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc==1.41.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_grpc-1.41.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.41.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_http-1.41.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.41.0 (from opentelemetry-exporter-otlp-proto-grpc==1.41.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_common-1.41.0-py3-none-any.whl.metadata (1.9 kB)
+Collecting opentelemetry-proto==1.41.0 (from opentelemetry-exporter-otlp-proto-grpc==1.41.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_proto-1.41.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp>=1.20.0 (from lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp-1.40.0-py3-none-any.whl.metadata (2.4 kB)
+Collecting opentelemetry-exporter-otlp-proto-grpc==1.40.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_grpc-1.40.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting opentelemetry-exporter-otlp-proto-http==1.40.0 (from opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_http-1.40.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting opentelemetry-exporter-otlp-proto-common==1.40.0 (from opentelemetry-exporter-otlp-proto-grpc==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_exporter_otlp_proto_common-1.40.0-py3-none-any.whl.metadata (1.9 kB)
+Collecting opentelemetry-proto==1.40.0 (from opentelemetry-exporter-otlp-proto-grpc==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading opentelemetry_proto-1.40.0-py3-none-any.whl.metadata (2.4 kB)
+Requirement already satisfied: requests~=2.7 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-exporter-otlp-proto-http==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (2.34.2)
+Requirement already satisfied: protobuf<7.0,>=5.0 in /usr/local/lib/python3.12/dist-packages (from opentelemetry-proto==1.40.0->opentelemetry-exporter-otlp-proto-grpc==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (6.33.6)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.12/dist-packages (from requests~=2.7->opentelemetry-exporter-otlp-proto-http==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (3.4.9)
+Requirement already satisfied: urllib3<3,>=1.26 in /usr/local/lib/python3.12/dist-packages (from requests~=2.7->opentelemetry-exporter-otlp-proto-http==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24) (2.7.0)
+Requirement already satisfied: vcs-versioning<3,>=2.0.0.dev0 in /usr/local/lib/python3.12/dist-packages (from setuptools_scm>=8->lmcache==0.5.2.dev24) (2.2.2)
+Requirement already satisfied: regex>=2025.10.22 in /usr/local/lib/python3.12/dist-packages (from transformers>=5.4->lmcache==0.5.2.dev24) (2026.7.19)
+Requirement already satisfied: tokenizers<=0.23.0,>=0.22.0 in /usr/local/lib/python3.12/dist-packages (from transformers>=5.4->lmcache==0.5.2.dev24) (0.22.2)
+Requirement already satisfied: typer in /usr/local/lib/python3.12/dist-packages (from transformers>=5.4->lmcache==0.5.2.dev24) (0.27.0)
+Collecting caio~=0.9.0 (from aiofile->lmcache==0.5.2.dev24)
+  Downloading caio-0.9.25-cp312-cp312-manylinux_2_34_x86_64.whl.metadata (3.3 kB)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (2.7.1)
+Requirement already satisfied: aiosignal>=1.4.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (1.4.0)
+Requirement already satisfied: attrs>=17.3.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (26.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (1.8.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (6.7.1)
+Requirement already satisfied: propcache>=0.2.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (0.5.2)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp->lmcache==0.5.2.dev24) (1.24.5)
+Requirement already satisfied: starlette>=0.46.0 in /usr/local/lib/python3.12/dist-packages (from fastapi->lmcache==0.5.2.dev24) (1.3.1)
+Requirement already satisfied: pydantic>=2.9.0 in /usr/local/lib/python3.12/dist-packages (from fastapi->lmcache==0.5.2.dev24) (2.13.4)
+Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.12/dist-packages (from fastapi->lmcache==0.5.2.dev24) (0.4.2)
+Requirement already satisfied: annotated-doc>=0.0.2 in /usr/local/lib/python3.12/dist-packages (from fastapi->lmcache==0.5.2.dev24) (0.0.4)
+Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.12/dist-packages (from pydantic>=2.9.0->fastapi->lmcache==0.5.2.dev24) (0.8.0)
+Requirement already satisfied: pydantic-core==2.46.4 in /usr/local/lib/python3.12/dist-packages (from pydantic>=2.9.0->fastapi->lmcache==0.5.2.dev24) (2.46.4)
+Requirement already satisfied: proto-plus<2.0.0,>=1.24.0 in /usr/local/lib/python3.12/dist-packages (from google-api-core->lmcache==0.5.2.dev24) (1.28.2)
+Requirement already satisfied: google-auth<3.0.0,>=2.14.1 in /usr/local/lib/python3.12/dist-packages (from google-api-core->lmcache==0.5.2.dev24) (2.56.2)
+Requirement already satisfied: pyasn1-modules>=0.2.1 in /usr/local/lib/python3.12/dist-packages (from google-auth<3.0.0,>=2.14.1->google-api-core->lmcache==0.5.2.dev24) (0.4.2)
+Requirement already satisfied: cryptography>=38.0.3 in /usr/local/lib/python3.12/dist-packages (from google-auth<3.0.0,>=2.14.1->google-api-core->lmcache==0.5.2.dev24) (49.0.0)
+Requirement already satisfied: cffi>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from cryptography>=38.0.3->google-auth<3.0.0,>=2.14.1->google-api-core->lmcache==0.5.2.dev24) (2.1.0)
+Requirement already satisfied: pycparser in /usr/local/lib/python3.12/dist-packages (from cffi>=2.0.0->cryptography>=38.0.3->google-auth<3.0.0,>=2.14.1->google-api-core->lmcache==0.5.2.dev24) (3.0)
+Requirement already satisfied: pyasn1<0.7.0,>=0.6.1 in /usr/local/lib/python3.12/dist-packages (from pyasn1-modules>=0.2.1->google-auth<3.0.0,>=2.14.1->google-api-core->lmcache==0.5.2.dev24) (0.6.4)
+Requirement already satisfied: google-cloud-core<3.0.0,>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from google-cloud-bigtable->lmcache==0.5.2.dev24) (2.6.0)
+Collecting grpc-google-iam-v1<1.0.0,>=0.14.2 (from google-cloud-bigtable->lmcache==0.5.2.dev24)
+  Downloading grpc_google_iam_v1-0.14.4-py3-none-any.whl.metadata (9.1 kB)
+Requirement already satisfied: google-crc32c<2.0.0dev,>=1.6.0 in /usr/local/lib/python3.12/dist-packages (from google-cloud-bigtable->lmcache==0.5.2.dev24) (1.8.0)
+Collecting grpcio-status<2.0.0,>=1.41.0 (from google-api-core[grpc]<3.0.0,>=2.24.2->google-cloud-bigtable->lmcache==0.5.2.dev24)
+  Downloading grpcio_status-1.83.0-py3-none-any.whl.metadata (1.2 kB)
+Collecting grpcio<2.0.0,>=1.63.2 (from opentelemetry-exporter-otlp-proto-grpc==1.40.0->opentelemetry-exporter-otlp>=1.20.0->lmcache==0.5.2.dev24)
+  Downloading grpcio-1.83.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (3.7 kB)
+Requirement already satisfied: llvmlite<0.48,>=0.47.0dev0 in /usr/local/lib/python3.12/dist-packages (from numba->lmcache==0.5.2.dev24) (0.47.0)
+Requirement already satisfied: iniconfig>=1.0.1 in /usr/local/lib/python3.12/dist-packages (from pytest->lmcache==0.5.2.dev24) (2.3.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /usr/local/lib/python3.12/dist-packages (from pytest->lmcache==0.5.2.dev24) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in /usr/local/lib/python3.12/dist-packages (from pytest->lmcache==0.5.2.dev24) (2.20.0)
+Requirement already satisfied: sympy>=1.13.3 in /usr/local/lib/python3.12/dist-packages (from torch->lmcache==0.5.2.dev24) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in /usr/local/lib/python3.12/dist-packages (from torch->lmcache==0.5.2.dev24) (3.6.1)
+Requirement already satisfied: jinja2 in /usr/local/lib/python3.12/dist-packages (from torch->lmcache==0.5.2.dev24) (3.1.6)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.12/dist-packages (from sympy>=1.13.3->torch->lmcache==0.5.2.dev24) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /usr/local/lib/python3.12/dist-packages (from jinja2->torch->lmcache==0.5.2.dev24) (3.0.3)
+Requirement already satisfied: shellingham>=1.3.0 in /usr/local/lib/python3.12/dist-packages (from typer->transformers>=5.4->lmcache==0.5.2.dev24) (1.5.4)
+Requirement already satisfied: rich>=13.8.0 in /usr/local/lib/python3.12/dist-packages (from typer->transformers>=5.4->lmcache==0.5.2.dev24) (15.0.0)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.12/dist-packages (from rich>=13.8.0->typer->transformers>=5.4->lmcache==0.5.2.dev24) (4.2.0)
+Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.12/dist-packages (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers>=5.4->lmcache==0.5.2.dev24) (0.1.2)
+Downloading numpy-2.2.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (16.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.5/16.5 MB 80.9 MB/s  0:00:00
+Downloading opentelemetry_api-1.40.0-py3-none-any.whl (68 kB)
+Downloading importlib_metadata-8.7.1-py3-none-any.whl (27 kB)
+Downloading opentelemetry_exporter_prometheus-0.61b0-py3-none-any.whl (13 kB)
+Downloading opentelemetry_sdk-1.40.0-py3-none-any.whl (141 kB)
+Downloading opentelemetry_semantic_conventions-0.61b0-py3-none-any.whl (231 kB)
+Downloading prometheus_client-0.24.1-py3-none-any.whl (64 kB)
+Downloading opentelemetry_exporter_otlp-1.40.0-py3-none-any.whl (7.0 kB)
+Downloading opentelemetry_exporter_otlp_proto_grpc-1.40.0-py3-none-any.whl (20 kB)
+Downloading opentelemetry_exporter_otlp_proto_common-1.40.0-py3-none-any.whl (18 kB)
+Downloading opentelemetry_exporter_otlp_proto_http-1.40.0-py3-none-any.whl (19 kB)
+Downloading opentelemetry_proto-1.40.0-py3-none-any.whl (72 kB)
+Downloading zipp-4.1.0-py3-none-any.whl (10 kB)
+Downloading aiofile-3.11.1-py3-none-any.whl (20 kB)
+Downloading caio-0.9.25-cp312-cp312-manylinux_2_34_x86_64.whl (80 kB)
+Downloading awscrt-0.36.1-cp311-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.3/4.3 MB 106.5 MB/s  0:00:00
+Downloading cufile_python-0.2.0-py3-none-any.whl (5.3 kB)
+Downloading cupy_rocm_7_0-14.1.1-cp312-cp312-manylinux2014_x86_64.whl (73.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.6/73.6 MB 54.7 MB/s  0:00:01
+Downloading google_cloud_bigtable-2.41.0-py3-none-any.whl (568 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 568.3/568.3 kB 35.1 MB/s  0:00:00
+Downloading grpc_google_iam_v1-0.14.4-py3-none-any.whl (32 kB)
+Downloading grpcio_status-1.83.0-py3-none-any.whl (14 kB)
+Downloading grpcio-1.83.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (7.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.0/7.0 MB 35.9 MB/s  0:00:00
+Downloading nvtx-0.2.15-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.2/806.2 kB 43.3 MB/s  0:00:00
+Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl (29 kB)
+Building wheels for collected packages: lmcache
+  Building editable for lmcache (pyproject.toml): started
+  Building editable for lmcache (pyproject.toml): still running...
+  Building editable for lmcache (pyproject.toml): finished with status 'done'
+  Created wheel for lmcache: filename=lmcache-0.5.2.dev24-0.editable-cp312-cp312-linux_x86_64.whl size=12185 sha256=474573f18ea5b1919659ead3426caf98cdea10ab5c1c11adc7d7a5c6e8371cd6
+  Stored in directory: /tmp/pip-ephem-wheel-cache-xu34hkin/wheels/b2/ac/3f/3fd5d97f674947b0c41e8c0734d4afb3c675ef3a20837e15de
+Successfully built lmcache
+Installing collected packages: sortedcontainers, nvtx, zipp, prometheus_client, opentelemetry-proto, numpy, grpcio, cufile-python, caio, awscrt, opentelemetry-exporter-otlp-proto-common, importlib-metadata, grpcio-status, cupy-rocm-7-0, aiofile, opentelemetry-api, grpc-google-iam-v1, opentelemetry-semantic-conventions, opentelemetry-sdk, opentelemetry-exporter-prometheus, opentelemetry-exporter-otlp-proto-http, opentelemetry-exporter-otlp-proto-grpc, google-cloud-bigtable, opentelemetry-exporter-otlp, lmcache
+  Attempting uninstall: zipp
+    Found existing installation: zipp 1.0.0
+    Uninstalling zipp-1.0.0:
+      Successfully uninstalled zipp-1.0.0
+  Attempting uninstall: prometheus_client
+    Found existing installation: prometheus_client 0.26.0
+    Uninstalling prometheus_client-0.26.0:
+      Successfully uninstalled prometheus_client-0.26.0
+  Attempting uninstall: opentelemetry-proto
+    Found existing installation: opentelemetry-proto 1.44.0
+    Uninstalling opentelemetry-proto-1.44.0:
+      Successfully uninstalled opentelemetry-proto-1.44.0
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.3.5
+    Uninstalling numpy-2.3.5:
+      Successfully uninstalled numpy-2.3.5
+  Attempting uninstall: grpcio
+    Found existing installation: grpcio 1.78.0
+    Uninstalling grpcio-1.78.0:
+      Successfully uninstalled grpcio-1.78.0
+  Attempting uninstall: opentelemetry-exporter-otlp-proto-common
+    Found existing installation: opentelemetry-exporter-otlp-proto-common 1.44.0
+    Uninstalling opentelemetry-exporter-otlp-proto-common-1.44.0:
+      Successfully uninstalled opentelemetry-exporter-otlp-proto-common-1.44.0
+  Attempting uninstall: importlib-metadata
+    Found existing installation: importlib-metadata 4.6.4
+    Uninstalling importlib-metadata-4.6.4:
+      Successfully uninstalled importlib-metadata-4.6.4
+  Attempting uninstall: opentelemetry-api
+    Found existing installation: opentelemetry-api 1.44.0
+    Uninstalling opentelemetry-api-1.44.0:
+      Successfully uninstalled opentelemetry-api-1.44.0
+  Attempting uninstall: opentelemetry-semantic-conventions
+    Found existing installation: opentelemetry-semantic-conventions 0.65b0
+    Uninstalling opentelemetry-semantic-conventions-0.65b0:
+      Successfully uninstalled opentelemetry-semantic-conventions-0.65b0
+  Attempting uninstall: opentelemetry-sdk
+    Found existing installation: opentelemetry-sdk 1.44.0
+    Uninstalling opentelemetry-sdk-1.44.0:
+      Successfully uninstalled opentelemetry-sdk-1.44.0
+  Attempting uninstall: opentelemetry-exporter-otlp-proto-http
+    Found existing installation: opentelemetry-exporter-otlp-proto-http 1.44.0
+    Uninstalling opentelemetry-exporter-otlp-proto-http-1.44.0:
+      Successfully uninstalled opentelemetry-exporter-otlp-proto-http-1.44.0
+  Attempting uninstall: opentelemetry-exporter-otlp-proto-grpc
+    Found existing installation: opentelemetry-exporter-otlp-proto-grpc 1.44.0
+    Uninstalling opentelemetry-exporter-otlp-proto-grpc-1.44.0:
+      Successfully uninstalled opentelemetry-exporter-otlp-proto-grpc-1.44.0
+  Attempting uninstall: opentelemetry-exporter-otlp
+    Found existing installation: opentelemetry-exporter-otlp 1.44.0
+    Uninstalling opentelemetry-exporter-otlp-1.44.0:
+      Successfully uninstalled opentelemetry-exporter-otlp-1.44.0
+
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+vllm 0.26.0+rocm723 requires grpcio==1.78.0, but you have grpcio 1.83.0 which is incompatible.
+Successfully installed aiofile-3.11.1 awscrt-0.36.1 caio-0.9.25 cufile-python-0.2.0 cupy-rocm-7-0-14.1.1 google-cloud-bigtable-2.41.0 grpc-google-iam-v1-0.14.4 grpcio-1.83.0 grpcio-status-1.83.0 importlib-metadata-8.7.1 lmcache-0.5.2.dev24 numpy-2.2.6 nvtx-0.2.15 opentelemetry-api-1.40.0 opentelemetry-exporter-otlp-1.40.0 opentelemetry-exporter-otlp-proto-common-1.40.0 opentelemetry-exporter-otlp-proto-grpc-1.40.0 opentelemetry-exporter-otlp-proto-http-1.40.0 opentelemetry-exporter-prometheus-0.61b0 opentelemetry-proto-1.40.0 opentelemetry-sdk-1.40.0 opentelemetry-semantic-conventions-0.61b0 prometheus_client-0.24.1 sortedcontainers-2.4.0 zipp-4.1.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
++ python3 -c 'import lmcache.integration.vllm.lmcache_mp_connector'
+[32;20m[2026-07-27 13:54:14,280] LMCache INFO:[0m torch_dev=<module 'torch.cuda' from '/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py'>, torch_device_type=cuda [3m(__init__.py:208:lmcache.v1.platform)[0m
+[32;20m[2026-07-27 13:54:14,584] LMCache INFO:[0m Using backend: lmcache.c_ops [3m(__init__.py:198:lmcache.v1.platform)[0m
+[32;20m[2026-07-27 13:54:33,989] LMCache INFO:[0m multi_layer_block_kv_transfer mode: ptr [3m(base.py:94:lmcache.v1.multiprocess.transfer_context.base)[0m
++ LMCACHE_HOST=127.0.0.1
++ LMCACHE_PORT=11896
++ LMCACHE_HTTP_PORT=12896
++ LMCACHE_CONNECT_HOST=tcp://127.0.0.1
+++ df -BG --output=avail /dev/shm
+++ tail -1
+++ tr -dc 0-9
+Starting LMCache MP server...
++ SHM_FREE_GB=838
++ SHM_CAP_GB=754
++ LMCACHE_L1_SIZE_GB=586
++ '[' -n 754 ']'
++ '[' 754 -gt 0 ']'
++ '[' 586 -gt 754 ']'
++ LMCACHE_L1_INIT_SIZE_GB=20
++ LMCACHE_L1_READ_TTL_SECONDS=7200
++ LMCACHE_CHUNK_SIZE=256
++ LMCACHE_MAX_WORKERS=8
++ export PYTHONHASHSEED=0
++ PYTHONHASHSEED=0
++ export LMCACHE_BLOCKING_TIMEOUT_SECS=60
++ LMCACHE_BLOCKING_TIMEOUT_SECS=60
++ echo 'Starting LMCache MP server...'
++ LMCACHE_CMD=(lmcache server --host "$LMCACHE_HOST" --port "$LMCACHE_PORT" --http-host "$LMCACHE_HOST" --http-port "$LMCACHE_HTTP_PORT" --l1-size-gb "$LMCACHE_L1_SIZE_GB" --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB" --l1-read-ttl-seconds "$LMCACHE_L1_READ_TTL_SECONDS" --chunk-size "$LMCACHE_CHUNK_SIZE" --max-workers "$LMCACHE_MAX_WORKERS" --eviction-policy LRU)
++ printf '%q ' lmcache server --host 127.0.0.1 --port 11896 --http-host 127.0.0.1 --http-port 12896 --l1-size-gb 586 --l1-init-size-gb 20 --l1-read-ttl-seconds 7200 --chunk-size 256 --max-workers 8 --eviction-policy LRU
++ printf '\n'
+LMCache server PID: 2786
++ LMCACHE_PID=2786
++ echo 'LMCache server PID: 2786'
++ wait_for_lmcache_ready
++ lmcache server --host 127.0.0.1 --port 11896 --http-host 127.0.0.1 --http-port 12896 --l1-size-gb 586 --l1-init-size-gb 20 --l1-read-ttl-seconds 7200 --chunk-size 256 --max-workers 8 --eviction-policy LRU
+[32;20m[2026-07-27 13:54:36,974] LMCache INFO:[0m torch_dev=<module 'torch.cuda' from '/usr/local/lib/python3.12/dist-packages/torch/cuda/__init__.py'>, torch_device_type=cuda [3m(__init__.py:208:lmcache.v1.platform)[0m
+[32;20m[2026-07-27 13:54:37,278] LMCache INFO:[0m Using backend: lmcache.c_ops [3m(__init__.py:198:lmcache.v1.platform)[0m
+
+ _     __  __    ____           _          
+| |   |  \/  |  / ___|__ _  ___| |__   ___      LMCache v0.5.2.dev24 (gaaf7c0d3)
+| |   | |\/| | | |   / _` |/ __| '_ \ / _ \     Website:  https://lmcache.ai/
+| |___| |  | | | |__| (_| | (__| | | |  __/     Recipes:  https://docs.lmcache.ai/recipes
+|_____|_|  |_|  \____\__,_|\___|_| |_|\___|     LinkedIn: https://www.linkedin.com/company/lmcache-lab
+Set LMCACHE_DISABLE_BANNER=1 to hide this banner.
+
+[32;20m[2026-07-27 13:54:38,202] LMCache INFO:[0m multi_layer_block_kv_transfer mode: ptr [3m(base.py:94:lmcache.v1.multiprocess.transfer_context.base)[0m
+[32;20m[2026-07-27 13:54:39,859] LMCache INFO:[0m Discovered API module: cache_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,860] LMCache INFO:[0m Discovered API module: env_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,860] LMCache INFO:[0m Discovered API module: loglevel_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,861] LMCache INFO:[0m Discovered API module: metrics_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,862] LMCache INFO:[0m Discovered API module: periodic_thread_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,863] LMCache INFO:[0m Discovered API module: run_script_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,863] LMCache INFO:[0m Discovered API module: thread_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,865] LMCache INFO:[0m Discovered API module: common_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,865] LMCache INFO:[0m Discovered API module: config_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,867] LMCache INFO:[0m Discovered API module: info_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,868] LMCache INFO:[0m Discovered API module: quota_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,871] LMCache INFO:[0m Discovered API module: reconfigure_api [3m(router_discovery.py:53:lmcache.v1.utils.router_discovery)[0m
+[32;20m[2026-07-27 13:54:39,988] LMCache INFO:[0m CudaPinMemoryBackend: using torch cudart [3m(pin_memory.py:89:lmcache.v1.platform.cuda.pin_memory)[0m
+[32;20m[2026-07-27 13:54:39,989] LMCache INFO:[0m Starting LMCache HTTP server on http://127.0.0.1:12896 [3m(http_server.py:258:lmcache.v1.multiprocess.http_server)[0m
+INFO:     Started server process [2786]
+INFO:     Waiting for application startup.
+[32;20m[2026-07-27 13:54:40,012] LMCache INFO:[0m Starting LMCache HTTP server... (accelerator available: True) [3m(http_server.py:73:lmcache.v1.multiprocess.http_server)[0m
+[32;20m[2026-07-27 13:54:40,021] LMCache INFO:[0m OTel MeterProvider initialised with Prometheus fallback (standalone metrics HTTP server disabled; /metrics must be exposed by the caller), resource={'telemetry.sdk.language': 'python', 'telemetry.sdk.name': 'opentelemetry', 'telemetry.sdk.version': '1.40.0', 'service.instance.id': '83b29d21-faf8-4f92-b632-eefe4ed664e7', 'service.name': 'unknown_service'} [3m(otel_init.py:114:lmcache.v1.mp_observability.otel_init)[0m
+[32;20m[2026-07-27 13:54:40,021] LMCache INFO:[0m Checking if shm capacity is larger than L1 request [3m(server.py:329:lmcache.v1.multiprocess.server)[0m
+[32;20m[2026-07-27 13:54:46,507] LMCache INFO:[0m Starting L1EvictionController... [3m(eviction_controller.py:53:lmcache.v1.distributed.storage_controllers.eviction_controller)[0m
+[32;20m[2026-07-27 13:54:46,535] LMCache INFO:[0m Starting L2EvictionController... [3m(eviction_controller.py:233:lmcache.v1.distributed.storage_controllers.eviction_controller)[0m
+[32;20m[2026-07-27 13:54:46,564] LMCache INFO:[0m Starting StoreController... [3m(store_controller.py:305:lmcache.v1.distributed.storage_controllers.store_controller)[0m
+[32;20m[2026-07-27 13:54:46,605] LMCache INFO:[0m Starting PrefetchController... [3m(prefetch_controller.py:555:lmcache.v1.distributed.storage_controllers.prefetch_controller)[0m
+[32;20m[2026-07-27 13:54:46,617] LMCache INFO:[0m Using blake3 hash function [3m(token_hasher.py:79:lmcache.v1.multiprocess.token_hasher)[0m
+[32;20m[2026-07-27 13:54:46,631] LMCache INFO:[0m Computed NONE_HASH=b"~>\xff\x9e\xf7a:P4\x0e\xb1&w\xee\x03\xb8:\xc7Y\xfc\xba\x9b\xb3'\x05\xf0rH\xd5mG;" using hash function [3m(token_hasher.py:180:lmcache.v1.multiprocess.token_hasher)[0m
+[32;20m[2026-07-27 13:54:46,631] LMCache INFO:[0m TokenHasher initialized: chunk_size=256, hash_algorithm=blake3 [3m(token_hasher.py:67:lmcache.v1.multiprocess.token_hasher)[0m
+[32;20m[2026-07-27 13:54:46,657] LMCache INFO:[0m PeriodicThread SessionManager-cleanup-thread-7be2d037f9e0 entering main loop (interval=60.0s) [3m(periodic_thread.py:284:lmcache.v1.periodic_thread)[0m
+[32;20m[2026-07-27 13:54:46,657] LMCache INFO:[0m Started PeriodicThread: SessionManager-cleanup-thread-7be2d037f9e0 (level=medium, interval=60.0s, init_wait=0.0s) [3m(periodic_thread.py:244:lmcache.v1.periodic_thread)[0m
+[32;20m[2026-07-27 13:54:46,667] LMCache INFO:[0m Supported transfer mode: auto [3m(server.py:206:lmcache.v1.multiprocess.server)[0m
+[32;20m[2026-07-27 13:54:46,675] LMCache INFO:[0m PeriodicThread lmcache-mp-worker-reaper entering main loop (interval=30.0s) [3m(periodic_thread.py:284:lmcache.v1.periodic_thread)[0m
+[32;20m[2026-07-27 13:54:46,675] LMCache INFO:[0m Started PeriodicThread: lmcache-mp-worker-reaper (level=medium, interval=30.0s, init_wait=0.0s) [3m(periodic_thread.py:244:lmcache.v1.periodic_thread)[0m
+[32;20m[2026-07-27 13:54:46,840] LMCache INFO:[0m Created AffinityThreadPool 'affinity-pool-0' with 8 worker slots: up to 8 distinct affinity keys each bind to their own thread before slots are shared. Compare this against the number of clients expected to connect to confirm routing. [3m(affinity_pool.py:60:lmcache.v1.multiprocess.affinity_pool)[0m
+[32;20m[2026-07-27 13:54:46,840] LMCache INFO:[0m LMCache ZMQ cache server is running on tcp://127.0.0.1:11896 [3m(server.py:389:lmcache.v1.multiprocess.server)[0m
+[32;20m[2026-07-27 13:54:46,854] LMCache INFO:[0m LMCache cache server is running... [3m(server.py:404:lmcache.v1.multiprocess.server)[0m
+[32;20m[2026-07-27 13:54:46,854] LMCache INFO:[0m LMCache HTTP server initialized [3m(http_server.py:166:lmcache.v1.multiprocess.http_server)[0m
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:12896 (Press CTRL+C to quit)
+INFO:     127.0.0.1:36064 - "GET /healthcheck HTTP/1.1" 200 OK
+Starting vllm server...
+vllm serve amd/Kimi-K2.7-Code-MXFP4 --served-model-name amd/Kimi-K2.7-Code-MXFP4 --host 0.0.0.0 --port 8896 --tensor-parallel-size=4 --gpu-memory-utilization 0.9 --kv-cache-dtype fp8 --trust-remote-code --max-num-seqs 40 --mm-encoder-tp-mode data --kv-transfer-config \{\"kv_connector\":\"LMCacheMPConnector\"\,\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\"\,\"kv_role\":\"kv_both\"\,\"kv_connector_extra_config\":\{\"lmcache.mp.host\":\"tcp://127.0.0.1\"\,\"lmcache.mp.port\":11896\}\} 
+Server PID: 2912
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:345] 
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:345]        █     █     █▄   ▄█
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:345]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.26.0
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:345]   █▄█▀ █     █     █     █  model   amd/Kimi-K2.7-Code-MXFP4
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:345]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:345] 
+(APIServer pid=2912) INFO 07-27 13:54:59 [api_utils.py:273] non-default args: {'model_tag': 'amd/Kimi-K2.7-Code-MXFP4', 'host': '0.0.0.0', 'port': 8896, 'model': 'amd/Kimi-K2.7-Code-MXFP4', 'trust_remote_code': True, 'served_model_name': ['amd/Kimi-K2.7-Code-MXFP4'], 'tensor_parallel_size': 4, 'gpu_memory_utilization': 0.9, 'kv_cache_dtype': 'fp8', 'mm_encoder_tp_mode': 'data', 'max_num_seqs': 40, 'kv_transfer_config': KVTransferConfig(kv_connector='LMCacheMPConnector', engine_id='ae15cc49-a6d8-4690-960a-eda443f75308', kv_buffer_device='cuda', kv_buffer_size=1000000000.0, kv_role='kv_both', kv_rank=None, kv_parallel_size=1, kv_ip='127.0.0.1', kv_port=14579, kv_connector_extra_config={'lmcache.mp.host': 'tcp://127.0.0.1', 'lmcache.mp.port': 11896}, kv_connector_module_path='lmcache.integration.vllm.lmcache_mp_connector', enable_permute_local_kv=False, kv_load_failure_policy='fail')}
+(APIServer pid=2912) Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+(APIServer pid=2912) ERROR 07-27 13:54:59 [repo_utils.py:68] Error retrieving file list: (Request ID: Root=1-6a676333-34bc340259ec68834c4dc995;46893400-0269-4bf3-8529-b317c69852a0)
+(APIServer pid=2912) ERROR 07-27 13:54:59 [repo_utils.py:68] 
+(APIServer pid=2912) ERROR 07-27 13:54:59 [repo_utils.py:68] 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) ERROR 07-27 13:54:59 [repo_utils.py:68] Retry after 41 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) ERROR 07-27 13:54:59 [repo_utils.py:68] Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) ERROR 07-27 13:54:59 [repo_utils.py:68] We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API., retrying 1 of 2
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:66] Error retrieving file list: (Request ID: Root=1-6a676335-427241554e2ca49353575e62;45603c28-c1f9-46f8-909c-2325a939ac88)
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:66] 
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:66] 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:66] Retry after 39 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:66] Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:66] We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API.
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:131] Error retrieving file list. Please ensure your `model_name_or_path``repo_type`, `token` and `revision` arguments are correctly set. Returning an empty list.
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:68] Error retrieving file list: (Request ID: Root=1-6a676335-6bf660e200374f512a062a48;50407d1b-32cc-400a-baf9-ab95ff557cc3)
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:68] 
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:68] 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:68] Retry after 39 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:68] Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) ERROR 07-27 13:55:01 [repo_utils.py:68] We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API., retrying 1 of 2
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:66] Error retrieving file list: (Request ID: Root=1-6a676337-2961ec0029bc9a40621ad652;1c09adf7-b74c-4321-8abe-c69101ab8258)
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:66] 
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:66] 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:66] Retry after 37 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:66] Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:66] We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API.
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:68] Error retrieving file list: (Request ID: Root=1-6a676337-431267432963d6a3289ed843;eb1b2edb-b95f-4e9c-b709-021a0b1ef019)
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:68] 
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:68] 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:68] Retry after 37 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:68] Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) ERROR 07-27 13:55:03 [repo_utils.py:68] We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API., retrying 1 of 2
+(APIServer pid=2912) ERROR 07-27 13:55:05 [repo_utils.py:66] Error retrieving file list: (Request ID: Root=1-6a676339-5b5fce7513ff643933572178;6beba5cf-0293-4029-94b8-7d3201ebaa13)
+(APIServer pid=2912) ERROR 07-27 13:55:05 [repo_utils.py:66] 
+(APIServer pid=2912) ERROR 07-27 13:55:05 [repo_utils.py:66] 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) ERROR 07-27 13:55:05 [repo_utils.py:66] Retry after 35 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) ERROR 07-27 13:55:05 [repo_utils.py:66] Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) ERROR 07-27 13:55:05 [repo_utils.py:66] We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API.
+(APIServer pid=2912) Traceback (most recent call last):
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_http.py", line 795, in hf_raise_for_status
+(APIServer pid=2912)     response.raise_for_status()
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/httpx/_models.py", line 829, in raise_for_status
+(APIServer pid=2912)     raise HTTPStatusError(message, request=request, response=self)
+(APIServer pid=2912) httpx.HTTPStatusError: Client error '429 Too Many Requests' for url 'https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false'
+(APIServer pid=2912) For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/429
+(APIServer pid=2912) 
+(APIServer pid=2912) The above exception was the direct cause of the following exception:
+(APIServer pid=2912) 
+(APIServer pid=2912) Traceback (most recent call last):
+(APIServer pid=2912)   File "/usr/local/bin/vllm", line 10, in <module>
+(APIServer pid=2912)     sys.exit(main())
+(APIServer pid=2912)              ^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/cli/main.py", line 95, in main
+(APIServer pid=2912)     args.dispatch_function(args)
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/cli/serve.py", line 148, in cmd
+(APIServer pid=2912)     uvloop.run(run_server(args))
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/uvloop/__init__.py", line 96, in run
+(APIServer pid=2912)     return __asyncio.run(
+(APIServer pid=2912)            ^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/lib/python3.12/asyncio/runners.py", line 195, in run
+(APIServer pid=2912)     return runner.run(main)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/lib/python3.12/asyncio/runners.py", line 118, in run
+(APIServer pid=2912)     return self._loop.run_until_complete(task)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "uvloop/loop.pyx", line 1518, in uvloop.loop.Loop.run_until_complete
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/uvloop/__init__.py", line 48, in wrapper
+(APIServer pid=2912)     return await main
+(APIServer pid=2912)            ^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/api_server.py", line 759, in run_server
+(APIServer pid=2912)     await run_server_worker(listen_address, sock, args, **uvicorn_kwargs)
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/api_server.py", line 773, in run_server_worker
+(APIServer pid=2912)     async with build_async_engine_client(
+(APIServer pid=2912)                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/lib/python3.12/contextlib.py", line 210, in __aenter__
+(APIServer pid=2912)     return await anext(self.gen)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/api_server.py", line 139, in build_async_engine_client
+(APIServer pid=2912)     async with build_async_engine_client_from_engine_args(
+(APIServer pid=2912)                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/lib/python3.12/contextlib.py", line 210, in __aenter__
+(APIServer pid=2912)     return await anext(self.gen)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/entrypoints/openai/api_server.py", line 163, in build_async_engine_client_from_engine_args
+(APIServer pid=2912)     vllm_config = engine_args.create_engine_config(usage_context=usage_context)
+(APIServer pid=2912)                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/engine/arg_utils.py", line 1880, in create_engine_config
+(APIServer pid=2912)     model_config = self.create_model_config()
+(APIServer pid=2912)                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/quark/online_quantization/vllm/plugin.py", line 193, in patched_create_model_config
+(APIServer pid=2912)     return orig_create_model_config(self, *args, **kwargs)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/engine/arg_utils.py", line 1639, in create_model_config
+(APIServer pid=2912)     return ModelConfig(
+(APIServer pid=2912)            ^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/pydantic/_internal/_dataclasses.py", line 121, in __init__
+(APIServer pid=2912)     s.__pydantic_validator__.validate_python(ArgsKwargs(args, kwargs), self_instance=s)
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/config/model.py", line 587, in __post_init__
+(APIServer pid=2912)     self.runner_type = self._get_runner_type(
+(APIServer pid=2912)                        ^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/config/model.py", line 968, in _get_runner_type
+(APIServer pid=2912)     runner_type = self._get_default_runner_type(architectures)
+(APIServer pid=2912)                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/config/model.py", line 941, in _get_default_runner_type
+(APIServer pid=2912)     if get_pooling_config(self.model, self.revision):
+(APIServer pid=2912)        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/transformers_utils/config.py", line 838, in get_pooling_config
+(APIServer pid=2912)     if file_or_path_exists(
+(APIServer pid=2912)        ^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/transformers_utils/repo_utils.py", line 223, in file_or_path_exists
+(APIServer pid=2912)     return file_exists(str(model), config_name, revision=revision)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/transformers_utils/repo_utils.py", line 197, in file_exists
+(APIServer pid=2912)     file_list = list_repo_files(
+(APIServer pid=2912)                 ^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/transformers_utils/repo_utils.py", line 113, in list_repo_files
+(APIServer pid=2912)     return with_retry(lookup_files, "Error retrieving file list")
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/transformers_utils/repo_utils.py", line 63, in with_retry
+(APIServer pid=2912)     return func()
+(APIServer pid=2912)            ^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/vllm/transformers_utils/repo_utils.py", line 104, in lookup_files
+(APIServer pid=2912)     return hf_api().list_repo_files(
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+(APIServer pid=2912)     return fn(*args, **kwargs)
+(APIServer pid=2912)            ^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/hf_api.py", line 3819, in list_repo_files
+(APIServer pid=2912)     for f in self.list_repo_tree(
+(APIServer pid=2912)              ^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/hf_api.py", line 3954, in list_repo_tree
+(APIServer pid=2912)     for path_info in paginate(path=tree_url, headers=headers, params={"recursive": recursive, "expand": expand}):
+(APIServer pid=2912)                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_pagination.py", line 37, in paginate
+(APIServer pid=2912)     hf_raise_for_status(r)
+(APIServer pid=2912)   File "/usr/local/lib/python3.12/dist-packages/huggingface_hub/utils/_http.py", line 915, in hf_raise_for_status
+(APIServer pid=2912)     raise _format(HfHubHTTPError, message, response) from e
+(APIServer pid=2912) huggingface_hub.errors.HfHubHTTPError: (Request ID: Root=1-6a676339-5b5fce7513ff643933572178;6beba5cf-0293-4029-94b8-7d3201ebaa13)
+(APIServer pid=2912) 
+(APIServer pid=2912) 429 Too Many Requests: you have reached your 'api' rate limit.
+(APIServer pid=2912) Retry after 35 seconds (0/500 requests remaining in current 300s window).
+(APIServer pid=2912) Url: https://huggingface.co/api/models/amd/Kimi-K2.7-Code-MXFP4/tree/main?recursive=true&expand=false.
+(APIServer pid=2912) We had to rate limit your IP (216.114.73.26). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API.
+Server died before becoming healthy. Exiting.
+[c40-lmc] exit=1

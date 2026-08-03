@@ -1,0 +1,1 @@
+vllm serve amd/Kimi-K2.7-Code-MXFP4 --served-model-name amd/Kimi-K2.7-Code-MXFP4 --host 0.0.0.0 --port 8888 --tensor-parallel-size=4 --gpu-memory-utilization 0.9 --kv-cache-dtype fp8 --trust-remote-code --max-num-seqs 8 --mm-encoder-tp-mode data --enable-prefix-caching 

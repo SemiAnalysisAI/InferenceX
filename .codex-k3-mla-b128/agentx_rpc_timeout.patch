@@ -1,0 +1,19 @@
+diff --git a/benchmarks/single_node/agentic/kimik3_fp4_mi355x.sh b/benchmarks/single_node/agentic/kimik3_fp4_mi355x.sh
+index 9c5640871..844653d4a 100755
+--- a/benchmarks/single_node/agentic/kimik3_fp4_mi355x.sh
++++ b/benchmarks/single_node/agentic/kimik3_fp4_mi355x.sh
+@@ -113,6 +113,14 @@ export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
+ # mid-request while the server is prefill-bound.
+ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+ 
++# A single chunked-prefill step can exceed vLLM's 300-second worker RPC
++# default once K3 is deep into a 1M-token trajectory, especially while FP8 KV
++# blocks are being maintained by SimpleCPUOffloadConnector. The client already
++# allows a 30-minute warmup grace, so keep the engine alive for the same window
++# instead of killing healthy workers mid-step with
++# "RPC call to sample_tokens timed out".
++export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1800}"
++
+ # ---- Server config ----------------------------------------------------------
+ SERVER_LOG="$RESULT_DIR/server.log"
+ LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"

@@ -1,0 +1,42 @@
+--- rocm_aiter_mla.py.orig
++++ rocm_aiter_mla.py
+@@ -963,6 +963,10 @@
+             if type(q) is tuple:
+                 q_nope, q_pe = q
+             else:
++                # The common MLA path quantizes the concatenated query when
++                # supports_quant_query_input is set, but Gluon consumes BF16 Q.
++                if q.dtype == torch.float8_e4m3fn:
++                    q = (q.float() * layer._q_scale).to(torch.bfloat16)
+                 q_nope, q_pe = torch.split(
+                     q, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+                 )
+@@ -987,7 +991,7 @@
+                 k_pe=None,
+                 kv_pe_offset=self.kv_lora_rank,
+                 use_2d_view=False,
+-                kv_scale=1.0,
++                kv_scale=layer._k_scale_float,
+                 min_kv_seq_len=decode.min_kv_seq_len,
+             )
+             return o, None
+@@ -1010,6 +1014,10 @@
+             if type(q) is tuple:
+                 q_nope, q_pe = q
+             else:
++                # Gluon uses BF16 MFMA for Q even when the common path emitted
++                # an FP8 query for the other AITER decode kernels.
++                if q.dtype == torch.float8_e4m3fn:
++                    q = (q.float() * layer._q_scale).to(torch.bfloat16)
+                 q_nope, q_pe = torch.split(
+                     q, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+                 )
+@@ -1066,7 +1074,7 @@
+                 k_pe=None,
+                 kv_pe_offset=self.kv_lora_rank,
+                 use_2d_view=False,
+-                kv_scale=1.0,
++                kv_scale=layer._k_scale_float,
+                 min_kv_seq_len=int(per_req_len.min()),
+             )
+             return o, None

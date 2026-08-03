@@ -1,0 +1,1438 @@
+[A-triton-bs16] physical GPUs=4,5,6,7 -> logical=0,1,2,3  port=8898 conc=8 duration=900s dir=/data/kimi-direct/varA
+[A-triton-bs16] devices: --device /dev/kfd --device /dev/dri/renderD160 --device /dev/dri/renderD168 --device /dev/dri/renderD176 --device /dev/dri/renderD184
+++ dirname benchmarks/single_node/agentic/kimik2.7_fp4_mi355x.sh
++ source benchmarks/single_node/agentic/../../benchmark_lib.sh
+++ export PYTHONDONTWRITEBYTECODE=1
+++ PYTHONDONTWRITEBYTECODE=1
+++ export PYTHONPYCACHEPREFIX=/tmp/inferencex-pycache
+++ PYTHONPYCACHEPREFIX=/tmp/inferencex-pycache
+++ mkdir -p /tmp/inferencex-pycache
+++ export PORT=8898
+++ PORT=8898
+++ _benchmark_caller=benchmarks/single_node/agentic/kimik2.7_fp4_mi355x.sh
+++ [[ benchmarks/single_node/agentic/kimik2.7_fp4_mi355x.sh == */agentic/* ]]
+++ unset MAX_MODEL_LEN
+++ [[ -z x ]]
+++ [[ -z none ]]
+++ case "$KV_OFFLOADING" in
+++ [[ -n '' ]]
+++ unset _benchmark_caller
+++ GPU_MONITOR_PID=
+++ GPU_METRICS_CSV=/workspace/gpu_metrics.csv
+++ export GPU_METRICS_CSV
+++ INFMAX_CONTAINER_WORKSPACE=/workspace
+++ AGENTIC_DIR=/workspace/utils/agentic-benchmark
+++ AIPERF_DIR=/workspace/utils/aiperf
+++ AIPERF_RUNTIME_DIR=/tmp/inferencex-agentic-1
+++ AIPERF_VENV=/tmp/inferencex-agentic-1/venv
+++ AIPERF_UV_INSTALL_DIR=/tmp/inferencex-agentic-1/uv/bin
+++ AIPERF_UV_CACHE_DIR=/tmp/inferencex-agentic-1/uv-cache
+++ AIPERF_PYTHON=/tmp/inferencex-agentic-1/venv/bin/python
+++ AIPERF_CLI=/tmp/inferencex-agentic-1/venv/bin/aiperf
+++ AIPERF_HF_CLI=/tmp/inferencex-agentic-1/venv/bin/hf
+++ AIPERF_DEPS_READY=0
+++ AIPERF_FAILED_REQUEST_THRESHOLD=0.10
++ check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
++ missing_vars=()
++ local missing_vars
++ for var_name in "$@"
++ [[ -z amd/Kimi-K2.7-Code-MXFP4 ]]
++ for var_name in "$@"
++ [[ -z 4 ]]
++ for var_name in "$@"
++ [[ -z 8 ]]
++ for var_name in "$@"
++ [[ -z none ]]
++ for var_name in "$@"
++ [[ -z 0 ]]
++ for var_name in "$@"
++ [[ -z /workspace/results ]]
++ for var_name in "$@"
++ [[ -z 900 ]]
++ for var_name in "$@"
++ [[ -z 1 ]]
++ for var_name in "$@"
++ [[ -z false ]]
++ [[ 0 -gt 0 ]]
++ [[ -n '' ]]
++ '[' -n 0,1,2,3 ']'
++ export HIP_VISIBLE_DEVICES=0,1,2,3
++ HIP_VISIBLE_DEVICES=0,1,2,3
++ [[ -n '' ]]
++ hf download amd/Kimi-K2.7-Code-MXFP4
+Fetching 84 files:   0%|          | 0/84 [00:00<?, ?it/s]Fetching 84 files: 100%|██████████| 84/84 [00:00<00:00, 9960.75it/s]
+[32m✓ Downloaded[0m
+  path: /mnt/hf_hub_cache/models--amd--Kimi-K2.7-Code-MXFP4/snapshots/7c86fb37b24dffd50ad2cb52d9af75689703219d
++ export MODEL_PATH=amd/Kimi-K2.7-Code-MXFP4
++ MODEL_PATH=amd/Kimi-K2.7-Code-MXFP4
++ rocm-smi
+
+
+============================================ ROCm System Management Interface ============================================
+====================================================== Concise Info ======================================================
+Device  Node  IDs              Temp        Power     Partitions          SCLK   MCLK     Fan  Perf  PwrCap   VRAM%  GPU%  
+[3m              (DID,     GUID)  (Junction)  (Socket)  (Mem, Compute, ID)                                                   [0m
+==========================================================================================================================
+0       7     0x75a3,   1590   48.0°C      222.0W    NPS1, SPX, 0        95Mhz  1900Mhz  0%   auto  1400.0W  0%     0%    
+1       9     0x75a3,   51771  46.0°C      224.0W    NPS1, SPX, 0        94Mhz  1900Mhz  0%   auto  1400.0W  0%     0%    
+2       8     0x75a3,   11806  47.0°C      212.0W    NPS1, SPX, 0        94Mhz  1900Mhz  0%   auto  1400.0W  0%     0%    
+3       6     0x75a3,   57875  47.0°C      222.0W    NPS1, SPX, 0        95Mhz  1900Mhz  0%   auto  1400.0W  0%     0%    
+==========================================================================================================================
+================================================== End of ROCm SMI Log ===================================================
++ amd-smi
++------------------------------------------------------------------------------+
+| AMD-SMI 26.2.2+c2d9476115    amdgpu version: 6.16.13  ROCm version: 7.2.3    |
+| VBIOS version: 00175784                                                      |
+| Platform: Linux Baremetal                                                    |
+|-------------------------------------+----------------------------------------|
+| BDF                        GPU-Name | Mem-Uti   Temp   UEC       Power-Usage |
+| GPU  HIP-ID  OAM-ID  Partition-Mode | GFX-Uti    Fan               Mem-Usage |
+|=====================================+========================================|
+| 0000:85:00.0 AMD Instinct MI355 OAM | 0 %      48 °C   0          221/1400 W |
+|   0       1       2        SPX/NPS1 | 0 %        N/A           284/294896 MB |
+|-------------------------------------+----------------------------------------|
+| 0000:95:00.0 AMD Instinct MI355 OAM | 0 %      46 °C   0          224/1400 W |
+|   1       3       3        SPX/NPS1 | 0 %        N/A           284/294896 MB |
+|-------------------------------------+----------------------------------------|
+| 0000:e5:00.0 AMD Instinct MI355 OAM | 0 %      47 °C   0          212/1400 W |
+|   2       2       1        SPX/NPS1 | 0 %        N/A           284/294896 MB |
+|-------------------------------------+----------------------------------------|
+| 0000:f5:00.0 AMD Instinct MI355 OAM | 0 %      47 °C   0          222/1400 W |
+|   3       0       0        SPX/NPS1 | 0 %        N/A           284/294896 MB |
++-------------------------------------+----------------------------------------+
++------------------------------------------------------------------------------+
+| Processes:                                                                   |
+|  GPU        PID  Process Name          GTT_MEM  VRAM_MEM  MEM_USAGE     CU % |
+|==============================================================================|
+|    0     926845  N/A                     0.0 B     0.0 B      0.0 B    0.0 % |
+|    1     926845  N/A                     0.0 B     0.0 B      0.0 B    0.0 % |
+|    2     926845  N/A                     0.0 B     0.0 B      0.0 B    0.0 % |
+|    3     926845  N/A                     0.0 B     0.0 B      0.0 B    0.0 % |
++------------------------------------------------------------------------------+
+Process Name may require elevated permissions.
++ resolve_trace_source
++ local default_loader
++ case "${MODEL_PREFIX:-}" in
++ default_loader=semianalysis_cc_traces_weka_062126_256k
++ local loader=semianalysis_cc_traces_weka_062126_256k
++ local dataset
++ case "$loader" in
++ dataset=semianalysisai/cc-traces-weka-062126-256k
++ TRACE_SOURCE_FLAG='--public-dataset semianalysis_cc_traces_weka_062126_256k'
++ echo 'Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_062126_256k (semianalysisai/cc-traces-weka-062126-256k) [MODEL_PREFIX=kimik2.7]'
++ ensure_hf_cli
++ install_agentic_deps
++ '[' 0 = 1 ']'
++ command -v git
+Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka_062126_256k (semianalysisai/cc-traces-weka-062126-256k) [MODEL_PREFIX=kimik2.7]
++ ensure_agentic_uv
++ command -v uv
+++ command -v uv
++ AIPERF_UV_BIN=/usr/local/bin/uv
++ return
++ rm -rf /tmp/inferencex-agentic-1/venv
++ mkdir -p /tmp/inferencex-agentic-1/uv-cache
+++ command -v python3
++ UV_CACHE_DIR=/tmp/inferencex-agentic-1/uv-cache
++ /usr/local/bin/uv venv --python /usr/bin/python3 /tmp/inferencex-agentic-1/venv
+Using CPython 3.12.13 interpreter at: /usr/bin/python3
+Creating virtual environment at: /tmp/inferencex-agentic-1/venv
+Activate with: source /tmp/inferencex-agentic-1/venv/bin/activate
++ UV_CACHE_DIR=/tmp/inferencex-agentic-1/uv-cache
++ /usr/local/bin/uv pip install --python /tmp/inferencex-agentic-1/venv/bin/python -r /workspace/utils/agentic-benchmark/requirements.txt -e /workspace/utils/aiperf 'datasets>=4.7.0' 'huggingface_hub[cli]>=0.25.0' urllib3 requests
+Using Python 3.12.13 environment at: /tmp/inferencex-agentic-1/venv
+   Updating https://github.com/huggingface/transformers.git (HEAD)
+    Updated https://github.com/huggingface/transformers.git (279e6efc8afb891fd4f1614690d251bb3e8d2e5b)
+Resolved 126 packages in 40.47s
+   Building aiperf @ file:///workspace/utils/aiperf
+   Building transformers @ git+https://github.com/huggingface/transformers.git@279e6efc8afb891fd4f1614690d251bb3e8d2e5b
+Downloading scipy (33.7MiB)
+Downloading pygments (1.2MiB)
+Downloading kiwisolver (1.4MiB)
+Downloading fonttools (4.8MiB)
+Downloading tokenizers (3.1MiB)
+Downloading pyarrow (47.8MiB)
+Downloading matplotlib (9.6MiB)
+Downloading numpy (15.9MiB)
+Downloading uvloop (4.2MiB)
+Downloading aiohttp (1.7MiB)
+Downloading hf-xet (4.2MiB)
+Downloading pydantic-core (2.0MiB)
+Downloading tiktoken (1.1MiB)
+Downloading zstandard (5.3MiB)
+Downloading dash (7.5MiB)
+Downloading soundfile (1.3MiB)
+Downloading pandas (11.8MiB)
+Downloading brotli (1.4MiB)
+Downloading plotly (9.4MiB)
+Downloading sentencepiece (1.3MiB)
+Downloading crick (1.7MiB)
+Downloading pillow (6.7MiB)
+ Downloaded tiktoken
+ Downloaded pygments
+ Downloaded sentencepiece
+ Downloaded soundfile
+ Downloaded brotli
+ Downloaded kiwisolver
+ Downloaded crick
+ Downloaded aiohttp
+ Downloaded pydantic-core
+ Downloaded tokenizers
+ Downloaded hf-xet
+ Downloaded uvloop
+ Downloaded fonttools
+ Downloaded zstandard
+      Built aiperf @ file:///workspace/utils/aiperf
+ Downloaded pillow
+ Downloaded dash
+ Downloaded plotly
+ Downloaded matplotlib
+ Downloaded pandas
+ Downloaded numpy
+ Downloaded scipy
+      Built transformers @ git+https://github.com/huggingface/transformers.git@279e6efc8afb891fd4f1614690d251bb3e8d2e5b
+ Downloaded pyarrow
+Prepared 125 packages in 2.09s
+Installed 126 packages in 412ms
+ + aiofiles==24.1.0
+ + aiohappyeyeballs==2.7.1
+ + aiohttp==3.13.5
+ + aiosignal==1.4.0
+ + aiperf==0.8.0 (from file:///workspace/utils/aiperf)
+ + annotated-doc==0.0.4
+ + annotated-types==0.8.0
+ + anyio==4.14.2
+ + attrs==26.1.0
+ + blinker==1.9.0
+ + brotli==1.2.0
+ + certifi==2026.7.22
+ + cffi==2.1.0
+ + charset-normalizer==3.4.9
+ + choreographer==1.3.0
+ + click==8.4.2
+ + contourpy==1.3.3
+ + crick==0.0.8
+ + cycler==0.12.1
+ + cyclopts==4.22.2
+ + dash==3.1.1
+ + dash-bootstrap-components==2.0.4
+ + datasets==5.0.0
+ + dill==0.4.1
+ + docstring-parser==0.18.0
+ + fastapi==0.140.0
+ + ffmpeg-python==0.2.0
+ + filelock==3.32.0
+ + flask==3.1.3
+ + fonttools==4.63.0
+ + frozenlist==1.8.0
+ + fsspec==2026.4.0
+ + future==1.0.0
+ + h11==0.16.0
+ + hf-xet==1.5.2
+ + httpcore==1.0.9
+ + httptools==0.8.0
+ + httpx==0.28.1
+ + huggingface-hub==1.24.0
+ + idna==3.18
+ + importlib-metadata==9.0.0
+ + iniconfig==2.3.0
+ + itsdangerous==2.2.0
+ + jinja2==3.1.6
+ + jmespath==1.0.1
+ + kaleido==1.2.0
+ + kiwisolver==1.5.0
+ + linkify-it-py==2.1.0
+ + logistro==2.0.1
+ + markdown-it-py==4.2.0
+ + markupsafe==3.0.3
+ + matplotlib==3.11.1
+ + mdit-py-plugins==0.6.1
+ + mdurl==0.1.2
+ + msgspec==0.21.1
+ + multidict==6.7.1
+ + multiprocess==0.70.19
+ + narwhals==2.24.0
+ + nest-asyncio==1.6.0
+ + numpy==2.5.1
+ + nvidia-ml-py==13.610.43
+ + orjson==3.11.9
+ + packaging==26.2
+ + pandas==2.3.3
+ + pillow==12.1.1
+ + platformdirs==4.11.0
+ + plotly==6.4.0
+ + pluggy==1.6.0
+ + prometheus-client==0.23.1
+ + propcache==0.5.2
+ + protobuf==7.35.1
+ + psutil==7.0.0
+ + pyarrow==25.0.0
+ + pycparser==3.0
+ + pydantic==2.13.4
+ + pydantic-core==2.46.4
+ + pydantic-settings==2.14.2
+ + pygments==2.20.0
+ + pyparsing==3.3.2
+ + pytest==9.1.1
+ + pytest-timeout==2.4.0
+ + python-dateutil==2.9.0.post0
+ + python-dotenv==1.2.2
+ + pytz==2026.3.post1
+ + pyyaml==6.0.3
+ + pyzmq==26.4.0
+ + regex==2026.7.19
+ + requests==2.34.2
+ + retrying==1.4.2
+ + rich==14.1.0
+ + rich-rst==2.1.0
+ + ruamel-yaml==0.18.17
+ + ruamel-yaml-clib==0.2.15
+ + safetensors==0.8.0
+ + scipy==1.18.0
+ + seaborn==0.13.2
+ + sentencepiece==0.2.2
+ + setproctitle==1.3.7
+ + setuptools==83.0.0
+ + shellingham==1.5.4
+ + simplejson==4.1.1
+ + six==1.17.0
+ + soundfile==0.13.1
+ + starlette==1.3.1
+ + starlette-compress==1.8.0
+ + textual==5.3.0
+ + tiktoken==0.13.0
+ + tokenizers==0.22.2
+ + tqdm==4.69.1
+ + transformers==5.15.0.dev0 (from git+https://github.com/huggingface/transformers.git@279e6efc8afb891fd4f1614690d251bb3e8d2e5b)
+ + typer==0.27.0
+ + typing-extensions==4.16.0
+ + typing-inspection==0.4.2
+ + tzdata==2026.3
+ + uc-micro-py==2.0.0
+ + urllib3==2.7.0
+ + uvicorn==0.51.0
+ + uvloop==0.22.1
+ + watchfiles==1.2.0
+ + websockets==16.1.1
+ + werkzeug==3.1.8
+ + xlsxwriter==3.2.9
+ + xxhash==3.8.1
+ + yarl==1.24.5
+ + zipp==4.1.0
+ + zstandard==0.25.0
+warning: The package `huggingface-hub==1.24.0` does not have an extra named `cli`
++ '[' '!' -x /tmp/inferencex-agentic-1/venv/bin/aiperf ']'
++ '[' '!' -x /tmp/inferencex-agentic-1/venv/bin/hf ']'
++ AIPERF_DEPS_READY=1
++ /tmp/inferencex-agentic-1/venv/bin/hf download --repo-type dataset semianalysisai/cc-traces-weka-062126-256k
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files: 100%|██████████| 8/8 [00:00<00:00, 52428.80it/s]
+[32m✓ Downloaded[0m
+  path: /mnt/hf_hub_cache/datasets--semianalysisai--cc-traces-weka-062126-256k/snapshots/8fecd2fc56694469f758f0afbbb6335ad3043740
++ install_agentic_deps
++ '[' 1 = 1 ']'
++ return
++ pip install amd-quark
+Requirement already satisfied: amd-quark in /usr/local/lib/python3.12/dist-packages (0.11.2)
+Requirement already satisfied: evaluate in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.4.6)
+Requirement already satisfied: joblib in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.5.3)
+Requirement already satisfied: ninja in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.13.0)
+Requirement already satisfied: numpy<=2.1.3 in /usr/local/lib/python3.12/dist-packages (from amd-quark) (2.1.3)
+Requirement already satisfied: onnx<=1.19.0,>=1.16.0 in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.19.0)
+Requirement already satisfied: onnxscript in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.7.0)
+Requirement already satisfied: onnxslim>=0.1.84 in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.1.94)
+Requirement already satisfied: pandas in /usr/local/lib/python3.12/dist-packages (from amd-quark) (3.0.3)
+Requirement already satisfied: plotly in /usr/local/lib/python3.12/dist-packages (from amd-quark) (6.8.0)
+Requirement already satisfied: protobuf in /usr/local/lib/python3.12/dist-packages (from amd-quark) (6.33.6)
+Requirement already satisfied: pydantic in /usr/local/lib/python3.12/dist-packages (from amd-quark) (2.13.4)
+Requirement already satisfied: rich in /usr/local/lib/python3.12/dist-packages (from amd-quark) (15.0.0)
+Requirement already satisfied: scipy in /usr/local/lib/python3.12/dist-packages (from amd-quark) (1.18.0)
+Requirement already satisfied: sentencepiece in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.2.1)
+Requirement already satisfied: tqdm in /usr/local/lib/python3.12/dist-packages (from amd-quark) (4.68.3)
+Requirement already satisfied: zstandard in /usr/local/lib/python3.12/dist-packages (from amd-quark) (0.25.0)
+Requirement already satisfied: typing_extensions>=4.7.1 in /usr/local/lib/python3.12/dist-packages (from onnx<=1.19.0,>=1.16.0->amd-quark) (4.15.0)
+Requirement already satisfied: ml_dtypes in /usr/local/lib/python3.12/dist-packages (from onnx<=1.19.0,>=1.16.0->amd-quark) (0.5.4)
+Requirement already satisfied: colorama in /usr/local/lib/python3.12/dist-packages (from onnxslim>=0.1.84->amd-quark) (0.4.6)
+Requirement already satisfied: packaging in /usr/local/lib/python3.12/dist-packages (from onnxslim>=0.1.84->amd-quark) (26.2)
+Requirement already satisfied: sympy>=1.13.1 in /usr/local/lib/python3.12/dist-packages (from onnxslim>=0.1.84->amd-quark) (1.14.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /usr/local/lib/python3.12/dist-packages (from sympy>=1.13.1->onnxslim>=0.1.84->amd-quark) (1.3.0)
+Requirement already satisfied: datasets>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (5.0.0)
+Requirement already satisfied: dill in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (0.4.1)
+Requirement already satisfied: requests>=2.19.0 in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (2.34.2)
+Requirement already satisfied: xxhash in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (3.8.0)
+Requirement already satisfied: multiprocess in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (0.70.19)
+Requirement already satisfied: fsspec>=2021.05.0 in /usr/local/lib/python3.12/dist-packages (from fsspec[http]>=2021.05.0->evaluate->amd-quark) (2026.4.0)
+Requirement already satisfied: huggingface-hub>=0.7.0 in /usr/local/lib/python3.12/dist-packages (from evaluate->amd-quark) (1.21.0)
+Requirement already satisfied: filelock in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (3.29.4)
+Requirement already satisfied: pyarrow>=21.0.0 in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (24.0.0)
+Requirement already satisfied: httpx<1.0.0 in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (0.28.1)
+Requirement already satisfied: pyyaml>=5.1 in /usr/local/lib/python3.12/dist-packages (from datasets>=2.0.0->evaluate->amd-quark) (6.0.3)
+Requirement already satisfied: aiohttp!=4.0.0a0,!=4.0.0a1 in /usr/local/lib/python3.12/dist-packages (from fsspec[http]>=2021.05.0->evaluate->amd-quark) (3.14.1)
+Requirement already satisfied: anyio in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (4.14.1)
+Requirement already satisfied: certifi in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (2026.6.17)
+Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (1.0.9)
+Requirement already satisfied: idna in /usr/local/lib/python3.12/dist-packages (from httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (3.18)
+Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.12/dist-packages (from httpcore==1.*->httpx<1.0.0->datasets>=2.0.0->evaluate->amd-quark) (0.16.0)
+Requirement already satisfied: click>=8.4.0 in /usr/local/lib/python3.12/dist-packages (from huggingface-hub>=0.7.0->evaluate->amd-quark) (8.4.2)
+Requirement already satisfied: hf-xet<2.0.0,>=1.5.1 in /usr/local/lib/python3.12/dist-packages (from huggingface-hub>=0.7.0->evaluate->amd-quark) (1.5.1)
+Requirement already satisfied: typer<0.26.0,>=0.20.0 in /usr/local/lib/python3.12/dist-packages (from huggingface-hub>=0.7.0->evaluate->amd-quark) (0.25.1)
+Requirement already satisfied: shellingham>=1.3.0 in /usr/local/lib/python3.12/dist-packages (from typer<0.26.0,>=0.20.0->huggingface-hub>=0.7.0->evaluate->amd-quark) (1.5.4)
+Requirement already satisfied: annotated-doc>=0.0.2 in /usr/local/lib/python3.12/dist-packages (from typer<0.26.0,>=0.20.0->huggingface-hub>=0.7.0->evaluate->amd-quark) (0.0.4)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (2.6.2)
+Requirement already satisfied: aiosignal>=1.4.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (1.4.0)
+Requirement already satisfied: attrs>=17.3.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (26.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (1.8.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (6.7.1)
+Requirement already satisfied: propcache>=0.2.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (0.5.2)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /usr/local/lib/python3.12/dist-packages (from aiohttp!=4.0.0a0,!=4.0.0a1->fsspec[http]>=2021.05.0->evaluate->amd-quark) (1.24.2)
+Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.12/dist-packages (from requests>=2.19.0->evaluate->amd-quark) (3.4.7)
+Requirement already satisfied: urllib3<3,>=1.26 in /usr/local/lib/python3.12/dist-packages (from requests>=2.19.0->evaluate->amd-quark) (2.7.0)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /usr/local/lib/python3.12/dist-packages (from rich->amd-quark) (4.2.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /usr/local/lib/python3.12/dist-packages (from rich->amd-quark) (2.20.0)
+Requirement already satisfied: mdurl~=0.1 in /usr/local/lib/python3.12/dist-packages (from markdown-it-py>=2.2.0->rich->amd-quark) (0.1.2)
+Requirement already satisfied: onnx_ir<2,>=0.1.16 in /usr/local/lib/python3.12/dist-packages (from onnxscript->amd-quark) (0.2.1)
+Requirement already satisfied: python-dateutil>=2.8.2 in /usr/local/lib/python3.12/dist-packages (from pandas->amd-quark) (2.9.0.post0)
+Requirement already satisfied: six>=1.5 in /usr/local/lib/python3.12/dist-packages (from python-dateutil>=2.8.2->pandas->amd-quark) (1.17.0)
+Requirement already satisfied: narwhals>=1.15.1 in /usr/local/lib/python3.12/dist-packages (from plotly->amd-quark) (2.22.1)
+Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.12/dist-packages (from pydantic->amd-quark) (0.7.0)
+Requirement already satisfied: pydantic-core==2.46.4 in /usr/local/lib/python3.12/dist-packages (from pydantic->amd-quark) (2.46.4)
+Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.12/dist-packages (from pydantic->amd-quark) (0.4.2)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
++ '[' 4 -lt 8 ']'
++ export VLLM_ROCM_USE_AITER_RMSNORM=0
++ VLLM_ROCM_USE_AITER_RMSNORM=0
+++ rocm-smi --showfw
+++ grep MEC
+++ head -n 1
+++ awk '{print $NF}'
++ version=41
++ [[ 41 == '' ]]
++ [[ 41 -lt 177 ]]
++ export HSA_NO_SCRATCH_RECLAIM=1
++ HSA_NO_SCRATCH_RECLAIM=1
++ export VLLM_ROCM_USE_AITER=1
++ VLLM_ROCM_USE_AITER=1
++ export VLLM_ROCM_USE_AITER_MLA=1
++ VLLM_ROCM_USE_AITER_MLA=1
++ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
++ VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
++ export VLLM_ALLREDUCE_USE_SYMM_MEM=0
++ VLLM_ALLREDUCE_USE_SYMM_MEM=0
++ SERVER_LOG=/workspace/results/server.log
++ LMCACHE_LOG=/workspace/results/lmcache_server.log
++ MOONCAKE_MASTER_LOG=/workspace/results/mooncake_master.log
++ mkdir -p /workspace/results
++ OFFLOAD_ARGS=()
++ PREFIX_CACHE_ARGS=()
++ LMCACHE_PID=
++ MOONCAKE_MASTER_PID=
++ ROUTER_PID=
++ trap cleanup_offload_services EXIT
++ [[ none == \n\o\n\e ]]
++ OFFLOAD_MODE=none
++ case "$OFFLOAD_MODE" in
++ PREFIX_CACHE_ARGS=(--enable-prefix-caching)
++ EP_ARGS=()
++ '[' 1 -gt 1 ']'
++ PARALLEL_ARGS=(--tensor-parallel-size="$TP")
++ USE_VLLM_ROUTER=false
++ VLLM_BACKEND_PORT=8898
+Starting vllm server...
++ '[' false = true ']'
++ echo 'Starting vllm server...'
++ export PYTHONNOUSERSITE=1
++ PYTHONNOUSERSITE=1
+vllm serve amd/Kimi-K2.7-Code-MXFP4 --served-model-name amd/Kimi-K2.7-Code-MXFP4 --host 0.0.0.0 --port 8898 --tensor-parallel-size=4 --gpu-memory-utilization 0.85 --kv-cache-dtype fp8 --trust-remote-code --max-num-seqs 8 --mm-encoder-tp-mode data --enable-prefix-caching 
+Server PID: 443
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:339] 
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:339]        █     █     █▄   ▄█
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:339]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.24.0
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:339]   █▄█▀ █     █     █     █  model   amd/Kimi-K2.7-Code-MXFP4
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:339]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:339] 
+(APIServer pid=443) INFO 07-27 04:50:37 [api_utils.py:273] non-default args: {'model_tag': 'amd/Kimi-K2.7-Code-MXFP4', 'host': '0.0.0.0', 'port': 8898, 'model': 'amd/Kimi-K2.7-Code-MXFP4', 'trust_remote_code': True, 'served_model_name': ['amd/Kimi-K2.7-Code-MXFP4'], 'tensor_parallel_size': 4, 'gpu_memory_utilization': 0.85, 'kv_cache_dtype': 'fp8', 'enable_prefix_caching': True, 'mm_encoder_tp_mode': 'data', 'max_num_seqs': 8}
+(APIServer pid=443) Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+(APIServer pid=443) INFO 07-27 04:50:38 [model.py:598] Resolved architecture: KimiK25ForConditionalGeneration
+(APIServer pid=443) INFO 07-27 04:50:38 [model.py:1725] Using max model len 262144
+(APIServer pid=443) [aiter] import [module_aiter_core] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_aiter_core.so
+(APIServer pid=443) INFO 07-27 04:50:41 [cache.py:279] Using fp8 data type to store kv cache. It reduces the GPU memory footprint and boosts the performance. Meanwhile, it may cause accuracy drop without a proper scaling factor
+(APIServer pid=443) INFO 07-27 04:50:41 [scheduler.py:252] Chunked prefill is enabled with max_num_batched_tokens=8192.
+(APIServer pid=443) INFO 07-27 04:50:41 [vllm.py:1006] Asynchronous scheduling is enabled.
+(APIServer pid=443) INFO 07-27 04:50:41 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(APIServer pid=443) INFO 07-27 04:50:41 [compilation.py:310] Enabled custom fusions: norm_quant, act_quant, allreduce_rms, mla_dual_rms_norm
+(APIServer pid=443) WARNING 07-27 04:50:42 [registry.py:234] Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead.
+(APIServer pid=443) [transformers] The following generation flags are not valid and may be ignored: ['top_p']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+(APIServer pid=443) WARNING 07-27 04:50:43 [rocm.py:123] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+WARNING 07-27 04:50:45 [rocm.py:123] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+[aiter] import [module_aiter_core] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_aiter_core.so
+(EngineCore pid=820) INFO 07-27 04:50:55 [core.py:114] Initializing a V1 LLM engine (v0.24.0) with config: model='amd/Kimi-K2.7-Code-MXFP4', speculative_config=None, tokenizer='amd/Kimi-K2.7-Code-MXFP4', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=262144, download_dir=None, load_format=auto, tensor_parallel_size=4, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=quark, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=fp8, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_verbose=False), seed=0, served_model_name=amd/Kimi-K2.7-Code-MXFP4, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['+quant_fp8', '+grouped_topk', '+sparse_attn_indexer', 'none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::linear_attention', 'vllm::plamo2_mamba_mixer', 'vllm::qwen_gdn_attention_core', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::kda_attention', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [4681, 8192], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': True, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_mla_dual_rms_norm': True, 'fuse_rope_kvcache': False}, 'max_cudagraph_capture_size': 16, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=820) WARNING 07-27 04:50:55 [multiproc_executor.py:1063] Reducing Torch parallelism from 128 threads to 1 to avoid unnecessary CPU contention. Set OMP_NUM_THREADS in the external environment to tune this value as needed.
+(EngineCore pid=820) INFO 07-27 04:50:55 [multiproc_executor.py:140] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=172.17.0.5 (local), world_size=4, local_world_size=4
+WARNING 07-27 04:50:56 [rocm.py:123] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+WARNING 07-27 04:50:56 [rocm.py:123] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+WARNING 07-27 04:50:56 [rocm.py:123] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+WARNING 07-27 04:50:56 [rocm.py:123] Using CUDA_VISIBLE_DEVICES on ROCm is deprecated and support will be removed in vLLM v0.26.0. Please use HIP_VISIBLE_DEVICES instead.
+[aiter] import [module_aiter_core] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_aiter_core.so
+[aiter] import [module_aiter_core] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_aiter_core.so
+[aiter] import [module_aiter_core] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_aiter_core.so
+[aiter] import [module_aiter_core] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_aiter_core.so
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+WARNING 07-27 04:51:07 [registry.py:234] Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead.
+WARNING 07-27 04:51:08 [registry.py:234] Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead.
+WARNING 07-27 04:51:08 [registry.py:234] Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead.
+WARNING 07-27 04:51:08 [registry.py:234] Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead.
+(Worker pid=1111) INFO 07-27 04:51:08 [parallel_state.py:1588] world_size=4 rank=0 local_rank=0 distributed_init_method=tcp://127.0.0.1:52767 backend=nccl
+(Worker pid=1113) INFO 07-27 04:51:08 [parallel_state.py:1588] world_size=4 rank=2 local_rank=2 distributed_init_method=tcp://127.0.0.1:52767 backend=nccl
+(Worker pid=1112) INFO 07-27 04:51:08 [parallel_state.py:1588] world_size=4 rank=1 local_rank=1 distributed_init_method=tcp://127.0.0.1:52767 backend=nccl
+(Worker pid=1114) INFO 07-27 04:51:08 [parallel_state.py:1588] world_size=4 rank=3 local_rank=3 distributed_init_method=tcp://127.0.0.1:52767 backend=nccl
+(Worker pid=1111) INFO 07-27 04:51:08 [pynccl.py:113] vLLM is using nccl==2.27.7
+(Worker pid=1111) INFO 07-27 04:51:17 [quick_all_reduce.py:198] Custom quick allreduce: BF16 inputs will be converted to FP16 to improve performance. set envs.VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 to turn off.
+(Worker pid=1114) INFO 07-27 04:51:17 [quick_all_reduce.py:198] Custom quick allreduce: BF16 inputs will be converted to FP16 to improve performance. set envs.VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 to turn off.
+(Worker pid=1113) INFO 07-27 04:51:17 [quick_all_reduce.py:198] Custom quick allreduce: BF16 inputs will be converted to FP16 to improve performance. set envs.VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 to turn off.
+(Worker pid=1112) INFO 07-27 04:51:17 [quick_all_reduce.py:198] Custom quick allreduce: BF16 inputs will be converted to FP16 to improve performance. set envs.VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 to turn off.
+(Worker pid=1111) INFO 07-27 04:51:17 [cuda_communicator.py:245] Using ['QUICK_REDUCE', 'CUSTOM', 'PYNCCL'] all-reduce backends (in dispatch order) for group 'tp:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+(Worker pid=1111) INFO 07-27 04:51:18 [cuda_communicator.py:245] Using ['PYNCCL'] all-reduce backends (in dispatch order) for group 'ep:0' out of potential backends: ['NCCL_SYMM_MEM', 'QUICK_REDUCE', 'FLASHINFER', 'CUSTOM', 'SYMM_MEM', 'PYNCCL'].
+(Worker pid=1111) INFO 07-27 04:51:18 [parallel_state.py:1923] rank 0 in world size 4 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+(Worker pid=1111) INFO 07-27 04:51:18 [topk_topp_sampler.py:116] Using aiter sampler on ROCm (lazy import, sampling-only).
+(Worker_TP0 pid=1111) INFO 07-27 04:51:18 [gpu_model_runner.py:5160] Starting to load model amd/Kimi-K2.7-Code-MXFP4...
+(Worker_TP0 pid=1111) WARNING 07-27 04:51:19 [activation.py:745] [ROCm] PyTorch's native GELU with tanh approximation is unstable. Falling back to GELU(approximate='none').
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [rocm.py:648] Using AITER Flash Attention backend for ViT model.
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [mm_encoder_attention.py:373] Using AttentionBackendEnum.ROCM_AITER_FA for MMEncoderAttention.
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [vllm.py:1006] Asynchronous scheduling is enabled.
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [compilation.py:310] Enabled custom fusions: norm_quant, act_quant, allreduce_rms, mla_dual_rms_norm
+(Worker_TP0 pid=1111) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/a8w8_bpreshuffle_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_a8w8_bpreshuffle_tuned_gemm.csv
+(Worker_TP3 pid=1114) INFO 07-27 04:51:19 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP3 pid=1114) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/a8w8_bpreshuffle_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_a8w8_bpreshuffle_tuned_gemm.csv
+(Worker_TP1 pid=1112) INFO 07-27 04:51:19 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP2 pid=1113) INFO 07-27 04:51:19 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [__init__.py:594] Selected AiterPreshuffledPerTokenFp8ScaledMMLinearKernel for QuarkW8A8Fp8
+(Worker_TP1 pid=1112) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/a8w8_bpreshuffle_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_a8w8_bpreshuffle_tuned_gemm.csv
+(Worker_TP2 pid=1113) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/a8w8_bpreshuffle_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_a8w8_bpreshuffle_tuned_gemm.csv
+(Worker_TP2 pid=1113) [aiter] waiting for baton release at /tmp/aiter_configs/a8w8_bpreshuffle_tuned_gemm.csv.lock
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [rocm.py:611] Using ROCM_AITER_MLA backend out of potential backends: ['ROCM_AITER_MLA', 'TRITON_MLA', 'ROCM_AITER_TRITON_MLA'].
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [selector.py:166] Using FLASH_ATTN MLA prefill backend.
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [mxfp4.py:513] Using 'AITER_MXFP4_MXFP4' Mxfp4 MoE backend.
+(Worker_TP0 pid=1111) INFO 07-27 04:51:19 [quark_moe.py:1049] Using AITER_MXFP4_MXFP4 backend for OCP_MX_Scheme.w_mxfp4_a_mxfp4
+(Worker_TP0 pid=1111) WARNING 07-27 04:51:20 [compilation.py:1301] Op 'grouped_topk' not present in model, enabling with '+grouped_topk' has no effect
+(Worker_TP0 pid=1111) WARNING 07-27 04:51:20 [compilation.py:1301] Op 'sparse_attn_indexer' not present in model, enabling with '+sparse_attn_indexer' has no effect
+(Worker_TP0 pid=1111) INFO 07-27 04:51:21 [weight_utils.py:849] Filesystem type for checkpoints: EXT4. Checkpoint size: 514.87 GiB. Available RAM: 2128.30 GiB.
+(Worker_TP0 pid=1111) INFO 07-27 04:51:21 [weight_utils.py:872] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:   0% Completed | 0/64 [00:00<?, ?it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:   3% Completed | 2/64 [00:00<00:22,  2.70it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:   5% Completed | 3/64 [00:01<00:37,  1.62it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:   6% Completed | 4/64 [00:02<00:44,  1.35it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:   8% Completed | 5/64 [00:03<00:47,  1.23it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:   9% Completed | 6/64 [00:04<00:47,  1.22it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  11% Completed | 7/64 [00:05<00:47,  1.20it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  12% Completed | 8/64 [00:06<00:46,  1.20it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  14% Completed | 9/64 [00:07<00:46,  1.18it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  16% Completed | 10/64 [00:07<00:46,  1.17it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  17% Completed | 11/64 [00:08<00:45,  1.16it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  19% Completed | 12/64 [00:09<00:46,  1.11it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  20% Completed | 13/64 [00:10<00:46,  1.10it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  22% Completed | 14/64 [00:11<00:45,  1.11it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  23% Completed | 15/64 [00:12<00:43,  1.12it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  25% Completed | 16/64 [00:13<00:43,  1.11it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  27% Completed | 17/64 [00:14<00:41,  1.12it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  28% Completed | 18/64 [00:15<00:41,  1.12it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  30% Completed | 19/64 [00:16<00:40,  1.10it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  31% Completed | 20/64 [00:17<00:40,  1.07it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  33% Completed | 21/64 [00:17<00:39,  1.10it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  34% Completed | 22/64 [00:18<00:37,  1.12it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  36% Completed | 23/64 [00:19<00:35,  1.16it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  38% Completed | 24/64 [00:20<00:33,  1.18it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  39% Completed | 25/64 [00:21<00:33,  1.18it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  41% Completed | 26/64 [00:22<00:32,  1.18it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  42% Completed | 27/64 [00:22<00:32,  1.16it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  44% Completed | 28/64 [00:23<00:31,  1.14it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  45% Completed | 29/64 [00:24<00:31,  1.12it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  47% Completed | 30/64 [00:25<00:31,  1.09it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  48% Completed | 31/64 [00:26<00:31,  1.06it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  50% Completed | 32/64 [00:27<00:30,  1.06it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  52% Completed | 33/64 [00:28<00:28,  1.08it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  53% Completed | 34/64 [00:29<00:26,  1.11it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  55% Completed | 35/64 [00:30<00:25,  1.15it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  56% Completed | 36/64 [00:31<00:23,  1.18it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  58% Completed | 37/64 [00:31<00:22,  1.19it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  59% Completed | 38/64 [00:32<00:21,  1.20it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  61% Completed | 39/64 [00:33<00:20,  1.19it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  62% Completed | 40/64 [00:34<00:19,  1.20it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  64% Completed | 41/64 [00:35<00:19,  1.20it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  66% Completed | 42/64 [00:36<00:18,  1.20it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  67% Completed | 43/64 [00:36<00:17,  1.21it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  69% Completed | 44/64 [00:37<00:16,  1.21it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  70% Completed | 45/64 [00:38<00:16,  1.17it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  72% Completed | 46/64 [00:39<00:15,  1.15it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  73% Completed | 47/64 [00:40<00:15,  1.13it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  75% Completed | 48/64 [00:41<00:14,  1.10it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  77% Completed | 49/64 [00:42<00:13,  1.10it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  78% Completed | 50/64 [00:43<00:12,  1.11it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  80% Completed | 51/64 [00:44<00:12,  1.07it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  81% Completed | 52/64 [00:45<00:11,  1.03it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  83% Completed | 53/64 [00:46<00:10,  1.01it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  84% Completed | 54/64 [00:47<00:10,  1.00s/it]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  86% Completed | 55/64 [00:48<00:09,  1.01s/it]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  88% Completed | 56/64 [00:49<00:08,  1.02s/it]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  89% Completed | 57/64 [00:50<00:07,  1.01s/it]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  91% Completed | 58/64 [00:51<00:06,  1.01s/it]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  92% Completed | 59/64 [00:52<00:05,  1.01s/it]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  94% Completed | 60/64 [00:53<00:04,  1.01s/it]
+(Worker_TP1 pid=1112) [aiter] import [module_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_quant.so
+(Worker_TP1 pid=1112) [aiter] [FlyDSL] loaded preshuffle GEMM compiler
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  95% Completed | 61/64 [00:54<00:03,  1.02s/it]
+warning: <unknown>:0:0: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in 'preshuffle_gemm_fp8_bf16_t128x64x256_lds2_pl8x8_async_wpe3_0': desired occupancy was 3, final occupancy is 2
+(Worker_TP3 pid=1114) [aiter] import [module_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_quant.so
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards:  97% Completed | 62/64 [00:55<00:01,  1.12it/s]
+(Worker_TP3 pid=1114) [aiter] [FlyDSL] loaded preshuffle GEMM compiler
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards: 100% Completed | 64/64 [00:55<00:00,  1.83it/s]
+(Worker_TP0 pid=1111) Loading safetensors checkpoint shards: 100% Completed | 64/64 [00:55<00:00,  1.16it/s]
+(Worker_TP0 pid=1111) 
+(Worker_TP0 pid=1111) INFO 07-27 04:52:16 [default_loader.py:430] Loading weights took 55.36 seconds
+(Worker_TP0 pid=1111) INFO 07-27 04:52:16 [mxfp4.py:1660] Using MoEPrepareAndFinalizeNoDPEPModular
+(Worker_TP0 pid=1111) [aiter] import [module_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_quant.so
+(Worker_TP2 pid=1113) [aiter] import [module_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_quant.so
+(Worker_TP2 pid=1113) [aiter] [FlyDSL] loaded preshuffle GEMM compiler
+(Worker_TP0 pid=1111) [aiter] [FlyDSL] loaded preshuffle GEMM compiler
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 1/1024 [00:00<06:44,  2.53it/s][Aiter Triton] Pre-compiling fp8 BMM kernel:   9%|▉         | 96/1024 [00:00<00:04, 196.59it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 1543.74it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16333.97it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16395.57it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16396.38it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16412.86it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16333.16it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16295.30it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16321.12it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16346.09it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16321.24it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16351.56it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16381.81it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16347.46it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16406.03it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16390.00it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16309.71it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16361.66it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16336.89it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16349.26it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16233.27it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16325.15it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16315.04it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16323.47it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16304.51it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16393.13it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16316.10it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16358.23it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16331.61it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16287.51it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16241.44it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16282.20it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16342.85it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16247.95it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16301.85it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16359.60it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16390.31it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16426.92it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16244.51it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16190.56it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16296.41it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16206.26it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16296.22it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16303.96it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16310.89it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16311.32it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16329.43it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16296.10it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16293.13it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16260.01it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16198.38it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16283.87it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16135.03it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16276.83it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16199.54it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16236.34it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16208.59it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16210.60it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16293.44it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16216.73it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16293.13it/s]
+(Worker_TP0 pid=1111) [Aiter Triton] Pre-compiling fp8 BMM kernel:   0%|          | 0/1024 [00:00<?, ?it/s][Aiter Triton] Pre-compiling fp8 BMM kernel: 100%|██████████| 1024/1024 [00:00<00:00, 16320.56it/s]
+(Worker_TP0 pid=1111) INFO 07-27 04:52:22 [gpu_model_runner.py:5255] Model loading took 130.42 GiB memory and 62.506561 seconds
+(Worker_TP0 pid=1111) INFO 07-27 04:52:23 [gpu_model_runner.py:6271] Encoder cache will be initialized with a budget of 8192 tokens, and profiled with 1 vision_chunk items of the maximum feature size.
+(Worker_TP0 pid=1111) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm5_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama70B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen32B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama405B_bf16_tuned_gemm.csv
+(Worker_TP0 pid=1111) [aiter] shape is M:16900, N:3456, K:1152 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] start build [mha_varlen_fwd_bf16_nlogits_nbias_nmask_nlse_ndropout_nskip_nqscale] under /usr/local/lib/python3.12/dist-packages/aiter/jit/build/mha_varlen_fwd_bf16_nlogits_nbias_nmask_nlse_ndropout_nskip_nqscale
+(Worker_TP0 pid=1111) [aiter] Current hipcc not support: -mllvm -amdgpu-coerce-illegal-types=1, skip it.
+(EngineCore pid=820) INFO 07-27 04:53:24 [shm_broadcast.py:705] No available shared memory broadcast block found in 60 seconds. This typically happens when some processes are hanging or doing some time-consuming work (e.g. compilation, weight/kv cache quantization).
+(Worker_TP0 pid=1111) [aiter] [32mfinish build [mha_varlen_fwd_bf16_nlogits_nbias_nmask_nlse_ndropout_nskip_nqscale], cost 47.8s [0m
+(Worker_TP0 pid=1111) [aiter] import [mha_varlen_fwd_bf16_nlogits_nbias_nmask_nlse_ndropout_nskip_nqscale] under /usr/local/lib/python3.12/dist-packages/aiter/jit/mha_varlen_fwd_bf16_nlogits_nbias_nmask_nlse_ndropout_nskip_nqscale.so
+(Worker_TP0 pid=1111) [aiter] shape is M:16900, N:1152, K:1152 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] shape is M:16900, N:4304, K:1152 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] shape is M:16900, N:1152, K:4304 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] shape is M:4225, N:4608, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] shape is M:4225, N:7168, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP2 pid=1113) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm5_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama70B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen32B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama405B_bf16_tuned_gemm.csv
+(Worker_TP3 pid=1114) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm5_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama70B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen32B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama405B_bf16_tuned_gemm.csv
+(Worker_TP1 pid=1112) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm5_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama70B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen32B_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_bf16_tuned_gemm.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/llama405B_bf16_tuned_gemm.csv
+(Worker_TP3 pid=1114) [aiter] waiting for baton release at /tmp/aiter_configs/bf16_tuned_gemm.csv.lock
+(Worker_TP1 pid=1112) [aiter] waiting for baton release at /tmp/aiter_configs/bf16_tuned_gemm.csv.lock
+(Worker_TP2 pid=1113) [aiter] shape is M:4225, N:4608, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP3 pid=1114) [aiter] shape is M:4225, N:4608, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP1 pid=1112) [aiter] shape is M:4225, N:4608, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) INFO 07-27 04:53:33 [backends.py:1089] Using cache directory: /vllm_cache/torch_compile_cache/ca7eb1ea09/rank_0_0/backbone for vLLM's torch.compile
+(Worker_TP0 pid=1111) INFO 07-27 04:53:33 [backends.py:1148] Dynamo bytecode transform time: 1.73 s
+(Worker_TP0 pid=1111) [aiter] import [module_custom_all_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_custom_all_reduce.so
+(Worker_TP2 pid=1113) [aiter] shape is M:4225, N:7168, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP1 pid=1112) [aiter] shape is M:4225, N:7168, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP3 pid=1114) [aiter] shape is M:4225, N:7168, K:4608 dtype='torch.bfloat16' otype='torch.bfloat16' bias=True, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP2 pid=1113) [aiter] import [module_custom_all_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_custom_all_reduce.so
+(Worker_TP3 pid=1114) [aiter] import [module_custom_all_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_custom_all_reduce.so
+(Worker_TP1 pid=1112) [aiter] import [module_custom_all_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_custom_all_reduce.so
+(Worker_TP0 pid=1111) WARNING 07-27 04:53:36 [allreduce_rms_fusion.py:1537] AITER AR+RMS+per-group-FP8-quant fusion disabled: aiter build is missing 'fused_ar_rms_per_group_quant'. Upgrade aiter past PR #2823 to enable the trailing per-group FP8 quant fusion.
+(Worker_TP0 pid=1111) INFO 07-27 04:53:37 [backends.py:378] Cache the graph of compile range (1, 4681) for later use
+(Worker_TP0 pid=1111) INFO 07-27 04:53:37 [backends.py:378] Cache the graph of compile range (4682, 8192) for later use
+(Worker_TP2 pid=1113) INFO 07-27 04:53:39 [decorators.py:311] Directly load AOT compilation from path /vllm_cache/torch_compile_cache/torch_aot_compile/df44050de0414ccf2b753201368cff346acf99cbc21428f0f90f351de88435c9/rank_2_0/model
+(Worker_TP2 pid=1113) [aiter] import [module_rmsnorm_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_rmsnorm_quant.so
+(Worker_TP3 pid=1114) INFO 07-27 04:53:39 [decorators.py:311] Directly load AOT compilation from path /vllm_cache/torch_compile_cache/torch_aot_compile/df44050de0414ccf2b753201368cff346acf99cbc21428f0f90f351de88435c9/rank_3_0/model
+(Worker_TP3 pid=1114) [aiter] import [module_rmsnorm_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_rmsnorm_quant.so
+(Worker_TP1 pid=1112) INFO 07-27 04:53:39 [decorators.py:311] Directly load AOT compilation from path /vllm_cache/torch_compile_cache/torch_aot_compile/df44050de0414ccf2b753201368cff346acf99cbc21428f0f90f351de88435c9/rank_1_0/model
+(Worker_TP1 pid=1112) [aiter] import [module_rmsnorm_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_rmsnorm_quant.so
+(Worker_TP0 pid=1111) INFO 07-27 04:53:39 [backends.py:393] Compiling a graph for compile range (1, 4681) takes 1.74 s
+(Worker_TP0 pid=1111) INFO 07-27 04:53:39 [backends.py:393] Compiling a graph for compile range (4682, 8192) takes 1.76 s
+(Worker_TP0 pid=1111) INFO 07-27 04:53:39 [decorators.py:311] Directly load AOT compilation from path /vllm_cache/torch_compile_cache/torch_aot_compile/df44050de0414ccf2b753201368cff346acf99cbc21428f0f90f351de88435c9/rank_0_0/model
+(Worker_TP0 pid=1111) INFO 07-27 04:53:39 [monitor.py:53] torch.compile took 8.03 s in total
+(Worker_TP0 pid=1111) [aiter] import [module_rmsnorm_quant] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_rmsnorm_quant.so
+(Worker_TP1 pid=1112) [aiter] shape is M:8192, N:384, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP2 pid=1113) [aiter] shape is M:8192, N:384, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP3 pid=1114) [aiter] shape is M:8192, N:384, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] shape is M:8192, N:384, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP1 pid=1112) [aiter] import [module_moe_asm] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_asm.so
+(Worker_TP1 pid=1112) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv
+(Worker_TP2 pid=1113) [aiter] import [module_moe_asm] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_asm.so
+(Worker_TP0 pid=1111) [aiter] import [module_moe_asm] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_asm.so
+(Worker_TP3 pid=1114) [aiter] import [module_moe_asm] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_asm.so
+(Worker_TP2 pid=1113) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv
+(Worker_TP0 pid=1111) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv
+(Worker_TP3 pid=1114) [aiter] merge tuned file under model_configs/ and configs/ /usr/local/lib/python3.12/dist-packages/aiter/configs/tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/minimax_m25_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/dsv3_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/gptoss_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3_5_397b_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/qwen3next_80b_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_i4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_minimax-m2_5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_ds_v3.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/kimik2_fp8fp4_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_glm5.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/glm47_fp8_tuned_fmoe.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_5_397b.csv:/usr/local/lib/python3.12/dist-packages/aiter/configs/model_configs/a8w8_blockscale_tuned_fmoe_qwen3_235b.csv
+(Worker_TP1 pid=1112) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t64x128x256_w2_bnt0_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t64x256x256_reduce_persist') for (256, 8192, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP1 pid=1112) [aiter] import [module_moe_sorting] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_sorting.so
+(Worker_TP0 pid=1111) [aiter] waiting for baton release at /tmp/aiter_configs/tuned_fmoe.csv.lock
+(Worker_TP2 pid=1113) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t64x128x256_w2_bnt0_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t64x256x256_reduce_persist') for (256, 8192, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP2 pid=1113) [aiter] import [module_moe_sorting] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_sorting.so
+(Worker_TP3 pid=1114) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t64x128x256_w2_bnt0_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t64x256x256_reduce_persist') for (256, 8192, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP3 pid=1114) [aiter] import [module_moe_sorting] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_sorting.so
+(Worker_TP0 pid=1111) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t64x128x256_w2_bnt0_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t64x256x256_reduce_persist') for (256, 8192, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP0 pid=1111) [aiter] import [module_moe_sorting] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_sorting.so
+(Worker_TP1 pid=1112) [aiter] shape is M:8, N:40960, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP2 pid=1113) [aiter] shape is M:8, N:40960, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP3 pid=1114) [aiter] shape is M:8, N:40960, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP1 pid=1112) [aiter] compile_template_op func_name = 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7' with {'src_template': <Template memory:7989e814adb0>, 'md_name': 'top_k_top_p_sampling_from_probs', 'includes': ['/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/utils.h', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/sampling.cuh', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/vec_dtypes.cuh'], 'sources': [], 'cxxflags': [], 'func_name': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'folder': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'kwargs': OrderedDict({'vec_size': 4, 'deterministic': True})}...
+(Worker_TP1 pid=1112) [aiter] start build /root/.aiter/build/top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7
+(Worker_TP2 pid=1113) [aiter] compile_template_op func_name = 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7' with {'src_template': <Template memory:7e76d161cec0>, 'md_name': 'top_k_top_p_sampling_from_probs', 'includes': ['/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/utils.h', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/sampling.cuh', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/vec_dtypes.cuh'], 'sources': [], 'cxxflags': [], 'func_name': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'folder': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'kwargs': OrderedDict({'vec_size': 4, 'deterministic': True})}...
+(Worker_TP2 pid=1113) [aiter] waiting for baton release at /root/.aiter/build/top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7/lock
+(Worker_TP3 pid=1114) [aiter] compile_template_op func_name = 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7' with {'src_template': <Template memory:7effacee19a0>, 'md_name': 'top_k_top_p_sampling_from_probs', 'includes': ['/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/utils.h', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/sampling.cuh', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/vec_dtypes.cuh'], 'sources': [], 'cxxflags': [], 'func_name': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'folder': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'kwargs': OrderedDict({'vec_size': 4, 'deterministic': True})}...
+(Worker_TP3 pid=1114) [aiter] waiting for baton release at /root/.aiter/build/top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7/lock
+(Worker_TP0 pid=1111) INFO 07-27 04:53:45 [monitor.py:81] Initial profiling/warmup run took 5.52 s
+(Worker_TP0 pid=1111) [aiter] shape is M:8, N:40960, K:7168 dtype='torch.bfloat16' otype='torch.bfloat16' bias=False, scaleAB=False, bpreshuffle=False, not found tuned config in /tmp/aiter_configs/bf16_tuned_gemm.csv, will use default config! using torch solution:0
+(Worker_TP0 pid=1111) [aiter] compile_template_op func_name = 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7' with {'src_template': <Template memory:7d79d8c2c8c0>, 'md_name': 'top_k_top_p_sampling_from_probs', 'includes': ['/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/utils.h', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/sampling.cuh', '/usr/local/lib/python3.12/dist-packages/aiter_meta/csrc/cpp_itfs/sampling/vec_dtypes.cuh'], 'sources': [], 'cxxflags': [], 'func_name': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'folder': 'top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7', 'kwargs': OrderedDict({'vec_size': 4, 'deterministic': True})}...
+(Worker_TP0 pid=1111) [aiter] waiting for baton release at /root/.aiter/build/top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7/lock
+clang (LLVM option parsing): Unknown command line argument '-amdgpu-coerce-illegal-types=1'.  Try: 'clang (LLVM option parsing) --help'
+clang (LLVM option parsing): Did you mean '--amdgpu-mode-register=1'?
+failed to execute:/opt/rocm/lib/llvm/bin/clang++  --offload-arch=gfx950 --offload-arch=gfx950 --offload-arch=gfx950 --offload-arch=gfx950 -O3  -mllvm -amdgpu-coerce-illegal-types=1 -x hip -c /dev/null -o "/dev/null"
+(Worker_TP1 pid=1112) [aiter] -mllvm -amdgpu-coerce-illegal-types=1 is not supported by hipcc.
+(Worker_TP1 pid=1112) [aiter] finish build /root/.aiter/build/top_k_top_p_sampling_from_probs_51f5779b2644c0a61347d39ea3295db7, cost 14.26033763s
+(Worker_TP0 pid=1111) WARNING 07-27 04:53:59 [topk_topp_sampler.py:232] aiter sampler does not support per-request generators; falling back to PyTorch-native.
+(Worker_TP0 pid=1111) INFO 07-27 04:54:02 [gpu_worker.py:508] Available KV cache memory: 106.52 GiB
+(EngineCore pid=820) INFO 07-27 04:54:02 [kv_cache_utils.py:2146] GPU KV cache size: 3,255,184 tokens
+(EngineCore pid=820) INFO 07-27 04:54:02 [kv_cache_utils.py:2147] Maximum concurrency for 262,144 tokens per request: 12.42x
+(Worker_TP2 pid=1113) INFO 07-27 04:54:02 [rocm_aiter_mla.py:350] FP8 MLA prefill PS buffers allocated (max_batch=8, max_qlen=8192, num_head_k=16)
+(Worker_TP1 pid=1112) INFO 07-27 04:54:02 [rocm_aiter_mla.py:350] FP8 MLA prefill PS buffers allocated (max_batch=8, max_qlen=8192, num_head_k=16)
+(Worker_TP3 pid=1114) INFO 07-27 04:54:02 [rocm_aiter_mla.py:350] FP8 MLA prefill PS buffers allocated (max_batch=8, max_qlen=8192, num_head_k=16)
+(Worker_TP0 pid=1111) INFO 07-27 04:54:02 [rocm_aiter_mla.py:350] FP8 MLA prefill PS buffers allocated (max_batch=8, max_qlen=8192, num_head_k=16)
+(Worker_TP3 pid=1114) INFO 07-27 04:54:02 [gpu_worker.py:648] Compile and warming up model for size 8192
+(Worker_TP2 pid=1113) INFO 07-27 04:54:02 [gpu_worker.py:648] Compile and warming up model for size 8192
+(Worker_TP1 pid=1112) INFO 07-27 04:54:02 [gpu_worker.py:648] Compile and warming up model for size 8192
+(Worker_TP0 pid=1111) INFO 07-27 04:54:02 [gpu_worker.py:648] Compile and warming up model for size 8192
+(Worker_TP2 pid=1113) [aiter] import [module_gemm_a8w8_bpreshuffle] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_gemm_a8w8_bpreshuffle.so
+(Worker_TP1 pid=1112) [aiter] import [module_gemm_a8w8_bpreshuffle] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_gemm_a8w8_bpreshuffle.so
+(Worker_TP3 pid=1114) [aiter] import [module_gemm_a8w8_bpreshuffle] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_gemm_a8w8_bpreshuffle.so
+(Worker_TP0 pid=1111) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/5 [00:00<?, ?it/s][aiter] import [module_gemm_a8w8_bpreshuffle] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_gemm_a8w8_bpreshuffle.so
+(Worker_TP2 pid=1113) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w4_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2_xcd4') for (256, 16, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP1 pid=1112) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w4_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2_xcd4') for (256, 16, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP3 pid=1114) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w4_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2_xcd4') for (256, 16, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP0 pid=1111) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w4_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2_xcd4') for (256, 16, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP0 pid=1111) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  20%|██        | 1/5 [00:02<00:10,  2.65s/it](Worker_TP2 pid=1113) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 8, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP1 pid=1112) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 8, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+[aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 8, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP3 pid=1114) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_xcd4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 8, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP0 pid=1111) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  40%|████      | 2/5 [00:05<00:08,  3.00s/it][aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 4, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP2 pid=1113) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 4, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP1 pid=1112) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 4, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP3 pid=1114) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 4, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP0 pid=1111) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  60%|██████    | 3/5 [00:07<00:04,  2.47s/it](Worker_TP2 pid=1113) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_kb4_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 2, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+[aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_kb4_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 2, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP1 pid=1112) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_kb4_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 2, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP3 pid=1114) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x128x256_w3_kb4_fp4', kernelName2='flydsl_moe2_afp4_wfp4_bf16_t32x128x256_atomic_bnt2') for (256, 2, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP0 pid=1111) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  80%|████████  | 4/5 [00:09<00:02,  2.11s/it](Worker_TP2 pid=1113) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x64x256_w3_kb4_go_fp4', kernelName2='moe_ck2stages_gemm2_256x32x128x128_1x4_MulABScaleExpertWeightShuffled_v3_Nswizzle0_Quant3_MulRoutedWeight1_FP4X2_FP4X2_B16') for (256, 1, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+[aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x64x256_w3_kb4_go_fp4', kernelName2='moe_ck2stages_gemm2_256x32x128x128_1x4_MulABScaleExpertWeightShuffled_v3_Nswizzle0_Quant3_MulRoutedWeight1_FP4X2_FP4X2_B16') for (256, 1, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP1 pid=1112) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x64x256_w3_kb4_go_fp4', kernelName2='moe_ck2stages_gemm2_256x32x128x128_1x4_MulABScaleExpertWeightShuffled_v3_Nswizzle0_Quant3_MulRoutedWeight1_FP4X2_FP4X2_B16') for (256, 1, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP3 pid=1114) [aiter] [fused_moe] using 2stage (kernelName1='flydsl_moe1_afp4_wfp4_bf16_t32x64x256_w3_kb4_go_fp4', kernelName2='moe_ck2stages_gemm2_256x32x128x128_1x4_MulABScaleExpertWeightShuffled_v3_Nswizzle0_Quant3_MulRoutedWeight1_FP4X2_FP4X2_B16') for (256, 1, 7168, 512, 384, 8, 'ActivationType.Silu', 'torch.bfloat16', 'torch.float4_e2m1fn_x2', 'torch.float4_e2m1fn_x2', 'QuantType.per_1x32', True, False) 
+(Worker_TP2 pid=1113) [aiter] import [module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2.so
+(Worker_TP2 pid=1113) [aiter] type hints mismatch, override to --> ck_moe_stage2(inter_states: torch.Tensor, w1: torch.Tensor, w2: torch.Tensor, sorted_token_ids: torch.Tensor, sorted_expert_ids: torch.Tensor, num_valid_ids: torch.Tensor, out: torch.Tensor, topk: int, kernelName: str = None, w2_scale: Optional[torch.Tensor] = None, a2_scale: Optional[torch.Tensor] = None, block_m: Optional[int] = 32, sorted_weights: Optional[torch.Tensor] = None, quant_type: int = 0, activation: int = 0, splitk: Optional[int] = 1, non_temporal_load: bool = False, dst_type: Optional[str] = None, is_shuffled: bool = True) -> None
+(Worker_TP0 pid=1111) [aiter] import [module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2.so
+(Worker_TP0 pid=1111) [aiter] type hints mismatch, override to --> ck_moe_stage2(inter_states: torch.Tensor, w1: torch.Tensor, w2: torch.Tensor, sorted_token_ids: torch.Tensor, sorted_expert_ids: torch.Tensor, num_valid_ids: torch.Tensor, out: torch.Tensor, topk: int, kernelName: str = None, w2_scale: Optional[torch.Tensor] = None, a2_scale: Optional[torch.Tensor] = None, block_m: Optional[int] = 32, sorted_weights: Optional[torch.Tensor] = None, quant_type: int = 0, activation: int = 0, splitk: Optional[int] = 1, non_temporal_load: bool = False, dst_type: Optional[str] = None, is_shuffled: bool = True) -> None
+(Worker_TP1 pid=1112) [aiter] import [module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2.so
+(Worker_TP1 pid=1112) [aiter] type hints mismatch, override to --> ck_moe_stage2(inter_states: torch.Tensor, w1: torch.Tensor, w2: torch.Tensor, sorted_token_ids: torch.Tensor, sorted_expert_ids: torch.Tensor, num_valid_ids: torch.Tensor, out: torch.Tensor, topk: int, kernelName: str = None, w2_scale: Optional[torch.Tensor] = None, a2_scale: Optional[torch.Tensor] = None, block_m: Optional[int] = 32, sorted_weights: Optional[torch.Tensor] = None, quant_type: int = 0, activation: int = 0, splitk: Optional[int] = 1, non_temporal_load: bool = False, dst_type: Optional[str] = None, is_shuffled: bool = True) -> None
+(Worker_TP3 pid=1114) [aiter] import [module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_moe_ck2stages_fp4x2_fp4x2_preshuffle_on_b16_silu_per_1x32_mulWeightStage2.so
+(Worker_TP3 pid=1114) [aiter] type hints mismatch, override to --> ck_moe_stage2(inter_states: torch.Tensor, w1: torch.Tensor, w2: torch.Tensor, sorted_token_ids: torch.Tensor, sorted_expert_ids: torch.Tensor, num_valid_ids: torch.Tensor, out: torch.Tensor, topk: int, kernelName: str = None, w2_scale: Optional[torch.Tensor] = None, a2_scale: Optional[torch.Tensor] = None, block_m: Optional[int] = 32, sorted_weights: Optional[torch.Tensor] = None, quant_type: int = 0, activation: int = 0, splitk: Optional[int] = 1, non_temporal_load: bool = False, dst_type: Optional[str] = None, is_shuffled: bool = True) -> None
+(Worker_TP0 pid=1111) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 5/5 [00:11<00:00,  2.15s/it]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 5/5 [00:11<00:00,  2.30s/it]
+(Worker_TP0 pid=1111) Capturing CUDA graphs (decode, FULL):   0%|          | 0/4 [00:00<?, ?it/s](Worker_TP2 pid=1113) [aiter] import [module_mla_metadata] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_metadata.so
+(Worker_TP1 pid=1112) [aiter] import [module_mla_metadata] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_metadata.so
+(Worker_TP3 pid=1114) [aiter] import [module_mla_metadata] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_metadata.so
+[aiter] import [module_mla_metadata] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_metadata.so
+[aiter] LoadKernel: _ZN5aiter36mla_a8w8_qh16_qseqlen1_gqaratio16_psE hsaco: /usr/local/lib/python3.12/dist-packages/aiter_meta/hsa//gfx950/mla/mla_a8w8_qh16_qseqlen1_gqaratio16_ps.co
+[aiter] LoadKernel: _ZN5aiter36mla_a8w8_qh16_qseqlen1_gqaratio16_psE hsaco: /usr/local/lib/python3.12/dist-packages/aiter_meta/hsa//gfx950/mla/mla_a8w8_qh16_qseqlen1_gqaratio16_ps.co
+(Worker_TP2 pid=1113) [aiter] import [module_mla_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_reduce.so
+(Worker_TP1 pid=1112) [aiter] import [module_mla_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_reduce.so
+[aiter] LoadKernel: _ZN5aiter36mla_a8w8_qh16_qseqlen1_gqaratio16_psE hsaco: /usr/local/lib/python3.12/dist-packages/aiter_meta/hsa//gfx950/mla/mla_a8w8_qh16_qseqlen1_gqaratio16_ps.co
+[aiter] LoadKernel: _ZN5aiter36mla_a8w8_qh16_qseqlen1_gqaratio16_psE hsaco: /usr/local/lib/python3.12/dist-packages/aiter_meta/hsa//gfx950/mla/mla_a8w8_qh16_qseqlen1_gqaratio16_ps.co
+(Worker_TP0 pid=1111) [aiter] import [module_mla_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_reduce.so
+(Worker_TP3 pid=1114) [aiter] import [module_mla_reduce] under /usr/local/lib/python3.12/dist-packages/aiter/jit/module_mla_reduce.so
+(Worker_TP0 pid=1111) Capturing CUDA graphs (decode, FULL):  25%|██▌       | 1/4 [00:00<00:01,  1.98it/s]Capturing CUDA graphs (decode, FULL):  50%|█████     | 2/4 [00:00<00:00,  3.22it/s]Capturing CUDA graphs (decode, FULL):  75%|███████▌  | 3/4 [00:00<00:00,  4.00it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 4/4 [00:01<00:00,  4.14it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 4/4 [00:01<00:00,  3.68it/s]
+(Worker_TP0 pid=1111) [aiter] Registering 1089 cuda graph addresses
+(Worker_TP1 pid=1112) [aiter] Registering 1089 cuda graph addresses
+(Worker_TP3 pid=1114) [aiter] Registering 1089 cuda graph addresses
+(Worker_TP2 pid=1113) [aiter] Registering 1089 cuda graph addresses
+(Worker_TP0 pid=1111) INFO 07-27 04:54:15 [custom_all_reduce.py:213] Registering 9 cuda graph addresses
+(Worker_TP1 pid=1112) INFO 07-27 04:54:15 [custom_all_reduce.py:213] Registering 9 cuda graph addresses
+(Worker_TP3 pid=1114) INFO 07-27 04:54:15 [custom_all_reduce.py:213] Registering 9 cuda graph addresses
+(Worker_TP2 pid=1113) INFO 07-27 04:54:15 [custom_all_reduce.py:213] Registering 9 cuda graph addresses
+(Worker_TP0 pid=1111) INFO 07-27 04:54:16 [gpu_model_runner.py:6656] Graph capturing finished in 14 secs, took 1.26 GiB
+(Worker_TP2 pid=1113) INFO 07-27 04:54:16 [jit_monitor.py:60] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(Worker_TP1 pid=1112) INFO 07-27 04:54:16 [jit_monitor.py:60] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(Worker_TP3 pid=1114) INFO 07-27 04:54:16 [jit_monitor.py:60] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(Worker_TP0 pid=1111) INFO 07-27 04:54:16 [jit_monitor.py:60] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(EngineCore pid=820) INFO 07-27 04:54:16 [core.py:337] init engine (profile, create kv cache, warmup model) took 113.67 s (compilation: 8.03 s)
+(EngineCore pid=820) Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+(EngineCore pid=820) WARNING 07-27 04:54:17 [registry.py:234] Using a slow tokenizer. This might cause a significant slowdown. Consider using a fast tokenizer instead.
+(EngineCore pid=820) INFO 07-27 04:54:19 [vllm.py:1006] Asynchronous scheduling is enabled.
+(EngineCore pid=820) INFO 07-27 04:54:19 [kernel.py:276] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(EngineCore pid=820) INFO 07-27 04:54:19 [compilation.py:310] Enabled custom fusions: norm_quant, act_quant, allreduce_rms, mla_dual_rms_norm
+(APIServer pid=443) INFO 07-27 04:54:19 [api_server.py:577] Supported tasks: ['generate']
+(APIServer pid=443) WARNING 07-27 04:54:20 [model.py:1477] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 1.0, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=443) [transformers] `KimiK25Processor` defines `image_processor_class = 'AutoImageProcessor'`, which is deprecated. Register the correct mapping in `AutoImageProcessor` instead.
+(APIServer pid=443) INFO 07-27 04:54:22 [hf.py:548] Detected the chat template content format to be 'string'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=443) INFO 07-27 04:54:22 [base.py:223] Multi-modal warmup completed in 0.208s
+(APIServer pid=443) INFO 07-27 04:54:22 [base.py:223] Readonly multi-modal warmup completed in 0.198s
+(APIServer pid=443) INFO 07-27 04:54:23 [api_server.py:581] Starting vLLM server on http://0.0.0.0:8898
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:37] Available routes are:
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /docs, Methods: GET, HEAD
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /load, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /version, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /health, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /metrics, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /tokenize, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /detokenize, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/models, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /ping, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /ping, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /invocations, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/responses, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/completions, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/messages, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /generative_scoring, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/completions/render, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/chat/completions/derender, Methods: POST
+(APIServer pid=443) INFO 07-27 04:54:23 [launcher.py:46] Route: /v1/completions/derender, Methods: POST
+(APIServer pid=443) INFO:     Started server process [443]
+(APIServer pid=443) INFO:     Waiting for application startup.
+(APIServer pid=443) INFO:     Application startup complete.
+(APIServer pid=443) INFO:     127.0.0.1:58834 - "GET /health HTTP/1.1" 200 OK
++ /tmp/inferencex-agentic-1/venv/bin/aiperf profile --scenario inferencex-agentx-mvp --url http://localhost:8898 --endpoint /v1/chat/completions --endpoint-type chat --streaming --model amd/Kimi-K2.7-Code-MXFP4 --concurrency 8 --benchmark-duration 900 --random-seed 42 --failed-request-threshold 0.10 --trajectory-start-min-ratio 0.25 --trajectory-start-max-ratio 0.75 --agentic-cache-warmup-duration 600 --warmup-grace-period 1800 --use-server-token-count --no-gpu-telemetry --tokenizer-trust-remote-code --num-dataset-entries 393 --slice-duration 1.0 --output-artifact-dir /workspace/results/aiperf_artifacts --public-dataset semianalysis_cc_traces_weka_062126_256k
++ tee /workspace/results/benchmark.log
+04:54:26.895 INFO     Starting AIPerf System (cli_runner.py:148)
+04:54:27.043 INFO     GPU telemetry disabled via --no-gpu-telemetry (system_controller.py:248)
+04:54:27.052 INFO     Registered Worker Manager (id: 'worker_manager') (system_controller.py:382)
+04:54:27.079 INFO     Server Metrics: Discovered 1 endpoints: ['http://localhost:8898/metrics'] (manager.py:74)
+04:54:27.102 INFO     Registered Record Processor (id: 'record_processor_487502a4') (system_controller.py:382)
+04:54:27.103 INFO     Registered Dataset Manager (id: 'dataset_manager') (system_controller.py:382)
+04:54:27.105 INFO     Registered Record Processor (id: 'record_processor_cea3a859') (system_controller.py:382)
+04:54:27.126 INFO     Record metrics export enabled: /workspace/results/aiperf_artifacts/profile_export.jsonl (record_export_jsonl_writer.py:58)
+04:54:27.134 INFO     Registered Worker (id: 'worker_deb7dd8f') (system_controller.py:382)
+04:54:27.145 INFO     Registered Worker (id: 'worker_43702654') (system_controller.py:382)
+04:54:27.152 INFO     Registered Records Manager (id: 'records_manager') (system_controller.py:382)
+04:54:27.159 INFO     Registered Timing Manager (id: 'timing_manager') (system_controller.py:382)
+04:54:27.164 INFO     Registered Worker (id: 'worker_3f7143c8') (system_controller.py:382)
+04:54:27.171 INFO     Registered Worker (id: 'worker_5bde208c') (system_controller.py:382)
+04:54:27.182 INFO     Registered Worker (id: 'worker_f2b39885') (system_controller.py:382)
+04:54:27.186 INFO     Registered Worker (id: 'worker_b4c7b3af') (system_controller.py:382)
+04:54:27.199 INFO     Registered Worker (id: 'worker_12514d38') (system_controller.py:382)
+04:54:27.201 INFO     Registered Server Metrics Manager (id: 'server_metrics_manager') (system_controller.py:382)
+04:54:27.201 INFO     Registered Worker (id: 'worker_194d0453') (system_controller.py:382)
+04:54:27.545 INFO     AIPerf System is CONFIGURING (system_controller.py:270)
+04:54:27.545 INFO     Configuring all services to start profiling (system_controller.py:283)
+04:54:27.545 INFO     Tokenization is disabled for this endpoint, skipping tokenizer configuration (inference_result_parser.py:79)
+04:54:27.545 INFO     Tokenization is disabled for this endpoint, skipping tokenizer configuration (inference_result_parser.py:79)
+04:54:27.545 INFO     Waiting for dataset to be configured before configuring timing (manager.py:117)
+04:54:27.553 INFO     Server Metrics: Capturing baseline metrics... (manager.py:157)
+04:54:27.574 INFO     Skipping unsupported summary metric: http_request_size_bytes (data_collector.py:294)
+04:54:27.574 INFO     Skipping unsupported summary metric: http_response_size_bytes (data_collector.py:294)
+04:54:27.575 INFO     Server metrics enabled - 1/1 endpoint(s) reachable. (system_controller.py:529)
+04:54:27.588 INFO     Memory-mapped dataset cache HIT (key=a9c5e4d75a1e8317664978ef991201eb); skipping tokenizer + composer. (dataset_manager.py:174)
+04:54:28.298 INFO     Restored mmap cache file dataset.dat via copy in 0.709s (2.35 GiB) (mmap_cache.py:415)
+04:54:28.299 INFO     Restored mmap cache file index.dat via copy in 0.001s (0.00 GiB) (mmap_cache.py:415)
+04:54:28.299 INFO     Restored mmap cache files in 0.711s via dataset=copy index=copy (dataset=2.35 GiB, index=0.00 GiB) (mmap_cache.py:433)
+04:54:28.649 INFO     sampling strategy: sequential, unique conversations: 9602, unique turn count: 68266 (dataset_manager.py:881)
+04:54:29.472 INFO     TrajectorySource: built 8 trajectories from 393 traces (trajectory_source.py:333)
+04:54:29.472 INFO       range cfg=[0.25, 0.75]  observed sample pct: min= 35% median= 51% max= 74% (trajectory_source.py:338)
+04:54:29.472 INFO         lane=00  sample_time= 53%  root_next= 46/61  ( 75% turns)  live=1 ready=1  trace_id=002001296e8a8c38ad9d7cc436d691afc602 (trajectory_source.py:340)
+04:54:29.472 INFO         lane=01  sample_time= 49%  root_next= 16/33  ( 48% turns)  live=1 ready=1  trace_id=006c98de37d819e95b0840e25426bb7ca99d (trajectory_source.py:340)
+04:54:29.472 INFO         lane=02  sample_time= 67%  root_next= 19/29  ( 66% turns)  live=1 ready=1  trace_id=00ca01c4aaeccee751ae6285beb54dea262f (trajectory_source.py:340)
+04:54:29.472 INFO         lane=03  sample_time= 56%  root_next=  7/16  ( 44% turns)  live=2 ready=1  trace_id=0196085d85d2075a50b74cd8795ffbdcea9a (trajectory_source.py:340)
+04:54:29.472 INFO         lane=04  sample_time= 47%  root_next=  0/13  (  0% turns)  live=8 ready=8  trace_id=02bc0afb13f7a2d9efa86c28511261d85c0e (trajectory_source.py:340)
+04:54:29.472 INFO         lane=05  sample_time= 47%  root_next= 17/28  ( 61% turns)  live=1 ready=1  trace_id=03e110ac6921c2fe9ac7772a9654314a2beb (trajectory_source.py:340)
+04:54:29.472 INFO         lane=06  sample_time= 74%  root_next=  0/54  (  0% turns)  live=11 ready=11  trace_id=0470d446a4514dfe0c6ad0be92853bd13287 (trajectory_source.py:340)
+04:54:29.472 INFO         lane=07  sample_time= 35%  root_next=  3/7   ( 43% turns)  live=10 ready=9  trace_id=04dba6fe621301a1d01fd63b8d02c9645c48 (trajectory_source.py:340)
+04:54:29.473 INFO     Initialized 2 phase(s): ['Warmup', 'Profiling'] (phase_orchestrator.py:200)
+04:54:29.765 INFO     Dataset client initialized and freed 0 conversations from memory (dataset_manager.py:301)
+04:54:29.767 INFO     All services configured in 2.22 seconds (system_controller.py:295)
+04:54:29.767 INFO     AIPerf System is CONFIGURED (system_controller.py:272)
+04:54:29.768 INFO     Server Metrics: Started 1 collector(s) successfully (manager.py:221)
+04:54:29.846 NOTICE   Phase warmup started (runner.py:365)
+04:54:29.847 INFO     WARMUP execute: dispatching 12 trajectory credits (agentic_replay.py:472)
+04:54:29.847 INFO     WARMUP spread: 6.8s ramp aligning 12 request(s) on t* (earliest fires at 0, last at 6.8s) (agentic_replay.py:539)
+04:54:30.152 INFO     Credit phase start: warmup (records_manager.py:795)
+04:54:30.152 INFO     All services started profiling successfully (system_controller.py:317)
+04:54:30.152 INFO     AIPerf System is PROFILING (system_controller.py:274)
+04:54:59.848 INFO     Phase warmup progress | returned=4 | sent=12 | in_flight=8 | errors=0 | elapsed=30.0s (runner.py:962)
+04:55:29.852 INFO     Phase warmup progress | returned=5 | sent=12 | in_flight=7 | errors=0 | elapsed=60.0s (runner.py:962)
+04:55:59.856 INFO     Phase warmup progress | returned=6 | sent=12 | in_flight=6 | errors=0 | elapsed=90.0s (runner.py:962)
+04:56:29.858 INFO     Phase warmup progress | returned=7 | sent=12 | in_flight=5 | errors=0 | elapsed=120.0s (runner.py:962)
+04:56:59.862 INFO     Phase warmup progress | returned=8 | sent=12 | in_flight=4 | errors=0 | elapsed=150.0s (runner.py:962)
+04:57:29.868 INFO     Phase warmup progress | returned=9 | sent=12 | in_flight=3 | errors=0 | elapsed=180.0s (runner.py:962)
+04:57:59.874 INFO     Phase warmup progress | returned=11 | sent=12 | in_flight=1 | errors=0 | elapsed=210.0s (runner.py:962)
+04:58:19.901 INFO     Replay interval barriers active: 68266 requests, 33736 gated turns, join-widths={1: 24154, 2: 6372, 3: 1834, 4: 681, 5: 205, 6: 146, 7: 80, 8: 97, 9: 78, 10: 55, 11: 21, 12: 9, 13: 2, 14: 2} (replay_dependencies.py:165)
+04:58:19.901 INFO     WARMUP cache pressure: replaying live trajectories for 600.0s with zero idle delay and max_tokens=1 (agentic_replay.py:583)
+04:58:29.878 INFO     Phase warmup progress | returned=25 | sent=48 | in_flight=23 | errors=0 | elapsed=240.0s (runner.py:962)
+04:58:59.882 INFO     Phase warmup progress | returned=50 | sent=68 | in_flight=18 | errors=0 | elapsed=270.0s (runner.py:962)
+04:59:29.885 INFO     Phase warmup progress | returned=88 | sent=105 | in_flight=17 | errors=0 | elapsed=300.0s (runner.py:962)
+04:59:59.890 INFO     Phase warmup progress | returned=111 | sent=128 | in_flight=17 | errors=0 | elapsed=330.0s (runner.py:962)
+05:00:29.894 INFO     Phase warmup progress | returned=138 | sent=156 | in_flight=18 | errors=0 | elapsed=360.0s (runner.py:962)
+05:00:59.899 INFO     Phase warmup progress | returned=158 | sent=175 | in_flight=17 | errors=0 | elapsed=390.1s (runner.py:962)
+05:01:29.905 INFO     Phase warmup progress | returned=199 | sent=216 | in_flight=17 | errors=0 | elapsed=420.1s (runner.py:962)
+05:01:59.912 INFO     Phase warmup progress | returned=236 | sent=251 | in_flight=15 | errors=0 | elapsed=450.1s (runner.py:962)
+05:02:29.915 INFO     Phase warmup progress | returned=264 | sent=279 | in_flight=15 | errors=0 | elapsed=480.1s (runner.py:962)
+05:02:59.918 INFO     Phase warmup progress | returned=327 | sent=339 | in_flight=12 | errors=0 | elapsed=510.1s (runner.py:962)
+05:03:29.925 INFO     Phase warmup progress | returned=391 | sent=403 | in_flight=12 | errors=0 | elapsed=540.1s (runner.py:962)
+05:03:59.931 INFO     Phase warmup progress | returned=430 | sent=442 | in_flight=12 | errors=0 | elapsed=570.1s (runner.py:962)
+05:04:29.934 INFO     Phase warmup progress | returned=458 | sent=470 | in_flight=12 | errors=0 | elapsed=600.1s (runner.py:962)
+05:04:59.939 INFO     Phase warmup progress | returned=497 | sent=512 | in_flight=15 | errors=0 | elapsed=630.1s (runner.py:962)
+05:05:29.943 INFO     Phase warmup progress | returned=535 | sent=551 | in_flight=16 | errors=0 | elapsed=660.1s (runner.py:962)
+05:05:59.950 INFO     Phase warmup progress | returned=546 | sent=562 | in_flight=16 | errors=0 | elapsed=690.1s (runner.py:962)
+05:06:29.955 INFO     Phase warmup progress | returned=556 | sent=572 | in_flight=16 | errors=0 | elapsed=720.1s (runner.py:962)
+05:06:59.963 INFO     Phase warmup progress | returned=557 | sent=573 | in_flight=16 | errors=0 | elapsed=750.1s (runner.py:962)
+05:07:29.965 INFO     Phase warmup progress | returned=598 | sent=612 | in_flight=14 | errors=0 | elapsed=780.1s (runner.py:962)
+05:07:59.967 INFO     Phase warmup progress | returned=645 | sent=658 | in_flight=13 | errors=0 | elapsed=810.1s (runner.py:962)
+05:08:19.901 INFO     WARMUP cache pressure duration reached; draining requests (agentic_replay.py:607)
+05:08:19.901 NOTICE   Phase warmup sending complete | sent=695, completed=682, in_flight=13 | sessions: sent=12, completed=7 (runner.py:723)
+05:08:29.511 INFO     All accelerated-warmup wire requests returned; preserving paused DAG work for profiling handoff. (runner.py:681)
+05:08:29.511 NOTICE   Phase warmup complete | completed=695, cancelled=0, errors=0 | sessions: completed=7, cancelled=0 | elapsed=839.66s (runner.py:832)
+05:08:29.511 INFO     Server Metrics: Warmup complete, capturing final warmup metrics... (manager.py:243)
+05:08:29.512 INFO     WARMUP cache pressure handoff: persisted 17 live streams (agentic_replay.py:725)
+05:08:29.512 INFO     BranchOrchestrator stats: spawned=47 completed=35 errored=0 suspended=6 resumed=5 parents_failed_due_to_child_error=0 joins_suppressed=0 delayed=0 (branch_orchestrator.py:1536)
+05:08:29.512 INFO     Session-tree slots for phase warmup: peak_open=8 (target concurrency 8); released 8 still-open at teardown; late_events=0 (runner.py:849)
+05:08:29.610 INFO     Replay interval barriers active: 68266 requests, 33736 gated turns, join-widths={1: 24154, 2: 6372, 3: 1834, 4: 681, 5: 205, 6: 146, 7: 80, 8: 97, 9: 78, 10: 55, 11: 21, 12: 9, 13: 2, 14: 2} (replay_dependencies.py:165)
+05:08:29.610 INFO     PROFILING setup: 8 trajectory lanes; recycle draws roots from the dataset sampler (agentic_replay.py:381)
+05:08:29.610 INFO     PROFILING: 3 rootless + 1 gated-parent lanes of 8 dispatch no root credit at start and hold a lane credit instead (so they still count toward concurrency); rootless lanes recycle into a fresh root once their background subagents drain (agentic_replay.py:387)
+05:08:29.611 NOTICE   Phase profiling started | target: 900.0s duration (runner.py:365)
+05:08:29.611 INFO     Credit phase start: profiling (records_manager.py:795)
+05:08:29.615 INFO     Waiting for event 'profiling phase sending' with timeout of 899.995824745s (runner.py:928)
+05:08:29.615 INFO     PROFILING execute: resuming 8 trajectory sessions (spread; first-request spread 1.9s) (agentic_replay.py:1051)
+05:09:00.311 INFO     [realtime 00:30 profiling]
+  rps=0.8 (avg 0.8)  tput_in=68,787/s  tput_out=5/s  done=10 ok=10 err=0
+  ttft    p50=10,957ms  p75=14,849ms  p95=35,924ms  p99=86,571ms
+  itl     p50=    32ms  p75=    39ms  p95=    41ms  p99=    42ms
+  e2e     p50=11,053ms  p75=14,873ms  p95=35,924ms  p99=86,571ms
+  intvty  p50=      32  p75=      53  p95=      55  p99=      55  (1/tpot tok/s)
+  isl     p50=  69,541  p75= 102,118  p90= 177,247  p99= 240,625  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=     110  (tokens)
+  tot     in=59,809,130  out=4,017
+  trace  theoretical_prefix_cache_hit=95.8%
+  srv    prefix_cache_hit=98.8% unique_in_srv=23,746 kv_usage=25.7% queue=8r/3w tput_in_srv=62,206/s tput_out_srv=185/s (records_manager.py:1043)
+05:09:30.607 INFO     [realtime 01:00 profiling]
+  rps=0.6 (avg 0.8)  tput_in=68,525/s  tput_out=10/s  done=27 ok=27 err=0
+  ttft    p50=10,903ms  p75=14,753ms  p95=35,728ms  p99=86,472ms
+  itl     p50=    30ms  p75=    39ms  p95=    42ms  p99=    43ms
+  e2e     p50=11,075ms  p75=14,997ms  p95=35,924ms  p99=86,472ms
+  intvty  p50=      34  p75=      44  p95=      55  p99=      58  (1/tpot tok/s)
+  isl     p50=  69,712  p75= 102,546  p90= 178,753  p99= 243,274  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=     467  (tokens)
+  tot     in=61,605,378  out=9,079
+  trace  theoretical_prefix_cache_hit=95.9%
+  srv    prefix_cache_hit=98.6% unique_in_srv=52,186 kv_usage=25.4% queue=8r/3w tput_in_srv=58,580/s tput_out_srv=213/s (records_manager.py:1043)
+05:10:00.939 INFO     [realtime 01:31 profiling]
+  rps=0.4 (avg 0.8)  tput_in=67,774/s  tput_out=16/s  done=40 ok=40 err=0
+  ttft    p50=10,901ms  p75=14,702ms  p95=33,185ms  p99=86,396ms
+  itl     p50=    29ms  p75=    38ms  p95=    41ms  p99=    43ms
+  e2e     p50=11,208ms  p75=15,496ms  p95=37,348ms  p99=86,396ms
+  intvty  p50=      35  p75=      45  p95=      55  p99=      57  (1/tpot tok/s)
+  isl     p50=  70,621  p75= 103,860  p90= 178,569  p99= 243,964  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=     547  (tokens)
+  tot     in=62,977,434  out=14,501
+  trace  theoretical_prefix_cache_hit=96.0%
+  srv    prefix_cache_hit=98.8% unique_in_srv=62,629 kv_usage=22.5% queue=8r/3w tput_in_srv=55,794/s tput_out_srv=236/s (records_manager.py:1043)
+05:10:31.232 INFO     [realtime 02:01 profiling]
+  rps=0.2 (avg 0.8)  tput_in=66,414/s  tput_out=23/s  done=47 ok=47 err=0
+  ttft    p50=10,903ms  p75=14,729ms  p95=32,011ms  p99=86,355ms
+  itl     p50=    27ms  p75=    37ms  p95=    41ms  p99=    43ms
+  e2e     p50=11,258ms  p75=15,782ms  p95=38,379ms  p99=88,230ms
+  intvty  p50=      36  p75=      47  p95=      55  p99=      57  (1/tpot tok/s)
+  isl     p50=  70,764  p75= 104,173  p90= 178,753  p99= 245,227  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=     724  (tokens)
+  tot     in=63,737,517  out=22,549
+  trace  theoretical_prefix_cache_hit=96.0%
+  srv    prefix_cache_hit=98.6% unique_in_srv=84,429 kv_usage=24.8% queue=8r/6w tput_in_srv=48,460/s tput_out_srv=265/s (records_manager.py:1043)
+05:11:01.572 INFO     [realtime 02:31 profiling]
+  rps=0.2 (avg 0.8)  tput_in=65,133/s  tput_out=28/s  done=54 ok=54 err=0
+  ttft    p50=10,915ms  p75=14,780ms  p95=34,359ms  p99=86,315ms
+  itl     p50=    25ms  p75=    36ms  p95=    40ms  p99=    43ms
+  e2e     p50=11,340ms  p75=16,008ms  p95=39,490ms  p99=88,036ms
+  intvty  p50=      41  p75=      48  p95=      55  p99=      57  (1/tpot tok/s)
+  isl     p50=  71,154  p75= 104,573  p90= 179,193  p99= 246,419  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=     875  (tokens)
+  tot     in=64,537,576  out=28,234
+  trace  theoretical_prefix_cache_hit=96.0%
+  srv    prefix_cache_hit=97.8% unique_in_srv=148,864 kv_usage=25.1% queue=8r/4w tput_in_srv=43,225/s tput_out_srv=274/s (records_manager.py:1043)
+05:11:31.943 INFO     [realtime 03:02 profiling]
+  rps=0.2 (avg 0.8)  tput_in=64,667/s  tput_out=38/s  done=61 ok=61 err=0
+  ttft    p50=10,957ms  p75=14,859ms  p95=33,898ms  p99=86,274ms
+  itl     p50=    25ms  p75=    35ms  p95=    40ms  p99=    43ms
+  e2e     p50=11,488ms  p75=16,242ms  p95=40,487ms  p99=95,037ms
+  intvty  p50=      40  p75=      47  p95=      55  p99=      57  (1/tpot tok/s)
+  isl     p50=  71,218  p75= 104,957  p90= 178,507  p99= 246,348  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=   1,118  (tokens)
+  tot     in=65,134,614  out=37,772
+  trace  theoretical_prefix_cache_hit=96.0%
+  srv    prefix_cache_hit=96.9% unique_in_srv=229,311 kv_usage=27.3% queue=8r/3w tput_in_srv=40,349/s tput_out_srv=258/s (records_manager.py:1043)
+05:12:02.271 INFO     [realtime 03:32 profiling]
+  rps=0.3 (avg 0.7)  tput_in=62,674/s  tput_out=42/s  done=70 ok=70 err=0
+  ttft    p50=11,053ms  p75=14,859ms  p95=33,163ms  p99= 86,221ms
+  itl     p50=    25ms  p75=    31ms  p95=    40ms  p99=     42ms
+  e2e     p50=11,617ms  p75=16,347ms  p95=40,707ms  p99=107,936ms
+  intvty  p50=      41  p75=      48  p95=      55  p99=       56  (1/tpot tok/s)
+  isl     p50=  70,840  p75= 104,968  p90= 177,247  p99=  246,256  (tokens)
+  osl     p50=       1  p75=       1  p90=       1  p99=    1,145  (tokens)
+  tot     in=65,681,065  out=44,306
+  trace  theoretical_prefix_cache_hit=95.9%
+  srv    prefix_cache_hit=96.4% unique_in_srv=287,564 kv_usage=28.0% queue=8r/3w tput_in_srv=37,191/s tput_out_srv=265/s (records_manager.py:1043)
+05:12:32.658 INFO     [realtime 04:03 profiling]
+  rps=0.5 (avg 0.7)  tput_in=61,893/s  tput_out=52/s  done=84 ok=84 err=0
+  ttft    p50=10,957ms  p75=14,857ms  p95=32,957ms  p99= 86,140ms
+  itl     p50=    25ms  p75=    35ms  p95=    42ms  p99=     60ms
+  e2e     p50=11,645ms  p75=16,484ms  p95=42,329ms  p99=118,673ms
+  intvty  p50=      40  p75=      47  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  70,840  p75= 105,351  p90= 176,296  p99=  247,307  (tokens)
+  osl     p50=       1  p75=       1  p90=      80  p99=    1,379  (tokens)
+  tot     in=66,873,380  out=55,918
+  trace  theoretical_prefix_cache_hit=95.8%
+  srv    prefix_cache_hit=95.8% unique_in_srv=375,568 kv_usage=23.1% queue=8r/2w tput_in_srv=36,546/s tput_out_srv=260/s (records_manager.py:1043)
+05:13:03.060 INFO     [realtime 04:33 profiling]
+  rps=0.3 (avg 0.7)  tput_in=61,049/s  tput_out=55/s  done=93 ok=93 err=0
+  ttft    p50=10,915ms  p75=14,832ms  p95=32,607ms  p99= 86,087ms
+  itl     p50=    25ms  p75=    32ms  p95=    42ms  p99=     59ms
+  e2e     p50=11,803ms  p75=16,838ms  p95=42,357ms  p99=118,621ms
+  intvty  p50=      40  p75=      48  p95=      55  p99=       58  (1/tpot tok/s)
+  isl     p50=  70,997  p75= 105,366  p90= 175,815  p99=  247,145  (tokens)
+  osl     p50=       1  p75=       1  p90=     109  p99=    1,573  (tokens)
+  tot     in=67,586,336  out=61,361
+  trace  theoretical_prefix_cache_hit=95.8%
+  srv    prefix_cache_hit=94.9% unique_in_srv=489,787 kv_usage=20.1% queue=8r/4w tput_in_srv=34,800/s tput_out_srv=260/s (records_manager.py:1043)
+05:13:33.489 INFO     [realtime 05:03 profiling]
+  rps=0.3 (avg 0.7)  tput_in=59,731/s  tput_out=60/s  done=103 ok=103 err=0
+  ttft    p50=10,936ms  p75=14,843ms  p95=32,149ms  p99= 86,029ms
+  itl     p50=    25ms  p75=    32ms  p95=    43ms  p99=     67ms
+  e2e     p50=11,939ms  p75=17,593ms  p95=42,496ms  p99=119,353ms
+  intvty  p50=      41  p75=      49  p95=      56  p99=       57  (1/tpot tok/s)
+  isl     p50=  70,804  p75= 105,351  p90= 175,177  p99=  246,965  (tokens)
+  osl     p50=       1  p75=       1  p90=     137  p99=    1,639  (tokens)
+  tot     in=68,259,336  out=68,495
+  trace  theoretical_prefix_cache_hit=95.8%
+  srv    prefix_cache_hit=95.1% unique_in_srv=507,534 kv_usage=22.0% queue=8r/1w tput_in_srv=33,657/s tput_out_srv=267/s (records_manager.py:1043)
+05:14:03.889 INFO     [realtime 05:34 profiling]
+  rps=0.5 (avg 0.7)  tput_in=59,308/s  tput_out=65/s  done=118 ok=118 err=0
+  ttft    p50=10,903ms  p75=14,776ms  p95=32,009ms  p99= 86,005ms
+  itl     p50=    25ms  p75=    32ms  p95=    46ms  p99=     66ms
+  e2e     p50=11,905ms  p75=17,604ms  p95=44,165ms  p99=119,053ms
+  intvty  p50=      40  p75=      47  p95=      56  p99=       57  (1/tpot tok/s)
+  isl     p50=  71,281  p75= 105,351  p90= 174,575  p99=  246,788  (tokens)
+  osl     p50=       1  p75=       1  p90=     164  p99=    2,033  (tokens)
+  tot     in=69,468,973  out=75,711
+  trace  theoretical_prefix_cache_hit=95.7%
+  srv    prefix_cache_hit=94.9% unique_in_srv=593,641 kv_usage=24.2% queue=8r/0w tput_in_srv=34,391/s tput_out_srv=262/s (records_manager.py:1043)
+05:14:34.334 INFO     [realtime 06:04 profiling]
+  rps=0.4 (avg 0.7)  tput_in=58,570/s  tput_out=66/s  done=129 ok=129 err=0
+  ttft    p50=10,862ms  p75=14,761ms  p95=31,847ms  p99= 85,998ms
+  itl     p50=    25ms  p75=    34ms  p95=    56ms  p99=     67ms
+  e2e     p50=11,837ms  p75=17,572ms  p95=43,062ms  p99=118,990ms
+  intvty  p50=      40  p75=      47  p95=      56  p99=       57  (1/tpot tok/s)
+  isl     p50=  71,464  p75= 105,175  p90= 174,039  p99=  246,675  (tokens)
+  osl     p50=       1  p75=       1  p90=     206  p99=    1,982  (tokens)
+  tot     in=70,413,084  out=78,754
+  trace  theoretical_prefix_cache_hit=95.7%
+  srv    prefix_cache_hit=95.1% unique_in_srv=619,530 kv_usage=27.7% queue=8r/1w tput_in_srv=34,654/s tput_out_srv=258/s (records_manager.py:1043)
+05:15:04.852 INFO     [realtime 06:35 profiling]
+  rps=0.4 (avg 0.7)  tput_in=57,972/s  tput_out=76/s  done=140 ok=140 err=0
+  ttft    p50=10,708ms  p75=14,745ms  p95=31,260ms  p99= 85,992ms
+  itl     p50=    25ms  p75=    32ms  p95=    51ms  p99=     67ms
+  e2e     p50=11,905ms  p75=18,067ms  p95=48,181ms  p99=124,193ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  71,604  p75= 105,234  p90= 172,704  p99=  246,563  (tokens)
+  osl     p50=       1  p75=       1  p90=     216  p99=    2,575  (tokens)
+  tot     in=71,428,719  out=93,777
+  trace  theoretical_prefix_cache_hit=95.7%
+  srv    prefix_cache_hit=95.2% unique_in_srv=656,663 kv_usage=25.5% queue=8r/2w tput_in_srv=34,445/s tput_out_srv=258/s (records_manager.py:1043)
+05:15:35.392 INFO     [realtime 07:05 profiling]
+  rps=0.3 (avg 0.7)  tput_in=57,179/s  tput_out=82/s  done=150 ok=150 err=0
+  ttft    p50=10,528ms  p75=14,728ms  p95=30,922ms  p99= 85,986ms
+  itl     p50=    25ms  p75=    32ms  p95=    50ms  p99=     67ms
+  e2e     p50=11,939ms  p75=18,649ms  p95=48,410ms  p99=127,142ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  71,911  p75= 105,351  p90= 171,991  p99=  246,460  (tokens)
+  osl     p50=       1  p75=       1  p90=     222  p99=    2,716  (tokens)
+  tot     in=72,280,325  out=103,940
+  trace  theoretical_prefix_cache_hit=95.7%
+  srv    prefix_cache_hit=94.8% unique_in_srv=737,453 kv_usage=20.3% queue=8r/1w tput_in_srv=33,669/s tput_out_srv=260/s (records_manager.py:1043)
+05:16:05.953 INFO     [realtime 07:36 profiling]
+  rps=0.3 (avg 0.7)  tput_in=56,611/s  tput_out=86/s  done=160 ok=160 err=0
+  ttft    p50=10,525ms  p75=14,675ms  p95=30,879ms  p99= 85,980ms
+  itl     p50=    25ms  p75=    32ms  p95=    50ms  p99=     67ms
+  e2e     p50=12,107ms  p75=18,766ms  p95=51,636ms  p99=127,082ms
+  intvty  p50=      39  p75=      45  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,205  p75= 105,234  p90= 171,249  p99=  246,358  (tokens)
+  osl     p50=       1  p75=       1  p90=     234  p99=    2,857  (tokens)
+  tot     in=73,116,718  out=111,647
+  trace  theoretical_prefix_cache_hit=95.6%
+  srv    prefix_cache_hit=94.7% unique_in_srv=802,705 kv_usage=23.9% queue=8r/3w tput_in_srv=33,430/s tput_out_srv=261/s (records_manager.py:1043)
+05:16:36.549 INFO     [realtime 08:06 profiling]
+  rps=0.4 (avg 0.7)  tput_in=55,777/s  tput_out=89/s  done=171 ok=171 err=0
+  ttft    p50=10,484ms  p75=14,620ms  p95=30,752ms  p99= 85,974ms
+  itl     p50=    25ms  p75=    32ms  p95=    49ms  p99=     67ms
+  e2e     p50=12,165ms  p75=19,211ms  p95=53,827ms  p99=127,015ms
+  intvty  p50=      40  p75=      45  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,290  p75= 104,942  p90= 170,920  p99=  246,245  (tokens)
+  osl     p50=       1  p75=       1  p90=     261  p99=    2,849  (tokens)
+  tot     in=73,920,011  out=118,030
+  trace  theoretical_prefix_cache_hit=95.5%
+  srv    prefix_cache_hit=94.4% unique_in_srv=905,147 kv_usage=24.4% queue=8r/4w tput_in_srv=32,990/s tput_out_srv=260/s (records_manager.py:1043)
+05:17:07.168 INFO     [realtime 08:37 profiling]
+  rps=0.4 (avg 0.6)  tput_in=55,182/s  tput_out=92/s  done=182 ok=182 err=0
+  ttft    p50=10,525ms  p75=14,674ms  p95=30,528ms  p99= 85,967ms
+  itl     p50=    25ms  p75=    32ms  p95=    49ms  p99=     67ms
+  e2e     p50=12,236ms  p75=19,438ms  p95=55,165ms  p99=126,949ms
+  intvty  p50=      39  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,284  p75= 104,595  p90= 170,804  p99=  246,133  (tokens)
+  osl     p50=       1  p75=       1  p90=     299  p99=    2,842  (tokens)
+  tot     in=74,625,016  out=124,368
+  trace  theoretical_prefix_cache_hit=95.5%
+  srv    prefix_cache_hit=94.1% unique_in_srv=993,087 kv_usage=25.3% queue=8r/4w tput_in_srv=32,426/s tput_out_srv=260/s (records_manager.py:1043)
+05:17:37.807 INFO     [realtime 09:08 profiling]
+  rps=0.5 (avg 0.6)  tput_in=54,806/s  tput_out=97/s  done=197 ok=197 err=0
+  ttft    p50=10,344ms  p75=14,604ms  p95=30,346ms  p99= 85,959ms
+  itl     p50=    26ms  p75=    32ms  p95=    49ms  p99=     67ms
+  e2e     p50=12,313ms  p75=19,871ms  p95=55,834ms  p99=126,859ms
+  intvty  p50=      39  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,290  p75= 104,922  p90= 170,258  p99=  245,979  (tokens)
+  osl     p50=       1  p75=       1  p90=     318  p99=    2,832  (tokens)
+  tot     in=75,816,101  out=134,144
+  trace  theoretical_prefix_cache_hit=95.5%
+  srv    prefix_cache_hit=94.2% unique_in_srv=1,028,621 kv_usage=22.4% queue=8r/6w tput_in_srv=32,705/s tput_out_srv=263/s (records_manager.py:1043)
+05:18:08.469 INFO     [realtime 09:38 profiling]
+  rps=0.4 (avg 0.6)  tput_in=54,254/s  tput_out=100/s  done=209 ok=209 err=0
+  ttft    p50=10,429ms  p75=14,598ms  p95=30,263ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    31ms  p95=    49ms  p99=     67ms
+  e2e     p50=12,367ms  p75=20,046ms  p95=55,998ms  p99=126,574ms
+  intvty  p50=      39  p75=      46  p95=      56  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,116  p75= 104,922  p90= 169,175  p99=  245,839  (tokens)
+  osl     p50=       1  p75=       1  p90=     356  p99=    2,826  (tokens)
+  tot     in=76,537,611  out=141,076
+  trace  theoretical_prefix_cache_hit=95.4%
+  srv    prefix_cache_hit=93.8% unique_in_srv=1,151,311 kv_usage=22.2% queue=8r/7w tput_in_srv=32,206/s tput_out_srv=261/s (records_manager.py:1043)
+05:18:39.144 INFO     [realtime 10:09 profiling]
+  rps=0.4 (avg 0.6)  tput_in=53,698/s  tput_out=101/s  done=220 ok=220 err=0
+  ttft    p50=10,525ms  p75=14,647ms  p95=30,263ms  p99= 85,953ms
+  itl     p50=    26ms  p75=    31ms  p95=    48ms  p99=     66ms
+  e2e     p50=12,396ms  p75=20,272ms  p95=55,773ms  p99=125,729ms
+  intvty  p50=      38  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,284  p75= 104,753  p90= 168,993  p99=  245,662  (tokens)
+  osl     p50=       1  p75=       1  p90=     364  p99=    2,824  (tokens)
+  tot     in=77,327,459  out=145,572
+  trace  theoretical_prefix_cache_hit=95.3%
+  srv    prefix_cache_hit=93.7% unique_in_srv=1,224,173 kv_usage=23.9% queue=8r/8w tput_in_srv=31,923/s tput_out_srv=260/s (records_manager.py:1043)
+05:19:09.820 INFO     [realtime 10:40 profiling]
+  rps=0.4 (avg 0.6)  tput_in=52,974/s  tput_out=102/s  done=231 ok=231 err=0
+  ttft    p50=10,689ms  p75=14,729ms  p95=30,752ms  p99= 85,953ms
+  itl     p50=    26ms  p75=    32ms  p95=    48ms  p99=     66ms
+  e2e     p50=12,479ms  p75=20,750ms  p95=56,060ms  p99=124,884ms
+  intvty  p50=      38  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,244  p75= 104,832  p90= 168,729  p99=  245,484  (tokens)
+  osl     p50=       1  p75=       1  p90=     388  p99=    2,822  (tokens)
+  tot     in=78,107,333  out=150,250
+  trace  theoretical_prefix_cache_hit=95.3%
+  srv    prefix_cache_hit=93.3% unique_in_srv=1,357,740 kv_usage=25.7% queue=8r/5w tput_in_srv=31,502/s tput_out_srv=253/s (records_manager.py:1043)
+05:19:40.528 INFO     [realtime 11:10 profiling]
+  rps=0.4 (avg 0.6)  tput_in=52,422/s  tput_out=109/s  done=242 ok=242 err=0
+  ttft    p50=10,778ms  p75=14,798ms  p95=30,862ms  p99= 85,953ms
+  itl     p50=    26ms  p75=    32ms  p95=    49ms  p99=     65ms
+  e2e     p50=12,576ms  p75=21,539ms  p95=56,070ms  p99=127,190ms
+  intvty  p50=      38  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,284  p75= 104,953  p90= 168,469  p99=  245,307  (tokens)
+  osl     p50=       1  p75=      68  p90=     412  p99=    2,869  (tokens)
+  tot     in=79,043,088  out=164,112
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.4% unique_in_srv=1,397,743 kv_usage=24.4% queue=8r/6w tput_in_srv=31,593/s tput_out_srv=255/s (records_manager.py:1043)
+05:20:11.235 INFO     [realtime 11:41 profiling]
+  rps=0.3 (avg 0.6)  tput_in=51,815/s  tput_out=111/s  done=251 ok=251 err=0
+  ttft    p50=10,886ms  p75=14,859ms  p95=30,752ms  p99= 85,953ms
+  itl     p50=    26ms  p75=    32ms  p95=    48ms  p99=     65ms
+  e2e     p50=12,620ms  p75=21,977ms  p95=56,098ms  p99=127,136ms
+  intvty  p50=      39  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,290  p75= 104,942  p90= 167,551  p99=  245,162  (tokens)
+  osl     p50=       1  p75=      88  p90=     438  p99=    2,863  (tokens)
+  tot     in=79,748,649  out=170,903
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.3% unique_in_srv=1,463,483 kv_usage=22.9% queue=8r/5w tput_in_srv=31,027/s tput_out_srv=258/s (records_manager.py:1043)
+05:20:41.954 INFO     [realtime 12:12 profiling]
+  rps=0.4 (avg 0.6)  tput_in=51,506/s  tput_out=113/s  done=262 ok=262 err=0
+  ttft    p50=10,903ms  p75=14,997ms  p95=30,528ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    32ms  p95=    48ms  p99=     65ms
+  e2e     p50=12,799ms  p75=22,285ms  p95=56,070ms  p99=127,069ms
+  intvty  p50=      39  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,366  p75= 104,968  p90= 166,603  p99=  244,985  (tokens)
+  osl     p50=       1  p75=     103  p90=     475  p99=    2,855  (tokens)
+  tot     in=80,680,440  out=176,760
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.3% unique_in_srv=1,522,785 kv_usage=25.5% queue=8r/6w tput_in_srv=31,042/s tput_out_srv=257/s (records_manager.py:1043)
+05:21:12.786 INFO     [realtime 12:43 profiling]
+  rps=0.2 (avg 0.6)  tput_in=50,747/s  tput_out=112/s  done=268 ok=268 err=0
+  ttft    p50=10,915ms  p75=15,005ms  p95=30,429ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    32ms  p95=    49ms  p99=     67ms
+  e2e     p50=12,839ms  p75=22,325ms  p95=56,060ms  p99=127,033ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,366  p75= 104,960  p90= 166,529  p99=  244,889  (tokens)
+  osl     p50=       1  p75=     110  p90=     483  p99=    2,851  (tokens)
+  tot     in=81,065,836  out=179,156
+  trace  theoretical_prefix_cache_hit=95.1%
+  srv    prefix_cache_hit=93.2% unique_in_srv=1,572,020 kv_usage=25.6% queue=8r/6w tput_in_srv=30,502/s tput_out_srv=260/s (records_manager.py:1043)
+05:21:43.574 INFO     [realtime 13:13 profiling]
+  rps=0.3 (avg 0.6)  tput_in=50,288/s  tput_out=117/s  done=277 ok=277 err=0
+  ttft    p50=10,995ms  p75=15,329ms  p95=30,655ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    31ms  p95=    48ms  p99=     67ms
+  e2e     p50=12,935ms  p75=22,567ms  p95=57,788ms  p99=127,844ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,670  p75= 105,175  p90= 166,381  p99=  244,744  (tokens)
+  osl     p50=       1  p75=     112  p90=     499  p99=    3,289  (tokens)
+  tot     in=81,940,374  out=191,433
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.3% unique_in_srv=1,620,786 kv_usage=23.4% queue=8r/4w tput_in_srv=30,333/s tput_out_srv=260/s (records_manager.py:1043)
+05:22:14.371 INFO     [realtime 13:44 profiling]
+  rps=0.3 (avg 0.6)  tput_in=49,805/s  tput_out=123/s  done=285 ok=285 err=0
+  ttft    p50=11,053ms  p75=15,732ms  p95=30,511ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    31ms  p95=    48ms  p99=     67ms
+  e2e     p50=12,987ms  p75=22,853ms  p95=58,319ms  p99=129,971ms
+  intvty  p50=      39  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  72,983  p75= 105,366  p90= 165,464  p99=  244,615  (tokens)
+  osl     p50=       1  p75=     125  p90=     509  p99=    3,692  (tokens)
+  tot     in=82,800,242  out=204,937
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.3% unique_in_srv=1,667,330 kv_usage=23.9% queue=8r/4w tput_in_srv=30,275/s tput_out_srv=259/s (records_manager.py:1043)
+05:22:45.170 INFO     [realtime 14:15 profiling]
+  rps=0.3 (avg 0.6)  tput_in=49,453/s  tput_out=124/s  done=295 ok=295 err=0
+  ttft    p50=11,075ms  p75=15,856ms  p95=30,472ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    31ms  p95=    47ms  p99=     67ms
+  e2e     p50=13,106ms  p75=22,938ms  p95=58,825ms  p99=129,467ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  73,086  p75= 105,471  p90= 165,349  p99=  244,454  (tokens)
+  osl     p50=       1  p75=     137  p90=     514  p99=    3,688  (tokens)
+  tot     in=83,738,923  out=210,643
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.4% unique_in_srv=1,712,585 kv_usage=25.4% queue=8r/2w tput_in_srv=30,323/s tput_out_srv=259/s (records_manager.py:1043)
+05:23:16.098 INFO     [realtime 14:46 profiling]
+  rps=0.4 (avg 0.6)  tput_in=49,311/s  tput_out=129/s  done=306 ok=306 err=0
+  ttft    p50=11,068ms  p75=15,856ms  p95=30,493ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    31ms  p95=    47ms  p99=     67ms
+  e2e     p50=13,125ms  p75=23,238ms  p95=59,281ms  p99=135,923ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  73,230  p75= 105,628  p90= 165,249  p99=  244,277  (tokens)
+  osl     p50=       1  p75=     140  p90=     518  p99=    3,722  (tokens)
+  tot     in=84,868,086  out=222,170
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.6% unique_in_srv=1,733,509 kv_usage=25.5% queue=8r/3w tput_in_srv=30,526/s tput_out_srv=261/s (records_manager.py:1043)
+05:23:29.611 INFO     Timeout of 899.995824745s elapsed for event 'profiling phase sending' (runner.py:916)
+05:23:29.612 NOTICE   Phase profiling sending complete | sent=322, completed=312, in_flight=10 | sessions: sent=8, completed=2 | timeout_triggered=True (runner.py:723)
+05:23:29.612 INFO     Waiting for event 'profiling phase credits returned' with timeout of 29.99887726700001s (runner.py:928)
+05:23:29.612 INFO     Sent 322 requests. Waiting for all to complete... (records_manager.py:803)
+05:23:46.985 INFO     [realtime 15:17 profiling]
+  rps=0.4 (avg 0.6)  tput_in=49,150/s  tput_out=132/s  done=318 ok=318 err=0
+  ttft    p50=11,053ms  p75=15,745ms  p95=30,466ms  p99= 85,953ms
+  itl     p50=    25ms  p75=    31ms  p95=    47ms  p99=     66ms
+  e2e     p50=13,221ms  p75=23,280ms  p95=59,281ms  p99=135,686ms
+  intvty  p50=      40  p75=      46  p95=      55  p99=       57  (1/tpot tok/s)
+  isl     p50=  73,468  p75= 106,339  p90= 164,339  p99=  244,167  (tokens)
+  osl     p50=       1  p75=     145  p90=     531  p99=    3,717  (tokens)
+  tot     in=86,157,000  out=230,823
+  trace  theoretical_prefix_cache_hit=95.2%
+  srv    prefix_cache_hit=93.6% unique_in_srv=1,769,233 kv_usage=12.1% queue=4r/0w tput_in_srv=30,396/s tput_out_srv=262/s (records_manager.py:1043)
+05:23:59.611 INFO     Timeout of 29.99887726700001s elapsed for event 'profiling phase credits returned' (runner.py:916)
+05:23:59.611 WARNING  Phase profiling timed out, cancelling all credits. Stats: sent=322, completed=321, cancelled=0, in_flight=1 (runner.py:785)
+05:23:59.611 INFO     Sent cancellation requests for 1 in-flight credits across 1 workers (sticky_router.py:399)
+05:23:59.611 INFO     Waiting for all cancelled credits to be returned for phase profiling. Need 1 more credits. (runner.py:799)
+05:24:09.611 ERROR    Timeout waiting 10.0s for cancelled credits to return. Some credits may be stuck. Forcing phase completion. (runner.py:816)
+05:24:09.612 INFO     Session-tree slots for phase profiling: peak_open=8 (target concurrency 8); released 8 still-open at teardown; late_events=0 (runner.py:849)
+05:24:09.612 NOTICE   Phase profiling complete | completed=321, cancelled=1, errors=0 | sessions: completed=2, cancelled=0 | elapsed=940.00s | grace_period_timeout=True (runner.py:832)
+05:24:09.612 INFO     BranchOrchestrator stats: spawned=28 completed=20 errored=0 suspended=4 resumed=1 parents_failed_due_to_child_error=0 joins_suppressed=2 delayed=13 (branch_orchestrator.py:1536)
+05:24:09.612 WARNING  BranchOrchestrator leaked state at cleanup: 1 active_joins, 0 future_joins, 2 tracked children, 2 parents with descendants (branch_orchestrator.py:1553)
+05:24:09.612 WARNING  Abandoned pending join for parent 431d18a7-4782-4080-8f56-d2c669b396be (outstanding=1, gated_turn_index=7, age_ms=414369) (branch_orchestrator.py:1565)
+05:24:09.612 INFO     Session-tree slots for phase profiling: peak_open=8 (target concurrency 8); released 0 still-open at teardown; late_events=0 (runner.py:849)
+05:24:09.612 NOTICE   All credits completed (phase_orchestrator.py:215)
+05:24:09.613 INFO     Received credits complete from 'timing_manager' (system_controller.py:449)
+05:24:09.613 INFO     Received CREDIT_PHASE_COMPLETE message, Phase complete: PhaseRecordsStats(phase=CreditPhase.PROFILING, start_ns=1785128909610995392, sent_end_ns=1785129809611956046, requests_end_ns=1785129849612123034, total_expected_requests=None, expected_duration_sec=None, expected_num_sessions=None, expected_grace_period_sec=None, final_requests_sent=None, final_requests_completed=321, final_requests_cancelled=1, final_request_errors=0, final_sent_sessions=None, final_completed_sessions=None, final_cancelled_sessions=None, timeout_triggered=True, grace_period_timeout_triggered=True, was_cancelled=False, records_end_ns=None, success_records=321, error_records=0) (records_manager.py:820)
+05:24:09.613 NOTICE   All requests have completed, please wait for the results to be processed (currently 321 of 321 records processed)... (records_manager.py:825)
+05:24:09.613 INFO     Processed 321 valid requests and 0 errors (321 total). (records_manager.py:710)
+05:24:09.613 INFO     Received all records, processing now... (records_manager.py:716)
+05:24:09.613 INFO     All credits complete, please wait for the results to be processed... (records_manager.py:841)
+05:24:09.614 INFO     Server Metrics: Profiling complete, capturing final metrics... (manager.py:291)
+05:24:09.615 INFO     Waiting 2.0s for server metrics flush period... (records_manager.py:766)
+05:24:11.613 INFO     Processing records results... (records_manager.py:1075)
+05:24:12.715 INFO     Waiting for server metrics results... (system_controller.py:762)
+05:24:14.108 INFO     _finalize_and_process_results completed (records_manager.py:773)
+05:24:14.336 INFO     All results received, initiating shutdown (system_controller.py:757)
+05:24:14.939 INFO     Exporting all records (exporter_manager.py:65)
+05:24:15.001 INFO     Scenario 'inferencex-agentx-mvp': setting timing_mode=agentic_replay (was at default request_rate). (validator.py:168)
+05:24:16.350 INFO     Scenario 'inferencex-agentx-mvp': setting timing_mode=agentic_replay (was at default request_rate). (validator.py:168)
+05:24:16.409 INFO     Exporting console data (exporter_manager.py:121)
+
+
+[3m                                                   NVIDIA AIPerf | LLM Metrics: Effective                                                   [0m
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃[1m [0m[1m                               Metric[0m[1m [0m┃[1m [0m[1m         avg[0m[1m [0m┃[1m [0m[1m     min[0m[1m [0m┃[1m [0m[1m         max[0m[1m [0m┃[1m [0m[1m         p99[0m[1m [0m┃[1m [0m[1m         p90[0m[1m [0m┃[1m [0m[1m         p50[0m[1m [0m┃[1m [0m[1m       std[0m[1m [0m┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│[36m [0m[36m     Effective Concurrency (requests)[0m[36m [0m│[32m [0m[32m       11.54[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m       16.00[0m[32m [0m│[32m [0m[32m       16.00[0m[32m [0m│[32m [0m[32m       14.00[0m[32m [0m│[32m [0m[32m       12.00[0m[32m [0m│[32m [0m[32m      2.64[0m[32m [0m│
+│[36m [0m[36m          Effective Decode Throughput[0m[36m [0m│[32m [0m[32m      251.66[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m   44,680.46[0m[32m [0m│[32m [0m[32m      479.03[0m[32m [0m│[32m [0m[32m      453.55[0m[32m [0m│[32m [0m[32m      381.89[0m[32m [0m│[32m [0m[32m    213.72[0m[32m [0m│
+│[36m [0m[36m                         (tokens/sec)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36m         Effective Prefill Throughput[0m[36m [0m│[32m [0m[32m   29,465.03[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m  373,877.86[0m[32m [0m│[32m [0m[32m   90,477.23[0m[32m [0m│[32m [0m[32m   45,913.67[0m[32m [0m│[32m [0m[32m   26,262.26[0m[32m [0m│[32m [0m[32m 20,944.06[0m[32m [0m│
+│[36m [0m[36m                         (tokens/sec)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36m         Effective Decode Concurrency[0m[36m [0m│[32m [0m[32m        7.21[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m        8.00[0m[32m [0m│[32m [0m[32m        8.00[0m[32m [0m│[32m [0m[32m        8.00[0m[32m [0m│[32m [0m[32m        7.00[0m[32m [0m│[32m [0m[32m      1.29[0m[32m [0m│
+│[36m [0m[36m                           (requests)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36m        Effective Prefill Concurrency[0m[36m [0m│[32m [0m[32m        4.33[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m       11.00[0m[32m [0m│[32m [0m[32m        9.00[0m[32m [0m│[32m [0m[32m        7.00[0m[32m [0m│[32m [0m[32m        4.00[0m[32m [0m│[32m [0m[32m      2.05[0m[32m [0m│
+│[36m [0m[36m                           (requests)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36m           Effective Total Throughput[0m[36m [0m│[32m [0m[32m   29,716.70[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m  373,877.86[0m[32m [0m│[32m [0m[32m   90,754.21[0m[32m [0m│[32m [0m[32m   46,193.51[0m[32m [0m│[32m [0m[32m   26,506.37[0m[32m [0m│[32m [0m[32m 20,937.65[0m[32m [0m│
+│[36m [0m[36m                         (tokens/sec)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36m Effective Decode Throughput Per User[0m[36m [0m│[32m [0m[32m       33.09[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m    6,864.18[0m[32m [0m│[32m [0m[32m       76.64[0m[32m [0m│[32m [0m[32m       56.89[0m[32m [0m│[32m [0m[32m       53.55[0m[32m [0m│[32m [0m[32m     27.73[0m[32m [0m│
+│[36m [0m[36m                    (tokens/sec/user)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36mEffective Prefill Throughput Per User[0m[36m [0m│[32m [0m[32m    8,111.96[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m  140,793.25[0m[32m [0m│[32m [0m[32m   33,452.78[0m[32m [0m│[32m [0m[32m   14,460.49[0m[32m [0m│[32m [0m[32m    5,893.77[0m[32m [0m│[32m [0m[32m  8,321.99[0m[32m [0m│
+│[36m [0m[36m                    (tokens/sec/user)[0m[36m [0m│[32m              [0m│[32m          [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m              [0m│[32m            [0m│
+│[36m [0m[36m            Tokens In Flight (tokens)[0m[36m [0m│[32m [0m[32m1,114,442.85[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m1,586,566.04[0m[32m [0m│[32m [0m[32m1,578,597.91[0m[32m [0m│[32m [0m[32m1,403,112.20[0m[32m [0m│[32m [0m[32m1,115,349.47[0m[32m [0m│[32m [0m[32m257,618.30[0m[32m [0m│
+│[36m [0m[36m    Effective Latency (CO-aware) (ms)[0m[36m [0m│[32m [0m[32m   33,802.04[0m[32m [0m│[32m [0m[32m2,985.28[0m[32m [0m│[32m [0m[32m  294,531.02[0m[32m [0m│[32m [0m[32m  181,353.08[0m[32m [0m│[32m [0m[32m   68,628.18[0m[32m [0m│[32m [0m[32m   23,297.33[0m[32m [0m│[32m [0m[32m 36,360.87[0m[32m [0m│
+└───────────────────────────────────────┴──────────────┴──────────┴──────────────┴──────────────┴──────────────┴──────────────┴────────────┘
+[3m                                             NVIDIA AIPerf | LLM Metrics: Active                                              [0m
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃[1m [0m[1m                                Metric[0m[1m [0m┃[1m [0m[1m      avg[0m[1m [0m┃[1m [0m[1m     min[0m[1m [0m┃[1m [0m[1m       max[0m[1m [0m┃[1m [0m[1m      p99[0m[1m [0m┃[1m [0m[1m      p90[0m[1m [0m┃[1m [0m[1m      p50[0m[1m [0m┃[1m [0m[1m      std[0m[1m [0m┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━┩
+│[36m [0m[36m Active Decode Throughput (tokens/sec)[0m[36m [0m│[32m [0m[32m   254.82[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m 44,680.46[0m[32m [0m│[32m [0m[32m   479.21[0m[32m [0m│[32m [0m[32m   453.65[0m[32m [0m│[32m [0m[32m   382.94[0m[32m [0m│[32m [0m[32m   213.18[0m[32m [0m│
+│[36m [0m[36mActive Prefill Throughput (tokens/sec)[0m[36m [0m│[32m [0m[32m30,526.35[0m[32m [0m│[32m [0m[32m5,323.10[0m[32m [0m│[32m [0m[32m373,877.86[0m[32m [0m│[32m [0m[32m90,477.23[0m[32m [0m│[32m [0m[32m47,463.54[0m[32m [0m│[32m [0m[32m26,582.92[0m[32m [0m│[32m [0m[32m20,543.99[0m[32m [0m│
+│[36m [0m[36m     Active Decode Throughput Per User[0m[36m [0m│[32m [0m[32m    33.51[0m[32m [0m│[32m [0m[32m    0.00[0m[32m [0m│[32m [0m[32m  6,864.18[0m[32m [0m│[32m [0m[32m    76.72[0m[32m [0m│[32m [0m[32m    56.91[0m[32m [0m│[32m [0m[32m    53.61[0m[32m [0m│[32m [0m[32m    27.65[0m[32m [0m│
+│[36m [0m[36m                     (tokens/sec/user)[0m[36m [0m│[32m           [0m│[32m          [0m│[32m            [0m│[32m           [0m│[32m           [0m│[32m           [0m│[32m           [0m│
+│[36m [0m[36m    Active Prefill Throughput Per User[0m[36m [0m│[32m [0m[32m 8,404.15[0m[32m [0m│[32m [0m[32m2,307.39[0m[32m [0m│[32m [0m[32m140,793.25[0m[32m [0m│[32m [0m[32m33,452.78[0m[32m [0m│[32m [0m[32m14,806.27[0m[32m [0m│[32m [0m[32m 6,123.84[0m[32m [0m│[32m [0m[32m 8,324.33[0m[32m [0m│
+│[36m [0m[36m                     (tokens/sec/user)[0m[36m [0m│[32m           [0m│[32m          [0m│[32m            [0m│[32m           [0m│[32m           [0m│[32m           [0m│[32m           [0m│
+│[36m [0m[36m  Active Total Throughput (tokens/sec)[0m[36m [0m│[32m [0m[32m30,072.83[0m[32m [0m│[32m [0m[32m   46.79[0m[32m [0m│[32m [0m[32m373,877.86[0m[32m [0m│[32m [0m[32m90,754.21[0m[32m [0m│[32m [0m[32m46,832.06[0m[32m [0m│[32m [0m[32m26,702.12[0m[32m [0m│[32m [0m[32m20,806.94[0m[32m [0m│
+└────────────────────────────────────────┴───────────┴──────────┴────────────┴───────────┴───────────┴───────────┴───────────┘
+[3m                                                NVIDIA AIPerf | LLM Metrics: Usage                                                [0m
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃[1m [0m[1m                                Metric[0m[1m [0m┃[1m [0m[1m          avg[0m[1m [0m┃[1m [0m[1m   min[0m[1m [0m┃[1m [0m[1m       max[0m[1m [0m┃[1m [0m[1m       p99[0m[1m [0m┃[1m [0m[1m       p90[0m[1m [0m┃[1m [0m[1m      p50[0m[1m [0m┃[1m [0m[1m      std[0m[1m [0m┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━┩
+│[36m [0m[36m          Usage Prompt Tokens (tokens)[0m[36m [0m│[32m [0m[32m    86,284.00[0m[32m [0m│[32m [0m[32m469.00[0m[32m [0m│[32m [0m[32m255,552.00[0m[32m [0m│[32m [0m[32m252,015.00[0m[32m [0m│[32m [0m[32m125,007.00[0m[32m [0m│[32m [0m[32m85,242.00[0m[32m [0m│[32m [0m[32m43,492.16[0m[32m [0m│
+│[36m [0m[36m      Usage Completion Tokens (tokens)[0m[36m [0m│[32m [0m[32m       737.96[0m[32m [0m│[32m [0m[32m 14.00[0m[32m [0m│[32m [0m[32m  9,075.00[0m[32m [0m│[32m [0m[32m  5,749.20[0m[32m [0m│[32m [0m[32m  1,606.00[0m[32m [0m│[32m [0m[32m   319.00[0m[32m [0m│[32m [0m[32m 1,181.99[0m[32m [0m│
+│[36m [0m[36m           Usage Total Tokens (tokens)[0m[36m [0m│[32m [0m[32m    87,021.96[0m[32m [0m│[32m [0m[32m488.00[0m[32m [0m│[32m [0m[32m255,736.00[0m[32m [0m│[32m [0m[32m253,349.20[0m[32m [0m│[32m [0m[32m125,144.00[0m[32m [0m│[32m [0m[32m86,590.00[0m[32m [0m│[32m [0m[32m43,741.22[0m[32m [0m│
+│[36m [0m[36m    Total Usage Prompt Tokens (tokens)[0m[36m [0m│[32m [0m[32m27,697,165.00[0m[32m [0m│[32m [0m[32m   [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+│[36m [0m[36mTotal Usage Completion Tokens (tokens)[0m[36m [0m│[32m [0m[32m   236,884.00[0m[32m [0m│[32m [0m[32m   [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+│[36m [0m[36m     Total Usage Total Tokens (tokens)[0m[36m [0m│[32m [0m[32m27,934,049.00[0m[32m [0m│[32m [0m[32m   [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+└────────────────────────────────────────┴───────────────┴────────┴────────────┴────────────┴────────────┴───────────┴───────────┘
+[3m                                                      NVIDIA AIPerf | LLM Metrics                                                      [0m
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━┓
+┃[1m [0m[1m                                       Metric[0m[1m [0m┃[1m [0m[1m      avg[0m[1m [0m┃[1m [0m[1m     min[0m[1m [0m┃[1m [0m[1m       max[0m[1m [0m┃[1m [0m[1m       p99[0m[1m [0m┃[1m [0m[1m       p90[0m[1m [0m┃[1m [0m[1m      p50[0m[1m [0m┃[1m [0m[1m      std[0m[1m [0m┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━┩
+│[36m [0m[36m                     Time to First Token (ms)[0m[36m [0m│[32m [0m[32m12,676.75[0m[32m [0m│[32m [0m[32m  517.04[0m[32m [0m│[32m [0m[32m 40,162.28[0m[32m [0m│[32m [0m[32m 34,741.29[0m[32m [0m│[32m [0m[32m 22,459.86[0m[32m [0m│[32m [0m[32m11,092.84[0m[32m [0m│[32m [0m[32m 7,576.40[0m[32m [0m│
+│[36m [0m[36m                    Time to Second Token (ms)[0m[36m [0m│[32m [0m[32m    27.83[0m[32m [0m│[32m [0m[32m    0.15[0m[32m [0m│[32m [0m[32m  1,085.09[0m[32m [0m│[32m [0m[32m    417.69[0m[32m [0m│[32m [0m[32m     18.41[0m[32m [0m│[32m [0m[32m    17.56[0m[32m [0m│[32m [0m[32m    96.17[0m[32m [0m│
+│[36m [0m[36m              Time to First Output Token (ms)[0m[36m [0m│[32m [0m[32m12,676.75[0m[32m [0m│[32m [0m[32m  517.04[0m[32m [0m│[32m [0m[32m 40,162.28[0m[32m [0m│[32m [0m[32m 34,741.29[0m[32m [0m│[32m [0m[32m 22,459.86[0m[32m [0m│[32m [0m[32m11,092.84[0m[32m [0m│[32m [0m[32m 7,576.40[0m[32m [0m│
+│[36m [0m[36m                         Request Latency (ms)[0m[36m [0m│[32m [0m[32m33,800.90[0m[32m [0m│[32m [0m[32m2,984.54[0m[32m [0m│[32m [0m[32m294,523.46[0m[32m [0m│[32m [0m[32m181,351.66[0m[32m [0m│[32m [0m[32m 68,627.56[0m[32m [0m│[32m [0m[32m23,295.34[0m[32m [0m│[32m [0m[32m36,360.57[0m[32m [0m│
+│[36m [0m[36m                     Inter Token Latency (ms)[0m[36m [0m│[32m [0m[32m    27.84[0m[32m [0m│[32m [0m[32m   16.77[0m[32m [0m│[32m [0m[32m     83.59[0m[32m [0m│[32m [0m[32m     66.10[0m[32m [0m│[32m [0m[32m     39.47[0m[32m [0m│[32m [0m[32m    25.24[0m[32m [0m│[32m [0m[32m     9.90[0m[32m [0m│
+│[36m [0m[36m             Output Token Throughput Per User[0m[36m [0m│[32m [0m[32m    39.28[0m[32m [0m│[32m [0m[32m   11.96[0m[32m [0m│[32m [0m[32m     59.62[0m[32m [0m│[32m [0m[32m     57.38[0m[32m [0m│[32m [0m[32m     54.30[0m[32m [0m│[32m [0m[32m    39.62[0m[32m [0m│[32m [0m[32m    10.40[0m[32m [0m│
+│[36m [0m[36m                            (tokens/sec/user)[0m[36m [0m│[32m           [0m│[32m          [0m│[32m            [0m│[32m            [0m│[32m            [0m│[32m           [0m│[32m           [0m│
+│[36m [0m[36mE2E Output Token Throughput (tokens/sec/user)[0m[36m [0m│[32m [0m[32m    17.78[0m[32m [0m│[32m [0m[32m    0.45[0m[32m [0m│[32m [0m[32m     41.83[0m[32m [0m│[32m [0m[32m     38.16[0m[32m [0m│[32m [0m[32m     30.81[0m[32m [0m│[32m [0m[32m    16.70[0m[32m [0m│[32m [0m[32m     8.88[0m[32m [0m│
+│[36m [0m[36m              Output Sequence Length (tokens)[0m[36m [0m│[32m [0m[32m   737.96[0m[32m [0m│[32m [0m[32m   14.00[0m[32m [0m│[32m [0m[32m  9,075.00[0m[32m [0m│[32m [0m[32m  5,749.20[0m[32m [0m│[32m [0m[32m  1,606.00[0m[32m [0m│[32m [0m[32m   319.00[0m[32m [0m│[32m [0m[32m 1,181.99[0m[32m [0m│
+│[36m [0m[36m               Input Sequence Length (tokens)[0m[36m [0m│[32m [0m[32m86,284.00[0m[32m [0m│[32m [0m[32m  469.00[0m[32m [0m│[32m [0m[32m255,552.00[0m[32m [0m│[32m [0m[32m252,015.00[0m[32m [0m│[32m [0m[32m125,007.00[0m[32m [0m│[32m [0m[32m85,242.00[0m[32m [0m│[32m [0m[32m43,492.16[0m[32m [0m│
+│[36m [0m[36m         Output Token Throughput (tokens/sec)[0m[36m [0m│[32m [0m[32m   252.00[0m[32m [0m│[32m [0m[32m     [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+│[36m [0m[36m          Input Token Throughput (tokens/sec)[0m[36m [0m│[32m [0m[32m29,465.03[0m[32m [0m│[32m [0m[32m     [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+│[36m [0m[36m            Request Throughput (requests/sec)[0m[36m [0m│[32m [0m[32m     0.34[0m[32m [0m│[32m [0m[32m     [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+│[36m [0m[36m                     Request Count (requests)[0m[36m [0m│[32m [0m[32m   321.00[0m[32m [0m│[32m [0m[32m     [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+│[36m [0m[36m             Theoretical Prefix Cache Hit (%)[0m[36m [0m│[32m [0m[32m    93.98[0m[32m [0m│[32m [0m[32m     [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m       [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│[32m [0m[32m      [0m[2;32mN/A[0m[32m [0m│
+└───────────────────────────────────────────────┴───────────┴──────────┴────────────┴────────────┴────────────┴───────────┴───────────┘
+
+CLI Command: aiperf profile --scenario 'inferencex-agentx-mvp' --url 'http://localhost:8898' 
+--endpoint '/v1/chat/completions' --endpoint-type 'chat' --streaming --model 
+'amd/Kimi-K2.7-Code-MXFP4' --concurrency 8 --benchmark-duration 900 --random-seed 42 
+--failed-request-threshold 0.1 --trajectory-start-min-ratio 0.25 --trajectory-start-max-ratio 0.75 
+--agentic-cache-warmup-duration 600 --warmup-grace-period 1800 --use-server-token-count 
+--no-gpu-telemetry --tokenizer-trust-remote-code --num-dataset-entries 393 --slice-duration 1.0 
+--output-artifact-dir '/workspace/results/aiperf_artifacts' --public-dataset 
+'semianalysis_cc_traces_weka_062126_256k'
+Benchmark Duration: 928.87 sec
+CSV Export: /workspace/results/aiperf_artifacts/profile_export_aiperf.csv
+JSON Export: /workspace/results/aiperf_artifacts/profile_export_aiperf.json
+Server Metrics CSV Export: /workspace/results/aiperf_artifacts/server_metrics_export.csv
+Server Metrics JSON Export: /workspace/results/aiperf_artifacts/server_metrics_export.json
+Timeslice CSV Export: /workspace/results/aiperf_artifacts/profile_export_aiperf_timeslices.csv
+Timeslice JSON Export: /workspace/results/aiperf_artifacts/profile_export_aiperf_timeslices.json
+Log File: /workspace/results/aiperf_artifacts/logs/aiperf.log
+
++ replay_rc=0
++ set +x
+Saved aggregated agentic result to /workspace/kimik2.7_direct_A-triton-bs16_conc8.json
+  Requests: 321 successful / 1016 total (695 warmup, 0 error dropped)
+  QPS: mean=0.35 p75=1.00 p95=1.00
+  GPU cache hit rate: 93.6%
+  CPU/offload cache hit rate: 0.0%
+  External cache hit rate: 0.0%
+  GPU KV cache usage:  31.3%
+  GPU KV cache capacity: 3255184 tokens
+  Theoretical cache hit rate: 94.0%
+  Throughput per GPU: 7518 tok/s
+Saved /workspace/results/metrics_plots.png
+  Records: 1016 | TTFT median 11027ms | E2E median 13227ms
+Loaded 1,016 records from /workspace/results/aiperf_artifacts
+======================================================================
+BENCHMARK WORKLOAD DISTRIBUTION ANALYSIS
+======================================================================
+Total requests: 1,016
+
+ALL REQUESTS ISL:
+  n=1,016  mean=85,038  median=73,520  p75=106,339  p90=164,633  p95=208,320
+ALL REQUESTS OSL:
+  n=1,016  mean=234  median=1  p75=148  p90=550  p95=1,105
+======================================================================
+Saved plots to /workspace/results/workload_distribution_plots.png
+Validated aiperf request error rate: 0/321 = 0.000% <= 10.000%
+/tmp/run_direct_m1517.sh: line 100: mik2.7_fp4_mi355x.sh: command not found
+[A-triton-bs16] exit=127

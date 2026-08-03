@@ -1,0 +1,77 @@
+v0.26.0: Pulling from vllm/vllm-openai-rocm
+e95c0a6b6182: Pulling fs layer
+c0964dc83030: Pulling fs layer
+4431e2adfdcf: Pulling fs layer
+f8dd001176cb: Pulling fs layer
+4957bf557a95: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+ebd40ab069dc: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+326419a04665: Pulling fs layer
+b4f10b77adf6: Pulling fs layer
+9265684f3887: Pulling fs layer
+5dfd0f7548d4: Pulling fs layer
+83b3566ab667: Pulling fs layer
+b969996e7c2e: Pulling fs layer
+2218e3a63d68: Pulling fs layer
+be36c8b46aec: Pulling fs layer
+130a285d9dc2: Pulling fs layer
+d688d5a01e8c: Pulling fs layer
+aad022607863: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+7626e68b0e91: Pulling fs layer
+63447a8596d0: Pulling fs layer
+7ec47e9e32dc: Pulling fs layer
+3ce92bb8db6a: Pulling fs layer
+776cba473aaa: Pulling fs layer
+4f4fb700ef54: Already exists
+4431e2adfdcf: Download complete
+e95c0a6b6182: Download complete
+4f4fb700ef54: Pull complete
+e95c0a6b6182: Pull complete
+9265684f3887: Download complete
+4957bf557a95: Download complete
+be36c8b46aec: Download complete
+b969996e7c2e: Download complete
+130a285d9dc2: Download complete
+2218e3a63d68: Download complete
+776cba473aaa: Download complete
+aad022607863: Download complete
+c0964dc83030: Download complete
+d688d5a01e8c: Download complete
+ebd40ab069dc: Download complete
+7626e68b0e91: Download complete
+b4f10b77adf6: Download complete
+5dfd0f7548d4: Download complete
+7ec47e9e32dc: Download complete
+83b3566ab667: Download complete
+f8dd001176cb: Download complete
+326419a04665: Download complete
+f8dd001176cb: Pull complete
+ebd40ab069dc: Pull complete
+83b3566ab667: Pull complete
+776cba473aaa: Pull complete
+c0964dc83030: Pull complete
+3ce92bb8db6a: Download complete
+63447a8596d0: Download complete
+63447a8596d0: Pull complete
+2218e3a63d68: Pull complete
+4957bf557a95: Pull complete
+7ec47e9e32dc: Pull complete
+326419a04665: Pull complete
+7626e68b0e91: Pull complete
+b4f10b77adf6: Pull complete
+9265684f3887: Pull complete
+be36c8b46aec: Pull complete
+3ce92bb8db6a: Pull complete
+4431e2adfdcf: Pull complete
+b969996e7c2e: Pull complete
+130a285d9dc2: Pull complete
+aad022607863: Pull complete
+d688d5a01e8c: Pull complete
+5dfd0f7548d4: Pull complete
+Digest: sha256:5709fafe47123becb2f5e61c32d0b97beff1a629bb40bb753c15464f69a97a18
+Status: Downloaded newer image for vllm/vllm-openai-rocm:v0.26.0
+docker.io/vllm/vllm-openai-rocm:v0.26.0

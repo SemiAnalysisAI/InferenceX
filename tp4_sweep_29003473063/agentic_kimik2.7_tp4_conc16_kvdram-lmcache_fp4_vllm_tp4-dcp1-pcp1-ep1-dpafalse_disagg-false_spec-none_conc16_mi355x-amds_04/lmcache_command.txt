@@ -1,0 +1,1 @@
+lmcache server --host 127.0.0.1 --port 5555 --http-host 127.0.0.1 --http-port 8080 --l1-size-gb 1199 --l1-init-size-gb 20 --l1-read-ttl-seconds 7200 --chunk-size 256 --max-workers 8 --eviction-policy LRU 

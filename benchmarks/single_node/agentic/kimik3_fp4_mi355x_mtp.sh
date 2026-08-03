@@ -115,6 +115,12 @@ export PREFIX_CACHING="${PREFIX_CACHING:-true}"
 # so only capture overshot. Capping keeps cudagraphs on instead of falling back
 # to --enforce-eager.
 export CUDAGRAPH_MAX_CAPTURE="${CUDAGRAPH_MAX_CAPTURE:-128}"
-export ENFORCE_EAGER="${ENFORCE_EAGER:-false}"
+# DIAGNOSTIC ARM. enforce_eager so the ~13-completions-per-slot fault produces
+# a real Python traceback instead of an async HSA_STATUS_ERROR_EXCEPTION with no
+# stack. Under CUDA graphs every one of 108/104/118/127 deaths gave us only
+# "Worker died (exit code: None)"; the ONE time we had eager (run 30499842314)
+# it pinpointed forward_mqa -> mla_gluon immediately. Costs throughput, and this
+# arm is not a perf measurement -- it exists to localize the crash.
+export ENFORCE_EAGER="${ENFORCE_EAGER:-true}"
 
 exec "$(dirname "$0")/kimik3_fp4_mi355x.sh" "$@"
