@@ -244,8 +244,12 @@ class MoRIBackend(EPBackend):
     def _encode_dispatch(self, x):
         if not self._fp8:
             return x, None
-        quantized = x.to(self._fp8_dtype)
-        return quantized, quantized.to(torch.bfloat16)
+        # Send BF16 and cast inside dispatch, where production pays it: vLLM and SGLang both run
+        # an aiter per-1x128 quant immediately before mori's dispatch, once per forward pass.
+        # MoRI's cast needs no compile -- it is already a single eager elementwise kernel, and
+        # elementwise is per-row invariant, so it carries none of the identity risk the blockwise
+        # backends do. oracle_x is the round trip, computed once here, untimed.
+        return x, x.to(self._fp8_dtype).to(torch.bfloat16)
 
     def make_problem(self, T, idx, weights, x):
         indices = idx.to(torch.int32)
@@ -266,9 +270,14 @@ class MoRIBackend(EPBackend):
         return problem
 
     def dispatch(self, p):
+        # See _encode_dispatch: the fp8 cast belongs in the timed window because production runs
+        # it per forward pass just before this collective. Low-latency is cast here too -- MoRI's
+        # IntraNodeLL takes a caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL
+        # kernels quantise internally, so there is no in-kernel cost already being charged.
+        dispatch_x = p.dispatch_x.to(self._fp8_dtype) if self._fp8 else p.dispatch_x
         dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (
             self.op.dispatch(
-                p.dispatch_x,
+                dispatch_x,
                 p.weights,
                 p.scales,
                 p.indices,

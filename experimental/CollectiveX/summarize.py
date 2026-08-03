@@ -68,7 +68,7 @@ def _wire_basis(document: dict) -> str:
     different combine traffic at EP8, so two low-latency rows are not doing equal work.
     """
     rows = document["measurement"]["rows"]
-    copies = ((rows[0] if rows else {}).get("byte_provenance") or {}).get("copies") or {}
+    copies = (rows[0] if rows else {}).get("logical_copies") or {}
     return {"per-assignment": "assign", "rank-deduplicated": "dedup"}.get(copies.get("wire"), "-")
 
 

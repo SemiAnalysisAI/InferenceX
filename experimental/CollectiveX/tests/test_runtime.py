@@ -27,6 +27,7 @@ import probe  # noqa: E402
 import config  # noqa: E402
 import stage  # noqa: E402
 import ep_harness  # noqa: E402  (stdlib-only at module top)
+import ep_backend  # noqa: E402  (torch is imported lazily inside its methods)
 
 
 # configs/platform_config.json is shared by matrix scheduling, operator/network
@@ -653,6 +654,81 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
             messages, torch.bfloat16,
         )
         self.assertEqual(combined.item(), 0.5)
+
+
+
+@unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
+class FusedQuantizeGate(unittest.TestCase):
+    """The fp8 quantize moved inside the timed dispatch, so its identity is load-bearing.
+
+    The oracle's payload gate is a `torch.equal` that compares the SENDER's [T, hidden] quantize
+    against the ORACLE's [receive_count, hidden] one, so the callable must be bit-identical to
+    the eager helper AND per-row invariant across batch sizes. Verified on-metal for e4m3fn
+    (H100: 9 kernels/19.2us eager vs 1/1.51us fused) and e4m3fnuz (MI300X, the arch with no
+    prior precedent for a compiled fp32->fp8 convert). These tests pin the guard, not the
+    compiler.
+    """
+
+    @staticmethod
+    def _fuse(mode, eager):
+        # Both methods read only `self.mode`, so call them unbound rather than instantiating an
+        # abstract backend; that also documents that they depend on nothing else.
+        return ep_backend.EPBackend.fused_quantize(types.SimpleNamespace(mode=mode), eager)
+
+    @staticmethod
+    def _check(eager, fused, x):
+        return ep_backend.EPBackend.assert_quantize_identity(
+            types.SimpleNamespace(mode="normal"), eager, fused, x
+        )
+
+    def test_low_latency_keeps_the_eager_helper(self):
+        # Its dispatch kernel quantises internally and the oracle gate is pinned to those bits,
+        # so swapping in a compiled callable would red every LL fp8 cell without touching timing.
+        def eager(x):
+            return x, x
+        self.assertIs(self._fuse("low-latency", eager), eager)
+
+    def test_normal_mode_wraps_the_helper(self):
+        def eager(x):
+            return x, x
+        self.assertIsNot(self._fuse("normal", eager), eager)
+
+    def test_identity_check_accepts_an_equivalent_callable(self):
+        torch = _torch
+        x = torch.randn(8, 256, dtype=torch.bfloat16)
+
+        def eager(t):
+            return t.to(torch.float8_e4m3fn), t.float().abs().amax(dim=1)
+
+        self._check(eager, lambda t: eager(t), x)  # must not raise
+
+    def test_identity_check_rejects_a_divergent_callable(self):
+        torch = _torch
+        x = torch.randn(8, 256, dtype=torch.bfloat16)
+
+        def eager(t):
+            return t.to(torch.float8_e4m3fn), t.float().abs().amax(dim=1)
+
+        def divergent(t):
+            values, scales = eager(t)
+            return values, scales + 1          # one differing scale is enough to red a cell
+        with self.assertRaises(RuntimeError):
+            self._check(eager, divergent, x)
+
+    def test_identity_check_rejects_a_shape_dependent_callable(self):
+        # A callable that is deterministic but NOT per-row invariant still breaks the gate,
+        # because the oracle quantises a different row count than the sender did.
+        torch = _torch
+        x = torch.randn(8, 256, dtype=torch.bfloat16)
+
+        def eager(t):
+            return t.to(torch.float8_e4m3fn), t.float().abs().amax(dim=1)
+
+        def shape_dependent(t):
+            values, scales = eager(t)
+            return values, scales * float(t.shape[0])
+        with self.assertRaises(RuntimeError):
+            self._check(eager, shape_dependent, x)
 
 if __name__ == "__main__":
     unittest.main()

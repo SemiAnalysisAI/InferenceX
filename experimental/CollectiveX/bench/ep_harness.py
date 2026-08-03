@@ -1118,14 +1118,16 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "dispatch": dispatch_bytes,
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
-                # Copy counts behind the byte figures above, so a reader can rebase them.
-                # `routed` is what they use; `assignments` is the per-(token, expert) count,
-                # and `wire` names which of the two this backend's kernels actually move.
-                "copies": {
-                    "routed": int(rstats["routed_copies"]),
-                    "assignments": assignment_copies,
-                    "wire": wire_basis,
-                },
+            },
+            # Copy counts behind the byte figures above, so a reader can rebase them. `routed`
+            # is the basis they use; `assignments` is the per-(token, expert) count; `wire` names
+            # which of the two this backend's kernels actually move. Kept OUT of
+            # `byte_provenance`, whose every value is a per-component byte breakdown -- a reader
+            # indexing it by component name must not meet a differently-shaped entry.
+            "logical_copies": {
+                "routed": int(rstats["routed_copies"]),
+                "assignments": assignment_copies,
+                "wire": wire_basis,
             },
             "receive": {
                 "max": recv_max,

@@ -161,6 +161,76 @@ class EPBackend(abc.ABC):
             return False
         return not (self.precision == "fp8" and self.fp8_consume == "dequant")
 
+    def fused_quantize(self, eager):
+        """The fp8 quantize the TIMED dispatch should call, keyed on mode.
+
+        Production quantises bf16->fp8 once per forward pass, with a single fused kernel, just
+        before the dispatch collective. This benchmark used to do it once per SHAPE in
+        `make_problem` -- outside every timed window -- so it omitted a real cost. Moving the
+        eager helper inside the window would have been worse than omitting it: the eager form is
+        a 9-launch composite (measured 19.2us on H100, 53.6us on MI300X) against ~1.5-4.9us for
+        the compiled single kernel, so charging it would publish this harness's kernel count
+        rather than production's cost, and flip fp8-vs-bf16 verdicts on that basis.
+
+        LOW-LATENCY GETS THE EAGER FORM, unchanged and deliberately. Its dispatch kernel
+        quantises internally (`use_fp8`), so the cost is already inside the timed window, and
+        the oracle's payload gate compares the received bytes against `semantic_payload` -- which
+        must therefore keep matching the kernel's arithmetic, i.e. the eager helper's bits.
+        Swapping this globally would red every low-latency fp8 cell without touching LL timing.
+
+        Compiled with `dynamic=False`: a dynamic-shape build of this same math measured 6.3x
+        slower once, and here that lands inside the timed window as silently inflated numbers.
+        The cache limit is raised because the quantize legitimately sees ~20+ shapes (one per
+        ladder rung, plus the oracle's receive-count shapes) against a default of 8, and
+        exceeding it makes dynamo fall back to EAGER SILENTLY -- the same failure class.
+        """
+        if self.mode == "low-latency":
+            return eager
+        import torch
+
+        torch._dynamo.config.cache_size_limit = 64
+        if hasattr(torch._dynamo.config, "fail_on_recompile_limit_hit"):
+            # Prefer a loud failure over a silent eager fallback if the limit is ever hit.
+            torch._dynamo.config.fail_on_recompile_limit_hit = True
+        return torch.compile(eager, dynamic=False)
+
+    def assert_quantize_identity(self, eager, fused, x) -> None:
+        """Fail loudly, untimed, if the compiled quantize is not the eager one bit-for-bit.
+
+        The correctness oracle's payload gate is a `torch.equal`, and it compares the SENDER's
+        [T, hidden] quantize against the ORACLE's [receive_count, hidden] one -- so identity has
+        to hold per row, across batch sizes, not merely deterministically. Both properties were
+        verified on-metal for e4m3fn (H100) and e4m3fnuz (MI300X/MI325X) before this was enabled;
+        this check is what turns a future toolchain regression into a named failure here instead
+        of an unexplained payload mismatch across the whole fleet.
+        """
+        if fused is eager:
+            return
+        import torch
+
+        def bits(pair):
+            values, scales = pair
+            return values.view(torch.uint8), scales
+
+        eager_values, eager_scales = bits(eager(x))
+        fused_values, fused_scales = bits(fused(x))
+        if not (torch.equal(eager_values, fused_values)
+                and torch.equal(eager_scales, fused_scales)):
+            raise RuntimeError(
+                "compiled fp8 quantize is not bitwise identical to the eager helper; the "
+                "oracle payload gate would fail fleet-wide"
+            )
+        rows = min(int(x.shape[0]), 3)
+        if rows:
+            part_values, part_scales = bits(fused(x[:rows]))
+            whole_values, whole_scales = fused_values[:rows], fused_scales[:rows]
+            if not (torch.equal(part_values, whole_values)
+                    and torch.equal(part_scales, whole_scales)):
+                raise RuntimeError(
+                    "compiled fp8 quantize is not per-row invariant across batch sizes; the "
+                    "oracle compares a different row count than the sender quantised"
+                )
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         if not getattr(cls, "name", ""):

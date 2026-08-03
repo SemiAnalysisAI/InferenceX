@@ -151,6 +151,10 @@ class DeepEPV2Backend(EPBackend):
             # deep_ep.utils.math) so the timed stage() does no module lookup in the
             # measured region.
             self._to_fp8, self._cast_back = _fp8_cast_helpers()
+            # Normal/HT quantises inside the timed dispatch with the compiled single-kernel
+            # form; low-latency keeps the eager helper because its kernel quantises internally
+            # and the oracle gate is pinned to those bits. See EPBackend.fused_quantize.
+            self._quant = self.fused_quantize(self._to_fp8)
         if self.mode == "low-latency":
             # Legacy Buffer IBGDA decode path: a distinct kernel family whose combine
             # multiplies by the gate at the source (weighted), not an unweighted rank sum.
@@ -286,7 +290,9 @@ class DeepEPV2Backend(EPBackend):
     def semantic_payload(self, x):
         if not self._fp8:
             return x
-        return self._cast_back(*self._to_fp8(x))
+        # Same callable the wire uses, so the oracle cannot disagree with the sender by
+        # construction (low-latency: both are the eager helper, matching its kernel).
+        return self._cast_back(*self._quant(x))
 
     def _encode_dispatch(self, x):
         if not self._fp8:
@@ -296,8 +302,11 @@ class DeepEPV2Backend(EPBackend):
             # send x unquantized; expose the host round-trip as the oracle semantic so the
             # combine expectation models the FP8 transport (same as semantic_payload).
             return x, self._cast_back(*self._to_fp8(x))
-        quantized = self._to_fp8(x)
-        return quantized, self._cast_back(*quantized)
+        # Normal/HT: send BF16 and quantise inside dispatch, where production pays it. The
+        # payload is therefore x itself; oracle_x is still the round trip, computed once here,
+        # untimed -- which also compiles this rung's shape before any timed region.
+        self.assert_quantize_identity(self._to_fp8, self._quant, x)
+        return x, self._cast_back(*self._quant(x))
 
     def _ll_dispatch(self, p):
         # Verified pinned signature (legacy.py:553):
@@ -322,8 +331,11 @@ class DeepEPV2Backend(EPBackend):
     def dispatch(self, p):
         if self.mode == "low-latency":
             return self._ll_dispatch(p)
+        # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per
+        # forward pass immediately before this collective, so the timed window must contain it.
+        dispatch_x = self._quant(p.dispatch_x) if self._fp8 else p.dispatch_x
         recv_x, recv_topk_idx, recv_topk_weights, handle, _ = self.buffer.dispatch(
-            p.dispatch_x,
+            dispatch_x,
             topk_idx=p.topk_idx,
             topk_weights=p.topk_weights,
             num_experts=self.args.experts,
