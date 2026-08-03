@@ -65,7 +65,6 @@ backend:
     VLLM_SHARED_EXPERTS_STREAM_TOKEN_THRESHOLD: '8192'
     VLLM_FLOAT32_MATMUL_PRECISION: high
     UCX_TCP_AF_PRIO: "inet"
-    VLLM_MINIMAX_M3_MSA_DECODE_BACKEND: cutlass
   vllm_config:
     prefill:
       tensor-parallel-size: 1
@@ -113,7 +112,7 @@ backend:
       served-model-name: nvidia/MiniMax-M3-NVFP4
       no-enable-flashinfer-autotune: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
       block-size: 128
       language-model-only: true
 health_check: {max_attempts: 360, interval_seconds: 10}
