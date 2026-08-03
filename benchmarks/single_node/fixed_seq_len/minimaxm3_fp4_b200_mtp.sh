@@ -47,7 +47,6 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-export VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
@@ -105,6 +104,7 @@ $PARALLEL_ARGS \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
 --stream-interval 20 --no-enable-prefix-caching \
+--attention_config.minimax_m3_msa_decode_backend cutlass \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
