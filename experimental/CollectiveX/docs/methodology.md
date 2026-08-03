@@ -30,6 +30,22 @@ it is charged **inside the measured dispatch** rather than prepared ahead of the
 issued as one fused kernel and guarded bitwise against its eager reference. This means an FP8
 `normal` dispatch number covers quantize-plus-transport while its BF16 control covers transport
 alone, and it is why FP8 `normal` rows are not comparable to runs published before sweep version 2.
+
+Read that charge as a **fixed per-call cost, not a payload-proportional one**, or the FP8-versus-BF16
+comparison will be misread at the bottom of the ladder. Measured on DeepEP V2 decode, FP8 dispatch p50
+minus its BF16 control is roughly flat until the transport starts to dominate — 65us on h100, 59us on
+b200, 27us on b300 and 57us on gb300 at T=1, holding within a microsecond or two through T=64, then
+decaying, and by T=512 it has gone slightly negative on h100 and b300 where halved payload bytes more
+than repay it. FlashInfer EP carries a larger one (~107us on gb300) because its codec is its own and
+FP8 adds a fourth dispatch payload. At T=1 the FP8 path moves *fewer* bytes than BF16, so none of this
+is transport: it is per-call work, and it exceeds the fused quantize's own device time (1.5-3.6us,
+measured per SKU) by more than an order of magnitude, because the timing window has no host sync
+before its start event (see below) and a near-idle stream at T=1 lets host-side launch cost land
+inside it. Compiling the quantize reduces this rather than causing it — an eager quantize measures
+33-39us worse per decode dispatch on h100 through the same window — but a production forward pass
+issues one custom quantize op into a stream that is already busy, so the small-T end of an FP8
+`normal` row is the least production-representative number the suite emits. Compare FP8 and BF16 at
+the top of the ladder, where the charge is repaid, rather than at T=1.
 `low-latency` rows are unaffected: those kernels either quantize internally (nothing for the caller
 to charge) or take pre-quantized input by API contract. NCCL EP is BF16-only this release, so its
 cells carry the control alone; the per-backend precision set lives in `sweep_matrix.py`'s
