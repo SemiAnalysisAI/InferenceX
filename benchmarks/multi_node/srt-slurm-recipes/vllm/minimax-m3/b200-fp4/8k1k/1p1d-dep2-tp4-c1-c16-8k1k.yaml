@@ -18,7 +18,7 @@ backend:
   type: vllm
   connector: null
   allow_prefill_decode_colocation: true
-  prefill_environment: {VLLM_FLOAT32_MATMUL_PRECISION: high, UCX_TCP_AF_PRIO: "inet", VLLM_MINIMAX_M3_MSA_DECODE_BACKEND: cutlass}
+  prefill_environment: {VLLM_FLOAT32_MATMUL_PRECISION: high, UCX_TCP_AF_PRIO: "inet"}
   decode_environment: {VLLM_FLOAT32_MATMUL_PRECISION: high, UCX_TCP_AF_PRIO: "inet", VLLM_MINIMAX_M3_MSA_DECODE_BACKEND: cutlass}
   vllm_config:
     prefill:
