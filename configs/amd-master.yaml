@@ -1106,6 +1106,46 @@ kimik3-fp4-mi355x-vllm-agentic-asmpad-lmc-c16:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16] }
 
+kimik3-fp4-mi355x-vllm-agentic-asmpad-lmc-c32:
+  # vllm-project/vllm#50578 A/B, arm 4: LMCache c32.
+  #
+  # Two reasons to run a cell the c16 key deliberately excluded:
+  #
+  # 1. The PR author reports the patch crashing at high concurrency. Nothing in
+  #    our three arms exercised that -- c8 and c16 both completed clean. This is
+  #    a stability probe first and a throughput number second. A crash here is a
+  #    RESULT, not a failed run: capture the traceback rather than relaunching.
+  # 2. Under Gluon, c32 was settled as collapsed (335.86 tok/s/GPU, external hit
+  #    2.72% against a 92.69% theoretical) and the diagnosis was reuse-interval:
+  #    an L1 entry could not outlive its trajectory's next turn. asm-pad already
+  #    falsified that mechanism's ceiling at c16 -- e2el mean 368.3 -> 158.3 s
+  #    moved external hit 13.97% -> 21.81% with no LMCache config change. If the
+  #    same 2.3x e2el compression lands here, c32 should stop missing. If it
+  #    does not, the c32 collapse is capacity, not residency.
+  #
+  # Config is byte-identical to the -lmc-c16 key except conc-list, so the c16
+  # asm-pad cell (1520.51) is the same-code neighbour. Caveat on the Gluon side:
+  # 335.86 came off the -lmcachek3 key's [8,16,32] sweep, whose worker/eviction
+  # settings predate the k3upstream defaults behind the 570.03 c16 control --
+  # so treat it as an order-of-magnitude reference, not a matched control.
+  #
+  # max_num_seqs stays 32: aiperf bounds in-flight requests by --concurrency, so
+  # mns 32 exactly covers c32 with no headroom. Raising it would re-inflate the
+  # chunked MLA workspace behind the HSA_OUT_OF_RESOURCES prefill deaths, which
+  # would confound a crash here with a known-unrelated OOM.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [32] }
+
 kimik3-fp4-mi355x-vllm-agentic-asmpad-eval:
   # vllm-project/vllm#50578 A/B, arm 3: accuracy on the patched decode path.
   #
