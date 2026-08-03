@@ -51,7 +51,26 @@ export SPEC_DECODE=true
 # --kv-cache-dtype fp8 at all. The patched b128 kernel this recipe pulls from
 # the gist is what lifts that restriction, so fp8 DSpark becomes possible once
 # that combination has actually been validated -- until then, auto.
-export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+# bf16, not fp8. fp8 + DSpark is closed on this build for THREE independent
+# reasons, each hit and confirmed:
+#   1. asm verify: asm_mla.cu:903 needs qo_len<=4 or persistent mode, and
+#      persistent metadata requires qo_len==1 under spec decode (30784997398 at
+#      k=7, 30785599385 at k=3).
+#   2. Gluon verify: patched mla_gluon caps batch at 128 while the MQA batch is
+#      max_num_seqs*~9 (30786158942 "got 225", 30786908516 "got 144").
+#   3. the DRAFTER itself: kimi_k3/nvidia/mla.py:614 asserts "Kimi-K3 fp8 KV
+#      cache decode requires a backend that accepts an fp8 (quantized) query
+#      input", and TRITON_MLA does not (30787559459).
+# Reason 3 fires at first forward, so it blocks fp8 no matter what the target's
+# verify path does.
+#
+# aiter#4474 is dtype-independent -- WITHIN_2GB is about the KV cache exceeding
+# 2 GB, and the bf16 pool is 2,156,093 x 576 x 2B = 2.48 GB, over the line. So
+# this arm still tests the int64-offset hypothesis, just without fp8's KV
+# doubling. Note the gist mla_gluon patch is gated on fp8 and will NOT apply
+# here; #4474's anchor is present in the stock image kernel too (verified), and
+# the bf16 regime bh16bn64 has no batch_size assert at all.
+export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 # Keep the DSpark arm off the unmerged vLLM#50578 asm-pad patch. It is inert
 # here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
 # runs at 8, so decode never reaches the asm path), and leaving it out keeps
