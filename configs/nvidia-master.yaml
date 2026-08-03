@@ -5272,7 +5272,7 @@ dsv4-fp4-gb200-dynamo-vllm:
 # TODO: change image to official llmd image.
 # Build source: benchmarks/llm-d/Dockerfile.
 dsv4-fp4-gb200-llmd-vllm:
-  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.26
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200

@@ -162,7 +162,6 @@ decode:
     --no-enable-flashinfer-autotune
     --block-size 256
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
-    --stream-interval 50
     --tokenizer-mode deepseek_v4
     --moe-backend deep_gemm_mega_moe
     --enable-ep-weight-filter

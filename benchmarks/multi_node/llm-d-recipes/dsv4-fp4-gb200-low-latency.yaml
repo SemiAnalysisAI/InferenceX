@@ -18,7 +18,7 @@
 #      decode ep:1/dp-attn:false in the master key is what selects the
 #      pure-TP path in server.sh. Decode knobs are latency-sized: max-num-seqs
 #      256, max-num-batched-tokens 256, max-cudagraph-capture-size 256,
-#      FULL_DECODE_ONLY graphs, stream-interval 50, gpu-memory-utilization 0.9.
+#      FULL_DECODE_ONLY graphs, gpu-memory-utilization 0.9.
 #   2. PREFILL is IDENTICAL to the mid-curve/high-tpt prefill (copied verbatim,
 #      DEP8 with enable-ep-weight-filter + moe-backend deep_gemm_mega_moe). An
 #      earlier srt-slurm-style low-latency prefill (weight-offload, no filter,
@@ -165,7 +165,6 @@ decode:
     --no-enable-flashinfer-autotune
     --block-size 256
     --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
-    --stream-interval 50
     --tokenizer-mode deepseek_v4
     --no-disable-hybrid-kv-cache-manager
     --enable-sleep-mode
