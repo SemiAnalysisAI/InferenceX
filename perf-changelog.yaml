@@ -5379,4 +5379,4 @@
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
     - "Refresh with corrected AgentX harness"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2474
