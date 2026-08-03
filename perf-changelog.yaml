@@ -5357,7 +5357,30 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
 - config-keys:
-    - minimaxm3-fp4-b200-dynamo-vllm-mtp
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
   description:
-    - "Add MiniMax M3 NVFP4 B200 disagg EAGLE3 MTP recipes, mirrored from B300"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2462
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B300 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2421
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B200 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
+  
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add five MiniMax-M3 NVFP4 B300 single-node aggregate vLLM AgentX points: TP8 concurrency 1; TP4 concurrency 1, 2, and 16; TP2 concurrency 2."
+    - "Use the Inferact/MiniMax-M3-EAGLE3-GQA draft model with three speculative tokens and synthetic rejection sampling; thinking-on synthetic acceptance length is 2.78."
+    - "Use vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 with prefix caching enabled, default KV-cache dtype, FlashInfer TRT-LLM attention with FP8 indexer KV, and the EAGLE3 drafter on FLASH_ATTN."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328

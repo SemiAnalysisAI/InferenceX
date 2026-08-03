@@ -97,9 +97,8 @@ VLLM_CMD=(
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
-    --attention-config '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8","minimax_m3_msa_decode_backend":"cutlass"}'
+    --attention-config '{"backend":"FLASHINFER","use_trtllm_attention":true,"indexer_kv_dtype":"fp8"}'
     --kv-cache-dtype fp8
-    --all2all-backend flashinfer_nvlink_one_sided
     --max-cudagraph-capture-size 512
     --max-num-batched-tokens 16384
     --stream-interval 20
