@@ -91,6 +91,56 @@ import sys
 
 REL = "vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
 
+# Marker proving vllm_pr50578_asm_pad.py already ran: only its AiterMLAHelper
+# has the non-divisor tile-padding branch.
+ASM_PAD_MARKER = "        reps = -(-m // num_heads)"
+
+# --------------------------------------------------------------------------
+# OPTIONAL: route DSpark verify through the PADDED ASM path instead of Gluon.
+#
+# forward_mqa's third branch (the fall-through) is already an asm multi-token
+# verify path: it calls get_mla_padded_q and then mla_decode_fwd with qo_indptr
+# and max_qo_len, and its own comment says the kernel computes metadata
+# internally for spec-dec steps. On the aiter side, mla_decode_fwd forwards
+# max_seqlen_q to mla_decode_stage1_asm_fwd with no assert pinning it to 1; the
+# dispatch only special-cases it for tuning
+#   mgc = 64 if nhead in [8, 16] and (max_seqlen_q == 1 or ...) else 16
+# so nhead == 16 with qseqlen > 1 falls to the else and proceeds.
+#
+# What stops K3 reaching it is purely this guard, which tests the RAW head
+# count: 12 < 16 is always true, so K3 diverts to the Gluon flatten branch
+# before padding ever gets a chance. vllm#50578 does not touch it -- that patch
+# replaces class AiterMLAHelper, while forward_mqa lives in AiterMLAImpl.
+#
+# The PR's "the asm path has no gqa<16, qseqlen>1 kernel" comment is accurate
+# about STOCK, where 12 heads cannot be padded at all. After the PR's
+# tile-padding the count is gqa=16, which is not the excluded case. That is a
+# claim to test, not to trust, which is what DSPARK_ASM_VERIFY=1 does.
+#
+# UNPROVEN: whether the asm kernel is numerically correct at gqa=16 / qseqlen=8
+# on gfx950. Padding is safe for plain decode because MLA is independent per
+# query head and the pad heads are sliced back off, but verify adds rejection
+# sampling on top -- a bad pad interaction would surface as degraded acceptance
+# length, not as a crash, and would be invisible in a throughput number. Do not
+# ship this arm on a throughput result alone; it needs gsm8k on the spec path.
+#
+# Requires MLA_ASM_PAD=1. Stock get_mla_padded_q computes
+# `q.repeat_interleave(16 // 12, dim=1)` == repeat_interleave(1) == q, i.e. it
+# silently leaves 12 heads, and the asm kernel would then be fed a head count it
+# does not handle. This script refuses to apply the reroute without the marker.
+GUARD_OLD = """        if (
+            self.num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS
+            and int(decode.max_qo_len) > 1
+        ):
+"""
+
+GUARD_NEW = """        if (
+            self.num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS
+            and int(decode.max_qo_len) > 1
+            and not _DSPARK_ASM_VERIFY
+        ):
+"""
+
 
 def die(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
@@ -237,6 +287,9 @@ HELPER_ANCHOR = "class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):"
 HELPER = '''import os as _dspark_os
 
 _DSPARK_MQA_SPLITK = _dspark_os.environ.get("DSPARK_MQA_SPLITK", "0") == "1"
+# Route DSpark multi-token verify through the padded asm path (requires
+# vllm#50578 / MLA_ASM_PAD=1) instead of the Gluon flatten branch below.
+_DSPARK_ASM_VERIFY = _dspark_os.environ.get("DSPARK_ASM_VERIFY", "0") == "1"
 
 
 def _dspark_mqa_expand(decode, num_rows: int):
@@ -321,7 +374,12 @@ def main() -> None:
         print(f"{path} already patched; nothing to do")
         return
 
-    for name, old in (("qo_indptr", QO_OLD), ("forward_mqa flatten", MQA_OLD)):
+    anchors = [
+        ("qo_indptr", QO_OLD),
+        ("forward_mqa flatten", MQA_OLD),
+        ("forward_mqa guard", GUARD_OLD),
+    ]
+    for name, old in anchors:
         if text.count(old) != 1:
             die(
                 f"anchor for {name} matched {text.count(old)} times, expected 1. "
@@ -330,8 +388,20 @@ def main() -> None:
     if text.count(HELPER_ANCHOR) != 1:
         die("helper anchor (class AiterMLAImpl) not found exactly once")
 
+    asm_verify = os.environ.get("DSPARK_ASM_VERIFY", "0") == "1"
+    if asm_verify and ASM_PAD_MARKER not in text:
+        die(
+            "DSPARK_ASM_VERIFY=1 but vllm#50578 is not applied to this file "
+            "(no non-divisor tile-padding branch in AiterMLAHelper). Stock "
+            "get_mla_padded_q leaves 12 heads unpadded -- repeat_interleave(16 "
+            "// 12) == repeat_interleave(1) -- so the asm kernel would be fed a "
+            "head count it does not handle. Run vllm_pr50578_asm_pad.py first, "
+            "i.e. set MLA_ASM_PAD=1."
+        )
+
     text = text.replace(QO_OLD, QO_NEW)
     text = text.replace(MQA_OLD, MQA_NEW)
+    text = text.replace(GUARD_OLD, GUARD_NEW)
     text = text.replace(HELPER_ANCHOR, HELPER + HELPER_ANCHOR)
 
     compile(text, path, "exec")
@@ -358,7 +428,19 @@ def main() -> None:
     print(f"Patched {path}")
     print(
         "DSPARK_MQA_SPLITK="
-        + ("1 (stock split-K restored)" if os.environ.get("DSPARK_MQA_SPLITK") == "1" else "0 (single-split)")
+        + (
+            "1 (stock split-K restored)"
+            if os.environ.get("DSPARK_MQA_SPLITK") == "1"
+            else "0 (single-split)"
+        )
+    )
+    print(
+        "DSPARK_ASM_VERIFY="
+        + (
+            "1 (verify routed to PADDED ASM; Gluon flatten branch bypassed)"
+            if asm_verify
+            else "0 (verify on the Gluon flatten branch)"
+        )
     )
 
 
