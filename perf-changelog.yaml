@@ -5361,4 +5361,4 @@
   description:
     - "Update the Qwen3.5 FP4 MI355X SGLang checkpoint to amd/Qwen3.5-397B-A17B-MXFP4-AttnFP8-V2"
     - "Quantize attention to PTPC FP8 and shared experts to MXFP4, and enable SGLANG_USE_AITER_FP8_PER_TOKEN=1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2465
