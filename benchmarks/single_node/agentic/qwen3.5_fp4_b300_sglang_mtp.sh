@@ -109,6 +109,19 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 # timeout so bursty AgentX trajectories cannot reuse a closing idle socket.
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
+# Temporary diagnostics for the TP2/EP2 HiCache stall reproduction. Blocking
+# CUDA launch surfaces asynchronous kernel failures at their originating call;
+# the soft SGLang watchdog below captures scheduler stacks without terminating
+# the server. NCCL's flight recorder is dumped only if a collective times out.
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_SHOW_CPP_STACKTRACES=1
+export PYTHONFAULTHANDLER=1
+export NCCL_DEBUG=INFO
+export NCCL_DEBUG_SUBSYS=INIT,COLL
+export TORCH_NCCL_TRACE_BUFFER_SIZE=2000
+export TORCH_NCCL_DUMP_ON_TIMEOUT=1
+export TORCH_NCCL_DESYNC_DEBUG=1
+
 if [ "${EVAL_ONLY:-false}" != "true" ]; then
     export SGLANG_SIMULATE_ACC_LEN=3.39
     export SGLANG_SIMULATE_ACC_METHOD=match-expected
@@ -137,6 +150,7 @@ SGLANG_CMD=(
     --mem-fraction-static 0.80
     --stream-interval "$STREAM_INTERVAL"
     --scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL"
+    --soft-watchdog-timeout 60
     "${TOKENIZER_ARGS[@]}"
     --tokenizer-path "$MODEL"
     --reasoning-parser qwen3
@@ -152,6 +166,11 @@ SGLANG_CMD=(
 
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
+env | grep -E '^(CUDA_LAUNCH_BLOCKING|TORCH_SHOW_CPP_STACKTRACES|PYTHONFAULTHANDLER|NCCL_DEBUG|NCCL_DEBUG_SUBSYS|TORCH_NCCL_.*)=' \
+    | sort > "$RESULT_DIR/debug_environment.txt"
+echo "Starting 5-second GPU diagnostic sampling..."
+nvidia-smi dmon -s pucvmet -d 5 > "$RESULT_DIR/gpu_dmon.log" 2>&1 &
+GPU_DMON_PID=$!
 "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
@@ -165,10 +184,21 @@ capture_cache_metrics() {
     } >> "$SERVER_LOG"
 }
 
+capture_debug_exit_state() {
+    capture_cache_metrics
+    {
+        echo "=== Debug exit state $(date --iso-8601=seconds) ==="
+        nvidia-smi
+        ps -eLf
+    } >> "$RESULT_DIR/debug_exit_state.log" 2>&1 || true
+    kill "$GPU_DMON_PID" 2>/dev/null || true
+    wait "$GPU_DMON_PID" 2>/dev/null || true
+}
+
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 capture_cache_metrics
-trap capture_cache_metrics EXIT
+trap capture_debug_exit_state EXIT
 
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
