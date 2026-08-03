@@ -5381,3 +5381,11 @@
   description:
     - "Add MiniMax-M3-MXFP8 GB300 8k1k disaggregated Dynamo-vLLM EAGLE3 MTP Pareto"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2478
+
+- config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Bump MiniMax-M3-MXFP8 GB300 EAGLE3 MTP recipes to vLLM nightly 5e35a6f4f and enable CUTLASS MSA sparse decode backend on decode servers"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2478

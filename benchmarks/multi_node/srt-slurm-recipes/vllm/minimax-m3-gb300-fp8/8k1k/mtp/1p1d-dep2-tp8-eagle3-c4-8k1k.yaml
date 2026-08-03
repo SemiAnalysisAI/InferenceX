@@ -2,7 +2,7 @@ name: "minimax-m3-vllm-disagg-gb300-1p1d-dep2-tp8-mxfp8-8k1k-eagle3-c4"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "vllm/vllm-openai:nightly-6f91edf96d3f3272945809c04702380053bff4de"
+  container: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
   precision: "fp8"
 
 identity:
@@ -10,10 +10,10 @@ identity:
     repo: "MiniMaxAI/MiniMax-M3-MXFP8"
     revision: "c5454eb03678d8710e54a4e0fc681b9f3b4a3dba"
   container:
-    image: "vllm/vllm-openai:nightly-6f91edf96d3f3272945809c04702380053bff4de"
+    image: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
   frameworks:
     dynamo: "1.4.0.dev20260730"
-    vllm: "0.26.1rc1.dev77+g6f91edf96"
+    vllm: "0.26.1rc1.dev255+g5e35a6f4f"
 
 dynamo:
   install: true
@@ -86,7 +86,7 @@ backend:
     decode:
       no-enable-flashinfer-autotune: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       tensor-parallel-size: 8
       enable-expert-parallel: false
