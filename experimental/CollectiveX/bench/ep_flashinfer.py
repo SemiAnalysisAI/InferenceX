@@ -186,6 +186,21 @@ class FlashInferEPBackend(EPBackend):
             h.tokens, h.recv_x.shape[-1], h.recv_x.dtype
         )
 
+    def _filled_slot_index(self, p, h):
+        """Row indices of the receive slots dispatch actually filled, resolved once per rung.
+
+        `_valid_rows` gives a boolean mask, and indexing with one needs the match count on the
+        host, which would put a device read inside the timed stage. Routing is fixed for a
+        ladder point, so resolve it to an integer index on first use -- which is always the
+        untimed `warm()` pass -- and cache it on the problem, the way `warm` already caches
+        `recv_tokens` for the same reason.
+        """
+        index = getattr(p, "flashinfer_filled_slots", None)
+        if index is None:
+            index = self._valid_rows(h).nonzero(as_tuple=True)[0]
+            p.flashinfer_filled_slots = index
+        return index
+
     def stage(self, p, h):
         """Materialise the combine payload in the workspace region the API designates.
 
@@ -194,9 +209,18 @@ class FlashInferEPBackend(EPBackend):
         staging copy. Copying here rather than handing `combine` a caller-owned tensor keeps
         that copy out of the combine measurement, where production does not pay it; it is
         still executed and reported, as `stage`.
+
+        Only the filled slots are copied, which is what the kernel's own staging path does --
+        `moeA2APrepareCombineKernel` returns early on `token_idx >= recv_counters[source]`.
+        Copying the whole plane moved 1/occupancy times too much: measured occupancy is
+        ~0.66 at EP8 and ~0.41 at EP16, i.e. 1.5x and 2.4x over-copy. The slots left
+        untouched are never read -- combine addresses peers exclusively through the
+        `topk_send_indices` recorded at dispatch, and an unfilled slot has none.
         """
         buffer = self._combine_buffer(h)
-        buffer.copy_(h.recv_x)
+        filled = self._filled_slot_index(p, h)
+        flat_buffer = buffer.view(-1, buffer.shape[-1])
+        flat_buffer[filled] = h.recv_x.view(-1, h.recv_x.shape[-1])[filled]
         h.combine_input = buffer
 
     def combine(self, p, h):

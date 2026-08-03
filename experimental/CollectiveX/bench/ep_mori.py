@@ -267,16 +267,25 @@ class MoRIBackend(EPBackend):
         rows = getattr(p, "recv_tokens", None)
         if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
-        # FP8: dispatch delivered an e4m3 payload; dequantize it to the BF16 combine sends.
-        h.combine_input = (
-            h.dispatch_output.to(torch.bfloat16) if self._fp8 else h.dispatch_output
-        )
         if self._external_input:
+            # The kernel reads the padded plane directly here, so all of it must be BF16.
+            h.combine_input = (
+                h.dispatch_output.to(torch.bfloat16) if self._fp8 else h.dispatch_output
+            )
             return None
+        # Zero-copy path: combine only ever reads the `rows` slots dispatch filled, so cast
+        # and copy just those. `dispatch_output` is sized to the buffer cap times the world,
+        # independent of the token count, so casting all of it made this stage flat in T --
+        # 61-114us across the whole decode ladder against 6-30us for BF16, ~99.8% of it
+        # padding at T=1.
+        source = h.dispatch_output[:rows]
+        if self._fp8:
+            # FP8: dispatch delivered an e4m3 payload; dequantize it to the BF16 combine sends.
+            source = source.to(torch.bfloat16)
         buffer = self.op.get_registered_combine_input_buffer(
-            torch.bfloat16, hidden_dim=h.combine_input.size(1)
+            torch.bfloat16, hidden_dim=h.dispatch_output.size(1)
         )
-        buffer[:rows, :].copy_(h.combine_input[:rows, :])
+        buffer[:rows, :].copy_(source)
         h.combine_input = buffer
 
     def combine(self, p, h):

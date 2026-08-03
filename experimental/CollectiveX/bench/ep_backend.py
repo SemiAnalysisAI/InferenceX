@@ -132,27 +132,30 @@ class EPBackend(abc.ABC):
     fp8_consume = os.environ.get("CX_FP8_CONSUME", "native")
 
     @property
-    def stages_fp8_natively(self) -> bool:
-        """Whether the chained roundtrip should skip the per-iteration `stage()`.
+    def stage_excluded_from_roundtrip(self) -> bool:
+        """Whether the chained roundtrip skips the per-iteration `stage()`.
 
-        Gated on precision, NOT on `stage_device_work` alone. The two are equivalent for
-        deepep-v2 and uccl, but MoRI sets `stage_device_work = self._fp8 or not
-        self._external_input`, so its scale-up kernels (IntraNode/IntraNodeLL) report True
-        for BF16 as well -- and their `stage()` really does run a device copy into the
-        registered combine-input buffer. That copy is not an fp8 dequant and nothing in this
-        change's evidence says it should leave the timed region, so BF16 keeps executing it
-        inline every iteration and its numbers are unmoved.
+        `roundtrip` must mean the same thing in every row, or it cannot be compared across
+        backends. It means dispatch -> combine: the transport, staging excluded. So the
+        answer is yes whenever `stage()` does device work, regardless of precision.
 
-        (Whether MoRI's registered-buffer copy is a production cost or a harness artefact is
-        a real open question -- a native integration may have the expert GEMM write straight
-        into that buffer -- but it is a separate question from fp8 consumption, it applies to
-        both precisions equally, and it needs its own evidence.)
+        This was previously gated on precision as well, which left `stage` inside the
+        roundtrip for exactly two configurations -- MoRI BF16 scale-up and FlashInfer BF16 --
+        and transport-only for all 800+ other rows, so the headline compared two different
+        quantities and penalised those two.
+
+        Gated on `stage_device_work` rather than applied blanket: where `stage()` is a bare
+        pointer assignment there is nothing to lift, and hoisting anyway would hand the
+        low-latency backends a VIEW into their double-buffered receive, whose parity flips on
+        each timed re-dispatch -- combine would then read the stale-parity buffer.
+
+        `CX_FP8_CONSUME=dequant` still opts an fp8 run back into the inline stage, because
+        that switch exists to model a stack that really does dequantise between the two
+        collectives (see `fp8_consume`).
         """
-        return (
-            self.precision == "fp8"
-            and self.stage_device_work
-            and self.fp8_consume == "native"
-        )
+        if not self.stage_device_work:
+            return False
+        return not (self.precision == "fp8" and self.fp8_consume == "dequant")
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -368,12 +371,17 @@ class EPBackend(abc.ABC):
 
         self.warm(problem, warmup)
         staged = None
-        if self.stages_fp8_natively:
-            # Materialise the expert-output stand-in ONCE, untimed. A native fp8 stack has no
-            # separate conversion between dispatch and combine, so the chained measurement
-            # must not contain one. Routing is fixed for a ladder point, so the same staged
-            # tensor is valid for every iteration (for MoRI it IS the registered combine
-            # buffer, already filled).
+        if self.stage_excluded_from_roundtrip:
+            # Materialise the expert-output stand-in ONCE, untimed, so the chained
+            # measurement is dispatch -> combine and nothing else. Routing is fixed for a
+            # ladder point, so the same staged tensor is valid for every iteration (for MoRI
+            # it IS the registered combine buffer, already filled; for FlashInfer it is the
+            # workspace combine region, which dispatch cannot clobber because that region
+            # sits past the end of every dispatch receive plane).
+            #
+            # Read the staged payload back through `combine_input_attr` rather than
+            # constructing one: nccl-ep keeps an `nccl.ep.Tensor` wrapper there, and
+            # `run_roundtrip` restores that same object, so no type ever changes hands.
             handle = self.dispatch(problem)
             self.stage(problem, handle)
             staged = getattr(handle, self.combine_input_attr)
