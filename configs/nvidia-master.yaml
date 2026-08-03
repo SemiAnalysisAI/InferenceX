@@ -7768,7 +7768,7 @@ minimaxm3-fp4-b300-dynamo-vllm-8k1k-legacy-max-tput:
           dp-attn: false
 
 minimaxm3-fp4-b200-dynamo-vllm-mtp:
-  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
+  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b200-multinode
