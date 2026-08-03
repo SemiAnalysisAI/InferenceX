@@ -5378,4 +5378,4 @@
     - kimik3-fp4-b300-vllm-agentic-dspark
   description:
     - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
