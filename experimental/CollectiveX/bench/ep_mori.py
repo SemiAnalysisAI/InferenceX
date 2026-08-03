@@ -127,6 +127,17 @@ class MoRIBackend(EPBackend):
         # Stash the __init__-only locals the moved create_buffer body reads back.
         self._gpus_per_node = gpus_per_node
 
+    def buffer_cap(self, args):
+        if self.mode == "low-latency":
+            # 256 tokens/rank, matching deepep-v2, uccl-ep and nccl-ep, so every backend's
+            # low-latency ladder ends at the same rung. MoRI imposes no bound of its own here
+            # -- this adapter previously allowed 512, which published a T=512 decode rung no
+            # other backend has, so the top of the ladder was unusable for any cross-vendor
+            # comparison. 256 is also vLLM's DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP,
+            # i.e. the capacity a deployment actually configures.
+            return 256
+        return None
+
     def create_buffer(self, spec):
         args, world_size, rank = self.args, self.world_size, self.rank
         gpus_per_node = self._gpus_per_node
@@ -151,8 +162,13 @@ class MoRIBackend(EPBackend):
                 f"MoRI realized {realized_qps} QPs per PE; {self.num_qps} required"
             )
 
-        # MoRI preallocates one communicator buffer for the case's entire ladder.
-        self._cap = max(512, spec.max_tokens_per_rank)
+        # MoRI preallocates one communicator buffer for the case's entire ladder. 256 matches
+        # the other three backends' low-latency cap and vLLM's own
+        # DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP; the previous 512 was this adapter's
+        # invention -- no MoRI bound requires it -- and it published a T=512 low-latency rung
+        # that no other backend has, so no cross-vendor comparison could use the top of the
+        # ladder. Normal mode still takes the ladder maximum, which is larger.
+        self._cap = max(256, spec.max_tokens_per_rank)
         # quant_type stays "none" for both precisions: dispatch precision is carried by
         # the passed tensor dtype (caller-prequantized e4m3 under FP8, BF16 otherwise),
         # and "none" keeps combine a genuine BF16 send. data_type is deprecated upstream

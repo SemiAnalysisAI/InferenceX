@@ -309,13 +309,33 @@ class NCCLEPBackend(EPBackend):
             h.handle = self._handle
             torch.cuda.synchronize()
             if not self._ll:
-                h.count = int(h.recv_total.item())
+                self._bind_ht_recv_count(h)
             self._bound = h
         else:
             h.handle = self._handle
             self._rebind(h)
         p._nccl = h
         return h
+
+    def _bind_ht_recv_count(self, h):
+        """Read HT's received-token count and pre-wrap the combine input at that size.
+
+        The combine call's staging copy is sized by the tensor it is HANDED -- upstream reads
+        `num_tokens = x->sizes[0]` and copies that many rows into the group's IPC staging --
+        not by the group's buffer. Handing it the whole ladder-max receive plane therefore made
+        HT combine copy `max(ladder) * world` rows on every call regardless of T, putting a
+        rung-independent floor under it: ~55-80us on a decode leg (ladder max 512) against
+        ~470-1295us on a prefill leg (max 8192), while the per-token slope stayed within 12%.
+        Slicing is free (a contiguous leading-dim view) and is what upstream's own ep_test does
+        when it sizes the combine input to the actual receive count.
+
+        Both callers are untimed -- handle creation and rebind, which only run on a shape change
+        -- so the `.item()` read never lands in a measured window.
+        """
+        h.count = int(h.recv_total.item())
+        # A rank that received nothing still needs a non-empty tensor for the shape checks; the
+        # routing map decides what combine reads, so the extra row cannot reach the output.
+        h.combine_in_t = self._t(self._recv_x[: max(h.count, 1)])
 
     def _rebind(self, h):
         """Point the single handle at h's routing (collective; untimed callers only).
@@ -332,7 +352,7 @@ class NCCLEPBackend(EPBackend):
         )
         torch.cuda.synchronize()
         if not self._ll:
-            h.count = int(h.recv_total.item())
+            self._bind_ht_recv_count(h)
         self._bound = h
 
     # ---- transport contract ------------------------------------------------------------------
@@ -375,8 +395,11 @@ class NCCLEPBackend(EPBackend):
 
     def stage(self, p, h):
         # BF16 combine input is the received buffer itself; no device work (value correctness
-        # is exercised only through the oracle's combine_transformed path).
-        h.combine_input_t = self._recv_x_t
+        # is exercised only through the oracle's combine_transformed path). LL takes the full
+        # padded plane -- its kernel asserts that shape -- while HT takes only the rows this
+        # routing actually received, so its staging copy scales with T (see
+        # `_bind_ht_recv_count`).
+        h.combine_input_t = self._recv_x_t if self._ll else h.combine_in_t
 
     def combine(self, p, h):
         stream = self._stream()
@@ -489,7 +512,8 @@ class NCCLEPBackend(EPBackend):
         self._recv_x[: transformed.shape[0]].copy_(transformed.to(self._recv_x.dtype))
         stream = self._stream()
         h.handle.combine(
-            CombineInputs(tokens=self._recv_x_t),
+            # Same sliced input the timed path uses, so the two cannot diverge in shape.
+            CombineInputs(tokens=h.combine_in_t),
             CombineOutputs(tokens=h.out_t),
             config=self._combine_cfg,
             stream=stream,

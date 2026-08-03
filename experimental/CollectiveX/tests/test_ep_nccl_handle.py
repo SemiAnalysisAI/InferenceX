@@ -96,6 +96,10 @@ def backend(ll=True):
     b.args = types.SimpleNamespace(hidden=16)
     b._t = lambda x: x
     b._stream = lambda: 0
+    # create_buffer always runs before the first _ensure_handle, so the HT receive plane
+    # exists by then: `_bind_ht_recv_count` slices it to the received-token count. A list
+    # stands in for the tensor because `_t` is identity here and only the slice is exercised.
+    b._recv_x = list(range(64))
     return b
 
 
@@ -145,6 +149,25 @@ class TestSingleHandle(unittest.TestCase):
         b._ensure_handle(problem(1))
         b._ensure_handle(problem(2))
         self.assertEqual([info for _, info in b._ep_group.handle.updates], [None])
+
+    def test_ht_combine_input_is_sliced_to_the_received_count(self):
+        """HT combine's staging copy is sized by the tensor it is handed, not by the group.
+
+        Passing the whole ladder-max receive plane made combine copy max(ladder) * world rows
+        on every call regardless of T, which put a rung-independent floor under it. LL must keep
+        the full padded plane -- its kernel asserts that shape.
+        """
+        b = backend(ll=False)
+        h = b._ensure_handle(problem(1))
+        # 7 is what the stubbed `torch.zeros(...).item()` reports as the received count.
+        self.assertEqual(h.count, 7)
+        self.assertEqual(h.combine_in_t, list(range(7)))
+        # The point of the fix: the slice, not the whole 64-row plane.
+        self.assertLess(len(h.combine_in_t), len(b._recv_x))
+
+        ll = backend(ll=True)
+        ll_h = ll._ensure_handle(problem(1))
+        self.assertFalse(hasattr(ll_h, "combine_in_t"))
 
     def test_ht_rebind_carries_that_problems_counters(self):
         """HT re-runs the metadata exchange into the rebound problem's own counter tensors."""
