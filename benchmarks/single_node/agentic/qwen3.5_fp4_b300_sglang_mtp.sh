@@ -110,10 +110,8 @@ export SGLANG_ENABLE_FLASHINFER_GEMM=true
 export SGLANG_TIMEOUT_KEEP_ALIVE=1800
 
 # Temporary diagnostics for the TP2/EP2 HiCache stall reproduction. Blocking
-# CUDA launch surfaces asynchronous kernel failures at their originating call;
-# the soft SGLang watchdog below captures scheduler stacks without terminating
+# The soft SGLang watchdog below captures scheduler stacks without terminating
 # the server. NCCL's flight recorder is dumped only if a collective times out.
-export CUDA_LAUNCH_BLOCKING=1
 export TORCH_SHOW_CPP_STACKTRACES=1
 export PYTHONFAULTHANDLER=1
 export NCCL_DEBUG=INFO
