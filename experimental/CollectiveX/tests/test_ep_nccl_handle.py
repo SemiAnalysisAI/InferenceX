@@ -150,6 +150,25 @@ class TestSingleHandle(unittest.TestCase):
         b._ensure_handle(problem(2))
         self.assertEqual([info for _, info in b._ep_group.handle.updates], [None])
 
+    def test_ll_gate_wrapper_is_built_once_per_handle(self):
+        """LL applies the gate in combine, so its weights wrapper must be cached like the rest.
+
+        Building one per timed combine costs a torch resolve, an np.asarray and a cybind
+        allocation, and `time_us` charges host work inside the window — a per-call tax no other
+        backend pays. HT never needs it: FWD forbids input weights on its combine.
+        """
+        ll = backend(ll=True)
+        pa = problem(1)
+        h = ll._ensure_handle(pa)
+        self.assertTrue(hasattr(h, "combine_weights_t"))
+        self.assertEqual(h.combine_weights_t, "w1")
+        # Re-entering the SAME problem -- the timed loop's steady state -- reuses the handle and
+        # therefore the wrapper; a fresh problem object legitimately builds its own.
+        self.assertIs(ll._ensure_handle(pa).combine_weights_t, h.combine_weights_t)
+
+        ht = backend(ll=False)
+        self.assertFalse(hasattr(ht._ensure_handle(problem(1)), "combine_weights_t"))
+
     def test_ht_combine_input_is_sliced_to_the_received_count(self):
         """HT combine's staging copy is sized by the tensor it is handed, not by the group.
 

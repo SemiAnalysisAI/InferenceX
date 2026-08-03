@@ -280,6 +280,13 @@ class NCCLEPBackend(EPBackend):
         )
         if not self._ll:
             h.in_weights_t = self._t(p.topk_weights)
+        else:
+            # LL applies the gate in its COMBINE kernel, not on dispatch. Wrap the weights here
+            # with every other per-handle wrapper rather than per timed combine: building one
+            # costs a torch resolve, an np.asarray and a cybind allocation, and `time_us`
+            # charges host work inside the window, so a fresh wrapper per iteration was a
+            # per-call tax no other backend pays.
+            h.combine_weights_t = self._t(p.topk_weights)
         # combined output is restored to original token order: [num_tokens, hidden].
         h.out = torch.empty((p.T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
         h.out_t = self._t(h.out)
@@ -408,7 +415,7 @@ class NCCLEPBackend(EPBackend):
             # source token's gate (CombineOutputs.topk_weights) before the FP32 accumulation.
             h.handle.combine(
                 CombineInputs(tokens=h.combine_input_t),
-                CombineOutputs(tokens=h.out_t, topk_weights=self._t(p.topk_weights)),
+                CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
                 config=self._combine_cfg,
                 stream=stream,
             )
@@ -492,7 +499,7 @@ class NCCLEPBackend(EPBackend):
         stream = self._stream()
         h.handle.combine(
             CombineInputs(tokens=self._t(combine_buf)),
-            CombineOutputs(tokens=h.out_t, topk_weights=self._t(p.topk_weights)),
+            CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
             config=self._combine_cfg,
             stream=stream,
         )
