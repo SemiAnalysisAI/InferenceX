@@ -424,7 +424,17 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
     -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
-    -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-0}
+    # Default 1. The non-persistent aiter MLA decode leaves num_kv_splits to
+    # aiter's python-side auto-search, which under CUDA graphs runs ONCE at
+    # capture and is then frozen for every replay. Above ~128 running
+    # requests per DP rank that frozen choice corrupts decode: measured
+    # gsm8k 0.0356 vs 0.9530 on the same batch with the persistent path
+    # (single node, image v0.5.16-rocm720-mi35x-20260729). Disabling CUDA
+    # graphs also restores it, confirming the capture-time freeze.
+    # This was set to 0 in #2170 to dodge a persistent-path defect that
+    # aiter has since fixed (cdd6628f9, s_barrier -> __syncthreads in the
+    # MLA reduce), so the workaround now costs more than it buys.
+    -e SGLANG_AITER_MLA_PERSIST=\${SGLANG_AITER_MLA_PERSIST:-1}
     -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-0}
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
     -e DURATION=\${DURATION:-1800}
