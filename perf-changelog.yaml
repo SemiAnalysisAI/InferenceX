@@ -5383,3 +5383,4 @@
     - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
     - "Bump llmd-vllm image vllm0.23 -> vllm0.26 (v0.26 strips data_parallel_hybrid_lb from rust args-json; required for VLLM_USE_RUST_FRONTEND=1 on multi-node DEP8)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2242
+  
