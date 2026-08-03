@@ -653,6 +653,14 @@ kimik3-fp4-mi355x-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [4, 8, 16, 32] }
 
 kimik3-fp4-mi355x-vllm-agentic-mtp:
+  # Frozen c1 DSpark diagnostic, pinned by
+  # utils/matrix_logic/test_kimik3_mi355x_dspark.py. The live DSpark arm is
+  # kimik3-fp4-mi355x-vllm-agentic-dspark (named to match PR #2403); use that
+  # one. Note this key is NOT an unpatched control: the forward_mqa fix is
+  # keyed on SPEC_DECODE=true in the wrapper, not on the config key, so both
+  # keys get it. The control for that patch is the historical run set
+  # (30516895411 / 30519967494 / 30524588650), all on a byte-identical command
+  # line, or DSPARK_MQA_FIX=0 on a direct run.
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
@@ -1173,6 +1181,53 @@ kimik3-fp4-mi355x-vllm-agentic-asmpad-eval:
     - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
+
+kimik3-fp4-mi355x-vllm-agentic-dspark:
+  # DSpark (MTP spec-decode) on Kimi-K3, GPU-only TP8, with the forward_mqa fix.
+  #
+  # Named to match PR #2403's key so this merges into that PR cleanly once the
+  # arm is enabled. Same reproducer config the PR ships -- seven draft tokens,
+  # probabilistic draft sampling, TRITON_MLA, real block rejection, GMU 0.95,
+  # mns 16, mnbt 4096 -- plus the `dspark_mqa_gluon_fix.py` patch the wrapper
+  # now applies.
+  #
+  # Two cells, and they answer different questions:
+  #
+  #   c1 is the crash A/B. It is the exact cell that produced BOTH the only
+  #   DSpark success (30516895411, 17 reqs, ITL 37.49 ms, 32.19 tok/s/user) and
+  #   two HSA 0x1016 deaths on a byte-identical command line (30519967494,
+  #   30524588650). Because the config is identical across all three, the crash
+  #   is not config-determined, and the fix has to be judged on repeats rather
+  #   than a single green run. Passing c1 once is necessary, not sufficient.
+  #
+  #   c4 is the correctness cell, and is the one that has never been attempted.
+  #   The stock flatten branch assumes every request contributes exactly
+  #   max_qo_len verify rows; that holds identically at num_reqs == 1 and breaks
+  #   as soon as a second request is in flight with a different query length, at
+  #   which point rows silently attend the wrong request's KV. So c1 could never
+  #   have exposed it. If c4 produces coherent output, the row map is right.
+  #
+  # NOT going past c4 yet: mns 16 with 4 concurrent verify batches is already
+  # 4x the KV pressure of the only cell that has ever passed, and the 13.99 GiB
+  # OOM at mns 128 (run 30512072425) came from this same code path. Expand after
+  # c4 lands, not before.
+  #
+  # bf16 KV here, unlike every other K3 key. mla_gluon's fp8 regime asserts
+  # batch_size == 1 and DSpark verify calls it at 8, so stock cannot run DSpark
+  # under fp8 KV at all -- see the wrapper. Revisit once the patched b128 kernel
+  # is validated against the verify path.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+      # No dram-utilization: GPU-only, so TOTAL_CPU_DRAM_GB resolves to 0.
+    - search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
 
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
