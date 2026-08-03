@@ -5377,7 +5377,7 @@
 - config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
-    - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on the proven TP8 x PP2 topology"
-    - "Add a TP8 x PP2 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
+    - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on the PP-free TP16 DSpark topology"
+    - "Add a TP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
     - "Run DSpark level 7 with probabilistic drafting and the committed synthetic acceptance length 3.84"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
