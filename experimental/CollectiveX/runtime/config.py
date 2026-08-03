@@ -128,12 +128,10 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
     iters, trials, warmup = str(case["timing"]).split(":")
     for flag, value in (("--iters", iters), ("--trials", trials), ("--warmup", warmup)):
         argv += [flag, value]
-    # precision and mode are part of the filename so a cell's legs (distinct shards sharing
-    # runner/backend/phase and each numbering cases from index 0) cannot collide when they land
-    # in the shared results/ dir under the same second-resolution ts. Mode matters as much as
-    # precision: CI gives every leg its own job and therefore its own ts, but anyone driving
-    # several shards from one loop shares it, and a low-latency case silently overwrote the
-    # normal case with the same precision, phase and index -- losing artifacts with no error.
+    # precision and mode are in the filename so a cell's legs -- distinct shards sharing
+    # runner/backend/phase, each numbering cases from index 0 -- cannot overwrite each other in
+    # the shared results/ dir when they share a second-resolution ts, as they do whenever
+    # several shards are driven from one loop rather than one CI job each.
     out = (
         f"results/{runner}_{case['backend']}_{case['precision']}_{case['mode']}_{case['phase']}"
         f"_{ts}-c{index:03d}.json"

@@ -61,11 +61,10 @@ _COMBINE_FP32_SINCE = (0, 6, 16)
 def _wheel_has_fp32_combine(version: str) -> bool:
     """Does this wheel accumulate combine in FP32, per `_COMBINE_FP32_SINCE`?
 
-    Ordering matters more than it looks. A release candidate sorts BELOW its own release, so
-    `0.6.16rc1` predates the rewrite and must read as False; a naive digit scrape reads it as
-    0.6.16 and models FP32 against a kernel that still rounds per level, which can exceed
-    COMBINE_REL_TOL and RED a correct run. The reverse error is harmless (a few ulps, far
-    inside tolerance), so every unparseable input answers False.
+    Needs real version ordering, not a digit scrape: `0.6.16rc1` predates the rewrite, and
+    reading it as 0.6.16 models FP32 against a kernel that still rounds per level, which can
+    exceed COMBINE_REL_TOL and RED a correct run. The opposite error costs a few ulps, so
+    anything unparseable answers False.
     """
     try:
         from packaging.version import InvalidVersion, Version

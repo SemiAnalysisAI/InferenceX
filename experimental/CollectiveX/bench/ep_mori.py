@@ -124,15 +124,11 @@ class MoRIBackend(EPBackend):
         self._inter_node = kernel_name == "InterNodeV1"
         self.num_qps = 1
         self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
-        # External input buffer on every path, matching what the engines run: vLLM leaves
-        # `use_external_inp_buf` at MoRI's default of True and SGLang sets it True explicitly, so
-        # registered-buffer (zero-copy) mode is a configuration no production engine selects. It
-        # also has to move together with `combine_warps`: MoRI's own tuned tables key combine on
-        # `zero_copy`, picking ~16 warps for external input against 4-8 for registered, so pinning
-        # the engines' 16 warps while staying registered matched neither. Measured cost of that
-        # mismatch, warps 16 vs 8 in registered mode on three chips: +13-18% combine at T=128 and
-        # +61-78% at T=512, correct in both arms. The zero-copy branches below are kept so the
-        # mode remains a one-line A/B rather than an archaeology exercise.
+        # External input buffer everywhere, as the engines run it (vLLM leaves MoRI's default,
+        # SGLang sets it explicitly). It must move together with `combine_warps`: MoRI's tuned
+        # tables key combine on `zero_copy`, so the engines' 16 warps belong to this mode and
+        # 4-8 to the registered one. The registered branches below stay, to keep the mode a
+        # one-line A/B; methodology.md carries the measured cost of mismatching them.
         self._external_input = True
         # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
         # input kernels consume the dispatch output directly, so their stage is not applicable.
@@ -308,12 +304,9 @@ class MoRIBackend(EPBackend):
         if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
         if self._external_input:
-            # The external-input staging copy is bounded by the receive count, not by the buffer:
-            # `EpCombineIntraNodeKernel_body` loops `i < totalRecvTokenNum` over `inpTokenBuf`
-            # (intranode.hpp:542-560), so it never reads past `rows` and the padding it leaves
-            # behind is untouched. BF16 therefore hands over the dispatch output as-is, and FP8
-            # dequantizes only the filled rows -- casting the whole cap-sized plane here would be
-            # ~99.8% padding at T=1, the same waste the zero-copy branch below documents.
+            # The kernel's own staging copy is bounded by the receive count, not the buffer
+            # (`EpCombineIntraNodeKernel_body` loops `i < totalRecvTokenNum`, intranode.hpp:542),
+            # so it never reads past `rows` and only the filled rows need converting.
             h.combine_input = (
                 h.dispatch_output[:rows].to(torch.bfloat16) if self._fp8 else h.dispatch_output
             )
