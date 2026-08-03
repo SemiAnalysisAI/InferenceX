@@ -1100,6 +1100,20 @@ fi
 # *callable* overrides to the draft config, and a callable is not expressible on
 # the CLI. Defaults on iff a RadixArk drafter was selected, so the Inferact arm
 # is untouched.
+# aiter's get_block_n_fp8 is a sparse tuning table keyed on nhead*max_seqlen_q.
+# vLLM's CUDA-graph capture asks for products it does not list -- with
+# vllm#50578 padding K3's 12 heads to 16, verify capture requested 240 and hit
+# `KeyError: 240` at engine init (run 30784128673). Reachable only under fp8:
+# the lookup sits behind `if dtype == dtypes.fp8`. min_block_n only clamps
+# num_kv_splits, so a nearest-key fallback costs split parallelism, not
+# correctness.
+if [ "${SPEC_DECODE:-false}" = "true" ] && [ "${KV_CACHE_DTYPE:-}" = "fp8" ] \
+   && [ "${DSPARK_FP8_BLOCKN_FALLBACK:-1}" = "1" ]; then
+    python3 "$(dirname "$0")/patches/aiter_fp8_blockn_fallback.py" \
+        --diff-out "$RESULT_DIR/aiter_fp8_blockn.diff" 2>&1 \
+        | tee "$RESULT_DIR/aiter_fp8_blockn.log"
+fi
+
 case "${SPEC_DRAFT_MODEL:-}" in
     *RadixArk*) DSPARK_ARCH_FIX="${DSPARK_ARCH_FIX:-1}" ;;
     *)          DSPARK_ARCH_FIX="${DSPARK_ARCH_FIX:-0}" ;;
