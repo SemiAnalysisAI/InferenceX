@@ -1,5 +1,5 @@
 {
-  "backend_maturity": {"deepep-v2": "production", "mori": "production", "uccl-ep": "candidate", "nccl-ep": "candidate"},
+  "backend_maturity": {"deepep-v2": "production", "mori": "production", "uccl-ep": "candidate", "nccl-ep": "candidate", "flashinfer-ep": "production"},
   "platforms": {
     "h100-dgxc": {
       "arch": "sm90",
@@ -102,7 +102,7 @@
       "scale_up_domain": 72,
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
-      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
+      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
       "ll_backends": {"nccl-ep": [8]},
       "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
       "operator": {
@@ -122,7 +122,7 @@
       "scale_up_domain": 72,
       "scale_up_transport": "mnnvl",
       "launcher": "gb-nv",
-      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16]},
+      "backends": {"deepep-v2": [8, 16], "nccl-ep": [8, 16], "flashinfer-ep": [8, 16]},
       "ll_backends": {"nccl-ep": [8]},
       "fabric": {"nic": "MNNVL (scale-out not used)", "switch": "NVLink NVL72"},
       "operator": {
