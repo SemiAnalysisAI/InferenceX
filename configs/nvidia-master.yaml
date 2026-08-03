@@ -7284,19 +7284,6 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
-# Qwen3.5 target FP8 KV is 15,360 bytes/token before the native MTP layer.
-# TP4 replicates the model's two KV heads and measured 30.5 KB/token node-wide;
-# TP2 measured 15.3 KB/token. Against the 256k trace's 88.8k median and 148.8k
-# p75 ISL, TP2 no-offload peaks at c32. HiCache overlaps from c32; probes put
-# the throughput transition between c34 and c40, while host KV reaches 98% at
-# c52 and c56 is the last useful stress point. c64+ warmups only deepen the
-# queue and are excluded. TP4 no-offload remains healthy into the c56-72
-# neighborhood, which is sampled every four requests around the cache cliff.
-# TP4 HiCache is dominated there: c68 sustained 197k tok/s versus 224k for
-# no-offload c64, while c76 fell to 158k with host KV full. Clean HiCache c94
-# was also dominated by no-offload c56 (210k vs 234k tok/s, with 44 ms vs 7 ms
-# median ITL), so the TP4 HiCache arm is excluded.
-# DEP8 was rejected after fragmenting the trace across eight radix caches.
 qwen3.5-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
