@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import io
 import json
@@ -340,7 +341,8 @@ class CaseArgvContract(unittest.TestCase):
         # Mirror of the parser bench/run_ep.py builds in main().
         parser = argparse.ArgumentParser()
         parser.add_argument(
-            "--backend", required=True, choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep"]
+            "--backend", required=True,
+            choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep", "flashinfer-ep"],
         )
         ep_harness.add_common_args(parser)
         return parser
@@ -429,6 +431,52 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.backend, "nccl-ep")
         self.assertEqual(args.case_id, nccl_case["case_id"])
         self.assertEqual(args.out, "results/h200-dgxc_nccl-ep_bf16_decode_TS-c000.json")
+
+    def test_flashinfer_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
+        # A flashinfer-ep case flows through the same generic codec; run_ep's --backend
+        # choices must accept "flashinfer-ep" and the result filename must carry the backend
+        # token so it never collides with the deepep-v2/nccl-ep legs of the same cell.
+        # The codec is SKU-agnostic, so this reuses the shared h200 fixture like its
+        # siblings; that flashinfer-ep is GB-only is a registry fact, pinned separately by
+        # test_matrix.test_flashinfer_ep_rollout_shape.
+        flashinfer_case = {
+            **self.CASE,
+            "backend": "flashinfer-ep",
+            "case_id": "h200-dgxc-flashinfer-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
+        }
+        argv = self._case_argv(["16", "2", "8", "8"], case=flashinfer_case)
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual(args.backend, "flashinfer-ep")
+        self.assertEqual(args.case_id, flashinfer_case["case_id"])
+        self.assertEqual(
+            args.out, "results/h200-dgxc_flashinfer-ep_bf16_decode_TS-c000.json"
+        )
+
+    def test_mirrored_backend_choices_match_run_ep(self) -> None:
+        """The mirror is only worth having if it cannot drift from the real parser.
+
+        Kept in sync by convention it has now drifted twice — a backend was added to
+        run_ep.py's choices while this fixture kept the old list, so a case_id that the real
+        CLI accepts raised SystemExit here. Read the real list out of the source (AST, not
+        import: importing run_ep pulls in torch and the vendor EP libraries) and compare.
+        """
+        tree = ast.parse((BENCH / "run_ep.py").read_text())
+        real = [
+            [element.value for element in keyword.value.elts]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            for argument in node.args
+            if isinstance(argument, ast.Constant) and argument.value == "--backend"
+            for keyword in node.keywords
+            if keyword.arg == "choices"
+        ]
+        self.assertEqual(len(real), 1, "expected exactly one --backend choices list")
+        mirrored = next(
+            action.choices
+            for action in self._run_ep_parser()._actions
+            if action.dest == "backend"
+        )
+        self.assertEqual(sorted(real[0]), sorted(mirrored))
 
 
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
