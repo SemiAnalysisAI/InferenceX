@@ -56,8 +56,26 @@ export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 # here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
 # runs at 8, so decode never reaches the asm path), and leaving it out keeps
 # this arm a clean single-variable test of the forward_mqa fix.
-export MLA_ASM_PAD="${MLA_ASM_PAD:-1}"
-export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-1}"
+# asm verify is OFF here, unlike the sibling perf branches. fp8 + asm verify is
+# CLOSED on this build: asm_mla.cu:903 says "only support gqa_ratio=16 fp8 mla
+# decoding with qo_len <= 4 and qo_len>4 in persistent mode on gfx950". Graph
+# capture probes qo_len above 4 even at k=3 (it probed 15 at k=7, i.e. 2k+1),
+# and the persistent-mode escape is unreachable because vLLM disables
+# persistent metadata for spec decode -- get_mla_metadata_v1 fails at
+# qseqlen>1. Runs 30784997398 (k=7) and 30785599385 (k=3) both died there.
+#
+# So verify goes back to Gluon. That is NOT a fallback to the broken config:
+# fp8 gates the gist mla_gluon patch, i.e. the kernel that lifts the
+# batch_size==1 restriction, and DSpark verify is the only caller that passes
+# batch>1. That patched kernel is the leading hypothesis for the
+# hipErrorIllegalAddress at ~13 completions per concurrency slot, and it has
+# never been tested against the verify path -- every prior DSpark cell ran
+# KV_CACHE_DTYPE=auto, which skips it.
+#
+# This arm therefore tests the crash fix and both perf levers at once:
+# fp8 KV pool (4,240,725 vs 2,156,093 tokens) + prefix caching (0% -> ~92%).
+export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
+export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
 export MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
 export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
