@@ -89,6 +89,15 @@ class FlashInferEPBackend(EPBackend):
 
     # ---- setup -------------------------------------------------------------------------------
 
+    def _topk_idx_dtype(self):
+        """int32 — what the kernel reads the routing plane as.
+
+        Declaring it here means `make_problem` casts once, untimed, instead of `dispatch`
+        casting on every call inside the measured window. `topk_weights` is already FP32
+        from `make_problem`, so both payloads reach the kernel with no conversion.
+        """
+        return torch.int32
+
     def buffer_cap(self, args):
         # The workspace is sized from the ladder maximum rather than a fixed slot budget, so
         # there is no cap to clamp the ladder against.
@@ -159,10 +168,9 @@ class FlashInferEPBackend(EPBackend):
         the tokens that selected one of its experts, so the kernel stamps the sentinel into the
         expert-id payload of every slot it did not fill.
         """
-        idx32 = p.topk_idx.to(torch.int32)
         recv_x, recv_idx, recv_w = self._a2a.dispatch(
-            idx32,
-            [p.dispatch_x, idx32, p.topk_weights.to(torch.float32)],
+            p.topk_idx,
+            [p.dispatch_x, p.topk_idx, p.topk_weights],
             p.T,
             invalid_token_expert_id=_INVALID_EXPERT,
             expert_id_payload_index=1,

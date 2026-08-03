@@ -7,6 +7,10 @@ name: Test CollectiveX
 
 on:
   pull_request:
+    # ready_for_review is not in the default set (opened/synchronize/reopened), so without
+    # it a PR developed as a draft has every run skipped by the draft gate below and gets
+    # no run at all on the transition — the suite would never see the merge candidate.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'experimental/CollectiveX/**'
       - '.github/workflows/test-collectivex.yml'
