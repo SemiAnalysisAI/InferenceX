@@ -308,6 +308,8 @@ else
     # =========================================================================
     if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
         export SGLANG_AITER_MLA_PERSIST=0
+        ## resolve the OOR issue
+        export HSA_NO_SCRATCH_RECLAIM=0
         # MoRI RDMA send-queue depth for DSv4 (overrides the global default above).
         export MORI_IO_QP_MAX_SEND_WR=32767
         # Unified radix tree: cache impl with per-component (full-attn / SWA)
