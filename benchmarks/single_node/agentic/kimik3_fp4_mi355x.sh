@@ -1185,6 +1185,14 @@ print(json.dumps(sizes))
     echo "CUDAGRAPH_MAX_CAPTURE=$CUDAGRAPH_MAX_CAPTURE -> $_cg_sizes"
 fi
 
+# fastsafetensors parallelises the safetensors read; K3 is 1.56 TB / ~195 GB
+# per rank, so load is worth shaving. The package ships in the image
+# (fastsafetensors 0.3.3) and "fastsafetensors" is a registered load format in
+# vllm/model_executor/model_loader. Set LOAD_FORMAT=auto to fall back to the
+# reference command's value.
+LOAD_FORMAT="${LOAD_FORMAT:-fastsafetensors}"
+echo "load-format: $LOAD_FORMAT"
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -1194,7 +1202,7 @@ VLLM_CMD=(
     --moe-backend auto
     --tensor-parallel-size "$TP"
     "${EP_ARGS[@]}"
-    --load-format auto
+    --load-format "$LOAD_FORMAT"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
