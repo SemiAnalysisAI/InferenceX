@@ -10,13 +10,18 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../benchmark_lib.sh"
 
+# MI355X amd-aim bring-up: GLM-5.2 MXFP4 weights under /it-share/hf_cache (symlink
+# GLM-5.2-MXFP4). Override MODEL_PATH/MODEL_DIR for other cluster mounts.
+export MODEL_PATH="${MODEL_PATH:-/it-share/hf_cache}"
+export MODEL_DIR="${MODEL_DIR:-$MODEL_PATH}"
+export MODEL_NAME="${MODEL_NAME:-GLM-5.2-MXFP4}"
+
 check_env_vars \
     CONC_LIST \
     ISL \
     OSL \
     IMAGE \
     SPEC_DECODING \
-    MODEL_PATH \
     PREFILL_NUM_WORKERS \
     PREFILL_TP \
     PREFILL_EP \
@@ -42,8 +47,9 @@ set -x
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
 export TIME_LIMIT="${TIME_LIMIT:-08:00:00}"
-export MODEL_PATH=$MODEL_PATH
-export MODEL_NAME=$MODEL_NAME
+export MODEL_PATH="${MODEL_PATH}"
+export MODEL_DIR="${MODEL_DIR:-$MODEL_PATH}"
+export MODEL_NAME="${MODEL_NAME}"
 export CONTAINER_IMAGE=$IMAGE
 export CLIENT_IMAGE="${CLIENT_IMAGE:-$IMAGE}"
 
