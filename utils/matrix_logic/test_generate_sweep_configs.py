@@ -15,6 +15,7 @@ from generate_sweep_configs import (
     mark_all_eval_entries,
     mark_eval_entries,
     multinode_node_count,
+    multinode_worker_pair,
     seq_len_itos,
     seq_len_stoi,
     seq_len_to_str,
@@ -44,6 +45,40 @@ def test_disaggregated_multinode_node_count_rejects_num_nodes():
 
     with pytest.raises(ValueError, match="num-nodes.*disaggregated"):
         add_multinode_node_count(entry, {}, num_nodes=3)
+
+
+def test_aggregated_worker_expands_to_legacy_matrix_pair():
+    benchmark = {
+        "worker": {
+            "tp": 8,
+            "pp": 2,
+            "ep": 1,
+            "dp-attn": False,
+            "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+        }
+    }
+
+    prefill, decode = multinode_worker_pair(benchmark, disagg=False)
+
+    assert prefill == {
+        "num-worker": 1,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+        "additional-settings": ["CONFIG_FILE=recipes/aggregate.yaml"],
+    }
+    assert decode == {
+        "num-worker": 0,
+        "tp": 8,
+        "pp": 2,
+        "dcp-size": 1,
+        "pcp-size": 1,
+        "ep": 1,
+        "dp-attn": False,
+    }
 
 def test_multinode_node_count_uses_role_gpu_footprints(sample_runner_config):
     prefill = {"num-worker": 3, "tp": 2, "pp": 1, "pcp-size": 1}
@@ -1193,6 +1228,8 @@ class TestGenerateFullSweepMultiNode:
                 "framework": "dynamo-trt",
                 "runner": "h200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1456,6 +1493,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1574,6 +1613,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
@@ -1622,6 +1663,8 @@ class TestEdgeCases:
                 "framework": "dynamo-trt",
                 "runner": "gb200",
                 "multinode": True,
+                "disagg": True,
+                "kv-p2p-transfer": "nixl",
                 "scenarios": {
                     "fixed-seq-len": [
 
