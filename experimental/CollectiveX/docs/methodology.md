@@ -175,6 +175,19 @@ dispatch then combine — the transport — in every row. It is reported as its 
 wherever it does device work. The one exception is the `CX_FP8_CONSUME=dequant` verification hatch,
 which puts the conversion back inside the chain on purpose.
 
+Under FP8, treat `stage` as **harness scaffolding rather than a phase a serving stack has**. Its work
+is converting the received FP8 payload to the BF16 that combine sends, and in production nothing does
+that as a separate step: the FP8 lands in the expert GEMM, which reads FP8 operands natively and emits
+BF16, and that GEMM output is what combine receives. This suite deliberately does not run the expert
+GEMM — it measures the collective, not the layer — so `stage` stands in for it. That is why `stage` is
+excluded from `roundtrip`, and it is also why **`stage` must not be summed into a total or compared
+between backends**: each adapter converts a different amount (DeepEP V2 a padded low-latency plane,
+MoRI only the received rows, FlashInfer only the filled slots), so the same component name covers
+three different quantities. The one production path that *does* pay a separate materialised dequant is
+a quant-format mismatch fallback (vLLM dequantises when `block_k` disagrees with DeepEP's block size);
+`CX_FP8_CONSUME=dequant` exists to model exactly that case, and it is not the default because it is
+not the fast path.
+
 Read `implementation.stage_excluded_from_roundtrip` as "there was device-work staging and it was
 hoisted out of the chain", not as "this row's roundtrip is stage-free". It is gated on whether the
 backend's `stage()` does device work at all, so it is `false` in two unrelated situations, and the

@@ -396,19 +396,33 @@ class EPBackend(abc.ABC):
                 components.append("stage")
         return components
 
-    def warm(self, problem, count):
+    def warm(self, problem, count, stage_every=False):
         """Untimed synchronized full round trips (fabric/clock warm-up; cold-jump-safe).
 
         Caches the dynamic receive cardinality once so adapters never read a device
         scalar during a timed trial (the count is stable for a fixed routing trace).
+
+        `stage_every` re-materialises the combine input on every iteration. The default hoists it
+        after the first, mirroring `benchmark_roundtrip` on the same reasoning: where staging is
+        excluded from the chain the timed region stages nothing at all, so staging once per warm
+        iteration warms work the measurement never performs. For an FP8 dequant that is not free --
+        it is ~247us against a 61us roundtrip, and at 32 warm iterations per component per trial it
+        was the largest single cost in the leg. `benchmark_stage` opts in, because there staging IS
+        the timed operation and its warm-up has to match.
         """
         import torch
 
+        staged = None
         for _ in range(count):
             handle = self.dispatch(problem)
             if not hasattr(problem, "recv_tokens"):
                 problem.recv_tokens = self.recv_tokens(handle)
-            self.stage(problem, handle)
+            if staged is None:
+                self.stage(problem, handle)
+                if not stage_every and self.stage_excluded_from_roundtrip:
+                    staged = getattr(handle, self.combine_input_attr)
+            else:
+                setattr(handle, self.combine_input_attr, staged)
             self.combine(problem, handle)
             torch.cuda.synchronize()
 
@@ -483,7 +497,8 @@ class EPBackend(abc.ABC):
     def benchmark_stage(self, problem, warmup, iters):
         import torch
 
-        self.warm(problem, warmup)
+        # Staging is the timed operation here, so it must be warmed on every iteration.
+        self.warm(problem, warmup, stage_every=True)
 
         def prep_stage(p=problem):
             return self.dispatch(p)

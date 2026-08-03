@@ -151,3 +151,47 @@ class RoundtripStagingGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WarmStaging(unittest.TestCase):
+    """Warm-up must not rehearse work the timed region skips.
+
+    Where staging is excluded from the chain, the timed roundtrip stages nothing, so staging on
+    every warm iteration warms a path the measurement never takes. For an FP8 dequant that was
+    the largest single cost in the leg (~247us x 32 iterations x every component x every trial).
+    `benchmark_stage` is the exception: staging is its timed operation.
+    """
+
+    @staticmethod
+    def _warm(backend, count, **kwargs):
+        # `warm` imports torch for one synchronize; a stub keeps this runnable without a GPU.
+        fake = types.ModuleType("torch")
+        fake.cuda = types.SimpleNamespace(synchronize=lambda: None)
+        saved = sys.modules.get("torch")
+        sys.modules["torch"] = fake
+        try:
+            backend.warm(types.SimpleNamespace(), count, **kwargs)
+        finally:
+            if saved is None:
+                del sys.modules["torch"]
+            else:
+                sys.modules["torch"] = saved
+
+    def test_stages_once_when_the_chain_excludes_staging(self):
+        b = _StubBackend(stage_device_work=True, fp8_consume="native")
+        self._warm(b, 5)
+        self.assertEqual(b.calls.count("dispatch"), 5)
+        self.assertEqual(b.calls.count("stage"), 1)
+        # Every later iteration still hands combine the staged payload, not a stale None.
+        self.assertEqual(b.calls.count("combine(staged-by-stage)"), 5)
+
+    def test_stage_every_rehearses_it_on_every_iteration(self):
+        b = _StubBackend(stage_device_work=True, fp8_consume="native")
+        self._warm(b, 5, stage_every=True)
+        self.assertEqual(b.calls.count("stage"), 5)
+
+    def test_a_chain_that_includes_staging_keeps_warming_it(self):
+        # The `dequant` hatch puts the conversion back in the timed chain, so warm-up must match.
+        b = _StubBackend(stage_device_work=True, fp8_consume="dequant")
+        self._warm(b, 5)
+        self.assertEqual(b.calls.count("stage"), 5)
