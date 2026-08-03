@@ -1037,6 +1037,28 @@ if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
     fi
 fi
 
+# ROCm/aiter#4474 -- int64 KV offsets in _mla_gluon's >2GB path.
+#
+# mla_gluon computes KV addresses as `kv_loc * stride_kv_c_bs + ...`, and
+# WITHIN_2GB selects only the load instruction (buffer_load vs global_load) --
+# the offset arithmetic stayed int32. K3's pools are over the 2 GB line in both
+# dtypes (2.48 GB bf16, 2.44 GB fp8), so the byte offset wraps int32 and the
+# kernel reads a bogus address: hipErrorIllegalAddress / HSA 0x1016.
+#
+# This is the best explanation we have for the DSpark crash landing at a fixed
+# ~13 completions PER CONCURRENCY SLOT (12 at c1, 53 at c4, 108 at c8): the
+# offset only overflows once allocated pages reach high indices in the pool,
+# which tracks accumulated context rather than in-flight requests.
+#
+# Must run AFTER the gist mla_gluon patch above, which replaces the whole file.
+# The anchor is present in the stock image kernel and the gist alike, so this
+# works on bf16 arms (no gist patch) and fp8 arms (gist patch) both.
+if [ "${SPEC_DECODE:-false}" = "true" ] && [ "${DSPARK_INT64_KV_OFFSETS:-1}" = "1" ]; then
+    python3 "$(dirname "$0")/patches/aiter_pr4474_int64_kv_offsets.py" \
+        --diff-out "$RESULT_DIR/aiter_pr4474.diff" 2>&1 \
+        | tee "$RESULT_DIR/aiter_pr4474.log"
+fi
+
 # vllm-project/vllm#50578 -- "[ROCm][MLA] Use asm decode for non-divisor small
 # head counts". K3 has 96 attention heads, i.e. 12 heads/rank at TP8, which is a
 # non-divisor of 16, so stock vLLM cannot pad it up to the asm persistent decode
