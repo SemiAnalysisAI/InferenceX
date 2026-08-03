@@ -41,6 +41,10 @@ BACKEND_PRECISIONS = {
     # NCCL EP is BF16-only this release: its FP8 machinery exists upstream but RELEASE.md
     # lists it unsupported/untested, so no FP8 case is emitted (see bench/ep_nccl.py).
     "nccl-ep": ("bf16",),
+    # FlashInfer one-sided is BF16-only this pass: the combine side accepts FP8 output
+    # dtypes, but an FP8 dispatch needs the scale payload plumbed as a second
+    # input_payload and validated against the oracle cast round-trip.
+    "flashinfer-ep": ("bf16",),
 }
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
