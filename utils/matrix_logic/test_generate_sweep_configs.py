@@ -2274,6 +2274,56 @@ class TestGenerateTestConfigSweep:
         # DRAM: 2861022 MiB * 0.80.
         assert result[0]["total-cpu-dram-gb"] == 2399
 
+    def test_multinode_agentic_dep_budget_counts_attention_dp_ranks(
+        self, sample_runner_config
+    ):
+        config = {
+            "kimik3-dep": {
+                "image": "vllm/vllm-openai:kimi-k3",
+                "model": "moonshotai/Kimi-K3",
+                "model-prefix": "kimik3",
+                "precision": "fp4",
+                "framework": "dynamo-vllm",
+                "runner": "cluster:b200-dgxc",
+                "multinode": True,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.61,
+                        "search-space": [{
+                            "conc-list": [128],
+                            "kv-offloading": "dram",
+                            "kv-offload-backend": {"name": "vllm-simple"},
+                            "prefill": {
+                                "num-worker": 1,
+                                "tp": 1,
+                                "ep": 16,
+                                "dp-attn": True,
+                            },
+                            "decode": {
+                                "num-worker": 0,
+                                "tp": 1,
+                                "ep": 1,
+                                "dp-attn": False,
+                            },
+                        }],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["kimik3-dep"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        assert len(result) == 1
+        # DEP16 spans both nodes, so all eight ranks on each node share DRAM.
+        assert result[0]["total-cpu-dram-gb"] == 1829
+
     def test_multinode_agentic_budget_ignores_decode_topology(
         self, sample_runner_config
     ):

@@ -95,6 +95,18 @@ def _validate_kv_offload_env() -> tuple[str, dict[str, str] | None]:
     return kv_offloading, backend_metadata
 
 
+def _parallel_gpu_count(
+    tp: int,
+    pp: int,
+    pcp_size: int,
+    ep: int,
+    dp_attention: bool,
+) -> int:
+    """Return the physical GPU count for one worker replica."""
+    tensor_gpu_count = tp * pp * pcp_size
+    return max(tensor_gpu_count, ep) if dp_attention else tensor_gpu_count
+
+
 def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     is_multinode = env_bool("IS_MULTINODE")
     tp = env_int("TP", 1)
@@ -111,7 +123,10 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
                 "PP_SIZE, DCP_SIZE, and PCP_SIZE must be positive integers."
             )
         fields.update({"pp": pp, "dcp_size": dcp_size, "pcp_size": pcp_size})
-        return fields, tp * pp * pcp_size, tp, ep, dp_attention
+        num_gpus = _parallel_gpu_count(
+            tp, pp, pcp_size, ep, env_bool("DP_ATTENTION")
+        )
+        return fields, num_gpus, tp, ep, dp_attention
 
     prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
     prefill_tp = env_int("PREFILL_TP")
@@ -120,6 +135,7 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     prefill_pcp_size = env_int("PREFILL_PCP_SIZE", 1)
     prefill_ep = env_int("PREFILL_EP", 1)
     prefill_dp_attention = os.environ.get("PREFILL_DP_ATTN", "false")
+    prefill_dp_attention_enabled = env_bool("PREFILL_DP_ATTN")
     decode_num_workers = env_int("DECODE_NUM_WORKERS")
     decode_tp = env_int("DECODE_TP")
     decode_pp = env_int("DECODE_PP_SIZE", 1)
@@ -127,6 +143,7 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     decode_pcp_size = env_int("DECODE_PCP_SIZE", 1)
     decode_ep = env_int("DECODE_EP", 1)
     decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
+    decode_dp_attention_enabled = env_bool("DECODE_DP_ATTN")
     worker_parallelism = (
         prefill_pp,
         prefill_dcp_size,
@@ -145,8 +162,20 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
         raise SystemExit(
             "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
         )
-    num_prefill_gpu = prefill_num_workers * prefill_tp * prefill_pp * prefill_pcp_size
-    num_decode_gpu = decode_num_workers * decode_tp * decode_pp * decode_pcp_size
+    num_prefill_gpu = prefill_num_workers * _parallel_gpu_count(
+        prefill_tp,
+        prefill_pp,
+        prefill_pcp_size,
+        prefill_ep,
+        prefill_dp_attention_enabled,
+    )
+    num_decode_gpu = decode_num_workers * _parallel_gpu_count(
+        decode_tp,
+        decode_pp,
+        decode_pcp_size,
+        decode_ep,
+        decode_dp_attention_enabled,
+    )
     num_gpus = num_prefill_gpu + num_decode_gpu
     # Aggregated configs set decode num-worker 0 (prefill+decode co-located on one
     # worker), so there are no separate decode GPUs. Mirror process_result.py and drop
@@ -162,7 +191,7 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     ep = max(prefill_ep, decode_ep)
     dp_attention = (
         "true"
-        if env_bool("PREFILL_DP_ATTN") or env_bool("DECODE_DP_ATTN")
+        if prefill_dp_attention_enabled or decode_dp_attention_enabled
         else "false"
     )
     fields.update(
