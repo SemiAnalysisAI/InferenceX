@@ -1066,6 +1066,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy,
         )
         combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
+        # Second byte basis, for the backends whose wire really does carry one copy per
+        # (token, expert) rather than per (token, dest-rank). Which basis applies is a property
+        # of the RECEIVE, not of the mode: deepep-v2, uccl-ep and nccl-ep low-latency receive
+        # per assignment, but MoRI's IntraNodeLL genuinely deduplicates, so keying this on
+        # "low-latency" would overstate MoRI by the dedup factor (~1.5x at EP8). Key it on the
+        # combine contract instead, which already encodes the distinction. `routed_copies`
+        # stays the canonical comparable basis; this is emitted alongside so a reader can
+        # convert a low-latency row onto the wire basis without guessing the factor.
+        assignment_copies = int(sum(rstats["expert_assignments_per_rank"]))
+        wire_basis = (
+            "per-assignment"
+            if backend.combine_weight_semantics == "weighted-kernel-sum"
+            else "rank-deduplicated"
+        )
         roundtrip_bytes = {
             field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
         }
@@ -1104,6 +1118,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "dispatch": dispatch_bytes,
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
+                # Copy counts behind the byte figures above, so a reader can rebase them.
+                # `routed` is what they use; `assignments` is the per-(token, expert) count,
+                # and `wire` names which of the two this backend's kernels actually move.
+                "copies": {
+                    "routed": int(rstats["routed_copies"]),
+                    "assignments": assignment_copies,
+                    "wire": wire_basis,
+                },
             },
             "receive": {
                 "max": recv_max,

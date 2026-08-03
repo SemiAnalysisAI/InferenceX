@@ -43,6 +43,35 @@ def _identity(document: dict) -> tuple[str, str, str, str, str, str, int, str]:
     )
 
 
+def _topology(document: dict) -> str:
+    """Scale-up shape, because the same `ep` label is not the same hardware.
+
+    GB200/GB300 run 4 GPUs per node inside a 72-GPU MNNVL domain, so their "EP8" spans two
+    trays over a rack fabric while every other SKU's EP8 is 8 GPUs in one node over NVLink or
+    XGMI. Nothing in the timing can fix that; printing it stops a reader comparing the two as
+    though they were the same configuration.
+    """
+    topology = document.get("topology") or {}
+    per_node = topology.get("gpus_per_node")
+    domain = topology.get("scale_up_domain")
+    nodes = topology.get("nodes")
+    if per_node is None or domain is None:
+        return "-"
+    return f"{nodes}x{per_node}/d{domain}"
+
+
+def _wire_basis(document: dict) -> str:
+    """Which copy basis this backend's kernels actually move.
+
+    Low-latency deepep-v2/uccl-ep/nccl-ep receive one copy per (token, expert); MoRI's
+    IntraNodeLL deduplicates by destination rank. At the same token count that is ~1.5x
+    different combine traffic at EP8, so two low-latency rows are not doing equal work.
+    """
+    rows = document["measurement"]["rows"]
+    copies = ((rows[0] if rows else {}).get("byte_provenance") or {}).get("copies") or {}
+    return {"per-assignment": "assign", "rank-deduplicated": "dedup"}.get(copies.get("wire"), "-")
+
+
 def _headline(document: dict) -> tuple:
     """Headline row, with the skew bracket beside it.
 
@@ -84,16 +113,17 @@ def render(documents: list[dict]) -> str:
         )
         lines.append("")
     lines += [
-        "| ver | sku | backend | mode | precision | suite | phase | routing | ep | outcome "
-        "| T* | p50 us | p99 us | min50 us | skew us |",
-        "|--:|---|---|---|---|---|---|---|--:|---|--:|--:|--:|--:|--:|",
+        "| ver | sku | backend | mode | precision | suite | phase | routing | ep | topo "
+        "| wire | outcome | T* | p50 us | p99 us | min50 us | skew us |",
+        "|--:|---|---|---|---|---|---|---|--:|---|---|---|--:|--:|--:|--:|--:|",
     ]
     for document in documents:
         sku, backend, suite, routing, mode, phase, ep, precision = _identity(document)
         token, p50, p99, min50, skew = _headline(document)
+        topo, wire = _topology(document), _wire_basis(document)
         lines.append(
             f"| {document['version']} | {sku} | `{backend}` | {mode} | {precision} | {suite} | "
-            f"{phase} | {routing} | {ep} | "
+            f"{phase} | {routing} | {ep} | {topo} | {wire} | "
             f"{document['outcome']['status']} | {token} | {p50} | {p99} | {min50} | {skew} |"
         )
     if not documents:

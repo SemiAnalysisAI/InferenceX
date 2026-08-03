@@ -80,9 +80,15 @@ class MoRIBackend(EPBackend):
         # default; `kernel_type` kwarg omitted); scale-out EP16 uses InterNodeV1, whose
         # required enum member is an image-lineage check.
         # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
+        # Scale-up matches the config the engines pin: vLLM and SGLang both set block_num 80,
+        # rdma_block_num 0 and ONE warp_num_per_block of 16 that applies to dispatch and combine
+        # alike, and neither sets MORI_EP_LAUNCH_CONFIG_MODE, so production runs MANUAL with
+        # these numbers. 16 is also the kernel's hard ceiling (kMaxWarpGroups 8 x kWarpsPerGroup
+        # 2, with groupData[8] indexed by warpId/2 and no upstream guard), so it cannot go
+        # higher. The scale-out tuple is left as-is: EP16 is walled and never dispatched.
         kernel_name, self.kernel_generation, blocks = (
             ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
-            else ("IntraNode", "intranode", (80, 0, 16, 8))
+            else ("IntraNode", "intranode", (80, 0, 16, 16))
         )
         if self.mode == "low-latency":
             # LOW-LATENCY (decode) mode: IntraNodeLL, the scale-up low-latency kernel. It is
@@ -105,7 +111,7 @@ class MoRIBackend(EPBackend):
                     "is out of scope; see platform_config ll_backends)"
                 )
             kernel_name, self.kernel_generation, blocks = (
-                "IntraNodeLL", "intranode-ll", (80, 0, 16, 8)
+                "IntraNodeLL", "intranode-ll", (80, 0, 16, 16)
             )
         self._kernel_type = None
         if kernel_name != "IntraNode":
