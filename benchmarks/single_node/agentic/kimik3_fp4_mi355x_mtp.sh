@@ -9,6 +9,18 @@ set -euo pipefail
 # The first AgentX validation is deliberately GPU-only at c1 so a server or
 # kernel failure cannot be attributed to a KV-offload connector.
 export SPEC_DECODE=true
+# EXPERIMENT BRANCH kimik3-dspark-radixark -- the ONLY delta from
+# kimik3-mla-asm-pad. Same config keys on both branches, so dispatching a key
+# against each is a single-variable A/B on the draft model. The agentic matrix
+# has no per-cell env channel, hence a branch pair.
+#
+# RadixArk is 2.2B vs Inferact's 4B. Acceptance is NOT the reason to try it --
+# we already measure 6.0-6.94 on this trace, above both cards' claims (Inferact
+# 3.85 mean, RadixArk 4.26). The reason is DRAFT COST: the drafter forward is
+# pure per-step overhead, and at high concurrency it competes with real batch
+# work rather than filling idle bandwidth, so halving it matters far more at c8
+# than at c1. Judge this arm on tok/s/GPU at equal acceptance, not on acc_len.
+export SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-RadixArk/Kimi-K3-DSpark}"
 # bf16 KV, against the fp8-everywhere rule for this model, and deliberately so
 # for now: mla_gluon's fp8 regime (bh16bn128) asserts batch_size == 1, but the
 # DSpark verify step calls it with batch_size = the number of verify tokens (8
