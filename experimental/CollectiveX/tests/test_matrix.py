@@ -207,7 +207,9 @@ class MatrixTests(unittest.TestCase):
         for absent in ("b300", "gb200", "gb300"):
             self.assertNotIn(absent, offered)
         # uccl-ep low-latency is enabled only on NVIDIA; the AMD SKUs keep normal mode but drop
-        # LL (UCCL's low-latency kernel trips a warp-group assertion on AMD's CU count).
+        # LL: upstream raised kNumMaxTopK 9 -> 16 six days before our pin, and the host assert
+        # kNumMaxTopK + 1 <= num_warp_groups * num_warps_per_group cannot hold on AMD, whose
+        # kNumMaxWarpGroups is 16 — a dated regression, not a CU-count limit.
         ll_skus = {
             item["sku"]
             for item in document["requested_cases"]

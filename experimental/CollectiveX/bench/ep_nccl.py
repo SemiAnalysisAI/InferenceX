@@ -13,8 +13,10 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
 Because both map exactly onto the two combine contracts CollectiveX already models, the
 scale_up_domain two-level combine oracle in ep_harness applies unchanged.
 
-BF16 only. NCCL EP's FP8 machinery exists but RELEASE.md lists it unsupported/untested this
-release, so this adapter does not override the FP8 encode hooks (SUPPORTED_PRECISIONS=("bf16",)).
+BF16 only: `contrib/nccl_ep/RELEASE.md` says "No FP8 support", so this adapter does not
+override the FP8 encode hooks (SUPPORTED_PRECISIONS=("bf16",)). Re-test before trusting that
+note — the C library at our pinned commit reads `inputs->scales` and switches on e4m3/e5m2,
+and the two documented FP8 exclusions are expert-major layouts we do not use.
 
 Communicator bootstrap: NCCL EP forms its OWN NCCL communicator (separate from PyTorch's
 process group) via ``Communicator.init(nranks, rank, unique_id)``. Upstream broadcasts the
