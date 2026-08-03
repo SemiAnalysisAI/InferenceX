@@ -77,7 +77,14 @@ export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
 export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
-export MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
+# mns 8, not the reproducer's 16. The patched gist mla_gluon accepts
+# 1 <= batch_size <= 128, and the DSpark MQA batch scales as max_num_seqs * ~9
+# (not k+1 = 8 as assumed): run 30786158942 died with "got 225" and 30786908516
+# with "got 144" even after cudagraph capture was capped at 128, which shows the
+# capture list is in SEQUENCES, not tokens. 16 * 9 = 144 > 128; 8 * 9 = 72 fits
+# with margin. mns 8 exactly covers c8 concurrency, since aiperf bounds
+# in-flight requests by --concurrency.
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"
 export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
 export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"

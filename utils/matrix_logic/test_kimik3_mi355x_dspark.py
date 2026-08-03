@@ -50,7 +50,7 @@ def test_dspark_wrapper_is_perf_tuned_not_reproducer_faithful() -> None:
 
     # Unchanged from the reproducer.
     assert _shell_default(wrapper, "GPU_MEM_UTIL") == "0.95"
-    assert _shell_default(wrapper, "MAX_NUM_SEQS") == "16"
+    assert _shell_default(wrapper, "MAX_NUM_SEQS") == "8"  # mla_gluon batch ceiling
     assert _shell_default(wrapper, "EVAL_MAX_NUM_SEQS") == "128"
     assert _shell_default(wrapper, "MAX_NUM_BATCHED_TOKENS") == "4096"
     assert _shell_default(wrapper, "LANGUAGE_MODEL_ONLY") == "false"
