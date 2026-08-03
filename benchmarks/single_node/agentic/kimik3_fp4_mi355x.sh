@@ -1124,6 +1124,30 @@ if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_ARCH_FIX" = "1" ]; then
         | tee "$RESULT_DIR/radixark_dspark_arch.log"
 fi
 
+# CUDAGRAPH_MAX_CAPTURE caps vLLM's cudagraph_capture_sizes.
+#
+# Needed because the capture list is independent of --max-num-seqs: it runs
+# [1,2,4,8,16,24,...,248,256] by default, so capture probes token batches up to
+# 256. Under DSpark the MQA verify batch equals that token count, and the gist
+# mla_gluon patch supports 1 <= batch_size <= 128 (it lifted the stock
+# batch_size==1, but not without bound). Run 30786158942 died at engine init
+# with `mla_gluon[bh16bn128] requires 1 <= batch_size <= 128, got 225`.
+#
+# At runtime the batch is bounded by max_num_seqs * (k+1) = 16 * 8 = 128, i.e.
+# exactly the kernel limit, so only capture overshoots. Capping the capture list
+# keeps graphs enabled rather than falling back to --enforce-eager.
+CUDAGRAPH_ARGS=()
+if [ -n "${CUDAGRAPH_MAX_CAPTURE:-}" ]; then
+    _cg_sizes=$(python3 -c "
+import json, sys
+m = int(sys.argv[1])
+sizes = sorted({x for x in [1, 2, 4] + list(range(8, m + 1, 8)) if x <= m})
+print(json.dumps(sizes))
+" "$CUDAGRAPH_MAX_CAPTURE")
+    CUDAGRAPH_ARGS=(--compilation-config "{\"cudagraph_capture_sizes\": $_cg_sizes}")
+    echo "CUDAGRAPH_MAX_CAPTURE=$CUDAGRAPH_MAX_CAPTURE -> $_cg_sizes"
+fi
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -1143,6 +1167,7 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     "${MAX_MODEL_LEN_ARGS[@]}"
     "${PREFIX_CACHE_ARGS[@]}"
+    "${CUDAGRAPH_ARGS[@]}"
     "${LMCACHE_MAMBA_CACHE_MODE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
     "${KV_BLOCK_SIZE_ARGS[@]}"

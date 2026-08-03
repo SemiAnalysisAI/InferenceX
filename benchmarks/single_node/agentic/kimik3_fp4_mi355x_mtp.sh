@@ -82,6 +82,13 @@ export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
 export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"
 export PREFIX_CACHING="${PREFIX_CACHING:-true}"
+# Cap cudagraph capture at the gist mla_gluon patch's batch ceiling. The capture
+# list is independent of max_num_seqs and defaults up to 256, while the patched
+# kernel supports 1 <= batch_size <= 128; run 30786158942 died at init with
+# "got 225". Runtime is already bounded at max_num_seqs * (k+1) = 16 * 8 = 128,
+# so only capture overshot. Capping keeps cudagraphs on instead of falling back
+# to --enforce-eager.
+export CUDAGRAPH_MAX_CAPTURE="${CUDAGRAPH_MAX_CAPTURE:-128}"
 export ENFORCE_EAGER="${ENFORCE_EAGER:-false}"
 
 exec "$(dirname "$0")/kimik3_fp4_mi355x.sh" "$@"
