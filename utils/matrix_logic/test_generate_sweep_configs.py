@@ -213,7 +213,7 @@ class TestSeqLenToStr:
 class TestMarkEvalEntries:
     """Tests for eval matrix selection policy."""
 
-    def test_marks_agentic_entry_for_swebench(self):
+    def test_marks_agentic_entry_for_gsm8k(self):
         matrix_values = [
             {
                 "scenario-type": "agentic-coding",
@@ -663,7 +663,7 @@ class TestMarkAllEvalEntries:
         assert eight_k['eval-all-concs'] is True
         assert eight_k['conc'] == [8, 32]
 
-    def test_marks_agentic_entries_for_swebench(self):
+    def test_marks_agentic_entries_for_gsm8k(self):
         entries = [
             {
                 'scenario-type': 'agentic-coding',
