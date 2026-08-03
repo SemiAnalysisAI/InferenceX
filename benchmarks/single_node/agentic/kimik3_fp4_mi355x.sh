@@ -1020,7 +1020,13 @@ export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:
 
 # Patch aiter's Gluon MLA kernel with a fixed version. The b128 kernel is only
 # exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
-if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+# Also required for DSPARK_MTP_NATIVE: the 4-D MTP entry
+# ("Accept plain decode (3-D, qlen=1) or MTP (4-D, [batch, qlen, nhead, dim])")
+# exists ONLY in the gist kernel. The image's stock mla_gluon is 3-D only and
+# fails with "too many values to unpack (expected 3)" at mla_gluon.py:806 --
+# run 30802560963 died exactly there because this patch is fp8-gated and that
+# arm is bf16.
+if [ "${KV_CACHE_DTYPE:-}" = "fp8" ] || [ "${DSPARK_MTP_NATIVE:-0}" = "1" ]; then
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
     # Pinned to the exact gist revision that produced the first clean fp8 KV
     # run (30442578333: c8, 3600s, 696 total tok/s/GPU, TTFT 2.6s). The
