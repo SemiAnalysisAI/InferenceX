@@ -5374,3 +5374,8 @@
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
   
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic-dspark
+  description:
+    - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
