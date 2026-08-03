@@ -116,6 +116,7 @@ def _require_runtime() -> None:
 
 class DeepEPV2Backend(EPBackend):
     name = "deepep-v2"
+    maturity = "production"  # vLLM --all2all-backend deepep_v2; SGLang --moe-a2a-backend deepep
     # Two kernel families under one adapter, selected by mode:
     #   normal      -> PR #605 ElasticBuffer (LSA vs hybrid GIN are transport paths, not
     #                  kernel families); rank-deduplicated unweighted-rank-sum combine.
