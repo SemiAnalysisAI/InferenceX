@@ -9,6 +9,19 @@ set -euo pipefail
 # The first AgentX validation is deliberately GPU-only at c1 so a server or
 # kernel failure cannot be attributed to a KV-offload connector.
 export SPEC_DECODE=true
+# ROOT-CAUSE ARM. mla_gluon natively accepts a 4-D MTP query
+# [batch, qlen, nhead, dim]; forward_mqa flattens verify tokens into fake batch
+# rows instead. That single choice produces batch = num_reqs*qlen (144 and 225
+# against the kernel's 128 cap), the per-layer sum(seq_len) index expansion
+# behind the 13.99 GiB OOM, and the uniform-qlen mis-mapping. Using the native
+# layout makes batch == num_reqs and needs no expansion.
+#
+# JUDGE THIS ON ACCEPTANCE LENGTH, NOT THROUGHPUT. The MTP kernel is causal
+# along qlen (q_pos attends KV [0, seq_len-qlen+q_pos]) while the flatten branch
+# is non-causal. Causal-tail is the correct verify semantics, but if acceptance
+# collapses from the flatten path's 6.41-8.00 the assumption is wrong.
+export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-0}"
+export DSPARK_MTP_NATIVE="${DSPARK_MTP_NATIVE:-1}"
 # EXPERIMENT BRANCH kimik3-dspark-perf -- DSpark configured for peak throughput
 # rather than for fidelity to the upstream AMD reproducer. Four deltas from
 # kimik3-mla-asm-pad, all of them independently proven on the NON-DSpark arm of

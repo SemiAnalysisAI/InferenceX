@@ -1115,6 +1115,21 @@ elif [ "${SPEC_DECODE:-false}" = "true" ]; then
     echo "DSPARK_MQA_FIX=0: leaving the stock forward_mqa flatten branch in place"
 fi
 
+# Native MTP verify. mla_gluon already takes a 4-D [batch, qlen, nhead, dim]
+# query; forward_mqa flattens instead, which is what creates batch = mns*~9
+# against the 128 cap and the per-layer index expansion. Rewrites that call to
+# the native layout so batch == num_reqs and no expansion happens at all.
+# MUTUALLY EXCLUSIVE with DSPARK_MQA_FIX -- both rewrite the same branch.
+if [ "${SPEC_DECODE:-false}" = "true" ] && [ "${DSPARK_MTP_NATIVE:-0}" = "1" ]; then
+    if [ "${DSPARK_MQA_FIX:-1}" = "1" ]; then
+        echo "Error: DSPARK_MTP_NATIVE=1 requires DSPARK_MQA_FIX=0; both rewrite forward_mqa." >&2
+        exit 1
+    fi
+    python3 "$(dirname "$0")/patches/dspark_mtp_native.py" \
+        --diff-out "$RESULT_DIR/dspark_mtp_native.diff" 2>&1 \
+        | tee "$RESULT_DIR/dspark_mtp_native.log"
+fi
+
 # RadixArk/Kimi-K3-DSpark declares architectures=["DSparkDraftModel"], which
 # vLLM's registry maps to the DeepSeek-V4 drafter -- the wrong implementation
 # for what is actually a Qwen3-backbone drafter. Rewrite it to Qwen3DSparkModel.
