@@ -1746,7 +1746,6 @@ build_replay_cmd() {
     local result_dir="$1"
     local duration="$DURATION"
     local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
-    local trace_idle_gap_cap_seconds="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-}"
 
     # Fast mode minimizes setup by advancing each trajectory lane only once
     # and shortens profiling to 20 minutes.
@@ -1779,18 +1778,6 @@ build_replay_cmd() {
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
-    # Some long AgentX traces contain recorded request-start gaps that would
-    # otherwise hold a trajectory lane idle for much longer than the useful
-    # cache-TTL window. When a recipe opts in, cap those gaps independently
-    # within each root trace during dataset reconstruction. This changes only
-    # replay timing; it is not a runtime request timeout.
-    if [ -n "$trace_idle_gap_cap_seconds" ]; then
-        if ! [[ "$trace_idle_gap_cap_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-            echo "ERROR: AIPERF_TRACE_IDLE_GAP_CAP_SECONDS must be a non-negative number" >&2
-            return 1
-        fi
-        REPLAY_CMD+=" --trace-idle-gap-cap-seconds $trace_idle_gap_cap_seconds"
-    fi
     # Fail runs early once the live error ratio crosses the configured limit.
     # Recipes with correlated low-concurrency trajectories may allow a larger
     # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
