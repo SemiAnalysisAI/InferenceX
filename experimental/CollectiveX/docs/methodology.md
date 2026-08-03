@@ -76,8 +76,9 @@ count while keeping a registered buffer would match neither. The cost of that mi
 hypothetical -- measured across MI300X, MI325X and MI355X, 16 warps in registered-buffer mode is
 +13-18% combine at T=128 and +61-78% at T=512 against 8, correct in both arms. With an external
 input buffer the kernel does its own staging copy, bounded by the receive count, so BF16 rows hand
-over the dispatch output unchanged and report no `stage` component at all; FP8 rows still stage,
-because the received payload has to be dequantized. These numbers therefore describe the
+over the dispatch output unchanged: their `stage` component is still declared but carries no
+percentiles, the same way any backend whose staging is a bare pointer assignment reports it. FP8 rows
+still stage for real, because the received payload has to be dequantized. These numbers therefore describe the
 engine-integrated configuration, not MoRI's peak: its shipped tuning tables reach a faster combine
 with per-shape block and warp counts no engine selects, and AUTO would not reproduce those tables
 anyway (there is no BF16 gfx950 dispatch rule and no gfx950 IntraNodeLL combine table, so AUTO falls
