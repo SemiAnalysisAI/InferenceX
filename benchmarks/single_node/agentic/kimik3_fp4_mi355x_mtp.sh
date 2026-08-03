@@ -108,7 +108,11 @@ export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 # fp8 KV pool (4,240,725 vs 2,156,093 tokens) + prefix caching (0% -> ~92%).
 export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
 export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
-export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
+# 0.88, not the reproducer's 0.95. Runs 30796959716 and 30796973043 both died
+# at worker init with "Free memory on device cuda:N (272.0-272.4/287.98 GiB) on
+# startup is less than desired GPU memory utilization" -- these mi355x-amds
+# nodes free only ~272 of 288 GiB and 0.95 asks for ~273.6. Known ceiling.
+export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
 # mns 8, not the reproducer's 16. The patched gist mla_gluon accepts
 # 1 <= batch_size <= 128, and the DSpark MQA batch scales as max_num_seqs * ~9
 # (not k+1 = 8 as assumed): run 30786158942 died with "got 225" and 30786908516
