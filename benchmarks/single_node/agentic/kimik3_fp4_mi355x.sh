@@ -1110,6 +1110,12 @@ if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_ARCH_FIX" = "1" ]; then
         | tee "$RESULT_DIR/radixark_dspark_arch.log"
 fi
 
+# Blog baseline (vllm.ai/blog/2026-07-27-k3) uses --load-format fastsafetensors.
+# fastsafetensors 0.3.3 ships in the image and the format is registered in
+# vllm/model_executor/model_loader. LOAD_FORMAT=auto restores the old value.
+LOAD_FORMAT="${LOAD_FORMAT:-fastsafetensors}"
+echo "load-format: $LOAD_FORMAT  rust-frontend: ${VLLM_USE_RUST_FRONTEND:-0}"
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -1119,7 +1125,7 @@ VLLM_CMD=(
     --moe-backend auto
     --tensor-parallel-size "$TP"
     "${EP_ARGS[@]}"
-    --load-format auto
+    --load-format "$LOAD_FORMAT"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
