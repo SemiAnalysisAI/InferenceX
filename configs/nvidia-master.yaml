@@ -7784,7 +7784,7 @@ minimaxm3-fp4-b200-dynamo-vllm-mtp:
       osl: 1024
       search-space:
       - spec-decoding: "mtp"
-        conc-list: [24, 48]
+        conc-list: [12, 24, 48]
         prefill:
           num-worker: 1
           tp: 4
@@ -7798,7 +7798,7 @@ minimaxm3-fp4-b200-dynamo-vllm-mtp:
           ep: 1
           dp-attn: false
       - spec-decoding: "mtp"
-        conc-list: [4, 8, 64]
+        conc-list: [4, 8, 16, 32, 64]
         prefill:
           num-worker: 1
           tp: 4
@@ -7812,7 +7812,7 @@ minimaxm3-fp4-b200-dynamo-vllm-mtp:
           ep: 1
           dp-attn: false
       - spec-decoding: "mtp"
-        conc-list: [4, 32, 64]
+        conc-list: [32, 64, 96]
         prefill:
           num-worker: 1
           tp: 4
@@ -7826,7 +7826,7 @@ minimaxm3-fp4-b200-dynamo-vllm-mtp:
           ep: 1
           dp-attn: false
       - spec-decoding: "mtp"
-        conc-list: [64]
+        conc-list: [192, 256, 512]
         prefill:
           num-worker: 1
           tp: 4
@@ -7841,7 +7841,7 @@ minimaxm3-fp4-b200-dynamo-vllm-mtp:
           dp-attn: false
 
       - spec-decoding: "mtp"
-        conc-list: [192]
+        conc-list: [12, 24, 48]
         prefill:
           num-worker: 1
           tp: 4
