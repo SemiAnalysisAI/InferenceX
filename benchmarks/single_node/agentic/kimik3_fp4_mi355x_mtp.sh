@@ -20,8 +20,28 @@ export SPEC_DECODE=true
 # along qlen (q_pos attends KV [0, seq_len-qlen+q_pos]) while the flatten branch
 # is non-causal. Causal-tail is the correct verify semantics, but if acceptance
 # collapses from the flatten path's 6.41-8.00 the assumption is wrong.
-export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-0}"
-export DSPARK_MTP_NATIVE="${DSPARK_MTP_NATIVE:-1}"
+# REFUTED 2026-08-03, run 30804496473. The native MTP path applied correctly
+# and BROKE VERIFICATION:
+#   acceptance   2.65-4.76   (flatten: 6.41-8.00)
+#   per-position 0.644, 0.534, 0.452, 0.356, 0.342, 0.342, 0.342
+#                (flatten: 1.000 x4 then 0.875 x3)
+# Position 0 rejected 36% of the time -- the target is scoring drafts against
+# the wrong context.
+#
+# Cause: the MTP kernel masks causally along qlen ("each query position q_pos
+# attends KV [0, seq_len-qlen+q_pos]"), but DSpark is NON-CAUSAL by
+# construction -- it drafts all k tokens in one parallel block-diffusion pass,
+# so verify must score them the same way. Independently confirmed by run
+# 30802552602, where ROCM_AITER_MLA was rejected for the DRAFTER with
+# "non-causal attention not supported". The flatten branch's non-causality was
+# deliberate.
+#
+# It also did NOT fix the crash: 104 completions, same HSA 0x1016 band.
+#
+# Defaults back off. dspark_mtp_native.py is kept for the record; re-enabling
+# it needs a non-causal MTP kernel, which does not exist today.
+export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-1}"
+export DSPARK_MTP_NATIVE="${DSPARK_MTP_NATIVE:-0}"
 # EXPERIMENT BRANCH kimik3-dspark-perf -- DSpark configured for peak throughput
 # rather than for fidelity to the upstream AMD reproducer. Four deltas from
 # kimik3-mla-asm-pad, all of them independently proven on the NON-DSpark arm of
