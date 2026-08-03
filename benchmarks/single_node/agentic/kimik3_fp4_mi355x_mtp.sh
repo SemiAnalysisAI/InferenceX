@@ -9,6 +9,12 @@ set -euo pipefail
 # The first AgentX validation is deliberately GPU-only at c1 so a server or
 # kernel failure cannot be attributed to a KV-offload connector.
 export SPEC_DECODE=true
+# NIGHTLY STACK (kimik3-dspark-nightly): vllm/vllm-openai-rocm:nightly-124154a8
+# + PR50578 asm pad + Triton 3.7.0 + fp8 KV + prefix caching + asm verify.
+# The nightly ships triton 3.6.0, which has no PaddedSharedLayout(cga_layout=),
+# so Gluon MLA cannot compile there -- TRITON_UPGRADE is mandatory, not optional.
+export TRITON_UPGRADE="${TRITON_UPGRADE:-3.7.0}"
+export TRITON_ROCM_VERSION="${TRITON_ROCM_VERSION:-7.2.0}"
 # EXPERIMENT BRANCH kimik3-dspark-perf -- DSpark configured for peak throughput
 # rather than for fidelity to the upstream AMD reproducer. Four deltas from
 # kimik3-mla-asm-pad, all of them independently proven on the NON-DSpark arm of
@@ -70,7 +76,7 @@ export SPEC_DECODE=true
 # doubling. Note the gist mla_gluon patch is gated on fp8 and will NOT apply
 # here; #4474's anchor is present in the stock image kernel too (verified), and
 # the bf16 regime bh16bn64 has no batch_size assert at all.
-export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
+export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 # Keep the DSpark arm off the unmerged vLLM#50578 asm-pad patch. It is inert
 # here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
 # runs at 8, so decode never reaches the asm path), and leaving it out keeps
@@ -93,8 +99,8 @@ export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 #
 # This arm therefore tests the crash fix and both perf levers at once:
 # fp8 KV pool (4,240,725 vs 2,156,093 tokens) + prefix caching (0% -> ~92%).
-export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
-export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
+export MLA_ASM_PAD="${MLA_ASM_PAD:-1}"
+export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-1}"
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.95}"
 # mns 8, not the reproducer's 16. The patched gist mla_gluon accepts
 # 1 <= batch_size <= 128, and the DSpark MQA batch scales as max_num_seqs * ~9

@@ -284,6 +284,18 @@ MQA_NEW = '''            if type(q) is tuple:
 # --------------------------------------------------------------------------
 HELPER_ANCHOR = "class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):"
 
+# Minimal injection for images where upstream already builds a real MTP
+# qo_indptr and pads to a uniform qo_len (_uniform_padded_mtp_qo_len /
+# pad_uniform_mtp -- present in vllm 0.26.x nightlies). There FIX 1 and FIX 2
+# are obsolete and forcing ours in would fight a better implementation; only the
+# asm-verify reroute is still needed.
+FLAG_ONLY = '''import os as _dspark_os
+
+_DSPARK_ASM_VERIFY = _dspark_os.environ.get("DSPARK_ASM_VERIFY", "0") == "1"
+
+
+'''
+
 HELPER = '''import os as _dspark_os
 
 _DSPARK_MQA_SPLITK = _dspark_os.environ.get("DSPARK_MQA_SPLITK", "0") == "1"
@@ -370,23 +382,36 @@ def main() -> None:
     original = open(path, encoding="utf-8").read()
     text = original
 
-    if "_dspark_mqa_expand" in text:
+    if "_DSPARK_ASM_VERIFY" in text:
         print(f"{path} already patched; nothing to do")
         return
 
-    anchors = [
-        ("qo_indptr", QO_OLD),
-        ("forward_mqa flatten", MQA_OLD),
-        ("forward_mqa guard", GUARD_OLD),
-    ]
-    for name, old in anchors:
-        if text.count(old) != 1:
-            die(
-                f"anchor for {name} matched {text.count(old)} times, expected 1. "
-                "The image drifted; re-derive the anchors before running."
-            )
+    have_qo = text.count(QO_OLD) == 1
+    have_mqa = text.count(MQA_OLD) == 1
+    legacy = have_qo and have_mqa
+
+    if text.count(GUARD_OLD) != 1:
+        die(
+            f"forward_mqa guard anchor matched {text.count(GUARD_OLD)} times, "
+            "expected 1. Re-derive before running."
+        )
     if text.count(HELPER_ANCHOR) != 1:
         die("helper anchor (class AiterMLAImpl) not found exactly once")
+    if not legacy and (have_qo or have_mqa):
+        die(
+            "partial anchor match (qo_indptr=%s, flatten=%s) -- the image is "
+            "neither the legacy layout nor a recognised newer one. Refusing to "
+            "half-patch." % (have_qo, have_mqa)
+        )
+    print(
+        "mode: %s"
+        % (
+            "legacy (applying qo_indptr + row-map + cache + guard)"
+            if legacy
+            else "upstream-MTP (guard only; vllm already builds a real MTP "
+            "qo_indptr and pads to uniform qo_len, so FIX 1/2 are obsolete)"
+        )
+    )
 
     asm_verify = os.environ.get("DSPARK_ASM_VERIFY", "0") == "1"
     if asm_verify and ASM_PAD_MARKER not in text:
@@ -399,10 +424,13 @@ def main() -> None:
             "i.e. set MLA_ASM_PAD=1."
         )
 
-    text = text.replace(QO_OLD, QO_NEW)
-    text = text.replace(MQA_OLD, MQA_NEW)
     text = text.replace(GUARD_OLD, GUARD_NEW)
-    text = text.replace(HELPER_ANCHOR, HELPER + HELPER_ANCHOR)
+    if legacy:
+        text = text.replace(QO_OLD, QO_NEW)
+        text = text.replace(MQA_OLD, MQA_NEW)
+        text = text.replace(HELPER_ANCHOR, HELPER + HELPER_ANCHOR)
+    else:
+        text = text.replace(HELPER_ANCHOR, FLAG_ONLY + HELPER_ANCHOR)
 
     compile(text, path, "exec")
 

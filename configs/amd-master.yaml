@@ -1229,6 +1229,36 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
     - search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
 
+kimik3-fp4-mi355x-vllm-agentic-dspark-nightly-c8:
+  # The nightly stack: nightly-124154a8 + PR50578 + Triton 3.7.0 + fp8 KV +
+  # prefix caching + asm verify + DSpark, c8.
+  #
+  # UNTESTED AS A WHOLE. The base (nightly + PR50578 + Triton, no DSpark) is
+  # confirmed working -- that is asm decode at qo_len == 1. Adding DSpark makes
+  # qo_len 8, and two things predict failure:
+  #   1. asm_mla.cu:903's "qo_len <= 4 or persistent mode" guard is PRESENT in
+  #      this nightly's aiter (verified by reading the image), and persistent
+  #      metadata is unavailable under spec decode.
+  #   2. asm verify measured 100% acceptance (574/574, per-position all 1.000)
+  #      on the kimi-k3 image -- it does not actually verify.
+  # Both are static-read inferences, and this nightly's rocm_aiter_mla.py has
+  # drifted substantially (it now builds a real MTP qo_indptr and pads to a
+  # uniform qo_len), so they are worth falsifying rather than assuming.
+  #
+  # Read acceptance length FIRST. If it is 8.00 flat with per-position 1.000,
+  # the arm is invalid regardless of throughput.
+  image: vllm/vllm-openai-rocm:nightly-124154a8843d1f8e4d4e2d5d466e2d3ebc3716da
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-dspark-c8:
   # DSpark GPU-only c8, same config as the -dspark key. Split into its own key
   # so -dspark stays an accurate record of the c1+c4 validation run
