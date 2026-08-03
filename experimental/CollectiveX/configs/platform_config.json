@@ -17,7 +17,7 @@
         "partition": "hpc-gpu-1",
         "account": "customer",
         "squash_dir": "/mnt/nfs/sa-shared/cx-squash",
-        "exclude_nodes": "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
+        "exclude_nodes": "hpc-gpu-1-0,hpc-gpu-1-1,hpc-gpu-1-2,hpc-gpu-1-4,hpc-gpu-1-5,hpc-gpu-1-7,hpc-gpu-1-8,hpc-gpu-1-13,hpc-gpu-1-16,hpc-gpu-1-19"
       },
       "network": {
         "socket_ifname": "eth0",
