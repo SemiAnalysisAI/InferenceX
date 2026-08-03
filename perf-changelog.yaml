@@ -5373,4 +5373,11 @@
     - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
-  
+
+- config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm-mtp
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Add MiniMax-M3-MXFP8 GB300 8k1k disaggregated Dynamo-vLLM EAGLE3 MTP Pareto"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
