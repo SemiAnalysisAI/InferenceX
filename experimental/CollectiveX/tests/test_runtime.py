@@ -755,10 +755,6 @@ class FusedQuantizeGate(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self._check(eager, shape_dependent, x)
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class GpuHealthProbe(unittest.TestCase):
     """Reject an allocation holding a throttled GPU before it burns the wall-clock guard.
 
@@ -806,3 +802,54 @@ class GpuHealthProbe(unittest.TestCase):
         for output in ("", "nonsense\n", "1, Not Active\n", self.HEALTHY.replace("32 ", "[N/A] ")):
             with self.subTest(output=output[:20]):
                 self.assertEqual(probe.gpu_health_faults(output), [])
+
+    def _run_validate(self, csv: str, has_smi: bool = True):
+        """Drive validate_gpu_health with a stubbed nvidia-smi; returns (exit_code, stdout)."""
+        import shutil
+        real_which = shutil.which
+        shutil.which = (lambda name: "/usr/bin/nvidia-smi") if has_smi else (lambda name: None)
+
+        class FakeSubprocess:
+            SubprocessError = subprocess.SubprocessError
+
+            @staticmethod
+            def run(*args, **kwargs):
+                return types.SimpleNamespace(stdout=csv)
+
+        sys.modules["subprocess"] = FakeSubprocess
+        captured = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(captured):
+                probe.validate_gpu_health()
+            code = 0
+        except SystemExit as exit_:
+            code = exit_.code
+        finally:
+            sys.modules["subprocess"] = subprocess
+            shutil.which = real_which
+        return code, captured.getvalue()
+
+    def test_a_healthy_check_records_how_many_gpus_it_saw(self):
+        # Without this marker a gate that went BLIND -- no visible devices, or a driver spelling
+        # the fields clocks_throttle_reasons.* -- writes an empty log and is indistinguishable
+        # from one that inspected eight healthy GPUs.
+        code, out = self._run_validate(self.HEALTHY)
+        self.assertEqual(code, 0)
+        self.assertIn("gpu-health-checked gpus=8", out)
+
+    def test_a_fault_exits_nonzero_and_names_the_gpu(self):
+        code, out = self._run_validate(
+            self._swap("7, Not Active, Not Active, 37 ", "7, Active, Active, 93 ")
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("gpu-health-fault gpu 7", out)
+        self.assertNotIn("gpu-health-checked", out)
+
+    def test_a_missing_nvidia_smi_is_silent_and_passes(self):
+        code, out = self._run_validate(self.HEALTHY, has_smi=False)
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "")
+
+
+if __name__ == "__main__":
+    unittest.main()

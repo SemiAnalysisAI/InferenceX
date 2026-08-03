@@ -114,7 +114,7 @@ for allocation_attempt in 1 2 3; do
   elif [ "$RUNNER" = b300 ] \
       && ! collx_validate_cuda_context_on_job "$JOB_ID" "$NODES" "$GPN"; then
     validation_failure=cuda-context
-  elif ! collx_validate_gpu_health_on_job "$JOB_ID" "$NODES"; then
+  elif ! collx_validate_gpu_health_on_job "$JOB_ID" "$NODES" "$GPN"; then
     validation_failure=gpu-health
   else
     break

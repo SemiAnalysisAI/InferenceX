@@ -95,6 +95,11 @@ def validate_gpu_health(max_temperature_c: int = 90) -> None:
         _emit(f"gpu-health-fault {fault}")
     if faults:
         raise SystemExit(1)
+    # Positive control. Without it a gate that has gone BLIND -- no visible devices, or a driver
+    # old enough to spell these fields `clocks_throttle_reasons.*` -- writes an empty log and is
+    # indistinguishable from one that inspected eight healthy GPUs. Recording the count is what
+    # makes "the gate ran and saw N devices" checkable per cluster instead of assumed.
+    _emit(f"gpu-health-checked gpus={sum(1 for line in output.splitlines() if line.strip())}")
 
 
 def _emit(marker: str) -> None:

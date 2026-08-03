@@ -148,11 +148,6 @@ class RoundtripStagingGate(unittest.TestCase):
             ).stage_excluded_from_roundtrip
         )
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class WarmStaging(unittest.TestCase):
     """Warm-up must not rehearse work the timed region skips.
 
@@ -195,3 +190,7 @@ class WarmStaging(unittest.TestCase):
         b = _StubBackend(stage_device_work=True, fp8_consume="dequant")
         self._warm(b, 5)
         self.assertEqual(b.calls.count("stage"), 5)
+
+
+if __name__ == "__main__":
+    unittest.main()

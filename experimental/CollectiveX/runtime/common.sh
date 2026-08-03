@@ -760,11 +760,14 @@ BASH
   printf '%s' "$sq"
 }
 
-# A clean nvidia-smi inventory does not prove that a prior cancelled workload
-# released every CUDA context. Retaining each primary context catches poisoned
-# allocations before a full shard spends time failing every case.
+# Reject an allocation whose GPUs are throttled: collectives are barriers, so one clamped device
+# paces every rank. `--gres` mirrors the cuda-context probe below rather than relying on a step
+# inheriting the job's GRES by default, so the probe provably sees the devices it is judging --
+# a gate that sees none would pass everything while looking like protection. `--time` bounds the
+# worst case: nvidia-smi can wedge uninterruptible on exactly the sick hardware this looks for,
+# and Python's own timeout cannot reap a process in D-state.
 collx_validate_gpu_health_on_job() {
-  local job_id="$1" nodes="$2" log_label=gpu-health log
+  local job_id="$1" nodes="$2" gpus_per_node="$3" log_label=gpu-health log
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
     2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
@@ -773,11 +776,14 @@ collx_validate_gpu_health_on_job() {
   log="$(collx_private_log_path "$log_label")"
   export COLLX_GPU_HEALTH_LOG="$log"
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
-    --chdir=/tmp --input=all \
+    --gres=gpu:"$gpus_per_node" --time=5 --chdir=/tmp --input=all \
     --export="$(collx_host_exports)" python3 /dev/stdin gpu-health \
     < "$COLLX_RUNTIME_DIR/probe.py" >"$log" 2>&1
 }
 
+# A clean nvidia-smi inventory does not prove that a prior cancelled workload
+# released every CUDA context. Retaining each primary context catches poisoned
+# allocations before a full shard spends time failing every case.
 collx_validate_cuda_context_on_job() {
   local job_id="$1" nodes="$2" gpus_per_node="$3" log_label=cuda-context log
   case "${COLLX_SALLOC_ATTEMPT:-1}" in

@@ -47,8 +47,9 @@ def _ll_dequant_static(fp8, scales):
     ``[num_local_experts, cap*num_ranks, hidden]`` = (32, 2048, 7168) at EP8). The low-latency
     padded shape is constant on every dispatch, so a static (``dynamic=False``) compile fuses
     to one FP32 pass (~0.5 ms, 6.3x, bit-identical to the dynamic kernel on valid slots). The
-    dequant runs in every timed component's warmup and samples (~hundreds of thousands of
-    calls over the profile), so the dynamic kernel's per-call overhead overran the leg's
+    dequant runs in every timed `stage` sample, in `benchmark_stage`'s warm-up, and once per
+    other component's warm-up (it was every warm iteration until the staging hoist), so the
+    call count is large enough that the dynamic kernel's per-call overhead overran the leg's
     wall-clock budget (all ranks SIGKILLed ~22 min in, no result); the static form brings FP8
     low-latency inside the budget BF16 already meets. Padding slots decode to NaN in both
     forms (FP8 padding bytes) — harmless, because combine is handle-indexed and never reads
