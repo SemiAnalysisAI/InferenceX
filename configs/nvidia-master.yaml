@@ -8248,7 +8248,7 @@ minimaxm3-fp4-b300-vllm:
 # /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
 # launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:nightly-4080263bb2c5d10deac17aaeb88e0823bc35bca9
+  image: vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
