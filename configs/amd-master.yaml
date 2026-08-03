@@ -1229,6 +1229,37 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
     - search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
 
+kimik3-fp4-mi355x-vllm-agentic-dspark-c8:
+  # DSpark GPU-only c8, same config as the -dspark key. Split into its own key
+  # so -dspark stays an accurate record of the c1+c4 validation run
+  # (30775983425) rather than being edited under a job in flight.
+  #
+  # c8 is the interesting comparison point: it is the peak of the non-DSpark
+  # no-offload curve (682.63 tok/s/GPU under Gluon, 1707.85 with asm-pad), so
+  # this is the first cell where DSpark can be judged against a real baseline
+  # instead of against itself. Note the two are not decode-equivalent -- asm-pad
+  # is inert under spec-decode, so this arm runs Gluon decode by construction.
+  #
+  # Launched ahead of the c1/c4 result at explicit request. Worth stating once:
+  # c8 is 8x the concurrency of the only DSpark cell that has ever completed,
+  # and the KV pressure it implies is the regime that produced the 13.99 GiB OOM
+  # at mns 128 (run 30512072425) through this same code path. mns stays 16 (the
+  # wrapper default), which bounds that risk but does not remove it. If this
+  # cell dies on memory rather than on the old HIP 700 / 0x1016 fault, that is a
+  # capacity result and not a regression of the forward_mqa fix -- read the
+  # traceback before concluding either way.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-bringup:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
