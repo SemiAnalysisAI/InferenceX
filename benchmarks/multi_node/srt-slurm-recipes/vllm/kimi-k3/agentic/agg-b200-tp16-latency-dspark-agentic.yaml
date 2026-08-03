@@ -70,6 +70,9 @@ backend:
       # OOM at the official 0.95 setting. Preserve the observed-safe headroom.
       gpu-memory-utilization: 0.90
       no-enable-flashinfer-autotune: true
+      # The generic custom communicator also probes MNNVL and stalls before
+      # model load on this pool. Use PyNCCL for the cross-node TP group.
+      disable-custom-all-reduce: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"TRTLLM_RAGGED"}'
