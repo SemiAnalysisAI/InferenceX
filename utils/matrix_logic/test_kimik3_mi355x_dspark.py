@@ -43,7 +43,7 @@ def test_dspark_wrapper_is_perf_tuned_not_reproducer_faithful() -> None:
     wrapper = MTP_WRAPPER.read_text()
 
     # Deltas from the reproducer, each proven on the non-DSpark arm.
-    assert _shell_default(wrapper, "KV_CACHE_DTYPE") == "fp8"
+    assert _shell_default(wrapper, "KV_CACHE_DTYPE") == "auto"  # hedge arm: bf16
     assert _shell_default(wrapper, "PREFIX_CACHING") == "true"
     assert _shell_default(wrapper, "MLA_ASM_PAD") == "1"
     assert _shell_default(wrapper, "DSPARK_ASM_VERIFY") == "1"

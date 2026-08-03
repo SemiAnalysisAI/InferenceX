@@ -51,7 +51,14 @@ export SPEC_DECODE=true
 # --kv-cache-dtype fp8 at all. The patched b128 kernel this recipe pulls from
 # the gist is what lifts that restriction, so fp8 DSpark becomes possible once
 # that combination has actually been validated -- until then, auto.
-export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+# bf16 KV, unlike the sibling kimik3-dspark-perf branch. This is the HEDGE arm:
+# fp8 additionally needs aiter's sparse get_block_n_fp8 table to cover the
+# nhead*qlen products vLLM's graph capture asks for, and the nearest-key
+# fallback that unblocks it may only move the failure into the asm fp8 kernel
+# itself. Prefix caching is the single largest lever (0.0% -> ~92% hit) and does
+# not depend on fp8 at all, so this arm secures that result independently.
+# Costs the KV-pool doubling: 2,156,093 tokens, against ~2.4M wanted at c8.
+export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 # Keep the DSpark arm off the unmerged vLLM#50578 asm-pad patch. It is inert
 # here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
 # runs at 8, so decode never reaches the asm path), and leaving it out keeps
