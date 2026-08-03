@@ -57,7 +57,14 @@ request NCCL Device API LSA and fail closed unless the realized LSA team covers 
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; its EP16 InterNodeV1 path is
-configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
+configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched.
+MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
+run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80 with
+rdma_block_num 0. These numbers therefore describe the engine-integrated configuration, not MoRI's
+peak -- its own shipped tuning tables reach roughly 1.3-1.4x faster combine at T=256 on gfx950 with a
+config no engine selects, and AUTO would not reproduce those tables anyway (there is no BF16 gfx950
+dispatch rule and no gfx950 IntraNodeLL combine table, so AUTO falls back to hard-coded defaults and
+couples the result to whichever MoRI revision is pinned). UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
 `dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
 `libibverbs` — no NVSHMEM/IBGDA — with software message ordering, atomics, and flow control; its
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
@@ -139,7 +146,20 @@ the ordering. Do not rank on p99 of MAX for multi-node decode cells, where it is
 worst-rank stalls rather than transport — p99 of MIN is the synchronized-cost tail beside it. The
 isolated components inherit the preceding operation's per-rank exit stagger, so treat them as
 residual-wait diagnostics rather than per-operation costs; the paired roundtrip is the
-comparable quantity. The artifact records the mode so a reader can keep distinct measurement
+comparable quantity.
+
+One backend's timed window omits a cost the others pay, deliberately. nccl-ep binds routing with
+`ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than with
+the token count, so charging it per iteration would import a ladder-max-proportional term into
+dispatch -- the same shape of artifact that sizing HT's combine input to the ladder maximum used to
+put under combine. It is therefore bound during the untimed warm-up, which is also what NVIDIA's own
+`ep_bench` does (CUDA events around dispatch and combine only, handle update outside the loop). In
+low-latency mode there is nothing to exclude: `ncclEpUpdateHandle` returns immediately and the kernel
+reads the cached routing inside the timed dispatch. Every other backend pays its layout per timed
+call -- uccl-ep calls `get_dispatch_layout` inside dispatch; deepep-v2, MoRI and FlashInfer pass
+routing on every call -- and those costs scale with tokens, so they belong in the window.
+
+The artifact records the mode so a reader can keep distinct measurement
 contracts separate.
 
 Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
