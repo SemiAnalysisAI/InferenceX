@@ -102,8 +102,7 @@ class NCCLEPBackend(EPBackend):
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
-        # both modes keep combine_needs_redispatch / dispatch_needs_combine_cleanup False. If
-        # on-metal bring-up ever shows LL result-tensor aliasing, flip both to True for LL.
+        # both modes keep combine_needs_redispatch / dispatch_needs_combine_cleanup False.
         self._algorithm = Algorithm.LOW_LATENCY if self._ll else Algorithm.HIGH_THROUGHPUT
         self._layout = Layout.EXPERT_MAJOR if self._ll else Layout.FLAT
         # send_only=0 on every dispatch/combine (no staged execution). Handle.complete() is
@@ -160,7 +159,7 @@ class NCCLEPBackend(EPBackend):
         # the internode DevComm with ginForceEnable + a RAIL connection type, so we do NOT force
         # NCCL_GIN_TYPE here — forcing GDAKI(3) can prevent NCCL from selecting a fabric-supported
         # GIN transport and trips an illegal-memory-access in the GIN dispatch kernel (on-metal
-        # checkpoint; still under cross-node bring-up). Set NCCL_GIN_TYPE in the launcher env if a
+        # checkpoint). Set NCCL_GIN_TYPE in the launcher env if a
         # specific transport must be pinned.
         length = torch.zeros(1, dtype=torch.int64, device=self.device)
         payload = torch.zeros(_UNIQUE_ID_MAX_BYTES, dtype=torch.uint8, device=self.device)

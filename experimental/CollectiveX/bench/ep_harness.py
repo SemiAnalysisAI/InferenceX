@@ -860,7 +860,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
 
     ep_size = world_size
-    num_logical = getattr(args, "num_logical_experts", args.experts)
     if args.experts % ep_size != 0:
         if rank == 0:
             print(f"ERROR: experts ({args.experts}) must divide ep_size ({ep_size})")
@@ -1133,7 +1132,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     scheduled_case = {
             "backend": backend.name,
             "ep": ep_size,
-            "experts": num_logical,
+            "experts": args.experts,
             "gpus_per_node": gpn,
             "hidden": args.hidden,
             "ladder": " ".join(map(str, ladder)),
