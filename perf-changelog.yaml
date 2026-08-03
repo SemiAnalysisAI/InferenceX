@@ -5380,4 +5380,4 @@
     - fixed-seq-len
   description:
     - "Add MiniMax-M3-MXFP8 GB300 8k1k disaggregated Dynamo-vLLM EAGLE3 MTP Pareto"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2478
