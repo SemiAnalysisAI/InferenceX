@@ -99,6 +99,7 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.9 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
+--kv-cache-dtype fp8 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
