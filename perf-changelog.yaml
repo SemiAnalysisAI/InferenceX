@@ -5357,6 +5357,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
 - config-keys:
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B300 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2421
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B200 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
+  
+- config-keys:
     - dsv4-fp4-gb200-llmd-vllm
   description:
     - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, max-num-seqs 512->1024, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
