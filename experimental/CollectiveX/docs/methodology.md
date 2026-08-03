@@ -22,9 +22,16 @@ It does not predict serving throughput without a separate correlation study.
 The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
 placement, and one pinned fixed resource profile per backend/topology. Combine is always BF16;
 dispatch precision is a swept dimension — a BF16 control and, on the backends whose FP8 dispatch is
-supported upstream (DeepEP V2, MoRI, UCCL-EP), an FP8 dispatch (`bf16`, `fp8`),
+supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`bf16`, `fp8`),
 caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
-DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). NCCL EP is BF16-only this release, so its
+DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). Because `normal`-mode FP8 is
+caller-prequantized, that quantize is a cost a production forward pass pays on the critical path, so
+it is charged **inside the measured dispatch** rather than prepared ahead of the timing window; it is
+issued as one fused kernel and guarded bitwise against its eager reference. This means an FP8
+`normal` dispatch number covers quantize-plus-transport while its BF16 control covers transport
+alone, and it is why FP8 `normal` rows are not comparable to runs published before sweep version 2.
+`low-latency` rows are unaffected: those kernels either quantize internally (nothing for the caller
+to charge) or take pre-quantized input by API contract. NCCL EP is BF16-only this release, so its
 cells carry the control alone; the per-backend precision set lives in `sweep_matrix.py`'s
 `BACKEND_PRECISIONS` and a backend never emits a case for a precision it does not support.
 `normal`-mode cases use the
@@ -125,11 +132,22 @@ combine returns activation payload through an unweighted rank-sum path. Expert-o
 outside isolated combine timing AND outside the measured paired roundtrip, so `roundtrip` means
 dispatch then combine — the transport — in every row. It is reported as its own `stage` component
 wherever it does device work. The one exception is the `CX_FP8_CONSUME=dequant` verification hatch,
-which puts the conversion back inside the chain on purpose. Each component declares
+which puts the conversion back inside the chain on purpose.
+
+Read `implementation.stage_excluded_from_roundtrip` as "there was device-work staging and it was
+hoisted out of the chain", not as "this row's roundtrip is stage-free". It is gated on whether the
+backend's `stage()` does device work at all, so it is `false` in two unrelated situations, and the
+`stage` component is what separates them: **absent** means the backend has nothing to stage (the
+staging is a bare pointer assignment, as for NCCL EP and for every BF16 row that hands the receive
+buffer straight to combine), while **present alongside `false`** means the `dequant` hatch put the
+conversion back inside the chain. A reader that treats `false` alone as "roundtrip includes staging"
+will wrongly subtract a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is the p50 of the per-iteration cross-rank MAX: a layer is not finished until
+Headline latency is the p99 of the per-iteration cross-rank MAX (`p50` is emitted alongside it, and
+`summarize.py` prints both; the p99 is the figure the published cohorts rank on). MAX is the
+reduction because a layer is not finished until
 its slowest rank is, so MAX is the completion cost, and it charges inter-rank entry stagger to
 whichever component the ranks entered unevenly. How much stagger there is depends on the code
 path AND the precision, not only on the fleet: on identical h200 low-latency decode cells the
@@ -201,9 +219,12 @@ padding, and backend buffer capacity. BF16 moves 2 bytes per value with no scale
 dispatch moves 1 byte per value, plus per-128-block FP32 scales for DeepEP's and UCCL-EP's blockwise
 codec (none for MoRI's plain e4m3 cast), while combine stays BF16 — so the dispatch and combine directions can carry
 different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
-for the normal-mode layout; the low-latency layout sends one copy per (token, expert) assignment
-rather than per (token, rank), so for a token whose experts share a destination rank this logical
-count is a lower bound on the bytes the low-latency kernels actually move. Latency (the headline) is
+for the normal-mode layout. It is also exact for a low-latency kernel that deduplicates per rank
+(MoRI's `IntraNodeLL`, whose combine is an unweighted rank-sum). The low-latency kernels that apply
+top-k weights inside combine instead send one copy per (token, expert) assignment rather than per
+(token, rank), so for a token whose experts share a destination rank this logical count is a lower
+bound on the bytes those kernels actually move. Each row states which basis it used in
+`logical_copies`, so the two are never silently mixed. Latency (the headline) is
 measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
 wire utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token

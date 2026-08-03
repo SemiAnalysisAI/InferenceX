@@ -57,6 +57,32 @@ _INVALID_EXPERT = -1
 # FP32 expectation does not carry, so the oracle needs to know which kernel it is facing.
 _COMBINE_FP32_SINCE = (0, 6, 16)
 
+
+def _wheel_has_fp32_combine(version: str) -> bool:
+    """Does this wheel accumulate combine in FP32, per `_COMBINE_FP32_SINCE`?
+
+    Ordering matters more than it looks. A release candidate sorts BELOW its own release, so
+    `0.6.16rc1` predates the rewrite and must read as False; a naive digit scrape reads it as
+    0.6.16 and models FP32 against a kernel that still rounds per level, which can exceed
+    COMBINE_REL_TOL and RED a correct run. The reverse error is harmless (a few ulps, far
+    inside tolerance), so every unparseable input answers False.
+    """
+    try:
+        from packaging.version import InvalidVersion, Version
+    except ImportError:  # pragma: no cover - packaging ships with torch
+        digits = re.match(r"(?:\d+!)?(\d+(?:\.\d+){0,2})", version.strip())
+        if digits is None:
+            return False
+        release = tuple(int(n) for n in digits.group(1).split("."))
+        # No pre-release ordering available, so treat a marked pre-release as below its release.
+        if re.match(r"[._-]?(a|b|c|rc|alpha|beta|dev|pre)", version[digits.end():]):
+            return release > _COMBINE_FP32_SINCE
+        return release >= _COMBINE_FP32_SINCE
+    try:
+        return Version(version) >= Version(".".join(str(n) for n in _COMBINE_FP32_SINCE))
+    except InvalidVersion:
+        return False
+
 # FP8 block size, matching the DeepSeek-V3 recipe every other FP8 backend here uses.
 _FP8_BLOCK = 128
 
@@ -203,8 +229,7 @@ class FlashInferEPBackend(EPBackend):
             workspace_size_per_rank=workspace_size,
             mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
         )
-        wheel = tuple(int(n) for n in re.findall(r"\d+", flashinfer.__version__)[:3])
-        if wheel >= _COMBINE_FP32_SINCE:
+        if _wheel_has_fp32_combine(flashinfer.__version__):
             self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
         # vLLM barriers here for the same reason. Scoped to the EP group, not the world.

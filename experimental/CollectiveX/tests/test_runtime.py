@@ -655,6 +655,22 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
         )
         self.assertEqual(combined.item(), 0.5)
 
+    def test_the_first_slot_claiming_a_rank_is_the_one_that_survives(self):
+        torch = _torch
+        # Which duplicate the kernel blanks is invisible when the repeated payload is the only
+        # value in play, so the case above cannot tell keep-first from keep-last. These
+        # contributions cancel instead: blanking the LATER slot reduces (256+1)->256 and
+        # (-256+0)->-256 to 0.0, while blanking the EARLIER one gives (0+1)->1 and
+        # (-256+256)->0, i.e. 1.0. The 257 -> 256 step is the BF16 rounding that makes the two
+        # models disagree at all.
+        destination = torch.tensor([[0, 1, 2, 0]])
+        messages = torch.tensor([[[256.0]], [[1.0]], [[-256.0]]])
+        combined = ep_harness._topk_slot_tree_combine(
+            torch, destination, torch.ones_like(destination, dtype=torch.bool),
+            messages, torch.bfloat16,
+        )
+        self.assertEqual(combined.item(), 0.0)
+
 
 
 @unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")

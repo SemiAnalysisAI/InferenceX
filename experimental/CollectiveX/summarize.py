@@ -85,6 +85,11 @@ def _headline(document: dict) -> tuple:
     the per-iteration MAX-MIN. Read the pair as a bracket, not the two ends as rival metrics.
     """
     rows = document["measurement"]["rows"]
+    if not rows:
+        # This renderer validates nothing and must degrade rather than crash: a shard that
+        # reported an outcome but no measurement rows is malformed, not a reason to lose the
+        # whole table.
+        return ("-", "-", "-", "-", "-")
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
     latency = row["components"]["roundtrip"]["percentiles_us"]
 
