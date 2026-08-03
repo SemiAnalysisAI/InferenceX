@@ -906,7 +906,14 @@ collx_run_shard() {
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
-    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-900}" \
+    # A hang guard, NOT a work budget: it must sit clear above the most expensive legitimate
+    # case, or it starts killing cases that are merely slow. It did. An h100 FP8 prefill EP16
+    # case wrote a complete, all-rungs-passed artifact 2s past a 900s deadline and was killed
+    # anyway, turning a good measurement into a red shard with correct data attached -- and FP8
+    # got slower on purpose when the quantize moved inside the timed dispatch (~233us vs ~126us
+    # per dispatch on GB300), so the heaviest FP8 prefill legs now sit right on that line.
+    # 1800 is what the AMD launcher already used; one shared number, no per-launcher drift.
+    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-1800}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
