@@ -115,7 +115,10 @@ Adapters may not generate routing or reinterpret one quantity as the other.
 
 Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
 combine returns activation payload through an unweighted rank-sum path. Expert-output staging is
-outside isolated combine timing and inside the measured paired roundtrip. Each component declares
+outside isolated combine timing AND outside the measured paired roundtrip, so `roundtrip` means
+dispatch then combine — the transport — in every row. It is reported as its own `stage` component
+wherever it does device work. The one exception is the `CX_FP8_CONSUME=dequant` verification hatch,
+which puts the conversion back inside the chain on purpose. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived. The artifact records the mode so a reader can keep distinct measurement
 contracts separate.

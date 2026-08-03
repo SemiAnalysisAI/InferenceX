@@ -1204,6 +1204,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # pick this per installed library version (flashinfer-ep does), so without it
             # a wheel bump silently changes the arithmetic behind `passed` with no trace.
             "combine_reduction": getattr(backend, "combine_reduction", "domain-fp32"),
+            # Whether `roundtrip` excludes expert-output staging. It always does now, unless
+            # the CX_FP8_CONSUME=dequant hatch is set, but it did not always: rows measured
+            # before that change carried the staging copy inside the chain for MoRI BF16 and
+            # FlashInfer BF16 only. Without this field those rows are indistinguishable from
+            # these ones while measuring a different quantity.
+            "stage_excluded_from_roundtrip": bool(
+                getattr(backend, "stage_excluded_from_roundtrip", False)
+            ),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "suite": "ep-core",
   "modes": {
     "normal": ["decode", "prefill"],

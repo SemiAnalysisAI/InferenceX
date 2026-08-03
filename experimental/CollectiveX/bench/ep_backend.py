@@ -110,8 +110,12 @@ class EPBackend(abc.ABC):
     #
     # `dequant` is a VERIFICATION HATCH, not a second metric: never a sweep axis, never a
     # default. It is retained because it costs nothing (BF16 needs the same staged-is-None
-    # branch) and because it reproduces historical numbers exactly for regression checks --
-    # measured 302.0us against 302.5us in run 30177021271 at T=1.
+    # branch) and because it reproduces historical numbers for regression checks on the
+    # backends whose stage this repo has not since changed -- measured 302.0us against 302.5us
+    # in run 30177021271 at T=1 for deepep-v2/uccl-ep. It no longer reproduces MoRI fp8, whose
+    # stage now casts only the rows dispatch filled rather than the whole padded plane; and no
+    # env combination reproduces pre-hoist BF16 MoRI/FlashInfer roundtrips, because the hatch
+    # is fp8-only by design.
     #
     # A second measured mode is unnecessary because the mismatched-config cost is DERIVABLE
     # from what every run already emits:
@@ -341,11 +345,11 @@ class EPBackend(abc.ABC):
     def run_roundtrip(self, problem, staged=None):
         """One chained round trip; returns combined activations.
 
-        `staged` supplies a pre-materialised combine input so the conversion pass stays out of
-        the timed region (see `fp8_consume`). When it is None the stage runs inline, which is
-        the `dequant` fp8 model and the BF16 path -- free for the adapters whose
-        received buffer is already the combine input, real device work for the ones that
-        must place it (mori, flashinfer-ep; both declare `stage_device_work`).
+        `staged` supplies a pre-materialised combine input so staging stays out of the timed
+        region, which is the default for every backend that does device work there (see
+        `stage_excluded_from_roundtrip`). It is None only when `stage()` is a bare pointer
+        assignment -- deepep-v2, uccl-ep and nccl-ep at BF16, where there is nothing to lift --
+        or under the `CX_FP8_CONSUME=dequant` hatch, which wants the conversion back in the chain.
         """
         handle = self.dispatch(problem)
         if staged is None:
@@ -380,8 +384,10 @@ class EPBackend(abc.ABC):
             # sits past the end of every dispatch receive plane).
             #
             # Read the staged payload back through `combine_input_attr` rather than
-            # constructing one: nccl-ep keeps an `nccl.ep.Tensor` wrapper there, and
-            # `run_roundtrip` restores that same object, so no type ever changes hands.
+            # constructing one, so whatever the adapter put there round-trips unchanged. No
+            # current backend needs that -- nccl-ep is the one whose attribute holds a
+            # non-torch wrapper, and its `stage()` does no device work so it never reaches
+            # here -- but constructing a tensor instead would silently break it if it did.
             handle = self.dispatch(problem)
             self.stage(problem, handle)
             staged = getattr(handle, self.combine_input_attr)

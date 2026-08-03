@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Contract for what the chained roundtrip measures.
 
-`stage` exists only for FP8 (`stage_device_work = self._fp8`), so charging it to the chained
-roundtrip compares FP8 and BF16 through structurally different pipelines. Real stacks decide
+`stage` is not an FP8-only cost: deepep-v2 and uccl-ep set `stage_device_work = self._fp8`, but
+MoRI sets `self._fp8 or not self._external_input` and FlashInfer sets it unconditionally, so BF16
+rows on those two do real device work there. Charging it to the chained roundtrip therefore made
+`roundtrip` mean different things in different rows. Real stacks decide
 this on quant-format match: SGLang's DeepEP dispatcher contains no dequant at all, and vLLM
 returns the dispatched fp8 + scales untouched when `block_k == DEEPEP_QUANT_BLOCK_SIZE`,
 dequantising only as a mismatch fallback. These tests pin both models.
