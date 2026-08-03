@@ -5377,5 +5377,7 @@
 - config-keys:
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
-    - "Initial B200 Kimi K3 DSpark submission with corrected AgentX harness"
+    - "Add official Kimi K3 B200 AgentX profiles for TP16 latency, TEP16 balanced throughput, and DEP16 high concurrency through checked-in srt-slurm recipes"
+    - "Add a DEP16 SimpleCPUOffloadConnector profile with the official 220 GiB host-KV pool per rank"
+    - "Run DSpark level 7 with probabilistic drafting and the committed synthetic acceptance length 3.84"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475

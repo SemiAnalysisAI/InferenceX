@@ -9253,9 +9253,12 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
           ep: 1
           dp-attn: false
 
-# Kimi-K3 MXFP4 B200 DSpark variant of the aggregated TP8 x PP2 topology.
-# The server recipe applies the DSpark draft configuration; `mtp` selects the
-# repository's speculative-decoding benchmark path and result identity.
+# Kimi K3 B200 AgentX DSpark profiles derived from the official vLLM B200
+# strategies. TP16 and TEP16 use direct multi-node vLLM through srt-slurm;
+# DEP16 uses srt-slurm's Dynamo aggregate path so node-local DP start ranks are
+# derived from the allocation. All four recipes use the committed K7 synthetic
+# acceptance length 3.84 for comparable performance runs.
+# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=b200
 kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
   image: vllm/vllm-openai:kimi-k3
   model: moonshotai/Kimi-K3
@@ -9267,23 +9270,70 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
   disagg: false
   scenarios:
     agentic-coding:
-    - search-space:
+    - dram-utilization: 0.61
+      search-space:
+      # Low-latency and high-interactivity profile.
       - spec-decoding: mtp
-        conc-list: [1, 2, 4, 8, 16, 32]
+        conc-list: [1, 2, 4, 8]
         prefill:
           num-worker: 1
-          tp: 8
-          pp: 2
+          tp: 16
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp8pp2-dspark-agentic.yaml"
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tp16-latency-dspark-agentic.yaml"
         decode:
           num-worker: 0
-          tp: 8
-          pp: 2
+          tp: 16
           ep: 1
           dp-attn: false
+      # Balanced medium-concurrency TEP16 profile.
+      - spec-decoding: mtp
+        conc-list: [8, 16, 24, 32]
+        prefill:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-tep16-balanced-dspark-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 16
+          ep: 16
+          dp-attn: false
+      # High-concurrency GPU-resident DEP16 profile.
+      - spec-decoding: mtp
+        conc-list: [32, 64, 96, 128, 192, 256]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-dep16-throughput-dspark-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 1
+          ep: 16
+          dp-attn: true
+      # Maximum-concurrency DEP16 profile with 220 GiB of CPU KV per rank.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple, version: "13c59a3" }
+        conc-list: [128, 192, 256, 384]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-b200-dep16-throughput-vllm-simple-offload-dspark-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 1
+          ep: 16
+          dp-attn: true
 
 qwen3.5-fp8-gb300-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
