@@ -69,6 +69,9 @@ backend:
       # OOM at the official 0.95 setting. Preserve the observed-safe headroom.
       gpu-memory-utilization: 0.90
       no-enable-flashinfer-autotune: true
+      # This B200 pool has no cross-node MNNVL multicast. Explicitly bypass
+      # custom collective initialization, which otherwise stalls before load.
+      disable-custom-all-reduce: true
       max-model-len: 1048576
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"TRTLLM_RAGGED"}'
