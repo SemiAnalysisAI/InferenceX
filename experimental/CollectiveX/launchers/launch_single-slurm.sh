@@ -114,16 +114,25 @@ for allocation_attempt in 1 2 3; do
   elif [ "$RUNNER" = b300 ] \
       && ! collx_validate_cuda_context_on_job "$JOB_ID" "$NODES" "$GPN"; then
     validation_failure=cuda-context
+  elif ! collx_validate_gpu_health_on_job "$JOB_ID" "$NODES"; then
+    validation_failure=gpu-health
   else
     break
   fi
   retryable=0
   [ "$RUNNER:$validation_failure" != h100-dgxc:network ] || retryable=1
   [ "$RUNNER:$validation_failure" != b300:cuda-context ] || retryable=1
+  # A throttled GPU is always someone else's node to fix, never this leg's to tolerate: one
+  # clamped device paces every rank, so retrying elsewhere is right on every SKU.
+  [ "$validation_failure" != gpu-health ] || retryable=1
   if [ "$retryable" = 0 ] || [ "$allocation_attempt" = 3 ]; then
     if [ "$validation_failure" = network ]; then
       collx_log_tail "${COLLX_NETWORK_PROFILE_LOG:-}"
       collx_die "allocated nodes failed the network profile"
+    fi
+    if [ "$validation_failure" = gpu-health ]; then
+      collx_log_tail "${COLLX_GPU_HEALTH_LOG:-}"
+      collx_die "allocated nodes hold a thermally throttled GPU"
     fi
     collx_log_tail "$COLLX_CUDA_CONTEXT_LOG"
     collx_die "allocated nodes failed accelerator context validation"

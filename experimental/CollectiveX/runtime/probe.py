@@ -31,6 +31,72 @@ def validate_cuda_context(expected: int) -> None:
         raise SystemExit(1)
 
 
+_GPU_HEALTH_FIELDS = ("index", "clocks_event_reasons.sw_thermal_slowdown",
+                      "clocks_event_reasons.hw_thermal_slowdown", "temperature.gpu")
+
+
+def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
+    """Throttled or overheating GPUs in an `nvidia-smi --format=csv,noheader` block.
+
+    Split out from the I/O so the parsing is testable without hardware; see
+    tests/test_runtime.py::GpuHealthProbe. Returns [] for anything it cannot read, because the
+    caller treats an unreadable probe as healthy rather than blocking a leg on it.
+    """
+    faults = []
+    for line in output.splitlines():
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) != len(_GPU_HEALTH_FIELDS):
+            continue
+        index, software, hardware, temperature = cells
+        # "Not Active" is the healthy reading, so compare exactly rather than searching for
+        # "Active" -- a substring test passes the fault straight through.
+        throttled = "Active" in (software, hardware)
+        try:
+            too_hot = int(temperature.split()[0]) > max_temperature_c
+        except (IndexError, ValueError):
+            too_hot = False
+        if throttled or too_hot:
+            faults.append(
+                f"gpu {index}: sw_thermal={software} hw_thermal={hardware} temp={temperature}"
+            )
+    return faults
+
+
+def validate_gpu_health(max_temperature_c: int = 90) -> None:
+    """Reject an allocation holding a thermally throttled GPU.
+
+    Every collective is a barrier across all ranks, so one clamped device paces the whole leg. A
+    B200 with GPU 7 held at 120 MHz against 1965 MHz on its siblings ran a case 17x slower and was
+    killed by the wall-clock guard twice, at 900s and again at 1800s, looking exactly like a code
+    pathology. Rejecting the allocation costs seconds; diagnosing it cost two 30-minute burns.
+
+    The signal is the throttle FLAG, not the clock: the allocation is idle at this point and an idle
+    B200 also reads 120 MHz, so a clock threshold cannot tell health from idleness. Temperature is a
+    second, independent signal because the flag can clear between samples while the fault persists.
+
+    Fails OPEN on anything unexpected -- no `nvidia-smi`, non-zero exit, unparseable output. A check
+    that blocks legs when it cannot read the hardware is worse than the fault it looks for.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("nvidia-smi") is None:
+        return
+    try:
+        output = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={','.join(_GPU_HEALTH_FIELDS)}",
+             "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=60, check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    faults = gpu_health_faults(output, max_temperature_c)
+    for fault in faults:
+        _emit(f"gpu-health-fault {fault}")
+    if faults:
+        raise SystemExit(1)
+
+
 def _emit(marker: str) -> None:
     # collx_validate_network_profile_on_job (runtime/common.sh) greps these exact strings
     # out of the per-node probe log to derive COLLX_SOCKET_IFNAME / COLLX_RDMA_LINK_LAYER and to
@@ -113,11 +179,13 @@ def main() -> None:
     commands.add_parser("default-route-interface")
     command = commands.add_parser("prepare-cache"); command.add_argument("parent")
     command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
+    commands.add_parser("gpu-health")
     command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index")
     args = parser.parse_args()
     if args.command == "default-route-interface": print(default_route_interface(), end="")
     elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
     elif args.command == "cuda-context": validate_cuda_context(args.expected)
+    elif args.command == "gpu-health": validate_gpu_health()
     else: validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
 
 

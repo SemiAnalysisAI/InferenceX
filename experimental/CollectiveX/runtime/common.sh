@@ -763,6 +763,21 @@ BASH
 # A clean nvidia-smi inventory does not prove that a prior cancelled workload
 # released every CUDA context. Retaining each primary context catches poisoned
 # allocations before a full shard spends time failing every case.
+collx_validate_gpu_health_on_job() {
+  local job_id="$1" nodes="$2" log_label=gpu-health log
+  case "${COLLX_SALLOC_ATTEMPT:-1}" in
+    1) ;;
+    2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
+    *) return 1 ;;
+  esac
+  log="$(collx_private_log_path "$log_label")"
+  export COLLX_GPU_HEALTH_LOG="$log"
+  srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
+    --chdir=/tmp --input=all \
+    --export="$(collx_host_exports)" python3 /dev/stdin gpu-health \
+    < "$COLLX_RUNTIME_DIR/probe.py" >"$log" 2>&1
+}
+
 collx_validate_cuda_context_on_job() {
   local job_id="$1" nodes="$2" gpus_per_node="$3" log_label=cuda-context log
   case "${COLLX_SALLOC_ATTEMPT:-1}" in

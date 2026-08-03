@@ -757,3 +757,52 @@ class FusedQuantizeGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GpuHealthProbe(unittest.TestCase):
+    """Reject an allocation holding a throttled GPU before it burns the wall-clock guard.
+
+    Collectives are barriers, so one clamped device paces every rank. A B200 with GPU 7 held at
+    120 MHz against 1965 MHz on its siblings ran a case 17x slower and was killed twice, at 900s
+    and again at 1800s, looking exactly like a code pathology. The flag is the signal, not the
+    clock: the allocation is idle when this runs and an idle B200 also reads 120 MHz.
+    """
+
+    HEALTHY = "\n".join(f"{i}, Not Active, Not Active, 3{i} " for i in range(8))
+
+    def _swap(self, line_in: str, line_out: str) -> str:
+        self.assertIn(line_in, self.HEALTHY)  # guard the fixture against silent drift
+        return self.HEALTHY.replace(line_in, line_out)
+
+    def test_healthy_allocation_passes(self):
+        self.assertEqual(probe.gpu_health_faults(self.HEALTHY), [])
+
+    def test_a_thermally_throttled_gpu_is_rejected(self):
+        output = self._swap("7, Not Active, Not Active, 37 ", "7, Active, Active, 93 ")
+        faults = probe.gpu_health_faults(output)
+        self.assertEqual(len(faults), 1)
+        self.assertIn("gpu 7", faults[0])
+
+    def test_either_throttle_flag_alone_is_enough(self):
+        for cells in ("7, Active, Not Active, 88 ", "7, Not Active, Active, 88 "):
+            with self.subTest(cells=cells):
+                output = self._swap("7, Not Active, Not Active, 37 ", cells)
+                self.assertEqual(len(probe.gpu_health_faults(output)), 1)
+
+    def test_not_active_is_not_read_as_active(self):
+        # A substring search for "Active" matches "Not Active" and passes every fault through,
+        # which is the whole failure mode this probe exists to avoid.
+        self.assertEqual(probe.gpu_health_faults(self.HEALTHY), [])
+
+    def test_temperature_is_an_independent_signal(self):
+        # The flag can clear between samples while the fault persists, so heat alone rejects.
+        output = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 95 ")
+        faults = probe.gpu_health_faults(output)
+        self.assertEqual(len(faults), 1)
+        self.assertIn("gpu 3", faults[0])
+
+    def test_unreadable_output_fails_open(self):
+        # Blocking legs when the hardware cannot be read is worse than the fault being looked for.
+        for output in ("", "nonsense\n", "1, Not Active\n", self.HEALTHY.replace("32 ", "[N/A] ")):
+            with self.subTest(output=output[:20]):
+                self.assertEqual(probe.gpu_health_faults(output), [])
