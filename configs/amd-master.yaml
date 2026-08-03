@@ -1229,6 +1229,47 @@ kimik3-fp4-mi355x-vllm-agentic-dspark:
     - search-space:
       - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
 
+kimik3-fp4-mi355x-vllm-agentic-dspark-lmc-c16:
+  # DSpark + LMCache at c16 -- does the host tier work with spec decode at all?
+  #
+  # Someone reported LMCache failing with DSpark and we have zero data: every
+  # DSpark cell so far ran kv-offloading: none. There is a real mechanism to
+  # suspect, so this is a genuine question rather than a formality. Spec decode
+  # is the one thing that writes KV and then UN-writes it: on rejection vLLM
+  # rolls back num_computed_tokens and the blocks holding rejected drafts are
+  # reused. A connector that already saved those blocks then holds external KV
+  # for tokens that were never committed. vLLM has no guard pairing
+  # speculative_config with kv_transfer_config -- grepped config/ and the v1
+  # scheduler, nothing -- so it will not refuse; it will just do something.
+  #
+  # Second suspect: LMCache needs mamba_cache_mode=align, which snapshots KDA
+  # state only on a block boundary at the end of a scheduler step. Spec decode
+  # makes tokens-per-step variable (1..k+1 by acceptance), so those boundaries
+  # land unpredictably.
+  #
+  # c16 not c8 deliberately. At c8 there is no work for a host tier -- LMCache
+  # LOST 11.9% there on the non-DSpark arm (601.64 vs 682.63) because the GPU
+  # pool never fills, so it pays to store every block and drags GPU prefix hit
+  # 88.4% -> 58.3%. c16 is where the working set thrashes and a host tier can
+  # actually earn its keep.
+  #
+  # bf16 puts LMCache's unified block at N=768, so the launcher derives
+  # --max-num-batched-tokens 1464 (must satisfy N <= mnbt < 2N) and chunk-size
+  # 768. That is a small prefill budget and will hurt TTFT; it is a constraint
+  # of the LMCache/vLLM Mamba-hybrid integration, not a choice.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, spec-decoding: mtp, conc-list: [16] }
+
 kimik3-fp4-mi355x-vllm-agentic-dspark-c8:
   # DSpark GPU-only c8, same config as the -dspark key. Split into its own key
   # so -dspark stays an accurate record of the c1+c4 validation run

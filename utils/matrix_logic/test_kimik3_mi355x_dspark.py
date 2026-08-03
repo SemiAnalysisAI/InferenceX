@@ -21,16 +21,36 @@ def _shell_default(script: str, variable: str) -> str:
     return match.group(1)
 
 
-def test_dspark_wrapper_matches_oren_rocm_baseline() -> None:
+def test_dspark_wrapper_matches_blog_baseline() -> None:
+    """Aligned to vllm.ai/blog/2026-07-27-k3, not to the Oren reproducer.
+
+    Deltas from the reproducer, each with a measured reason:
+      PREFIX_CACHING true  -- the blog says --enable-prefix-caching is required
+                              and not on by default; the reproducer emitted no
+                              override, so DSpark ran at 0.0% hit.
+      GPU_MEM_UTIL 0.88    -- 0.95 fails the startup free-memory check on
+                              mi355x-amds (~272 of 288 GiB free).
+      MLA_ASM_PAD 0 /      -- padded asm verify does not verify (574/574,
+      DSPARK_ASM_VERIFY 0     per-position all 1.000); native MTP imposes causal
+      DSPARK_MTP_NATIVE 0     masking DSpark cannot take (acceptance 1.41-4.76
+                              vs 6.41-8.00). Gluon verify is the only path that
+                              verifies.
+      KV_CACHE_DTYPE auto  -- fp8 is blocked at the drafter on ROCm; no backend
+                              is both non-causal and fp8-query capable.
+    """
     wrapper = MTP_WRAPPER.read_text()
 
+    assert _shell_default(wrapper, "PREFIX_CACHING") == "true"
+    assert _shell_default(wrapper, "MLA_ASM_PAD") == "0"
+    assert _shell_default(wrapper, "DSPARK_ASM_VERIFY") == "0"
+    assert _shell_default(wrapper, "DSPARK_MTP_NATIVE") == "0"
+    assert _shell_default(wrapper, "DSPARK_MQA_FIX") == "1"
     assert _shell_default(wrapper, "KV_CACHE_DTYPE") == "auto"
-    assert _shell_default(wrapper, "GPU_MEM_UTIL") == "0.95"
+    assert _shell_default(wrapper, "GPU_MEM_UTIL") == "0.88"
     assert _shell_default(wrapper, "MAX_NUM_SEQS") == "16"
     assert _shell_default(wrapper, "EVAL_MAX_NUM_SEQS") == "128"
     assert _shell_default(wrapper, "MAX_NUM_BATCHED_TOKENS") == "4096"
     assert _shell_default(wrapper, "LANGUAGE_MODEL_ONLY") == "false"
-    assert _shell_default(wrapper, "PREFIX_CACHING") == "auto"
     assert _shell_default(wrapper, "ENFORCE_EAGER") == "false"
 
 
