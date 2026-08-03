@@ -83,6 +83,7 @@ def _wheel_has_fp32_combine(version: str) -> bool:
     except InvalidVersion:
         return False
 
+
 # FP8 block size, matching the DeepSeek-V3 recipe every other FP8 backend here uses.
 _FP8_BLOCK = 128
 
