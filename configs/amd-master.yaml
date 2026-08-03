@@ -983,7 +983,7 @@ dsr1-fp4-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1150,6 +1150,21 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
+          # job.slurm defaults SGLANG_AITER_MLA_PERSIST to 0, i.e. the
+          # NON-persistent aiter MLA decode. That path leaves num_kv_splits to
+          # aiter's python-side auto-search in mla_decode_fwd; under CUDA
+          # graphs that python runs only at capture, so the split count and the
+          # partial buffers sized from it are frozen and reused for every
+          # replay. Above ~128 running requests per DP rank the frozen choice
+          # corrupts decode. This is the only entry of this config that gets
+          # there (1024/8 = 128 and up); conc <= 640 stays below it.
+          # Measured, 2 prefill + 1 decode node, conc 2048, full gsm8k 5-shot:
+          #   SGLANG_AITER_MLA_PERSIST=0  ->  0.0023
+          #   SGLANG_AITER_MLA_PERSIST=1  ->  0.9469
+          # Safe only on an aiter carrying cdd6628f9 (s_barrier ->
+          # __syncthreads in mla_reduce_v1_impl_massive); that is why the image
+          # above is pinned to 20260729. Do not enable this on an older image.
+          - "SGLANG_AITER_MLA_PERSIST=1"
 
 
 dsv4-fp4-mi355x-sglang-disagg:
