@@ -5378,4 +5378,4 @@
     - kimik3-fp4-b200-dynamo-vllm-agentic-dspark
   description:
     - "Initial B200 Kimi K3 DSpark submission with corrected AgentX harness"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
