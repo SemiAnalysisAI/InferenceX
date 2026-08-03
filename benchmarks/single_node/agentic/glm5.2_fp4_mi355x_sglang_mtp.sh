@@ -218,6 +218,10 @@ SGLANG_CMD=(
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
+    --speculative-algorithm EAGLE
+    --speculative-num-steps 5
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 6
     "${CACHE_ARGS[@]}"
     --watchdog-timeout 1800
     --enable-metrics
