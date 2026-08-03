@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu-2"
-SLURM_ACCOUNT="benchmark"
+SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
+SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
 set -x
 
@@ -29,7 +29,7 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
             fi
         done
     fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-${MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
@@ -213,7 +213,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w 600 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else
