@@ -162,6 +162,19 @@ class MatrixTests(unittest.TestCase):
                     self.assertTrue(degrees)
                     self.assertLessEqual(set(degrees), set(platform["backends"][backend]))
 
+    def test_ep_degrees_pin_the_two_backends_without_a_rollout_test(self):
+        # deepep-v2 and mori have no rollout-shape test of their own, so the two facts most
+        # likely to drift silently are pinned here: deepep-v2 is the only backend at EP16
+        # everywhere, and mori is EP8-only (its EP16 InterNodeV1 combine corrupts, mori#475).
+        # Without this, adding 16 to backends.mori passes CI.
+        for sku, platform in sweep_matrix.PLATFORMS.items():
+            degrees = platform["backends"]
+            with self.subTest(sku=sku):
+                if "mori" in degrees:
+                    self.assertEqual(degrees["mori"], [8])
+                if "deepep-v2" in degrees:
+                    self.assertEqual(degrees["deepep-v2"], [8, 16])
+
     def test_uccl_ep_rollout_shape(self):
         # UCCL-EP's rollout, locked here: EP8 runnable on exactly the six supported SKUs, and
         # EP16 an unsupported coverage row on every one of them. uccl-ep is EP8-only: the
@@ -194,7 +207,9 @@ class MatrixTests(unittest.TestCase):
         for absent in ("b300", "gb200", "gb300"):
             self.assertNotIn(absent, offered)
         # uccl-ep low-latency is enabled only on NVIDIA; the AMD SKUs keep normal mode but drop
-        # LL (UCCL's low-latency kernel trips a warp-group assertion on AMD's CU count).
+        # LL: upstream raised kNumMaxTopK 9 -> 16 six days before our pin, and the host assert
+        # kNumMaxTopK + 1 <= num_warp_groups * num_warps_per_group cannot hold on AMD, whose
+        # kNumMaxWarpGroups is 16 — a dated regression, not a CU-count limit.
         ll_skus = {
             item["sku"]
             for item in document["requested_cases"]

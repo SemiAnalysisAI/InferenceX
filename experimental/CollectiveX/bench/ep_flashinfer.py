@@ -275,9 +275,10 @@ def _communicator(group):
     second. The contract is `flashinfer.comm.mnnvl.CommBackend` and it is not optional in any
     part: an earlier version of this adapter implemented only rank/size/allgather/Split and
     the first dispatch died with `CUDA error: unspecified launch failure` (sticky 719) on
-    gb200. `barrier` is the reason — handle exchange has to complete on every rank before any
-    rank's kernel touches peer memory, and without it the writes land on memory the peer has
-    not mapped yet. Built as a subclass of the upstream ABC so a future interface change is an
+    gb200. Every method is required because `CommBackend` declares them abstract, not because the
+    fabric path calls them: `MnnvlMemory` exchanges handles with `allgather` alone. What the
+    ordering actually needs is the explicit `torch.distributed.barrier` in create_buffer.
+    Built as a subclass of the upstream ABC so a future interface change is an
     import-time error here rather than another asynchronous fault on the cluster.
     """
     import torch.distributed as dist
