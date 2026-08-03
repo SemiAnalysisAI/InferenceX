@@ -111,7 +111,8 @@ $PARALLEL_ARGS \
 --block-size 128 \
 --kv-cache-dtype fp8 \
 --language-model-only \
---max-cudagraph-capture-size 2048 \
+--max-cudagraph-capture-size "$((CONC * (NUM_SPEC_TOKENS + 1)))" \
+--max-num-seqs "$((CONC * (NUM_SPEC_TOKENS + 1)))" \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
 --stream-interval 20 --no-enable-prefix-caching \
