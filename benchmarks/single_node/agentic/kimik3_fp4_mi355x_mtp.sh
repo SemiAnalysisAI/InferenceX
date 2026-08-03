@@ -9,6 +9,24 @@ set -euo pipefail
 # The first AgentX validation is deliberately GPU-only at c1 so a server or
 # kernel failure cannot be attributed to a KV-offload connector.
 export SPEC_DECODE=true
+# num_speculative_tokens 3 (=> qo_len 4) instead of the reproducer's 7 (qo_len
+# 8). This is NOT tuning -- it is the only width the fp8 asm verify kernel
+# accepts. Run 30784997398 died with the kernel saying so on all 8 ranks:
+#
+#   [AITER] asm_mla.cu:903 mla_decode_stage1_asm_fwd:
+#     only support gqa_ratio=16 fp8 mla decoding with qo_len <= 4
+#
+# The cost is small and measured, not assumed. Per-position acceptance on this
+# trace was 1.000, 1.000, 1.000, 1.000, 0.875, 0.875, 0.875 -- the first four
+# positions accept everything, so k=3 keeps the productive width and drops the
+# three that were already the weakest. In exchange we get the fp8 KV pool,
+# confirmed at 4,240,725 tokens vs 2,156,093 at bf16, which is the c8 wall
+# (~2.4M wanted at ~300K contexts).
+#
+# RISK: both DSpark checkpoints declare block_size 7 and draft 7 in one
+# parallel pass, so vLLM may reject k=3 or the drafter may behave oddly at a
+# narrower width. Fails fast at init if so.
+export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 # EXPERIMENT BRANCH kimik3-dspark-perf -- DSpark configured for peak throughput
 # rather than for fidelity to the upstream AMD reproducer. Four deltas from
 # kimik3-mla-asm-pad, all of them independently proven on the NON-DSpark arm of
