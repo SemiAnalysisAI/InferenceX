@@ -26,6 +26,8 @@ def _load_config(name: str) -> dict[str, Any]:
 
 SWEEP = _load_config("sweep.json")
 PLATFORMS = _load_config("platform_config.json")["platforms"]
+# Per-backend production/candidate map for the matrix and docs; see EPBackend.maturity.
+BACKEND_MATURITY = _load_config("platform_config.json")["backend_maturity"]
 SWEEP_BACKENDS = tuple(dict.fromkeys(
     backend for platform in PLATFORMS.values() for backend in platform["backends"]
 ))
@@ -36,9 +38,13 @@ BACKEND_PRECISIONS = {
     "deepep-v2": ("bf16", "fp8"),
     "mori": ("bf16", "fp8"),
     "uccl-ep": ("bf16", "fp8"),
-    # NCCL EP is BF16-only this release: its FP8 machinery exists upstream but RELEASE.md
-    # lists it unsupported/untested, so no FP8 case is emitted (see bench/ep_nccl.py).
+    # NCCL EP is BF16-only on the strength of RELEASE.md's "No FP8 support" row, which is
+    # worth re-testing — see the note in bench/ep_nccl.py.
     "nccl-ep": ("bf16",),
+    # FlashInfer one-sided is BF16-only this pass: the combine side accepts FP8 output
+    # dtypes, but an FP8 dispatch needs the scale payload plumbed as a second
+    # input_payload and validated against the oracle cast round-trip.
+    "flashinfer-ep": ("bf16",),
 }
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".

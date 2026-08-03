@@ -36,7 +36,7 @@ export COLLX_TRANSPORT=mnnvl
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
-  deepep-v2 | nccl-ep) ;;
+  deepep-v2 | nccl-ep | flashinfer-ep) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR

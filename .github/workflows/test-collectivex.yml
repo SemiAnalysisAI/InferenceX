@@ -1,0 +1,50 @@
+name: Test CollectiveX
+
+# The sweep exercises the benchmark on real hardware, but nothing ran CollectiveX's own
+# unit tests, so the oracle contracts they pin were unverified on every PR. Torch is
+# installed CPU-only: the torch-dependent tests are combine-oracle arithmetic checks that
+# never touch a device, and without it they skip silently rather than fail.
+
+on:
+  pull_request:
+    # ready_for_review is not in the default set (opened/synchronize/reopened), so without
+    # it a PR developed as a draft has every run skipped by the draft gate below and gets
+    # no run at all on the transition — the suite would never see the merge candidate.
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'experimental/CollectiveX/**'
+      - '.github/workflows/test-collectivex.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+
+      # Every skip in this suite is torch-gated, so a missing torch turns the oracle
+      # checks into silent passes. Fail here instead, where the cause is obvious.
+      - name: Verify torch is importable
+        run: python -c "import torch; print(torch.__version__)"
+
+      - name: Run unit tests
+        run: |
+          cd experimental/CollectiveX
+          python -m unittest discover -s tests -p "test_*.py" -v

@@ -56,9 +56,8 @@ the exact upstream PR #640 library matcher that excludes NCCL shared-memory mapp
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
-scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; EP16 uses pinned
-InterNodeV1 over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external
-input. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
+scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; its EP16 InterNodeV1 path is
+configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
 `dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
 `libibverbs` — no NVSHMEM/IBGDA — with software message ordering, atomics, and flow control; its
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
@@ -69,7 +68,7 @@ unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same 
 NVIDIA-only and CUDA 13 only, and runs EP8 scale-up on H100/H200/B200/B300 plus EP8 and EP16 on
 GB200/GB300, where EP16 stays inside the MNNVL scale-up domain; x86 EP16 scale-out is an unsupported
 coverage row, its cross-node GIN path faulting inside `nccl_ep.cc` identically on RoCE and IB across
-four SKUs — a GDAKI limit, not a fabric-selection one. Those throughput kernels run across the full token ladder in the `normal` mode.
+four SKUs — a GDAKI limit, not a fabric-selection one. FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM; it is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32; the adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
@@ -85,14 +84,16 @@ does not fit the single-call dispatch/combine contract). Low latency is a decode
 whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
 cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs; it is
 currently enabled for DeepEP V2 EP8 on H100/H200/B200, MoRI
-EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency
-kernels over UCCL's CPU-proxy transport; the AMD SKUs keep UCCL-EP normal mode but drop LL, whose
-kernel trips a warp-group assertion on AMD's CU count). NCCL EP implements the mode — its
+EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency kernels; at EP8 these
+run `cudaIpc` over NVLink, not the CPU-proxy RDMA path, because the adapter passes `is_intranode`
+and UCCL then never starts its proxies. The AMD SKUs drop LL: upstream raised `kNumMaxTopK` 9 -> 16
+six days before our pin, and the resulting host assert cannot hold on AMD's 16 warp groups), and NCCL EP EP8 on all six NVIDIA SKUs — its
 `LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR receive with a source-side
-weighted-kernel-sum combine — but carries no `ll_backends` row on any SKU: the shipped decode kernels
-consume stale peer signals under a fixed workload and wedge
-([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)), so the cells stay out of the matrix
-until a fixed wheel ships. Whether a given SKU/backend/EP/mode cell is attempted is a capability
+weighted-kernel-sum combine. Those rows were dropped while every LL leg wedged on stale peer signals
+([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)) and restored once the single-handle
+adapter removed the aliasing that caused it. B300, GB200 and GB300 carry NCCL EP as their only
+low-latency row, and it is a `candidate` transport, so those three SKUs publish no production decode
+coverage. Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact; whether it succeeded is decided only by the emitted artifact.
 
 ## Workload Identity
@@ -135,6 +136,19 @@ identical shape. Ascending through the ladder, each measured shape is conditione
 full roundtrips — settling clocks, fabric, and buffer state — before it is correctness-checked;
 all timing happens after every shape is warmed and checked. Conditioning rounds are never
 measured or emitted.
+
+Comparing these figures against a vendor table is not like-for-like, in a knowable direction.
+Every sample here is an eager per-call measurement that includes kernel-launch cost and
+inter-rank entry skew, reduced across ranks by MAX. Vendor microbenchmarks published for these
+same kernels variously time the named kernel only via a profiler (DeepEP, UCCL low-latency),
+replay CUDA graphs (MoRI), average across ranks instead of taking the max (all of them), delete
+entry skew with a pre-iteration sleep or an amortized barrier (DeepEP, MoRI), and report the
+best of a config sweep (DeepEP V1, MoRI). Expect our headline to read roughly 5-10% above such
+a table on a healthy fabric; `cross_rank_min_us` is the per-row figure to place beside one.
+Where a like-for-like comparison exists we match or beat: our skew-excluded MoRI dispatch is
+0.96x MoRI's own shipped tuning-config best at the same shape and byte count, DeepEP V2 on B300
+reproduces DeepEP's published 8x2 figure within 3%, and FlashInfer EP matches NVIDIA's published
+one-sided kernel within 4% across eight byte-normalized points.
 
 Logical payload bandwidth is:
 
@@ -202,7 +216,11 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks;
 - `measurement`: dispatch/combine dtype (the realized wire formats — combine always BF16, dispatch
   BF16 or the SKU's FP8 format) and semantics, `sampling`, and the per-point `rows`;
-- `implementation`: backend name and kernel generation;
+- `implementation`: backend name, kernel generation, and `maturity` — whether a production
+  inference engine can select this transport today (`production` = exposed by vLLM's
+  `--all2all-backend` or SGLang's `--moe-a2a-backend`; `candidate` = a real transport we
+  benchmark that no engine ships a selector for, so its numbers describe the library rather
+  than a deployable configuration). The same map is in the registry's `backend_maturity`;
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.

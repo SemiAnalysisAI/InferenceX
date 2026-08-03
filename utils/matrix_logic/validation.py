@@ -291,7 +291,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-    # Agentic eval rows (SWE-bench) carry run-eval/eval-only; benchmark rows
+    # Agentic GSM8K eval rows carry run-eval/eval-only; benchmark rows
     # omit them, and exclude_none keeps them out of dumped benchmark output.
     run_eval: Optional[bool] = Field(default=None, alias=Fields.RUN_EVAL.value)
     eval_only: Optional[bool] = Field(default=None, alias=Fields.EVAL_ONLY.value)
@@ -895,7 +895,7 @@ class ChangelogMatrixEntry(BaseModel):
     multi_node: dict[str, list[Union[MultiNodeMatrixEntry, MultiNodeAgenticMatrixEntry]]
                      ] = Field(default_factory=dict)
     evals: list[SingleNodeMatrixEntry] = Field(default_factory=list)
-    # Agentic (SWE-bench) eval rows live in their own bucket rather than a
+    # Agentic GSM8K eval rows live in their own bucket rather than a
     # union inside `evals`: each bucket maps 1:1 to a run-sweep.yml job with a
     # static input block, so an agentic row can never reach the fixed-seq-len
     # eval dispatch (which reads isl/osl/max-model-len and would launch the

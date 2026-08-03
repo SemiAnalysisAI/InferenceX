@@ -15,6 +15,7 @@ on:
       - ".github/workflows/run-sweep.yml"
       - ".github/workflows/speedbench-al.yml"
       - ".github/workflows/test-changelog-gate.yml"
+      - ".github/workflows/trusted-external-sweep.yml"
       - "benchmarks/benchmark_lib.sh"
       - "configs/ci-priority.yaml"
       - "benchmarks/multi_node/amd_utils/job.slurm"

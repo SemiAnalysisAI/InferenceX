@@ -619,7 +619,7 @@ def test_eval_rows_split_into_fixed_and_agentic_buckets(
 ):
     """Realistic eval rows must pass final validation and land in the bucket
     matching their dispatch job: fixed-seq-len rows in `evals`, agentic
-    (SWE-bench) rows in `agentic_evals`."""
+    GSM8K rows in `agentic_evals`."""
     added_yaml = """
 - config-keys:
     - test-config

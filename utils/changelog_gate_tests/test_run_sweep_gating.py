@@ -201,8 +201,12 @@ def _eval(expr: str, ctx: dict) -> bool:
 def _ctx(sc: dict) -> dict:
     return {
         "github.event_name": sc["event"],
+        "github.repository": "SemiAnalysisAI/InferenceX",
         "github.event.action": sc.get("action"),
         "github.event.pull_request.draft": sc.get("draft", False),
+        "github.event.pull_request.head.repo.full_name": sc.get(
+            "head_repo", "SemiAnalysisAI/InferenceX"
+        ),
         "github.event.pull_request.labels.*.name": sc.get("labels", []),
         "github.event.label.name": sc.get("label_name"),
         "vars.PRIORITY_SCHEDULER_ENABLED": sc.get("scheduler_enabled", "true"),
@@ -286,6 +290,10 @@ CASES = [
     ("PR-sync-no-sweep-label",
      {**_PR, "action": "synchronize", "labels": []},
      ("success", "skipped", "SKIP")),
+    ("PR-sync-external-fork-defers-to-trusted-dispatch",
+     {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
+      "head_repo": "external/InferenceX"},
+     ("success", "success", "SKIP")),
     ("PR-labeled-with-sweep-label",
      {**_PR, "action": "labeled", "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"]}, ("success", "skipped", "RUN")),
@@ -464,6 +472,9 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
     labels = set(sc.get("labels", []))
     draft = sc.get("draft", False)
     is_pr = sc["event"] == "pull_request"
+    is_internal_pr = sc.get("head_repo", "SemiAnalysisAI/InferenceX") == (
+        "SemiAnalysisAI/InferenceX"
+    )
     action = sc.get("action")
 
     check_runs = (
@@ -499,6 +510,7 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
         )
         event_ok = (
             (not draft)
+            and is_internal_pr
             and bool(labels & SWEEP_LABELS)
             and action_ok
             and "[skip-sweep]" not in sc.get("msg", "")

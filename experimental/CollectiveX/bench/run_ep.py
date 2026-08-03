@@ -51,7 +51,7 @@ def _runtime_info(torch, *, vendor: str) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
     ap.add_argument("--backend", required=True,
-                    choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep"])
+                    choices=["deepep-v2", "mori", "uccl-ep", "nccl-ep", "flashinfer-ep"])
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -95,13 +95,15 @@ def main() -> int:
         from ep_uccl import UCCLEPBackend as Backend
     elif args.backend == "nccl-ep":
         from ep_nccl import NCCLEPBackend as Backend
+    elif args.backend == "flashinfer-ep":
+        from ep_flashinfer import FlashInferEPBackend as Backend
     else:
         from ep_deepep_v2 import DeepEPV2Backend as Backend
 
     # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
     # group device-only so scale-out does not also depend on a host Gloo fabric.
     if not dist.is_initialized():
-        if args.backend in ("mori", "uccl-ep", "nccl-ep"):
+        if args.backend in ("mori", "uccl-ep", "nccl-ep", "flashinfer-ep"):
             # MoRI registers this group with its SHMEM runtime; UCCL-EP is portable across
             # NVIDIA (NCCL) and AMD (RCCL) and bootstraps its Buffer + CPU-proxy ranks from
             # it. NCCL EP forms its OWN NCCL communicator and uses this group only to broadcast

@@ -289,7 +289,7 @@ def main():
             seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
-    # Agentic eval rows go to their own bucket so run-sweep.yml can dispatch
+    # Agentic GSM8K eval rows go to their own bucket so run-sweep.yml can dispatch
     # them with agentic inputs (scenario-type, kv-offloading, ...) instead of
     # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have.
     single_node_evals = [e for e in all_eval_results if e.get("prefill") is None]

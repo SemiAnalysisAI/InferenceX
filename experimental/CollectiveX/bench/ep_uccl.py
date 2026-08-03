@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""UCCL-EP adapter: the drop-in DeepEP-legacy `Buffer` API over UCCL's CPU-proxy transport.
+"""UCCL-EP adapter: the drop-in DeepEP-legacy `Buffer` API over UCCL's CPU-proxy RDMA.
+
+Scale-out only: at the scoped single-node EP8 the adapter passes `is_intranode=True`, UCCL
+never starts its proxies, and both modes move data over `cudaIpc`/NVLink instead.
 
 UCCL-EP (https://github.com/uccl-project/uccl) is an API-identical DeepEP replacement whose
 CPU proxies issue GPUDirect RDMA over plain libibverbs (no NVSHMEM/IBGDA); scale-up is
@@ -123,6 +126,7 @@ def _normal_num_sms() -> int:
 
 class UCCLEPBackend(EPBackend):
     name = "uccl-ep"
+    maturity = "candidate"  # no engine exposes a UCCL-EP all-to-all selector
     # One legacy Buffer under two modes, selected by args.mode:
     #   normal      -> get_dispatch_layout/dispatch/combine; unweighted rank-sum combine.
     #   low-latency -> low_latency_dispatch/combine decode kernels; source-side weighted combine.
@@ -226,10 +230,12 @@ class UCCLEPBackend(EPBackend):
         )
 
     def _create_ll_buffer(self, spec):
-        """Construct the legacy low-latency Buffer (decode kernels over the CPU-proxy transport).
+        """Construct the legacy low-latency Buffer (the decode kernels).
 
-        Distinct from normal mode: LL always allocates the RDMA staging buffer and forces the
-        proxy path even for single-node EP8. Mirrors ep_deepep_v2._create_ll_buffer.
+        Distinct from normal mode only in allocating the RDMA staging buffer unconditionally.
+        It does NOT force the proxy path: `is_intranode` is passed below, so at EP8 UCCL
+        leaves the proxies stopped and the kernel takes its IPC branch.
+        Mirrors ep_deepep_v2._create_ll_buffer.
         """
         args, world_size = self.args, self.world_size
         assert args.experts % world_size == 0, (

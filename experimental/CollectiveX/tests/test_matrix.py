@@ -162,6 +162,19 @@ class MatrixTests(unittest.TestCase):
                     self.assertTrue(degrees)
                     self.assertLessEqual(set(degrees), set(platform["backends"][backend]))
 
+    def test_ep_degrees_pin_the_two_backends_without_a_rollout_test(self):
+        # deepep-v2 and mori have no rollout-shape test of their own, so the two facts most
+        # likely to drift silently are pinned here: deepep-v2 is the only backend at EP16
+        # everywhere, and mori is EP8-only (its EP16 InterNodeV1 combine corrupts, mori#475).
+        # Without this, adding 16 to backends.mori passes CI.
+        for sku, platform in sweep_matrix.PLATFORMS.items():
+            degrees = platform["backends"]
+            with self.subTest(sku=sku):
+                if "mori" in degrees:
+                    self.assertEqual(degrees["mori"], [8])
+                if "deepep-v2" in degrees:
+                    self.assertEqual(degrees["deepep-v2"], [8, 16])
+
     def test_uccl_ep_rollout_shape(self):
         # UCCL-EP's rollout, locked here: EP8 runnable on exactly the six supported SKUs, and
         # EP16 an unsupported coverage row on every one of them. uccl-ep is EP8-only: the
@@ -194,7 +207,9 @@ class MatrixTests(unittest.TestCase):
         for absent in ("b300", "gb200", "gb300"):
             self.assertNotIn(absent, offered)
         # uccl-ep low-latency is enabled only on NVIDIA; the AMD SKUs keep normal mode but drop
-        # LL (UCCL's low-latency kernel trips a warp-group assertion on AMD's CU count).
+        # LL: upstream raised kNumMaxTopK 9 -> 16 six days before our pin, and the host assert
+        # kNumMaxTopK + 1 <= num_warp_groups * num_warps_per_group cannot hold on AMD, whose
+        # kNumMaxWarpGroups is 16 — a dated regression, not a CU-count limit.
         ll_skus = {
             item["sku"]
             for item in document["requested_cases"]
@@ -202,6 +217,36 @@ class MatrixTests(unittest.TestCase):
             and item["case"]["mode"] == "low-latency"
         }
         self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-dgxc"})
+
+    def test_flashinfer_ep_rollout_shape(self):
+        # FlashInfer one-sided is the transport a GB deployment actually runs: vLLM picks
+        # `flashinfer_nvlink_one_sided` on NVLink and `deepep_v2` on RDMA, so it belongs on the
+        # MNNVL SKUs and nowhere else this pass.
+        #   * GB NVL72 (gb200/gb300): EP8 AND EP16, both inside the 72-GPU scale-up domain.
+        #   * No x86 rows. The kernels are grouped upstream under MNNVL and vLLM gates them on an
+        #     MNNVL-availability probe, so an HGX 8-GPU NVSwitch node may not qualify; that is an
+        #     open question, not an assumed capability, and is left unclaimed until measured.
+        #   * No AMD rows (NVIDIA/MNNVL only).
+        #   * No low-latency row anywhere: FlashInfer exposes one one-sided A2A kernel family, not
+        #     a separate decode kernel, so an ll_backends cell would re-measure the same kernel
+        #     under a mode that promises a different one. Decode is still covered by the decode
+        #     phase of normal mode.
+        # BF16 only this pass (FP8 dispatch needs the scale payload plumbed and oracle-validated).
+        document = matrix(backend="all")
+        cases = [
+            item for item in document["requested_cases"]
+            if item["case"]["backend"] == "flashinfer-ep"
+        ]
+        runnable = {
+            (item["sku"], item["case"]["ep"])
+            for item in cases if item["disposition"] == "runnable"
+        }
+        self.assertEqual(runnable, {(sku, ep) for sku in ("gb200", "gb300") for ep in (8, 16)})
+        self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16"})
+        # Normal mode only — no low-latency cell on any SKU.
+        self.assertEqual({item["case"]["mode"] for item in cases}, {"normal"})
+        for platform in sweep_matrix.PLATFORMS.values():
+            self.assertNotIn("flashinfer-ep", platform.get("ll_backends", {}))
 
     def test_nccl_ep_rollout_shape(self):
         # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
@@ -279,6 +324,58 @@ class MatrixTests(unittest.TestCase):
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):
                 sweep_matrix.resolve_matrix(**options)
+
+
+class BackendMaturityTests(unittest.TestCase):
+    """The registry map and each adapter's `maturity` are two copies of one fact, read by
+    different consumers, so they can drift silently: pin coverage, vocabulary and agreement.
+    The adapter side is parsed from source rather than imported — importing an adapter pulls
+    in torch and the vendor EP library, which the test image does not carry.
+    """
+
+    VOCABULARY = {"production", "candidate"}
+
+    @staticmethod
+    def _declared_in_source():
+        """{backend name: maturity} parsed from the adapter class bodies."""
+        import ast
+
+        declared = {}
+        for path in sorted((ROOT / "bench").glob("ep_*.py")):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+                literals = {}
+                for statement in node.body:
+                    if not isinstance(statement, ast.Assign):
+                        continue
+                    if not isinstance(statement.value, ast.Constant):
+                        continue
+                    for target in statement.targets:
+                        if isinstance(target, ast.Name):
+                            literals[target.id] = statement.value.value
+                # The abstract base declares both as empty defaults; skip it.
+                if literals.get("name") and "maturity" in literals:
+                    declared[literals["name"]] = literals["maturity"]
+        return declared
+
+    def test_registry_covers_every_dispatched_backend(self):
+        maturity = sweep_matrix.BACKEND_MATURITY
+        for sku, platform in sweep_matrix.PLATFORMS.items():
+            for backend in platform["backends"]:
+                with self.subTest(sku=sku, backend=backend):
+                    self.assertIn(backend, maturity)
+                    self.assertIn(maturity[backend], self.VOCABULARY)
+
+    def test_adapters_and_registry_agree(self):
+        declared = self._declared_in_source()
+        # Every backend the matrix can dispatch must declare a maturity in its adapter,
+        # or the artifact it writes would say "unknown" while the registry says otherwise.
+        for backend, expected in sweep_matrix.BACKEND_MATURITY.items():
+            with self.subTest(backend=backend):
+                self.assertIn(backend, declared)
+                self.assertEqual(declared[backend], expected)
 
 
 if __name__ == "__main__":

@@ -67,6 +67,11 @@ class EPBackend(abc.ABC):
     """
 
     name: str = ""
+    # "production" = an engine can select this transport today (vLLM `--all2all-backend`,
+    # SGLang `--moe-a2a-backend`); "candidate" = a real transport we benchmark that no engine
+    # ships a selector for, so its numbers describe the library, not a deployable config.
+    # Mirrored in configs/platform_config.json; tests/test_matrix.py holds the two in step.
+    maturity: str = ""
     SUPPORTED_MODES: tuple = ("normal",)
     # Dispatch precisions the adapter realizes. BF16 is the universal control; an
     # adapter that also sends an FP8-quantized dispatch payload widens this.
@@ -241,10 +246,9 @@ class EPBackend(abc.ABC):
         import routing
 
         ep_size = self.world_size
-        num_logical = getattr(args, "num_logical_experts", args.experts)
         global_tokens = tokens_per_rank * ep_size
         idx_g, w_g = routing.build_global_routing(
-            global_tokens, num_logical, args.topk, args.routing, args.seed
+            global_tokens, args.experts, args.topk, args.routing, args.seed
         )
         idx_s, w_s = routing.rank_slice(idx_g, w_g, self.rank, tokens_per_rank)
         activations = routing.rank_activations(
@@ -336,7 +340,9 @@ class EPBackend(abc.ABC):
 
         `staged` supplies a pre-materialised combine input so the conversion pass stays out of
         the timed region (see `fp8_consume`). When it is None the stage runs inline, which is
-        both the BF16 path (stage is a no-op there) and the `dequant` fp8 model.
+        the `dequant` fp8 model and the BF16 path -- free for the adapters whose
+        received buffer is already the combine input, real device work for the ones that
+        must place it (mori, flashinfer-ep; both declare `stage_device_work`).
         """
         handle = self.dispatch(problem)
         if staged is None:

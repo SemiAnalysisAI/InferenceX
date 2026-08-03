@@ -41,15 +41,17 @@ def _dispatch(*, is_agentic: str = "0", eval_only: str = "false", cli_fw=None, e
 
 
 
-def test_agentic_scenario_defaults_to_swebench():
-    assert "DISPATCH=swebench" in _dispatch(is_agentic="1")
+def test_agentic_scenario_defaults_to_gsm8k_lm_eval():
+    assert "DISPATCH=lm-eval" in _dispatch(is_agentic="1")
 
 
 def test_fixed_seqlen_scenario_defaults_to_lm_eval():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0")
 
 def test_agentic_eval_only_stages_summary():
-    assert "STAGED=summary" in _dispatch(is_agentic="1", eval_only="true")
+    output = _dispatch(is_agentic="1", eval_only="true")
+    assert "DISPATCH=lm-eval" in output
+    assert "STAGED=summary" in output
 
 
 def test_fixed_seqlen_eval_only_leaves_staging_to_recipe():
@@ -168,6 +170,11 @@ def test_eval_limit_appended_when_set():
 def test_eval_limit_absent_when_unset():
     out = _run_lm_eval_cmdline(eval_limit=None)
     assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
+
+
+def test_lm_eval_defaults_to_gsm8k():
+    out = _run_lm_eval_cmdline()
+    assert "utils/evals/gsm8k.yaml" in out
 
 
 

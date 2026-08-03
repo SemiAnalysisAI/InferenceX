@@ -166,6 +166,27 @@ and eval jobs retain their canonical settings. Adding or removing the modifier
 restarts the active sweep. Fast-mode runs are not eligible for artifact reuse
 after merge.
 
+## Trusted External-Fork Sweep Dispatch (PoC)
+
+Public-fork `pull_request` workflows receive no repository secrets. For an
+external PR, the ordinary `run-sweep.yml` run therefore validates the
+changelog but does not fan out onto GPU runners. A maintainer with `write`,
+`maintain`, or `admin` permission can add any modifier labels first, then apply
+one primary sweep label to approve the PR's exact current head SHA.
+`trusted-external-sweep.yml` then dispatches `e2e-tests.yml` from `main`, pins
+both the approved head and GitHub's merge SHA, and runs the generated matrix
+with the trusted workflow's secrets.
+
+The approval is revision-specific. A later push is not trusted automatically;
+remove and re-add the primary sweep label to approve the new SHA. The trusted
+dispatcher never checks out or executes PR code itself.
+
+This proof of concept produces benchmark and evaluation artifacts through the
+End-to-End Tests workflow. Those runs are not yet eligible for
+`/reuse-sweep-run`, which currently accepts only `run-sweep.yml` runs. The PoC
+also fans out the selected matrix immediately; it does not reproduce
+`run-sweep.yml`'s canary-first sequencing.
+
 ## Reusing an Approved PR Full Sweep
 
 `[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
