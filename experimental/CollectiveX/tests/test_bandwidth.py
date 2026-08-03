@@ -28,9 +28,9 @@ def _row(tokens, nbytes, latency, passed=True):
     }
 
 
-def _doc(rows, ep=2):
+def _doc(rows, ep=2, mode="normal"):
     case = {"ep": ep, "backend": "deepep-v2", "precision": "bf16", "phase": "decode",
-            "suite": "s", "routing": "uniform"}
+            "mode": mode, "suite": "s", "routing": "uniform"}
     return {
         "generated_at": "2026-07-25T22:12:55.760511+00:00",
         "identity": {"attempt_ordinal": 1, "allocation_factors": {"run_id": "30177021271"},

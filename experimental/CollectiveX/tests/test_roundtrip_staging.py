@@ -64,7 +64,8 @@ class RoundtripStaging(unittest.TestCase):
         self.assertNotIn("stage", b.calls)
 
     def test_without_staged_input_the_stage_runs_inline(self):
-        # BF16 (stage is a no-op) and the fp8 `dequant` model both take this path.
+        # The fp8 `dequant` model takes this path, and so does BF16 — free for the adapters
+        # whose receive buffer is already the combine input, real work for mori/flashinfer-ep.
         b = _StubBackend(stage_device_work=True, fp8_consume="dequant")
         b.run_roundtrip(object())
         self.assertEqual(b.calls, ["dispatch", "stage", "combine(staged-by-stage)"])

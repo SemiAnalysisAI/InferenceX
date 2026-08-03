@@ -14,6 +14,10 @@ include the copies a rank routes to itself, which never cross the interconnect, 
 traffic is (1 - routing.locality.local_rank_fraction) x these figures; and beta is a
 MARGINAL rate, so it legitimately sits above every measured point.
 
+This basis is goodput; low-latency layouts send one copy per (token, expert), so their wire
+traffic is topk/fanout higher (~1.5x at EP8) and their GB/s is not comparable to a normal row
+or to a vendor table counting every expert copy.
+
 A line through a ladder is a MODEL and a positive slope alone is not evidence, so every Fit
 carries its own quality and beta is withheld unless it clears both gates below. Deliberately
 NOT added: a per-SKU peak table to check beta against; that hardware knowledge belongs in
@@ -147,8 +151,10 @@ def _cell(row: dict, component: str, ep: int) -> str:
 
 def _sort_key(document: dict):
     case = document["identity"]["case_factors"]["case"]
+    # mode sorts before phase: a cell's normal and low-latency rows are otherwise
+    # indistinguishable here, and they are different kernel families.
     return (document["identity"]["case_factors"]["sku"], case["backend"],
-            case["precision"], case["phase"], case["ep"],
+            case["mode"], case["precision"], case["phase"], case["ep"],
             document.get("generated_at", ""))
 
 
@@ -177,7 +183,8 @@ def render(documents: list[dict]) -> str:
         ep = _ep(document)
         lines.append(
             f"### {document['identity']['case_factors']['sku']} `{case['backend']}` "
-            f"{case['precision']} {case['phase']} ep{ep} — {document['outcome']['status']}"
+            f"{case['mode']} {case['precision']} {case['phase']} ep{ep} — "
+            f"{document['outcome']['status']}"
         )
         if provenance := _provenance(document):
             lines.append(f"  ({provenance})")
