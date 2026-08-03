@@ -1228,6 +1228,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # pick this per installed library version (flashinfer-ep does), so without it
             # a wheel bump silently changes the arithmetic behind `passed` with no trace.
             "combine_reduction": getattr(backend, "combine_reduction", "domain-fp32"),
+            # The library version the line above was decided FROM, where the backend knows it.
+            # Recording only the outcome leaves the decision unauditable: a reader can see that
+            # the oracle used the slot-tree model but not which wheel selected it, and so cannot
+            # tell a correct selection from a mis-parse. None where a backend does not report one.
+            "library_version": getattr(backend, "library_version", None),
             # Whether `roundtrip` excludes expert-output staging. It always does now, unless
             # the CX_FP8_CONSUME=dequant hatch is set, but it did not always: rows measured
             # before that change carried the staging copy inside the chain for MoRI BF16 and

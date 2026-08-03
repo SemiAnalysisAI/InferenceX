@@ -229,6 +229,7 @@ class FlashInferEPBackend(EPBackend):
             workspace_size_per_rank=workspace_size,
             mnnvl_config=MnnvlConfig(comm_backend=_communicator(_ep_group())),
         )
+        self.library_version = flashinfer.__version__
         if _wheel_has_fp32_combine(flashinfer.__version__):
             self.combine_reduction = "domain-fp32"
         # Every rank must finish mapping its workspace before any peer writes into it;
