@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-b200-1p2d-dep2-tp4-fp4-8k1k-eagle3"
+name: "minimax-m3-vllm-disagg-b200-1p6d-tp4-tp4-fp4-8k1k-eagle3"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
@@ -9,10 +9,10 @@ resources:
   gpu_type: b200
   gpus_per_node: 8
   prefill_nodes: 1
-  decode_nodes: 1
+  decode_nodes: 3
   prefill_workers: 1
-  decode_workers: 2
-  gpus_per_prefill: 2
+  decode_workers: 6
+  gpus_per_prefill: 4
   gpus_per_decode: 4
 
 dynamo:
@@ -40,11 +40,8 @@ backend:
   vllm_config:
     prefill:
       no-enable-flashinfer-autotune: true
-      tensor-parallel-size: 1
+      tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      data-parallel-size: 2
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
       trust-remote-code: true
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -89,4 +86,4 @@ benchmark:
   num_warmup_mult: 0
   random_range_ratio: 0.8
   use_chat_template: true
-  concurrencies: "4x32x64"
+  concurrencies: "24x48"
