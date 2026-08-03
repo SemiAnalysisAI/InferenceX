@@ -88,17 +88,27 @@ combine alike (neither passes a per-call override, so combine inherits the 16). 
 external input buffer, which is MoRI's default and which SGLang sets explicitly. Those two settings
 are pinned together deliberately: MoRI's own tuning tables key combine on `zero_copy`, selecting
 roughly 16 warps for external input against 4-8 for a registered buffer, so taking the engines' warp
-count while keeping a registered buffer would match neither. The cost of that mismatch is not
-hypothetical -- measured across MI300X, MI325X and MI355X, 16 warps in registered-buffer mode is
-+13-18% combine at T=128 and +61-78% at T=512 against 8, correct in both arms. With an external
-input buffer the kernel does its own staging copy, bounded by the receive count, so BF16 rows hand
-over the dispatch output unchanged: their `stage` component is still declared but carries no
-percentiles, the same way any backend whose staging is a bare pointer assignment reports it. FP8 rows
-still stage for real, because the received payload has to be dequantized. These numbers therefore describe the
-engine-integrated configuration, not MoRI's peak: its shipped tuning tables reach a faster combine
-with per-shape block and warp counts no engine selects, and AUTO would not reproduce those tables
-anyway (there is no BF16 gfx950 dispatch rule and no gfx950 IntraNodeLL combine table, so AUTO falls
-back to hard-coded defaults and couples the result to whichever MoRI revision is pinned). One
+count while keeping a registered buffer would match neither, and the mismatch is not hypothetical in
+either direction. Measured on MI300X, MI325X and MI355X: **in registered-buffer mode** 16 warps costs
++13-18% combine at T=128 and +61-78% at T=512 against 8, while **in the external-input mode the
+engines actually run** the same 16 warps *wins* — 14-19% at T=128, 26-27% at T=256, and 9-14% at every
+prefill rung including T=8192, the true top of the ladder. Below T=32 it gives up 0.2-2.5us, which is
+the only rung range where 8 is ahead. All arms were correct at every rung, so the pairing is a
+throughput question, not a correctness one. With an external input buffer the kernel does its own
+staging copy, bounded by the receive count, so BF16 rows hand over the dispatch output unchanged:
+their `stage` component is still declared, as an explicit unavailable marker with a null percentile
+block and a zero sample count, the same way any backend whose staging is a bare pointer assignment
+reports it. FP8 rows still stage for real, because the received payload has to be dequantized. These
+numbers therefore describe the engine-integrated configuration, not MoRI's peak: its shipped tuning
+tables reach a faster combine with per-shape block and warp counts no engine selects, and AUTO would
+not reproduce those tables anyway (there is no BF16 gfx950 dispatch rule and no gfx950 IntraNodeLL
+combine table, so AUTO falls back to hard-coded defaults and couples the result to whichever MoRI
+revision is pinned). How far off peak is arch-dependent and only partly measured: comparing across
+buffer modes on MI355X, with the registered mode's excluded BF16 stage added back so the comparison is
+not flattered, a registered buffer at 8 warps is still 15% faster at T=512 decode and 8% at T=8192
+prefill than the shipped pairing. That margin did not reproduce as a clear win on gfx942, so treat
+0-15% as the honest range rather than a single figure -- and note that the faster configuration is one
+no engine runs, which is why this suite does not chase it. One
 asymmetry is worth stating: the low-latency arm has no engine-integrated configuration to match at
 all, because SGLang's low-latency path pins `AsyncLL` at 8 warps while this suite uses `IntraNodeLL`
 (`AsyncLL` is split-phase and fails silently under a single-call harness), so the low-latency launch
