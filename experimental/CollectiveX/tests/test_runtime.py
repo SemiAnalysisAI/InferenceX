@@ -849,6 +849,28 @@ class GpuHealthProbe(unittest.TestCase):
         code, out = self._run_validate(self.HEALTHY, has_smi=False)
         self.assertEqual(code, 0)
         self.assertEqual(out, "")
+    def test_the_temperature_spread_is_reported_for_the_signal_no_gate_can_see(self):
+        # An H100 engages software thermal slowdown at ~86-87 C, so a clamped one never crosses the
+        # 90 C limit; and at pre-flight it is idle, so the flag is clear too. The measured fault was
+        # visible ONLY as an idle outlier (55 C against ~30 C siblings), so the spread is recorded
+        # every run to build the evidence a relative gate would need.
+        sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
+        self.assertEqual(probe.gpu_temperature_spread(sick), (55, 35, 20))
+        hottest, median, spread = probe.gpu_temperature_spread(self.HEALTHY)
+        self.assertEqual((hottest, median), (37, 34))  # 8 temps -> median is index 4
+        self.assertLess(spread, 10)
+
+    def test_the_spread_appears_in_the_healthy_marker(self):
+        sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
+        code, out = self._run_validate(sick)
+        self.assertEqual(code, 0)  # reported, deliberately NOT gated on
+        self.assertIn("spread=20C", out)
+
+    def test_the_spread_is_none_when_unreadable(self):
+        for output in ("", "nonsense\n", self.HEALTHY.replace("33 ", "[N/A] ")):
+            with self.subTest(output=output[:16]):
+                result = probe.gpu_temperature_spread(output)
+                self.assertTrue(result is None or result[2] < 10)
 
 
 if __name__ == "__main__":

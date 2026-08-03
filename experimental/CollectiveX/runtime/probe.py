@@ -62,6 +62,34 @@ def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
     return faults
 
 
+def gpu_temperature_spread(output: str) -> tuple[int, int, int] | None:
+    """`(hottest, median, spread)` GPU temperature, or None if unreadable.
+
+    Reported, NOT gated on. The absolute threshold in `gpu_health_faults` is architecture
+    dependent and can be unreachable: an H100 engages its software thermal slowdown at ~86-87 C,
+    so a clamped H100 never crosses a 90 C limit even under load, and at pre-flight it is idle
+    anyway. In the one fault measured end to end, the only signal visible at pre-flight time was
+    the RELATIVE one -- the sick GPU idled at 55 C against ~30 C for every sibling, then clamped
+    under load. Recording the spread every run is how that becomes a gate with evidence behind its
+    threshold instead of a heuristic picked from a single incident. Healthy references so far:
+    50-66 C under load on h100 (~16 C spread), 34-39 C on b200.
+    """
+    temperatures = []
+    for line in output.splitlines():
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) != len(_GPU_HEALTH_FIELDS):
+            continue
+        try:
+            temperatures.append(int(cells[3].split()[0]))
+        except (IndexError, ValueError):
+            continue
+    if not temperatures:
+        return None
+    temperatures.sort()
+    median = temperatures[len(temperatures) // 2]
+    return temperatures[-1], median, temperatures[-1] - median
+
+
 def validate_gpu_health(max_temperature_c: int = 90) -> None:
     """Reject an allocation holding a thermally throttled GPU.
 
@@ -99,7 +127,11 @@ def validate_gpu_health(max_temperature_c: int = 90) -> None:
     # old enough to spell these fields `clocks_throttle_reasons.*` -- writes an empty log and is
     # indistinguishable from one that inspected eight healthy GPUs. Recording the count is what
     # makes "the gate ran and saw N devices" checkable per cluster instead of assumed.
-    _emit(f"gpu-health-checked gpus={sum(1 for line in output.splitlines() if line.strip())}")
+    spread = gpu_temperature_spread(output)
+    detail = "" if spread is None else f" hottest={spread[0]}C median={spread[1]}C spread={spread[2]}C"
+    _emit(
+        f"gpu-health-checked gpus={sum(1 for line in output.splitlines() if line.strip())}{detail}"
+    )
 
 
 def _emit(marker: str) -> None:
