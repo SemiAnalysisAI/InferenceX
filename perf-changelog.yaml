@@ -5360,4 +5360,4 @@
     - minimaxm3-fp4-b200-dynamo-vllm-mtp
   description:
     - "Add MiniMax M3 NVFP4 B200 disagg EAGLE3 MTP recipes, mirrored from B300"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2462
