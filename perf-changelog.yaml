@@ -5355,3 +5355,13 @@
     - "Apply the accuracy-gated Kimi-K2.5 MXFP4 settings: tuned AITER MXFP4 MoE, fused shared experts, FP8 KV cache, block size 16, 16384 batched tokens, 512 sequences, async scheduling, gpu-memory-utilization 0.85 (headroom for CUDA-graph capture on MI355X), and the AITER BF16 GEMM path"
     - "Extend the TP4 and TP8 8k1k concurrency sweep from 64 to 128 (1k1k deprecated per #2263)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Add dsv4-fp4-b300-sglang-agentic-mtp: DeepSeek-V4-Pro FP4 B300 AgentX with SGLang EAGLE/MTP (--speculative-algorithm EAGLE, --speculative-num-steps 3, --speculative-eagle-topk 1, --speculative-num-draft-tokens 4), routed to benchmarks/single_node/agentic/dsv4_fp4_b300_sglang_mtp.sh"
+    - "Pin simulated acceptance to the committed golden AL: SGLANG_SIMULATE_ACC_LEN=2.49 (golden_al_distribution/dsv4_mtp.yaml, thinking_on, K=3), SGLANG_SIMULATE_ACC_METHOD=match-expected, SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token; EVAL_ONLY runs keep real verification"
+    - "Bump image from lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233 to lmsysorg/sglang:nightly-dev-cu13-20260802-131bd51b, which reads SGLANG_SIMULATE_ACC_TOKEN_MODE (added in v0.5.16)"
+    - "Enable --enable-deepseek-v4-fp4-indexer on the plain-TP arm, --enable-cache-report, SGLANG_DEFAULT_THINKING=1 and SGLANG_DSV4_REASONING_EFFORT=high (the conditions the golden AL curve was measured under), and size the decode CUDA graph to max-running-requests instead of conc"
+    - "Search space is four points: TP8 and TP4 at conc 1 without KV offload, plus TP8 at conc 8 with and without HiCache host-DRAM offload. The conc 1 points match the topologies of the vLLM dsv4-fp4-b300-vllm-agentic-mtp arms; conc 8 raises max-running-requests above the observed AgentX subagent fan-out peak and is where the TP8 radix cache starts to outgrow the device pool"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2452
