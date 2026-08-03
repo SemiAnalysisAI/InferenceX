@@ -8586,20 +8586,6 @@ minimaxm3-fp8-h200-vllm-agentic:
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
-# Qwen3.5 has 15 full-attention layers with two 256-wide KV heads, so its
-# target FP8 KV is 15,360 bytes/token before the native MTP layer. TP4
-# replicates the two KV heads and measured 30.5 KB/token node-wide; TP2
-# measured 15.3 KB/token. Against the 256k trace's 88.8k median and 148.8k
-# p75 ISL, TP2 no-offload is already GPU-KV-bound by c18; measured c20
-# HiCache improves both its throughput and latency, so offload takes over
-# after c14 rather than repeating dominated no-offload points. TP2 c40 is
-# capped to 25 running requests by the available HBM and matches c32 throughput
-# with 15-second median TTFT, so the HiCache arm ends at c32.
-# TP4 retains 83.9% prefix hits at c64. No-offload c66 and c68 are already
-# throughput/latency dominated, while c70 collapses to 6% hits and 96% KV
-# usage, so HiCache takes over at c64 and densely covers the boundary through
-# c76. At c80 GPU KV reaches 100% with 19-second median TTFT, and c88 falls to
-# 10% prefix hits, so the dominated upper tail is excluded.
 qwen3.5-fp4-b200-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
