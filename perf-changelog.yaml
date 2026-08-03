@@ -5374,3 +5374,9 @@
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
   
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
+    - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Refresh with corrected AgentX harness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
