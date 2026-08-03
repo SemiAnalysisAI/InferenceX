@@ -75,6 +75,9 @@ backend:
       # The generic custom communicator also probes MNNVL and stalls before
       # model load on this pool. Use PyNCCL for the cross-node TP group.
       disable-custom-all-reduce: true
+      # The default allreduce/RMS fusion independently allocates a FlashInfer
+      # MNNVL workspace during profile_run, bypassing the communicator flags.
+      compilation-config: '{"pass_config":{"fuse_allreduce_rms":false}}'
       max-model-len: 1048576
       kv-cache-dtype: fp8
       attention-config: '{"use_prefill_query_quantization":true,"mla_prefill_backend":"TRTLLM_RAGGED"}'
