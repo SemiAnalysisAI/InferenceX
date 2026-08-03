@@ -21,16 +21,39 @@ def _shell_default(script: str, variable: str) -> str:
     return match.group(1)
 
 
-def test_dspark_wrapper_matches_oren_rocm_baseline() -> None:
+def test_dspark_wrapper_is_perf_tuned_not_reproducer_faithful() -> None:
+    """Branch kimik3-dspark-perf DELIBERATELY diverges from the AMD reproducer.
+
+    On the base branch this test asserts fidelity to the upstream Oren ROCm
+    baseline (KV_CACHE_DTYPE=auto, PREFIX_CACHING=auto, MLA_ASM_PAD=0). That
+    fidelity is the wrong objective for a throughput arm:
+
+      * PREFIX_CACHING=auto means vLLM resolves the flag to False for this
+        model, and every DSpark cell so far measured "Prefix cache hit rate:
+        0.0%" against 91.7% on the non-DSpark asm c8 arm. On an agentic trace
+        (ISL mean 335K, theoretical hit 98.1%) that is a ~300K-token prefix
+        recomputed every turn.
+      * KV_CACHE_DTYPE=auto leaves a 2,156,093-token pool while c8 at ~300K
+        contexts wants ~2.4M, and it also skips the gist mla_gluon patch, which
+        the launcher gates on this exact flag.
+
+    So this branch asserts the perf config instead. The reproducer-fidelity
+    assertions still guard the base branch; do not merge this file back.
+    """
     wrapper = MTP_WRAPPER.read_text()
 
-    assert _shell_default(wrapper, "KV_CACHE_DTYPE") == "auto"
+    # Deltas from the reproducer, each proven on the non-DSpark arm.
+    assert _shell_default(wrapper, "KV_CACHE_DTYPE") == "fp8"
+    assert _shell_default(wrapper, "PREFIX_CACHING") == "true"
+    assert _shell_default(wrapper, "MLA_ASM_PAD") == "1"
+    assert _shell_default(wrapper, "DSPARK_ASM_VERIFY") == "1"
+
+    # Unchanged from the reproducer.
     assert _shell_default(wrapper, "GPU_MEM_UTIL") == "0.95"
     assert _shell_default(wrapper, "MAX_NUM_SEQS") == "16"
     assert _shell_default(wrapper, "EVAL_MAX_NUM_SEQS") == "128"
     assert _shell_default(wrapper, "MAX_NUM_BATCHED_TOKENS") == "4096"
     assert _shell_default(wrapper, "LANGUAGE_MODEL_ONLY") == "false"
-    assert _shell_default(wrapper, "PREFIX_CACHING") == "auto"
     assert _shell_default(wrapper, "ENFORCE_EAGER") == "false"
 
 
