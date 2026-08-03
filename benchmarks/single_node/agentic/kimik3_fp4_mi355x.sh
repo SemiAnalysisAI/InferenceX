@@ -893,11 +893,27 @@ SPEC_ARGS=()
 if [ "${SPEC_DECODE:-false}" = "true" ]; then
     SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
     SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
-    SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-TRITON_MLA}"
-    SPEC_ARGS=(
-        --speculative-config
-        "{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"$SPEC_ATTN_BACKEND\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
-    )
+    # attention_backend applies to the DRAFT model, so the right value depends on
+    # which drafter is loaded:
+    #   Inferact  -- MLA drafter (q_lora_rank/kv_lora_rank/qk_rope_head_dim), so
+    #                an MLA backend is correct. Upstream pins FLASHINFER_MLA,
+    #                which is CUDA-only and unusable on gfx950; TRITON_MLA is the
+    #                gfx950 stand-in.
+    #   RadixArk  -- Qwen3-style GQA drafter (64 q / 16 kv), NOT MLA. Forcing an
+    #                MLA backend on it is simply wrong, so leave the key out and
+    #                let vLLM pick the backend for a GQA model. Set
+    #                SPEC_ATTN_BACKEND explicitly to override.
+    case "$SPEC_DRAFT_MODEL" in
+        *RadixArk*) SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-}" ;;
+        *)          SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-TRITON_MLA}" ;;
+    esac
+    SPEC_CFG="{\"model\":\"$SPEC_DRAFT_MODEL\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\""
+    if [ -n "$SPEC_ATTN_BACKEND" ]; then
+        SPEC_CFG="$SPEC_CFG,\"attention_backend\":\"$SPEC_ATTN_BACKEND\""
+    fi
+    SPEC_CFG="$SPEC_CFG,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    SPEC_ARGS=(--speculative-config "$SPEC_CFG")
+    echo "SpecDecode: draft=$SPEC_DRAFT_MODEL k=$SPEC_NUM_TOKENS backend=${SPEC_ATTN_BACKEND:-<auto>}"
 fi
 
 # ---- Eval-only path -----------------------------------------------------------
@@ -1075,6 +1091,23 @@ if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_MQA_FIX" = "1" ]; then
         | tee "$RESULT_DIR/dspark_mqa_fix.log"
 elif [ "${SPEC_DECODE:-false}" = "true" ]; then
     echo "DSPARK_MQA_FIX=0: leaving the stock forward_mqa flatten branch in place"
+fi
+
+# RadixArk/Kimi-K3-DSpark declares architectures=["DSparkDraftModel"], which
+# vLLM's registry maps to the DeepSeek-V4 drafter -- the wrong implementation
+# for what is actually a Qwen3-backbone drafter. Rewrite it to Qwen3DSparkModel.
+# Dict --hf-overrides cannot do this: compose_draft_hf_overrides only propagates
+# *callable* overrides to the draft config, and a callable is not expressible on
+# the CLI. Defaults on iff a RadixArk drafter was selected, so the Inferact arm
+# is untouched.
+case "${SPEC_DRAFT_MODEL:-}" in
+    *RadixArk*) DSPARK_ARCH_FIX="${DSPARK_ARCH_FIX:-1}" ;;
+    *)          DSPARK_ARCH_FIX="${DSPARK_ARCH_FIX:-0}" ;;
+esac
+if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_ARCH_FIX" = "1" ]; then
+    python3 "$(dirname "$0")/patches/radixark_dspark_arch.py" \
+        --diff-out "$RESULT_DIR/radixark_dspark_arch.diff" 2>&1 \
+        | tee "$RESULT_DIR/radixark_dspark_arch.log"
 fi
 
 { set +x; } 2>/dev/null
