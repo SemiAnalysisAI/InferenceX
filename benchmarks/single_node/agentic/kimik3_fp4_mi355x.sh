@@ -1037,6 +1037,28 @@ if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
     fi
 fi
 
+# Triton upgrade. REQUIRED on images whose Triton predates the Gluon MLA layout
+# API: mla_gluon builds gl.PaddedSharedLayout(..., cga_layout=[], ...), and a
+# Triton without that keyword cannot compile the Gluon MLA kernels at all.
+# Measured: vllm/vllm-openai-rocm:kimi-k3 ships triton 3.7.0 (cga_layout present)
+# while nightly-124154a8 ships 3.6.0 (cga_layout MISSING), so any Gluon MLA path
+# on that nightly needs this. Unset by default, so the kimi-k3 image is
+# untouched and this costs nothing there.
+if [ -n "${TRITON_UPGRADE:-}" ]; then
+    _triton_rocm="${TRITON_ROCM_VERSION:-7.2.0}"
+    _triton_idx="https://pypi.amd.com/triton/release/rocm-${_triton_rocm}/simple/"
+    echo "Triton: $(python3 -c 'import triton;print(triton.__version__)' 2>/dev/null || echo none) -> ${TRITON_UPGRADE}"
+    python3 -m pip install --extra-index-url "$_triton_idx" "triton==${TRITON_UPGRADE}"
+    # Fail here rather than discover at first decode that Gluon cannot build.
+    python3 -c "
+import inspect, sys, triton
+from triton.experimental.gluon.language import PaddedSharedLayout as P
+if 'cga_layout' not in inspect.signature(P.__init__).parameters:
+    sys.exit(f'FATAL: triton {triton.__version__} lacks PaddedSharedLayout(cga_layout=...); Gluon MLA cannot compile.')
+print(f'Triton {triton.__version__}: PaddedSharedLayout(cga_layout=...) OK')
+"
+fi
+
 # ROCm/aiter#4474 -- int64 KV offsets in _mla_gluon's >2GB path.
 #
 # mla_gluon computes KV addresses as `kv_loc * stride_kv_c_bs + ...`, and
