@@ -242,7 +242,11 @@ class MatrixTests(unittest.TestCase):
             for item in cases if item["disposition"] == "runnable"
         }
         self.assertEqual(runnable, {(sku, ep) for sku in ("gb200", "gb300") for ep in (8, 16)})
-        self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16"})
+        # FP8 is dispatch-side only: scales ride as a fourth payload (the kernel's kMaxPayloads
+        # is exactly 4) and combine stays BF16, so none of the 0.6.16+ combine-quant API is
+        # needed. Same per-128-block e4m3 recipe as deepep-v2/uccl-ep, so the axis stays
+        # comparable across backends.
+        self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16", "fp8"})
         # Normal mode only — no low-latency cell on any SKU.
         self.assertEqual({item["case"]["mode"] for item in cases}, {"normal"})
         for platform in sweep_matrix.PLATFORMS.values():

@@ -57,16 +57,46 @@ _INVALID_EXPERT = -1
 # FP32 expectation does not carry, so the oracle needs to know which kernel it is facing.
 _COMBINE_FP32_SINCE = (0, 6, 16)
 
+# FP8 block size, matching the DeepSeek-V3 recipe every other FP8 backend here uses.
+_FP8_BLOCK = 128
+
+
+def _blockwise_cast_to_fp8(x):
+    """Per-128-channel e4m3 quantize: (values [m, n], FP32 scales [m, n//128]).
+
+    A local pair rather than a shared one on purpose. deepep-v2 must use deep_ep's own helper
+    because its low-latency kernel quantises in-kernel and the oracle compares against those
+    bits; uccl-ep vendors a copy faithful to UCCL's. FlashInfer's combine is always BF16 and no
+    kernel here quantises, so nothing external pins the arithmetic -- the oracle only needs a
+    self-consistent round trip. Each copy is pinned to a different library's numerics, so this
+    is three contracts, not three copies of one.
+    """
+    m, n = x.shape
+    blocks = x.view(m, -1, _FP8_BLOCK)
+    amax = blocks.abs().float().amax(dim=2).view(m, -1).clamp(1e-4)
+    values = (blocks * (448.0 / amax.unsqueeze(2))).to(torch.float8_e4m3fn).view(m, n)
+    return values, (amax / 448.0).view(m, -1)
+
+
+def _blockwise_cast_back(values, scales):
+    """Inverse of _blockwise_cast_to_fp8, to BF16."""
+    m, n = values.shape
+    blocks = values.view(m, -1, _FP8_BLOCK).float()
+    return (blocks * scales.view(m, -1, 1)).view(m, n).to(torch.bfloat16)
+
 
 class FlashInferEPBackend(EPBackend):
     name = "flashinfer-ep"
     maturity = "production"  # vLLM --all2all-backend flashinfer_nvlink_one_sided
     # One kernel family; see the module docstring for why there is no low-latency mode.
     SUPPORTED_MODES = ("normal",)
-    # BF16 first. The combine side accepts fp8_e4m3fn/uint8 output dtypes and a
-    # use_low_precision accumulate, but dispatch FP8 needs the scale payload plumbed as a
-    # second input_payload and validated against the oracle's cast round-trip; not this pass.
-    SUPPORTED_PRECISIONS = ("bf16",)
+    # FP8 is DISPATCH-side only: the scales ride as a fourth payload and combine stays BF16,
+    # so none of the 0.6.16+ combine-quant API is needed. The recipe is the same per-128-block
+    # e4m3 every other FP8 backend here uses, which keeps the fp8 axis comparable -- but note
+    # vLLM's integration accepts only nvfp4/mxfp8/bf16 on this transport, so an fp8 row here
+    # measures what the transport costs with the DeepSeek-V3 recipe rather than a configuration
+    # a deployment can currently select. `dispatch_dtype` records that per row.
+    SUPPORTED_PRECISIONS = ("bf16", "fp8")
     kernel_generation = "flashinfer-mnnvl-one-sided"
     # stage() now copies the received payload into the workspace combine region.
     stage_device_work = True
@@ -83,6 +113,16 @@ class FlashInferEPBackend(EPBackend):
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
+        self._fp8 = self.precision == "fp8"
+        if self._fp8:
+            # "-offpath" because vLLM cannot select this recipe on this transport today; the
+            # bytes and the block size match deepep-v2/uccl-ep so the axis stays comparable.
+            self.dispatch_dtype = "fp8-e4m3fn-blockwise-offpath"
+            self.dispatch_value_bytes = 1
+            self.dispatch_scale_bytes_per_copy = (
+                (args.hidden + _FP8_BLOCK - 1) // _FP8_BLOCK
+            ) * 4
+            self._quant = self.fused_quantize(_blockwise_cast_to_fp8)
         self._a2a = None
         self._max_tokens = None
         self.experts_per_rank = args.experts // world_size
@@ -97,6 +137,20 @@ class FlashInferEPBackend(EPBackend):
         from `make_problem`, so both payloads reach the kernel with no conversion.
         """
         return torch.int32
+
+    def semantic_payload(self, x):
+        if not self._fp8:
+            return x
+        # Same callable the wire uses, so sender and oracle cannot disagree by construction.
+        return _blockwise_cast_back(*self._quant(x))
+
+    def _encode_dispatch(self, x):
+        if not self._fp8:
+            return x, None
+        # Send BF16 and quantise inside dispatch, where production pays it. oracle_x is the
+        # round trip, computed once here, untimed -- which also compiles this rung's shape.
+        self.assert_quantize_identity(_blockwise_cast_to_fp8, self._quant, x)
+        return x, _blockwise_cast_back(*self._quant(x))
 
     def buffer_cap(self, args):
         # The workspace is sized from the ladder maximum rather than a fixed slot budget, so
@@ -122,7 +176,11 @@ class FlashInferEPBackend(EPBackend):
         top_k = self.args.topk
         # Dispatch carries the activation plus the routing metadata the kernel needs per token:
         # int32 expert ids and fp32 gate weights, top_k of each. Combine carries BF16 hidden.
-        dispatch_bytes = hidden * 2 + top_k * 4 + top_k * 4
+        dispatch_bytes = (
+            hidden * self.dispatch_value_bytes
+            + self.dispatch_scale_bytes_per_copy
+            + top_k * 4 + top_k * 4
+        )
         combine_bytes = hidden * 2
         workspace_size = moe_a2a_get_workspace_size_per_rank(
             ep_size=self.world_size,
@@ -168,22 +226,43 @@ class FlashInferEPBackend(EPBackend):
         the tokens that selected one of its experts, so the kernel stamps the sentinel into the
         expert-id payload of every slot it did not fill.
         """
-        recv_x, recv_idx, recv_w = self._a2a.dispatch(
+        # Quantise here, not in make_problem: production runs one fused bf16->fp8 kernel per
+        # forward pass immediately before this collective. The scales then ride as their own
+        # payload, which shifts the expert ids to index 2 -- four payloads, and the kernel's
+        # kMaxPayloads is exactly 4, matching vLLM's own [values, scales, ids, weights] order.
+        if self._fp8:
+            values, scales = self._quant(p.dispatch_x)
+            payloads = [values, scales, p.topk_idx, p.topk_weights]
+            expert_id_index = 2
+        else:
+            payloads = [p.dispatch_x, p.topk_idx, p.topk_weights]
+            expert_id_index = 1
+        received = self._a2a.dispatch(
             p.topk_idx,
-            [p.dispatch_x, p.topk_idx, p.topk_weights],
+            payloads,
             p.T,
             invalid_token_expert_id=_INVALID_EXPERT,
-            expert_id_payload_index=1,
+            expert_id_payload_index=expert_id_index,
         )
+        # One received tensor per payload. Under FP8 `recv_x` stays the VALUES plane and the
+        # scales ride beside it, so every shape-sensitive consumer keeps working on a tensor.
+        if self._fp8:
+            recv_x, recv_scales, recv_idx, recv_w = received
+        else:
+            (recv_x, recv_idx, recv_w), recv_scales = received, None
         return types.SimpleNamespace(
-            recv_x=recv_x, recv_idx=recv_idx, recv_w=recv_w,
+            recv_x=recv_x, recv_scales=recv_scales, recv_idx=recv_idx, recv_w=recv_w,
             tokens=p.T, topk=p.topk_idx.shape[1], combine_input=None,
         )
 
     def _combine_buffer(self, h):
-        """The workspace-resident combine payload region for this rung."""
+        """The workspace-resident combine payload region for this rung.
+
+        Always BF16: combine carries BF16 whatever the dispatch precision was, so this cannot
+        key off `recv_x.dtype` -- under FP8 that would size the region for 1-byte values.
+        """
         return self._a2a.get_combine_payload_tensor_in_workspace(
-            h.tokens, h.recv_x.shape[-1], h.recv_x.dtype
+            h.tokens, h.recv_x.shape[-1], torch.bfloat16
         )
 
     def _filled_slot_index(self, p, h):
@@ -219,8 +298,16 @@ class FlashInferEPBackend(EPBackend):
         """
         buffer = self._combine_buffer(h)
         filled = self._filled_slot_index(p, h)
+        hidden = h.recv_x.shape[-1]
         flat_buffer = buffer.view(-1, buffer.shape[-1])
-        flat_buffer[filled] = h.recv_x.view(-1, h.recv_x.shape[-1])[filled]
+        source = h.recv_x.view(-1, hidden)[filled]
+        if self._fp8:
+            # Combine sends BF16, so the dequant lands here -- device work, which is why
+            # `stage` is a reported component for this backend under either precision.
+            source = _blockwise_cast_back(
+                source, h.recv_scales.view(-1, h.recv_scales.shape[-1])[filled]
+            )
+        flat_buffer[filled] = source
         h.combine_input = buffer
 
     def combine(self, p, h):
@@ -253,6 +340,12 @@ class FlashInferEPBackend(EPBackend):
         keep = self._valid_rows(h)
         hidden = h.recv_x.shape[-1]
         payload = h.recv_x.reshape(-1, hidden)[keep]
+        if self._fp8:
+            # The oracle compares a BF16 payload against semantic_payload's round trip, so the
+            # received FP8 slice is dequantised with the same pair that produced it.
+            payload = _blockwise_cast_back(
+                payload, h.recv_scales.reshape(-1, h.recv_scales.shape[-1])[keep]
+            )
         ids = h.recv_idx.reshape(-1, h.topk).to(torch.int64)[keep]
         weights = h.recv_w.reshape(-1, h.topk).to(torch.float32)[keep]
         local = (ids >= 0) & ((ids // self.experts_per_rank) == self.rank)

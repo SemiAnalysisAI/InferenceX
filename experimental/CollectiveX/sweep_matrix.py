@@ -44,7 +44,9 @@ BACKEND_PRECISIONS = {
     # FlashInfer one-sided is BF16-only this pass: the combine side accepts FP8 output
     # dtypes, but an FP8 dispatch needs the scale payload plumbed as a second
     # input_payload and validated against the oracle cast round-trip.
-    "flashinfer-ep": ("bf16",),
+    # FP8 is dispatch-side only here (scales as a fourth payload, combine stays BF16), and
+    # uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is comparable.
+    "flashinfer-ep": ("bf16", "fp8"),
 }
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
