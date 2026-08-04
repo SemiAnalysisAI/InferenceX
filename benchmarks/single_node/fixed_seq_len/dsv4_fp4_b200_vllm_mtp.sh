@@ -47,9 +47,11 @@ fi
 # FULL_AND_PIECEWISE compilation config.
 GMU_ARGS=()
 MOE_ARGS=()
+PREFILL_SCHEDULE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
-    GMU_ARGS=(--gpu-memory-utilization 0.95)
+    GMU_ARGS=(--gpu-memory-utilization 0.9)
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
+    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
 fi
 
 MAX_NUM_BATCHED_TOKENS=$(( ISL * 2 ))
@@ -79,6 +81,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${EP_ARGS[@]}" \
     "${GMU_ARGS[@]}" \
     "${MOE_ARGS[@]}" \
+    "${PREFILL_SCHEDULE_ARGS[@]}" \
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache=True \
     --tokenizer-mode deepseek_v4 \
