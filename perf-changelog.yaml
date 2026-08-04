@@ -5425,3 +5425,9 @@
   description:
     - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Initial MI355X MiniMax M3 with new AgentX harness"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2458
