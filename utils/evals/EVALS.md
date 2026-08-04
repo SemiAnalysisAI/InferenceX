@@ -20,7 +20,7 @@ Generator eval modes:
 - `--all-evals`: every fixed-sequence eval only; equivalent to
   `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
   sequentially on one engine. Agentic-coding configs are included and run
-  SWE-bench (they are excluded only from the default, non-eval sweep).
+  GSM8K (they are excluded only from the default, non-eval sweep).
 
 Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
 implies eval-only there. On PRs, the same names are modifier labels:
@@ -41,7 +41,7 @@ malformed metadata, duplicates, or raw/aggregate mismatches are not. See
 ## How?
 `run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
 
-The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`).
+The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k; explicit agentic runs can still select SWE-bench.
 
 ### Benchmark script flow
 

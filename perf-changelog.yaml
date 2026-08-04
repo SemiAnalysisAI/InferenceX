@@ -5357,9 +5357,79 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
 - config-keys:
+    - qwen3.5-fp4-b300-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B300 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2421
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang-agentic-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B200 with SGLang native NEXTN MTP"
+    - "Use the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
+  
+
+- config-keys:
+    - minimaxm3-fp4-b200-dynamo-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update all B200 FP4 8k1k recipe YAML container fields to match"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2472
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1-tep4
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update B300 FP4 8k1k tp1 recipe YAML container fields to match"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2473
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update B300 FP4 MTP recipe YAML container fields to match (excluding 2p1d-dep2-dep4 used by legacy-dep4)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2471
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update 2p1d-dep2-dep4 recipe YAML container to match"
+    - "Enable minimax_m3_msa_decode_backend=cutlass in decode attention-config"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2483
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2470
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2468
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+
+- config-keys:
     - dsv4-fp8-h200-dynamo-sglang-agentic-agg
   description:
     - "Add one H200 TP8 aggregated DeepSeek-V4-Pro AgentX recipe with MTP and HiCache."
     - "Generate Pareto points by sweeping concurrency [1, 2, 4, 8, 16] while keeping the serving topology fixed."
-    - "Use Dynamo header-based session affinity and pin AIPerf to the merged PR #17 implementation."
+    - "Use Dynamo header-based session affinity and AIPerf agentx-v1.0.1 (b7b16cf851885567988a643282266bce74e34437)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2364
