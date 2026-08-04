@@ -170,7 +170,9 @@ DeepSeek-R1-0528:
 
 Qwen3.5-397B-A17B-MXFP4:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori --moe-dense-tp-size 1"
-  mtp_flags: ""
+  # Qwen3.5 built-in MTP head uses EAGLE (in-checkpoint draft, no draft-model-path);
+  # build_server_config appends --speculative-num-steps/-draft-tokens from DECODE_MTP_SIZE.
+  mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   dp_flags: "--enable-dp-attention --enable-dp-lm-head"
   ep_flags: "--moe-a2a-backend mori"
   prefill:
@@ -202,7 +204,11 @@ Qwen3.5-397B-A17B-MXFP4:
 
 Qwen3.5-397B-A17B-FP8:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend aiter --disaggregation-transfer-backend mori --moe-dense-tp-size 1"
-  mtp_flags: ""
+  # Qwen3.5 built-in MTP head uses EAGLE (in-checkpoint draft, no draft-model-path);
+  # build_server_config appends --speculative-num-steps=DECODE_MTP_SIZE and
+  # --speculative-num-draft-tokens=DECODE_MTP_SIZE+1. Mirrors the validated
+  # single-node sglang recipe (qwen3.5_fp4_mi355x_mtp.sh: EAGLE, eagle-topk 1).
+  mtp_flags: "--speculative-algorithm EAGLE --speculative-eagle-topk 1"
   dp_flags: "--enable-dp-attention --enable-dp-lm-head"
   ep_flags: "--moe-a2a-backend mori"
   prefill:
@@ -217,6 +223,9 @@ Qwen3.5-397B-A17B-FP8:
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
   decode:
+    # NOTE: lowering to 0.70 for MTP was tried to fix conc=128 8K1K OOM but
+    # backfired (shrank KV pool -> conc=64 degraded, conc=128 still failed), so
+    # kept at 0.85. The conc=128 MTP failure needs a different lever.
     mem_fraction_static: 0.85
     prefill_round_robin_balance: true
     dp:
