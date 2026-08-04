@@ -5403,3 +5403,10 @@
     - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update 2p1d-dep2-dep4 recipe YAML container to match"
     - "Enable minimax_m3_msa_decode_backend=cutlass in decode attention-config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2483
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2470
