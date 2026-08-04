@@ -5425,3 +5425,9 @@
   description:
     - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp-min-lat
+  description:
+    - "Add low latency B300 dynamo config (1p4d-dep2-tp4, conc 4/8/64)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2491
