@@ -15,35 +15,59 @@ permissions:
 jobs:
   preflight:
     runs-on: mi355x
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      IMAGE: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726
+      GPU_COUNT: "4"
+      PARTITION: compute
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Environment recon
+      - name: Submit-host recon
         run: |
           {
             uname -a
-            python3 --version 2>&1 || echo "python3: absent"
-            docker --version 2>&1 || echo "docker: absent"
-            ls -l /dev/kfd /dev/dri 2>&1 || true
-            cat /opt/rocm/.info/version 2>&1 || echo "/opt/rocm/.info/version: absent"
-            (command -v amd-smi >/dev/null && amd-smi version 2>&1) || echo "amd-smi: absent on host"
+            sinfo -p "$PARTITION" 2>&1 || echo "sinfo: absent"
+            squeue -p "$PARTITION" -h 2>&1 | head -5
           } | tee env_recon.txt
 
-      - name: Host amd-smi preflight
-        run: python3 utils/mi355x_power_preflight.py --samples 60 --hz 1.0 --out preflight_host.json || true
-
-      - name: Container amd-smi preflight (lane image, only if cached)
+      - name: Compute-node preflight via Slurm + enroot
         run: |
-          IMG=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726
-          if docker image inspect "$IMG" >/dev/null 2>&1; then
-            docker run --rm --device=/dev/kfd --device=/dev/dri \
-              --group-add video --group-add render --security-opt seccomp=unconfined \
-              -v "$PWD:/w" -w /w "$IMG" \
-              python3 utils/mi355x_power_preflight.py --samples 60 --hz 1.0 --out preflight_container.json || true
-          else
-            echo "lane image not cached on this runner; container attempt skipped" | tee preflight_container_skipped.txt
-          fi
+          JOB_NAME="power-preflight-${{ github.run_id }}"
+          SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+          LOCK_FILE="${SQUASH_FILE}.lock"
+
+          salloc --partition="$PARTITION" --gres=gpu:$GPU_COUNT --exclusive \
+            --cpus-per-task=128 --time=25 --no-shell --job-name="$JOB_NAME"
+          JOB_ID=$(squeue --name="$JOB_NAME" -h -o %A | head -n1)
+          [ -n "$JOB_ID" ] || { echo "no allocation"; exit 1; }
+          trap 'scancel $JOB_ID' EXIT
+
+          srun --jobid=$JOB_ID bash -c "
+            { hostname; uname -a; ls -l /dev/kfd 2>&1
+              cat /opt/rocm/.info/version 2>&1 || true
+              (command -v amd-smi >/dev/null && amd-smi version 2>&1) || echo 'amd-smi: absent on compute host'
+            } " | tee node_recon.txt
+
+          srun --jobid=$JOB_ID bash -c "
+            exec 9>\"$LOCK_FILE\"
+            flock -w 600 9 || { echo 'Failed to acquire lock for $SQUASH_FILE'; exit 1; }
+            if unsquashfs -l \"$SQUASH_FILE\" > /dev/null 2>&1; then
+              echo 'Squash file already exists and is valid, skipping import'
+            else
+              rm -f \"$SQUASH_FILE\"
+              enroot import -o \"$SQUASH_FILE\" docker://$IMAGE
+            fi
+          "
+
+          srun --jobid=$JOB_ID \
+            --container-image=$SQUASH_FILE \
+            --container-mounts=$GITHUB_WORKSPACE:/workspace/ \
+            --container-writable \
+            --container-workdir=/workspace/ \
+            --container-remap-root \
+            --no-container-entrypoint \
+            bash -c "amd-smi version; python3 utils/mi355x_power_preflight.py --samples 60 --hz 1.0 --out preflight_container.json"
 
       - name: Upload preflight report
         if: always()
@@ -52,7 +76,6 @@ jobs:
           name: mi355x-power-preflight
           path: |
             env_recon.txt
-            preflight_host.json
+            node_recon.txt
             preflight_container.json
-            preflight_container_skipped.txt
           if-no-files-found: warn
