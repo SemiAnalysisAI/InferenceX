@@ -386,6 +386,18 @@ class EPBackend(abc.ABC):
 
     # ---- Timing template methods -----------------------------------------------------
 
+    # Pairs issued back-to-back per `period` sample; 0 disables the component. A serving decode
+    # loop runs dispatch->combine->dispatch->combine without stopping, so its cost per layer is
+    # the pipeline's PERIOD, not the sum of separately-drained stages -- `roundtrip` measures the
+    # latter and overstates the former. Opt-in rather than default because the overlap is only
+    # sound where the backend tolerates rank drift: dispatch is a peer WRITE into another rank's
+    # buffer, and stream order on the receiver does not order the sender's remote writes. The
+    # collective bounds that drift to roughly one iteration (a dispatch cannot complete until
+    # every rank enters it), so a backend whose receive buffer is double-buffered per dispatch is
+    # safe and one with a single shared buffer is not. Enabling it for a backend that is not
+    # means a fast number over corrupted data, which is why the default is off.
+    pipeline_pairs = 0
+
     def timed_components(self):
         """Components measured for this backend: roundtrip always; the rest unless
         the backend exposes only a stateful paired round trip."""
@@ -394,6 +406,8 @@ class EPBackend(abc.ABC):
             components.extend(["dispatch", "combine"])
             if self.stage_device_work:
                 components.append("stage")
+        if self.pipeline_pairs > 1:
+            components.append("period")
         return components
 
     def warm(self, problem, count, stage_every=False):
@@ -442,10 +456,41 @@ class EPBackend(abc.ABC):
             setattr(handle, self.combine_input_attr, staged)
         return self.combine(problem, handle)
 
+    def benchmark_period(self, problem, warmup, iters):
+        """Steady-state cost per dispatch->combine pair, pairs issued back-to-back.
+
+        `roundtrip` drains the GPU around every pair, so it reports the latency of an idle
+        pipeline and charges inter-rank entry stagger to whichever component the ranks entered
+        unevenly. A decode loop never stops between layers, so what it pays per layer is this
+        period. The two are different quantities, not competing estimates of one: quote
+        `roundtrip` for how long a single collective takes and `period` for what a continuous
+        stream costs, and never sum or compare them across backends -- only backends that opt in
+        via `pipeline_pairs` report it at all.
+        """
+        import torch
+
+        self.warm(problem, warmup)
+        pairs = max(2, int(self.pipeline_pairs))
+        samples = []
+        for _ in range(iters):
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
+            for _ in range(pairs):
+                handle = self.dispatch(problem)
+                self.stage(problem, handle)
+                self.combine(problem, handle)
+            end.record()
+            torch.cuda.synchronize()
+            samples.append(start.elapsed_time(end) * 1000.0 / pairs)
+        return samples
+
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
         if component == "roundtrip":
             return self.benchmark_roundtrip(problem, warmup, iters)
+        if component == "period":
+            return self.benchmark_period(problem, warmup, iters)
         if component == "dispatch":
             return self.benchmark_dispatch(problem, warmup, iters)
         if component == "stage":

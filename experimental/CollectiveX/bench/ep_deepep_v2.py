@@ -186,6 +186,13 @@ class DeepEPV2Backend(EPBackend):
         self.max_tokens = spec.max_tokens_per_rank
         if self.mode == "low-latency":
             self._create_ll_buffer(spec)
+            # The legacy LL receive is double-buffered with a parity that flips per dispatch,
+            # and a collective bounds rank drift to about one iteration (a dispatch cannot
+            # complete until every rank enters it), so two parities cover the worst overlap and
+            # pairs may be issued back-to-back. This is the pattern SGLang and vLLM use for
+            # two-micro-batch overlap. Only this path opts in; the ElasticBuffer normal-mode
+            # receive is not double-buffered that way.
+            self.pipeline_pairs = 8
             return
         _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
@@ -255,6 +262,23 @@ class DeepEPV2Backend(EPBackend):
         num_rdma_bytes = deep_ep.Buffer.get_low_latency_rdma_size_hint(
             self.max_tokens, args.hidden, world_size, args.experts
         )
+        kwargs = {}
+        # On an MNNVL rack the scale-up fabric IS NVLink across trays, but the legacy Buffer
+        # defaults `allow_mnnvl=False` and a False there self-sets NVSHMEM_DISABLE_MNNVL --
+        # so leaving it unset forced the low-latency kernels onto IBGDA on exactly the systems
+        # whose fast path is MNNVL, and measured the rack's slow path. Keyed on the topology
+        # the platform already reports rather than on the SKU name. Passed only when the pinned
+        # wheel accepts it, so an older deep_ep keeps working instead of raising on an unknown
+        # keyword.
+        if str(getattr(args, "scale_up_transport", "")) == "mnnvl":
+            import inspect
+            if "allow_mnnvl" in inspect.signature(deep_ep.Buffer.__init__).parameters:
+                kwargs["allow_mnnvl"] = True
+            else:
+                raise RuntimeError(
+                    "MNNVL scale-up needs deep_ep.Buffer(allow_mnnvl=...); this wheel lacks it, "
+                    "so the low-latency path would silently run over IBGDA"
+                )
         self.buffer = deep_ep.Buffer(
             self.group,
             num_rdma_bytes=num_rdma_bytes,
@@ -262,6 +286,7 @@ class DeepEPV2Backend(EPBackend):
             num_qps_per_rank=num_qps_per_rank,
             allow_nvlink_for_low_latency_mode=True,
             explicitly_destroy=True,
+            **kwargs,
         )
 
     def _ll_recv_bf16(self, recv_x):

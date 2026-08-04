@@ -962,6 +962,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
     comb_pool = {T: [] for T in ladder}     # ... combine
     rt_pool = {T: [] for T in ladder}       # independently measured round trip
+    period_pool = {T: [] for T in ladder}   # steady-state per-pair cost, opt-in backends only
     spread_pool = {T: [] for T in ladder}   # cross-rank (max-min) of the round trip, per iter
     # Cross-rank MIN per component. The LAST rank to enter a collective is the one that waited
     # least -- it started when its peers were already there -- so its duration is the closest
@@ -977,7 +978,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # timed_components() encodes the roundtrip-only vs full-component contract
             # (and whether stage launches device work) once, in the base class.
             component_order = trial_order(backend.timed_components(), trial_index)
-            measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
+            measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip", "period")}
             for component_name in component_order:
                 # The base template gives every component the same synchronized
                 # full-roundtrip warm-up before its timed trial and encodes the two
@@ -993,6 +994,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
             rt_max = _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
             rt_pool[T] += rt_max
+            if measured["period"]:
+                period_pool[T] += _reduce_vec(torch, dist, device, measured["period"], MAX)
             # Cross-rank SPREAD (max-min) of the same iterations. A collective cannot finish
             # before its slowest participant, so when ranks enter together every rank measures
             # nearly the same duration and the spread is small; a large spread means the ranks
@@ -1091,6 +1094,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "dispatch": _component(dp, len(d)),
                 "isolated_sum": _component(isum, 0, derived=True),
                 "roundtrip": _component(rtp, len(rt)),
+                "period": _component(_pcts(period_pool[T]), len(period_pool[T])),
                 "stage": _component(sp, len(s)),
             },
             # Skew-excluded companion to `components`: same iterations reduced with cross-rank

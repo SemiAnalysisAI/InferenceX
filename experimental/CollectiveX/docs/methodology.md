@@ -224,6 +224,23 @@ per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they share th
 FP8, where the kernel quantises in-kernel and the heavier dispatch self-aligns the ranks. So the
 term is not subtractable in any principled way, and MAX alone taxes some rows more than others.
 
+Some rows also carry a `period` component, and it answers a different question from `roundtrip`.
+`roundtrip` drains the GPU around each pair, so it reports the latency of an idle pipeline. A decode
+loop never stops between layers — the next dispatch is already in flight while the previous combine's
+stragglers land — so what a serving stack pays per layer is the pipeline's PERIOD, which is smaller
+than the sum of separately-drained stages and is also indifferent to how inter-rank entry stagger gets
+attributed. Both are real; quote `roundtrip` for how long one collective takes and `period` for what a
+continuous stream costs, and never sum them or treat one as a correction to the other.
+
+`period` is opt-in per backend (`pipeline_pairs`) rather than universal, because issuing pairs
+back-to-back lets ranks drift, and dispatch is a peer WRITE into another rank's buffer — stream order
+on the receiver does not order the sender's remote writes. A collective bounds that drift to roughly
+one iteration, since a dispatch cannot complete until every rank enters it, so a receive buffer that
+is double-buffered per dispatch is safe and one shared buffer is not. Today only DeepEP V2's
+low-latency path opts in, which is the same two-micro-batch overlap SGLang and vLLM run. Enabling it
+where the buffer cannot absorb the drift would produce a fast number over corrupted data, so it is off
+by default and a row without the component simply did not measure it.
+
 Every row therefore also carries `cross_rank_min_us` (the same iterations reduced with MIN — the
 skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN
 as a bracket. Two cells whose MAX gap is smaller than the larger contender's spread are not

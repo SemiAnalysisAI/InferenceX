@@ -192,6 +192,36 @@ class WarmStaging(unittest.TestCase):
         self._warm(b, 5)
         self.assertEqual(b.calls.count("stage"), 5)
 
+class SteadyStatePeriod(unittest.TestCase):
+    """`period` is opt-in, because the overlap it measures is only sound for some backends.
+
+    A decode loop never stops between layers, so its per-layer cost is the pipeline's period,
+    not the sum of separately-drained stages. Measuring that means issuing pairs back-to-back,
+    which lets ranks drift — and dispatch is a peer WRITE into another rank's buffer, so stream
+    order on the receiver does not order the sender's remote writes. A double-buffered receive
+    covers the ~one iteration of drift a collective permits; a single shared buffer does not.
+    Defaulting this on would produce a fast number over corrupted data.
+    """
+
+    def test_off_by_default_so_no_backend_pipelines_accidentally(self):
+        b = _StubBackend(stage_device_work=False, fp8_consume="native")
+        self.assertEqual(b.pipeline_pairs, 0)
+        self.assertNotIn("period", b.timed_components())
+
+    def test_declaring_pairs_adds_the_component(self):
+        b = _StubBackend(stage_device_work=False, fp8_consume="native")
+        b.pipeline_pairs = 8
+        self.assertIn("period", b.timed_components())
+        # and it never displaces the drained latency measurement
+        self.assertIn("roundtrip", b.timed_components())
+
+    def test_a_single_pair_is_not_a_pipeline(self):
+        # pipeline_pairs = 1 measures exactly what roundtrip already does, so it must not
+        # advertise a second name for the same quantity.
+        b = _StubBackend(stage_device_work=False, fp8_consume="native")
+        b.pipeline_pairs = 1
+        self.assertNotIn("period", b.timed_components())
+
 
 if __name__ == "__main__":
     unittest.main()
