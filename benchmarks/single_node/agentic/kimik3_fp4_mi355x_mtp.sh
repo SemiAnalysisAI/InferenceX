@@ -29,19 +29,34 @@ export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 # runs at 8, so decode never reaches the asm path), and leaving it out keeps
 # this arm a clean single-variable test of the forward_mqa fix.
 # Gluon verify. Padded asm verify does not verify (574/574 accepted,
-# per-position all 1.000), and the native MTP path imposes causal masking that
-# DSpark cannot take (acceptance 1.41-4.76 vs 6.41-8.00). Both refuted today.
+# per-position all 1.000).
 export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
 export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
-# PROBE BRANCH ONLY -- these three reproduce run 30804611712, the only K3
-# DSpark cell that has ever run to completion. It is green for a bad reason
-# (native MTP forces causal masking, acceptance collapses to ~1.5, 14.37
-# tok/s), and that is precisely why it is the right base for a *functional*
-# LMCache check: the HSA abort that kills every other DSpark arm at 90-130
-# completions does not fire here, so a failure during this run is attributable
-# to the connector rather than to the crash. Do NOT merge these defaults back
-# to the A/B branch, where MTP_NATIVE=0 / MQA_FIX=1 are correct.
-export DSPARK_MTP_NATIVE="${DSPARK_MTP_NATIVE:-1}"
+# vllm-project/vllm#50619's causal native MTP verify, cherry-picked onto this
+# image. It replaces DSPARK_MQA_FIX, which owned the same branch, so that goes
+# to 0 and the launcher refuses to run both.
+#
+# Everything else here is held at run 30875699986's values (k=7, mns 8, GMU
+# 0.88, bf16 KV, prefix caching on) so this is a single-variable test of the
+# verify path.
+#
+# What the old default was hiding: the branch DSPARK_MQA_FIX patches, and the
+# stock branch it replaces, both give every verify row the request's entire KV
+# range -- and seq_lens already counts this step's tokens. Draft token t
+# therefore attends draft tokens t+1..7, so the target grades the draft against
+# itself. That is where 6.41-8.00 of 8 came from, and why conc 1 read 8.00
+# flat. PR 50619 restores the causal tail upstream has always specified and
+# scores GSM8K 1271/1319 against a 1269/1319 no-speculation baseline.
+#
+# So expect acceptance to FALL here, and do not read that as a regression: on
+# the old path acceptance rose as correctness fell. The PR's own figure is
+# 54.4% of drafted tokens. Judge this arm on acceptance plus a quality gate,
+# never acceptance alone.
+#
+# The former DSPARK_MTP_NATIVE knob is gone: its patcher was never in this
+# branch's lineage, so run 30875699986 exported it to no effect and actually
+# ran the image's stock non-causal flatten.
+export DSPARK_PR50619="${DSPARK_PR50619:-1}"
 export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-0}"
 export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
 # 0.88: mi355x-amds nodes free only ~272 of 288 GiB and 0.95 fails the

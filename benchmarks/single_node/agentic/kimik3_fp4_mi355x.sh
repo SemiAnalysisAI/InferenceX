@@ -1092,15 +1092,57 @@ fi
 # Only meaningful when spec decode is on: with max_qo_len == 1 the branch is
 # never reached and the patch is inert (FIX 1's qo_indptr change is numerically
 # identical in that case), but there is no reason to touch the file at all.
+#
+# DSPARK_PR50619 supersedes this patch entirely -- see the block below -- so
+# the two are mutually exclusive and the launcher refuses to run both.
+DSPARK_PR50619="${DSPARK_PR50619:-0}"
 DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-1}"
+if [ "$DSPARK_PR50619" = "1" ] && [ "$DSPARK_MQA_FIX" = "1" ]; then
+    echo "ERROR: DSPARK_PR50619=1 and DSPARK_MQA_FIX=1 both set. Both patchers" >&2
+    echo "       own forward_mqa's Gluon branch; set DSPARK_MQA_FIX=0." >&2
+    exit 1
+fi
+if [ "$DSPARK_PR50619" = "1" ] && [ "$MLA_GLUON_PATCH" != "1" ]; then
+    echo "ERROR: DSPARK_PR50619=1 needs MLA_GLUON_PATCH=1. The image's stock" >&2
+    echo "       mla_gluon cannot take a 4-D MTP query." >&2
+    exit 1
+fi
+if [ "$DSPARK_PR50619" = "1" ] && [ "$MLA_ASM_PAD" = "1" ]; then
+    echo "ERROR: DSPARK_PR50619=1 with MLA_ASM_PAD=1. asm-pad routes decode" >&2
+    echo "       away from Gluon, which is the path this patch fixes." >&2
+    exit 1
+fi
 if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_MQA_FIX" = "1" ]; then
     # No `|| true`, same reasoning as the asm-pad patch above: an unpatched
     # DSpark cell reproduces a known crash on a whole MI355X node for nothing.
     python3 "$(dirname "$0")/patches/dspark_mqa_gluon_fix.py" \
         --diff-out "$RESULT_DIR/dspark_mqa_fix.diff" 2>&1 \
         | tee "$RESULT_DIR/dspark_mqa_fix.log"
-elif [ "${SPEC_DECODE:-false}" = "true" ]; then
+elif [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_PR50619" != "1" ]; then
     echo "DSPARK_MQA_FIX=0: leaving the stock forward_mqa flatten branch in place"
+fi
+
+# vllm-project/vllm#50619 -- "[ROCm][Perf] Fix Kimi-K3 DSpark FP8 MLA
+# verification". Replaces the expanded-row verify path with mla_gluon's native
+# 4-D MTP layout, which the kernel masks with a causal tail.
+#
+# The correctness argument, not the 8x, is why this runs. The image's flatten
+# branch gives every verify row the request's whole KV range, and seq_lens
+# already counts this step's tokens -- so draft token t attends draft tokens
+# t+1..7 and the target grades the draft against itself. That is the mechanism
+# behind every acceptance number we have logged on this path (6.41-8.00 of 8,
+# and 8.00 flat at conc 1); it is leakage, not quality. Upstream holds the
+# opposite convention and PR 50619 keeps it, scoring GSM8K 1271/1319 against a
+# 1269/1319 no-speculation baseline.
+#
+# Read acceptance together with a quality gate from here on: on the leaking
+# path acceptance rises as correctness falls, so on its own it cannot tell the
+# two apart.
+if [ "${SPEC_DECODE:-false}" = "true" ] && [ "$DSPARK_PR50619" = "1" ]; then
+    # No `|| true`, same reasoning as the patches above.
+    python3 "$(dirname "$0")/patches/vllm_pr50619_native_mtp.py" \
+        --diff-out "$RESULT_DIR/vllm_pr50619.diff" 2>&1 \
+        | tee "$RESULT_DIR/vllm_pr50619.log"
 fi
 
 # RadixArk/Kimi-K3-DSpark declares architectures=["DSparkDraftModel"], which
