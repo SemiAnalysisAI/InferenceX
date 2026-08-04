@@ -296,6 +296,16 @@ labels:
     - mi355x-amds_06
     - mi355x-amds_07
     - mi355x-amds_08
+  # Fork-only: SPUR cluster (Crusoe-operated, 126x MI355X in partition
+  # amd-spur). The runners live on the login node crs-m2m-cpu-spur-009 and
+  # dispatch to workers via srun; SPUR has no salloc and no --export, so this
+  # cluster is served by runners/launch_spuraim.sh rather than the amds
+  # salloc/enroot path.
+  cluster:spuraim:
+    - spuraim_00
+    - spuraim_01
+    - spuraim_02
+    - spuraim_03
 hardware:
   cluster:h100-dgxc:
     available-cpu-dram-mib: 2_063_837
@@ -341,4 +351,8 @@ hardware:
     gpus-per-node: 8
   cluster:mi355x-amds:
     available-cpu-dram-mib: 3_095_781
+    gpus-per-node: 8
+  # /proc/meminfo MemTotal 2_885_471_960 kB on crsuse2-m2m-071.
+  cluster:spuraim:
+    available-cpu-dram-mib: 2_817_843
     gpus-per-node: 8

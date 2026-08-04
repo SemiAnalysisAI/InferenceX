@@ -3061,3 +3061,50 @@ dsv4-fp8-mi325x-vllm-mtp:
       # is 55.8%. conc128 passed cleanly on the memory-tightest SKU (MI300X);
       # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
+# ---------------------------------------------------------------------------
+# Fork-only: Kimi-K3 on the SPUR cluster (cluster:spuraim).
+#
+# These are copies of the shipped kimik3 keys whose ONLY difference is
+# `runner:` -- keep them that way. The point is to exercise the same recipe on
+# different hardware, so any other divergence makes the comparison worthless.
+#
+# SPUR is a functional/bring-up lane, NOT a source of comparable numbers:
+# jobs are non-exclusive (only ~8 of 233 nodes are ever fully idle), and the
+# 1.5 TB checkpoint streams from read-only /shared_nfs rather than local NVMe.
+# Do not put SPUR results next to cluster:mi355x-amds results in a writeup.
+# ---------------------------------------------------------------------------
+
+kimik3-fp4-mi355x-vllm-agentic-dspark-spur:
+  # Identical to kimik3-fp4-mi355x-vllm-agentic-dspark except `runner:`.
+  # See that key for why c1 is the crash A/B and c4 the correctness cell, and
+  # why this stops at c4.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:spuraim
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+      # No dram-utilization: GPU-only, so TOTAL_CPU_DRAM_GB resolves to 0.
+    - search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
+
+kimik3-fp4-mi355x-vllm-agentic-bringup-spur:
+  # Identical to kimik3-fp4-mi355x-vllm-agentic-bringup except `runner:`.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:spuraim
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
