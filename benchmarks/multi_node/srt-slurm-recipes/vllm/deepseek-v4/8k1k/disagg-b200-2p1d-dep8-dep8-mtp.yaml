@@ -9,8 +9,6 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260426"
 
-setup_script: vllm-container-deps.sh
-
 sbatch_directives:
   segment: "1"
 health_check:

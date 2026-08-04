@@ -9,8 +9,6 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260426"
 
-setup_script: vllm-container-deps.sh
-
 health_check:
   max_attempts: 90
   interval_seconds: 10
