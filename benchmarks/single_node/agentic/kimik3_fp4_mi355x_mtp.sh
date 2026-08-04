@@ -24,14 +24,20 @@ export SPEC_DECODE=true
 # dequantize the query. KV usage at our crashes was 31-83%, so the pool is not
 # the binding constraint at these concurrencies anyway.
 export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
-# Keep the DSpark arm off the unmerged vLLM#50578 asm-pad patch. It is inert
-# here by construction (use_gluon_decode gates on max_qo_len == 1, and verify
-# runs at 8, so decode never reaches the asm path), and leaving it out keeps
-# this arm a clean single-variable test of the forward_mqa fix.
-# Gluon verify. Padded asm verify does not verify (574/574 accepted,
-# per-position all 1.000), and the native MTP path imposes causal masking that
-# DSpark cannot take (acceptance 1.41-4.76 vs 6.41-8.00). Both refuted today.
-export MLA_ASM_PAD="${MLA_ASM_PAD:-0}"
+# asm-pad ON for this arm, paired with kv-offloading: none.
+#
+# Expect it to be INERT, and that is the point of running it. Both asm-pad PRs
+# pad 12 query heads to 16 so the AITER persistent (asm) decode can take a
+# Kimi-K3 TP8 rank, but both gate on SINGLE-TOKEN decode: vllm#50371's own test
+# asserts `not use_gluon_decode(12, 1)`, and use_gluon_decode is
+# `num_heads < 16 and max_qo_len == 1`. Under DSpark the target's decode is
+# always max_qo_len = k+1 > 1, so the asm path cannot be reached and verify
+# stays on Gluon. If this arm differs from a Gluon-decode GPU-only run, the
+# assumption is wrong and that is worth knowing.
+#
+# Verify itself stays on Gluon: padded asm verify does not verify (574/574
+# accepted, per-position all 1.000).
+export MLA_ASM_PAD="${MLA_ASM_PAD:-1}"
 export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
 # PROBE BRANCH ONLY -- these three reproduce run 30804611712, the only K3
 # DSpark cell that has ever run to completion. It is green for a bad reason
