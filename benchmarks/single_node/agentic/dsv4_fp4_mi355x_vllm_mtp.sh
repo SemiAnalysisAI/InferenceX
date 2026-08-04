@@ -454,6 +454,34 @@ echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+# The recipe pins -cc.mode=3 (VLLM_COMPILE) below, but vLLM auto-enables
+# VLLM_USE_BREAKABLE_CUDAGRAPH on this model and then logs "disabling vLLM's
+# torch.compile pipeline. Equivalent to -cc.mode=none", silently downgrading
+# that request: the engine dump reports 'mode': <CompilationMode.NONE: 0> and
+# only 16 decode graphs get captured. Pinning it to 0 restores the compiled
+# path (33 graphs, ~55s capture, 0.50 GiB). The other AMD agentic recipes
+# already do this (minimaxm3_fp8_mi300x.sh, minimaxm3_fp8_mi325x.sh,
+# minimaxm3_fp4_mi355x.sh).
+export VLLM_USE_BREAKABLE_CUDAGRAPH="${VLLM_USE_BREAKABLE_CUDAGRAPH:-0}"
+
+# Opt-in, off by default: this recipe serves deepseek-ai/DeepSeek-V4-Pro, which
+# does not need shared-expert fusion. It is required only when MODEL points at
+# an AMD-Quark OCP-MXFP4 checkpoint such as amd/DeepSeek-V4-Pro-MXFP4. vLLM
+# reroutes those onto the deepseek_v4_fp8 path (models/deepseek_v4/
+# quant_config.py: override_quantization_method + _is_quark_mxfp4_ocp), which
+# assumes the shared expert is already fused into the routed-expert grouped
+# GEMM. Without the flag _fuse_shared_experts_enabled() (models/deepseek_v4/
+# amd/model.py) returns False, .ffn.shared_experts.w{1,3} is never redirected
+# to .ffn.experts.{n_routed}.w, and the tensors fall through to the ordinary
+# merged-column loader, which does not understand the FP4-packed layout: all TP
+# workers then die on a bare
+#   assert param_data.shape == loaded_weight.shape
+# with param (768, 7168) vs checkpoint (3072, 3584) at
+# layers.0.ffn.shared_experts.gate_up_proj.weight. Verified on 8x MI355X
+# (gfx950): with the flag the MXFP4 checkpoint serves and scores 95.15%
+# strict-match on the full 1319-question gsm8k set. The fusion self-disables
+# under expert parallelism, so exporting it is safe for the EP arms too.
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS="${VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS:-0}"
 
 sleep 180
 
@@ -511,7 +539,7 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-if [ "${EVAL_ONLY}" = "true" ]; then
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
