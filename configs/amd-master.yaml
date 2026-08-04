@@ -3108,3 +3108,28 @@ kimik3-fp4-mi355x-vllm-agentic-bringup-spur:
       - { tp: 8, kv-offloading: none, conc-list: [8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [8] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k27, version: "0.5.1" }, conc-list: [8] }
+
+kimik3-fp4-mi355x-vllm-agentic-dspark-c8-spur:
+  # Identical to kimik3-fp4-mi355x-vllm-agentic-dspark-c8 except `runner:`.
+  #
+  # SPUR-side half of the aiter #4474/#4507/#4509 Gluon MLA A/B that
+  # SemiAnalysisAI run 30873376524 is running on cluster:mi355x-amds. Same
+  # branch, same recipe, same k=2 -- only the fleet differs.
+  #
+  # Worth running here specifically: the two SPUR DSpark attempts at k=7
+  # (fork runs 30870535817, 30871360182) both lost VllmWorker-4 to a signal
+  # while loading aiter fused-MoE kernels, on two different nodes, one of them
+  # --exclusive. A non-DSpark control on a third node came up fine, so the
+  # crash is in the DSpark path, not the fleet. If the vendored aiter plus k=2
+  # clears it here too, that is independent confirmation on different hardware.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:spuraim
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [8] }
