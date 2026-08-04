@@ -47,7 +47,19 @@ export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
 # 0.88: mi355x-amds nodes free only ~272 of 288 GiB and 0.95 fails the
 # startup free-memory check.
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
-export MAX_NUM_SEQS="${MAX_NUM_SEQS:-8}"
+# mns is an admission ceiling, so a fixed 8 turns a c16 cell into a c8 cell
+# with 8 requests permanently queued -- which would make the c8-vs-c16 host-tier
+# comparison meaningless. Track CONC instead, floored at 8 so c8 stays
+# byte-identical to run 30875699986.
+#
+# Safe against the chunked-prefill workspace OOM: that floor is
+# max_num_seqs * block_size against a 65,536-token cap, and under bf16 the
+# attention block is 768 tokens, so c16 gives 12,288 -- far under. (It is the
+# fp8 page of 1536 with mns 128 that blows past it at 196,608.)
+#
+# Safe for mla_gluon too: the mns*~9 verify-batch limit applies to the flatten
+# path, and this branch runs DSPARK_MTP_NATIVE=1 where batch == num_reqs.
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( ${CONC:-8} > 8 ? ${CONC:-8} : 8 ))}"
 export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
 export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"
