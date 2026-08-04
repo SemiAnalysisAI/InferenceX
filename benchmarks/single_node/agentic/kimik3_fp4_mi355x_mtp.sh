@@ -67,7 +67,24 @@ export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
 #
 # Safe for mla_gluon too: the mns*~9 verify-batch limit applies to the flatten
 # path, and this branch runs DSPARK_MTP_NATIVE=1 where batch == num_reqs.
-export MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( ${CONC:-8} > 8 ? ${CONC:-8} : 8 ))}"
+# Floor of 16 at k=2, not 8. Run 30923373136 died in PIECEWISE capture at step
+# 7 of 9 (hipModuleLoadData -> hipErrorIllegalAddress), and run 30917322169 died
+# the same way on a different branch, so it is k-dependent and not the patch
+# set. The capture ladder here is [1,2,4,8,16,24,32,40,48]; a uniform-decode
+# capture at size S needs S/(k+1) request slots, so size 32 at k=2 wants 10.7
+# slots against mns 8. k=7 never hits this because 8*8 = 64 clears the whole
+# ladder -- which is why every k=7 arm captures clean and both k=2 arms did not.
+# mns 16 gives 16*3 = 48, covering the ladder exactly.
+#
+# Cheap as a variable: mns is an admission ceiling and this cell only ever
+# offers 8 concurrent requests, so 16 admits the same work as 8. It is also
+# clear of the chunked-prefill workspace floor (16 * 768 = 12,288 against the
+# 65,536-token cap).
+if [ "${SPEC_NUM_TOKENS:-2}" -lt 7 ]; then
+    export MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( ${CONC:-8} > 16 ? ${CONC:-8} : 16 ))}"
+else
+    export MAX_NUM_SEQS="${MAX_NUM_SEQS:-$(( ${CONC:-8} > 8 ? ${CONC:-8} : 8 ))}"
+fi
 export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
 export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
 export LANGUAGE_MODEL_ONLY="${LANGUAGE_MODEL_ONLY:-false}"
