@@ -106,39 +106,55 @@ SHARED_HF_ROOT="${SPUR_SHARED_HF_ROOT:-/shared_nfs/huggingface}"
 SHARED_HF_HUB="$SHARED_HF_ROOT/hub"
 NODE_SCRATCH="${SPUR_NODE_SCRATCH:-/mnt/m2m_nobackup/$(id -un)}"
 
-# Resolve MODEL -> the read-only snapshot dir, if that repo is staged.
+# Resolve an HF repo id to its snapshot dir in the shared read-only hub.
+# Prints the path, or nothing if that repo is not staged there.
 # org/name -> models--org--name
-MODEL_REPO_DIR="$SHARED_HF_HUB/models--${MODEL//\//--}"
-RESOLVED_MODEL_PATH=""
-if [[ -d "$MODEL_REPO_DIR/snapshots" ]]; then
+resolve_shared_snapshot() {
+    local repo="$1"
+    local dir="$SHARED_HF_HUB/models--${repo//\//--}"
+    [[ -d "$dir/snapshots" ]] || return 0
     # Prefer the ref the hub points at; fall back to the sole snapshot.
-    _ref_file="$MODEL_REPO_DIR/refs/main"
-    if [[ -f "$_ref_file" ]]; then
-        _rev="$(<"$_ref_file")"
-        [[ -d "$MODEL_REPO_DIR/snapshots/$_rev" ]] && RESOLVED_MODEL_PATH="$MODEL_REPO_DIR/snapshots/$_rev"
+    if [[ -f "$dir/refs/main" ]]; then
+        local rev; rev="$(<"$dir/refs/main")"
+        if [[ -d "$dir/snapshots/$rev" ]]; then printf '%s' "$dir/snapshots/$rev"; return 0; fi
     fi
-    if [[ -z "$RESOLVED_MODEL_PATH" ]]; then
-        _only="$(find "$MODEL_REPO_DIR/snapshots" -mindepth 1 -maxdepth 1 -type d | head -n1)"
-        [[ -n "$_only" ]] && RESOLVED_MODEL_PATH="$_only"
-    fi
-fi
+    find "$dir/snapshots" -mindepth 1 -maxdepth 1 -type d | head -n1 | tr -d '\n'
+}
 
+# HF_HUB_CACHE always points at WRITABLE node-local scratch, and HF is NOT run
+# offline. The shared hub is read-only, so using it as HF_HUB_CACHE plus
+# HF_HUB_OFFLINE=1 looks tempting but breaks the run: the agentic recipes also
+# pull a trace DATASET (semianalysisai/cc-traces-*), which is not staged there,
+# and offline mode blocks it --
+#   "Local entry not found. Cannot reach .../datasets/semianalysisai/... :
+#    offline mode is enabled."
+# So instead of routing everything through the shared hub, we take only the two
+# things that are actually expensive out of it, by absolute path, and let
+# everything small resolve normally over the network.
+CONTAINER_HF_HUB="$NODE_SCRATCH/hf_hub"
+
+RESOLVED_MODEL_PATH="$(resolve_shared_snapshot "$MODEL")"
 if [[ -n "$RESOLVED_MODEL_PATH" ]]; then
-    # Shared read-only hub has the model. Run HF offline against it; the recipe
-    # skips its `hf download` because MODEL_PATH is a non-empty dir.
-    HF_MODE="shared-ro"
-    CONTAINER_HF_HUB="$SHARED_HF_HUB"
-    HF_OFFLINE_VAL=1
+    # MODEL_PATH non-empty makes the recipe skip its `hf download`, so the
+    # 1.5 TB checkpoint is read straight off shared NFS and never copied.
     echo "[spuraim] model staged on shared NFS: $RESOLVED_MODEL_PATH"
 else
-    # Not staged. Fall back to a writable node-local hub and let HF download.
-    # Node-local means a fresh node re-downloads -- fine for small models, and
-    # the explicit reason large ones should be pre-staged on /shared_nfs.
-    HF_MODE="node-local-rw"
-    CONTAINER_HF_HUB="$NODE_SCRATCH/hf_hub"
-    HF_OFFLINE_VAL=0
-    echo "[spuraim] WARNING: $MODEL is NOT on $SHARED_HF_HUB; falling back to a" \
-         "writable node-local cache at $CONTAINER_HF_HUB (will download)."
+    echo "[spuraim] WARNING: $MODEL is NOT on $SHARED_HF_HUB; it will be" \
+         "downloaded to node-local $CONTAINER_HF_HUB (re-downloaded per fresh" \
+         "node). Pre-stage large checkpoints on $SHARED_HF_HUB." >&2
+fi
+
+# Same treatment for the speculative-decoding drafter. The recipe defaults
+# SPEC_DRAFT_MODEL to a repo id; handing it the shared snapshot path avoids a
+# per-node download. The recipe branches on the drafter name with globs
+# (*RadixArk*/*Inferact*), and those still match inside the snapshot path, so
+# substituting a path does not change its behaviour. A caller-supplied
+# SPEC_DRAFT_MODEL always wins.
+RESOLVED_DRAFT_PATH=""
+if [[ "${SPEC_DECODING:-none}" == "mtp" && -z "${SPEC_DRAFT_MODEL:-}" ]]; then
+    RESOLVED_DRAFT_PATH="$(resolve_shared_snapshot "${SPUR_DEFAULT_DRAFTER:-Inferact/Kimi-K3-DSpark}")"
+    [[ -n "$RESOLVED_DRAFT_PATH" ]] && \
+        echo "[spuraim] drafter staged on shared NFS: $RESOLVED_DRAFT_PATH"
 fi
 
 JOB_NAME="ix-${RUNNER_NAME}-${EXP_NAME:-job}"
@@ -161,9 +177,13 @@ emit_env() { printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"; }
 : > "$ENV_FILE"
 emit_env HF_HUB_CACHE          "$CONTAINER_HF_HUB"
 emit_env HF_HOME               "$NODE_SCRATCH/hf_home"
-emit_env HF_HUB_OFFLINE        "$HF_OFFLINE_VAL"
 emit_env HF_TOKEN              "${HF_TOKEN:-}"
 [[ -n "$RESOLVED_MODEL_PATH" ]] && emit_env MODEL_PATH "$RESOLVED_MODEL_PATH"
+if [[ -n "${SPEC_DRAFT_MODEL:-}" ]]; then
+    emit_env SPEC_DRAFT_MODEL "$SPEC_DRAFT_MODEL"
+elif [[ -n "$RESOLVED_DRAFT_PATH" ]]; then
+    emit_env SPEC_DRAFT_MODEL "$RESOLVED_DRAFT_PATH"
+fi
 emit_env PORT                  "$PORT"
 emit_env RANDOM_RANGE_RATIO    "${RANDOM_RANGE_RATIO:-0.8}"
 emit_env MODEL                 "$MODEL"
@@ -231,14 +251,13 @@ emit_env PYTHONHASHSEED        0
     printf 'SHARED_HF_ROOT=%q\n'    "$SHARED_HF_ROOT"
     printf 'NODE_SCRATCH=%q\n'      "$NODE_SCRATCH"
     printf 'CONTAINER_HF_HUB=%q\n'  "$CONTAINER_HF_HUB"
-    printf 'HF_MODE=%q\n'           "$HF_MODE"
     printf 'HOST_UID=%q\n'          "$(id -u)"
     printf 'HOST_GID=%q\n'          "$(id -g)"
     cat <<'INNER_EOF'
 set -uo pipefail
 set -x
 
-echo "[spuraim/worker] node=$(hostname) hf_mode=$HF_MODE"
+echo "[spuraim/worker] node=$(hostname)"
 
 # Docker health is NOT uniform across this cluster -- some nodes have a dead
 # daemon even while sitting `idle`. Fail fast and legibly rather than dying
@@ -249,8 +268,8 @@ if ! docker info >/dev/null 2>&1; then
     exit 125
 fi
 
-mkdir -p "$NODE_SCRATCH/hf_home" "$NODE_SCRATCH/aiperf-cache" "$NODE_SCRATCH/vllm-cache"
-[[ "$HF_MODE" == "node-local-rw" ]] && mkdir -p "$CONTAINER_HF_HUB"
+mkdir -p "$NODE_SCRATCH/hf_home" "$NODE_SCRATCH/aiperf-cache" "$NODE_SCRATCH/vllm-cache" \
+         "$CONTAINER_HF_HUB"
 
 # The scheduler already masked our GPU slice via ROCR_VISIBLE_DEVICES; forward
 # it rather than computing a device list. We are non-exclusive, so this mask is
@@ -279,12 +298,13 @@ for g in video render; do
     fi
 done
 
-# Shared hub is read-only; mount it :ro so a stray write fails loudly at the
-# mount boundary instead of half-succeeding.
-HF_MOUNT=(-v "$SHARED_HF_ROOT:$SHARED_HF_ROOT:ro")
-if [[ "$HF_MODE" == "node-local-rw" ]]; then
-    HF_MOUNT=(-v "$CONTAINER_HF_HUB:$CONTAINER_HF_HUB")
-fi
+# Two HF mounts, and they are not interchangeable:
+#   - the shared hub, :ro, is where MODEL_PATH and the drafter live. Read-only
+#     so a stray write fails at the mount boundary instead of half-succeeding.
+#   - node-local scratch, writable, is HF_HUB_CACHE: where the trace dataset
+#     and anything else not pre-staged gets downloaded.
+HF_MOUNT=(-v "$SHARED_HF_ROOT:$SHARED_HF_ROOT:ro"
+          -v "$CONTAINER_HF_HUB:$CONTAINER_HF_HUB")
 
 cleanup() { docker rm -f "$CONTAINER" >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
