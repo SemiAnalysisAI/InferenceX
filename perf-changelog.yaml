@@ -5417,3 +5417,11 @@
     - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
     - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2468
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
