@@ -1018,23 +1018,33 @@ export PYTHONNOUSERSITE=1
 # "RPC call to sample_tokens timed out". Widen it.
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 
-# Patch aiter's Gluon MLA kernel with a fixed version. The b128 kernel is only
-# exercised on the fp8 KV path, so only patch when KV_CACHE_DTYPE is fp8.
-if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+# Replace aiter's Gluon MLA kernel with the vendored merge of aiter main +
+# ROCm/aiter#4474 (int64 KV offsets >2GB), #4507 (size NUM_KV_SPLITS from the
+# page table) and #4509 (split-major grid + blocked stage-2 reduce). See the
+# header of the patch file for full provenance and the local deltas.
+#
+# This used to curl a pinned gist and only when KV_CACHE_DTYPE=fp8, on the
+# reasoning that the b128 kernel is fp8-only. That gate was wrong for DSpark:
+# spec-decode verify runs bf16 KV (bh16bn64) and so never got the patch, which
+# left it on the image's stock kernel -- a kernel with almost no qlen/MTP
+# support, which is exactly why forward_mqa has to flatten verify tokens into
+# fake batch rows. Install unconditionally; MLA_GLUON_PATCH=0 opts out.
+MLA_GLUON_PATCH="${MLA_GLUON_PATCH:-1}"
+if [ "$MLA_GLUON_PATCH" = "1" ]; then
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
-    # Pinned to the exact gist revision that produced the first clean fp8 KV
-    # run (30442578333: c8, 3600s, 696 total tok/s/GPU, TTFT 2.6s). The
-    # unpinned .../raw/mla_gluon.py URL silently follows the gist HEAD, so a
-    # later edit would change the kernel under us with no diff in this repo.
-    MLA_GLUON_SRC="https://gist.githubusercontent.com/seungrokj/f64cb547829360bfb304f5e794d284ac/raw/4b0088c5fecbeffa6544d2da1006b45380aac896/mla_gluon.py"
-    if [ -f "$MLA_GLUON_DST" ]; then
-        echo "Patching $MLA_GLUON_DST from gist..."
-        curl --silent --fail --location "$MLA_GLUON_SRC" -o "$MLA_GLUON_DST" \
-            && echo "Patched mla_gluon.py" \
-            || echo "WARN: failed to patch mla_gluon.py; leaving the image version in place" >&2
-    else
-        echo "WARN: $MLA_GLUON_DST not found; skipping mla_gluon.py patch" >&2
+    MLA_GLUON_SRC="$(dirname "$0")/patches/mla_gluon_4507_4509.py"
+    if [ ! -f "$MLA_GLUON_DST" ]; then
+        echo "ERROR: $MLA_GLUON_DST not found; the image layout changed" >&2
+        exit 1
     fi
+    # No `|| true`: silently falling back to the image kernel would produce a
+    # control-arm number under this experiment's name.
+    cp "$MLA_GLUON_DST" "$RESULT_DIR/mla_gluon.image.py"
+    cp "$MLA_GLUON_SRC" "$MLA_GLUON_DST"
+    python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" "$MLA_GLUON_DST"
+    echo "Installed mla_gluon: aiter main + #4474 + #4507 + #4509 (B128_PT_SPLITS=${AITER_MLA_B128_PT_SPLITS:-1})"
+else
+    echo "MLA_GLUON_PATCH=0: leaving the image's mla_gluon.py in place"
 fi
 
 # vllm-project/vllm#50578 -- "[ROCm][MLA] Use asm decode for non-divisor small
