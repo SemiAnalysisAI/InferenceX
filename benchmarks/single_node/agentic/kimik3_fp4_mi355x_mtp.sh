@@ -785,7 +785,6 @@ MAX_CUDAGRAPH_CAPTURE_SIZE=$((2 * CONC))
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE}")
 GPU_MEM_UTIL="0.8"
 MAX_NUM_SEQS=$((2 * CONC))
-MAX_NUM_BATCHED_TOKENS="8192"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -806,7 +805,6 @@ VLLM_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS"
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
