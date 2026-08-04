@@ -5425,3 +5425,11 @@
   description:
     - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+
+- config-keys:
+    - dsv4-fp8-h200-dynamo-sglang-agentic-agg
+  description:
+    - "Add one H200 TP8 aggregated DeepSeek-V4-Pro AgentX recipe with MTP and HiCache."
+    - "Generate Pareto points by sweeping concurrency [1, 2, 4, 8, 16] while keeping the serving topology fixed."
+    - "Use Dynamo header-based session affinity and AIPerf agentx-v1.0.1 (b7b16cf851885567988a643282266bce74e34437)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2364
