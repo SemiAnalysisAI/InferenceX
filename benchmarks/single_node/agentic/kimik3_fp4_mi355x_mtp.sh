@@ -43,7 +43,15 @@ export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
 # to the A/B branch, where MTP_NATIVE=0 / MQA_FIX=1 are correct.
 export DSPARK_MTP_NATIVE="${DSPARK_MTP_NATIVE:-1}"
 export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-0}"
-export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
+# k=2, the only delta from run 30885227860. That run drafted 109,942 tokens to
+# accept 69,129 at k=7; this asks what the same cell does when the draft block
+# is shorter. Verify attends 3 positions per step instead of 8 and writes 3 KV
+# entries instead of 8, so the per-step cost falls even where acceptance does.
+#
+# Mean acceptance length is NOT comparable across the two: the ladder is 3
+# positions here, so it is bounded by 3.00 rather than 8.00. Compare tok/s/GPU,
+# requests completed, and TTFT.
+export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 # 0.88: mi355x-amds nodes free only ~272 of 288 GiB and 0.95 fails the
 # startup free-memory check.
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
