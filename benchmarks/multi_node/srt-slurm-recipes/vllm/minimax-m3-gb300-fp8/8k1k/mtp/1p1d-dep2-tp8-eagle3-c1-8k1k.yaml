@@ -86,7 +86,7 @@ backend:
     decode:
       no-enable-flashinfer-autotune: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
       tensor-parallel-size: 8
       enable-expert-parallel: false
@@ -101,7 +101,6 @@ backend:
       max-num-seqs: 1024
       max-num-batched-tokens: 16384
       max-cudagraph-capture-size: 2048
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
 
 benchmark:
   type: "sa-bench"
