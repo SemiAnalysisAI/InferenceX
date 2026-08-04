@@ -5425,3 +5425,10 @@
   description:
     - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+
+- config-keys:
+    - glm5.2-fp4-mi355x-sglang-agentic-mtp
+  description:
+    - "Add GLM-5.2 FP4 SGLANG Single Node Agentic Support"
+    - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+  pr-link: TO-BE-ADDED
