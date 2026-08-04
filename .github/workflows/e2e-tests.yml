@@ -1,13 +1,17 @@
 name: End-to-End Tests
 run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
 
+permissions:
+    contents: read
+
 on:
     workflow_dispatch:
         inputs:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
-                required: true
+                required: false
                 type: string
+                default: ""
             test-name:
                 description: "Name for this test run"
                 required: false
@@ -41,12 +45,48 @@ on:
                 required: false
                 type: string
                 default: ""
+            changelog-base-ref:
+                description: "Trusted-dispatch mode: base SHA for process_changelog.py"
+                required: false
+                type: string
+                default: ""
+            changelog-head-ref:
+                description: "Trusted-dispatch mode: exact approved PR head SHA"
+                required: false
+                type: string
+                default: ""
+            trim-conc:
+                description: "Trim each configuration to its minimum concurrency"
+                required: false
+                type: boolean
+                default: false
+            all-evals:
+                description: "Expand evaluation selection to every fixed-sequence configuration"
+                required: false
+                type: boolean
+                default: false
+            evals-only:
+                description: "Suppress throughput and run only evaluations"
+                required: false
+                type: boolean
+                default: false
+            fail-fast:
+                description: "Cancel the rest of each matrix after its first failure"
+                required: false
+                type: boolean
+                default: false
+            pr-labels-json:
+                description: "Labels from the source PR for priority scoring"
+                required: false
+                type: string
+                default: "[]"
     workflow_call:
         inputs:
             generate-cli-command:
                 description: "Command passed to generate matrix script"
-                required: true
+                required: false
                 type: string
+                default: ""
             test-name:
                 description: "Name for this test run"
                 required: false
@@ -80,6 +120,41 @@ on:
                 required: false
                 type: string
                 default: ""
+            changelog-base-ref:
+                description: "Trusted-dispatch mode: base SHA for process_changelog.py"
+                required: false
+                type: string
+                default: ""
+            changelog-head-ref:
+                description: "Trusted-dispatch mode: exact approved PR head SHA"
+                required: false
+                type: string
+                default: ""
+            trim-conc:
+                description: "Trim each configuration to its minimum concurrency"
+                required: false
+                type: boolean
+                default: false
+            all-evals:
+                description: "Expand evaluation selection to every fixed-sequence configuration"
+                required: false
+                type: boolean
+                default: false
+            evals-only:
+                description: "Suppress throughput and run only evaluations"
+                required: false
+                type: boolean
+                default: false
+            fail-fast:
+                description: "Cancel the rest of each matrix after its first failure"
+                required: false
+                type: boolean
+                default: false
+            pr-labels-json:
+                description: "Labels from the source PR for priority scoring"
+                required: false
+                type: string
+                default: "[]"
 
 jobs:
     get-jobs:
@@ -98,6 +173,8 @@ jobs:
               uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                 ref: ${{ inputs.ref }}
+                fetch-depth: 0
+                persist-credentials: false
 
             - name: Checkout code (default)
               if: ${{ !inputs.ref || inputs.ref == '' }}
@@ -115,14 +192,49 @@ jobs:
             - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
             - id: get-jobs
               env:
-                  PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+                  PR_LABELS: ${{ inputs.pr-labels-json || toJson(github.event.pull_request.labels.*.name) }}
+                  CHANGELOG_BASE_REF: ${{ inputs.changelog-base-ref }}
+                  CHANGELOG_HEAD_REF: ${{ inputs.changelog-head-ref }}
+                  TRIM_CONC: ${{ inputs.trim-conc }}
+                  ALL_EVALS: ${{ inputs.all-evals }}
+                  EVALS_ONLY: ${{ inputs.evals-only }}
               run: |
-                  CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
-                    ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
-                    ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
                   PRIORITY_ROOT="${GITHUB_WORKSPACE}"
                   if [ -d "${GITHUB_WORKSPACE}/.ci-priority" ]; then
                     PRIORITY_ROOT="${GITHUB_WORKSPACE}/.ci-priority"
+                  fi
+                  if [ -n "$CHANGELOG_BASE_REF" ] || [ -n "$CHANGELOG_HEAD_REF" ]; then
+                    if [ -z "$CHANGELOG_BASE_REF" ] || [ -z "$CHANGELOG_HEAD_REF" ]; then
+                      echo "Both changelog-base-ref and changelog-head-ref are required" >&2
+                      exit 1
+                    fi
+                    CMD=(
+                      uv run --no-project --with pydantic --with pyyaml --python 3.12
+                      "${PRIORITY_ROOT}/utils/process_changelog.py"
+                      --changelog-file "${GITHUB_WORKSPACE}/perf-changelog.yaml"
+                      --base-ref "$CHANGELOG_BASE_REF"
+                      --head-ref "$CHANGELOG_HEAD_REF"
+                    )
+                    if [ "$TRIM_CONC" = "true" ]; then
+                      CMD+=(--trim-conc)
+                    fi
+                    if [ "$ALL_EVALS" = "true" ]; then
+                      CMD+=(--all-evals)
+                    fi
+                    if [ "$EVALS_ONLY" = "true" ]; then
+                      CMD+=(--evals-only)
+                    fi
+                    RAW_CONFIG_JSON=$("${CMD[@]}")
+                    CONFIG_JSON=$(python3 -c 'import json,sys; data=json.load(sys.stdin); rows=[row for family in ("single_node","multi_node") for group in data.get(family,{}).values() for row in group]; rows.extend(row for family in ("evals","agentic_evals","multinode_evals") for row in data.get(family,[])); print(json.dumps(rows))' <<<"$RAW_CONFIG_JSON")
+                  else
+                    GENERATE_COMMAND="${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }}"
+                    if [ -z "$GENERATE_COMMAND" ]; then
+                      echo "generate-cli-command is required outside trusted changelog dispatch mode" >&2
+                      exit 1
+                    fi
+                    CONFIG_JSON=$(uv run --no-project --with pydantic --with pyyaml --python 3.12 \
+                      "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py" \
+                      $GENERATE_COMMAND)
                   fi
                   score_matrix() {
                     local family="$1"
@@ -139,13 +251,15 @@ jobs:
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))" | score_matrix multi)
                   EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))" | score_matrix eval)
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))" | score_matrix multi-eval)
-                  echo "agentic-config=$AGENTIC" >> $GITHUB_OUTPUT
-                  echo "agentic-eval-config=$AGENTIC_EVAL" >> $GITHUB_OUTPUT
-                  echo "multi-node-agentic-config=$MULTI_AGENTIC" >> $GITHUB_OUTPUT
-                  echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
-                  echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
-                  echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
-                  echo "multi-node-eval-config=$MULTI_EVAL" >> $GITHUB_OUTPUT
+                  {
+                    echo "agentic-config=$AGENTIC"
+                    echo "agentic-eval-config=$AGENTIC_EVAL"
+                    echo "multi-node-agentic-config=$MULTI_AGENTIC"
+                    echo "single-node-config=$SINGLE"
+                    echo "multi-node-config=$MULTI"
+                    echo "eval-config=$EVALS"
+                    echo "multi-node-eval-config=$MULTI_EVAL"
+                  } >> "$GITHUB_OUTPUT"
 
     test-sweep-multi-node:
         needs: get-jobs
@@ -153,7 +267,7 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
         secrets: inherit
@@ -204,7 +318,7 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
         secrets: inherit
@@ -257,7 +371,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
         secrets: inherit
@@ -301,7 +415,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.agentic-eval-config) }}
         secrets: inherit
@@ -342,7 +456,7 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
         secrets: inherit
@@ -398,7 +512,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
         secrets: inherit
@@ -436,7 +550,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ inputs.fail-fast }}
             matrix:
                 config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
         secrets: inherit
@@ -509,7 +623,7 @@ jobs:
               run: pip install PyGithub
 
             - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+              run: python3 utils/calc_success_rate.py "$STATS_FILENAME"
 
             - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
               with:

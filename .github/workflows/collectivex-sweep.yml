@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori, uccl-ep, nccl-ep]
+        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep]
       only_sku:
         description: Restrict to one GHA runner pool; blank = all
         type: string
@@ -223,6 +223,11 @@ jobs:
           collx_cleanup_allocation "$COLLX_JOB_ROOT" \
             || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
           python3 experimental/CollectiveX/summarize.py \
+            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+          # Second view over the same documents: latency answers how long a point took,
+          # this answers how fast it moved its payload. Both are renderers over the staged
+          # JSON and neither gates the leg, so both are `|| true`.
+          python3 experimental/CollectiveX/bandwidth.py \
             --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
           shopt -s nullglob
           results=(experimental/CollectiveX/results/*.json)
