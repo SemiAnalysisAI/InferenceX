@@ -1,0 +1,58 @@
+name: MI355X Power Preflight
+
+on:
+  push:
+    branches:
+      - wenyao/power-pr5-mi355x-preflight
+    paths:
+      - .github/workflows/mi355x-power-preflight.yml
+      - utils/mi355x_power_preflight.py
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: mi355x
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Environment recon
+        run: |
+          {
+            uname -a
+            python3 --version 2>&1 || echo "python3: absent"
+            docker --version 2>&1 || echo "docker: absent"
+            ls -l /dev/kfd /dev/dri 2>&1 || true
+            cat /opt/rocm/.info/version 2>&1 || echo "/opt/rocm/.info/version: absent"
+            (command -v amd-smi >/dev/null && amd-smi version 2>&1) || echo "amd-smi: absent on host"
+          } | tee env_recon.txt
+
+      - name: Host amd-smi preflight
+        run: python3 utils/mi355x_power_preflight.py --samples 60 --hz 1.0 --out preflight_host.json || true
+
+      - name: Container amd-smi preflight (lane image, only if cached)
+        run: |
+          IMG=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260726
+          if docker image inspect "$IMG" >/dev/null 2>&1; then
+            docker run --rm --device=/dev/kfd --device=/dev/dri \
+              --group-add video --group-add render --security-opt seccomp=unconfined \
+              -v "$PWD:/w" -w /w "$IMG" \
+              python3 utils/mi355x_power_preflight.py --samples 60 --hz 1.0 --out preflight_container.json || true
+          else
+            echo "lane image not cached on this runner; container attempt skipped" | tee preflight_container_skipped.txt
+          fi
+
+      - name: Upload preflight report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mi355x-power-preflight
+          path: |
+            env_recon.txt
+            preflight_host.json
+            preflight_container.json
+            preflight_container_skipped.txt
+          if-no-files-found: warn
