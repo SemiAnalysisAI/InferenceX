@@ -2,10 +2,11 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Minimax-M3 FP4 on MI355X using vLLM.
+# Agentic trace replay benchmark for MiniMax-M3 FP4 on MI355X using vLLM
+# EAGLE3 speculative decoding.
 #
 # Required env vars:
-#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND,
+#   MODEL, MODEL_PATH, TP, CONC, KV_OFFLOADING,
 #   TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION, EP_SIZE, DP_ATTENTION
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -17,11 +18,15 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 # setting it here makes the effective framework always lm-eval, never swebench.
 export EVAL_FRAMEWORK="lm-eval"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
 
-PORT=8888
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3-GQA"
+NUM_SPEC_TOKENS=3
+# golden_al_distribution/minimaxm3_eagle3_gqa.yaml:
+# minimax-m3.thinking_on[3]
+SYNTHETIC_ACCEPT_LEN=2.78
 
 if [[ -n "${SLURM_JOB_ID+x}" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -40,6 +45,7 @@ else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
 fi
+hf download "$DRAFT_MODEL"
 
 rocm-smi || true
 amd-smi || true
@@ -49,16 +55,33 @@ install_agentic_deps
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
-LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
-OFFLOAD_ARGS=(--no-enable-prefix-caching)
+SERVER_PID=""
+cleanup_agentic_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    exit "$exit_code"
+}
+trap cleanup_agentic_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-case "$KV_OFFLOAD_BACKEND" in
-    vllm-simple)
+# AgentX replays growing multi-turn prefixes, so keep prefix caching enabled
+# for both GPU-resident and native-offload configurations.
+OFFLOAD_ARGS=()
+
+case "${KV_OFFLOAD_BACKEND:-}" in
+    "")
+        require_agentic_kv_offload_none
+        ;;
+    vllm-native)
+        require_agentic_kv_offload_backend vllm-native
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
-        # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
+        # NOT the SimpleCPUOffloadConnector. The "vllm-native" backend resolves to
         # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
         # would switch it to SimpleCPUOffloadConnector. We intentionally leave
         # that env var UNSET here so the regular OffloadingConnector path is
@@ -73,28 +96,39 @@ case "$KV_OFFLOAD_BACKEND" in
             --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
         )
         ;;
+    *)
+        echo "Unsupported KV_OFFLOAD_BACKEND: ${KV_OFFLOAD_BACKEND:-}" >&2
+        exit 1
+        ;;
 esac
 
 # ---- LLM server config ----------------------------------------------------------
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
-if [ "${DP_ATTENTION}" = "true" ]; then
-    PARALLEL_ARGS=(
-        --tensor-parallel-size 1
-        --data-parallel-size "$TP"
-        --enable-expert-parallel
-    )
-elif [ "$EP_SIZE" -gt 1 ]; then
+if [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
+fi
+
+# Synthetic acceptance standardizes throughput against the committed golden
+# EAGLE3-GQA curve. Accuracy evals must use real target verification.
+if [ "${EVAL_ONLY}" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}"
+else
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1800
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+# The official MiniMax-M3 MI355X EAGLE3 baseline uses the native page-128
+# layout. The shuffled AITER page-16 path is a separate high-concurrency mode
+# and must only be enabled after that band is validated independently.
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
 # INT4 quantized all-reduce for the (~1.5 MB) decode all-reduces, which are the
 # single biggest decode kernel at high concurrency. The MIN_SIZE_KB override is
 # required: vLLM's default INT4 quick-reduce size gate for (bf16, TP4) is 16 MB,
@@ -113,11 +147,13 @@ VLLM_CMD=(
     --block-size 128
     --gpu-memory-utilization 0.85
     --language-model-only
+    --enable-prefix-caching
     --attention-backend TRITON_ATTN
     --moe-backend aiter
     --kv-cache-dtype fp8
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
+    --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     # NOTE: --reasoning-parser minimax_m3 is intentionally OMITTED.
     # MiniMax-M3 is an interleaved-thinking model: its <mm:think>...</mm:think>
     # block MUST be round-tripped back into the conversation history every turn
@@ -129,6 +165,7 @@ VLLM_CMD=(
     # inline in message.content, so the client preserves it across turns. The
     # tool-call parser above still extracts tool calls from the full output.
     --max-num-seqs "$CONC"
+    --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
