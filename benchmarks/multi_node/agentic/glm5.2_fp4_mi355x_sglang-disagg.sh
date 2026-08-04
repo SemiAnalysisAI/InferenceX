@@ -10,11 +10,11 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../benchmark_lib.sh"
 
-# MI355X amd-aim: GLM-5.2 MXFP4 lives under /it-share/hf_cache (symlink GLM-5.2-MXFP4).
-# This file is GLM-only — do not inherit launch_mi355x-amds.sh MODEL_PATH=/it-share/data
-# (DSv4/R1 staging). Override with GLM52_MODEL_ROOT if needed.
+# MI355X amd-aim: default model root matches launch_mi355x-amds.sh and job.slurm
+# (MODEL_DIR=/it-share/data on mia1*). Override MODEL_PATH/MODEL_DIR when weights
+# live elsewhere (e.g. /it-share/hf_cache).
 export MODEL_NAME="${MODEL_NAME:-GLM-5.2-MXFP4}"
-export MODEL_PATH="${GLM52_MODEL_ROOT:-/it-share/hf_cache}"
+export MODEL_PATH="${MODEL_PATH:-/it-share/data}"
 export MODEL_DIR="${MODEL_DIR:-$MODEL_PATH}"
 
 check_env_vars \
