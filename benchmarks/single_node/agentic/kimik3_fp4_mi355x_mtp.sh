@@ -780,7 +780,7 @@ SPEC_ARGS=(
 
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((2 * CONC))
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
-GPU_MEM_UTIL="0.8"
+GPU_MEM_UTIL="0.9"
 MAX_NUM_SEQS=$((2 * CONC))
 
 echo "Starting vllm server..."
