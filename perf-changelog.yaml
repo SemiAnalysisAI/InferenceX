@@ -5438,4 +5438,4 @@
   description:
     - "Update the aggregated DSR1 FP4 B200 SGLang STP and MTP configurations to v0.5.16 with CUDA 13"
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2492
