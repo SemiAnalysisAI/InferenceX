@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
-SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
+SLURM_PARTITION="gpu-2"
+SLURM_ACCOUNT="benchmark"
 
 set -x
 
@@ -29,7 +29,7 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
             fi
         done
     fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-${MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}}"
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
@@ -213,7 +213,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            flock -w 600 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else
@@ -300,21 +300,12 @@ EOF
         exit 1
     fi
 
-    # Strip any :override[N] selector so sed and the injector operate on the file.
-    CONFIG_PATH="${CONFIG_FILE%%:*}"
-
     # Override the job name in the config file with the runner name
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
     # Bump recipe health-check timeout from 360×10s=3600s to 720×10s=7200s
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
-    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
-
-    # Optionally inject synthetic acceptance into the recipe's speculative-config
-    # when SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
-    # override and before srtctl apply so the rendered job picks it up. Fail
-    # fast so a broken opt-in never reaches srtctl with an unrewritten recipe.
-    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
-        "$CONFIG_PATH" "$FRAMEWORK" || exit 1
+    # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
+    sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
 
     SRTCTL_PREFLIGHT_ARGS=()
     # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.

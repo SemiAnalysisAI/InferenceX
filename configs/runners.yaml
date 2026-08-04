@@ -80,7 +80,7 @@ labels:
     - b200-dgxc-slurm_7
     - b200-dgxc-slurm_8
     - b200-dgxc-slurm_9
-  b200-new:
+  b200-nscale:
     - b200-nscale-slurm_0
     - b200-nscale-slurm_1
     - b200-nscale-slurm_2
