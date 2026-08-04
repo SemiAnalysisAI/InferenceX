@@ -1,42 +1,30 @@
 #!/usr/bin/env bash
 # ============================================================================
-# apply_k3_container_patches.sh
+# apply_k3_cb8104839c_patches.sh
 #
-# Reproduces ALL in-container filesystem changes made to the image:
+# Reproduces ALL in-container filesystem changes for the Kimi-K3 DSpark FP8 MLA
+# (MTP) noprefixcache stack on image:
 #   vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
-# for the Kimi-K3 DSpark FP8 MLA (MTP / speculative decode) workload on MI355X.
 #
 # Changes applied (idempotent):
 #   1. vLLM PR #50619  - "Fix Kimi-K3 DSpark FP8 MLA verification":
-#        - kimi_k3/nvidia/mla.py : bf16-query branch when the backend does not
-#          accept an fp8 (quantized) query (uses do_kv_cache_update instead of
-#          asserting), so fp8 KV decode works with a bf16-query MLA backend.
-#        - v1/attention/backends/mla/rocm_aiter_mla.py : sets
-#          supports_quant_query_input=False for <16 heads + fp8 KV, and rewrites
-#          forward_mqa to route <16-head decode AND <16-head MTP verify (qlen>1)
-#          through the native 4-D Gluon path.
-#        - v1/worker/gpu/{attn_utils,model_runner}.py : exclude the spec-decode
-#          draft's attention layers from the target runner's cudagraph-support
-#          decision.
-#      (Only the vllm/* files are applied; the PR's tests/* are omitted since
-#      they are not present in the installed package.)
-#   2. aiter aiter/ops/triton/gluon/mla_gluon.py : bh16bn128 (bf16 Q + fp8 KV)
-#      regime batch relaxation, 1 <= batch_size <= 128 (needed by the PR #50619
-#      batched MTP-verify path).
-#   3. aiter PR #4474 : widen KV strides to int64 on the global_load (>2GB KV)
-#      path so kv offsets do not overflow int32.
-#   4. Triton 3.7.0 (AMD ROCm 7.2.0 build) + tabulate (Gluon MLA kernels need
-#      triton.experimental.gluon PaddedSharedLayout(cga_layout=...)).
+#        kimi_k3/nvidia/mla.py bf16-query branch (do_kv_cache_update instead of
+#        asserting when the backend can't take an fp8 query); rocm_aiter_mla.py
+#        supports_quant_query_input=False for <16h+fp8 and forward_mqa native
+#        4-D Gluon for <16-head decode + MTP verify; worker cudagraph
+#        draft-exclude. (vllm/* only; the PR's tests/* are omitted.)
+#   2. aiter mla_gluon.py bh16bn128 batch relaxation (1 <= batch_size <= 128).
+#   3. aiter PR #4474  - int64 KV stride widening on the >2GB global_load path.
+#   4. Triton 3.7.0 (AMD ROCm 7.2.0 build) + tabulate (Gluon MLA needs
+#      PaddedSharedLayout(cga_layout=...)).
 #
 # Run INSIDE a fresh container of the image above:
-#   docker exec -i <container> bash < apply_k3_container_patches.sh
-# or copy in and run:  bash /workspace/apply_k3_container_patches.sh
+#   docker exec -i <container> bash < apply_k3_cb8104839c_patches.sh
 #
-# Server-side runtime config used for the passing benchmark (NOT container
-# changes -- set on the `vllm serve` command line): --kv-cache-dtype fp8,
-# --tensor-parallel-size 8, --gpu-memory-utilization 0.8, and a
-# --speculative-config with num_speculative_tokens=2 and
-# attention_backend=TRITON_MLA for the Inferact/Kimi-K3-DSpark draft.
+# Server-side runtime config for the passing benchmark (NOT container changes):
+#   --kv-cache-dtype fp8, TP8, --gpu-memory-utilization 0.8,
+#   --speculative-config num_speculative_tokens=2 attention_backend=TRITON_MLA,
+#   --no-enable-prefix-caching  (prefix caching is unsupported on this stack).
 # ============================================================================
 set -euo pipefail
 
@@ -374,10 +362,10 @@ index 64dc4bec418..d36f1fca3b7 100644
          return
 PR4474_EOF
 
-# ---- apply source patches ----
-apply_idem "$VLLM_DIR"  /tmp/pr50619_vllm.diff         "vLLM PR #50619 (K3 fp8 MLA verify)"
+# ---- apply source patches (order: vllm, then aiter batch, then aiter #4474) ----
+apply_idem "$VLLM_DIR"  /tmp/pr50619_vllm.diff          "vLLM PR #50619 (K3 fp8 MLA verify)"
 apply_idem "$AITER_DIR" /tmp/aiter_mla_gluon_batch.diff "aiter mla_gluon bh16bn128 batch relax"
-apply_idem "$AITER_DIR" /tmp/aiter_pr4474.diff         "aiter PR #4474 (int64 KV stride)"
+apply_idem "$AITER_DIR" /tmp/aiter_pr4474.diff          "aiter PR #4474 (int64 KV stride)"
 
 # ---- Triton 3.7.0 + tabulate ----
 TRITON_ROCM_VERSION="${TRITON_ROCM_VERSION:-7.2.0}"
@@ -390,7 +378,7 @@ python -m pip install tabulate
 python - <<'PY'
 import inspect
 import vllm, aiter, triton
-import vllm.models.kimi_k3.nvidia.mla            # bf16-query branch
+import vllm.models.kimi_k3.nvidia.mla
 import vllm.v1.attention.backends.mla.rocm_aiter_mla
 import aiter.ops.triton.gluon.mla_gluon
 from triton.experimental.gluon.language import PaddedSharedLayout

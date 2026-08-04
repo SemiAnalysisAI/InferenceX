@@ -206,7 +206,7 @@ LMCACHE_MAMBA_CACHE_MODE_ARGS=()
 # KV_CACHE_DTYPE=fp8 and must see it already set.
 #
 # Set KV_CACHE_DTYPE=auto for a bf16 A/B.
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
@@ -770,19 +770,16 @@ if [ "$LANGUAGE_MODEL_ONLY" = "true" ]; then
 fi
 
 # ---- Optional axes ----------------------------------------------------------
-KV_CACHE_DTYPE_ARGS=()
-if [ -n "${KV_CACHE_DTYPE:-}" ] && [ "${KV_CACHE_DTYPE}" != "auto" ]; then
-    KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
-fi
+KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
 
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 SPEC_ARGS=(
     --speculative-config
-    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"fp8\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
 )
 
 MAX_CUDAGRAPH_CAPTURE_SIZE=$((2 * CONC))
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 GPU_MEM_UTIL="0.8"
 MAX_NUM_SEQS=$((2 * CONC))
 
