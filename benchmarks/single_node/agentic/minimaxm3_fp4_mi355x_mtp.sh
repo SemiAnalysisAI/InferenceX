@@ -47,6 +47,9 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+NUM_SPEC_TOKENS=5
+
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
