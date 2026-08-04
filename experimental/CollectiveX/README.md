@@ -56,9 +56,10 @@ byte-identical routing and gate weights on every runtime.
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding
 standing in for the expert GEMM, which in production consumes FP8 operands natively rather than
 materialising a BF16 copy, so `stage` must not be summed into a total or compared between backends.
-That was not always true: rows published before sweep version 2 carried the staging copy inside the
-chain for MoRI BF16 and FlashInfer BF16, so `roundtrip` meant different things in different rows.
-`implementation.stage_excluded_from_roundtrip` distinguishes the generations from the artifact alone.
+That was not always true: rows measured before this change carried the staging copy inside the chain
+for MoRI BF16 and FlashInfer BF16, so `roundtrip` meant different things in different rows. The sweep
+`version` stays 1 across the change, so `implementation.stage_excluded_from_roundtrip` and whether a
+`stage` component is present are the only way to tell the two generations apart.
 See [docs/methodology.md](docs/methodology.md) for the full contract.
 
 Correctness is checked against an implementation-independent oracle that reproduces the backend's

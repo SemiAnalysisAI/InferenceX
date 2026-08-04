@@ -30,7 +30,10 @@ it is charged **inside the measured dispatch** rather than prepared ahead of the
 DeepEP V2, UCCL-EP and FlashInfer EP it is issued as one fused kernel and guarded bitwise against its
 eager reference; MoRI needs neither, because its quantize is a single plain dtype cast. This means an FP8
 `normal` dispatch number covers quantize-plus-transport while its BF16 control covers transport
-alone, and it is why FP8 `normal` rows are not comparable to runs published before sweep version 2.
+alone, and it is why an FP8 `normal` row is not comparable to one measured before that change. The
+sweep `version` deliberately stays 1 across it, so the version tag does NOT separate the two
+generations — `implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component
+are the only discriminators, and a consumer comparing rows across that boundary has to key on them.
 
 Read that charge as a **fixed per-call cost, not a payload-proportional one**, or the FP8-versus-BF16
 comparison will be misread at the bottom of the ladder. Measured on DeepEP V2 decode, FP8 dispatch p50
