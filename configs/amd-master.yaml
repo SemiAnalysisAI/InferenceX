@@ -1270,6 +1270,51 @@ kimik3-fp4-mi355x-vllm-agentic-dspark-lmc-c16:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, spec-decoding: mtp, conc-list: [16] }
 
+kimik3-fp4-mi355x-vllm-agentic-dspark-lmc-c8:
+  # FUNCTIONAL probe, not a perf cell: does LMCache work with DSpark at all?
+  #
+  # The -lmc-c16 key asks the same question but could not answer it: run
+  # 30820582510 died at 13 completions on the known HSA abort, so "LMCache +
+  # DSpark" and "DSpark crashes" were confounded. This key removes the
+  # confound by running on the branch's MTP-native config -- run 30804611712,
+  # the only K3 DSpark cell that has ever reached the end of its window. That
+  # config is degenerate for throughput (causal masking collapses acceptance to
+  # ~1.5, 14.37 tok/s), which does not matter here: the question is whether the
+  # connector registers, stores, evicts and serves without erroring, and that
+  # answers the same either way.
+  #
+  # c8 not c16, matching 30804611712. c16 is the right cell to ask whether a
+  # host tier EARNS anything; c8 is the right cell to ask whether it WORKS.
+  #
+  # What is already known and should not be re-derived from this run
+  # (all from 30820582510): LMCache itself was healthy -- 24,563 x 768-token
+  # stores, 16 evictions, zero errors, and the eventfd / "No GPU context
+  # registered" lines were all post-mortem. Spec decode did not corrupt the
+  # connector. The open item is sustained behaviour past 13 requests, which is
+  # exactly what the non-crashing base buys.
+  #
+  # Expect Running:1 and slow prefill regardless. Under bf16 KV, LMCache's
+  # align mamba-cache mode needs N <= mnbt < 2N with N=768, so the launcher
+  # derives mnbt 1464 and vLLM clamps it to 1368 for spec decode -- about one
+  # request's chunk per step against tens-of-thousands-token prompts. That is
+  # structural, not a regression, and fp8 (which would lift N to 1536) is
+  # closed at the DSpark drafter.
+  image: vllm/vllm-openai-rocm:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # Dispatch with -f duration-override="900". Agentic duration comes from
+    # DEFAULT_AGENTIC_DURATION_SECONDS and a per-scenario `duration:` key is
+    # rejected by the schema, so 900 cannot live here.
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, spec-decoding: mtp, conc-list: [8] }
+
 kimik3-fp4-mi355x-vllm-agentic-dspark-c8:
   # DSpark GPU-only c8, same config as the -dspark key. Split into its own key
   # so -dspark stays an accurate record of the c1+c4 validation run
