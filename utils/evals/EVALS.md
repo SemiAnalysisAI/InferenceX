@@ -5,25 +5,6 @@ concurrency, kernels, and other throughput optimizations. They run separately
 from throughput; selection lives in `mark_eval_entries()` in
 `utils/matrix_logic/generate_sweep_configs.py`.
 
-## Status: agentic evals are disabled
-
-**Agentic (SWE-bench) evals are turned off repo-wide** by
-`AGENTIC_EVALS_DISABLED` in `utils/matrix_logic/generate_sweep_configs.py`.
-While it is set, no `agentic-coding` row is ever marked `run-eval`, so
-`run-sweep.yml`'s `sweep-agentic-evals` and `e2e-tests.yml`'s
-`test-sweep-agentic-evals` both find an empty matrix and skip — including
-under `--evals-only`, `--all-evals`, and the `evals-only` / `all-evals` PR
-labels. Agentic *throughput* coverage is unaffected, and fixed-sequence
-(`gsm8k`, `gpqa`, `swebench` on 8k1k) evals are unaffected.
-
-TODO(@adibarra): fix the agentic eval path and re-enable by flipping the flag
-to `False`. The selection policy below still has test coverage behind the
-`_agentic_evals_enabled()` helper in `test_generate_sweep_configs.py`, so the
-re-enable is a one-line change.
-
-The rest of this section describes the behaviour that returns when the flag is
-cleared.
-
 ## Selection
 
 - **Single-node:** 8k1k only; highest and median concurrency for every model,
@@ -39,7 +20,7 @@ Generator eval modes:
 - `--all-evals`: every fixed-sequence eval only; equivalent to
   `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
   sequentially on one engine. Agentic-coding configs are included and run
-  SWE-bench (they are excluded only from the default, non-eval sweep).
+  GSM8K (they are excluded only from the default, non-eval sweep).
 
 Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
 implies eval-only there. On PRs, the same names are modifier labels:
@@ -60,7 +41,7 @@ malformed metadata, duplicates, or raw/aggregate mismatches are not. See
 ## How?
 `run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
 
-The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`).
+The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k; explicit agentic runs can still select SWE-bench.
 
 ### Benchmark script flow
 
