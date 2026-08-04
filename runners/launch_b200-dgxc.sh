@@ -477,10 +477,6 @@ EOF
 else
 
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    # Point the bench script at the local MODEL_PATH resolved above instead of
-    # pulling from the HF hub cache. Bench scripts skip `hf download` when
-    # MODEL is a local path.
-    export MODEL="$MODEL_PATH"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -513,6 +509,11 @@ else
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # Point the bench script at the resolved MODEL_PATH instead of
+    # pulling from the HF hub cache. Bench scripts skip `hf download` when
+    # MODEL is a local path.
+    export MODEL="$MODEL_PATH"
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes

@@ -247,7 +247,8 @@ def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) 
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
-    - Agentic evals are opt-in to preserve default throughput coverage.
+    - Agentic evals are opt-in to preserve default throughput coverage. They
+      run GSM8K through the same lm-eval path as fixed-sequence 8k1k evals.
     """
     from collections import defaultdict
 
@@ -345,7 +346,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Single-node agentic entries use SWE-bench; multi-node eval is unsupported.
+    Single-node agentic entries use GSM8K; multi-node eval is unsupported.
     Multi-node rows with the same engine topology are merged into one eval row
     whose full concurrency list is run sequentially against the same engine.
     """

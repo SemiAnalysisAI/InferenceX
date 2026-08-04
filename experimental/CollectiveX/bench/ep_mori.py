@@ -9,7 +9,8 @@ import types
 # MoRI reads the symmetric-heap size when the heap is created (at shmem init,
 # once a process group exists — see create_buffer). The pinned upstream
 # inter-node benchmark uses 6 GiB for its InterNodeV1 staging and signal
-# buffers; under VMM_HEAP this is a virtual reservation backed on demand.
+# buffers. STATIC is the shipped mode (VMM_HEAP is inter-node only), so this is
+# 6 GiB really allocated per rank against a worst-case EP8 need near 2 GiB.
 os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 
 import torch
@@ -38,6 +39,7 @@ def _project_local_metadata(torch_module, raw_expert_ids, raw_weights, rank, exp
 
 class MoRIBackend(EPBackend):
     name = "mori"
+    maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     combine_needs_redispatch = True
@@ -47,13 +49,14 @@ class MoRIBackend(EPBackend):
         super().__init__(args, rank, world_size, local_rank, device)
         self._fp8 = self.precision == "fp8"
         # MoRI's FP8 wire format is the SKU's arch fact, not a scheduled axis: gfx942
-        # (MI300X/MI325X) uses OCP-unsigned-zero e4m3fnuz, gfx950 (MI355X) uses OCP
+        # (MI300X/MI325X) uses AMD's unsigned-zero e4m3fnuz, gfx950 (MI355X) the OCP
         # e4m3fn. Read from the realized device so it never has to be plumbed through
         # argv. FP8 dispatch is caller-prequantized: MoRI's dispatch kernel keys purely
         # on the passed tensor dtype, so handing it an e4m3 tensor selects the FP8
         # dispatch kernel with no in-kernel cast. Combine stays genuinely BF16 (quant_type
-        # "none" -> EpCombineIntraNodeKernel_bf16_nop2p); "fp8_direct_cast" would instead
-        # pick the _fp8cast combine that compresses the BF16 combine wire to FP8.
+        # "none"). With use_external_inp_buf False the launcher
+        # takes the zero-copy branch, EpCombineIntraNodeKernel_bf16_p2p; the _nop2p and
+        # _fp8cast variants both sit behind the external-buffer branch we never enter.
         self._fp8_dtype = None
         if self._fp8:
             arch = torch.cuda.get_device_properties(device).gcnArchName
