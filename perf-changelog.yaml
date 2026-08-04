@@ -5373,6 +5373,58 @@
     - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
+  
+
+- config-keys:
+    - minimaxm3-fp4-b200-dynamo-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update all B200 FP4 8k1k recipe YAML container fields to match"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2472
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1
+    - minimaxm3-fp4-b300-dynamo-vllm-8k1k-tp1-tep4
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update B300 FP4 8k1k tp1 recipe YAML container fields to match"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2473
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update B300 FP4 MTP recipe YAML container fields to match (excluding 2p1d-dep2-dep4 used by legacy-dep4)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2471
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm-mtp-legacy-dep4
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update 2p1d-dep2-dep4 recipe YAML container to match"
+    - "Enable minimax_m3_msa_decode_backend=cutlass in decode attention-config"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2483
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2470
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2468
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
 
 - config-keys:
     - dsv4-fp4-b200-dynamo-vllm-mtp
