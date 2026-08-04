@@ -5374,3 +5374,10 @@
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
   
+
+- config-keys:
+    - minimaxm3-fp4-b200-dynamo-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update all B200 FP4 8k1k recipe YAML container fields to match"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass in prefill and decode environments"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2472
