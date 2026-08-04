@@ -1029,6 +1029,16 @@ export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:
 # left it on the image's stock kernel -- a kernel with almost no qlen/MTP
 # support, which is exactly why forward_mqa has to flatten verify tokens into
 # fake batch rows. Install unconditionally; MLA_GLUON_PATCH=0 opts out.
+# CONTROL BRANCH ONLY. Arm 2 of the aiter A/B died twice at an identical warmup
+# position (returned=5/87, in_flight=2, 120 s) with HSA 0x1008 / free mem 0 MB.
+# Two identical deaths are not the known probabilistic prefill-workspace OOM, so
+# this branch is under suspicion of a real regression on the fp8 arm. Revert the
+# one non-upstream delta in the kernel -- #4507's page-table split sizing
+# extended to bh16bn128 -- and keep everything else. A pass here pins the
+# regression on that extension; another death exonerates it and moves suspicion
+# to the gist -> aiter-main swap itself.
+export AITER_MLA_B128_PT_SPLITS=0
+
 MLA_GLUON_PATCH="${MLA_GLUON_PATCH:-1}"
 if [ "$MLA_GLUON_PATCH" = "1" ]; then
     MLA_GLUON_DST="/usr/local/lib/python3.12/dist-packages/aiter/ops/triton/gluon/mla_gluon.py"
