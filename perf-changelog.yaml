@@ -5403,10 +5403,33 @@
     - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update 2p1d-dep2-dep4 recipe YAML container to match"
     - "Enable minimax_m3_msa_decode_backend=cutlass in decode attention-config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2483
+  
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2470
 
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix)"
+    - "Enable VLLM_MINIMAX_M3_MSA_DECODE_BACKEND=cutlass"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2468
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  scenario-type:
+    - fixed-seq-len
+  description:
+    - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+  
 - config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   description:
     - "Bump image from lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713 to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2433
+  
