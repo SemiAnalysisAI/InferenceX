@@ -5440,3 +5440,10 @@
     - "Add MiniMax-M3-MXFP8 GB300 8k1k disaggregated Dynamo-vLLM EAGLE3 MTP Pareto on vLLM nightly 5e35a6f4f"
     - "The six dep8 decode configurations enable the CUTLASS MSA sparse decode backend and FULL_DECODE_ONLY cudagraph mode; the five low-concurrency c1/c4/c8 configurations use neither"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2486
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
+    - "Image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263"
+  pr-link: TO-BE ADDED - https://github.com/SemiAnalysisAI/InferenceX/pull/
