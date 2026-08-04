@@ -3,7 +3,7 @@ name: MI355X Power Preflight
 on:
   push:
     branches:
-      - wenyao/power-pr5-mi355x-preflight
+      - feat/power-pr5-mi355x-preflight
     paths:
       - .github/workflows/mi355x-power-preflight.yml
       - utils/mi355x_power_preflight.py
