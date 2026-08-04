@@ -35,8 +35,9 @@ def gpu_entries(doc):
     if isinstance(doc, list):
         return doc
     if isinstance(doc, dict):
-        if isinstance(doc.get("gpu"), list):
-            return doc["gpu"]
+        for key in ("gpu_data", "gpu"):
+            if isinstance(doc.get(key), list):
+                return doc[key]
         if all(isinstance(v, dict) for v in doc.values()) and doc:
             return [dict(v, gpu=k) for k, v in doc.items()]
     return []
