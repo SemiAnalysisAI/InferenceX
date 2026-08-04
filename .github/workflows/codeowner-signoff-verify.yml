@@ -25,12 +25,14 @@ name: CODEOWNER Sign-off Verify
 #   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
 #      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
 #      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
-#   7. No benchmark hacks that change the model architecture / cut FLOPs.
-#   8. Speculative-decoding configs benchmark through chat templates.
-#   9. No patches to the inference engine / serving stack (the pinned image
+#   7. No submissions for models, scenarios, or model-scenario combinations
+#      deprecated in MODELS.md.
+#   8. No benchmark hacks that change the model architecture / cut FLOPs.
+#   9. Speculative-decoding configs benchmark through chat templates.
+#  10. No patches to the inference engine / serving stack (the pinned image
 #      runs as shipped) — the only exception is a patch covered by a
 #      filled-out docs/waiver/<PR_NUMBER>.md waiver.
-#  10. Agentic spec-decode configs simulate acceptance at the committed golden
+#  11. Agentic spec-decode configs simulate acceptance at the committed golden
 #      AL from golden_al_distribution/ (SGLang SGLANG_SIMULATE_ACC_* env vars,
 #      vLLM synthetic rejection sampling in --speculative-config).
 # If any of those are not to standard, Claude posts a single comment that
