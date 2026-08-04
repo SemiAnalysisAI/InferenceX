@@ -246,7 +246,20 @@ and read its `framework:`, `runner:`, and `image:` fields.
   the matching entry named.
 - N/A if the PR changes no master-config entries (state that in one line).
 
-## Check 7 — No benchmark hacks that change the model architecture
+## Check 7 — No submissions for deprecated models or scenarios
+Read the current `MODELS.md` in the checked-out default branch. It is the source of
+truth for active and deprecated models, scenarios, and model-scenario combinations.
+For every benchmark configuration or recipe that the PR adds, changes, or re-enables,
+identify its model prefix and scenario, including fixed-sequence, agentic, single-node,
+and multi-node entries.
+- Use `date -u +%F` to establish the review date. Honor an effective date in
+  `MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
+- FAIL if the PR submits a model that is retired on the review date, a deprecated
+  scenario, or a deprecated model-scenario combination. Name the model prefix,
+  scenario, and the `MODELS.md` row or notice that prohibits it.
+- N/A if the PR adds, changes, or re-enables no benchmark configurations or recipes.
+
+## Check 8 — No benchmark hacks that change the model architecture
 Verify from the PR diff (server args in `benchmarks/**` and master-config changes)
 that nothing alters the model architecture or reduces its FLOPs — e.g. `--hf-overrides`
 that skip the indexer every N layers on a model that doesn't natively support it,
@@ -261,7 +274,7 @@ production by accuracy-sensitive customers.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
   model support. PASS in one line otherwise; N/A if the PR touches no server args.
 
-## Check 8 — Speculative-decoding configs benchmark through chat templates
+## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
 flags such as `--speculative-config`, `--speculative-algorithm`, `spec-decode`, config
 names ending in `-mtp`), verify the benchmark client exercises the model through its
@@ -271,7 +284,7 @@ completions) so the acceptance-length distribution matches real-world traffic.
   name the config and script line.
 - N/A if the PR has no speculative-decoding changes.
 
-## Check 9 — No engine patches without a waiver
+## Check 10 — No engine patches without a waiver
 The pinned upstream image must run AS SHIPPED — the community must be able to
 reproduce the number from the released image. From the PR diff (scripts under
 `benchmarks/**`, master configs, workflow changes), scan for anything that modifies
@@ -300,7 +313,7 @@ Installing the benchmark harness and client-side deps (aiperf, eval tooling) is 
   waiver not linked / waiver does not cover this patch).
 - N/A if the PR touches no benchmark scripts, images, or configs.
 
-## Check 10 — Agentic spec-decode configs use the golden simulated acceptance length
+## Check 11 — Agentic spec-decode configs use the golden simulated acceptance length
 APPLICABILITY: this check covers AGENTIC-workload benchmark changes that enable
 speculative decoding. From the PR diff, identify configs that are BOTH:
 - agentic — scripts under `benchmarks/single_node/agentic/**`, multi-node recipes
@@ -342,12 +355,12 @@ Verify BOTH:
   additional detail section must state the source of the AL value (e.g. a pending
   golden-curve collection run); FAIL if it does not.
 - Also FAIL (as a benchmark hack) if simulated/synthetic-acceptance knobs appear on a
-  NON-agentic spec-decode config, where Check 8's real-traffic AL standard applies —
+  NON-agentic spec-decode config, where Check 9's real-traffic AL standard applies —
   unless the sign-off documents a sanctioned exception.
 - N/A if the PR has no agentic speculative-decoding changes (state that in one line).
 
 ## Verdict and output
-Decide PASS only if Checks 0-10 ALL pass (a check reported as `N/A` counts as a pass —
+Decide PASS only if Checks 0-11 ALL pass (a check reported as `N/A` counts as a pass —
 keep the `N/A — <reason>` row so the reviewer sees it was considered). Post EXACTLY ONE summary comment on
 PR #${PR_NUMBER} using `gh pr comment`. Start the comment with
 the hidden marker so reruns are identifiable:
@@ -373,8 +386,7 @@ single terse line either. Rules:
   restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
   run/recipe instead of describing it.
 
-- If everything is to standard: post the verdict header + the eleven one-line rows
-  (with the green run URL). Do NOT @-mention anyone on a pass.
+- If everything is to standard: post the verdict header + the twelve one-line rows
 - If anything is NOT to standard: the verdict header must be immediately followed by a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}`
   with the blocking summary. Then the per-check lines, each failing one led by its root
