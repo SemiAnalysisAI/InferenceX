@@ -799,10 +799,10 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     --trust-remote-code
-    --moe-backend fastsafetensors
+    --moe-backend auto
     --tensor-parallel-size "$TP"
     "${EP_ARGS[@]}"
-    --load-format auto
+    --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
