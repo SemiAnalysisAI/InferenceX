@@ -248,6 +248,21 @@ else
     echo "[spuraim/worker] WARN: scheduler set no ROCR_VISIBLE_DEVICES mask." >&2
 fi
 
+# Resolve video/render as NUMERIC gids from the host. `--group-add render` by
+# name requires the group to exist inside the image and hard-fails the run if
+# it does not ("unable to find group render: no matching entries in group
+# file") -- true of plain base images, and not something a launcher should
+# depend on. Numeric gids are always accepted.
+GROUP_ARG=()
+for g in video render; do
+    gid="$(getent group "$g" | cut -d: -f3)"
+    if [[ -n "$gid" ]]; then
+        GROUP_ARG+=(--group-add "$gid")
+    else
+        echo "[spuraim/worker] WARN: host has no '$g' group; GPU access may fail." >&2
+    fi
+done
+
 # Shared hub is read-only; mount it :ro so a stray write fails loudly at the
 # mount boundary instead of half-succeeding.
 HF_MOUNT=(-v "$SHARED_HF_ROOT:$SHARED_HF_ROOT:ro")
@@ -271,7 +286,7 @@ docker run --rm --name "$CONTAINER" \
     --network host \
     --device /dev/kfd --device /dev/dri \
     --ipc=host --shm-size=0 \
-    --group-add video --group-add render \
+    "${GROUP_ARG[@]}" \
     --cap-add SYS_PTRACE --security-opt seccomp=unconfined \
     "${ROCR_ARG[@]}" \
     --env-file "$ENV_FILE" \
