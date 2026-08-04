@@ -5431,4 +5431,4 @@
   description:
     - "Add GLM-5.2 FP4 SGLANG Single Node Agentic Support"
     - "Image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
-  pr-link: TO-BE-ADDED
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2488
