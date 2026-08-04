@@ -58,7 +58,18 @@ export DSPARK_ASM_VERIFY="${DSPARK_ASM_VERIFY:-0}"
 # ran the image's stock non-causal flatten.
 export DSPARK_PR50619="${DSPARK_PR50619:-1}"
 export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-0}"
-export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-7}"
+# k=2, down from the k=7 arm this branch forked from (run 30896406545). Not
+# about the crash this time -- the native 4-D path keeps the Gluon batch at
+# num_reqs, so the old mns*~(k+1) <= 128 argument for k=2 no longer applies.
+# This is about waste under block rejection: on the causal path, per-position
+# acceptance measured 0.25 / 0.18 / 0.067 / 0.000 / 0.000 / 0.000 / 0.000, so
+# positions 3-6 of every k=7 draft were computed and thrown away. 67,004 tokens
+# were drafted to accept 6,234. k=2 drafts only where acceptance is nonzero.
+#
+# Reading it: the ladder is now 3 positions, so mean acceptance is bounded by
+# 3.00 rather than 8.00 -- compare the token-weighted accept rate and tok/s,
+# NOT the mean acceptance length, against the k=7 arm.
+export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 # 0.88: mi355x-amds nodes free only ~272 of 288 GiB and 0.95 fails the
 # startup free-memory check.
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
