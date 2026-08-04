@@ -2360,3 +2360,21 @@ dsv4-fp8-mi325x-vllm-mtp:
       # is 55.8%. conc128 passed cleanly on the memory-tightest SKU (MI300X);
       # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
+
+# GLM-5.2 MXFP4 single-node on MI355X via SGLang with HiCache KV offloading.
+# Agentic-coding scenario with DRAM KV offload (hicache backend); TP8/EP8,
+# concurrency sweep [1,4,8,12,16] to profile throughput at low-to-mid load.
+glm5.2-fp4-mi355x-sglang-agentic-hicache-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.85
+      search-space:
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
