@@ -31,6 +31,37 @@ def run_json(cmd, timeout=30):
         return dt, rc, None, (err or out)[:500]
 
 
+def gpu_entries(doc):
+    if isinstance(doc, list):
+        return doc
+    if isinstance(doc, dict):
+        if isinstance(doc.get("gpu"), list):
+            return doc["gpu"]
+        if all(isinstance(v, dict) for v in doc.values()) and doc:
+            return [dict(v, gpu=k) for k, v in doc.items()]
+    return []
+
+
+def num(x):
+    if isinstance(x, dict):
+        x = x.get("value")
+    return x if isinstance(x, (int, float)) else None
+
+
+def pick(sec, keys):
+    if not isinstance(sec, dict):
+        return None
+    for k in keys:
+        v = num(sec.get(k))
+        if v is not None:
+            return v
+    return None
+
+
+POWER_KEYS = ["socket_power", "average_socket_power", "current_socket_power", "power"]
+ENERGY_KEYS = ["total_energy_consumption", "energy_accumulator", "total_energy"]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--samples", type=int, default=60)
@@ -52,12 +83,14 @@ def main():
     ck["version"] = {"ok": rc == 0, "value": ver, "err": err if rc else None}
 
     dt, rc, static, err = run_json(["amd-smi", "static"])
+    _, _, static_raw, _ = run(["amd-smi", "static", "--json"])
+    report["raw"]["static_head"] = (static_raw or "")[:3000]
     identity = {}
     if rc == 0 and static:
-        for gpu in static if isinstance(static, list) else static.get("gpu", []):
+        for gpu in gpu_entries(static):
             idx = gpu.get("gpu")
-            asic = gpu.get("asic", {})
-            board = gpu.get("board", {})
+            asic = gpu.get("asic", {}) or {}
+            board = gpu.get("board", {}) or {}
             identity[str(idx)] = {
                 "asic_serial": asic.get("asic_serial"),
                 "market_name": asic.get("market_name"),
@@ -68,12 +101,13 @@ def main():
     dt, rc, uuid_out, err = run(["amd-smi", "list", "-e"])
     report["raw"]["list_e_head"] = (uuid_out or err or "")[:800]
 
+    dt, rc2, metric_raw, err = run(["amd-smi", "metric", "-p", "-E", "--json"])
+    report["raw"]["metric_p_E_head"] = (metric_raw or err or "")[:4000]
     dt, rc, one, err = run_json(["amd-smi", "metric", "-p", "-E"])
     fields = set()
     if rc == 0 and one:
-        for gpu in one if isinstance(one, list) else one.get("gpu", []):
-            for section in ("power", "energy"):
-                sec = gpu.get(section)
+        for gpu in gpu_entries(one):
+            for section, sec in gpu.items():
                 if isinstance(sec, dict):
                     fields.update(f"{section}.{k}" for k in sec)
     ck["power_energy_fields"] = {"ok": bool(fields), "fields": sorted(fields)}
@@ -86,13 +120,11 @@ def main():
         lat.append(dt)
         row = {"t": time.monotonic() - t_start, "rc": rc, "gpus": {}}
         if rc == 0 and snap:
-            for gpu in snap if isinstance(snap, list) else snap.get("gpu", []):
+            for gpu in gpu_entries(snap):
                 idx = str(gpu.get("gpu"))
-                pw = (gpu.get("power") or {})
-                en = (gpu.get("energy") or {})
                 row["gpus"][idx] = {
-                    "socket_power": pw.get("socket_power"),
-                    "energy_accumulator": en.get("total_energy_consumption"),
+                    "socket_power": pick(gpu.get("power"), POWER_KEYS),
+                    "energy_accumulator": pick(gpu.get("energy"), ENERGY_KEYS),
                 }
         series.append(row)
         sleep_for = (i + 1) * interval - (time.monotonic() - t_start)
