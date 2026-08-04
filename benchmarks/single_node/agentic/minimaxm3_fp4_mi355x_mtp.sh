@@ -49,6 +49,18 @@ install_agentic_deps
 
 DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
 NUM_SPEC_TOKENS=5
+# Throughput pins synthetic EAGLE3 acceptance to the minimax-m3 golden AL
+# (thinking_on, num_speculative_tokens=5, golden_al_distribution/minimaxm3_eagle3.yaml).
+# MiniMax-M3 is an interleaved-thinking model and the replay runs it with
+# thinking active, so thinking_on is the matching curve. The EVAL_ONLY accuracy
+# run uses real target verification instead -- synthetic acceptance bypasses
+# verification and corrupts the eval score.
+SYNTHETIC_ACCEPT_LEN=3.35
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}"
+else
+    SPEC_CONFIG="{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\", \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+fi
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -112,7 +124,7 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     "${PARALLEL_ARGS[@]}"
-    --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}"
+    --speculative-config "$SPEC_CONFIG"
     --trust-remote-code
     --block-size 128
     --gpu-memory-utilization 0.80
