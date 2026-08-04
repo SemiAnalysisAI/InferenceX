@@ -67,13 +67,24 @@ SPUR_TIME_LIMIT="${SPUR_TIME_LIMIT:-480}"
 # SPUR_EXCLUDE_NODES= clears the denylist, unset gets the default.
 SPUR_EXCLUDE_NODES="${SPUR_EXCLUDE_NODES-crsuse2-m2m-071}"
 
-# NOT --exclusive. Only ~8 of 233 nodes are fully idle at any time (86 alloc,
-# 66 mix, 64 resv), so demanding whole nodes means queueing behind the cluster
-# instead of running. Dropping it lets us land on any `mix` node with enough
-# free GPUs; the scheduler's ROCR_VISIBLE_DEVICES mask (forwarded below) keeps
-# us to our own slice. The tradeoff is co-tenant noise -- this lane is a
-# functional/bring-up harness, not a source of comparable perf numbers.
-SPUR_EXCLUSIVE="${SPUR_EXCLUSIVE:-0}"
+# --exclusive by DEFAULT, despite the queueing cost.
+#
+# Started non-exclusive to avoid queueing (only ~8 of 233 nodes are ever fully
+# idle: 86 alloc, 66 mix, 64 resv). That was the wrong trade for this workload.
+# Run 30870535817 died with VllmWorker-4 killed by a signal during
+# determine_available_memory() -- the VRAM profiling run -- with no OOM kill
+# recorded on the node (memory.events oom_kill 0) and no HSA fault in the log.
+# A co-tenant holding VRAM at that instant produces exactly that, because
+# --gpu-memory-utilization 0.88 is computed against TOTAL VRAM, and the node
+# did have another user's processes on it.
+#
+# It is NOT proven that co-tenancy caused it -- kimik3-...-dspark's own comment
+# documents this same c1 cell both passing and dying on byte-identical command
+# lines upstream. That is the point: while co-tenancy is in play, a failure
+# cannot be attributed, so the known-flaky cell can never be judged. Exclusive
+# removes the one variable we control. Set SPUR_EXCLUSIVE=0 to trade it back
+# for schedulability on workloads that do not need whole-node VRAM.
+SPUR_EXCLUSIVE="${SPUR_EXCLUSIVE:-1}"
 
 # Per-runner port offset (last char of runner name), same scheme as amds.
 PORT_OFFSET="${RUNNER_NAME: -1}"
