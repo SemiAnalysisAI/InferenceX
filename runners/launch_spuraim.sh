@@ -38,6 +38,22 @@
 set -uo pipefail
 set -x
 
+# The spur CLI finds spurctld via SPUR_CONTROLLER_ADDR, which is exported from
+# /etc/profile.d/spur.sh -- and profile.d is sourced by LOGIN shells only. A
+# systemd-managed Actions runner is not a login shell, so without this every
+# srun dies with "failed to connect to spurctld: ... Connection refused". Source
+# it explicitly rather than assuming an interactive environment.
+if [[ -z "${SPUR_CONTROLLER_ADDR:-}" && -r /etc/profile.d/spur.sh ]]; then
+    # shellcheck disable=SC1091
+    . /etc/profile.d/spur.sh
+fi
+if [[ -z "${SPUR_CONTROLLER_ADDR:-}" ]]; then
+    echo "[spuraim] FATAL: SPUR_CONTROLLER_ADDR is unset and /etc/profile.d/spur.sh" \
+         "is unreadable; srun cannot reach spurctld." >&2
+    exit 78
+fi
+export SPUR_CONTROLLER_ADDR
+
 SPUR_ACCOUNT="${SPUR_ACCOUNT:-amd-aifw-aim}"
 SPUR_QOS="${SPUR_QOS:-amd-aifw-aim-qos}"
 SPUR_PARTITION="${SPUR_PARTITION:-amd-spur}"
