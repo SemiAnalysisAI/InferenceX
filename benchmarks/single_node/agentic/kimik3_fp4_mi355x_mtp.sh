@@ -38,6 +38,17 @@ export DSPARK_MQA_FIX="${DSPARK_MQA_FIX:-1}"
 # 0.88: mi355x-amds nodes free only ~272 of 288 GiB and 0.95 fails the
 # startup free-memory check.
 export GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.88}"
+# k=2, down from the reproducer's 7. Two reasons, both about the crash rather
+# than about peak speedup:
+#   1. The flatten branch's verify batch is max_num_seqs * ~(k+1), so k=7 put
+#      the mla_gluon call at ~9x mns (144 and 225 against the kernel's 128 cap
+#      at mns 16 and 32). k=2 takes that to ~3x, well clear of the cap.
+#   2. The HSA abort tracks context depth, not request count: every k=7 arm
+#      died at 90-130 completions, and the only cell that ever finished was the
+#      one whose acceptance collapsed to ~1.5 and so accumulated context ~4x
+#      slower per step. k=2 caps per-step growth at 3 tokens by construction.
+# Costs peak acceptance (6.41-8.00 of 8 at k=7), which is the trade being made.
+export SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 export MAX_NUM_SEQS="${MAX_NUM_SEQS:-16}"
 export EVAL_MAX_NUM_SEQS="${EVAL_MAX_NUM_SEQS:-128}"
 export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-4096}"
