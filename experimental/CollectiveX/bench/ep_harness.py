@@ -1209,6 +1209,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "workload": {
             "cross_rank_consistent": routing_consistent,
+            # The ladder actually measured, plus any requested point the backend's cap
+            # excluded. This used to be a rank-0 stdout NOTE only, which made a clamped
+            # ladder invisible to anyone reading the artifact -- so a backend measuring a
+            # shorter ladder than the sweep requested looked identical to one that measured
+            # all of it. deepep-v2's low-latency mode clamps below its receive cap to avoid a
+            # rung upstream corrupts, and that omission has to be legible downstream.
+            "ladder_measured": list(ladder),
+            "ladder_dropped": list(dropped),
+            "ladder_cap": cap,
         },
         "measurement": {
             "combine_dtype": backend.combine_dtype,

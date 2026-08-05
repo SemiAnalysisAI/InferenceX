@@ -935,6 +935,18 @@ class LowLatencyCapDecoupling(unittest.TestCase):
             "create_buffer must set self.max_tokens = _LL_BUFFER_CAP on the low-latency path",
         )
 
+    def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
+        # A clamped ladder was previously visible only as a rank-0 stdout NOTE, so an artifact
+        # from a backend that measured 8 rungs was indistinguishable from one that measured 9.
+        # The emitted record must carry what ran and what was excluded.
+        harness = ast.parse((BENCH / "ep_harness.py").read_text())
+        keys = {
+            k.value for node in ast.walk(harness) if isinstance(node, ast.Dict)
+            for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)
+        }
+        for required in ("ladder_measured", "ladder_dropped", "ladder_cap"):
+            self.assertIn(required, keys, f"the emitted record must include {required}")
+
 
 if __name__ == "__main__":
     unittest.main()
