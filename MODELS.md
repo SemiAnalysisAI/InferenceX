@@ -65,7 +65,7 @@ The dashboard defaults to P90. Taking the percentile in seconds per output token
 
 `OSL / E2EL ≈ 1 / (TPOT + TTFT / OSL)`
 
-In other words, it is decode interactivity with a penalty for the queueing and prefill time during which the user receives no output tokens.
+Intuitively, it can be thought of as decode interactivity with a penalty for the queueing and prefill time during which the user receives no output tokens.
 
 ### Advantages
 
