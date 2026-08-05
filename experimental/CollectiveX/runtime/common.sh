@@ -941,13 +941,16 @@ collx_run_shard() {
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, NOT a work budget: at 900 it killed FP8 prefill cases that had already
-    # written complete, all-rungs-passed artifacts, and at 1800 it killed multi-node EP16 prefill
-    # once the DeepEP pin moved to main. That bump brought #715, which adds a system-scope release
-    # before every GIN barrier when scale-up spans NVLink and RDMA -- correct, but it roughly
-    # doubles EP16 decode and costs several times more on prefill, which issues far more
-    # barriers. Single-node EP8 uses neither RDMA nor GIN and is unchanged, which is what
-    # localizes the cost. 5400 keeps the guard well inside the 300-minute allocation while
-    # leaving room to actually measure that cost instead of truncating it.
+    # written complete, all-rungs-passed artifacts, and at 1800 it killed b200 and h200 multi-node
+    # EP16 prefill in run 31020463440 (b200 EP16 decode 185s -> 287s, h200 127s -> 270s, both
+    # prefills past 1800s). What is NOT established is why. The obvious suspect was #715, which
+    # the same pin bump introduced and which adds a system-scope release before the GIN barrier
+    # when scale-up spans NVLink and RDMA -- but h100-dgxc has that identical 2-node RDMA+GIN
+    # topology and did not move at all (decode 161s -> 165s, prefill 681s -> 678s), and the two
+    # runs compared were nine hours apart, so cluster contention is not excluded either. Treat
+    # the cause as open; a same-window A/B on one cluster is what would settle it.
+    # Raising the guard is right regardless of cause: truncating a legitimate measurement is a
+    # worse failure than a late one, and 5400 stays well inside the 300-minute allocation.
     if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
