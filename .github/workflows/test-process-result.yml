@@ -3,14 +3,17 @@ name: Test Process Result
 on:
   pull_request:
     paths:
+      - '.github/workflows/benchmark-multinode-tmpl.yml'
       - '.github/workflows/benchmark-tmpl.yml'
       - '.github/workflows/e2e-tests.yml'
       - '.github/workflows/test-process-result.yml'
       - 'benchmarks/benchmark_lib.sh'
       - 'utils/aggregate_power.py'
+      - 'utils/aggregate_power_multinode.py'
       - 'utils/bench_serving/benchmark_serving.py'
       - 'utils/process_result.py'
       - 'utils/test_aggregate_power.py'
+      - 'utils/test_aggregate_power_multinode.py'
       - 'utils/test_process_result.py'
 
 permissions:
@@ -39,4 +42,4 @@ jobs:
       - name: Run pytest
         run: |
           cd utils
-          python -m pytest test_aggregate_power.py test_process_result.py -v
+          python -m pytest test_aggregate_power.py test_aggregate_power_multinode.py test_process_result.py -v

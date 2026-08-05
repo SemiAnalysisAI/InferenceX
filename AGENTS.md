@@ -42,7 +42,7 @@ Run `ls` for details. Key paths:
 - `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
 - `utils/bench_serving/` - `benchmark_serving.py` and backends.
 - `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `aggregate_power.py` (single-node GPU energy validation + aggregation), `collect_*.py`, `compare_results.py`.
+- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `aggregate_power.py` (single-node GPU energy validation + aggregation), `aggregate_power_multinode.py` (multinode srt-slurm `dcgm-power` artifact validation), `collect_*.py`, `compare_results.py`.
 - `experimental/` - non-core experiments.
 
 ## Terminology
@@ -202,6 +202,8 @@ cat ./results/agg_bmk.json | jq '[.[] | select(.infmax_model_prefix == "gptoss")
 
 Single-node fixed-sequence results also carry GPU power metrics when telemetry is valid: `power_valid` (1/0), `avg_power_w` (average board power per GPU), `avg_total_gpu_power_w` (all observed GPUs), `total_gpu_energy_j` (integrated over the formal benchmark window), and `joules_per_successful_query` / `joules_per_input_token` / `joules_per_output_token` / `joules_per_total_token`. Invalid telemetry records `power_valid: 0` and no energy metrics; it fails the job only under `REQUIRE_POWER=1` (see the `require-power` dispatch input).
 
+Multinode disaggregated results add role energy metrics: `prefill_gpu_energy_j` / `decode_gpu_energy_j` (board energy of that role's GPUs integrated over the FULL formal window — not kernel-level phase energies) and `prefill_joules_per_input_token` / `decode_joules_per_output_token`.
+
 ### Artifacts
 
-`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded). `power_audit_<result>` → `power_validation_<result>.json` (canonical power validity verdict + reason codes; uploaded even when invalid).
+`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded). `power_audit_<result>` → `power_validation_<result>.json` single-node, `power_validation_<result>_*.json` multinode (canonical power validity verdict + reason codes; uploaded even when invalid).
