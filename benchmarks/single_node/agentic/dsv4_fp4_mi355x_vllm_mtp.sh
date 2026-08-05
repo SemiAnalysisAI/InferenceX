@@ -455,15 +455,33 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-# Torch profiler. vLLM only exposes /start_profile and /stop_profile when
-# VLLM_TORCH_PROFILER_DIR is set at server start, so this has to be exported
-# before the serve command below. Point it at RESULT_DIR so the traces ride out
-# with the agentic_<RESULT_FILENAME> artifact (benchmark-tmpl.yml uploads
+# Torch profiler. vLLM only registers /start_profile and /stop_profile when the
+# profiler is configured at server start (entrypoints/serve/profile/api_router.py
+# :attach_router gates on profiler_config.profiler being set), so this has to be
+# built before the serve command below.
+#
+# Note this is NOT the old VLLM_TORCH_PROFILER_DIR env var. That variable was
+# removed from vllm/envs.py and replaced by the structured --profiler-config on
+# the way to this image; setting it only produces "Unknown vLLM environment
+# variable detected: VLLM_TORCH_PROFILER_DIR" and the endpoints stay unregistered,
+# so /start_profile answers 404. Fields come from vllm/config/profiler.py.
+#
+# max_iterations makes the engine stop itself after N profiled steps rather than
+# relying on the wall-clock window below to be the thing that bounds trace size.
+# The window still exists as a backstop, but at 8 DP ranks a purely time-bounded
+# capture is what turns a trace unreadable. torch_profiler_dir must be absolute
+# (ProfilerConfig validates this) and points into RESULT_DIR so the traces ride
+# out with the agentic_<RESULT_FILENAME> artifact (benchmark-tmpl.yml uploads
 # results/**). See capture_agentx_trace() for the capture window.
+PROFILER_ARGS=()
 if [ "${AGENTX_TRACE:-0}" = "1" ]; then
-    export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-$RESULT_DIR/traces}"
-    mkdir -p "$VLLM_TORCH_PROFILER_DIR"
-    echo "Torch profiler enabled, traces -> $VLLM_TORCH_PROFILER_DIR"
+    AGENTX_TRACE_DIR="${AGENTX_TRACE_DIR:-$RESULT_DIR/traces}"
+    mkdir -p "$AGENTX_TRACE_DIR"
+    AGENTX_TRACE_DIR="$(cd "$AGENTX_TRACE_DIR" && pwd)"
+    PROFILER_ARGS=(
+        --profiler-config "{\"profiler\":\"torch\",\"torch_profiler_dir\":\"$AGENTX_TRACE_DIR\",\"max_iterations\":${AGENTX_TRACE_MAX_ITERS:-40},\"ignore_frontend\":true,\"torch_profiler_with_stack\":false}"
+    )
+    echo "Torch profiler enabled, traces -> $AGENTX_TRACE_DIR"
 fi
 
 # MoE backend. All arms use the AITER fused MoE this recipe was validated
@@ -524,6 +542,7 @@ VLLM_CMD=(
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
+    "${PROFILER_ARGS[@]}"
 )
 
 # (srok), not yet
@@ -566,6 +585,11 @@ fi
 # representative AgentX traffic (real prefix-cache hits, real session trees)
 # rather than during warmup.
 #
+# The engine self-stops after max_iterations profiled steps (see PROFILER_ARGS),
+# so AGENTX_TRACE_WINDOW_S is a backstop, not the primary bound: we still POST
+# /stop_profile to force the flush in case the replay is slow enough that the
+# iteration count has not been reached.
+#
 # AGENTX_TRACE_DELAY_S is wall-clock from just before aiperf is launched, so it
 # has to absorb everything that happens before traffic reaches steady state:
 # dataset load/reconstruct (routinely 4-14 min on the Weka corpus, per
@@ -592,9 +616,19 @@ capture_agentx_trace() {
         return 0
     fi
 
+    # Report the status code, not just pass/fail. A 404 here means the profiler
+    # endpoints were never registered (profiler not configured at server start),
+    # which is a different bug from the server refusing the request -- and it is
+    # invisible if the failure is reported as a bare "failed".
     echo "[TRACE] POST /start_profile"
-    if ! curl -sf -m 60 -X POST "$url/start_profile" > /dev/null 2>&1; then
-        echo "[TRACE] /start_profile failed; skipping capture" >&2
+    local code
+    code=$(curl -s -m 60 -o /dev/null -w '%{http_code}' -X POST "$url/start_profile" 2>/dev/null)
+    if [ "$code" != "200" ]; then
+        echo "[TRACE] /start_profile returned HTTP $code; skipping capture" >&2
+        if [ "$code" = "404" ]; then
+            echo "[TRACE] 404 means vLLM did not register the profiler endpoints;" >&2
+            echo "[TRACE] check that --profiler-config reached the serve command" >&2
+        fi
         return 0
     fi
 
@@ -605,7 +639,8 @@ capture_agentx_trace() {
     curl -sf -m 900 -X POST "$url/stop_profile" > /dev/null 2>&1 \
         || echo "[TRACE] /stop_profile failed or timed out; trace may be partial" >&2
 
-    echo "[TRACE] capture complete; traces in $VLLM_TORCH_PROFILER_DIR"
+    echo "[TRACE] capture complete; traces in ${AGENTX_TRACE_DIR:-$RESULT_DIR/traces}"
+    ls -la "${AGENTX_TRACE_DIR:-$RESULT_DIR/traces}" 2>/dev/null || true
 }
 
 if [ "${EVAL_ONLY}" = "true" ]; then
