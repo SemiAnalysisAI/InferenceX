@@ -785,7 +785,20 @@ if [ "$LANGUAGE_MODEL_ONLY" = "true" ]; then
 fi
 
 # ---- Optional axes ----------------------------------------------------------
-KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
+# fp8 KV on the TARGET only. The drafter's own kv_cache_dtype stays "auto" in
+# SPEC_ARGS below, deliberately -- see the note there.
+#
+# This is only reachable because verify runs on the asm PS route. The kimi_k3
+# wrapper asserts `impl.supports_quant_query_input` whenever the KV cache is
+# quantized (mla.py:615). ROCM_AITER_MLA inherits True, so the assert passes;
+# it is Gluon that cannot take an fp8 query, which is the whole reason #51088
+# exists. With verify on Gluon this arm would abort at startup.
+#
+# The kernel exists: hsa/gfx950/mla/mla_asm.csv registers
+#   mla_a8w8_qh16_qseqlen4_gqaratio16_v3_ps.co   (fp8 q, fp8 kv, Gqa 16, qlen 4)
+# which is exactly 12 heads padded to 16 at k=3 verify.
+export KV_CACHE_DTYPE=fp8
+KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "fp8")
 
 # k=3, not 2, and the kernel registry is why.
 #
@@ -801,6 +814,11 @@ KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
 # measurements (0.306 / 0.191 / 0.096 / 0.034 / 0.019 / 0.010 / 0.004) say the
 # first three positions carry 90% of the total gain.
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
+# The DRAFTER stays bf16 on purpose. It runs TRITON_MLA, which sets
+# supports_quant_query_input=False, so giving it fp8 KV would trip the same
+# kimi_k3 assert the target now clears -- the drafter has no asm route. vLLM
+# keeps a separate kv_cache_dtype for the draft model precisely so the two can
+# differ.
 SPEC_ARGS=(
     --speculative-config
     "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"

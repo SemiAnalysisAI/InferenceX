@@ -894,6 +894,35 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c8:
+  # fp8 KV + asm VERIFY, GPU-only c8, k=3. Sibling of the bf16 asm-verify arm.
+  #
+  # Reachable only because verify is on the asm PS route: kimi_k3/nvidia/mla.py
+  # asserts impl.supports_quant_query_input under a quantized KV cache, and
+  # ROCM_AITER_MLA inherits True while Gluon cannot take an fp8 query.
+  #
+  # Kernel: mla_a8w8_qh16_qseqlen4_gqaratio16_v3_ps.co (fp8/fp8, Gqa 16,
+  # qSeqLen 4) = 12 heads padded to 16 at k=3 verify.
+  #
+  # Target fp8, drafter bf16 -- the drafter is on TRITON_MLA and has no asm
+  # route, so fp8 there would trip the assert the target clears.
+  #
+  # Beyond throughput this also halves KV footprint and lifts vLLM's unified
+  # block N from 768 to 1536, which is the only thing that would raise
+  # LMCache's align ceiling on max_num_batched_tokens from 1464 to ~3000.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
   # bf16 + asm + DSpark: route the multi-token VERIFY step to the PS ASM kernel.
   #
