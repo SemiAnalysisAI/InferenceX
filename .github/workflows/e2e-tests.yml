@@ -25,6 +25,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            require-power:
+                description: "Fail single-node fixed-sequence jobs when GPU power is invalid"
+                required: false
+                type: boolean
+                default: false
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -95,6 +100,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            require-power:
+                description: "Fail single-node fixed-sequence jobs when GPU power is invalid"
+                required: false
+                type: boolean
+                default: false
             agentx-fast:
                 description: "AgentX fast feedback: one warmup request per lane and a 20-minute profile."
                 required: false
@@ -531,6 +541,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: false
+            require-power: ${{ inputs.require-power }}
             ref: ${{ inputs.ref }}
 
     test-sweep-evals:

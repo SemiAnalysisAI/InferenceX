@@ -42,7 +42,7 @@ Run `ls` for details. Key paths:
 - `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
 - `utils/bench_serving/` - `benchmark_serving.py` and backends.
 - `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `collect_*.py`, `compare_results.py`.
+- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `aggregate_power.py` (single-node GPU energy validation + aggregation), `collect_*.py`, `compare_results.py`.
 - `experimental/` - non-core experiments.
 
 ## Terminology
@@ -117,7 +117,7 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value.
+Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value. `inputs[require-power]` fails single-node fixed-sequence jobs when GPU power telemetry is invalid (default: power is best-effort and never fails a run).
 
 For an AgentX preflight, add `-F 'inputs[agentx-fast]=true'` to the dispatch command. This reduces deterministic warmup to one request per lane and profiling to 20 minutes for every AgentX job. Use it to get faster feedback while debugging, then run the official sweep without `agentx-fast`; canonical AgentX warmup remains 10 requests per lane with a 1-hour profile.
 
@@ -200,6 +200,8 @@ cat ./results/agg_bmk.json | jq '[.[] | select(.infmax_model_prefix == "gptoss")
 
 `tput_per_gpu` (total throughput per GPU, tok/s), `output_tput_per_gpu` (output token throughput), `mean_ttft` / `p99_ttft` (time to first token), `mean_tpot` (time per output token), `mean_e2el` (end-to-end latency).
 
+Single-node fixed-sequence results also carry GPU power metrics when telemetry is valid: `power_valid` (1/0), `avg_power_w` (average board power per GPU), `avg_total_gpu_power_w` (all observed GPUs), `total_gpu_energy_j` (integrated over the formal benchmark window), and `joules_per_successful_query` / `joules_per_input_token` / `joules_per_output_token` / `joules_per_total_token`. Invalid telemetry records `power_valid: 0` and no energy metrics; it fails the job only under `REQUIRE_POWER=1` (see the `require-power` dispatch input).
+
 ### Artifacts
 
-`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded).
+`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded). `power_audit_<result>` → `power_validation_<result>.json` (canonical power validity verdict + reason codes; uploaded even when invalid).

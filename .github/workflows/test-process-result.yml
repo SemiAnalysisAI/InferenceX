@@ -3,7 +3,14 @@ name: Test Process Result
 on:
   pull_request:
     paths:
+      - '.github/workflows/benchmark-tmpl.yml'
+      - '.github/workflows/e2e-tests.yml'
+      - '.github/workflows/test-process-result.yml'
+      - 'benchmarks/benchmark_lib.sh'
+      - 'utils/aggregate_power.py'
+      - 'utils/bench_serving/benchmark_serving.py'
       - 'utils/process_result.py'
+      - 'utils/test_aggregate_power.py'
       - 'utils/test_process_result.py'
 
 permissions:
@@ -11,7 +18,6 @@ permissions:
 
 jobs:
   test:
-    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -33,4 +39,4 @@ jobs:
       - name: Run pytest
         run: |
           cd utils
-          pytest test_process_result.py -v
+          python -m pytest test_aggregate_power.py test_process_result.py -v
