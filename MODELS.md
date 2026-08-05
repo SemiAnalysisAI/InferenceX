@@ -12,6 +12,8 @@ InferenceX-e2e runs on a fixed, limited pool of GPUs and is maintained by a smal
 
 **Monday, August 3, 2026** is the last day for the scenarios, precisions, and recipe variants listed below; they are deprecated after that date.
 
+**Partially enacted on 2026-08-04** in [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493): the scenario and precision retirements in the first table were carried out — 54 config keys removed from the active master configs and archived under [`configs/deprecated/`](configs/deprecated/), with their benchmark scripts moved to the sibling `deprecated/` directories. The speculative-decoding A/B retirements in the second table are **not yet enacted**; see the note under that table.
+
 Scenario and precision retirements:
 
 | Model | Deprecated | Remains |
@@ -29,6 +31,8 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 | MiniMax-M3 (`minimaxm3`) | Agentic coding, non-EAGLE3 | Agentic coding, EAGLE3 |
 | GLM-5.2 (`glm5.2`) | Agentic coding, non-MTP | Agentic coding, MTP |
 | Kimi-K3 (`kimik3`) | Agentic coding, non-DSpark — deprecated from day 0 | Agentic coding, DSpark |
+
+**Status: not yet enacted.** Every non-spec-decode agentic arm above still runs. Removing them today would leave MiniMax-M3 and GLM-5.2 with no active config at all — their EAGLE3 and MTP agentic arms have not landed yet — and would drop all AMD and all SGLang agentic coverage for DeepSeek-V4-Pro and Qwen3.5, neither of which has an MTP sibling on those platforms. This round runs once the replacement arms exist.
 
 **Going forward we no longer benchmark non-spec-decode versus spec-decode as an A/B.** The non-spec-decode arm existed as a neutral baseline back when acceptance length wasn't standardized. That is now solved: [`golden_al_distribution/`](golden_al_distribution/) commits one golden acceptance-length curve per model, thinking mode, and draft length, measured on the SPEED-Bench `coding` category, and AgentX pins every submission to that curve through synthetic acceptance (vLLM `synthetic_acceptance_length`, SGLang `SGLANG_SIMULATE_ACC_LEN`, TensorRT-LLM `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`, etc). With a fair, engine-independent acceptance target in place, spec-decode results are directly comparable on their own and a separate non-spec-decode track is redundant. Agentic coding recipes are therefore run and published with speculative decoding enabled only — MTP, EAGLE/EAGLE3, DSpark, or whatever draft method the model ships — and the non-spec-decode arm is neither run nor published. New models are onboarded that way from day 0, as Kimi-K3 is.
 
@@ -51,13 +55,13 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 |---|---|---|---|---|
 | Qwen3.8 2.4T | `qwen3.8` | TBD | Agentic coding | |
 | Kimi-K3 | `kimik3` | 2026-07-27 ([#2391](https://github.com/SemiAnalysisAI/InferenceX/pull/2391)) | Agentic coding (DSpark only) | Agentic coding non-DSpark arm (deprecated from day 0) |
-| GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (MTP only from 2026-08-03) | |
-| MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Single-turn 8k1k (until 2026-08-03), Agentic coding (EAGLE3 only from 2026-08-03) | Single-turn 1k1k |
-| DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding (MTP only from 2026-08-03) | Single-turn 1k1k |
+| GLM-5.2 | `glm5.2` | 2026-07-18 ([#2268](https://github.com/SemiAnalysisAI/InferenceX/pull/2268)) | Agentic coding (MTP-only pending — the non-MTP arm still runs; see the Deprecation Notice) | |
+| MiniMax-M3 | `minimaxm3` | 2026-06-12 ([#1724](https://github.com/SemiAnalysisAI/InferenceX/pull/1724)) | Agentic coding | Single-turn 1k1k, Single-turn 8k1k (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
+| DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding (MTP-only pending — the non-MTP arm still runs; see the Deprecation Notice) | Single-turn 1k1k |
 | GLM-5 / GLM-5.1 | `glm5`, `glm5.1` | 2026-03-06 ([#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)); GLM-5.1 added 2026-04-21 ([#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)) | — (retired 2026-07-18, [#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)) | Single-turn 1k1k, Single-turn 1k8k (GLM-5 only), Single-turn 8k1k |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | — (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
-| Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | Single-turn 8k1k (until 2026-08-06), Agentic coding (until 2026-08-03) — fully retired after 2026-08-06 | Single-turn 1k1k, Single-turn 1k8k |
-| Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Single-turn 8k1k, Agentic coding (MTP only from 2026-08-03); fp8/fp4 only — bf16 recipes retired 2026-08-03 | Single-turn 1k1k, Single-turn 1k8k |
+| Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | Single-turn 8k1k (until 2026-08-06) — fully retired after 2026-08-06 | Single-turn 1k1k, Single-turn 1k8k, Agentic coding (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
+| Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Single-turn 8k1k, Agentic coding; fp8/fp4 only | Single-turn 1k1k, Single-turn 1k8k, all bf16 recipes (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
 | gpt-oss-120b | `gptoss` | 2025-09-09 | — (retired 2026-07-06, [#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
 | DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | Single-turn 8k1k | Single-turn 1k1k, Single-turn 1k8k |
 | Llama-3.1-70B-Instruct | `llama70b` | 2025-08-12 | — (retired 2025-10-29, [#149](https://github.com/SemiAnalysisAI/InferenceX/pull/149)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k [^1] |
