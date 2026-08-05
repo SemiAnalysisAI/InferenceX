@@ -1,0 +1,105 @@
+# GLM-5.2-FP8 (753B MoE) on H200, DEP P/D disagg via llmd-vllm.
+#
+# Per-engine shape (H200 = 8 GPUs/node):
+#   Each engine is DEP (TP=1, DP=N, EP=N) with DP-attention + DeepGemm MoE
+#   backend. Prefill uses DeepEP high-throughput all-to-all; decode uses
+#   DeepEP v2 (low-latency) with --language-model-only.
+#
+# Topology set by nvidia-master.yaml additional-settings:
+#   agentic (p1w2d1w2): 1P DEP16 + 1D DEP16, 4 H200 nodes / 32 GPUs
+#     PREFILL_NODES=2 DECODE_NODES=2 GPUS_PER_NODE=8
+#
+# Flags and env vars match the llm-d K8s P/D reference deployment
+# (guides/wide-ep-lws/modelserver/gpu/vllm-glm-5.2/base/{prefill,decode}.yaml).
+# No MTP speculative decoding — see glm5.2-fp8-h200-mtp.yaml for the MTP variant.
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags ----
+# Prefill: DEP (TP=1, EP on). DeepGemm MoE backend + DeepEP high-throughput
+# all-to-all. gpu-memory-utilization 0.935 matches the K8s reference default
+# for single-node; multi-node (LWS_GROUP_SIZE>1) gets NVSHMEM_SYMMETRIC_SIZE=16G
+# from server.sh, which reserves VRAM for the symmetric heap automatically.
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.935
+    --max-model-len auto
+    --max-num-batched-tokens 2048
+    --moe-backend deep_gemm
+    --all2all-backend deepep_high_throughput
+  env:
+    VLLM_USE_V2_MODEL_RUNNER: "0"
+    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "1"
+    TRITON_LIBCUDA_PATH: /usr/lib64
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+# Decode: DEP (TP=1, EP on). DeepEP v2 low-latency all-to-all.
+# --language-model-only + --block-size 256 for efficient KV consumption.
+# max-num-seqs/batched-tokens 64 matches K8s MAX_TOKENS_PER_NODE=32 * 2 nodes
+# (DEP16 topology).
+# NVSHMEM_QP_DEPTH = (64+1)*2 = 130 (DeepEP low-latency requirement).
+decode:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.95
+    --max-model-len auto
+    --max-num-seqs 64
+    --max-num-batched-tokens 64
+    --all2all-backend deepep_v2
+    --language-model-only
+    --block-size 256
+  env:
+    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "1"
+    TRITON_LIBCUDA_PATH: /usr/lib64
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    NVSHMEM_QP_DEPTH: "130"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+slurm:
+  time_limit: "08:00:00"
