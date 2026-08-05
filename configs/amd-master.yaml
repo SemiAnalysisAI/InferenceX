@@ -626,6 +626,24 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c4:
+  # c4 on its own. The c4 cell of the -sweep key wedged in `Launch job script`
+  # for 6h04m with no step progress and no artifacts (run 30987878388) and was
+  # cancelled; c1 and c16 from that dispatch are already collected, so rerunning
+  # the whole sweep would burn two nodes to re-measure known results.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-sweep:
   # Concurrency sweep around the c8 result (run 30982145794): fp8 KV + asm
   # verify, GPU-only, k=3 -- 717.31 tok/s/GPU, 203 reqs, TTFT 2.51 s, prefix hit
