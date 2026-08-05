@@ -226,7 +226,11 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
+    if [[ "${SPEC_DECODING:-}" == "mtp" ]]; then
+        git checkout v1.0.38
+    else
+        git checkout sa-submission-q2-2026
+    fi
     mkdir -p recipes/vllm/minimax-m3-gb300-fp8
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
