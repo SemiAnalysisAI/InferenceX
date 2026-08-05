@@ -455,6 +455,17 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
+# Torch profiler. vLLM only exposes /start_profile and /stop_profile when
+# VLLM_TORCH_PROFILER_DIR is set at server start, so this has to be exported
+# before the serve command below. Point it at RESULT_DIR so the traces ride out
+# with the agentic_<RESULT_FILENAME> artifact (benchmark-tmpl.yml uploads
+# results/**). See capture_agentx_trace() for the capture window.
+if [ "${AGENTX_TRACE:-0}" = "1" ]; then
+    export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-$RESULT_DIR/traces}"
+    mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+    echo "Torch profiler enabled, traces -> $VLLM_TORCH_PROFILER_DIR"
+fi
+
 # MoE backend. All arms use the AITER fused MoE this recipe was validated
 # against.
 #
@@ -542,9 +553,86 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
+# ---- Torch profiler trace capture (AGENTX_TRACE=1) ------------------------------
+#
+# The shared PROFILE=1 path in benchmark_lib.sh hangs off run_benchmark_serving
+# (--dataset-name random), which the agentic scenario never calls -- AgentX goes
+# through build_replay_cmd + aiperf. So capture here instead, driving vLLM's
+# /start_profile and /stop_profile endpoints against the live replay.
+#
+# The window is deliberately short. This is a 3600s replay across 8 DP ranks; a
+# full-duration trace would be enormous and unreadable. We sample a slice once
+# the replay has reached steady state, so the trace shows MoE/MLA cost under
+# representative AgentX traffic (real prefix-cache hits, real session trees)
+# rather than during warmup.
+#
+# AGENTX_TRACE_DELAY_S is wall-clock from just before aiperf is launched, so it
+# has to absorb everything that happens before traffic reaches steady state:
+# dataset load/reconstruct (routinely 4-14 min on the Weka corpus, per
+# build_replay_cmd) plus AIPERF_WARMUP_REQUESTS_PER_LANE warmup requests per
+# lane. The 1800s default leaves margin on both; with agentx-fast (1200s total
+# replay) it would land past the end, so pass agentx-trace-delay-s explicitly
+# there. Watch for "[TRACE] POST /start_profile" in the log to confirm the
+# window actually opened during profiling and not during setup.
+#
+# Traces land in RESULT_DIR, which benchmark-tmpl.yml uploads wholesale as the
+# agentic_<RESULT_FILENAME> artifact (path: results/**).
+capture_agentx_trace() {
+    local port="$1"
+    local delay_s="${AGENTX_TRACE_DELAY_S:-1800}"
+    local window_s="${AGENTX_TRACE_WINDOW_S:-20}"
+    local url="http://localhost:${port}"
+
+    echo "[TRACE] armed: sleeping ${delay_s}s into the replay, then capturing ${window_s}s"
+    sleep "$delay_s"
+
+    # Bail out rather than hang the run if the server went away mid-replay.
+    if ! curl -sf -m 10 "$url/health" > /dev/null 2>&1; then
+        echo "[TRACE] server not healthy at $url; skipping capture" >&2
+        return 0
+    fi
+
+    echo "[TRACE] POST /start_profile"
+    if ! curl -sf -m 60 -X POST "$url/start_profile" > /dev/null 2>&1; then
+        echo "[TRACE] /start_profile failed; skipping capture" >&2
+        return 0
+    fi
+
+    sleep "$window_s"
+
+    echo "[TRACE] POST /stop_profile (writes trace; can take minutes to flush)"
+    # Generous timeout: torch dumps the whole ring buffer on stop.
+    curl -sf -m 900 -X POST "$url/stop_profile" > /dev/null 2>&1 \
+        || echo "[TRACE] /stop_profile failed or timed out; trace may be partial" >&2
+
+    echo "[TRACE] capture complete; traces in $VLLM_TORCH_PROFILER_DIR"
+}
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+
+    TRACE_PID=""
+    if [ "${AGENTX_TRACE:-0}" = "1" ]; then
+        # Profile against the backend directly, not the router: the router
+        # fans out over DP ranks, and /start_profile must reach the engine.
+        capture_agentx_trace "$VLLM_BACKEND_PORT" &
+        TRACE_PID=$!
+        echo "Trace capture PID: $TRACE_PID"
+    fi
+
+    # Let the replay own the exit status; the capture is best-effort.
+    set +e
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
+    REPLAY_RC=$?
+    set -e
+
+    if [ -n "$TRACE_PID" ]; then
+        wait "$TRACE_PID" 2>/dev/null || true
+    fi
+
+    if [ "$REPLAY_RC" -ne 0 ]; then
+        exit "$REPLAY_RC"
+    fi
 fi

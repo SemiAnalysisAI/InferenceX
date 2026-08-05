@@ -139,6 +139,21 @@ on:
         required: false
         type: boolean
         default: false
+      agentx-trace:
+        description: "Capture a short torch-profiler trace mid-replay (AgentX recipes that implement it)"
+        required: false
+        type: boolean
+        default: false
+      agentx-trace-delay-s:
+        description: "Seconds into the AgentX replay before the trace window opens"
+        required: false
+        type: string
+        default: ''
+      agentx-trace-window-s:
+        description: "Length of the trace window in seconds"
+        required: false
+        type: string
+        default: ''
       eval-limit:
         description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
         required: false
@@ -186,6 +201,9 @@ env:
   DURATION: ${{ inputs.duration }}
   REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
   AIPERF_EXPERIMENTAL_FAST: ${{ inputs.agentx-fast && '1' || '0' }}
+  AGENTX_TRACE: ${{ inputs.agentx-trace && '1' || '0' }}
+  AGENTX_TRACE_DELAY_S: ${{ inputs.agentx-trace-delay-s }}
+  AGENTX_TRACE_WINDOW_S: ${{ inputs.agentx-trace-window-s }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
   SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'

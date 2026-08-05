@@ -40,6 +40,21 @@ on:
                 required: false
                 type: boolean
                 default: false
+            agentx-trace:
+                description: "Capture a short torch-profiler trace mid-replay (AgentX recipes that implement it)."
+                required: false
+                type: boolean
+                default: false
+            agentx-trace-delay-s:
+                description: "Seconds into the AgentX replay before the trace window opens."
+                required: false
+                type: string
+                default: ""
+            agentx-trace-window-s:
+                description: "Length of the trace window in seconds."
+                required: false
+                type: string
+                default: ""
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
@@ -120,6 +135,21 @@ on:
                 required: false
                 type: boolean
                 default: false
+            agentx-trace:
+                description: "Capture a short torch-profiler trace mid-replay (AgentX recipes that implement it)."
+                required: false
+                type: boolean
+                default: false
+            agentx-trace-delay-s:
+                description: "Seconds into the AgentX replay before the trace window opens."
+                required: false
+                type: string
+                default: ""
+            agentx-trace-window-s:
+                description: "Length of the trace window in seconds."
+                required: false
+                type: string
+                default: ""
             eval-limit:
                 description: "Eval instance count: empty/full = whole split (default); N = first-N smoke slice"
                 required: false
@@ -412,6 +442,9 @@ jobs:
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
+            agentx-trace: ${{ inputs.agentx-trace }}
+            agentx-trace-delay-s: ${{ inputs.agentx-trace-delay-s }}
+            agentx-trace-window-s: ${{ inputs.agentx-trace-window-s }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
