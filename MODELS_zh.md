@@ -49,7 +49,9 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 | 单轮 1k1k | 1024 / 1024 | **对所有模型均已弃用**，自 2026-07-17 起（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置位于 [`configs/deprecated/`](configs/deprecated/)。 |
 | 单轮 1k8k | 1024 / 8192 | **对所有模型均已弃用**，自 2026-03-27 起（[#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。相关配置已删除，未归档。 |
 
-## AgentX 端到端归一化交互性与帕累托前沿策略
+## AgentX 指南
+
+### 端到端归一化交互性与帕累托前沿策略
 
 端到端归一化交互性（E2E normalized interactivity）是 AgentX 轨迹回放结果的主要用户侧延迟指标，也是默认横轴。对于每个有效的性能分析请求 `i`，令 `OSL_i` 表示其正值输出序列长度，`E2EL_i` 表示其正值端到端延迟；E2EL 同时包含首 Token 延迟（TTFT）与生成时间。首先计算每个请求交付一个输出 Token 所需的时间：
 
@@ -87,7 +89,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 因此，只有同时属于北极星优胜点、且在所选图表中不被其他点支配的数据点，才能出现在任一 AgentX 帕累托前沿上。该规则可防止某个配置以牺牲端到端用户体验为代价，只优化某一辅助延迟指标却仍进入发布的前沿。被支配的数据点仍保留在未过滤的散点视图中，供诊断使用。
 
-## 引擎提交策略
+### 引擎提交策略
 
 根据 Tier 1 AI 实验室和更广泛的机器学习社区对 InferenceX AgentX 展示内容的反馈，InferenceX 采用明确的模型到框架映射。多家实验室反馈，TensorRT-LLM、ATOM 等专有或硬件专用引擎并不总能提供其 AgentX 工作负载所需的全部功能。
 
@@ -110,7 +112,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
-## KV 缓存卸载策略
+### KV 缓存卸载策略
 
 为遵循“通过限制范围实现快速交付”的设计原则，AgentX 初始策略仅允许 CPU DRAM KV 缓存卸载，且该功能为可选项。支持的方案包括 vLLM Connector、LMCache、SGLang HiCache、Mooncake CPU DRAM Connector、Dynamo KVBM、CPU DRAM P2P 池化以及类似的 CPU 内存机制。供应商可自行决定是否为每项提交启用 CPU KV 缓存卸载；如果禁用后能得到更优的 Pareto 点，也可选择禁用。
 

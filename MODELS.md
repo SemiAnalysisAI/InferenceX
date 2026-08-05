@@ -49,7 +49,9 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 | Single-turn 1k1k | 1024 / 1024 | **Deprecated for all models** since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs live in [`configs/deprecated/`](configs/deprecated/). |
 | Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
 
-## AgentX E2E normalized interactivity and Pareto-frontier policy
+## AgentX guidelines
+
+### E2E normalized interactivity and Pareto-frontier policy
 
 E2E normalized interactivity is the primary user-side latency metric and default x-axis for AgentX trace-replay results. For every valid profiling request `i`, let `OSL_i` be its positive output sequence length and `E2EL_i` be its positive end-to-end latency, including both time to first token (TTFT) and generation time. First compute the per-request time per delivered output token:
 
@@ -87,7 +89,7 @@ For every supported y-axis metric and comparison group, the Pareto frontier comp
 
 Therefore, a point cannot appear on any AgentX Pareto frontier unless it is both a North Star winner and non-dominated on the selected chart. This prevents a configuration from entering a published frontier by optimizing one secondary latency metric at the expense of end-to-end user experience. Dominated points remain available in the unfiltered scatter view for diagnosis.
 
-## Engine submission policy
+### Engine submission policy
 
 Based on feedback from Tier 1 AI labs and the broader ML community about what they want to see in InferenceX AgentX, InferenceX uses an explicit model-to-framework mapping. Labs have reported that proprietary or hardware-specific engines such as TensorRT-LLM and ATOM do not always provide every feature their AgentX workloads require.
 
@@ -110,7 +112,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
-## KV cache offloading policy
+### KV cache offloading policy
 
 To align with the design principle of shipping quickly by limiting scope, the initial AgentX policy permits only CPU DRAM KV cache offloading, and its use is optional. Supported approaches include the vLLM Connector, LMCache, SGLang HiCache, Mooncake CPU DRAM Connector, Dynamo KVBM, CPU DRAM P2P pooling, and similar CPU-memory mechanisms. Vendors may enable or disable CPU KV cache offloading for each submission at their discretion, including disabling it when that produces better Pareto points.
 
