@@ -232,6 +232,14 @@ def compute_throughput_stats(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     input_tokens = extract_per_record_ints(records, "input_sequence_length")
     output_tokens = extract_per_record_ints(records, "output_sequence_length")
+    full_response_tps_per_user = extract_per_record_floats(
+        records,
+        "full_response_output_token_throughput_per_user",
+    )
+    full_response_tps_per_user_stats = stats_for(
+        "full_response_output_token_throughput_per_user",
+        full_response_tps_per_user,
+    )
     starts_ns = [
         int(record["metadata"]["request_start_ns"])
         for record in records
@@ -255,11 +263,16 @@ def compute_throughput_stats(
         "output_tput_tps": total_output / duration,
         "total_tput_tps": (total_input + total_output) / duration,
         "duration_seconds": duration,
+        **full_response_tps_per_user_stats,
     }
     nested = {
         "input": {"tokens_per_second": flat["input_tput_tps"]},
         "output": {"tokens_per_second": flat["output_tput_tps"]},
         "total": {"tokens_per_second": flat["total_tput_tps"]},
+        "full_response_output_token_throughput_per_user": _nest_stats(
+            "full_response_output_token_throughput_per_user",
+            full_response_tps_per_user_stats,
+        ),
         "duration_seconds": duration,
         "per_gpu": {},
     }

@@ -129,6 +129,7 @@ REQUEST_THROUGHPUT_KEYS = {
     "input",
     "output",
     "total",
+    "full_response_output_token_throughput_per_user",
     "duration_seconds",
     "per_gpu",
 }
@@ -508,6 +509,45 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     assert per_gpu["output_tput_tps"] == pytest.approx(
         throughput["output"]["tokens_per_second"] / 16
     )
+
+
+def test_processor_aggregates_full_response_output_tps_per_user(tmp_path: Path):
+    result_dir = tmp_path / "results"
+    artifact = result_dir / "aiperf_artifacts"
+    artifact.mkdir(parents=True)
+
+    values = (182.82228456622666, 200.0, 250.0)
+    with open(artifact / "profile_export.jsonl", "w") as f:
+        for idx, full_response_tps in enumerate(values):
+            record = _make_record(
+                conv_id=f"trace-{idx}",
+                turn_index=0,
+                isl=100,
+                osl=26_571,
+                ttft_ms=529.058811,
+                e2e_ms=610.559573,
+                itl_ms=0.003067398,
+                start_ns=(idx + 1) * 1_000_000_000,
+                end_ns=(idx + 1) * 1_000_000_000 + 145_861_451_008,
+            )
+            record["metrics"][
+                "full_response_output_token_throughput_per_user"
+            ] = {"value": full_response_tps, "unit": "tokens/s/user"}
+            f.write(json.dumps(record) + "\n")
+
+    with open(artifact / "profile_export_aiperf.json", "w") as f:
+        json.dump({"request_count": len(values)}, f)
+
+    agg = _run_processor(result_dir, tmp_path / "out")
+    metric = agg["request_metrics"]["throughput"][
+        "full_response_output_token_throughput_per_user"
+    ]
+
+    assert metric["mean"] == pytest.approx(sum(values) / len(values), rel=1e-5)
+    assert metric["p50"] == pytest.approx(200.0)
+    assert metric["p75"] == pytest.approx(225.0)
+    assert metric["p90"] == pytest.approx(240.0)
+    assert metric["p95"] == pytest.approx(245.0)
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
