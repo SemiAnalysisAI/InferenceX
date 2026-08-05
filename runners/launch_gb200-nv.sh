@@ -14,7 +14,7 @@ SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 # URL+PIN here (and identically in launch_gb300-nv.sh) when the upstream
 # srt-slurm merge lands.
 POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
-POWER_SRT_SLURM_PIN="6609d46a4c74ed66fc2f7014d7e790efe1d23bde"
+POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
 
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
