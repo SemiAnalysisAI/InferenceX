@@ -455,27 +455,36 @@ set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
-# MoE backend. The pure-TP arms stay on the AITER fused MoE that this recipe
-# was validated against. The DEP arms (DP-attention + EP>1) instead select
-# AITER's FlyDSL mega-MoE, which fuses the expert-parallel dispatch, the two
-# expert GEMMs, and the combine into one pipeline (ROCm/FlyDSL#626). Its
-# intranode dispatch/combine kernel is the EP-aware path, so it only applies
-# where there is an actual all-to-all to fuse.
+# MoE backend. All arms use the AITER fused MoE this recipe was validated
+# against.
 #
-# Launch geometry comes from AITER's checked-in tuning table, resolved by
-# aiter/ops/flydsl/kernels/flydsl_dispatch_combine_intranode_op.py:
-# resolve_tuning_config_path() globs mega_moe_tuning_config/ for
-# flydsl_*_{kernel_type}_ep{world_size}.json and scores candidates on gfx arch
-# then GPU model. On MI355X at EP8 that resolves to
-# flydsl_gfx950_mi355x_IntraNode_ep8.json. DSv4-Pro matches its
-# hidden_dim=7168 / topk=6 / local_expert_num=48 (384 routed experts / EP8)
-# fp4 dispatch rules directly, so the table hits rather than falling back to
-# the static 128-block / 4-warp defaults. A shape miss is not fatal: the op
-# logs "using static geometry defaults" and still runs.
-MOE_BACKEND=aiter
-if [ "$DP_ATTENTION" = "true" ] && [ "$EP_SIZE" -gt 1 ]; then
-    MOE_BACKEND=flydsl
-fi
+# The DEP arms (DP-attention + EP>1) were tried on AITER's FlyDSL mega-MoE
+# (--moe-backend flydsl), which fuses the expert-parallel dispatch, both expert
+# GEMMs, and the combine into one pipeline (ROCm/FlyDSL#626). That does not work
+# for this model: DSv4-Pro resolves expert_dtype to 'fp4', so its experts are
+# built by Mxfp4MoEMethod, and vllm/model_executor/layers/fused_moe/oracle/
+# mxfp4.py:map_mxfp4_backend() hard-rejects anything outside its MXFP4 allowlist:
+#
+#   ValueError: moe_backend='flydsl' is not supported for MXFP4 MoE.
+#   Expected one of ['deep_gemm', 'flashinfer_trtllm', 'flashinfer_trtllm_afp8',
+#   'flashinfer_cutlass', 'flashinfer_cutlass_afp8', 'triton', 'triton_unfused',
+#   'humming', 'marlin', 'aiter', 'aiter_mxfp4_fp8', 'aiter_mxfp4_mxfp4', 'xpu',
+#   'cpu', 'emulation']
+#
+# This is a hard failure at model load, not a fallback -- every worker dies in
+# FusedMoE.__init__ before any KV cache is allocated. The rejection is on the
+# quantization path, so it is independent of EP size and of whether AITER's
+# flydsl_gfx950_mi355x_IntraNode_ep8.json tuning table covers the shape (it does:
+# hidden_dim=7168 / topk=6 / local_expert_num=48 matches DSv4-Pro at EP8). The
+# tuning table is simply never consulted, because FlyDSL is not reachable for an
+# MXFP4-quantized MoE in this vLLM build.
+#
+# So the DEP8 arm runs on --moe-backend aiter, which is on the allowlist. That
+# still answers the question this arm exists for: whether sharding KV per DP rank
+# and the 384 routed experts across EP8 frees enough HBM to raise the prefix-cache
+# hit rate that dominates AgentX. Revisit flydsl once vLLM wires it into the
+# MXFP4 backend oracle. Override with MOE_BACKEND to retest without editing this.
+MOE_BACKEND="${MOE_BACKEND:-aiter}"
 
 sleep 180
 

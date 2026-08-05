@@ -1441,11 +1441,10 @@ dsv4-fp4-mi355x-vllm-agentic:
 # pure TP8 replicates the MLA KV cache on every GPU, so the available KV pool
 # -- and therefore the prefix-cache hit rate that dominates this trace-replay
 # workload -- does not grow with the node. DP-attention shards KV per DP rank
-# and EP8 shards the 384 routed experts, freeing HBM for KV. The launch script
-# selects --moe-backend flydsl on this arm (AITER FlyDSL mega-MoE, whose
-# intranode dispatch/combine tuning table
-# flydsl_gfx950_mi355x_IntraNode_ep8.json covers gfx950 at EP8); the pure-TP
-# arms stay on --moe-backend aiter.
+# and EP8 shards the 384 routed experts, freeing HBM for KV. Every arm runs on
+# --moe-backend aiter: AITER's FlyDSL mega-MoE was tried on the DEP8 arm and is
+# rejected at model load, because DSv4-Pro's experts are MXFP4 and vLLM's MXFP4
+# backend oracle does not list flydsl. See the launch script for details.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-b88916617d3d2249bff0dae5cecb6b727c980a20
   model: deepseek-ai/DeepSeek-V4-Pro
