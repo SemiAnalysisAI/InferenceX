@@ -51,15 +51,15 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 ## 引擎提交策略
 
-下表列出各模型优先允许的原生/上游（native/upstream）引擎。硬件专用引擎也允许提交，但优先级较低，且须在所列原生/上游引擎均已提交后方可提交。表中同时记录已达成一致的草稿模型规划（PoR）以及尚待合作伙伴对齐的提案。
+下表列出各模型优先允许的原生/上游（native/upstream）引擎。硬件专用引擎也允许提交，但通常仅作为次优先级，且须在所列原生/上游引擎均已提交后方可提交。新支持的硬件属于例外：为实现初始支持，可先提交硬件专用引擎，但预期相应的原生/上游 vLLM 或 SGLang 提交会在此后不久跟进。表中同时记录已达成一致的草稿模型规划（PoR）以及尚待合作伙伴对齐的提案。
 
 | 模型 | 首选原生/上游引擎 | 已达成一致的草稿模型（PoR） | 待合作伙伴对齐的草稿模型提案 | 次选引擎 |
 |---|---|---|---|---|
-| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | 原生 MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` —— 仅提议用于 AgentX，并须遵循相同的合成接受方法；尚待合作伙伴对齐。单轮 8k1k 继续使用原生 MTP 头。 | 硬件专用引擎；须在原生/上游 vLLM 和 SGLang 引擎均已提交后 |
-| Kimi-K3（`kimik3`） | 原生/上游 vLLM 引擎 | `Inferact/Kimi-K3-DSpark` | — | 硬件专用引擎；须在原生/上游 vLLM 引擎已提交后 |
-| MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | — | 硬件专用引擎；须在原生/上游 vLLM 引擎已提交后 |
-| GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 硬件专用引擎；须在原生/上游 SGLang 引擎已提交后 |
-| Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 硬件专用引擎；须在原生/上游 SGLang 引擎已提交后 |
+| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | 原生 MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` —— 仅提议用于 AgentX，并须遵循相同的合成接受方法；尚待合作伙伴对齐。单轮 8k1k 继续使用原生 MTP 头。 | 硬件专用引擎；通常须在原生/上游 vLLM 和 SGLang 引擎均已提交后，但适用上述新硬件例外 |
+| Kimi-K3（`kimik3`） | 原生/上游 vLLM 引擎 | `Inferact/Kimi-K3-DSpark` | — | 硬件专用引擎；通常须在原生/上游 vLLM 引擎已提交后，但适用上述新硬件例外 |
+| MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | — | 硬件专用引擎；通常须在原生/上游 vLLM 引擎已提交后，但适用上述新硬件例外 |
+| GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 硬件专用引擎；通常须在原生/上游 SGLang 引擎已提交后，但适用上述新硬件例外 |
+| Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 硬件专用引擎；通常须在原生/上游 SGLang 引擎已提交后，但适用上述新硬件例外 |
 
 ## 模型支持矩阵
 
