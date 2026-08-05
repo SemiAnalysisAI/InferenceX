@@ -123,13 +123,20 @@ SERVER_PROMPT_SOURCE_KEYS = {
     "raw",
 }
 REQUEST_METRICS_KEYS = {"qps", "latency", "tokens", "throughput", "cache"}
-REQUEST_LATENCY_KEYS = {"ttft", "e2el", "itl", "tpot", "intvty"}
+REQUEST_LATENCY_KEYS = {
+    "ttft",
+    "e2el",
+    "itl",
+    "tpot",
+    "intvty",
+    "full_response_itl",
+    "full_response_intvty",
+}
 REQUEST_TOKEN_KEYS = {"input", "output_actual", "output_expected"}
 REQUEST_THROUGHPUT_KEYS = {
     "input",
     "output",
     "total",
-    "full_response_output_token_throughput_per_user",
     "duration_seconds",
     "per_gpu",
 }
@@ -511,14 +518,14 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     )
 
 
-def test_processor_aggregates_full_response_output_tps_per_user(tmp_path: Path):
+def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path):
     result_dir = tmp_path / "results"
     artifact = result_dir / "aiperf_artifacts"
     artifact.mkdir(parents=True)
 
-    values = (182.82228456622666, 200.0, 250.0)
+    full_response_itls_ms = (5.469791, 5.0, 4.0)
     with open(artifact / "profile_export.jsonl", "w") as f:
-        for idx, full_response_tps in enumerate(values):
+        for idx, full_response_itl_ms in enumerate(full_response_itls_ms):
             record = _make_record(
                 conv_id=f"trace-{idx}",
                 turn_index=0,
@@ -530,24 +537,27 @@ def test_processor_aggregates_full_response_output_tps_per_user(tmp_path: Path):
                 start_ns=(idx + 1) * 1_000_000_000,
                 end_ns=(idx + 1) * 1_000_000_000 + 145_861_451_008,
             )
-            record["metrics"][
-                "full_response_output_token_throughput_per_user"
-            ] = {"value": full_response_tps, "unit": "tokens/s/user"}
+            record["metrics"]["full_response_inter_token_latency"] = {
+                "value": full_response_itl_ms,
+                "unit": "ms",
+            }
             f.write(json.dumps(record) + "\n")
 
     with open(artifact / "profile_export_aiperf.json", "w") as f:
-        json.dump({"request_count": len(values)}, f)
+        json.dump({"request_count": len(full_response_itls_ms)}, f)
 
     agg = _run_processor(result_dir, tmp_path / "out")
-    metric = agg["request_metrics"]["throughput"][
-        "full_response_output_token_throughput_per_user"
-    ]
+    latency = agg["request_metrics"]["latency"]
+    full_response_itl = latency["full_response_itl"]
+    full_response_intvty = latency["full_response_intvty"]
 
-    assert metric["mean"] == pytest.approx(sum(values) / len(values), rel=1e-5)
-    assert metric["p50"] == pytest.approx(200.0)
-    assert metric["p75"] == pytest.approx(225.0)
-    assert metric["p90"] == pytest.approx(240.0)
-    assert metric["p95"] == pytest.approx(245.0)
+    assert full_response_itl["p50"] == pytest.approx(0.005)
+    assert full_response_itl["p75"] == pytest.approx(0.00523)
+    assert full_response_intvty["p50"] == pytest.approx(
+        1 / full_response_itl["p50"]
+    )
+    assert full_response_intvty["p75"] == pytest.approx(1 / 0.0052348955)
+    assert full_response_intvty["p75"] < full_response_intvty["p50"]
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
