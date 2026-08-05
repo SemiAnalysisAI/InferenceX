@@ -50,56 +50,40 @@ def record_power_internal_error(
     error,
 ):
     """Preserve an auditable invalid result when aggregation fails unexpectedly."""
-    reason = "aggregation_internal_error"
+    reasons = ["aggregation_internal_error"]
     try:
+        from aggregate_power import (
+            _POWER_METRIC_KEYS,
+            _empty_integration,
+            _validation_payload,
+            _write_json_atomic,
+        )
+
         agg_data = json.loads(agg_result.read_text(encoding="utf-8"))
-        for key in (
-            "avg_power_w",
-            "avg_total_gpu_power_w",
-            "total_gpu_energy_j",
-            "joules_per_successful_query",
-            "joules_per_input_token",
-            "joules_per_output_token",
-            "joules_per_total_token",
-        ):
+        for key in _POWER_METRIC_KEYS:
             agg_data.pop(key, None)
         agg_data["power_valid"] = 0
         agg_data.pop("power_invalid_reasons", None)
-        agg_tmp = agg_result.with_suffix(agg_result.suffix + ".tmp")
-        agg_tmp.write_text(json.dumps(agg_data, indent=2), encoding="utf-8")
-        agg_tmp.replace(agg_result)
+        _write_json_atomic(agg_result, agg_data)
 
-        validation_data = {
-            "schema_version": 1,
-            "power_valid": False,
-            "reasons": [reason],
-            "telemetry_source": str(csv_path),
-            "benchmark_result": str(bench_result),
-            "benchmark_window": None,
-            "integration_method": (
-                "per_device_trapezoidal_with_linear_boundary_interpolation"
+        validation_data = _validation_payload(
+            csv_path=csv_path,
+            bench_result=bench_result,
+            benchmark=None,
+            integration=_empty_integration(
+                expected_num_gpus=expected_num_gpus,
+                reasons=reasons,
             ),
-            "expected_gpu_count": expected_num_gpus,
-            "observed_gpu_count": 0,
-            "observed_gpu_ids": [],
-            "per_gpu_sample_counts": {},
-            "per_gpu_max_sample_gap_s": {},
-            "per_gpu_energy_j": {},
-            "device_issues": {},
-            "metrics": {},
-            "internal_error": {
-                "type": type(error).__name__,
-                "message": str(error)[:500],
-            },
+            power_valid=False,
+            reasons=reasons,
+            metrics={},
+        )
+        validation_data["internal_error"] = {
+            "type": type(error).__name__,
+            "message": str(error)[:500],
         }
-        validation_tmp = validation_result.with_suffix(
-            validation_result.suffix + ".tmp"
-        )
-        validation_tmp.write_text(
-            json.dumps(validation_data, indent=2), encoding="utf-8"
-        )
-        validation_tmp.replace(validation_result)
-    except (OSError, json.JSONDecodeError) as fallback_error:
+        _write_json_atomic(validation_result, validation_data)
+    except (OSError, json.JSONDecodeError, ImportError, AttributeError) as fallback_error:
         print(
             f"[process_result] failed to preserve power validation fallback: "
             f"{fallback_error}",

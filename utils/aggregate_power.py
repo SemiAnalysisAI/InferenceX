@@ -389,9 +389,10 @@ def integrate_power(
                 if timestamp is None or not math.isfinite(timestamp):
                     _append_reason(reasons, "invalid_timestamp_sample")
                     continue
-                # Only the formal window and its possible boundary neighbors
-                # can affect integration. Bad warmup/eval rows farther away
-                # must not invalidate an otherwise sound measurement.
+                # Note (wenyao): corrupt warmup/eval rows are skipped only when
+                # their parseable timestamp proves they cannot affect the
+                # window. An unparseable timestamp has unknown position, so it
+                # was rejected above instead of skipped.
                 if (
                     timestamp < start_unix - max_sample_gap_s
                     or timestamp > end_unix + max_sample_gap_s

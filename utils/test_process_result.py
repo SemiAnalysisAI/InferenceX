@@ -108,20 +108,20 @@ def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_resul
 def run_script_with_broken_aggregator(
     tmp_path, env, benchmark_result, result_filename="benchmark_result"
 ):
-    """Run process_result with an injected aggregator that raises unexpectedly."""
+    """Run process_result with the real aggregator patched to raise unexpectedly."""
     result_file = tmp_path / f"{result_filename}.json"
     result_file.write_text(json.dumps(benchmark_result))
     env = {**env, "RESULT_FILENAME": result_filename}
     wrapper = f"""
 import runpy
 import sys
-import types
 
-aggregate_power = types.ModuleType("aggregate_power")
+sys.path.insert(0, {str(SCRIPT_PATH.parent)!r})
+import aggregate_power
+
 def broken_run(**kwargs):
     raise RuntimeError("forced aggregation failure")
 aggregate_power.run = broken_run
-sys.modules["aggregate_power"] = aggregate_power
 runpy.run_path({str(SCRIPT_PATH)!r}, run_name="__main__")
 """
     return subprocess.run(
