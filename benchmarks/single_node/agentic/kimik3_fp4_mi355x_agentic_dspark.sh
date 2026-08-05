@@ -35,6 +35,10 @@ if [[ -n "${ROCR_VISIBLE_DEVICES:-}" ]]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
+# Do not start the large Kimi-K3 load while a previous Slurm job is still
+# releasing VRAM on the allocated MI355X GPUs.
+wait_for_amd_gpu_clean
+
 # The cluster launcher mounts its persistent Hugging Face cache here. MODEL_PATH
 # may instead point at a pre-staged snapshot.
 export HF_HUB_CACHE="${HF_HUB_CACHE:-/models/huggingface_hub}"
