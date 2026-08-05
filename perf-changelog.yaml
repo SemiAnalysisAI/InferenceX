@@ -5357,15 +5357,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2213
 
 - config-keys:
-    - dsv4-fp4-gb200-llmd-vllm
-  description:
-    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
-    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
-    - "EPP: switch from max-score-picker to weighted-random-picker (threshold=0.1) for better load distribution under high concurrency"
-    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
-
-- config-keys:
     - qwen3.5-fp4-b300-sglang-agentic-mtp
   description:
     - "Add Qwen3.5-397B-A17B NVFP4 AgentX benchmark on B300 with SGLang native NEXTN MTP"
@@ -5382,6 +5373,7 @@
     - "Use the shared AIPerf watchdog to cap whole-trajectory runtime idle gaps at 300 seconds"
     - "Image: lmsysorg/sglang:v0.5.16-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2420
+  
 
 - config-keys:
     - minimaxm3-fp4-b200-dynamo-vllm
@@ -5457,3 +5449,12 @@
     - "Enable prefill-only INT4 quick-reduce: set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048 on the prefill workers via a new prefill_env channel (mirrors the existing decode_env path in server_vllm.sh)."
     - "Cap the 1P1D TP4 concurrency sweep at 256 (was 512); drop the 2P1D TP4 layout (128/256/512) as it is CI-flaky with negligible curve impact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1943
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
+    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
+    - "EPP: switch from max-score-picker to weighted-random-picker (threshold=0.1) for better load distribution under high concurrency"
+    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
