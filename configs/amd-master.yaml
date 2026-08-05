@@ -626,6 +626,33 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
+  # bf16 + asm + DSpark: route the multi-token VERIFY step to the PS ASM kernel.
+  #
+  # k=3 because verify runs qlen = k+1 = 4, and aiter main's gfx950 registry has
+  # a bf16 Gqa=16 kernel at qSeqLen=4 and nothing at 3.
+  #
+  # The prize is the non-DSpark asm A/B: c8 682.63 -> 1707.85 tok/s/GPU (2.50x),
+  # LMCache c16 570.03 -> 1520.51 (2.67x), gsm8k unchanged. That was asm DECODE.
+  # This asks whether asm VERIFY pays the same way.
+  #
+  # Judge acceptance shape first. The k=3 ladder tops out at 4.00. Padded asm
+  # verify previously produced 574/574 accepted with per-position all 1.000 --
+  # corruption, caused (most likely) by the 16 // 12 == 1 no-op in the padding
+  # helpers that #51088 fixes. A saturated 4.00 means it is not fixed.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-ps-c8:
   # vllm#51088 PS ASM decode route, GPU-only c8, single variable against run
   # 30928884574 (496.19 tok/s/GPU, 142 reqs, TTFT 27.6 s, acceptance 1.21/3.00).
