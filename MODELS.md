@@ -51,15 +51,26 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 
 ## Engine submission policy
 
-The native/upstream engines below are the primary allowed engines for each model. Hardware-specific engines are also allowed, but normally only as second-priority submissions after the listed native/upstream engine submissions have been made. As an exception for newly supported hardware, a hardware-specific engine may be submitted first to enable initial support, with the expectation that the corresponding native/upstream vLLM or SGLang submission will follow shortly afterward. The table records both the agreed plan-of-record (PoR) draft-model mapping and proposals that still require partner alignment.
+Based on feedback from Tier 1 AI labs and the broader ML community about what they want to see in InferenceX AgentX, InferenceX uses an explicit model-to-framework mapping. Labs have reported that proprietary or hardware-specific engines such as TensorRT-LLM and ATOM do not always provide every feature their AgentX workloads require.
 
-| Model | Primary native/upstream engines | Agreed draft model(s) (PoR) | Proposed draft model(s) pending partner alignment | Secondary engines |
+The native/upstream engines in the table below are the first-class engines for each model. If a provider supports both the native/upstream vLLM engine and native/upstream SGLang engine as first-class LLM engines, it must first submit the engine or engines assigned by this mapping before submitting additional non-vLLM/SGLang engines such as ATOM, TensorRT-LLM, or TokenSpeed. Multiple additional non-vLLM/SGLang engines may be submitted.
+
+There are two exceptions to this ordering guideline:
+
+1. Brand-new hardware SKUs, such as MI455X UALoE72, VR200 NVL72, Rubin NVL8, TPUv8t, and TPUv8i, may use a hardware-specific engine first for initial support. The corresponding native/upstream vLLM or SGLang submission is expected to follow shortly afterward.
+2. For a new model architecture, a provider may use another engine first if it cannot support the mapped native/upstream vLLM or SGLang engine as a first-class engine and can articulate to core maintainers a fundamental, first-principles reason why the mapped framework does not yet support the hardware-model combination.
+
+InferenceX supports the maintainers of both SGLang and vLLM and reflects feedback from AI labs and the ML community that want to see performance from both frameworks. Among models assigned to one primary framework, the mapping splits assignments evenly between vLLM and SGLang; models mapped to both provide shared coverage. This ensures that InferenceX tests both frameworks equally without favoring one over the other.
+
+The table also records both the agreed plan-of-record (PoR) draft-model mapping and proposals that still require partner alignment.
+
+| Model | Primary native/upstream engines | Agreed draft model(s) (PoR) | Proposed draft model(s) pending partner alignment | Additional engines |
 |---|---|---|---|---|
-| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | native MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` — proposed for AgentX only under the same synthetic-acceptance methodology; pending partner alignment. Single-turn 8k1k remains on the native MTP heads. | Hardware-specific engines; normally after native/upstream vLLM and SGLang engine submissions, subject to the new-hardware exception above |
-| Kimi-K3 (`kimik3`) | native/upstream vLLM engine | `Inferact/Kimi-K3-DSpark` | — | Hardware-specific engines; normally after a native/upstream vLLM engine submission, subject to the new-hardware exception above |
-| MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | `Inferact/MiniMax-M3-EAGLE3` and/or `Inferact/MiniMax-M3-EAGLE3-GQA` | — | Hardware-specific engines; normally after a native/upstream vLLM engine submission, subject to the new-hardware exception above |
-| GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | — | Hardware-specific engines; normally after a native/upstream SGLang engine submission, subject to the new-hardware exception above |
-| Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | — | Hardware-specific engines; normally after a native/upstream SGLang engine submission, subject to the new-hardware exception above |
+| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | native MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` — proposed for AgentX only under the same synthetic-acceptance methodology; pending partner alignment. Single-turn 8k1k remains on the native MTP heads. | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Kimi-K3 (`kimik3`) | native/upstream vLLM engine | `Inferact/Kimi-K3-DSpark` | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | `Inferact/MiniMax-M3-EAGLE3` and/or `Inferact/MiniMax-M3-EAGLE3-GQA` | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
 ## Model support matrix
 

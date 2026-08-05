@@ -51,15 +51,26 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 ## 引擎提交策略
 
-下表列出各模型优先允许的原生/上游（native/upstream）引擎。硬件专用引擎也允许提交，但通常仅作为次优先级，且须在所列原生/上游引擎均已提交后方可提交。新支持的硬件属于例外：为实现初始支持，可先提交硬件专用引擎，但预期相应的原生/上游 vLLM 或 SGLang 提交会在此后不久跟进。表中同时记录已达成一致的草稿模型规划（PoR）以及尚待合作伙伴对齐的提案。
+根据 Tier 1 AI 实验室和更广泛的机器学习社区对 InferenceX AgentX 展示内容的反馈，InferenceX 采用明确的模型到框架映射。多家实验室反馈，TensorRT-LLM、ATOM 等专有或硬件专用引擎并不总能提供其 AgentX 工作负载所需的全部功能。
 
-| 模型 | 首选原生/上游引擎 | 已达成一致的草稿模型（PoR） | 待合作伙伴对齐的草稿模型提案 | 次选引擎 |
+下表中的原生/上游（native/upstream）引擎是各模型的一级支持引擎。如果某一提供方将原生/上游 vLLM 引擎和原生/上游 SGLang 引擎均作为一级支持的 LLM 引擎，则必须先按照本映射提交指定的一个或多个引擎，之后才能提交 ATOM、TensorRT-LLM、TokenSpeed 等其他非 vLLM/SGLang 引擎。允许提交多个其他非 vLLM/SGLang 引擎。
+
+该提交顺序指南有两项例外：
+
+1. 对于 MI455X UALoE72、VR200 NVL72、Rubin NVL8、TPUv8t、TPUv8i 等全新硬件 SKU，为实现初始支持，可先使用硬件专用引擎。预期相应的原生/上游 vLLM 或 SGLang 提交会在此后不久跟进。
+2. 对于新的模型架构，如果提供方无法将映射指定的原生/上游 vLLM 或 SGLang 引擎作为一级支持引擎，并能向核心维护者说明该框架尚不支持相应硬件—模型组合的根本性、第一性原理原因，则可先使用其他引擎。
+
+InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和机器学习社区希望看到两个框架性能数据的反馈。在仅指定一个主要框架的模型中，映射会将任务均衡分配给 vLLM 和 SGLang；同时指定两个框架的模型则提供共享覆盖。这确保 InferenceX 对两个框架进行同等测试，不偏向任何一方。
+
+表中还同时记录已达成一致的草稿模型规划（PoR）以及尚待合作伙伴对齐的提案。
+
+| 模型 | 首选原生/上游引擎 | 已达成一致的草稿模型（PoR） | 待合作伙伴对齐的草稿模型提案 | 其他引擎 |
 |---|---|---|---|---|
-| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | 原生 MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` —— 仅提议用于 AgentX，并须遵循相同的合成接受方法；尚待合作伙伴对齐。单轮 8k1k 继续使用原生 MTP 头。 | 硬件专用引擎；通常须在原生/上游 vLLM 和 SGLang 引擎均已提交后，但适用上述新硬件例外 |
-| Kimi-K3（`kimik3`） | 原生/上游 vLLM 引擎 | `Inferact/Kimi-K3-DSpark` | — | 硬件专用引擎；通常须在原生/上游 vLLM 引擎已提交后，但适用上述新硬件例外 |
-| MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | — | 硬件专用引擎；通常须在原生/上游 vLLM 引擎已提交后，但适用上述新硬件例外 |
-| GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 硬件专用引擎；通常须在原生/上游 SGLang 引擎已提交后，但适用上述新硬件例外 |
-| Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 硬件专用引擎；通常须在原生/上游 SGLang 引擎已提交后，但适用上述新硬件例外 |
+| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | 原生 MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` —— 仅提议用于 AgentX，并须遵循相同的合成接受方法；尚待合作伙伴对齐。单轮 8k1k 继续使用原生 MTP 头。 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Kimi-K3（`kimik3`） | 原生/上游 vLLM 引擎 | `Inferact/Kimi-K3-DSpark` | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
 ## 模型支持矩阵
 
