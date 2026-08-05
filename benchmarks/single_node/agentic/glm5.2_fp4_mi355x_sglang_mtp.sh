@@ -29,7 +29,6 @@ fi
 rocm-smi || true
 amd-smi || true
 
-
 # A server killed on this node minutes earlier (previous job, crashed run)
 # can still be draining its ~1.4 TB of HBM: KFD reclaim takes minutes, and
 # booting into a half-drained node fails RCCL init with HIP 'unhandled cuda
@@ -80,51 +79,6 @@ export SGLANG_OPT_USE_TOPK_V2=false
 # it runs ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load headroom) at
 # negligible hit-rate cost.
 CACHE_ARGS=()
-if require_agentic_kv_offload_backend mooncake; then
-    if [ "$DP_ATTENTION" = "true" ]; then
-        HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
-    else
-        HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
-    fi
-    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-    L3_PER_RANK_GB="${L3_PER_RANK_GB:-40}"
-    python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-    MOONCAKE_MASTER_PORT=$((PORT + 12000))
-    MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
-    MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
-    cat > "$MOONCAKE_CONFIG_PATH" <<EOF
-{
-  "local_hostname": "127.0.0.1",
-  "metadata_server": "P2PHANDSHAKE",
-  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
-  "global_segment_size": "${L3_PER_RANK_GB}gb",
-  "local_buffer_size": "4gb",
-  "protocol": "tcp",
-  "device_name": ""
-}
-EOF
-    export SGLANG_HICACHE_MOONCAKE_CONFIG_PATH="$MOONCAKE_CONFIG_PATH"
-    mooncake_master --port "$MOONCAKE_MASTER_PORT" \
-        --default_kv_lease_ttl=120s \
-        --eviction_high_watermark_ratio=0.80 \
-        --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
-    MOONCAKE_MASTER_PID=$!
-    sleep 2
-    kill -0 "$MOONCAKE_MASTER_PID"
-    echo "HiCache+Mooncake: ratio=$HICACHE_RATIO, l3_per_rank=${L3_PER_RANK_GB} GB, dram_budget=${TOTAL_CPU_DRAM_GB} GB"
-    CACHE_ARGS=(
-        --enable-hierarchical-cache
-        --hicache-ratio "$HICACHE_RATIO"
-        --hicache-size 0
-        --hicache-write-policy "$HICACHE_WRITE_POLICY"
-        --hicache-io-backend "$HICACHE_IO_BACKEND"
-        --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
-        --hicache-storage-backend mooncake
-        --hicache-storage-prefetch-policy wait_complete
-    )
-fi
 
 # Arm selection. TP arm keeps the FP8 sibling's cookbook batch-shaping
 # bands.
