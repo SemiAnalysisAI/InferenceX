@@ -51,15 +51,15 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 
 ## Engine submission policy
 
-The engines below are the primary allowed engines for each model. Hardware-specific engines are also allowed, but only as second-priority submissions after the listed primary-engine submissions have been made.
+The native/upstream engines below are the primary allowed engines for each model. Hardware-specific engines are also allowed, but only as second-priority submissions after the listed native/upstream engine submissions have been made. The table also records the speculative-decoding draft model or method used for Agentic coding.
 
-| Model | Primary engines | Secondary engines |
-|---|---|---|
-| DeepSeek-V4-Pro 1.6T (`dsv4`) | vLLM and SGLang | Hardware-specific engines, after vLLM and SGLang submissions |
-| Kimi-K3 (`kimik3`) | vLLM | Hardware-specific engines, after a vLLM submission |
-| MiniMax-M3 (`minimaxm3`) | vLLM | Hardware-specific engines, after a vLLM submission |
-| GLM-5.2 (`glm5.2`) | SGLang | Hardware-specific engines, after an SGLang submission |
-| Qwen3.5-397B-A17B (`qwen3.5`) | SGLang | Hardware-specific engines, after an SGLang submission |
+| Model | Primary native/upstream engines | Draft model/method | Secondary engines |
+|---|---|---|---|
+| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | MTP | Hardware-specific engines, after native/upstream vLLM and SGLang engine submissions |
+| Kimi-K3 (`kimik3`) | native/upstream vLLM engine | DSpark | Hardware-specific engines, after a native/upstream vLLM engine submission |
+| MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | EAGLE3 | Hardware-specific engines, after a native/upstream vLLM engine submission |
+| GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | MTP | Hardware-specific engines, after a native/upstream SGLang engine submission |
+| Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | MTP | Hardware-specific engines, after a native/upstream SGLang engine submission |
 
 ## Model support matrix
 
