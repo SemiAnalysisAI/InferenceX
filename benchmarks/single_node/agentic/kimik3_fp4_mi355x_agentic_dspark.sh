@@ -151,7 +151,10 @@ LMCACHE_PID=$!
 echo "LMCache server PID: $LMCACHE_PID"
 wait_for_lmcache_ready
 
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-$CONC}"
+# AgentX concurrency counts live session trees, not individual requests.
+# Subagent fan-out can push instantaneous request concurrency above CONC, so
+# leave 2x headroom rather than clipping those bursts at the scheduler.
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((2 * CONC))}"
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 SPEC_CONFIG="{\"model\":\"${SPEC_DRAFT_MODEL}\",\"num_speculative_tokens\":${SPEC_NUM_TOKENS},\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
