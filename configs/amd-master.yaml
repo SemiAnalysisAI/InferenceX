@@ -1432,6 +1432,35 @@ dsv4-fp4-mi355x-vllm-agentic:
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [64, 72], router: { name: vllm-router, version: "0.1.14" } }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "9229067cec0b3a63bb8a39368d101db7ac0bc3c1" }, conc-list: [32, 40, 48] }
 
+# MTP variant of dsv4-fp4-mi355x-vllm-agentic. Mirrors the base recipe and adds
+# spec-decoding: mtp, which routes to
+# benchmarks/single_node/agentic/dsv4_fp4_mi355x_vllm_mtp.sh (MTP,
+# num_speculative_tokens=3).
+#
+# The DEP8 arm (tp 8 + ep 8 + dp-attn) targets the AgentX KV-capacity problem:
+# pure TP8 replicates the MLA KV cache on every GPU, so the available KV pool
+# -- and therefore the prefix-cache hit rate that dominates this trace-replay
+# workload -- does not grow with the node. DP-attention shards KV per DP rank
+# and EP8 shards the 384 routed experts, freeing HBM for KV. The launch script
+# selects --moe-backend flydsl on this arm (AITER FlyDSL mega-MoE, whose
+# intranode dispatch/combine tuning table
+# flydsl_gfx950_mi355x_IntraNode_ep8.json covers gfx950 at EP8); the pure-TP
+# arms stay on --moe-backend aiter.
+dsv4-fp4-mi355x-vllm-agentic-mtp:
+  image: vllm/vllm-openai-rocm:nightly-b88916617d3d2249bff0dae5cecb6b727c980a20
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32], router: { name: vllm-router, version: "0.1.14" } }
+
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
