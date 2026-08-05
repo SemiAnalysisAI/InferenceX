@@ -183,12 +183,33 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     NODELIST_OPT=(--nodelist "$NODELIST_CSV")
 fi
 
-# Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
-# Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
+# Optional: exclude specific nodes for known-bad (FRAMEWORK, MODEL_NAME)
+# combos (e.g. nodes with broken Docker sockets), looked up from
+# node_excludes.yaml. Set SLURM_EXCLUDE_NODES to override with an explicit
+# comma-separated hostname list (takes precedence over the file).
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g10,mia1-p01-g11,mia1-p01-g12}"
+NODE_EXCLUDES_YAML="$(dirname "$0")/node_excludes.yaml"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
-    EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
+    RESOLVED_EXCLUDE_NODES="$SLURM_EXCLUDE_NODES"
+elif [[ -f "$NODE_EXCLUDES_YAML" ]]; then
+    RESOLVED_EXCLUDE_NODES=$(python3 -c "
+import yaml
+
+with open('${NODE_EXCLUDES_YAML}') as f:
+    cfg = yaml.safe_load(f) or {}
+
+framework = '${FRAMEWORK}'
+model = '${MODEL_NAME}'
+for rule in cfg.get('rules', []):
+    if rule.get('framework') == framework and model in (rule.get('models') or []):
+        print(rule.get('exclude_nodes', ''))
+        break
+")
+else
+    RESOLVED_EXCLUDE_NODES=""
+fi
+if [[ -n "$RESOLVED_EXCLUDE_NODES" ]]; then
+    EXCLUDE_OPT=(--exclude "$RESOLVED_EXCLUDE_NODES")
 fi
 
 # =============================================================================
