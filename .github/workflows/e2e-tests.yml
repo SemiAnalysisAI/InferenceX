@@ -428,6 +428,13 @@ jobs:
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.agentx-fast && '1200' || (inputs.duration-override != '' && inputs.duration-override || matrix.config.duration) }}
             agentx-fast: ${{ inputs.agentx-fast }}
+            # The sibling `agentic /` job passes this; this one did not, so it
+            # defaulted to 'none' and the launcher resolved the NON-DSpark
+            # script name. On this branch only kimik3_fp4_mi355x_mtp.sh exists,
+            # so run 30989466944 died with exit 127, "No such file or
+            # directory". Even where a base script exists, the eval would have
+            # measured a no-speculation run under a DSpark experiment's name.
+            spec-decoding: ${{ matrix.config.spec-decoding }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
