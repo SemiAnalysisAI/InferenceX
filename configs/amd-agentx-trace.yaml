@@ -1,15 +1,42 @@
-# Trace-collection config. Not part of any sweep -- amd-master.yaml owns the
-# published DSv4-Pro MI355X AgentX numbers, and this file exists purely so a
-# trace run can target the DEP arm (dp-attn + EP8) on its own without also
-# spending a runner on the TP8 baseline. Both arms sit at conc 32 in
+# Trace-collection / one-off comparison config. Not part of any sweep --
+# amd-master.yaml owns the published DSv4-Pro MI355X AgentX numbers, and this
+# file exists so a single arm can be targeted on its own without also spending a
+# runner on the arms that are not under test. Both arms sit at conc 32 in
 # amd-master.yaml, so --conc cannot separate them.
 #
 # Everything here mirrors dsv4-fp4-mi355x-vllm-agentic-mtp exactly, minus the
-# pure-TP search-space entry. Dispatch with agentx-trace: true; the recipe then
-# drives vLLM's /start_profile and /stop_profile mid-replay and drops traces in
-# results/traces (see benchmarks/single_node/agentic/dsv4_fp4_mi355x_vllm_mtp.sh).
+# search-space entries that are not under test. Dispatch with agentx-trace: true
+# to also drive vLLM's /start_profile and /stop_profile mid-replay and drop
+# traces in results/traces (see
+# benchmarks/single_node/agentic/dsv4_fp4_mi355x_vllm_mtp.sh).
 #
-# Keep in sync with the DEP entry in amd-master.yaml if that one changes.
+# Keep in sync with the corresponding entries in amd-master.yaml if those change.
+
+# DP-attention with EP off. The launch script maps dp-attn true to
+# --tensor-parallel-size 1 --data-parallel-size 8, and drops
+# --enable-expert-parallel when ep is 1. That combination is NOT "TP with
+# nothing left to shard": vLLM's FusedMoEParallelConfig.make() takes the
+# not-use_ep branch, and flatten_tp_across_dp_and_pcp() folds the 8 DP ranks
+# into an effective MoE tp_size of 8, so the experts are still sharded 8 ways --
+# as tensor-parallel slices of every expert rather than whole experts per rank.
+# Weights are therefore not replicated, and the KV pool stays per-rank as under
+# DEP8. This is the arm that isolates EP vs MoE-TP at identical attention and KV
+# layout.
+dsv4-fp4-mi355x-vllm-agentic-mtp-dpa-only:
+  image: vllm/vllm-openai-rocm:nightly-b88916617d3d2249bff0dae5cecb6b727c980a20
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32], router: { name: vllm-router, version: "0.1.14" } }
+
+# DP-attention + EP8. Already measured in run 31037991308.
 dsv4-fp4-mi355x-vllm-agentic-mtp-trace:
   image: vllm/vllm-openai-rocm:nightly-b88916617d3d2249bff0dae5cecb6b727c980a20
   model: deepseek-ai/DeepSeek-V4-Pro
