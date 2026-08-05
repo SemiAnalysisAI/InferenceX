@@ -830,7 +830,10 @@ MAX_NUM_SEQS=$((2 * CONC))
 # branch leaves it at 0.
 MLA_FORCE_PS="${MLA_FORCE_PS:-1}"
 if [ "$MLA_FORCE_PS" = "1" ]; then
-    PS_DIFF="$(dirname "$0")/patches/vllm_pr51088_force_ps.diff"
+    # Absolute: the patch runs inside `cd "$VLLM_ROOT"`, and the `<` redirect is
+    # resolved after that cd, so a relative path here resolves against
+    # site-packages and fails (run 30970159866).
+    PS_DIFF="$(cd "$(dirname "$0")/patches" && pwd)/vllm_pr51088_force_ps.diff"
     VLLM_ROOT="$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')"
     [ -f "$PS_DIFF" ] || { echo "ERROR: $PS_DIFF missing" >&2; exit 1; }
     # No `|| true`: an unpatched run would silently be a Gluon control arm
