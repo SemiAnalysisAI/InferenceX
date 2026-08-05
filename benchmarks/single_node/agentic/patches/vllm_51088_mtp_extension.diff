@@ -1,0 +1,10 @@
+--- a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
++++ b/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
+@@ -1142,6 +1142,7 @@
+         if (
+             self.num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS
+             and int(decode.max_qo_len) > 1
++            and not VLLM_ROCM_MLA_FORCE_PS
+         ):
+             qlen = int(decode.max_qo_len)
+             if type(q) is tuple:

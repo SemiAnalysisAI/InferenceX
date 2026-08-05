@@ -787,7 +787,20 @@ fi
 # ---- Optional axes ----------------------------------------------------------
 KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
 
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+# k=3, not 2, and the kernel registry is why.
+#
+# hsa/gfx950/mla/mla_asm.csv in aiter main has exactly one bf16 PS entry at
+# Gqa=16 -- qSeqLen=4, mask1 (causal):
+#   mla_a16w16_qh16_m16x4_n16x1_coex0_mask1_ps.co
+# There is NO qSeqLen=3 kernel in either dtype; that is what the still-open
+# aiter#4521 ("MLA PS mode fp8 -n 16,3 16,4") adds. DSpark verify runs at
+# qlen = k+1, so k=2 asks for a kernel that does not exist and k=3 asks for one
+# that does. It also sits exactly on asm_mla.cu:903's qo_len <= 4 boundary.
+#
+# k=3 is a fine place to be independently: the k=7 per-position acceptance
+# measurements (0.306 / 0.191 / 0.096 / 0.034 / 0.019 / 0.010 / 0.004) say the
+# first three positions carry 90% of the total gain.
+SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 SPEC_ARGS=(
     --speculative-config
     "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
@@ -840,6 +853,21 @@ if [ "$MLA_FORCE_PS" = "1" ]; then
     # published under this experiment's name.
     ( cd "$VLLM_ROOT" && patch -p1 --forward --batch < "$PS_DIFF" ) \
         2>&1 | tee "$RESULT_DIR/vllm_pr51088.log"
+    python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
+        "$VLLM_ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
+    # LOCAL EXTENSION, not part of #51088.
+    #
+    # #51088 adds `and not VLLM_ROCM_MLA_FORCE_PS` to use_gluon_decode, but not
+    # to forward_mqa's small-head multi-token branch, which returns
+    # unconditionally for num_heads < 16 and max_qo_len > 1. Under DSpark every
+    # target step is a verify step at max_qo_len = k+1, so that branch always
+    # wins and the asm route below is never reached -- which is why run
+    # 30971662995 loaded a qseqlen1 PS kernel and then served every step on
+    # Gluon, with acceptance identical to the Gluon baseline (1.21 / 10.6% vs
+    # 1.21 / 10.8%). One condition, so verify falls through to asm.
+    ( cd "$VLLM_ROOT" && patch -p1 --forward --batch \
+        < "$(cd "$(dirname "$0")/patches" && pwd)/vllm_51088_mtp_extension.diff" ) \
+        2>&1 | tee -a "$RESULT_DIR/vllm_pr51088.log"
     python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
         "$VLLM_ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
     export VLLM_ROCM_MLA_FORCE_PS=1
