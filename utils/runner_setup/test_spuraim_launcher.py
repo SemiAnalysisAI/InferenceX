@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import pwd
 import signal
 import subprocess
 import time
@@ -107,6 +108,7 @@ esac
             "TEST_CAPTURE_DIR": str(capture_dir),
             "TEST_STALE_JOB": "1",
             "SPUR_CONTROLLER_ADDR": "test-controller",
+            "SPUR_SUBMIT_USER": pwd.getpwuid(os.getuid()).pw_name,
             "SPUR_SHARED_HF_ROOT": str(tmp_path / "shared-hf"),
             "SPUR_NODE_SCRATCH": str(tmp_path / "scratch"),
             "SPUR_HEARTBEAT_SECONDS": "1",
@@ -191,6 +193,28 @@ def test_launcher_rejects_invalid_metadata_before_srun(tmp_path: Path) -> None:
     assert "KV_OFFLOAD_BACKEND_METADATA must contain valid JSON" in result.stderr
     assert not (capture_dir / "srun.log").exists()
     assert list((workspace / ".spuraim").iterdir()) == []
+
+
+def test_launcher_rejects_unresolved_submit_identity_before_srun(
+    tmp_path: Path,
+) -> None:
+    env, capture_dir, workspace = _launcher_env(tmp_path)
+    env["SPUR_SUBMIT_USER"] = "inferencex-user-that-does-not-exist"
+
+    result = subprocess.run(
+        ["bash", str(LAUNCHER)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 67
+    assert "NSS cannot resolve SPUR_SUBMIT_USER" in result.stderr
+    assert not (capture_dir / "srun.log").exists()
+    assert not (workspace / ".spuraim").exists()
 
 
 def test_launcher_cancels_allocation_and_cleans_files_on_signal(

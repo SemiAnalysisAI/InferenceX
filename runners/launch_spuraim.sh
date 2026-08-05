@@ -55,7 +55,7 @@ if [[ -z "${SPUR_CONTROLLER_ADDR:-}" ]]; then
 fi
 export SPUR_CONTROLLER_ADDR
 
-for required_command in srun squeue scancel python3 timeout; do
+for required_command in srun squeue scancel getent python3 timeout; do
     if ! command -v "$required_command" >/dev/null 2>&1; then
         echo "[spuraim] FATAL: required command is unavailable: $required_command" >&2
         exit 69
@@ -67,6 +67,48 @@ SPUR_QOS="${SPUR_QOS:-amd-aifw-aim-qos}"
 SPUR_PARTITION="${SPUR_PARTITION:-amd-spur}"
 SPUR_CPUS_PER_TASK="${SPUR_CPUS_PER_TASK:-128}"
 SPUR_TIME_LIMIT="${SPUR_TIME_LIMIT:-480}"
+
+# GitHub runners are long-lived systemd services. On the SPUR login fleet,
+# SSSD can evict their numeric UID -> NTID entry even though name-based lookup
+# still works. The spur CLI resolves the submitter with getpwuid(3); when that
+# cache entry is absent it silently submits as user `unknown`, which the
+# controller rejects with "user 'unknown' has no account associations".
+#
+# Prime NSS by the stable NTID first, then prove that the record maps back to
+# this process's UID. This turns an intermittent, late srun rejection into a
+# deterministic preflight and prevents a wrong account identity from reaching
+# the controller. SPUR_SUBMIT_USER is available for service installations
+# whose USER/HOME values do not identify the NTID.
+SPUR_SUBMIT_USER="${SPUR_SUBMIT_USER:-${USER:-}}"
+if [[ -z "$SPUR_SUBMIT_USER" || "$SPUR_SUBMIT_USER" == "unknown" || \
+      "$SPUR_SUBMIT_USER" =~ ^[0-9]+$ ]]; then
+    SPUR_SUBMIT_USER="${HOME##*/}"
+fi
+if ! [[ "$SPUR_SUBMIT_USER" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "[spuraim] FATAL: invalid SPUR_SUBMIT_USER: $SPUR_SUBMIT_USER" >&2
+    exit 67
+fi
+SPUR_PASSWD_RECORD="$(timeout 30s getent passwd "$SPUR_SUBMIT_USER")" || {
+    echo "[spuraim] FATAL: NSS cannot resolve SPUR_SUBMIT_USER=$SPUR_SUBMIT_USER" \
+         "on $(hostname); check SSSD on the runner login node." >&2
+    exit 67
+}
+IFS=: read -r SPUR_RESOLVED_USER SPUR_PASSWD_PASSWORD SPUR_RESOLVED_UID \
+    SPUR_RESOLVED_GID SPUR_GECOS SPUR_RESOLVED_HOME SPUR_RESOLVED_SHELL \
+    <<< "$SPUR_PASSWD_RECORD"
+if [[ -z "$SPUR_RESOLVED_USER" || "$SPUR_RESOLVED_UID" != "$(id -u)" ]]; then
+    echo "[spuraim] FATAL: SPUR_SUBMIT_USER=$SPUR_SUBMIT_USER resolves to" \
+         "uid=${SPUR_RESOLVED_UID:-missing}, but the runner uid is $(id -u)." >&2
+    exit 67
+fi
+if [[ "$(id -un 2>/dev/null)" != "$SPUR_RESOLVED_USER" ]]; then
+    echo "[spuraim] FATAL: NSS did not retain the UID mapping for" \
+         "$SPUR_RESOLVED_USER; check SSSD on $(hostname)." >&2
+    exit 67
+fi
+SPUR_SUBMIT_USER="$SPUR_RESOLVED_USER"
+export SPUR_SUBMIT_USER USER="$SPUR_SUBMIT_USER" LOGNAME="$SPUR_SUBMIT_USER"
+echo "[spuraim] submit identity: $SPUR_SUBMIT_USER (uid=$SPUR_RESOLVED_UID)"
 
 # Node denylist. crsuse2-m2m-071 is in the idle set but its docker daemon is
 # dead ("Cannot connect to the Docker daemon at unix:///var/run/docker.sock"),
@@ -119,7 +161,7 @@ echo "[spuraim] recipe: $BENCHMARK_SCRIPT"
 # ---------------------------------------------------------------------------
 SHARED_HF_ROOT="${SPUR_SHARED_HF_ROOT:-/shared_nfs/huggingface}"
 SHARED_HF_HUB="$SHARED_HF_ROOT/hub"
-NODE_SCRATCH="${SPUR_NODE_SCRATCH:-/mnt/m2m_nobackup/$(id -un)}"
+NODE_SCRATCH="${SPUR_NODE_SCRATCH:-/mnt/m2m_nobackup/$SPUR_SUBMIT_USER}"
 
 # Resolve an HF repo id to its snapshot dir in the shared read-only hub.
 # Prints the path, or nothing if that repo is not staged there.
@@ -182,7 +224,7 @@ CONTAINER="spuraim_${RUNNER_NAME}_$$"
 # sibling runner or another user's job.
 SPUR_JOB_PREFIX="ix-${RUNNER_NAME}-"
 mapfile -t STALE_JOB_IDS < <(
-    squeue -h -u "$(id -un)" -o '%.18i %.200j' 2>/dev/null | \
+    squeue -h -u "$SPUR_SUBMIT_USER" -o '%.18i %.200j' 2>/dev/null | \
         awk -v prefix="$SPUR_JOB_PREFIX" 'index($2, prefix) == 1 { print $1 }'
 )
 if [[ ${#STALE_JOB_IDS[@]} -gt 0 ]]; then
