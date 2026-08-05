@@ -5459,3 +5459,4 @@
     - "Use the Inferact/MiniMax-M3-EAGLE3-GQA draft model with three speculative tokens and synthetic rejection sampling; thinking-on synthetic acceptance length is 2.78."
     - "Use vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 with prefix caching enabled, default KV-cache dtype, FlashInfer TRT-LLM attention with FP8 indexer KV, and the EAGLE3 drafter on FLASH_ATTN."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
+  
