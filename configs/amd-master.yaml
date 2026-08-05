@@ -894,6 +894,56 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-sweep:
+  # Concurrency sweep around the c8 result (run 30982145794): fp8 KV + asm
+  # verify, GPU-only, k=3 -- 717.31 tok/s/GPU, 203 reqs, TTFT 2.51 s, prefix hit
+  # 88.5%, acceptance 1.22 mean / 1.35 max against a 4.00 ceiling.
+  #
+  # c16 has never survived on any K3 DSpark arm; the nightly's bf16 c16 cell
+  # died on the illegal-address abort. It is included because fp8 changes the
+  # premise -- the c8 arm ran at 79.6% KV while serving 43% more requests, so
+  # there is headroom that did not exist before.
+  #
+  # mns and max_cudagraph_capture_size are both 2*CONC in the recipe, so they
+  # scale with the cell and the capture ladder stays inside mns*(k+1).
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 16], spec-decoding: mtp}
+
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-lmc-c8:
+  # fp8 + asm verify + LMCache at c8. The host tier retested on the only stack
+  # where it has a chance.
+  #
+  # Under bf16 the connector was capped at mnbt 1464 by align's [N, 2N) with
+  # N=768 -- a 5.6x smaller prefill chunk than GPU-only's 8192, and it cost 20%
+  # throughput and 2.7x TTFT (run 30974914342: 399.16 vs 496.19). fp8 lifts N to
+  # 1536, so the same derivation now gives mnbt 3000.
+  #
+  # The GPU-only fp8 arm already reaches 88.5% prefix hit at 79.6% KV, close to
+  # the trace's ~88.4% theoretical, so there may be little left for a host tier
+  # to add. That is the question.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c8:
   # fp8 KV + asm VERIFY, GPU-only c8, k=3. Sibling of the bf16 asm-verify arm.
   #
