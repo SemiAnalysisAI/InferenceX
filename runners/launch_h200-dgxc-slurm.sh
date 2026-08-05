@@ -2,8 +2,8 @@
 set -eo pipefail
 
 # System-specific configuration for H200 DGXC Slurm cluster
-SLURM_PARTITION="main"
-SLURM_ACCOUNT="sa-shared"
+export SLURM_PARTITION="main"
+export SLURM_ACCOUNT="sa-shared"
 
 set -x
 

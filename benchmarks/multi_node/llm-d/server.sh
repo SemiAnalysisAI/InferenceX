@@ -579,6 +579,8 @@ PY
                 --use-chat-template
                 --dsv4
             )
+        elif [[ "${SPEC_DECODING,,}" == "mtp" ]]; then
+            bench_extra_args+=(--use-chat-template)
         fi
 
         # Non-fatal: a failed or timed-out conc point must not abort the sweep

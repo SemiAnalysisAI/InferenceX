@@ -6,9 +6,7 @@
 #   DeepEP v2 (low-latency) with --language-model-only.
 #
 # Topology set by nvidia-master.yaml additional-settings:
-#   fixed-seq-len (p1w1d1w1): 1P DEP8 + 1D DEP8, 2 H200 nodes / 16 GPUs
-#     PREFILL_NODES=1 DECODE_NODES=1 GPUS_PER_NODE=8
-#   agentic (p1w2d1w2):       1P DEP16 + 1D DEP16, 4 H200 nodes / 32 GPUs
+#   agentic (p1w2d1w2): 1P DEP16 + 1D DEP16, 4 H200 nodes / 32 GPUs
 #     PREFILL_NODES=2 DECODE_NODES=2 GPUS_PER_NODE=8
 #
 # Flags and env vars match the llm-d K8s P/D reference deployment
@@ -82,7 +80,7 @@ prefill:
 # Decode: DEP (TP=1, EP on). DeepEP v2 low-latency all-to-all.
 # --language-model-only + --block-size 256 for efficient KV consumption.
 # max-num-seqs/batched-tokens 64 matches K8s MAX_TOKENS_PER_NODE=32 * 2 nodes
-# (the primary DEP16 topology); safe for DEP8 (slightly overprovisioned).
+# (DEP16 topology).
 # NVSHMEM_QP_DEPTH = (64+1)*2 = 130 (DeepEP low-latency requirement).
 decode:
   tp: 1

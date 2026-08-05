@@ -7885,9 +7885,8 @@ glm5.2-fp4-b300-sglang-agentic:
 # --language-model-only. Flags and env vars match the llm-d K8s P/D
 # reference deployment (wide-ep-lws/modelserver/gpu/vllm-glm-5.2).
 #
-# Topologies:
-#   fixed-seq-len: 1P DEP8 + 1D DEP8 (p1w1d1w1, 2 H200 nodes / 16 GPUs)
-#   agentic:       1P DEP16 + 1D DEP16 (p1w2d1w2, 4 H200 nodes / 32 GPUs)
+# Topology:
+#   agentic: 1P DEP16 + 1D DEP16 (p1w2d1w2, 4 H200 nodes / 32 GPUs)
 # Both STP and MTP (3-token speculative decoding) arms.
 glm5.2-fp8-h200-llmd-vllm:
   image: vllm/vllm-openai:nightly
