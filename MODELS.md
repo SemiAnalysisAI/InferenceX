@@ -51,15 +51,45 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 
 ## Engine submission policy
 
-The engines below are the primary allowed engines for each model. Hardware-specific engines are also allowed, but only as second-priority submissions after the listed primary-engine submissions have been made.
+Based on feedback from Tier 1 AI labs and the broader ML community about what they want to see in InferenceX AgentX, InferenceX uses an explicit model-to-framework mapping. Labs have reported that proprietary or hardware-specific engines such as TensorRT-LLM and ATOM do not always provide every feature their AgentX workloads require.
 
-| Model | Primary engines | Secondary engines |
+The native/upstream engines in the table below are the first-class engines for each model. If a provider supports both the native/upstream vLLM engine and native/upstream SGLang engine as first-class LLM engines, it must first submit the engine or engines assigned by this mapping before submitting additional non-vLLM/SGLang engines such as ATOM, TensorRT-LLM, or TokenSpeed. Multiple additional non-vLLM/SGLang engines may be submitted.
+
+There are two exceptions to this ordering guideline:
+
+1. Brand-new hardware SKUs, such as MI455X UALoE72, VR200 NVL72, Rubin NVL8, TPUv8t, and TPUv8i, may use a hardware-specific engine first for initial support. The corresponding native/upstream vLLM or SGLang submission is expected to follow shortly afterward.
+2. For a new model architecture, a provider may use another engine first if it cannot support the mapped native/upstream vLLM or SGLang engine as a first-class engine and can articulate to core maintainers a fundamental, first-principles reason why the mapped framework does not yet support the hardware-model combination.
+
+InferenceX supports the maintainers of both SGLang and vLLM and reflects feedback from AI labs and the ML community that want to see performance from both frameworks. Among models assigned to one primary framework, the mapping splits assignments evenly between vLLM and SGLang; models mapped to both provide shared coverage. This ensures that InferenceX tests both frameworks equally without favoring one over the other.
+
+The table also records both the agreed plan-of-record (PoR) draft-model mapping and proposals that still require partner alignment.
+
+| Model | Primary native/upstream engines | Agreed draft model(s) (PoR) | Proposed draft model(s) pending partner alignment | Additional engines |
+|---|---|---|---|---|
+| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | native MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` — proposed for AgentX only under the same synthetic-acceptance methodology; pending partner alignment. Single-turn 8k1k remains on the native MTP heads. | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Kimi-K3 (`kimik3`) | native/upstream vLLM engine | `Inferact/Kimi-K3-DSpark` | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | `Inferact/MiniMax-M3-EAGLE3` and/or `Inferact/MiniMax-M3-EAGLE3-GQA` | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+| Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
+
+## KV cache offloading policy
+
+To align with the design principle of shipping quickly by limiting scope, the initial AgentX policy permits only CPU DRAM KV cache offloading, and its use is optional. Supported approaches include the vLLM Connector, LMCache, SGLang HiCache, Mooncake CPU DRAM Connector, Dynamo KVBM, CPU DRAM P2P pooling, and similar CPU-memory mechanisms. Vendors may enable or disable CPU KV cache offloading for each submission at their discretion, including disabling it when that produces better Pareto points.
+
+The amount of CPU DDR5 used for KV cache offloading must be proportional to the fraction of a server's GPUs used by the serving configuration:
+
+`allowed CPU DRAM = per-server baseline CPU DRAM × (GPUs used by the configuration / total GPUs in the server)`
+
+This rule applies independently to each server.
+
+| CPU DRAM capacity class | Example SKUs | Per-server baseline and limit |
 |---|---|---|
-| DeepSeek-V4-Pro 1.6T (`dsv4`) | vLLM and SGLang | Hardware-specific engines, after vLLM and SGLang submissions |
-| Kimi-K3 (`kimik3`) | vLLM | Hardware-specific engines, after a vLLM submission |
-| MiniMax-M3 (`minimaxm3`) | vLLM | Hardware-specific engines, after a vLLM submission |
-| GLM-5.2 (`glm5.2`) | SGLang | Hardware-specific engines, after an SGLang submission |
-| Qwen3.5-397B-A17B (`qwen3.5`) | SGLang | Hardware-specific engines, after an SGLang submission |
+| No standardized CPU DRAM capacity | HGX B200, HGX B300, MI355X chassis | At most 3 TB per server. A configuration using 4 of 8 GPUs may therefore use at most 1.5 TB of CPU DRAM for KV cache offloading. |
+| Standardized CPU DRAM capacity | TPUv7, GB200 NVL72, GB300 NVL72 | The SKU's standard installed CPU DRAM capacity is the baseline, with no additional per-server hard cap. The proportional-GPU rule still applies. |
+
+The 3 TB limit prevents an unrealistic memory-capacity race in which hardware vendors ask CSPs and OEMs to install the maximum number of high-capacity DIMMs, potentially reaching 6 TB per server. Total cost of ownership (TCO) per accelerator chip will be normalized by the cost of the server's total CPU DDR5 capacity.
+
+Other offloading tiers, including NVMe KV cache offloading, are outside the initial scope and may be introduced after the InferenceX v3 release. NVMe KV cache offloading is tentatively targeted as a fast follow-up in InferenceX v3.5 or as part of InferenceX v4.
 
 ## Model support matrix
 

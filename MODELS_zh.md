@@ -51,15 +51,45 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 ## 引擎提交策略
 
-下表列出各模型优先允许的引擎。硬件专用引擎也允许提交，但优先级较低，且须在所列首选引擎均已提交后方可提交。
+根据 Tier 1 AI 实验室和更广泛的机器学习社区对 InferenceX AgentX 展示内容的反馈，InferenceX 采用明确的模型到框架映射。多家实验室反馈，TensorRT-LLM、ATOM 等专有或硬件专用引擎并不总能提供其 AgentX 工作负载所需的全部功能。
 
-| 模型 | 首选引擎 | 次选引擎 |
+下表中的原生/上游（native/upstream）引擎是各模型的一级支持引擎。如果某一提供方将原生/上游 vLLM 引擎和原生/上游 SGLang 引擎均作为一级支持的 LLM 引擎，则必须先按照本映射提交指定的一个或多个引擎，之后才能提交 ATOM、TensorRT-LLM、TokenSpeed 等其他非 vLLM/SGLang 引擎。允许提交多个其他非 vLLM/SGLang 引擎。
+
+该提交顺序指南有两项例外：
+
+1. 对于 MI455X UALoE72、VR200 NVL72、Rubin NVL8、TPUv8t、TPUv8i 等全新硬件 SKU，为实现初始支持，可先使用硬件专用引擎。预期相应的原生/上游 vLLM 或 SGLang 提交会在此后不久跟进。
+2. 对于新的模型架构，如果提供方无法将映射指定的原生/上游 vLLM 或 SGLang 引擎作为一级支持引擎，并能向核心维护者说明该框架尚不支持相应硬件—模型组合的根本性、第一性原理原因，则可先使用其他引擎。
+
+InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和机器学习社区希望看到两个框架性能数据的反馈。在仅指定一个主要框架的模型中，映射会将任务均衡分配给 vLLM 和 SGLang；同时指定两个框架的模型则提供共享覆盖。这确保 InferenceX 对两个框架进行同等测试，不偏向任何一方。
+
+表中还同时记录已达成一致的草稿模型规划（PoR）以及尚待合作伙伴对齐的提案。
+
+| 模型 | 首选原生/上游引擎 | 已达成一致的草稿模型（PoR） | 待合作伙伴对齐的草稿模型提案 | 其他引擎 |
+|---|---|---|---|---|
+| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | 原生 MTP | `deepseek-ai/DeepSeek-V4-Pro-DSpark` —— 仅提议用于 AgentX，并须遵循相同的合成接受方法；尚待合作伙伴对齐。单轮 8k1k 继续使用原生 MTP 头。 | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Kimi-K3（`kimik3`） | 原生/上游 vLLM 引擎 | `Inferact/Kimi-K3-DSpark` | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | `Inferact/MiniMax-M3-EAGLE3` 和/或 `Inferact/MiniMax-M3-EAGLE3-GQA` | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+| Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
+
+## KV 缓存卸载策略
+
+为遵循“通过限制范围实现快速交付”的设计原则，AgentX 初始策略仅允许 CPU DRAM KV 缓存卸载，且该功能为可选项。支持的方案包括 vLLM Connector、LMCache、SGLang HiCache、Mooncake CPU DRAM Connector、Dynamo KVBM、CPU DRAM P2P 池化以及类似的 CPU 内存机制。供应商可自行决定是否为每项提交启用 CPU KV 缓存卸载；如果禁用后能得到更优的 Pareto 点，也可选择禁用。
+
+用于 KV 缓存卸载的 CPU DDR5 容量必须与推理配置实际使用的服务器 GPU 比例成正比：
+
+`允许的 CPU DRAM = 每服务器 CPU DRAM 基准容量 ×（配置使用的 GPU 数 / 服务器 GPU 总数）`
+
+该规则按每台服务器独立计算。
+
+| CPU DRAM 容量类别 | 示例 SKU | 每服务器基准与上限 |
 |---|---|---|
-| DeepSeek-V4-Pro 1.6T（`dsv4`） | vLLM 和 SGLang | 硬件专用引擎；须在 vLLM 和 SGLang 均已提交后 |
-| Kimi-K3（`kimik3`） | vLLM | 硬件专用引擎；须在 vLLM 已提交后 |
-| MiniMax-M3（`minimaxm3`） | vLLM | 硬件专用引擎；须在 vLLM 已提交后 |
-| GLM-5.2（`glm5.2`） | SGLang | 硬件专用引擎；须在 SGLang 已提交后 |
-| Qwen3.5-397B-A17B（`qwen3.5`） | SGLang | 硬件专用引擎；须在 SGLang 已提交后 |
+| CPU DRAM 容量未标准化 | HGX B200、HGX B300、MI355X 机箱 | 每服务器最多 3 TB。因此，仅使用 8 块 GPU 中 4 块的配置最多可使用 1.5 TB CPU DRAM 进行 KV 缓存卸载。 |
+| CPU DRAM 容量已标准化 | TPUv7、GB200 NVL72、GB300 NVL72 | 以该 SKU 标准安装的 CPU DRAM 容量为基准，不另设每服务器硬上限，但仍须遵守 GPU 比例规则。 |
+
+3 TB 上限旨在避免不现实的内存容量竞赛，即各硬件供应商要求云服务提供商（CSP）和原始设备制造商（OEM）安装尽可能多的高容量 DIMM，导致每服务器容量可能达到 6 TB。每颗加速器芯片的总体拥有成本（TCO）将按服务器 CPU DDR5 总容量的成本进行归一化。
+
+其他卸载层级（包括 NVMe KV 缓存卸载）不属于初始范围，可在 InferenceX v3 发布后引入。NVMe KV 缓存卸载暂定在 InferenceX v3.5 中作为快速后续功能加入，或纳入 InferenceX v4。
 
 ## 模型支持矩阵
 
