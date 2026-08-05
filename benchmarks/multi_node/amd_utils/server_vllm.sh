@@ -404,6 +404,9 @@ mori_extra = {
     "proxy_ip": os.environ["NODE0_ADDR"],
     "proxy_ping_port": os.environ["PROXY_PING_PORT"],
     "http_port": os.environ["SERVER_PORT"],
+    # Kimi-K3 MI355X validated run pins the MoRIIO backend to rdma explicitly
+    # (k3-agentx/gen_k3_mc.sh); IBDEVICES/MORI_RDMA_TC come from the harness env.
+    "backend": os.environ.get("MORIIO_BACKEND", "rdma"),
     "read_mode": True,
 }
 print(json.dumps({

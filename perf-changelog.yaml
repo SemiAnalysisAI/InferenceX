@@ -5457,3 +5457,11 @@
     - "Enable prefill-only INT4 quick-reduce: set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048 on the prefill workers via a new prefill_env channel (mirrors the existing decode_env path in server_vllm.sh)."
     - "Cap the 1P1D TP4 concurrency sweep at 256 (was 512); drop the 2P1D TP4 layout (128/256/512) as it is CI-flaky with negligible curve impact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1943
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-disagg-agentic
+  description:
+    - "Add Kimi-K3 MXFP4 MI355X vLLM disaggregated agentic recipe (1P1D TP8, DSpark n=7 draft-model speculative decoding on both prefill and decode, MoRIIO KDA P/D transfer + Mooncake DRAM KV offload)."
+    - "vLLM K3 GDN/DSpark + MoRIIO-KDA fixes are online-installed from the YukioZzz/vllm fork branch yichaozhu/moriio-k3-dspark on top of the prebuilt kimi-k3 image (VLLM_K3_FORK_REF); Mooncake v0.3.11.post1 built at job runtime by server_vllm.sh (VLLM_PATCH_46240, INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32)."
+    - "Mooncake MultiConnector plumbing vendored from PR #2326 (server_vllm.sh + patches + job.slurm env). conc-list [8] smoke; GMU 0.70, max-model-len 32768."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2326

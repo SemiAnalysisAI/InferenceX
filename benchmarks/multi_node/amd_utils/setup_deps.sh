@@ -102,6 +102,48 @@ install_transformers_glm5() {
     _SETUP_INSTALLED+=("transformers-glm5")
 }
 
+# ---------------------------------------------------------------------------
+# Kimi-K3 DSpark: online-update vLLM from the fork branch that carries the K3
+# GDN/DSpark + MoRIIO KDA PD-transfer fixes, on top of the prebuilt kimi-k3
+# image. Opt-in: only runs when VLLM_K3_FORK_REF is set (recipe additional-
+# setting), so other vllm-disagg models keep the image's vLLM untouched.
+#   VLLM_K3_FORK_REPO (default https://github.com/YukioZzz/vllm)
+#   VLLM_K3_FORK_REF  (e.g. yichaozhu/moriio-k3-dspark)
+# Idempotent via an install marker keyed on the ref.
+# ---------------------------------------------------------------------------
+install_kimi_k3_vllm_fork() {
+    local ref="${VLLM_K3_FORK_REF:-}"
+    [[ -z "$ref" ]] && return 0
+
+    local repo="${VLLM_K3_FORK_REPO:-https://github.com/YukioZzz/vllm}"
+    local src="${VLLM_K3_FORK_SRC:-/opt/vllm-k3-fork}"
+    local marker="${src}/.inferencex_installed_ref"
+
+    if [[ -f "$marker" ]] && [[ "$(cat "$marker" 2>/dev/null)" == "${repo}@${ref}" ]]; then
+        echo "[SETUP] Kimi-K3 vLLM fork already installed (${repo}@${ref})"
+        return 0
+    fi
+
+    # Private-fork auth: if VLLM_K3_FORK_TOKEN is set, inject it into an https URL.
+    local clone_url="$repo"
+    if [[ -n "${VLLM_K3_FORK_TOKEN:-}" && "$repo" == https://github.com/* ]]; then
+        clone_url="https://x-access-token:${VLLM_K3_FORK_TOKEN}@github.com/${repo#https://github.com/}"
+    fi
+
+    echo "[SETUP] Installing Kimi-K3 vLLM fork ${repo}@${ref} (VLLM_USE_PRECOMPILED=1)..."
+    if [[ ! -d "$src/.git" ]]; then
+        rm -rf "$src"
+        git_clone_retry "$clone_url" "$src" || { echo "[SETUP] ERROR: clone $repo failed"; exit 1; }
+    fi
+    (
+        cd "$src" || exit 1
+        git fetch --depth 1 origin "$ref" && git checkout -f FETCH_HEAD
+        VLLM_USE_PRECOMPILED=1 pip install --no-build-isolation -e .
+    ) || { echo "[SETUP] ERROR: Kimi-K3 vLLM fork install failed"; exit 1; }
+    echo "${repo}@${ref}" > "$marker"
+    _SETUP_INSTALLED+=("vllm-k3-fork@${ref}")
+}
+
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
@@ -109,6 +151,7 @@ install_transformers_glm5() {
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_recipe_deps
     install_amd_quark
+    install_kimi_k3_vllm_fork
 
     # =========================================================================
     # vLLM: Export UCX/RIXL paths (persists since this file is sourced)

@@ -30,6 +30,32 @@ Kimi-K2.5-MXFP4:
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_RMSNORM=1 VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--amd--Kimi-K2.5-MXFP4"
 
+Kimi-K3:
+  # Kimi-K3 (hybrid: MLA attention + KDA gated-delta-net) MXFP4, disaggregated
+  # 1P1D. The server flags/env below are the VALIDATED local 1P1D MultiConnector
+  # (MoRIIO read + Mooncake DRAM) run (k3-agentx/gen_k3_mc.sh) with the DSpark
+  # arm from PR #2403 (kimik3-fp4-mi355x-vllm-agentic-dspark) layered on top.
+  # Key K3-specific flags (do not drop):
+  #   --reasoning-parser kimi_k3     : K3 chat/reasoning parser
+  #   --attention-backend ROCM_AITER_MLA : main-model MLA backend on gfx950
+  #   --mamba-cache-mode all         : KDA (mamba) recurrent-state cache mode
+  #   --block-size 128               : hybrid KV page size (NOT 1)
+  #   --language-model-only          : text-only agentx replay (skip vision tower)
+  #   --enable-prefix-caching        : required for the Mooncake DRAM cache tier
+  #   --mm-encoder-tp-mode data      : multimodal encoder data-parallel
+  # DSpark (n=7) is baked symmetrically into BOTH prefill and decode so the KDA
+  # conv-state geometry matches on P and D (required for MoRIIO KDA transfer);
+  # method=dspark, draft=Inferact/Kimi-K3-DSpark, TRITON_MLA draft attention,
+  # probabilistic draft sampling + real block rejection (PR #2403). Decode CUDA
+  # graph stays ON (no --enforce-eager). VLLM_SSM_CONV_STATE_LAYOUT=DS gives the
+  # dim-first conv layout the rebased MoRIIO connector packs for contiguous KDA
+  # transfers; VLLM_KV_CACHE_LAYOUT=HND matches the validated run. GMU / max-model-len
+  # come from the recipe (GPU_MEMORY_UTILIZATION / MAX_MODEL_LEN) via server_vllm.sh.
+  prefill_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 64 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
+  decode_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 64 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
+  env: "VLLM_USE_V1=1 PYTHONHASHSEED=0 VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_SSM_CONV_STATE_LAYOUT=DS VLLM_KV_CACHE_LAYOUT=HND HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
+  hf_dir: "models--moonshotai--Kimi-K3"
+
 MiniMax-M2.5:
   # AITER fused-MoE kernel fmoe_bf16_blockscaleFp8_g1u1_vs_silu_32x384 for gfx950 writes OOB when run with MiniMax's shapes at M=8K(=num batched tokens), crashing vllm during AITER warmup.
   # Set token budget to 4k to avoid using that shape, instead of disabling AITER_MOE.
