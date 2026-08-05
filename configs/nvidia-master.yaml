@@ -7905,7 +7905,7 @@ glm5.2-fp8-h200-llmd-vllm:
     - search-space:
       # STP: 1 prefill DEP16 + 1 decode DEP16 (4 nodes, 32 GPUs).
       - spec-decoding: "none"
-        conc-list: [1, 2, 4, 8, 16]
+        conc-list: [1, 16, 32, 64]
         prefill:
           num-worker: 1
           tp: 1
@@ -7926,7 +7926,7 @@ glm5.2-fp8-h200-llmd-vllm:
 
       # MTP: same topology with 3-token speculative decoding.
       - spec-decoding: mtp
-        conc-list: [1, 2, 4, 8, 16]
+        conc-list: [1, 16, 32, 64]
         prefill:
           num-worker: 1
           tp: 1
