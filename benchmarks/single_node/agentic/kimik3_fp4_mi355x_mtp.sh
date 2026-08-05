@@ -297,7 +297,23 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     else
         LMCACHE_UNIFIED_BLOCK="${LMCACHE_UNIFIED_BLOCK:-768}"
     fi
-    LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-$LMCACHE_UNIFIED_BLOCK}"
+    # Chunk size is NOT the attention block. K3 is hybrid (KDA + MLA) and the
+    # KDA cache group carries its own, larger tokens_per_block; LMCache requires
+    # chunk_size to be a multiple of THAT. Run 30987890713 died at engine init:
+    #   LMCache chunk size 1536 must be a multiple of engine group 14
+    #   tokens_per_block 3072
+    # with attention block 1536 and mnbt 3000, i.e. the mnbt derivation was
+    # right and only the chunk was wrong. Under bf16 the two happened to agree
+    # so chunk = N passed, which is why this never surfaced before fp8.
+    #
+    # 2N satisfies every constraint at once: LMCache's chunk % 3072 == 0, the
+    # launcher's own chunk % N == 0, and N <= mnbt < 2N is untouched because
+    # mnbt is still derived from N.
+    if [ "${KV_CACHE_DTYPE:-}" = "fp8" ]; then
+        LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-$(( LMCACHE_UNIFIED_BLOCK * 2 ))}"
+    else
+        LMCACHE_K3_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE_OVERRIDE:-$LMCACHE_UNIFIED_BLOCK}"
+    fi
     MAX_NUM_BATCHED_TOKENS="${LMCACHE_MAX_NUM_BATCHED_TOKENS:-$(( LMCACHE_UNIFIED_BLOCK * 2 - 72 ))}"
     LMCACHE_CHUNK_SIZE="$LMCACHE_K3_CHUNK_SIZE"
     LMCACHE_CHUNK_SIZE_K27="$LMCACHE_K3_CHUNK_SIZE"
