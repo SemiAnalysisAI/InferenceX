@@ -133,10 +133,11 @@ if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
 fi
 
 LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
+LMCACHE_MP_PORT="${LMCACHE_MP_PORT:-6000}"
 LMCACHE_CMD=(
     lmcache server
     --host 127.0.0.1
-    --port 5555
+    --port "$LMCACHE_MP_PORT"
     --http-host 127.0.0.1
     --http-port "$LMCACHE_HTTP_PORT"
     --l1-size-gb "$LMCACHE_L1_SIZE_GB"
@@ -159,14 +160,14 @@ wait_for_lmcache_ready
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((2 * CONC))}"
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
+SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
 SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 SPEC_DRAFT_MODEL_PATH="${SPEC_DRAFT_MODEL_PATH:-$SPEC_DRAFT_MODEL}"
 if [[ "$SPEC_DRAFT_MODEL_PATH" == "$SPEC_DRAFT_MODEL" ]]; then
     hf download "$SPEC_DRAFT_MODEL"
 fi
 SPEC_CONFIG="{\"model\":\"${SPEC_DRAFT_MODEL_PATH}\",\"num_speculative_tokens\":${SPEC_NUM_TOKENS},\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
-KV_TRANSFER_CONFIG='{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://127.0.0.1","lmcache.mp.port":5555,"lmcache.mp.mq_timeout":6000.0}}'
+KV_TRANSFER_CONFIG="{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"tcp://127.0.0.1\",\"lmcache.mp.port\":${LMCACHE_MP_PORT}}}"
 
 VLLM_CMD=(
     vllm serve "$MODEL_PATH"
@@ -180,14 +181,13 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.85
     --mm-encoder-tp-mode data
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-num-batched-tokens 32768
+    --max-num-batched-tokens 3000
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
     --enable-prefix-caching
     --mamba-cache-mode align
     --kv-cache-dtype fp8
-    --enforce-eager
     --speculative-config "$SPEC_CONFIG"
     --kv-transfer-config "$KV_TRANSFER_CONFIG"
 )
