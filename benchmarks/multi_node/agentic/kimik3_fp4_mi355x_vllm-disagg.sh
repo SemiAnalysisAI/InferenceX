@@ -54,11 +54,26 @@ export RESULT_FILENAME="${RESULT_FILENAME:-${RUNNER_NAME:-kimik3-fp4-agentic}}"
 
 export IS_AGENTIC="${IS_AGENTIC:-1}"
 export DURATION="${DURATION:-1800}"
-# K3 + DSpark draft weights + MoRIIO RDMA registration are memory-hungry; keep a
-# modest default context and GMU (both overridable from the recipe search-space
-# additional-settings). Validated symmetric-DSpark bring-up used GMU 0.70.
-export MAX_MODEL_LEN="${MAX_MODEL_LEN:-10240}"
-export GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.70}"
+# Agentic replays run at the model's NATIVE context: benchmark_lib.sh unsets
+# MAX_MODEL_LEN when it is sourced from benchmarks/multi_node/agentic/, precisely
+# so a recipe cannot shrink the window and flatter the numbers. That means the
+# value below is what the server actually gets -- a recipe additional-setting is
+# a no-op here. It must therefore be K3's native 1M, matching
+# dsv4_fp4_mi355x_sglang-disagg.sh (1000000) and the merged B300 K3 agentic arm
+# (--max-model-len 1048576). The previous 10240 silently capped every agentic run
+# to 10k tokens against a corpus whose peak trace is ~1M.
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1048576}"
+# PR #2403 (kimik3-fp4-mi355x-vllm-agentic-dspark) measured this fleet: the
+# upstream reference pins 0.95 but that cleared only 2 of 9 bring-up cells, and
+# 0.90 comes up clean then dies mid-prefill with HSA_STATUS_ERROR_OUT_OF_RESOURCES
+# on 4/8 ranks at ~362K computed tokens (transient chunked-prefill workspace, not
+# the KV pool). 0.88 is the value that stands up stand-alone.
+export GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.88}"
+# ROCm 7.2 HIP-runtime watchdog race during decode cudagraph capture
+# (sgl-project/sglang#29235, ROCm/hip#3876, pytorch/pytorch#176251) -- same
+# mitigation PR #2309 added for the DSv4 disagg agentic recipe.
+export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
+export NCCL_BLOCKING_WAIT="${NCCL_BLOCKING_WAIT:-1}"
 
 # KV cache offload: dram via MooncakeStoreConnector (MultiConnector + MoRIIO P/D).
 export KV_OFFLOADING="${KV_OFFLOADING:-none}"

@@ -49,10 +49,15 @@ Kimi-K3:
   # probabilistic draft sampling + real block rejection (PR #2403). Decode CUDA
   # graph stays ON (no --enforce-eager). VLLM_SSM_CONV_STATE_LAYOUT=DS gives the
   # dim-first conv layout the rebased MoRIIO connector packs for contiguous KDA
-  # transfers; VLLM_KV_CACHE_LAYOUT=HND matches the validated run. GMU / max-model-len
-  # come from the recipe (GPU_MEMORY_UTILIZATION / MAX_MODEL_LEN) via server_vllm.sh.
-  prefill_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 64 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
-  decode_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 64 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
+  # transfers; VLLM_KV_CACHE_LAYOUT=HND matches the validated run.
+  # --max-num-batched-tokens 4096 / --max-num-seqs 16 are the values PR #2403
+  # pins for the AMD K3 AgentX DSpark reference; do not raise max-num-seqs
+  # without re-checking the aiter MLA decode path (see below).
+  # GMU comes from the recipe (GPU_MEMORY_UTILIZATION). MAX_MODEL_LEN does NOT:
+  # benchmark_lib.sh unsets it for agentic runs, so the effective context is the
+  # native 1M default set in benchmarks/multi_node/agentic/kimik3_*.sh.
+  prefill_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 16 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
+  decode_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 16 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
   env: "VLLM_USE_V1=1 PYTHONHASHSEED=0 VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_SSM_CONV_STATE_LAYOUT=DS VLLM_KV_CACHE_LAYOUT=HND HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
   hf_dir: "models--moonshotai--Kimi-K3"
 

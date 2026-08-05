@@ -154,9 +154,19 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     done
 
     if [[ -z "$MODEL_PATH" ]]; then
-        echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
-        for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
-        exit 1
+        # Debug / no-weights fallback: for a dummy-weight plumbing smoke (or when
+        # ALLOW_REMOTE_MODEL=1) the checkpoint need not be staged on disk. Fall
+        # back to the HF repo id (reconstructed from the hf_dir "models--org--name")
+        # so vLLM pulls only the config/tokenizer; --load-format dummy skips weights.
+        if [[ "${LOAD_FORMAT:-}" == "dummy" || "${ALLOW_REMOTE_MODEL:-0}" == "1" ]]; then
+            HF_REPO_ID=$(echo "$DISK_DIR_NAME" | sed -E 's/^models--//; s/--/\//')
+            MODEL_PATH="$HF_REPO_ID"
+            echo "WARNING: '$MODEL_NAME' not on disk; LOAD_FORMAT=${LOAD_FORMAT:-} -> using HF repo id '$MODEL_PATH' (config only, dummy weights)"
+        else
+            echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
+            for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
+            exit 1
+        fi
     fi
     echo "Final MODEL_PATH: $MODEL_PATH"
 else
@@ -474,11 +484,33 @@ DOCKER_ENV_COMMON=(
     -e INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=\${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}
     -e MC_WORKERS_PER_CTX=\${MC_WORKERS_PER_CTX:-}
     -e VLLM_PATCH_46240=\${VLLM_PATCH_46240:-}
+    # Generalise aiter MLA head padding so 12 heads/rank (K3 TP8) reach the ASM
+    # decode kernel instead of the batch_size=1 fp8 gluon regime.
+    -e VLLM_PATCH_MLA_HEAD_PAD=\${VLLM_PATCH_MLA_HEAD_PAD:-}
     # Kimi-K3: online-install the vLLM DSpark/MoRIIO-KDA fork over the base image
     # (setup_deps.sh install_kimi_k3_vllm_fork). REF empty -> skipped.
     -e VLLM_K3_FORK_REF=\${VLLM_K3_FORK_REF:-}
     -e VLLM_K3_FORK_REPO=\${VLLM_K3_FORK_REPO:-}
     -e VLLM_K3_FORK_TOKEN=\${VLLM_K3_FORK_TOKEN:-}
+    # Debug: dummy-weight / no-draft plumbing smoke (server_vllm.sh honors these).
+    -e LOAD_FORMAT=\${LOAD_FORMAT:-}
+    -e DISABLE_SPECULATIVE=\${DISABLE_SPECULATIVE:-}
+    # --kv-cache-dtype (fp8 halves MLA KV bytes/token -> buys context length).
+    -e KV_CACHE_DTYPE=\${KV_CACHE_DTYPE:-}
+    # Target --attention-backend override (K3 TP8 needs TRITON_MLA; see server_vllm.sh).
+    -e ATTENTION_BACKEND=\${ATTENTION_BACKEND:-}
+    # Let setup_deps continue when the diagnostics-only RDMA CLI tools cannot be
+    # apt-installed (flaky mirror). Unset in CI -> still a hard failure there.
+    -e ALLOW_MISSING_RDMA_TOOLS=\${ALLOW_MISSING_RDMA_TOOLS:-}
+    # --enforce-eager: mandatory for K3 + ROCM_AITER_MLA at TP8 (12 heads -> the
+    # batch_size=1-only mla_gluon kernel cannot be cudagraph-captured).
+    -e ENFORCE_EAGER=\${ENFORCE_EAGER:-}
+    # aiperf tokenizer override (served-model-name is bare; needs a valid HF id/path).
+    # Name is IX_-prefixed on purpose: an AIPERF_-prefixed env collides with aiperf's
+    # own pydantic settings (field TOKENIZER) and fails to parse a plain string.
+    -e IX_AIPERF_TOKENIZER=\${IX_AIPERF_TOKENIZER:-}
+    # Agentic corpus override (256k-capped variant when server context < 1M).
+    -e WEKA_LOADER_OVERRIDE=\${WEKA_LOADER_OVERRIDE:-}
     -e ENABLE_METRICS=\${ENABLE_METRICS:-0}
     -e PREFILL_ROUTER_POLICY=\${PREFILL_ROUTER_POLICY:-random}
     -e DECODE_ROUTER_POLICY=\${DECODE_ROUTER_POLICY:-random}

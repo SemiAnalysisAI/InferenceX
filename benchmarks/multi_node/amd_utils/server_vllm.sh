@@ -259,12 +259,112 @@ if [[ "$enable_prefix_caching" == "true" || -n "${MAX_MODEL_LEN:-}" ]]; then
     echo "DECODE_SERVER_CONFIG (overrides): $DECODE_SERVER_CONFIG"
 fi
 
+# Debug: LOAD_FORMAT override (e.g. dummy) — model-less launcher/plumbing smoke
+# on clusters without the checkpoint staged. Rewrites --load-format <x> or appends.
+apply_load_format() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--load-format'; then
+        echo "$cfg" | sed -E "s/--load-format[[:space:]]+[A-Za-z0-9_.-]+/--load-format ${LOAD_FORMAT}/g"
+    else
+        echo "$cfg --load-format ${LOAD_FORMAT}"
+    fi
+}
+if [[ -n "${LOAD_FORMAT:-}" && "${LOAD_FORMAT}" != "auto" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_load_format "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_load_format "$DECODE_SERVER_CONFIG")"
+    echo "Applied LOAD_FORMAT=${LOAD_FORMAT}"
+fi
+
+# Debug: DISABLE_SPECULATIVE strips the single-quoted --speculative-config block.
+# Optional escape hatch only; dummy-weight smokes keep DSpark on (symmetric P+D)
+# and only skip the main checkpoint via LOAD_FORMAT=dummy.
+if [[ "${DISABLE_SPECULATIVE:-0}" == "1" || "${DISABLE_SPECULATIVE:-}" == "true" ]]; then
+    PREFILL_SERVER_CONFIG="$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/[[:space:]]*--speculative-config[[:space:]]+'[^']*'//g")"
+    DECODE_SERVER_CONFIG="$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/[[:space:]]*--speculative-config[[:space:]]+'[^']*'//g")"
+    echo "Applied DISABLE_SPECULATIVE=1 (stripped --speculative-config)"
+fi
+
+# KV_CACHE_DTYPE: recipe-level --kv-cache-dtype (e.g. fp8). Halves MLA KV
+# bytes/token, which is what buys context length on a checkpoint whose weights
+# already take ~195 GB/GPU at TP8. AiterMLABackend.supported_kv_cache_dtypes
+# accepts auto/float16/bfloat16/fp8/fp8_e4m3/fp8_e5m2, so ROCM_AITER_MLA honors
+# this; the separate FP8 *ASM prefill* fast path additionally needs
+# num_heads % 16 == 0 per rank and stays off for K3 at TP8 (96/8 = 12 heads).
+apply_kv_cache_dtype() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--kv-cache-dtype'; then
+        echo "$cfg" | sed -E "s/--kv-cache-dtype[[:space:]]+[A-Za-z0-9_]+/--kv-cache-dtype ${KV_CACHE_DTYPE}/g"
+    else
+        echo "$cfg --kv-cache-dtype ${KV_CACHE_DTYPE}"
+    fi
+}
+if [[ -n "${KV_CACHE_DTYPE:-}" && "${KV_CACHE_DTYPE}" != "auto" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_kv_cache_dtype "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_kv_cache_dtype "$DECODE_SERVER_CONFIG")"
+    echo "Applied KV_CACHE_DTYPE=${KV_CACHE_DTYPE}"
+fi
+
+# ATTENTION_BACKEND: override the target model's --attention-backend.
+# Default (unset) keeps models_vllm.yaml's ROCM_AITER_MLA, which is correct for
+# K3 at TP8 -- see the KV-dtype note below before changing it.
+#
+# K3 TP8 gives 96/8 = 12 MLA heads/rank, i.e. nhead <= 16, so aiter serves decode
+# from mla_gluon. That kernel has three regimes and picks by KV dtype:
+#   bh16bn64  : bf16 Q + bf16 KV, nhead <= 16, batch_size >= 1   <-- what we use
+#   bh16bn128 : bf16 Q + fp8  KV, nhead <= 16, batch_size == 1
+#   bh64      : nhead in {64,128}, batch_size in {64,128,256}
+# So batched decode on 12 heads is fine on bf16 KV; it is *fp8 KV* that pins the
+# batch to 1 and aborts with
+#   AssertionError: mla_gluon[bh16bn128] requires batch_size=1, got <N>
+# This is why the validated real-weight run (GSM8K 44/50) served fine on
+# ROCM_AITER_MLA: it never set --kv-cache-dtype, so it landed on bh16bn64.
+apply_attention_backend() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--attention-backend'; then
+        echo "$cfg" | sed -E "s/--attention-backend[[:space:]]+[A-Za-z0-9_]+/--attention-backend ${ATTENTION_BACKEND}/g"
+    else
+        echo "$cfg --attention-backend ${ATTENTION_BACKEND}"
+    fi
+}
+if [[ -n "${ATTENTION_BACKEND:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_attention_backend "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_attention_backend "$DECODE_SERVER_CONFIG")"
+    echo "Applied ATTENTION_BACKEND=${ATTENTION_BACKEND}"
+fi
+
+# ENFORCE_EAGER: disable CUDA graphs. Escape hatch, not a default -- AiterMLA
+# declares AttentionCGSupport.UNIFORM_BATCH and the K3 fork adds
+# _uniform_padded_mtp_qo_len specifically so full-CG padded MTP decode works, so
+# graphs are the intended mode. Idempotent: never appended twice.
+if [[ "${ENFORCE_EAGER:-0}" == "1" || "${ENFORCE_EAGER:-}" == "true" ]]; then
+    echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enforce-eager' \
+        || PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enforce-eager"
+    echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enforce-eager' \
+        || DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enforce-eager"
+    echo "Applied ENFORCE_EAGER=1 (--enforce-eager on P and D)"
+fi
+
 install_mooncake_rocm() {
     local mooncake_tag="v0.3.11.post1"
     local mooncake_src="/tmp/Mooncake-$mooncake_tag"
     local mooncake_stage="/tmp/mooncake-stage-$mooncake_tag"
     local build_jobs cache_root cache_key cache_archive cache_tmp engine_path
     local os_version python_abi rocm_version
+
+    # Already-installed fast path. Everything below (apt-get update + ~20 build
+    # deps, then a source build or a cache untar) is pure setup cost, so skip it
+    # when the image already ships a HIP-linked mooncake plus the master binary
+    # -- e.g. vllm-openai-rocm:kimi-k3-mc. Matches the idempotency contract the
+    # other installers in setup_deps.sh follow, and removes the only
+    # unconditional apt-get in the vllm-disagg path (which stalls whenever
+    # repo.radeon.com is slow, killing the container mid-setup).
+    if command -v mooncake_master >/dev/null 2>&1 \
+       && engine_path=$(python3 -c 'import mooncake.engine; print(mooncake.engine.__file__)' 2>/dev/null) \
+       && [[ -n "$engine_path" ]] \
+       && ldd "$engine_path" 2>/dev/null | grep -q 'libamdhip64.so'; then
+        echo "[Mooncake] Already present and HIP-linked ($engine_path); skipping build"
+        return 0
+    fi
 
     build_jobs=$(nproc)
     if ((build_jobs > 32)); then
@@ -454,6 +554,38 @@ if [[ "${VLLM_PATCH_46240:-${KV_OFFLOADING:-none}}" == "dram" || "${VLLM_PATCH_4
         exit 1
     fi
     python3 "$PATCH_SCRIPT"
+fi
+
+# aiter MLA head padding: lets the ASM decode kernel serve head counts that do
+# not divide 16 (Kimi-K3 TP8 -> 12 heads/rank). Without it those decodes are
+# routed to mla_gluon, whose fp8 regime (bh16bn128) is batch_size=1 only, so
+# fp8 KV and concurrency > 1 become mutually exclusive. Opt-in.
+if [[ "${VLLM_PATCH_MLA_HEAD_PAD:-0}" == "1" || "${VLLM_PATCH_MLA_HEAD_PAD:-}" == "true" ]]; then
+    MLA_PAD_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_aiter_mla_head_pad.py"
+    if [[ ! -f "$MLA_PAD_PATCH_SCRIPT" ]]; then
+        echo "ERROR: VLLM_PATCH_MLA_HEAD_PAD enabled but missing $MLA_PAD_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$MLA_PAD_PATCH_SCRIPT"
+
+    # Reaching the ASM path exposes aiter's fp8 split-heuristic table, which is
+    # keyed on nhead*max_seqlen_q and KeyErrors on untabulated products (16*15
+    # = 240 during spec-decode warmup). Ship the fallback with the pad patch.
+    MLA_BLOCKN_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_aiter_mla_block_n_fallback.py"
+    if [[ ! -f "$MLA_BLOCKN_PATCH_SCRIPT" ]]; then
+        echo "ERROR: missing $MLA_BLOCKN_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$MLA_BLOCKN_PATCH_SCRIPT"
+
+    # gfx950 fp8 ASM decode needs persistent mode once qo_len > 4 (DSpark n=7
+    # verifies 8), but vLLM only builds persistent metadata for qo_len == 1.
+    MLA_PERSIST_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_aiter_mla_persistent_mtp.py"
+    if [[ ! -f "$MLA_PERSIST_PATCH_SCRIPT" ]]; then
+        echo "ERROR: missing $MLA_PERSIST_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$MLA_PERSIST_PATCH_SCRIPT"
 fi
 
 # =============================================================================
