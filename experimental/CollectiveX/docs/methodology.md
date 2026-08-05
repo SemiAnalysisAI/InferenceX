@@ -62,6 +62,20 @@ cells carry the control alone; the per-backend precision set lives in `sweep_mat
   T=1..512 powers of two and prefill T=1024..8192 powers of two. Ladders are model-specific and
   live with the workload in `configs/sweep.json`.
 
+A backend may clamp the ladder below that, and every clamped point is reported in the artifact
+rather than dropped silently. Exactly one backend clamps today: DeepEP V2 in `low-latency` mode
+pre-allocates a fixed receive, so its ladder cannot exceed that buffer, and it is currently held at
+**T=128**, one rung below the 256-slot receive, because DeepEP's low-latency combine corrupts the
+256 rung on every Blackwell SKU we run — B200, GB200 and GB300, EP8 and EP16, both precisions,
+MNNVL and RDMA alike, while Hopper stays clean. It is stochastic at roughly 1.5-3.3% per
+invocation and shows up as one wrong token row whose norm still matches, so it is a correctness
+gate failure rather than a crash (upstream DeepEP issue #700). The receive stays sized at 256
+even though the ladder stops at 128: its footprint drives both the transport's memory traffic and
+the FP8 dequant volume, so shrinking it with the ladder would move every retained rung and break
+comparability with the published series. The likely upstream fix (DeepEP PR #642, a CTA-scope
+fence so the combine consumer's shared-memory reads retire before the stage is recycled) landed
+after the commit we pin, so raising this back to 256 is gated on a pin bump.
+
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
 `--ep-sizes`, and `--precisions` select a subset; a subset produces a smaller matrix, not a

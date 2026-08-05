@@ -26,6 +26,18 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # verifies the wheel's commit tag against the pin — it checks only that the loaded
 # deep_ep exposes ElasticBuffer (the from-source PR #605 capability).
 
+# Low-latency receive sizing. These are deliberately two numbers, not one: _LL_BUFFER_CAP
+# sizes the pre-allocated receive (and so fixes the transport footprint and the fp8 dequant
+# volume), while _LL_LADDER_CAP bounds which token counts are measured. See `buffer_cap` for
+# why the measured ladder stops below the buffer -- an upstream Blackwell combine defect at
+# the 256 rung -- and `create_buffer` for why the buffer must not follow the ladder down.
+_LL_BUFFER_CAP = 256
+_LL_LADDER_CAP = 128
+assert _LL_LADDER_CAP <= _LL_BUFFER_CAP <= 511, (
+    "the LL receive cap must fit NVSHMEM_QP_DEPTH=1024 ((cap + 1) * 2 <= 1024 => cap <= 511) "
+    "and the measured ladder must fit inside the buffer"
+)
+
 
 def _fp8_cast_helpers():
     """The pinned per-token FP8 cast pair (blockwise e4m3fn, per-128-block FP32 scale).
@@ -171,11 +183,34 @@ class DeepEPV2Backend(EPBackend):
     def buffer_cap(self, args):
         if self.mode == "low-latency":
             # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
-            # buffer, so cap is a hard per-rank dispatch-slot bound (the harness clamps the
-            # decode ladder to it and reports the dropped point). 256 sits well under the
-            # default NVSHMEM_QP_DEPTH ceiling ((cap + 1) * 2 <= 1024 => cap <= 511 with
-            # NVSHMEM_QP_DEPTH=1024) and is adjustable if the decode ladder needs more.
-            return 256
+            # buffer, so the buffer cap is a hard per-rank dispatch-slot bound. The MEASURED
+            # ladder is clamped tighter than that buffer (the harness reports every dropped
+            # point, so the omission lands in the artifact rather than being silent) because
+            # DeepEP's low-latency combine corrupts at T=256 on every Blackwell SKU -- b200,
+            # gb200 and gb300, EP8 and EP16, both precisions, MNNVL and RDMA alike -- while
+            # Hopper stays clean. It is stochastic at roughly 1.5-3.3% per oracle invocation,
+            # so a passing leg proves nothing; the gate catches it as a 0.07-6.6 relative
+            # error against a 0.03125 tolerance. Tracked upstream as DeepEP issue #700.
+            #
+            # The likely fix already exists upstream and our pin simply predates it:
+            # PR #642 adds a CTA-scope `fence.proxy.async.shared::cta` before
+            # `mbarrier_arrive(empty_barriers[stage_idx])` in LOW_LATENCY_COMBINE_RECV, so the
+            # consumer's shared-memory reads retire before the stage is declared empty and the
+            # producer's next TMA load refills it. Signalling empty too early lets a row be
+            # assembled from two tiles, which is exactly the observed signature (one token row,
+            # norm preserved to 4 s.f., 16-40% of elements deviating). It closed #621, the same
+            # race reached from NVL72. COLLX_DEEPEP_V2_COMMIT is the head of PR #605, branched
+            # before #642 merged, so the fence is absent from our build; upstream main has both.
+            # An earlier on-metal test that appeared to rule fencing out used a device-scope
+            # __threadfence_system after the grid sync at internode_ll.cu:976 -- a different
+            # fence at a different site -- so it does not bear on #642.
+            #
+            # Raising this back to _LL_BUFFER_CAP is therefore gated on a pin bump, not on a
+            # new upstream release. That bump is deliberately NOT bundled here: it spans months
+            # of upstream change, re-baselines every deepep-v2 row including normal mode, and
+            # needs `rewrite_deepep_v2` made tolerant first (main already carries that
+            # 'libnccl' fix, so the rewrite's count(old) == 1 assertion would abort the stage).
+            return _LL_LADDER_CAP
         return None
 
     def create_buffer(self, spec):
@@ -185,6 +220,20 @@ class DeepEPV2Backend(EPBackend):
         args, world_size = self.args, self.world_size
         self.max_tokens = spec.max_tokens_per_rank
         if self.mode == "low-latency":
+            # Size the LL buffer from the fixed cap, NOT from the clamped ladder. Deriving it
+            # from max(ladder) would halve the receive tensor the moment the ladder was
+            # clamped, and the receive footprint sets both the transport's memory traffic and
+            # the fp8 dequant volume (`_ll_recv_bf16` converts the whole padded receive) -- so
+            # every retained rung's numbers would shift and stop being comparable with the
+            # published series. Holding the buffer at 256 keeps them bit-comparable and leaves
+            # the top measured rung at half occupancy, which is the ladder/capacity decoupling
+            # the earlier capacity probe had to hand-roll.
+            if spec.max_tokens_per_rank > _LL_BUFFER_CAP:
+                raise RuntimeError(
+                    f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
+                    f"buffer cap {_LL_BUFFER_CAP}"
+                )
+            self.max_tokens = _LL_BUFFER_CAP
             self._create_ll_buffer(spec)
             # The legacy LL receive is double-buffered with a parity that flips per dispatch,
             # and a collective bounds rank drift to about one iteration (a dispatch cannot

@@ -873,5 +873,68 @@ class GpuHealthProbe(unittest.TestCase):
                 self.assertTrue(result is None or result[2] < 10)
 
 
+class LowLatencyCapDecoupling(unittest.TestCase):
+    """The LL receive size and the measured ladder are two numbers and must stay two.
+
+    The measured ladder stops below the receive cap to skip a token count DeepEP's low-latency
+    combine corrupts on Blackwell (upstream #700; the fix is #642, which our pin predates). The
+    receive must NOT follow the ladder down: its footprint sets the transport's memory traffic
+    and the fp8 dequant volume, so sizing it from `max(ladder)` would shift every retained
+    rung and break comparability with the published series. Asserted over the source because
+    importing the adapter needs a built deep_ep.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tree = ast.parse((BENCH / "ep_deepep_v2.py").read_text())
+        cls.consts = {
+            t.id: node.value.value
+            for node in cls.tree.body
+            if isinstance(node, ast.Assign)
+            for t in node.targets
+            if isinstance(t, ast.Name) and isinstance(node.value, ast.Constant)
+        }
+
+    def _func(self, name):
+        for node in ast.walk(self.tree):
+            if isinstance(node, ast.FunctionDef) and node.name == name:
+                return node
+        self.fail(f"{name} not found in ep_deepep_v2.py")
+
+    def test_both_caps_exist_and_the_ladder_stops_strictly_below_the_buffer(self):
+        buf, ladder = self.consts.get("_LL_BUFFER_CAP"), self.consts.get("_LL_LADDER_CAP")
+        self.assertIsInstance(buf, int)
+        self.assertIsInstance(ladder, int)
+        # Strictly below: equality is the configuration that corrupts, and it also puts the top
+        # measured rung at 100% occupancy, which is what made capacity and last-rung
+        # indistinguishable in the original investigation.
+        self.assertLess(ladder, buf)
+        # NVSHMEM_QP_DEPTH=1024 asserts nvshmem_qp_depth >= (cap + 1) * 2 at construction.
+        self.assertLessEqual(buf, 511)
+
+    def test_buffer_cap_clamps_the_ladder_by_the_constant_not_a_literal(self):
+        returns = [
+            n.value for n in ast.walk(self._func("buffer_cap"))
+            if isinstance(n, ast.Return) and n.value is not None
+        ]
+        names = {n.id for n in returns if isinstance(n, ast.Name)}
+        self.assertIn("_LL_LADDER_CAP", names)
+        # A bare literal here would drift out of step with the constants above.
+        self.assertEqual([n for n in returns if isinstance(n, ast.Constant) and n.value is not None], [])
+
+    def test_the_low_latency_receive_is_sized_from_the_cap_not_the_ladder(self):
+        # Guards the regression that would silently re-baseline every LL row.
+        assigned = [
+            node.value for node in ast.walk(self._func("create_buffer"))
+            if isinstance(node, ast.Assign)
+            for t in node.targets
+            if isinstance(t, ast.Attribute) and t.attr == "max_tokens"
+        ]
+        self.assertTrue(
+            any(isinstance(v, ast.Name) and v.id == "_LL_BUFFER_CAP" for v in assigned),
+            "create_buffer must set self.max_tokens = _LL_BUFFER_CAP on the low-latency path",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
