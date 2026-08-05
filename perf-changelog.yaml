@@ -5457,5 +5457,6 @@
   description:
     - "Add Kimi-K3 MXFP4 DSpark speculative decoding on TP8 MI355X with the validated haihub007/hc-gpu:kimik3-dspark-lmcache-working-20260804 image"
     - "Run LMCache 0.5.3rc2 MP host-DRAM offload with a 906 GB L1 pool, FP8 KV cache, Mamba alignment, and concurrency 1 through 64"
-    - "Use Inferact/Kimi-K3-DSpark with four speculative tokens, probabilistic drafting, TRITON_MLA, block rejection, and a 3000-token scheduler cap"
+    - "Use Inferact/Kimi-K3-DSpark with three speculative tokens, probabilistic drafting, TRITON_MLA, block rejection, eager execution, and a 3000-token scheduler cap"
+    - "Apply the pinned vLLM PR #50619 fix for native causal Kimi-K3 DSpark FP8 MLA verification"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2496

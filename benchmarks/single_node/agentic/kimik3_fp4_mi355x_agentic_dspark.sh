@@ -57,6 +57,46 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# Apply the upstream Kimi-K3 DSpark FP8 MLA verification fix until the pinned
+# image includes vLLM PR #50619. The immutable compare URL and checksum make
+# this reproducible; git-apply checks fail loudly if the image has drifted.
+apply_vllm_pr_50619() {
+    local base_sha="38a466e7b6e087d67c35e7f924c04c245423c99f"
+    local head_sha="a9f790851885589ea41b2b99ee750e044573bebd"
+    local patch_sha256="fa7200baae57af574ad018a92fff91430e864bd5609772a89e75fd9743c5abce"
+    local patch_file vllm_site_parent
+
+    patch_file="$(mktemp)"
+    curl --fail --location --retry 3 --silent --show-error \
+        "https://github.com/vllm-project/vllm/compare/${base_sha}...${head_sha}.patch" \
+        --output "$patch_file"
+    echo "${patch_sha256}  ${patch_file}" | sha256sum --check --status
+
+    vllm_site_parent="$(python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.find_spec("vllm")
+if spec is None or not spec.submodule_search_locations:
+    raise SystemExit("Unable to locate the installed vLLM package")
+print(Path(next(iter(spec.submodule_search_locations))).resolve().parent)
+PY
+)"
+
+    if git -C "$vllm_site_parent" apply --reverse --check \
+            --include='vllm/**' "$patch_file" 2>/dev/null; then
+        echo "vLLM PR #50619 is already applied"
+    else
+        git -C "$vllm_site_parent" apply --check \
+            --include='vllm/**' "$patch_file"
+        git -C "$vllm_site_parent" apply \
+            --include='vllm/**' "$patch_file"
+        echo "Applied vLLM PR #50619 at ${head_sha}"
+    fi
+    rm -f "$patch_file"
+}
+apply_vllm_pr_50619
+
 # Environment used by the validated Kimi-K3 + DSpark + LMCache image.
 export PYTHONNOUSERSITE=1
 export PYTHONHASHSEED=42
@@ -65,7 +105,6 @@ export VLLM_ROCM_USE_AITER_MLA=1
 export AITER_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 export VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION=1
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS="${VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS:-1200}"
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 export HSA_NO_SCRATCH_RECLAIM=1
@@ -160,7 +199,7 @@ wait_for_lmcache_ready
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((2 * CONC))}"
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-4}"
+SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
 SPEC_DRAFT_MODEL_PATH="${SPEC_DRAFT_MODEL_PATH:-$SPEC_DRAFT_MODEL}"
 if [[ "$SPEC_DRAFT_MODEL_PATH" == "$SPEC_DRAFT_MODEL" ]]; then
@@ -188,6 +227,8 @@ VLLM_CMD=(
     --enable-prefix-caching
     --mamba-cache-mode align
     --kv-cache-dtype fp8
+    # Keep eager execution until the patched graph path is validated in this image.
+    --enforce-eager
     --speculative-config "$SPEC_CONFIG"
     --kv-transfer-config "$KV_TRANSFER_CONFIG"
 )
