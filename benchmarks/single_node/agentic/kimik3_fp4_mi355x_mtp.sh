@@ -217,8 +217,16 @@ MNBT_ARGS=()
 # way to ask for fp8), and the mla_gluon patch further down gates on
 # KV_CACHE_DTYPE=fp8 and must see it already set.
 #
+# fp8 by default on this branch. It has to be decided HERE, not at the serve
+# command: the LMCache block below derives vLLM's unified block N from it
+# (768 bf16 / 1536 fp8) and `align` then pins max_num_batched_tokens into
+# [N, 2N). Setting fp8 only at the serve line would leave LMCache on N=768 and
+# mnbt 1464 while the engine actually ran fp8 -- the 5.6x-too-small prefill
+# chunk that pinned every earlier LMCache arm. At fp8 the same derivation gives
+# mnbt 3000.
+#
 # Set KV_CACHE_DTYPE=auto for a bf16 A/B.
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 
 if agentic_kv_offload_enabled; then
 case "${KV_OFFLOAD_BACKEND:-}" in
@@ -797,8 +805,7 @@ fi
 # The kernel exists: hsa/gfx950/mla/mla_asm.csv registers
 #   mla_a8w8_qh16_qseqlen4_gqaratio16_v3_ps.co   (fp8 q, fp8 kv, Gqa 16, qlen 4)
 # which is exactly 12 heads padded to 16 at k=3 verify.
-export KV_CACHE_DTYPE=fp8
-KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "fp8")
+KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
 
 # k=3, not 2, and the kernel registry is why.
 #
