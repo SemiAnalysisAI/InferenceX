@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -eo pipefail
 set -x
-
+ 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-export EVAL_FRAMEWORK="lm-eval"
-
+ export EVAL_FRAMEWORK="lm-eval"
+ 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
-
+ 
 if [[ -n "$SLURM_JOB_ID" ]]; then
     echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
-
+ 
 # ROCR/HIP visibility under slurm cgroups.
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
-
-
+ 
+ 
 if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -28,7 +28,7 @@ else
 fi
 rocm-smi || true
 amd-smi || true
-
+  
 # A server killed on this node minutes earlier (previous job, crashed run)
 # can still be draining its ~1.4 TB of HBM: KFD reclaim takes minutes, and
 # booting into a half-drained node fails RCCL init with HIP 'unhandled cuda
@@ -44,14 +44,14 @@ for i in $(seq 1 90); do
     echo "waiting for prior-job GPU memory reclaim: vram%max=$VRAM_MAX"; sleep 10
 done
 [ "$GPU_CLEAN" = "true" ] || { echo "Error: GPUs still draining prior job's memory after 15min" >&2; exit 1; }
-
+ 
 resolve_trace_source
 install_agentic_deps
-
+ 
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 mkdir -p "$RESULT_DIR"
-
+ 
 export PYTHONNOUSERSITE=1
 # Agentic warmup dispatches hundreds of large prompts at once; allow up to
 # 15 minutes of TCP progress before AIPerf declares a connection dead.
@@ -66,20 +66,88 @@ export SGLANG_TIMEOUT_KEEP_ALIVE=900
 # v1 dispatches to the precompiled HIP op in sgl-kernel (upstream MI355X CI
 # runs DSA models the same way).
 export SGLANG_OPT_USE_TOPK_V2=false
-
-# HiCache L2 + Mooncake L3 on every point (sizing rationale in the header).
-# Per-arm L2 ratio, both measured on-node. TP arm (182.7 GB/rank device
-# pool): the working set oversubscribes the device pool ~3x at conc 32, so
-# the host tier is what carries the radix hits - ratio 1.5 (~2.9 TB pinned
-# incl. sidecars) validates through the conc-24 long-context storm. The
-# DP-attention arm (159.4 GB/rank) only runs at conc >= 32, where each DP
-# rank's ~8 sessions nearly fit in its own device pool (~1.5-1.6M of 1.7M
-# tokens at conc 64) and the host tier just absorbs overflow - ratio 1.5
-# boots but the host OOM killer takes the server mid-storm at conc 48, so
-# it runs ratio 0.5 (~1.2 TB pinned, ~1.8 TB of load headroom) at
-# negligible hit-rate cost.
+ 
+# HiCache L2 (host DRAM), optionally extended with Mooncake L3.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache or mooncake.
+#
+# Per-arm L2 ratio (sizing rationale below) applies to both backends unless
+# overridden via HICACHE_RATIO. TP arm (182.7 GB/rank device pool): the
+# working set oversubscribes the device pool ~3x at conc 32, so the host
+# tier is what carries the radix hits - ratio 1.5 (~2.9 TB pinned incl.
+# sidecars) validates through the conc-24 long-context storm for the
+# mooncake arm. The DP-attention arm (159.4 GB/rank) only runs at conc >=
+# 32, where each DP rank's ~8 sessions nearly fit in its own device pool
+# (~1.5-1.6M of 1.7M tokens at conc 64) and the host tier just absorbs
+# overflow - ratio 1.5 boots but the host OOM killer takes the server
+# mid-storm at conc 48, so it runs ratio 0.5 (~1.2 TB pinned, ~1.8 TB of
+# load headroom) at negligible hit-rate cost. The hicache-only arm has no
+# L3 to fall back on, so these ratios are unvalidated there - override with
+# HICACHE_RATIO if the host OOMs or hit-rate is poor.
 CACHE_ARGS=()
-
+if agentic_kv_offload_enabled; then
+    if [ "$DP_ATTENTION" = "true" ]; then
+        HICACHE_RATIO="${HICACHE_RATIO:-0.5}"
+    else
+        HICACHE_RATIO="${HICACHE_RATIO:-1.5}"
+    fi
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    case "$KV_OFFLOAD_BACKEND" in
+        hicache)
+            echo "HiCache (GPU+host DRAM only): ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+            CACHE_ARGS=(
+                --enable-hierarchical-cache
+                --hicache-ratio "$HICACHE_RATIO"
+                --hicache-write-policy "$HICACHE_WRITE_POLICY"
+                --hicache-io-backend "$HICACHE_IO_BACKEND"
+                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
+            )
+            ;;
+        mooncake)
+            L3_PER_RANK_GB="${L3_PER_RANK_GB:-40}"
+            python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+            MOONCAKE_MASTER_PORT=$((PORT + 12000))
+            MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
+            MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+            cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "local_hostname": "127.0.0.1",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${L3_PER_RANK_GB}gb",
+  "local_buffer_size": "4gb",
+  "protocol": "tcp",
+  "device_name": ""
+}
+EOF
+            export SGLANG_HICACHE_MOONCAKE_CONFIG_PATH="$MOONCAKE_CONFIG_PATH"
+            mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+                --default_kv_lease_ttl=120s \
+                --eviction_high_watermark_ratio=0.80 \
+                --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
+            MOONCAKE_MASTER_PID=$!
+            sleep 2
+            kill -0 "$MOONCAKE_MASTER_PID"
+            echo "HiCache+Mooncake: ratio=$HICACHE_RATIO, l3_per_rank=${L3_PER_RANK_GB} GB, dram_budget=${TOTAL_CPU_DRAM_GB} GB"
+            CACHE_ARGS=(
+                --enable-hierarchical-cache
+                --hicache-ratio "$HICACHE_RATIO"
+                --hicache-size 0
+                --hicache-write-policy "$HICACHE_WRITE_POLICY"
+                --hicache-io-backend "$HICACHE_IO_BACKEND"
+                --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
+                --hicache-storage-backend mooncake
+                --hicache-storage-prefetch-policy wait_complete
+            )
+            ;;
+        *)
+            echo "Error: unsupported KV_OFFLOAD_BACKEND '$KV_OFFLOAD_BACKEND' (expected: hicache or mooncake)" >&2
+            exit 1
+            ;;
+    esac
+fi
+ 
 # Arm selection. TP arm keeps the FP8 sibling's cookbook batch-shaping
 # bands.
 #
@@ -121,15 +189,15 @@ elif [ "$CONC" -le 16 ]; then
     # like the FP8 sibling's low-conc band (0.85 OOMs the device mid-replay:
     # "Tried to allocate 6.86 GiB ... 5.15 GiB is free", run 29751563205).
     CHUNKED_PREFILL_SIZE=131072
-    MEM_FRACTION_STATIC=0.80
+    MEM_FRACTION_STATIC=0.85
 else
     CHUNKED_PREFILL_SIZE=32768
     export AGENTIC_WARMUP_GRACE_PERIOD=3600
 fi
-MAX_RUNNING_REQUESTS=$((2 * CONC))
+MAX_RUNNING_REQUESTS=$((1 * CONC))
 [ "$MAX_RUNNING_REQUESTS" -gt 256 ] && MAX_RUNNING_REQUESTS=256
 CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
-
+ 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
     --model-path "$MODEL_PATH"
@@ -138,6 +206,7 @@ SGLANG_CMD=(
     --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
+    --kv-cache-dtype fp8_e4m3
     --dsa-prefill-backend tilelang
     --dsa-decode-backend tilelang
     # GLM-5.2 emits the GLM-4.7-style tool-call format; glm47 is required for
@@ -154,20 +223,20 @@ SGLANG_CMD=(
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 6
     "${CACHE_ARGS[@]}"
-    --watchdog-timeout 3600
+    --watchdog-timeout 1800
     --enable-metrics
 )
-
+ 
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
-
+ 
 echo "Starting SGLang server for MI355X..."
 "${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
-
+ 
 wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-
+ 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "${SGLANG_ROUTER_CMD[@]}" \
@@ -187,24 +256,8 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Router PID: $ROUTER_PID"
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
-
-if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
-    capture_cache_metrics
-    trap capture_cache_metrics EXIT
-fi
-
+ 
 if [ "${EVAL_ONLY}" = "true" ]; then
-    # GLM-5.2's chat template defaults to reasoning_effort=Max when the
-    # client passes no chat_template_kwargs (mini-swe-agent doesn't), and the
-    # heavy thinking burns the default 75-step budget before submission.
-    # Double the step budget for this recipe; others keep the shared default.
-    export SWEBENCH_AGENT_STEP_LIMIT=150
-    # Pin eval agent parallelism to the proven-green level: workers default
-    # to CONC, and at 64 concurrent Modal sandboxes the cluster's egress
-    # collapses (18k "Cannot connect to *.modal.host" errors crippled the
-    # trajectories in run 29764760177) while 32 ran clean. The serving
-    # config is unchanged - only the agent's session fan-out is capped.
-    export SWEBENCH_AGENT_WORKERS="${SWEBENCH_AGENT_WORKERS:-32}"
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
