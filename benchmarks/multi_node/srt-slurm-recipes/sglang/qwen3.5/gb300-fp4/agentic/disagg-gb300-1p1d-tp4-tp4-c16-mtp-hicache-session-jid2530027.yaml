@@ -108,6 +108,7 @@ backend:
     decode:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
+      enable-metrics: true
       model-path: /model/
       trust-remote-code: true
       quantization: modelopt_fp4
@@ -145,6 +146,7 @@ backend:
     prefill:
       served-model-name: nvidia/Qwen3.5-397B-A17B-NVFP4
       enable-cache-report: true
+      enable-metrics: true
       model-path: /model/
       quantization: modelopt_fp4
       kv-cache-dtype: fp8_e4m3
@@ -196,3 +198,4 @@ benchmark:
     HF_HUB_CACHE: /hf_hub_cache
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: 'true'
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: '0'
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: 'sglang:'
