@@ -5454,7 +5454,6 @@
     - glm5.2-fp8-h200-llmd-vllm
   description:
     - "Add GLM-5.2-FP8 (753B MoE) H200 llmd-vllm P/D disagg benchmark recipes matching the K8s wide-ep-lws reference deployment"
-    - "Fixed-seq-len: 1P DEP8 + 1D DEP8 (2 nodes / 16 GPUs), STP and MTP arms"
     - "Agentic: 1P DEP16 + 1D DEP16 (4 nodes / 32 GPUs), STP and MTP arms"
     - "DeepGemm MoE backend, DeepEP high-throughput prefill / DeepEP v2 low-latency decode, NIXL KV transfer"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
