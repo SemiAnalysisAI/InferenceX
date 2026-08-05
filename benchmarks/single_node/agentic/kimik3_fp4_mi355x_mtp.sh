@@ -190,6 +190,18 @@ OFFLOAD_ARGS=()
 # Only the LMCache arms set this (to `--mamba-cache-mode align`); every other
 # arm leaves vLLM to pick the mode.
 LMCACHE_MAMBA_CACHE_MODE_ARGS=()
+# Likewise --max-num-batched-tokens: empty everywhere except the LMCache arms.
+#
+# 60da246d2 dropped the flag so vLLM picks its own budget (8192 on the GPU-only
+# c8 run 30928884574, which is 5.6x the value the LMCache path derives). That is
+# right for GPU-only and wrong for LMCache: `align` requires
+# N <= max_num_batched_tokens < 2N, and vLLM's 8192 is far outside [768, 1536)
+# for the bf16 N=768. Leaving the flag off on an LMCache arm silently violates
+# the constraint the block below spends thirty lines deriving and guarding.
+#
+# So the flag comes back, but only where the constraint applies -- the GPU-only
+# arm keeps vLLM's default and stays byte-identical to run 30928884574.
+MNBT_ARGS=()
 
 # fp8 KV is the DEFAULT for every arm on this model.
 #
@@ -294,6 +306,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     fi
     echo "LMCache: N=$LMCACHE_UNIFIED_BLOCK (kv-cache-dtype=${KV_CACHE_DTYPE:-auto})" \
          "--max-num-batched-tokens=$MAX_NUM_BATCHED_TOKENS --chunk-size=$LMCACHE_K3_CHUNK_SIZE"
+    # Actually pass it. The value above is derived and guarded but, since
+    # 60da246d2, was never reaching vllm serve.
+    MNBT_ARGS=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
 
     # Required by upstream's K3 recipe, and by the KDA backend generally:
     # `align` is the only Mamba cache mode the KDA backend supports, and it is
@@ -807,6 +822,7 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
+    "${MNBT_ARGS[@]}"
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${LMCACHE_MAMBA_CACHE_MODE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
