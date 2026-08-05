@@ -798,6 +798,53 @@ COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$
 GPU_MEM_UTIL="0.9"
 MAX_NUM_SEQS=$((2 * CONC))
 
+# vllm-project/vllm#51088 -- "[ROCm][MLA] Add small-head PS ASM decode route".
+#
+# K3 at TP8 is 12 heads/rank, under AITER MLA's 16-head minimum, so decode and
+# DSpark verify both fall to the Gluon Triton kernel. #51088 adds
+# VLLM_ROCM_MLA_FORCE_PS=1, which routes small-head decode to the persistent
+# -scheduling ASM kernel instead, and fixes the head-padding helpers.
+#
+# Those helpers are the reason this is worth running. At 12 heads both are
+# silent no-ops -- `16 // 12 == 1`, so get_mla_padded_q's repeat_interleave(1)
+# pads nothing and get_mla_unpadded_o's o[:, ::1, :] returns 16 heads where 12
+# are expected. That is the likeliest cause of the earlier "padded asm verify
+# does not verify" result (574/574 accepted, per-position all 1.000), which we
+# had recorded as asm verify being unusable for DSpark. #51088 replaces both
+# with zero-pad and a contiguous slice.
+#
+# Unlike #50371 and #50578, nothing here gates on max_qo_len, and aiter's asm
+# guard accepts qo_len <= 4 -- so at k=2 (qo_len 3) DSpark verify can take this
+# path. That is the whole experiment.
+#
+# The PR does not compile as posted: it replaces the `return (...)` in
+# get_mla_padded_q but leaves the outer closing paren behind as context, giving
+# `SyntaxError: unmatched ')'`. The vendored diff deletes that line; it is
+# otherwise byte-for-byte the PR. Verified to apply to this image's vLLM
+# (nightly-cb8104839c... is byte-identical to the PR's base 12292d94b258 for
+# this file).
+#
+# READ ACCEPTANCE SHAPE, NOT JUST THE MEAN: a corrupt asm verify previously
+# presented as 100% acceptance, which looks like a win.
+# Default ON for this branch -- it exists to test the PS ASM route. Every other
+# branch leaves it at 0.
+MLA_FORCE_PS="${MLA_FORCE_PS:-1}"
+if [ "$MLA_FORCE_PS" = "1" ]; then
+    PS_DIFF="$(dirname "$0")/patches/vllm_pr51088_force_ps.diff"
+    VLLM_ROOT="$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')"
+    [ -f "$PS_DIFF" ] || { echo "ERROR: $PS_DIFF missing" >&2; exit 1; }
+    # No `|| true`: an unpatched run would silently be a Gluon control arm
+    # published under this experiment's name.
+    ( cd "$VLLM_ROOT" && patch -p1 --forward --batch < "$PS_DIFF" ) \
+        2>&1 | tee "$RESULT_DIR/vllm_pr51088.log"
+    python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
+        "$VLLM_ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
+    export VLLM_ROCM_MLA_FORCE_PS=1
+    echo "MLA_FORCE_PS=1: small-head decode routed to the PS ASM kernel"
+else
+    echo "MLA_FORCE_PS=0: leaving small-head decode on Gluon (upstream default)"
+fi
+
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
