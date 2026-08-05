@@ -91,6 +91,29 @@ WATCHER_PID=$!
 LLMD_CONTAINER_ENGINE="${LLMD_CONTAINER_ENGINE:-docker}"
 echo "LLMD_CONTAINER_ENGINE=$LLMD_CONTAINER_ENGINE"
 
+# Load binary source locations; extract on the batch host if missing.
+# shellcheck source=/dev/null
+[[ -f "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env" ]] && \
+    source "${DI_REPO_DIR}/benchmarks/llm-d/binaries.env"
+: "${LLMD_BIN_DIR:=${BENCHMARK_LOGS_DIR}/.llmd-bins}"
+
+_need_extract=false
+for _bin in epp pd-sidecar envoy; do
+    [[ -x "${LLMD_BIN_DIR}/${_bin}" ]] || { _need_extract=true; break; }
+done
+if $_need_extract; then
+    echo "Extracting llm-d binaries -> $LLMD_BIN_DIR"
+    LLMD_BIN_DIR="$LLMD_BIN_DIR" bash "${DI_REPO_DIR}/benchmarks/llm-d/extract-binaries.sh"
+fi
+
+LLMD_BIN_MOUNTS=""
+for _bin in epp pd-sidecar envoy; do
+    if [[ -x "${LLMD_BIN_DIR}/${_bin}" ]]; then
+        LLMD_BIN_MOUNTS+=" -v ${LLMD_BIN_DIR}/${_bin}:/usr/local/bin/${_bin}:ro"
+        echo "Mounting ${LLMD_BIN_DIR}/${_bin} -> /usr/local/bin/${_bin}"
+    fi
+done
+
 if [[ "$LLMD_CONTAINER_ENGINE" == "docker" ]]; then
     # One docker run per node, one task per node. server.sh dispatches by NODE_RANK.
     srun \
@@ -123,6 +146,7 @@ exec docker run --rm \
     -v ${DI_REPO_DIR}/benchmarks/multi_node/llm-d-recipes:/etc/llmd-recipes:ro \
     -v ${DI_REPO_DIR}/benchmarks/llm-d/epp-config.yaml:/etc/epp/config.yaml:ro \
     -v ${DI_REPO_DIR}/benchmarks/llm-d/envoy.yaml:/etc/envoy/envoy.yaml:ro \
+    ${LLMD_BIN_MOUNTS} \
     -e SLURM_JOB_ID=\$SLURM_JOB_ID \
     -e NODE_RANK=\$SLURM_PROCID \
     -e NUM_NODES=$NUM_NODES \
