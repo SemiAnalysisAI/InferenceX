@@ -72,6 +72,25 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 原生/上游 SGLang 引擎 | 原生 MTP | — | 按照上述提交顺序指南及例外处理的其他非 vLLM/SGLang 引擎 |
 
+## KV 缓存卸载策略
+
+为遵循“通过限制范围实现快速交付”的设计原则，AgentX 初始策略仅允许 CPU DRAM KV 缓存卸载，且该功能为可选项。支持的方案包括 vLLM Connector、LMCache、SGLang HiCache、Mooncake CPU DRAM Connector、Dynamo KVBM、CPU DRAM P2P 池化以及类似的 CPU 内存机制。供应商可自行决定是否为每项提交启用 CPU KV 缓存卸载；如果禁用后能得到更优的 Pareto 点，也可选择禁用。
+
+用于 KV 缓存卸载的 CPU DDR5 容量必须与推理配置实际使用的服务器 GPU 比例成正比：
+
+`允许的 CPU DRAM = 每服务器 CPU DRAM 基准容量 ×（配置使用的 GPU 数 / 服务器 GPU 总数）`
+
+该规则按每台服务器独立计算。
+
+| CPU DRAM 容量类别 | 示例 SKU | 每服务器基准与上限 |
+|---|---|---|
+| CPU DRAM 容量未标准化 | HGX B200、HGX B300、MI355X 机箱 | 每服务器最多 3 TB。因此，仅使用 8 块 GPU 中 4 块的配置最多可使用 1.5 TB CPU DRAM 进行 KV 缓存卸载。 |
+| CPU DRAM 容量已标准化 | TPUv7、GB200 NVL72、GB300 NVL72 | 以该 SKU 标准安装的 CPU DRAM 容量为基准，不另设每服务器硬上限，但仍须遵守 GPU 比例规则。 |
+
+3 TB 上限旨在避免不现实的内存容量竞赛，即各硬件供应商要求云服务提供商（CSP）和原始设备制造商（OEM）安装尽可能多的高容量 DIMM，导致每服务器容量可能达到 6 TB。每颗加速器芯片的总体拥有成本（TCO）将按服务器 CPU DDR5 总容量的成本进行归一化。
+
+其他卸载层级（包括 NVMe KV 缓存卸载）不属于初始范围，可在 InferenceX v3 发布后引入。NVMe KV 缓存卸载暂定在 InferenceX v3.5 中作为快速后续功能加入，或纳入 InferenceX v4。
+
 ## 模型支持矩阵
 
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |

@@ -72,6 +72,25 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
+## KV cache offloading policy
+
+To align with the design principle of shipping quickly by limiting scope, the initial AgentX policy permits only CPU DRAM KV cache offloading, and its use is optional. Supported approaches include the vLLM Connector, LMCache, SGLang HiCache, Mooncake CPU DRAM Connector, Dynamo KVBM, CPU DRAM P2P pooling, and similar CPU-memory mechanisms. Vendors may enable or disable CPU KV cache offloading for each submission at their discretion, including disabling it when that produces better Pareto points.
+
+The amount of CPU DDR5 used for KV cache offloading must be proportional to the fraction of a server's GPUs used by the serving configuration:
+
+`allowed CPU DRAM = per-server baseline CPU DRAM × (GPUs used by the configuration / total GPUs in the server)`
+
+This rule applies independently to each server.
+
+| CPU DRAM capacity class | Example SKUs | Per-server baseline and limit |
+|---|---|---|
+| No standardized CPU DRAM capacity | HGX B200, HGX B300, MI355X chassis | At most 3 TB per server. A configuration using 4 of 8 GPUs may therefore use at most 1.5 TB of CPU DRAM for KV cache offloading. |
+| Standardized CPU DRAM capacity | TPUv7, GB200 NVL72, GB300 NVL72 | The SKU's standard installed CPU DRAM capacity is the baseline, with no additional per-server hard cap. The proportional-GPU rule still applies. |
+
+The 3 TB limit prevents an unrealistic memory-capacity race in which hardware vendors ask CSPs and OEMs to install the maximum number of high-capacity DIMMs, potentially reaching 6 TB per server. Total cost of ownership (TCO) per accelerator chip will be normalized by the cost of the server's total CPU DDR5 capacity.
+
+Other offloading tiers, including NVMe KV cache offloading, are outside the initial scope and may be introduced after the InferenceX v3 release. NVMe KV cache offloading is tentatively targeted as a fast follow-up in InferenceX v3.5 or as part of InferenceX v4.
+
 ## Model support matrix
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |
