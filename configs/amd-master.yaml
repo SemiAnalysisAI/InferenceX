@@ -851,6 +851,32 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c8:
+  # LMCache sibling of -mtp, pinned to run 30928884574's GPU-only c8 cell.
+  # Everything is held: nightly image, k=2, mns 2*CONC, GMU 0.9, prefix caching,
+  # bf16 KV, FULL_DECODE_ONLY capture at 2*CONC. The only change is the host
+  # tier, so this answers whether LMCache earns anything on the image that
+  # actually finishes -- 30928884574 gave 496.19 tok/s/GPU, 142 requests,
+  # TTFT 27.6 s, prefix hit 36.4%.
+  #
+  # Expect the connector to cost prefill throughput. `align` requires
+  # N <= max_num_batched_tokens < 2N and N is 768 under bf16, so this arm runs
+  # mnbt 1464 against the GPU-only arm's vLLM default of 8192 -- a 5.6x smaller
+  # prefill chunk on ~101K-token prompts. That ceiling is structural, not a
+  # tuning choice; fp8 KV would lift N to 1536 and allow ~3000.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
   model: moonshotai/Kimi-K3
