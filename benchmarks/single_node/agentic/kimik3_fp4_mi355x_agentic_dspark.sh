@@ -157,7 +157,11 @@ wait_for_lmcache_ready
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((2 * CONC))}"
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 SPEC_DRAFT_MODEL="${SPEC_DRAFT_MODEL:-Inferact/Kimi-K3-DSpark}"
-SPEC_CONFIG="{\"model\":\"${SPEC_DRAFT_MODEL}\",\"num_speculative_tokens\":${SPEC_NUM_TOKENS},\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+SPEC_DRAFT_MODEL_PATH="${SPEC_DRAFT_MODEL_PATH:-$SPEC_DRAFT_MODEL}"
+if [[ "$SPEC_DRAFT_MODEL_PATH" == "$SPEC_DRAFT_MODEL" ]]; then
+    hf download "$SPEC_DRAFT_MODEL"
+fi
+SPEC_CONFIG="{\"model\":\"${SPEC_DRAFT_MODEL_PATH}\",\"num_speculative_tokens\":${SPEC_NUM_TOKENS},\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
 KV_TRANSFER_CONFIG='{"kv_connector":"LMCacheMPConnector","kv_connector_module_path":"lmcache.integration.vllm.lmcache_mp_connector","kv_role":"kv_both","kv_connector_extra_config":{"lmcache.mp.host":"tcp://127.0.0.1","lmcache.mp.port":5555}}'
 
 VLLM_CMD=(
