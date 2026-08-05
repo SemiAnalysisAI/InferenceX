@@ -49,6 +49,18 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 | Single-turn 1k1k | 1024 / 1024 | **Deprecated for all models** since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs live in [`configs/deprecated/`](configs/deprecated/). |
 | Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
 
+## Engine submission policy
+
+The engines below are the primary allowed engines for each model. Hardware-specific engines are also allowed, but only as second-priority submissions after the listed primary-engine submissions have been made.
+
+| Model | Primary engines | Secondary engines |
+|---|---|---|
+| DeepSeek-V4-Pro 1.6T (`dsv4`) | vLLM and SGLang | Hardware-specific engines, after vLLM and SGLang submissions |
+| Kimi-K3 (`kimik3`) | vLLM | Hardware-specific engines, after a vLLM submission |
+| MiniMax-M3 (`minimaxm3`) | vLLM | Hardware-specific engines, after a vLLM submission |
+| GLM-5.2 (`glm5.2`) | SGLang | Hardware-specific engines, after an SGLang submission |
+| Qwen3.5-397B-A17B (`qwen3.5`) | SGLang | Hardware-specific engines, after an SGLang submission |
+
 ## Model support matrix
 
 | Model architecture class | Prefix | Date added | Active scenarios | Deprecated scenarios |

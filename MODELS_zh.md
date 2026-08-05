@@ -49,6 +49,18 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 | 单轮 1k1k | 1024 / 1024 | **对所有模型均已弃用**，自 2026-07-17 起（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置位于 [`configs/deprecated/`](configs/deprecated/)。 |
 | 单轮 1k8k | 1024 / 8192 | **对所有模型均已弃用**，自 2026-03-27 起（[#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。相关配置已删除，未归档。 |
 
+## 引擎提交策略
+
+下表列出各模型优先允许的引擎。硬件专用引擎也允许提交，但优先级较低，且须在所列首选引擎均已提交后方可提交。
+
+| 模型 | 首选引擎 | 次选引擎 |
+|---|---|---|
+| DeepSeek-V4-Pro 1.6T（`dsv4`） | vLLM 和 SGLang | 硬件专用引擎；须在 vLLM 和 SGLang 均已提交后 |
+| Kimi-K3（`kimik3`） | vLLM | 硬件专用引擎；须在 vLLM 已提交后 |
+| MiniMax-M3（`minimaxm3`） | vLLM | 硬件专用引擎；须在 vLLM 已提交后 |
+| GLM-5.2（`glm5.2`） | SGLang | 硬件专用引擎；须在 SGLang 已提交后 |
+| Qwen3.5-397B-A17B（`qwen3.5`） | SGLang | 硬件专用引擎；须在 SGLang 已提交后 |
+
 ## 模型支持矩阵
 
 | 模型架构类别 | 前缀 | 加入日期 | 启用场景 | 已弃用场景 |
