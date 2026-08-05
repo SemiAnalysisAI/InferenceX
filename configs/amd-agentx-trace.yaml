@@ -1,0 +1,25 @@
+# Trace-collection config. Not part of any sweep -- amd-master.yaml owns the
+# published DSv4-Pro MI355X AgentX numbers, and this file exists purely so a
+# trace run can target the DEP arm (dp-attn + EP8) on its own without also
+# spending a runner on the TP8 baseline. Both arms sit at conc 32 in
+# amd-master.yaml, so --conc cannot separate them.
+#
+# Everything here mirrors dsv4-fp4-mi355x-vllm-agentic-mtp exactly, minus the
+# pure-TP search-space entry. Dispatch with agentx-trace: true; the recipe then
+# drives vLLM's /start_profile and /stop_profile mid-replay and drops traces in
+# results/traces (see benchmarks/single_node/agentic/dsv4_fp4_mi355x_vllm_mtp.sh).
+#
+# Keep in sync with the DEP entry in amd-master.yaml if that one changes.
+dsv4-fp4-mi355x-vllm-agentic-mtp-trace:
+  image: vllm/vllm-openai-rocm:nightly-b88916617d3d2249bff0dae5cecb6b727c980a20
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.60
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32], router: { name: vllm-router, version: "0.1.14" } }
