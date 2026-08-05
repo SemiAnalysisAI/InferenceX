@@ -35,6 +35,7 @@ _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 
 _INTEGRATION_METHOD = "per_device_trapezoidal_with_linear_boundary_interpolation"
 _DEFAULT_MAX_SAMPLE_GAP_S = 3.0
+_ACCUMULATOR_TOLERANCE = 0.05
 _POWER_METRIC_KEYS = {
     "avg_power_w",
     "avg_total_gpu_power_w",
@@ -501,6 +502,135 @@ def integrate_power(
     )
 
 
+def _read_energy_snapshot(path: Path) -> dict[str, float] | None:
+    """Map GPU id to accumulator joules from one ``amd-smi metric -E`` snapshot."""
+    with path.open("r", newline="", encoding="utf-8", errors="replace") as f:
+        reader = csv.DictReader(f, skipinitialspace=True)
+        header = [column.strip() for column in (reader.fieldnames or [])]
+        reader.fieldnames = header
+        if "gpu" not in header or "total_energy_consumption" not in header:
+            return None
+        energy_by_gpu: dict[str, float] = {}
+        for row in reader:
+            gpu_id = (row.get("gpu") or "").strip()
+            if not gpu_id:
+                continue
+            try:
+                energy_j = float((row.get("total_energy_consumption") or "").strip())
+            except ValueError:
+                continue
+            if math.isfinite(energy_j):
+                energy_by_gpu[gpu_id] = energy_j
+    return energy_by_gpu or None
+
+
+def _stream_samples_by_gpu(csv_path: Path) -> dict[str, list[tuple[float, float]]]:
+    """Group every parseable (timestamp, watt) sample per GPU, sorted in time."""
+    samples: dict[str, list[tuple[float, float]]] = {}
+    with csv_path.open("r", newline="", encoding="utf-8", errors="replace") as f:
+        reader = csv.DictReader(f, skipinitialspace=True)
+        header = [column.strip() for column in (reader.fieldnames or [])]
+        reader.fieldnames = header
+        timestamp_col, power_col, gpu_col = _detect_columns(header)
+        if not timestamp_col or not power_col or not gpu_col:
+            return {}
+        for row in reader:
+            timestamp = _parse_timestamp((row.get(timestamp_col) or "").strip())
+            power = _parse_power((row.get(power_col) or "").strip())
+            gpu_id = (row.get(gpu_col) or "").strip()
+            if timestamp is None or power is None or not gpu_id:
+                continue
+            if not math.isfinite(timestamp) or not math.isfinite(power):
+                continue
+            samples.setdefault(gpu_id, []).append((timestamp, power))
+    return {gpu_id: sorted(values) for gpu_id, values in samples.items()}
+
+
+def _trapezoid(samples: list[tuple[float, float]]) -> float:
+    """Integrate consecutive (timestamp, watt) samples with no window clipping."""
+    return float(
+        sum(
+            (right_time - left_time) * (left_power + right_power) / 2.0
+            for (left_time, left_power), (right_time, right_power) in zip(
+                samples, samples[1:]
+            )
+        )
+    )
+
+
+def cross_check_accumulator(csv_path: Path) -> dict | None:
+    """Compare the hardware energy-accumulator delta with the full stream integral.
+
+    The snapshots bracket the whole monitor lifetime rather than one benchmark
+    window, so the comparison integrates the entire stream span: it validates the
+    sampling instrument, not a window's metrics. Advisory only — the result never
+    affects ``power_valid`` or the validation reason codes.
+    """
+    start_path = csv_path.with_name(f"{csv_path.stem}_energy_start.csv")
+    end_path = csv_path.with_name(f"{csv_path.stem}_energy_end.csv")
+    start_exists = start_path.is_file()
+    end_exists = end_path.is_file()
+    if not start_exists and not end_exists:
+        return None
+    if not start_exists:
+        return {"available": False, "reason": "missing_start_snapshot"}
+    if not end_exists:
+        return {"available": False, "reason": "missing_end_snapshot"}
+
+    start_energy = _read_energy_snapshot(start_path)
+    if start_energy is None:
+        return {"available": False, "reason": "unparseable_start_snapshot"}
+    end_energy = _read_energy_snapshot(end_path)
+    if end_energy is None:
+        return {"available": False, "reason": "unparseable_end_snapshot"}
+
+    matched_gpu_ids = sorted(set(start_energy) & set(end_energy), key=_gpu_sort_key)
+    per_gpu_delta_j = {
+        gpu_id: end_energy[gpu_id] - start_energy[gpu_id] for gpu_id in matched_gpu_ids
+    }
+    unmatched_gpus = sorted(set(start_energy) ^ set(end_energy), key=_gpu_sort_key)
+    negative_delta_gpus = [
+        gpu_id for gpu_id, delta in per_gpu_delta_j.items() if delta < 0
+    ]
+
+    stream = _stream_samples_by_gpu(csv_path)
+    integrated_gpu_ids = sorted(set(stream) & set(per_gpu_delta_j), key=_gpu_sort_key)
+    integrated_stream_j = float(
+        sum(_trapezoid(stream[gpu_id]) for gpu_id in integrated_gpu_ids)
+    )
+    boundaries = [
+        timestamp
+        for gpu_id in integrated_gpu_ids
+        for timestamp in (stream[gpu_id][0][0], stream[gpu_id][-1][0])
+    ]
+    stream_span_s = max(boundaries) - min(boundaries) if boundaries else 0.0
+
+    accumulator_delta_j = float(sum(per_gpu_delta_j.values()))
+    relative_error: float | None = None
+    within_tolerance = False
+    if accumulator_delta_j > 0:
+        relative_error = (
+            abs(accumulator_delta_j - integrated_stream_j) / accumulator_delta_j
+        )
+        within_tolerance = (
+            not negative_delta_gpus and relative_error <= _ACCUMULATOR_TOLERANCE
+        )
+
+    return {
+        "available": True,
+        "accumulator_delta_j": accumulator_delta_j,
+        "integrated_stream_j": integrated_stream_j,
+        "relative_error": relative_error,
+        "within_tolerance": within_tolerance,
+        "tolerance": _ACCUMULATOR_TOLERANCE,
+        "per_gpu_delta_j": per_gpu_delta_j,
+        "integrated_gpu_ids": integrated_gpu_ids,
+        "unmatched_gpus": unmatched_gpus,
+        "negative_delta_gpus": negative_delta_gpus,
+        "stream_span_s": stream_span_s,
+    }
+
+
 def _load_benchmark_data(
     bench_result_path: Path,
 ) -> tuple[BenchmarkData | None, list[str]]:
@@ -646,6 +776,7 @@ def _validation_payload(
     power_valid: bool,
     reasons: list[str],
     metrics: dict[str, float],
+    accumulator_check: dict | None,
 ) -> dict:
     """Build the complete auditable power-validation sidecar payload."""
     benchmark_window = None
@@ -674,6 +805,7 @@ def _validation_payload(
         "per_gpu_max_sample_gap_s": integration.per_gpu_max_sample_gap_s,
         "per_gpu_energy_j": integration.per_gpu_energy_j,
         "device_issues": integration.device_issues,
+        "accumulator_check": accumulator_check,
         "metrics": {
             key: round(value, 6)
             for key, value in metrics.items()
@@ -736,6 +868,11 @@ def run(
             print(f"[aggregate_power] Failed to patch {agg_result}: {exc}", file=sys.stderr)
 
     try:
+        accumulator_check = cross_check_accumulator(csv_path)
+    except (OSError, csv.Error):
+        accumulator_check = {"available": False, "reason": "cross_check_error"}
+
+    try:
         _write_json_atomic(
             validation_result,
             _validation_payload(
@@ -746,6 +883,7 @@ def run(
                 power_valid=power_valid,
                 reasons=reasons,
                 metrics=metrics,
+                accumulator_check=accumulator_check,
             ),
         )
     except OSError as exc:
