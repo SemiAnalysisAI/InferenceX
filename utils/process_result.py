@@ -90,6 +90,7 @@ def record_power_internal_error(
             power_valid=False,
             reasons=reasons,
             metrics={},
+            accumulator_check=None,
         )
         validation_data["internal_error"] = {
             "type": type(error).__name__,

@@ -10,6 +10,7 @@ Covers:
   - Whole-deployment power/energy/J-query/J-token metric semantics
   - Best-effort invalid results and REQUIRE_POWER strict failures
   - Atomic aggregate and validation artifacts
+  - Advisory energy-accumulator cross-check against the AMD sidecar snapshots
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from aggregate_power import (  # noqa: E402
     _parse_power,
     _parse_timestamp,
     aggregate_power,
+    cross_check_accumulator,
     integrate_power,
     main,
     patch_agg_result,
@@ -70,6 +72,23 @@ def test_detect_columns_nvidia():
 
 def test_detect_columns_amd():
     header = ["timestamp", "gpu", "socket_power", "temperature"]
+    ts, pw, gpu = _detect_columns(header)
+    assert ts == "timestamp"
+    assert pw == "socket_power"
+    assert gpu == "gpu"
+
+
+def test_detect_columns_amd_watch_mode_real_header():
+    # AMDSMI 26.2.0 `metric -p -c -t -u -w 1 --csv` header (order-faithful
+    # subset, measured on MI355X): socket_power must win even though
+    # power_management also matches the power pattern later in the row.
+    header = [
+        "timestamp", "gpu", "gfx_activity", "umc_activity", "mm_activity",
+        "vcn_activity", "jpeg_activity", "gfx_busy_inst_xcp_0",
+        "jpeg_busy_xcp_0", "vcn_busy_xcp_0", "socket_power", "gfx_voltage",
+        "soc_voltage", "mem_voltage", "throttle_status", "power_management",
+        "gfx_0_clk", "mem_0_clk", "edge", "hotspot", "mem",
+    ]
     ts, pw, gpu = _detect_columns(header)
     assert ts == "timestamp"
     assert pw == "socket_power"
@@ -759,6 +778,8 @@ def test_run_emits_complete_whole_deployment_metric_contract(tmp_path: Path):
     assert audit["integration_method"] == (
         "per_device_trapezoidal_with_linear_boundary_interpolation"
     )
+    # No vendor accumulator sidecars: the advisory check stays absent.
+    assert audit["accumulator_check"] is None
 
 
 def test_run_best_effort_marks_invalid_power_and_preserves_benchmark(tmp_path: Path):
@@ -873,6 +894,285 @@ def test_run_invalid_benchmark_denominator_is_auditable(tmp_path: Path):
     assert json.loads(validation.read_text())["reasons"] == [
         "invalid_successful_query_count"
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Advisory hardware energy-accumulator cross-check
+# --------------------------------------------------------------------------- #
+
+_ENERGY_SNAPSHOT_HEADER = (
+    "gpu,socket_power,gfx_voltage,soc_voltage,mem_voltage,"
+    "throttle_status,power_management,total_energy_consumption"
+)
+
+
+def _write_energy_snapshot(path: Path, energy_by_gpu: dict[str, float]) -> None:
+    """`amd-smi metric -E --csv` shape measured on MI355X, N/A cells included."""
+    lines = [_ENERGY_SNAPSHOT_HEADER]
+    for gpu_id, energy_j in energy_by_gpu.items():
+        lines.append(f"{gpu_id},238,N/A,N/A,N/A,N/A,ENABLED,{energy_j}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_snapshot_pair(
+    csv: Path,
+    *,
+    start: dict[str, float],
+    end: dict[str, float],
+) -> None:
+    """Sidecars named exactly as start_gpu_monitor/stop_gpu_monitor write them."""
+    _write_energy_snapshot(csv.parent / "gpu_metrics_energy_start.csv", start)
+    _write_energy_snapshot(csv.parent / "gpu_metrics_energy_end.csv", end)
+
+
+def _write_flat_stream(csv: Path, *, base: float, watts_by_gpu: dict[int, float]) -> None:
+    """11 samples at 1 Hz, so each GPU's full-stream span is exactly 10s."""
+    _write_amd_csv(
+        csv,
+        [
+            (base + offset, gpu, watts)
+            for gpu, watts in watts_by_gpu.items()
+            for offset in range(11)
+        ],
+    )
+
+
+def test_cross_check_accumulator_matches_full_stream_integral(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
+    _write_snapshot_pair(csv, start={"0": 1_000_000.0}, end={"0": 1_005_000.0})
+
+    result = cross_check_accumulator(csv)
+
+    assert result is not None
+    assert result["available"] is True
+    assert result["accumulator_delta_j"] == pytest.approx(5_000.0)
+    assert result["integrated_stream_j"] == pytest.approx(5_000.0)
+    assert result["relative_error"] < 0.05
+    assert result["within_tolerance"] is True
+    assert result["tolerance"] == 0.05
+    assert result["per_gpu_delta_j"] == pytest.approx({"0": 5_000.0})
+    assert result["integrated_gpu_ids"] == ["0"]
+    assert result["unmatched_gpus"] == []
+    assert result["negative_delta_gpus"] == []
+    assert result["stream_span_s"] == pytest.approx(10.0)
+
+
+def test_cross_check_accumulator_flags_disagreement_beyond_tolerance(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    # 400 W sampled against a 5_000 J accumulator delta: the stream is 20% low.
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 400.0})
+    _write_snapshot_pair(csv, start={"0": 1_000_000.0}, end={"0": 1_005_000.0})
+
+    result = cross_check_accumulator(csv)
+
+    assert result["available"] is True
+    assert result["integrated_stream_j"] == pytest.approx(4_000.0)
+    assert result["relative_error"] == pytest.approx(0.2)
+    assert result["within_tolerance"] is False
+
+
+def test_cross_check_accumulator_without_snapshots_returns_none(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
+
+    assert cross_check_accumulator(csv) is None
+
+
+def test_cross_check_accumulator_reports_missing_end_snapshot(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
+    _write_energy_snapshot(tmp_path / "gpu_metrics_energy_start.csv", {"0": 1_000_000.0})
+
+    assert cross_check_accumulator(csv) == {
+        "available": False,
+        "reason": "missing_end_snapshot",
+    }
+
+
+def test_cross_check_accumulator_reports_unparseable_snapshot(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
+    _write_energy_snapshot(tmp_path / "gpu_metrics_energy_start.csv", {"0": 1_000_000.0})
+    (tmp_path / "gpu_metrics_energy_end.csv").write_text(
+        "gpu,socket_power\n0,238\n", encoding="utf-8"
+    )
+
+    assert cross_check_accumulator(csv) == {
+        "available": False,
+        "reason": "unparseable_end_snapshot",
+    }
+
+
+def test_cross_check_accumulator_flags_negative_delta(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 400.0, 1: 0.0})
+    # GPU 1's counter wrapped. The summed delta still matches the stream, so a
+    # False verdict here can only come from the wrap itself.
+    _write_snapshot_pair(
+        csv,
+        start={"0": 1_000_000.0, "1": 2_000_000.0},
+        end={"0": 1_005_000.0, "1": 1_999_000.0},
+    )
+
+    result = cross_check_accumulator(csv)
+
+    assert result["negative_delta_gpus"] == ["1"]
+    assert result["accumulator_delta_j"] == pytest.approx(4_000.0)
+    assert result["integrated_stream_j"] == pytest.approx(4_000.0)
+    assert result["relative_error"] == pytest.approx(0.0)
+    assert result["within_tolerance"] is False
+
+
+def test_cross_check_accumulator_excludes_unmatched_gpu(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    # GPU 1 draws 10x GPU 0 but is absent from the end snapshot: counting it
+    # would blow the integral past tolerance.
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0, 1: 5_000.0})
+    _write_energy_snapshot(
+        tmp_path / "gpu_metrics_energy_start.csv",
+        {"0": 1_000_000.0, "1": 3_000_000.0},
+    )
+    _write_energy_snapshot(
+        tmp_path / "gpu_metrics_energy_end.csv",
+        {"0": 1_005_000.0},
+    )
+
+    result = cross_check_accumulator(csv)
+
+    assert result["unmatched_gpus"] == ["1"]
+    assert list(result["per_gpu_delta_j"]) == ["0"]
+    assert result["integrated_gpu_ids"] == ["0"]
+    assert result["accumulator_delta_j"] == pytest.approx(5_000.0)
+    assert result["integrated_stream_j"] == pytest.approx(5_000.0)
+    assert result["within_tolerance"] is True
+
+
+def test_cross_check_accumulator_guards_zero_accumulator_delta(tmp_path: Path):
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
+    _write_snapshot_pair(csv, start={"0": 1_000_000.0}, end={"0": 1_000_000.0})
+
+    result = cross_check_accumulator(csv)
+
+    assert result["accumulator_delta_j"] == pytest.approx(0.0)
+    assert result["relative_error"] is None
+    assert result["within_tolerance"] is False
+
+
+def test_cross_check_accumulator_parses_real_amd_smi_snapshot(tmp_path: Path):
+    """Verbatim AMDSMI 26.2.0 rows: N/A cells, and an N/A accumulator reading."""
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_flat_stream(csv, base=1_700_000_000.0, watts_by_gpu={0: 500.0})
+    (tmp_path / "gpu_metrics_energy_start.csv").write_text(
+        f"{_ENERGY_SNAPSHOT_HEADER}\n"
+        "0,238,N/A,N/A,N/A,N/A,ENABLED,178319501.682\n"
+        "1,241,N/A,N/A,N/A,N/A,ENABLED,178400000.000\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "gpu_metrics_energy_end.csv").write_text(
+        f"{_ENERGY_SNAPSHOT_HEADER}\n"
+        "0,240,N/A,N/A,N/A,N/A,ENABLED,178324501.682\n"
+        "1,239,N/A,N/A,N/A,N/A,ENABLED,N/A\n",
+        encoding="utf-8",
+    )
+
+    result = cross_check_accumulator(csv)
+
+    assert result["available"] is True
+    assert result["per_gpu_delta_j"] == pytest.approx({"0": 5_000.0})
+    assert result["unmatched_gpus"] == ["1"]
+    assert result["within_tolerance"] is True
+
+
+def test_run_records_advisory_accumulator_check(tmp_path: Path):
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=2,
+    )
+    # The monitor lifetime spans 12s (one sample either side of the formal
+    # window), so the accumulator delta legitimately exceeds window energy.
+    _write_snapshot_pair(
+        csv,
+        start={"0": 1_000_000.0, "1": 2_000_000.0},
+        end={"0": 1_006_000.0, "1": 2_006_000.0},
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=10,
+        total_input=10_000,
+        total_output=2_000,
+    )
+    agg.write_text(json.dumps({"hw": "mi355x"}), encoding="utf-8")
+
+    exit_code = run(csv, bench, agg, expected_num_gpus=2, validation_result=validation)
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert patched["power_valid"] == 1
+    assert patched["total_gpu_energy_j"] == pytest.approx(10_000.0)
+
+    audit = json.loads(validation.read_text())
+    assert audit["power_valid"] is True
+    assert audit["reasons"] == []
+    check = audit["accumulator_check"]
+    assert check["available"] is True
+    assert check["within_tolerance"] is True
+    assert check["accumulator_delta_j"] == pytest.approx(12_000.0)
+    assert check["integrated_stream_j"] == pytest.approx(12_000.0)
+    assert check["stream_span_s"] == pytest.approx(12.0)
+
+
+def test_run_accumulator_mismatch_leaves_power_validity_untouched(tmp_path: Path):
+    base = 1_700_000_000.0
+    csv = tmp_path / "gpu_metrics.csv"
+    _write_constant_window_samples(
+        csv,
+        start=base,
+        end=base + 10,
+        watts_per_gpu=500.0,
+        num_gpus=2,
+    )
+    _write_snapshot_pair(
+        csv,
+        start={"0": 1_000_000.0, "1": 2_000_000.0},
+        end={"0": 1_000_100.0, "1": 2_000_100.0},
+    )
+    bench = tmp_path / "bench.json"
+    agg = tmp_path / "agg.json"
+    validation = tmp_path / "power_validation.json"
+    _write_bench_result(
+        bench,
+        start=base,
+        end=base + 10,
+        duration=10.0,
+        completed=10,
+        total_input=10_000,
+        total_output=2_000,
+    )
+    agg.write_text(json.dumps({"hw": "mi355x"}), encoding="utf-8")
+
+    exit_code = run(csv, bench, agg, expected_num_gpus=2, validation_result=validation)
+
+    assert exit_code == 0
+    patched = json.loads(agg.read_text())
+    assert patched["power_valid"] == 1
+    assert patched["avg_power_w"] == pytest.approx(500.0)
+    audit = json.loads(validation.read_text())
+    assert audit["power_valid"] is True
+    assert audit["reasons"] == []
+    assert audit["accumulator_check"]["within_tolerance"] is False
 
 
 def test_cli_requires_expected_gpu_count(monkeypatch: pytest.MonkeyPatch):
