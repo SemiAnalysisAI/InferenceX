@@ -149,6 +149,8 @@ For `dynamo-sglang` / `dynamo-trt` disaggregated multi-node configs, see `benchm
 
 Multi-node srt-slurm changes must edit the recipe yaml AND `nvidia-master.yaml` together. `srtctl` reads only the recipe (`model.container`, resources, prefill/decode workers); the sweep generator (`utils/matrix_logic/generate_sweep_configs.py`) reads `nvidia-master.yaml` for frontend labels - its prefill/decode numbers never reach `srtctl`. Recipe-only edits mislabel results, master-only edits don't take effect. For image bumps, `model.container` must equal `image:`, since the launcher uses the latter as the container-alias key.
 
+Power lanes: a recipe `telemetry:` block with `provider: dcgm-power` enables official energy collection for that config. The launcher (`runners/launch_gb200-nv.sh`, `launch_gb300-nv.sh`) is the single source of truth for the producer pin (`POWER_SRT_SLURM_PIN`); CI derives `POWER_PRODUCER_SHA` from the launcher's stamp file, and `utils/test_gb200_power_official_contract.py` / `test_gb300_power_official_contract.py` lock the recipe↔launcher contract. dcgm-power lanes are validated for `PRECISION=fp8` only.
+
 ### Updating Docker images
 
 Update the image tag in the relevant `configs/*-master.yaml` and/or `benchmarks/*.sh`, update any related env vars / config params, and append a `perf-changelog.yaml` entry (required - triggers benchmarks):
