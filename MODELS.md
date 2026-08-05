@@ -55,7 +55,7 @@ The native/upstream engines below are the primary allowed engines for each model
 
 | Model | Primary native/upstream engines | Draft model/method | Secondary engines |
 |---|---|---|---|
-| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | MTP | Hardware-specific engines, after native/upstream vLLM and SGLang engine submissions |
+| DeepSeek-V4-Pro 1.6T (`dsv4`) | native/upstream vLLM engine and native/upstream SGLang engine | MTP; DSpark is allowed for AgentX only under the same synthetic-acceptance methodology. Single-turn 8k1k continues to use the native MTP heads. | Hardware-specific engines, after native/upstream vLLM and SGLang engine submissions |
 | Kimi-K3 (`kimik3`) | native/upstream vLLM engine | DSpark | Hardware-specific engines, after a native/upstream vLLM engine submission |
 | MiniMax-M3 (`minimaxm3`) | native/upstream vLLM engine | EAGLE3 | Hardware-specific engines, after a native/upstream vLLM engine submission |
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | MTP | Hardware-specific engines, after a native/upstream SGLang engine submission |

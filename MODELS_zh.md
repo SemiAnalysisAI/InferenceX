@@ -55,7 +55,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 | 模型 | 首选原生/上游引擎 | 草稿模型/方法 | 次选引擎 |
 |---|---|---|---|
-| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | MTP | 硬件专用引擎；须在原生/上游 vLLM 和 SGLang 引擎均已提交后 |
+| DeepSeek-V4-Pro 1.6T（`dsv4`） | 原生/上游 vLLM 引擎和原生/上游 SGLang 引擎 | MTP；DSpark 仅允许用于 AgentX，并须遵循相同的合成接受方法。单轮 8k1k 继续使用原生 MTP 头。 | 硬件专用引擎；须在原生/上游 vLLM 和 SGLang 引擎均已提交后 |
 | Kimi-K3（`kimik3`） | 原生/上游 vLLM 引擎 | DSpark | 硬件专用引擎；须在原生/上游 vLLM 引擎已提交后 |
 | MiniMax-M3（`minimaxm3`） | 原生/上游 vLLM 引擎 | EAGLE3 | 硬件专用引擎；须在原生/上游 vLLM 引擎已提交后 |
 | GLM-5.2（`glm5.2`） | 原生/上游 SGLang 引擎 | MTP | 硬件专用引擎；须在原生/上游 SGLang 引擎已提交后 |
