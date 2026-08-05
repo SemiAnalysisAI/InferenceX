@@ -53,6 +53,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import os
+import re
 import sys
 
 REL = "vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
@@ -78,21 +79,48 @@ def find_target(override: str | None = None) -> str:
 # --------------------------------------------------------------------------
 # Edit 1: teach _mtp_decode_qlen about DSpark.
 # --------------------------------------------------------------------------
-QLEN_OLD = '''and speculative_config.method in ("mtp", "deepseek_mtp")'''
-QLEN_NEW = '''and speculative_config.method in ("mtp", "deepseek_mtp", "dspark")'''
+QLEN_RE = re.compile(
+    r'(speculative_config\.method\s+in\s+\(\s*"mtp"\s*,\s*"deepseek_mtp"\s*)(\))'
+)
+
+
+def qlen_sub(text: str) -> tuple[str, int]:
+    return QLEN_RE.subn(r'\1, "dspark"\2', text)
+
 
 # --------------------------------------------------------------------------
 # Edit 2: stop the small-head multi-token branch from swallowing verify.
+#
+# Whitespace-tolerant on purpose. An exact-string version of this anchor
+# reported 0 matches in run 30980537097 while matching by hand in the very same
+# container, so the literal is not something to depend on; only the token
+# sequence is. On failure we dump the region rather than guessing again.
 # --------------------------------------------------------------------------
-MQA_OLD = """        if (
-            self.num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS
-            and int(decode.max_qo_len) > 1
-        ):"""
-MQA_NEW = """        if (
-            self.num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS
-            and int(decode.max_qo_len) > 1
-            and not VLLM_ROCM_MLA_FORCE_PS
-        ):"""
+MQA_RE = re.compile(
+    r"(\n(?P<ind>[ \t]*)if\s*\(\s*\n"
+    r"[ \t]*self\.num_heads\s*<\s*AiterMLAHelper\._AITER_MIN_MLA_HEADS\s*\n"
+    r"[ \t]*and\s+int\(decode\.max_qo_len\)\s*>\s*1\s*\n)"
+    r"(?P<close>[ \t]*\):)"
+)
+
+
+def mqa_sub(text: str) -> tuple[str, int]:
+    def repl(m: "re.Match[str]") -> str:
+        ind = m.group("ind")
+        return f"{m.group(1)}{ind}    and not VLLM_ROCM_MLA_FORCE_PS\n{m.group('close')}"
+
+    return MQA_RE.subn(repl, text)
+
+
+def dump_region(text: str, needle: str, ctx: int = 12) -> str:
+    lines = text.splitlines()
+    out = []
+    for i, line in enumerate(lines):
+        if needle in line:
+            lo, hi = max(0, i - ctx), min(len(lines), i + ctx)
+            out.append(f"--- around line {i + 1} ---")
+            out += [f"{n + 1:5d}| {lines[n]}" for n in range(lo, hi)]
+    return "\n".join(out) or f"(no line containing {needle!r})"
 
 
 def main() -> None:
@@ -106,26 +134,31 @@ def main() -> None:
     original = open(path, encoding="utf-8").read()
     text = original
 
-    if "deepseek_mtp\", \"dspark\"" in text and "not VLLM_ROCM_MLA_FORCE_PS\n        ):" in text:
-        print(f"{path} already patched; nothing to do")
-        return
-
     if "VLLM_ROCM_MLA_FORCE_PS" not in text:
         die(
             "VLLM_ROCM_MLA_FORCE_PS not present -- vllm#51088 must be applied "
             "before this patcher."
         )
 
-    for name, old in (("_mtp_decode_qlen method tuple", QLEN_OLD),
-                      ("forward_mqa small-head branch", MQA_OLD)):
-        if text.count(old) != 1:
-            die(
-                f"anchor for {name} matched {text.count(old)} times, expected 1. "
-                "The image drifted; re-derive the anchors."
-            )
+    text, n_qlen = qlen_sub(text)
+    if n_qlen != 1:
+        if '"dspark"' in text:
+            print("  _mtp_decode_qlen already lists dspark")
+        else:
+            print(dump_region(original, "deepseek_mtp"), file=sys.stderr)
+            die(f"_mtp_decode_qlen anchor matched {n_qlen} times, expected 1")
 
-    text = text.replace(QLEN_OLD, QLEN_NEW)
-    text = text.replace(MQA_OLD, MQA_NEW)
+    text, n_mqa = mqa_sub(text)
+    if n_mqa != 1:
+        if "and not VLLM_ROCM_MLA_FORCE_PS\n" in text:
+            print("  forward_mqa branch already guarded")
+        else:
+            print(dump_region(original, "_AITER_MIN_MLA_HEADS"), file=sys.stderr)
+            die(f"forward_mqa anchor matched {n_mqa} times, expected 1")
+
+    if text == original:
+        print(f"{path} already patched; nothing to do")
+        return
 
     compile(text, path, "exec")
 
