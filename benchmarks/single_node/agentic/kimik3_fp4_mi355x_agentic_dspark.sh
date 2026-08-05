@@ -176,7 +176,7 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.85
     --mm-encoder-tp-mode data
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-num-batched-tokens 3000
+    --max-num-batched-tokens 32768
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
