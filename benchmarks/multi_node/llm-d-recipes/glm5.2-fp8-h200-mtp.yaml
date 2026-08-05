@@ -1,0 +1,89 @@
+# GLM-5.2-FP8 (753B MoE) on H200, DEP P/D disagg via llmd-vllm.
+# MTP speculative decoding variant (3 tokens). Identical to glm5.2-fp8-h200.yaml
+# except --speculative-config is added to both prefill and decode extra-args,
+# matching the K8s reference ENABLE_MTP=1 default.
+#
+# See glm5.2-fp8-h200.yaml for topology and env var documentation.
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.935
+    --max-model-len auto
+    --max-num-batched-tokens 2048
+    --moe-backend deep_gemm
+    --all2all-backend deepep_high_throughput
+    --speculative-config {"method":"mtp","num_speculative_tokens":3}
+  env:
+    VLLM_USE_V2_MODEL_RUNNER: "0"
+    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "1"
+    TRITON_LIBCUDA_PATH: /usr/lib64
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+decode:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --gpu-memory-utilization 0.95
+    --max-model-len auto
+    --max-num-seqs 64
+    --max-num-batched-tokens 64
+    --all2all-backend deepep_v2
+    --language-model-only
+    --block-size 256
+    --speculative-config {"method":"mtp","num_speculative_tokens":3}
+  env:
+    VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "1"
+    TRITON_LIBCUDA_PATH: /usr/lib64
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    NVSHMEM_QP_DEPTH: "130"
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+
+slurm:
+  time_limit: "08:00:00"

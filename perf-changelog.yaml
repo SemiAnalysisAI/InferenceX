@@ -5449,3 +5449,12 @@
     - "Enable prefill-only INT4 quick-reduce: set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048 on the prefill workers via a new prefill_env channel (mirrors the existing decode_env path in server_vllm.sh)."
     - "Cap the 1P1D TP4 concurrency sweep at 256 (was 512); drop the 2P1D TP4 layout (128/256/512) as it is CI-flaky with negligible curve impact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1943
+
+- config-keys:
+    - glm5.2-fp8-h200-llmd-vllm
+  description:
+    - "Add GLM-5.2-FP8 (753B MoE) H200 llmd-vllm P/D disagg benchmark recipes matching the K8s wide-ep-lws reference deployment"
+    - "Fixed-seq-len: 1P DEP8 + 1D DEP8 (2 nodes / 16 GPUs), STP and MTP arms"
+    - "Agentic: 1P DEP16 + 1D DEP16 (4 nodes / 32 GPUs), STP and MTP arms"
+    - "DeepGemm MoE backend, DeepEP high-throughput prefill / DeepEP v2 low-latency decode, NIXL KV transfer"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER

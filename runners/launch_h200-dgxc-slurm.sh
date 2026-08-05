@@ -12,7 +12,56 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ $FRAMEWORK == "llmd-vllm" ]]; then
+        if [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/models/GLM-5.2-FP8"
+            export MODEL_NAME="zai-org/GLM-5.2-FP8"
+        else
+            echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on H200: $MODEL_PREFIX/$PRECISION" >&2
+            exit 1
+        fi
+
+        export DOCKER_IMAGE_NAME=$IMAGE
+        export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
+        mkdir -p "$BENCHMARK_LOGS_DIR"
+
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_h200_llmd-vllm-disagg.sh"
+        BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
+        if [[ ! -f "$BENCH_SCRIPT" ]]; then
+            echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
+            exit 1
+        fi
+
+        source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
+        JOB_ID=$(bash "$BENCH_SCRIPT")
+        if [[ -z "$JOB_ID" ]]; then
+            echo "Error: failed to submit llm-d job" >&2
+            exit 1
+        fi
+        echo "Submitted llm-d job: $JOB_ID"
+
+        trap 'bundle_server_logs "$BENCHMARK_LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
+
+        LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
+        stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+
+        while IFS= read -r -d '' result_file; do
+            copy_to_workspace "$result_file" "$GITHUB_WORKSPACE/$(basename "$result_file")" || exit 1
+        done < <(find "$BENCHMARK_LOGS_DIR" -name "${RESULT_FILENAME}*.json" -print0 2>/dev/null)
+
+        if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+            EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results -print -quit 2>/dev/null)
+            if [[ -z "$EVAL_DIR" ]]; then
+                EVAL_DIR="$BENCHMARK_LOGS_DIR/eval_results"
+            fi
+            copy_eval_artifacts "$EVAL_DIR" "$GITHUB_WORKSPACE" || exit 1
+        fi
+
+        scancel "$JOB_ID" 2>/dev/null || true
+        exit 0
+
+    elif [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
@@ -30,7 +79,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             exit 1
         fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: llmd-vllm, dynamo-trt, dynamo-sglang"
         exit 1
     fi
 
