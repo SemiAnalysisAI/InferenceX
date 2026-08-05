@@ -57,46 +57,6 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-# Apply the upstream Kimi-K3 DSpark FP8 MLA verification fix until the pinned
-# image includes vLLM PR #50619. The immutable compare URL and checksum make
-# this reproducible; git-apply checks fail loudly if the image has drifted.
-apply_vllm_pr_50619() {
-    local base_sha="38a466e7b6e087d67c35e7f924c04c245423c99f"
-    local head_sha="a9f790851885589ea41b2b99ee750e044573bebd"
-    local patch_sha256="fa7200baae57af574ad018a92fff91430e864bd5609772a89e75fd9743c5abce"
-    local patch_file vllm_site_parent
-
-    patch_file="$(mktemp)"
-    curl --fail --location --retry 3 --silent --show-error \
-        "https://github.com/vllm-project/vllm/compare/${base_sha}...${head_sha}.patch" \
-        --output "$patch_file"
-    echo "${patch_sha256}  ${patch_file}" | sha256sum --check --status
-
-    vllm_site_parent="$(python3 - <<'PY'
-import importlib.util
-from pathlib import Path
-
-spec = importlib.util.find_spec("vllm")
-if spec is None or not spec.submodule_search_locations:
-    raise SystemExit("Unable to locate the installed vLLM package")
-print(Path(next(iter(spec.submodule_search_locations))).resolve().parent)
-PY
-)"
-
-    if git -C "$vllm_site_parent" apply --reverse --check \
-            --include='vllm/**' "$patch_file" 2>/dev/null; then
-        echo "vLLM PR #50619 is already applied"
-    else
-        git -C "$vllm_site_parent" apply --check \
-            --include='vllm/**' "$patch_file"
-        git -C "$vllm_site_parent" apply \
-            --include='vllm/**' "$patch_file"
-        echo "Applied vLLM PR #50619 at ${head_sha}"
-    fi
-    rm -f "$patch_file"
-}
-apply_vllm_pr_50619
-
 # Environment used by the validated Kimi-K3 + DSpark + LMCache image.
 export PYTHONNOUSERSITE=1
 export PYTHONHASHSEED=42
