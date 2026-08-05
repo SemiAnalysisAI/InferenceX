@@ -941,8 +941,14 @@ collx_run_shard() {
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, NOT a work budget: at 900 it killed FP8 prefill cases that had already
-    # written complete, all-rungs-passed artifacts. 1800 is what the AMD launcher already used.
-    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-1800}" \
+    # written complete, all-rungs-passed artifacts, and at 1800 it killed multi-node EP16 prefill
+    # once the DeepEP pin moved to main. That bump brought #715, which adds a system-scope release
+    # before every GIN barrier when scale-up spans NVLink and RDMA -- correct, but it roughly
+    # doubles EP16 decode and costs several times more on prefill, which issues far more
+    # barriers. Single-node EP8 uses neither RDMA nor GIN and is unchanged, which is what
+    # localizes the cost. 5400 keeps the guard well inside the 300-minute allocation while
+    # leaving room to actually measure that cost instead of truncating it.
+    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \
