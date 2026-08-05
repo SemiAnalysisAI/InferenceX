@@ -11,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from aggregate_power_multinode import ROLE_METRIC_KEYS, WHOLE_METRIC_KEYS
+from test_aggregate_power_multinode import PRODUCER_SHA, build_package
+
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
 
 
@@ -1025,6 +1028,98 @@ stop_gpu_monitor
             complete_sample,
             final_sample,
         ]
+
+
+# =============================================================================
+# Integration: multinode power aggregation patches the agg JSON
+# =============================================================================
+
+
+class TestMultinodePower:
+    """End-to-end wiring: process_result.py invokes aggregate_power_multinode.py
+    against the srt-slurm artifact package staged under LOGS/.
+
+    The consumer binds the processed copy to LOGS/<result_path> by canonical
+    sha256, so the benchmark result passed to run_script must equal the
+    package's original result byte-for-byte after JSON canonicalization.
+    """
+
+    BENCH_EXTRA = {"total_token_throughput": 15000.5, "output_throughput": 12000.0}
+
+    @pytest.fixture
+    def power_env(self, multinode_env_vars):
+        return {
+            **multinode_env_vars,
+            "PREFILL_GPUS": "2",
+            "DECODE_GPUS": "2",
+            "POWER_PRODUCER_SHA": PRODUCER_SHA,
+        }
+
+    def _build(self, tmp_path, **kwargs):
+        pkg = build_package(tmp_path, bench_extra=self.BENCH_EXTRA, **kwargs)
+        return json.loads(pkg.original_result.read_text())
+
+    def _bench_without_package(self):
+        return {
+            "model_id": "test-model",
+            "max_concurrency": 4,
+            **self.BENCH_EXTRA,
+        }
+
+    def test_valid_package_patches_role_energy(self, tmp_path, power_env):
+        benchmark_result = self._build(tmp_path)
+
+        result = run_script(tmp_path, power_env, benchmark_result)
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_valid"] == 1
+        assert agg["prefill_gpu_energy_j"] == 48000.0
+        assert agg["decode_gpu_energy_j"] == 36000.0
+        assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+
+    def test_missing_package_is_best_effort(self, tmp_path, power_env):
+        result = run_script(tmp_path, power_env, self._bench_without_package())
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_valid"] == 0
+        for key in WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS:
+            assert key not in agg
+        assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+
+    def test_missing_package_fails_in_strict_mode(self, tmp_path, power_env):
+        env = {**power_env, "REQUIRE_POWER": "1"}
+
+        result = run_script(tmp_path, env, self._bench_without_package())
+
+        assert result.returncode != 0
+        assert (tmp_path / "power_validation_benchmark_result.json").is_file()
+
+    def test_invalid_package_withholds_metrics(self, tmp_path, power_env):
+        benchmark_result = self._build(tmp_path, publication_valid=False)
+
+        result = run_script(tmp_path, power_env, benchmark_result)
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_valid"] == 0
+        for key in WHOLE_METRIC_KEYS + ROLE_METRIC_KEYS:
+            assert key not in agg
+        validation = json.loads(
+            (tmp_path / "power_validation_benchmark_result.json").read_text()
+        )
+        assert "producer_verdict_mismatch" in validation["reasons"]
+
+    def test_strict_mode_passes_on_valid_package(self, tmp_path, power_env):
+        benchmark_result = self._build(tmp_path)
+        env = {**power_env, "REQUIRE_POWER": "1"}
+
+        result = run_script(tmp_path, env, benchmark_result)
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        agg = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        assert agg["power_valid"] == 1
 
 
 # =============================================================================
