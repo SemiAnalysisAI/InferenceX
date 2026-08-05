@@ -110,6 +110,7 @@ unset _benchmark_caller
 
 GPU_MONITOR_PID=""
 GPU_MONITOR_VENDOR=""
+GPU_MONITOR_INTERVAL=1
 GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
 NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
@@ -130,6 +131,7 @@ start_gpu_monitor() {
     done
 
     GPU_METRICS_CSV="$output"
+    GPU_MONITOR_INTERVAL="$interval"
     export GPU_METRICS_CSV
 
     if command -v nvidia-smi &>/dev/null; then
@@ -141,10 +143,18 @@ start_gpu_monitor() {
     elif command -v amd-smi &>/dev/null; then
         GPU_MONITOR_VENDOR="amd"
         # Use amd-smi native watch mode (-w) which includes timestamps automatically.
-        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
-        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+        # PYTHONUNBUFFERED defeats the tool's own stdout block buffering (amd-smi is
+        # Python; measured on MI355X: trailing ticks were lost at kill without it).
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated
+        # headers, and flush every row so killing the pipe cannot discard buffered samples.
+        PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
         GPU_MONITOR_PID=$!
+        # Hardware energy-accumulator + identity snapshots; the end-side twin in
+        # stop_gpu_monitor lets auditors cross-check the integrated energy
+        # against the accumulator delta.
+        _write_amd_smi_sidecar "${output%.csv}_energy_start.csv" metric -E --csv
+        _write_amd_smi_sidecar "${output%.csv}_identity.json" static --json
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
         GPU_MONITOR_VENDOR=""
@@ -156,33 +166,31 @@ start_gpu_monitor() {
 # Stop the background GPU monitor and report file size.
 stop_gpu_monitor() {
     if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
+        # benchmark_end_time_unix is recorded shortly before the benchmark
+        # process exits, so the stream must cover one more sample past it for
+        # deterministic boundary interpolation. NVIDIA appends a one-shot
+        # post-exit sample below; amd-smi one-shot CSV has no timestamp column,
+        # so the AMD path instead lets the watch stream emit final ticks before
+        # the kill. Two extra intervals: amd-smi stamps integer seconds, so a
+        # tick in the same second as the window end still fails bracketing —
+        # the stream needs a tick at the NEXT whole second (measured on MI355X:
+        # end=...153.325 vs last sample ...153.0).
+        if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
+            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
+        fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
         wait "$GPU_MONITOR_PID" 2>/dev/null || true
-        # benchmark_end_time_unix is recorded shortly before the benchmark
-        # process exits. For the NVIDIA PR1 canary, append one post-exit sample
-        # so boundary interpolation is deterministic even when the run ends
-        # between 1 Hz monitor ticks. AMD one-shot CSV schemas vary by amd-smi
-        # version, so strict AMD lifecycle validation remains follow-up work.
         case "$GPU_MONITOR_VENDOR" in
             nvidia)
-                local append_final_nvidia_sample=true
-                local repaired_metrics="${GPU_METRICS_CSV}.repair.$$"
-                if [[ -s "$GPU_METRICS_CSV" ]] &&
-                    ! tail -c 1 "$GPU_METRICS_CSV" | grep -q '^$'; then
-                    if sed '$d' "$GPU_METRICS_CSV" > "$repaired_metrics" &&
-                        mv "$repaired_metrics" "$GPU_METRICS_CSV"; then
-                        echo "[GPU Monitor] Dropped truncated trailing sample"
-                    else
-                        rm -f "$repaired_metrics"
-                        append_final_nvidia_sample=false
-                        echo "[GPU Monitor] Warning: could not repair truncated trailing sample" >&2
-                    fi
-                fi
-                if [[ "$append_final_nvidia_sample" == true ]]; then
+                if _repair_truncated_gpu_metrics_tail; then
                     nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
                         --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
                         echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
                 fi
+                ;;
+            amd)
+                _repair_truncated_gpu_metrics_tail || true
+                _write_amd_smi_sidecar "${GPU_METRICS_CSV%.csv}_energy_end.csv" metric -E --csv
                 ;;
         esac
         echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
@@ -194,6 +202,35 @@ stop_gpu_monitor() {
     fi
     GPU_MONITOR_PID=""
     GPU_MONITOR_VENDOR=""
+}
+
+# Drop a partial trailing row left behind when the monitor dies mid-write.
+# Returns non-zero when a truncated row was detected but could not be removed.
+_repair_truncated_gpu_metrics_tail() {
+    local repaired_metrics="${GPU_METRICS_CSV}.repair.$$"
+    if [[ -s "$GPU_METRICS_CSV" ]] &&
+        ! tail -c 1 "$GPU_METRICS_CSV" | grep -q '^$'; then
+        if sed '$d' "$GPU_METRICS_CSV" > "$repaired_metrics" &&
+            mv "$repaired_metrics" "$GPU_METRICS_CSV"; then
+            echo "[GPU Monitor] Dropped truncated trailing sample"
+        else
+            rm -f "$repaired_metrics"
+            echo "[GPU Monitor] Warning: could not repair truncated trailing sample" >&2
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Write one best-effort amd-smi snapshot; remove the file rather than keep a
+# partial one when the invocation fails.
+_write_amd_smi_sidecar() {
+    local out="$1"
+    shift
+    if ! amd-smi "$@" > "$out" 2>/dev/null; then
+        rm -f "$out"
+        echo "[GPU Monitor] Warning: amd-smi $1 sidecar failed" >&2
+    fi
 }
 
 # Block until the GPUs have released a prior job's memory before starting a run.

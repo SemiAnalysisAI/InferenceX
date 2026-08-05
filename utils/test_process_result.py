@@ -1029,6 +1029,154 @@ stop_gpu_monitor
             final_sample,
         ]
 
+    def test_stop_gpu_monitor_amd_waits_one_tick_and_snapshots_energy(self, tmp_path):
+        """AMD stop lets the watch stream bracket the window, then snapshots energy."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        args_log = tmp_path / "amd_args.txt"
+        fake_amd_smi = fake_bin / "amd-smi"
+        fake_amd_smi.write_text(
+            "#!/usr/bin/env bash\n"
+            f"printf '%s\\n' \"$*\" >> {str(args_log)!r}\n"
+            "printf 'gpu,total_energy_consumption\\n0,178319501.7\\n'\n"
+        )
+        fake_amd_smi.chmod(0o755)
+        sleep_log = tmp_path / "sleep_args.txt"
+        contents = "timestamp,gpu,socket_power\n1785881113,0,238\n"
+        metrics = tmp_path / "gpu_metrics.csv"
+        metrics.write_text(contents)
+        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        script = f"""
+source {str(benchmark_lib)!r}
+kill() {{ return 0; }}
+wait() {{ return 0; }}
+sleep() {{ printf '%s\\n' "$1" > {str(sleep_log)!r}; }}
+GPU_MONITOR_PID=999
+GPU_MONITOR_VENDOR=amd
+GPU_MONITOR_INTERVAL=3
+GPU_METRICS_CSV={str(metrics)!r}
+stop_gpu_monitor
+"""
+        env = {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+        result = subprocess.run(
+            ["bash", "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert sleep_log.read_text().strip() == "5"
+        assert metrics.read_text() == contents
+        assert "metric -E --csv" in args_log.read_text()
+        energy_end = tmp_path / "gpu_metrics_energy_end.csv"
+        assert energy_end.read_text().startswith("gpu,total_energy_consumption")
+
+    def test_stop_gpu_monitor_amd_drops_truncated_row_without_append(self, tmp_path):
+        """The AMD path repairs a partial trailing row but appends no sample."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_amd_smi = fake_bin / "amd-smi"
+        fake_amd_smi.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf 'gpu,total_energy_consumption\\n0,178319501.7\\n'\n"
+        )
+        fake_amd_smi.chmod(0o755)
+        header = "timestamp,gpu,socket_power"
+        complete_sample = "1785881113,0,238"
+        metrics = tmp_path / "gpu_metrics.csv"
+        metrics.write_text(f"{header}\n{complete_sample}\n1785881114,0,2")
+        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        script = f"""
+source {str(benchmark_lib)!r}
+kill() {{ return 0; }}
+wait() {{ return 0; }}
+sleep() {{ return 0; }}
+GPU_MONITOR_PID=999
+GPU_MONITOR_VENDOR=amd
+GPU_METRICS_CSV={str(metrics)!r}
+stop_gpu_monitor
+"""
+        env = {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+        result = subprocess.run(
+            ["bash", "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert metrics.read_text().splitlines() == [header, complete_sample]
+        assert (tmp_path / "gpu_metrics_energy_end.csv").exists()
+
+    def test_start_stop_gpu_monitor_amd_lifecycle(self, tmp_path):
+        """Watch rows survive the kill and both boundary snapshots are written."""
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_amd_smi = fake_bin / "amd-smi"
+        fake_amd_smi.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [[ "$*" == *" -w "* ]]; then\n'
+            "    echo \"'CTRL' + 'C' to stop watching output:\"\n"
+            "    echo 'timestamp,gpu,socket_power,power_management'\n"
+            "    for _ in $(seq 1 30); do\n"
+            "        echo \"$(date +%s),0,238,ENABLED\"\n"
+            "        echo 'timestamp,gpu,socket_power,power_management'\n"
+            "        sleep 0.2\n"
+            "    done\n"
+            'elif [[ "$*" == *"metric -E --csv"* ]]; then\n'
+            "    printf 'gpu,total_energy_consumption\\n0,178319501.7\\n'\n"
+            'elif [[ "$1" == "static" ]]; then\n'
+            "    printf '{\"gpu_data\": []}\\n'\n"
+            "fi\n"
+        )
+        fake_amd_smi.chmod(0o755)
+        metrics = tmp_path / "gpu_metrics.csv"
+        benchmark_lib = Path(__file__).parents[1] / "benchmarks/benchmark_lib.sh"
+        script = f"""
+source {str(benchmark_lib)!r}
+start_gpu_monitor --output {str(metrics)!r} --interval 1
+sleep 0.8
+stop_gpu_monitor
+"""
+        env = {
+            "PATH": f"{fake_bin}:/usr/bin:/bin",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+        result = subprocess.run(
+            ["bash", "-c", script],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+
+        assert result.returncode == 0, result.stderr
+        lines = metrics.read_text().splitlines()
+        assert lines[0] == "timestamp,gpu,socket_power,power_management"
+        assert sum(1 for line in lines if line.startswith("timestamp,")) == 1
+        assert "CTRL" not in metrics.read_text()
+        data_rows = [line for line in lines[1:] if line]
+        assert len(data_rows) >= 2
+        assert all(row.split(",")[2] == "238" for row in data_rows)
+        energy_start = tmp_path / "gpu_metrics_energy_start.csv"
+        assert energy_start.read_text().startswith("gpu,total_energy_consumption")
+        assert (tmp_path / "gpu_metrics_energy_end.csv").exists()
+        identity = json.loads((tmp_path / "gpu_metrics_identity.json").read_text())
+        assert identity == {"gpu_data": []}
+
 
 # =============================================================================
 # Integration: multinode power aggregation patches the agg JSON

@@ -362,7 +362,11 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_gpu_metrics_' || 'gpu_metrics_' }}${{ env.RESULT_FILENAME }}
-          path: gpu_metrics.csv
+          path: |
+            gpu_metrics.csv
+            gpu_metrics_energy_start.csv
+            gpu_metrics_energy_end.csv
+            gpu_metrics_identity.json
           if-no-files-found: ignore
 
       - name: Upload power audit bundle
@@ -374,6 +378,9 @@ jobs:
             ${{ env.RESULT_FILENAME }}.json
             agg_${{ env.RESULT_FILENAME }}.json
             gpu_metrics.csv
+            gpu_metrics_energy_start.csv
+            gpu_metrics_energy_end.csv
+            gpu_metrics_identity.json
             power_validation_${{ env.RESULT_FILENAME }}.json
           if-no-files-found: ignore
 
