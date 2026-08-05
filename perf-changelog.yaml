@@ -5460,3 +5460,12 @@
     - "Use vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 with prefix caching enabled, default KV-cache dtype, FlashInfer TRT-LLM attention with FP8 indexer KV, and the EAGLE3 drafter on FLASH_ATTN."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
   
+- config-keys:
+    - kimik3-fp4-b300-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add client-observed full-response inter-token latency and matching interactivity aggregates for AgentX request artifacts."
+    - "Keep server-reported completion-token counts aligned with the full HTTP response lifecycle when Kimi-K3 stops emitting parsed content at an end-of-message marker but continues raw generation."
+    - "Exercise the Kimi-K3 B300 concurrency-1 GPU-resident and DRAM-offload points as the targeted regression for the previously inflated visible-content interactivity calculation."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2504
