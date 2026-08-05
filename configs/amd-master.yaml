@@ -877,6 +877,23 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c8:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
+  # Fork-only c16 SPUR variant of the exact cell dispatched by upstream run
+  # 30966332839. Keep the image, recipe, MTP and LMCache settings identical;
+  # only the runner and concurrency intentionally differ.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:spuraim
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
   model: moonshotai/Kimi-K3
