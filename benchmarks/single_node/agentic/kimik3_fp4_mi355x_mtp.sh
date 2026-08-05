@@ -846,9 +846,17 @@ if [ "$MLA_FORCE_PS" = "1" ]; then
     # Absolute: the patch runs inside `cd "$VLLM_ROOT"`, and the `<` redirect is
     # resolved after that cd, so a relative path here resolves against
     # site-packages and fails (run 30970159866).
-    PS_DIFF="$(cd "$(dirname "$0")/patches" && pwd)/vllm_pr51088_force_ps.diff"
+    # Resolve BOTH diffs to absolute paths here, before any subshell. Doing the
+    # `$(cd ...)` inline in the redirect fails: the redirect is expanded after
+    # the subshell's `cd "$VLLM_ROOT"`, so a relative $0 resolves against
+    # site-packages. Cost one cell each way (30970159866, 30977723941).
+    PATCH_DIR="$(cd "$(dirname "$0")/patches" && pwd)"
+    PS_DIFF="$PATCH_DIR/vllm_pr51088_force_ps.diff"
+    EXT_DIFF="$PATCH_DIR/vllm_51088_mtp_extension.diff"
     VLLM_ROOT="$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')"
-    [ -f "$PS_DIFF" ] || { echo "ERROR: $PS_DIFF missing" >&2; exit 1; }
+    for f in "$PS_DIFF" "$EXT_DIFF"; do
+        [ -f "$f" ] || { echo "ERROR: $f missing" >&2; exit 1; }
+    done
     # No `|| true`: an unpatched run would silently be a Gluon control arm
     # published under this experiment's name.
     ( cd "$VLLM_ROOT" && patch -p1 --forward --batch < "$PS_DIFF" ) \
@@ -865,8 +873,7 @@ if [ "$MLA_FORCE_PS" = "1" ]; then
     # 30971662995 loaded a qseqlen1 PS kernel and then served every step on
     # Gluon, with acceptance identical to the Gluon baseline (1.21 / 10.6% vs
     # 1.21 / 10.8%). One condition, so verify falls through to asm.
-    ( cd "$VLLM_ROOT" && patch -p1 --forward --batch \
-        < "$(cd "$(dirname "$0")/patches" && pwd)/vllm_51088_mtp_extension.diff" ) \
+    ( cd "$VLLM_ROOT" && patch -p1 --forward --batch < "$EXT_DIFF" ) \
         2>&1 | tee -a "$RESULT_DIR/vllm_pr51088.log"
     python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
         "$VLLM_ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
