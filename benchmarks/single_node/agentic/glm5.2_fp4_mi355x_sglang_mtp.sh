@@ -154,7 +154,7 @@ SGLANG_CMD=(
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 6
     "${CACHE_ARGS[@]}"
-    --watchdog-timeout 1800
+    --watchdog-timeout 3600
     --enable-metrics
 )
 
