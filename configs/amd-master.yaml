@@ -626,6 +626,30 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
       search-space:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-ps-c8:
+  # vllm#51088 PS ASM decode route, GPU-only c8, single variable against run
+  # 30928884574 (496.19 tok/s/GPU, 142 reqs, TTFT 27.6 s, acceptance 1.21/3.00).
+  # Same nightly image, k=2, mns 2*CONC, GMU 0.9, bf16 KV, prefix caching. The
+  # branch sets MLA_FORCE_PS=1, which patches in VLLM_ROCM_MLA_FORCE_PS and
+  # routes 12-head decode off Gluon and onto the persistent-scheduling ASM
+  # kernel.
+  #
+  # Judge on acceptance SHAPE first. The k=2 ladder tops out at 3.00, and a
+  # corrupt asm verify has previously presented as a saturated 100%. A healthy
+  # result looks like 30928884574's max 1.67, not 3.00.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
   model: moonshotai/Kimi-K3
