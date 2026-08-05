@@ -141,6 +141,7 @@ benchmark:
     # in process_agentic_result.py instead. TP must match sglang_config tp-size.
     IS_MULTINODE: "false"
     TP: "4"
+    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
     # Stamp X-Dynamo-Session-ID on every turn so both nginx and Dynamo's
     # router keep the session on the worker that owns its KV prefix.
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
