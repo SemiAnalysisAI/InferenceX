@@ -870,9 +870,9 @@ if [ "$MLA_FORCE_PS" = "1" ]; then
     # site-packages. Cost one cell each way (30970159866, 30977723941).
     PATCH_DIR="$(cd "$(dirname "$0")/patches" && pwd)"
     PS_DIFF="$PATCH_DIR/vllm_pr51088_force_ps.diff"
-    EXT_DIFF="$PATCH_DIR/vllm_51088_mtp_extension.diff"
+
     VLLM_ROOT="$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')"
-    for f in "$PS_DIFF" "$EXT_DIFF"; do
+    for f in "$PS_DIFF" "$PATCH_DIR/vllm_dspark_ps_enable.py"; do
         [ -f "$f" ] || { echo "ERROR: $f missing" >&2; exit 1; }
     done
     # No `|| true`: an unpatched run would silently be a Gluon control arm
@@ -891,10 +891,14 @@ if [ "$MLA_FORCE_PS" = "1" ]; then
     # 30971662995 loaded a qseqlen1 PS kernel and then served every step on
     # Gluon, with acceptance identical to the Gluon baseline (1.21 / 10.6% vs
     # 1.21 / 10.8%). One condition, so verify falls through to asm.
-    ( cd "$VLLM_ROOT" && patch -p1 --forward --batch < "$EXT_DIFF" ) \
+    # An anchor-matched patcher, not a context diff. The installed file drifts
+    # from the GitHub source for the same image tag -- #51088's own hunks land
+    # at offset +1, and the context-diff version of this step applied with
+    # `fuzz 2 (offset -28 lines)` in run 30978612788. Exact-match anchors with a
+    # count check fail loudly instead of landing somewhere plausible.
+    python3 "$PATCH_DIR/vllm_dspark_ps_enable.py" \
+        --diff-out "$RESULT_DIR/vllm_dspark_ps_enable.diff" \
         2>&1 | tee -a "$RESULT_DIR/vllm_pr51088.log"
-    python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
-        "$VLLM_ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
     export VLLM_ROCM_MLA_FORCE_PS=1
     echo "MLA_FORCE_PS=1: small-head decode routed to the PS ASM kernel"
 else
