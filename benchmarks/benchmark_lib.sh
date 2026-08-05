@@ -163,6 +163,30 @@ stop_gpu_monitor() {
     GPU_MONITOR_PID=""
 }
 
+# Block until the GPUs have released a prior job's memory before starting a run.
+# Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
+# GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
+# starting a benchmark on GPUs still draining the previous run's memory.
+wait_for_amd_gpu_clean() {
+    local gpu_clean=false vram_max i
+    for i in $(seq 1 90); do
+        vram_max=$(rocm-smi --showmemuse 2>/dev/null \
+            | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
+            | awk '{if ($NF > m) m = $NF} END {print m+0}')
+        if [ "${vram_max:-0}" -le 10 ]; then
+            echo "GPUs clean (vram%max=$vram_max after $((i * 10))s)"
+            gpu_clean=true
+            break
+        fi
+        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max"
+        sleep 10
+    done
+    if [ "$gpu_clean" != "true" ]; then
+        echo "Error: GPUs still draining prior job's memory after 15min" >&2
+        return 1
+    fi
+}
+
 # Return success only while a PID exists and is not a zombie waiting to be
 # reaped. `kill -0` alone treats zombies as live processes.
 _background_process_is_running() {
