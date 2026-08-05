@@ -61,10 +61,17 @@ def validate_cleanup(args) -> None:
 
 
 def rewrite_deepep_v2(args) -> None:
+    # Narrows DeepEP's NCCL library scan from 'nccl' to 'libnccl'; upstream landed the same
+    # change as #640, so a current pin already satisfies it and there is nothing to rewrite.
+    # Succeeding in that case is the point: failing on an already-correct source would abort
+    # every leg at repository-stage the moment the pin moved forward.
     path = Path(args.path)
     old = "for so in [line.strip().split(' ')[-1] for line in f if 'nccl' in line]:"
     new = "for so in [line.strip().split(' ')[-1] for line in f if 'libnccl' in line]:"
     text = path.read_text()
+    if text.count(new) >= 1 and text.count(old) == 0:
+        return
+    # Exactly one un-rewritten occurrence, or the source is not what we think it is.
     if text.count(old) != 1: raise SystemExit(1)
     path.write_text(text.replace(old, new))
 

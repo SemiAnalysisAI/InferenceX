@@ -21,18 +21,20 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# The source pin in runtime/common.sh is PR #605 head at the #630 fix; #640 is NOT in
-# the fetched tree — runtime/stage.py applies it as a local rewrite before the build. This adapter no longer
-# verifies the wheel's commit tag against the pin — it checks only that the loaded
-# deep_ep exposes ElasticBuffer (the from-source PR #605 capability).
+# The source pin in runtime/common.sh is upstream main, which carries #630 (the fix our previous
+# PR #605 branch pin was cut at) as well as #640, so the stage-time rewrite is now a no-op the
+# source already satisfies. This adapter does not verify the wheel's commit tag against the pin --
+# it checks only that the loaded deep_ep exposes ElasticBuffer (the PR #605 capability).
 
 # Low-latency receive sizing. These are deliberately two numbers, not one: _LL_BUFFER_CAP
 # sizes the pre-allocated receive (and so fixes the transport footprint and the fp8 dequant
-# volume), while _LL_LADDER_CAP bounds which token counts are measured. See `buffer_cap` for
-# why the measured ladder stops below the buffer -- an upstream Blackwell combine defect at
-# the 256 rung -- and `create_buffer` for why the buffer must not follow the ladder down.
+# volume), while _LL_LADDER_CAP bounds which token counts are measured. They are equal today --
+# the ladder runs to the full receive -- but they stay separate because the buffer must not
+# follow the ladder (see `create_buffer`), and because clamping the measured ladder without
+# disturbing the footprint is the lever for a kernel defect at a specific token count, which is
+# how the Blackwell combine corruption at 256 was handled before #642 fixed it upstream.
 _LL_BUFFER_CAP = 256
-_LL_LADDER_CAP = 128
+_LL_LADDER_CAP = 256
 assert _LL_LADDER_CAP <= _LL_BUFFER_CAP <= 511, (
     "the LL receive cap must fit NVSHMEM_QP_DEPTH=1024 ((cap + 1) * 2 <= 1024 => cap <= 511) "
     "and the measured ladder must fit inside the buffer"
@@ -183,33 +185,22 @@ class DeepEPV2Backend(EPBackend):
     def buffer_cap(self, args):
         if self.mode == "low-latency":
             # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
-            # buffer, so the buffer cap is a hard per-rank dispatch-slot bound. The MEASURED
-            # ladder is clamped tighter than that buffer (the harness reports every dropped
-            # point, so the omission lands in the artifact rather than being silent) because
-            # DeepEP's low-latency combine corrupts at T=256 on every Blackwell SKU -- b200,
-            # gb200 and gb300, EP8 and EP16, both precisions, MNNVL and RDMA alike -- while
-            # Hopper stays clean. It is stochastic at roughly 1.5-3.3% per oracle invocation,
-            # so a passing leg proves nothing; the gate catches it as a 0.07-6.6 relative
-            # error against a 0.03125 tolerance. Tracked upstream as DeepEP issue #700.
+            # buffer, so the cap is a hard per-rank dispatch-slot bound and the harness clamps
+            # the ladder to it, recording any dropped point in the artifact.
             #
-            # The likely fix already exists upstream and our pin simply predates it:
-            # PR #642 adds a CTA-scope `fence.proxy.async.shared::cta` before
-            # `mbarrier_arrive(empty_barriers[stage_idx])` in LOW_LATENCY_COMBINE_RECV, so the
+            # History, because the value here is load-bearing: DeepEP's low-latency combine used
+            # to corrupt the T=256 rung on every Blackwell SKU (b200, gb200, gb300; EP8 and EP16;
+            # both precisions; MNNVL and RDMA alike) while Hopper stayed clean -- stochastically,
+            # ~1.5-3.3% per oracle invocation, surfacing as one token row whose norm still matched
+            # to 4 s.f. with 16-40% of elements wrong. That is DeepEP issue #700, and it was fixed
+            # upstream by #642, which adds a CTA-scope `fence.proxy.async.shared::cta` before
+            # `mbarrier_arrive(empty_barriers[stage_idx])` in LOW_LATENCY_COMBINE_RECV so the
             # consumer's shared-memory reads retire before the stage is declared empty and the
-            # producer's next TMA load refills it. Signalling empty too early lets a row be
-            # assembled from two tiles, which is exactly the observed signature (one token row,
-            # norm preserved to 4 s.f., 16-40% of elements deviating). It closed #621, the same
-            # race reached from NVL72. COLLX_DEEPEP_V2_COMMIT is the head of PR #605, branched
-            # before #642 merged, so the fence is absent from our build; upstream main has both.
-            # An earlier on-metal test that appeared to rule fencing out used a device-scope
-            # __threadfence_system after the grid sync at internode_ll.cu:976 -- a different
-            # fence at a different site -- so it does not bear on #642.
-            #
-            # Raising this back to _LL_BUFFER_CAP is therefore gated on a pin bump, not on a
-            # new upstream release. That bump is deliberately NOT bundled here: it spans months
-            # of upstream change, re-baselines every deepep-v2 row including normal mode, and
-            # needs `rewrite_deepep_v2` made tolerant first (main already carries that
-            # 'libnccl' fix, so the rewrite's count(old) == 1 assertion would abort the stage).
+            # producer's next TMA load refills it. Our pin was the head of PR #605, branched
+            # before #642 merged, so we carried the defect and clamped this to 128 to keep the
+            # corrupt rung out of the results; the pin now tracks main and the ladder runs full.
+            # If the top rung ever reds again on Blackwell, clamping here is the containment
+            # lever -- but check the pin first rather than assuming the defect returned.
             return _LL_LADDER_CAP
         return None
 
@@ -303,11 +294,12 @@ class DeepEPV2Backend(EPBackend):
             raise RuntimeError(
                 "invalid DeepEP LL runtime: deep_ep.Buffer.low_latency_dispatch is absent"
             )
-        # Verified pinned signatures (commit fa8a9b16, deep_ep/buffers/legacy.py):
+        # Verified pinned signatures (commit 01dc3aaa, deep_ep/buffers/legacy.py):
         #   Buffer.get_low_latency_rdma_size_hint(num_max_dispatch_tokens_per_rank,
-        #       hidden, num_ranks, num_experts) -> int   (staticmethod, line 175)
+        #       hidden, num_ranks, num_experts) -> int   (staticmethod, line 176)
         #   Buffer(group, num_nvl_bytes=0, num_rdma_bytes=0, low_latency_mode=False,
-        #       num_qps_per_rank=24, allow_nvlink_for_low_latency_mode=True, ...)  (line 33)
+        #       num_qps_per_rank=24, allow_nvlink_for_low_latency_mode=True,
+        #       allow_mnnvl=False, explicitly_destroy=False, ...)  (line 33)
         num_rdma_bytes = deep_ep.Buffer.get_low_latency_rdma_size_hint(
             self.max_tokens, args.hidden, world_size, args.experts
         )

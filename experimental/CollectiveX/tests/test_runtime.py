@@ -901,14 +901,15 @@ class LowLatencyCapDecoupling(unittest.TestCase):
                 return node
         self.fail(f"{name} not found in ep_deepep_v2.py")
 
-    def test_both_caps_exist_and_the_ladder_stops_strictly_below_the_buffer(self):
+    def test_both_caps_exist_and_the_ladder_fits_inside_the_buffer(self):
         buf, ladder = self.consts.get("_LL_BUFFER_CAP"), self.consts.get("_LL_LADDER_CAP")
         self.assertIsInstance(buf, int)
         self.assertIsInstance(ladder, int)
-        # Strictly below: equality is the configuration that corrupts, and it also puts the top
-        # measured rung at 100% occupancy, which is what made capacity and last-rung
-        # indistinguishable in the original investigation.
-        self.assertLess(ladder, buf)
+        # Equality is expected while the ladder runs to the full receive; what must never happen
+        # is a ladder larger than the buffer, which would dispatch past the allocated slots.
+        # (This was `assertLess` while the ladder was clamped to 128 to dodge the pre-#642
+        # Blackwell combine defect -- that was a workaround, not an invariant.)
+        self.assertLessEqual(ladder, buf)
         # NVSHMEM_QP_DEPTH=1024 asserts nvshmem_qp_depth >= (cap + 1) * 2 at construction.
         self.assertLessEqual(buf, 511)
 

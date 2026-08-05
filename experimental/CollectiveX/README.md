@@ -96,11 +96,14 @@ scale-up domain.
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.
-The pinned source is the [PR #630](https://github.com/deepseek-ai/DeepEP/pull/630) head, whose parent
-is the #605 merge tree, plus the exact one-line library matcher from upstream
-[PR #640](https://github.com/deepseek-ai/DeepEP/pull/640). The first fixes pure scale-up
-initialization when GIN is unavailable; the second prevents NCCL shared-memory mappings from being
-misclassified as duplicate NCCL libraries. Scale-up cases request NCCL Device API LSA and fail closed
+The pinned source is upstream `main`, which contains #605 along with
+[PR #630](https://github.com/deepseek-ai/DeepEP/pull/630) (fixes pure scale-up initialization when
+GIN is unavailable), [PR #640](https://github.com/deepseek-ai/DeepEP/pull/640) (stops NCCL
+shared-memory mappings being misclassified as duplicate NCCL libraries), and
+[PR #642](https://github.com/deepseek-ai/DeepEP/pull/642) (the low-latency combine fence that fixes
+the Blackwell top-rung corruption of
+[issue #700](https://github.com/deepseek-ai/DeepEP/issues/700)). It previously pinned the #630 head
+on the pre-merge #605 branch, which predated #642. Scale-up cases request NCCL Device API LSA and fail closed
 unless the realized LSA team covers the full EP world. x86 EP16 scale-out cases instead require the
 hybrid path with GIN, two logical scale-out domains represented by two physical RDMA ranks, and eight
 scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. Whether a given

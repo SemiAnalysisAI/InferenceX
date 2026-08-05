@@ -12,7 +12,20 @@ collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
 COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
-COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
+# Upstream main. This replaced the head of PR #605 (fa8a9b16), which was a pre-merge branch
+# commit: #605 merged on 2026-04-29 and useful fixes landed on main afterwards that the branch
+# never received. Its one unique commit was the #630 single-node V2 init fix, which main carries
+# as 56169594e, so nothing was lost by moving. What was gained, and why this bump happened:
+#   #642 fence.proxy.async.shared::cta in LOW_LATENCY_COMBINE_RECV -- the fix for the Blackwell
+#        low-latency combine corruption at the top ladder rung (DeepEP issue #700)
+#   #715 system-scope release before the GIN barrier when scale-up spans NVLink and RDMA
+#   #688 NCCL Device API compat: use the runtime version for ncclDevCommCreate
+#   #178 SM90 compatibility; #641 internode dispatch args
+#   #640/#627 match "libnccl" and resolve real NVSHMEM/NCCL SO names for pip-wheel installs,
+#        which is the upstream form of the rewrite collx_prepare_deepep_source applies below
+# The backend cache directory is keyed on this value, so changing it forces a rebuild rather
+# than silently reusing a build of the old source.
+COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"

@@ -63,18 +63,23 @@ cells carry the control alone; the per-backend precision set lives in `sweep_mat
   live with the workload in `configs/sweep.json`.
 
 A backend may clamp the ladder below that, and every clamped point is reported in the artifact
-rather than dropped silently. Exactly one backend clamps today: DeepEP V2 in `low-latency` mode
-pre-allocates a fixed receive, so its ladder cannot exceed that buffer, and it is currently held at
-**T=128**, one rung below the 256-slot receive, because DeepEP's low-latency combine corrupts the
-256 rung on every Blackwell SKU we run — B200, GB200 and GB300, EP8 and EP16, both precisions,
-MNNVL and RDMA alike, while Hopper stays clean. It is stochastic at roughly 1.5-3.3% per
-invocation and shows up as one wrong token row whose norm still matches, so it is a correctness
-gate failure rather than a crash (upstream DeepEP issue #700). The receive stays sized at 256
-even though the ladder stops at 128: its footprint drives both the transport's memory traffic and
-the FP8 dequant volume, so shrinking it with the ladder would move every retained rung and break
-comparability with the published series. The likely upstream fix (DeepEP PR #642, a CTA-scope
-fence so the combine consumer's shared-memory reads retire before the stage is recycled) landed
-after the commit we pin, so raising this back to 256 is gated on a pin bump.
+rather than dropped silently — `workload.ladder_measured`, `ladder_dropped` and `ladder_cap`
+record what ran and what did not. DeepEP V2 in `low-latency` mode pre-allocates a fixed receive,
+so its ladder cannot exceed that buffer; both are 256, so the decode ladder runs to its full
+extent and only the 512 point is dropped.
+
+That clamp was briefly load-bearing and the episode is worth recording, because it is the kind of
+defect that reads as a measurement bug. DeepEP's low-latency combine corrupted the 256 rung on
+every Blackwell SKU — B200, GB200 and GB300, EP8 and EP16, both precisions, MNNVL and RDMA alike
+— while Hopper stayed clean, stochastically at roughly 1.5-3.3% per invocation, surfacing as one
+wrong token row whose norm still matched to 4 significant figures. Upstream fixed it in PR #642
+with a CTA-scope fence so the combine consumer's shared-memory reads retire before its staging
+buffer is recycled; the commit we pinned was a pre-merge branch head that predated the fix, so we
+carried the defect and clamped the measured ladder to 128 to keep the corrupt rung out of the
+results. The pin now tracks upstream main and the rung is measured again. The receive is sized
+from a constant rather than from `max(ladder)` so that clamping the ladder cannot change the
+footprint, since that footprint drives both the transport's memory traffic and the FP8 dequant
+volume and would otherwise shift every remaining rung.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
@@ -92,8 +97,9 @@ Physical host count does not define scope. Both GB cells remain inside one 72-GP
 domain.
 
 Unsupported combinations are explicitly classified in the matrix, not silently skipped coverage. DeepEP V2 is the
-`ElasticBuffer` introduced by PR #605, pinned with upstream PR #630's minimal pure-scale-up fix and
-the exact upstream PR #640 library matcher that excludes NCCL shared-memory mappings. Scale-up cases
+`ElasticBuffer` introduced by PR #605, pinned at upstream main, which carries that PR plus #630's
+minimal pure-scale-up fix, the #640 library matcher that excludes NCCL shared-memory mappings, and
+the #642 low-latency combine fence. Scale-up cases
 request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
 x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
 represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
