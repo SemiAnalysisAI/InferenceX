@@ -36,7 +36,7 @@ start_gpu_monitor
 # (~32% of total), which collides with --gpu-memory-utilization=0.90 and
 # leaves negative space for the KV cache. Disable the profiler — our 0.90
 # already leaves ~18 GB/GPU as safety net (same pattern as
-# benchmarks/single_node/agentic/kimik2.5_fp4_b200.sh).
+# benchmarks/single_node/agentic/deprecated/kimik2.5_fp4_b200.sh).
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 set -x
