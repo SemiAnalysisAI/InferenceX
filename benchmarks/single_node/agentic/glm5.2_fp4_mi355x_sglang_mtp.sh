@@ -4,6 +4,8 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+export EVAL_FRAMEWORK="lm-eval"
+
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
@@ -230,6 +232,11 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
+fi
+
+if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
+    capture_cache_metrics
+    trap capture_cache_metrics EXIT
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
