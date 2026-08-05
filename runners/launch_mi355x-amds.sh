@@ -306,10 +306,19 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
+    # Kimi-K3's 1.56 TB checkpoint does not fit reliably in the node-local hub
+    # cache, so use the cluster's pre-staged NFS cache.
+    if [[ "$MODEL" == moonshotai/Kimi-K3* ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
+    SCRIPT_AGENTIC_DSPARK="benchmarks/single_node/agentic/${SCRIPT_BASE}_agentic_dspark.sh"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
-    if [[ -f "$SCRIPT_FW" ]]; then
+    if [[ "${SCENARIO_SUBDIR:-}" == "agentic/" && "$SPEC_DECODING" == "mtp" && -f "$SCRIPT_AGENTIC_DSPARK" ]]; then
+        BENCHMARK_SCRIPT="$SCRIPT_AGENTIC_DSPARK"
+    elif [[ -f "$SCRIPT_FW" ]]; then
         BENCHMARK_SCRIPT="$SCRIPT_FW"
     else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
