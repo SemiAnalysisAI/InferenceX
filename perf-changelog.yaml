@@ -5359,12 +5359,11 @@
 - config-keys:
     - dsv4-fp4-gb200-llmd-vllm
   description:
-    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, max-num-seqs 512->1024, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
     - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
     - "EPP: switch from max-score-picker to weighted-random-picker (threshold=0.1) for better load distribution under high concurrency"
     - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
-    - "Bump llmd-vllm image vllm0.23 -> vllm0.26 (v0.26 strips data_parallel_hybrid_lb from rust args-json; required for VLLM_USE_RUST_FRONTEND=1 on multi-node DEP8)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2242
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
 
 - config-keys:
     - qwen3.5-fp4-b300-sglang-agentic-mtp
