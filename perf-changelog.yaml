@@ -5460,3 +5460,10 @@
     - "Use vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 with prefix caching enabled, default KV-cache dtype, FlashInfer TRT-LLM attention with FP8 indexer KV, and the EAGLE3 drafter on FLASH_ATTN."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
   
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add Minimax-M3 FP4 vLLM Single Node Agentic Support"
+    - "Image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263"
+    - "Throughput runs use synthetic EAGLE3 acceptance pinned to the minimax-m3 golden AL (thinking_on, num_speculative_tokens=5, AL=3.35); EVAL_ONLY accuracy runs keep real target verification"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
