@@ -100,10 +100,7 @@ install_agentic_deps
 # ---- Reference env block ----------------------------------------------------
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
-# AITER a8w4 MoE path for the MXFP4-weight / MXFP8-activation QAT checkpoint.
-# Upstream: "set AITER_SITUV2_A8W4 to 0 along with AITER master flag to use
-# aiter a16w4 MoE path. Set it to 1 to use aiter a8w4 MoE path." Swept.
-export AITER_SITUV2_A8W4="${AITER_A8W4:-1}"
+export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
 export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
@@ -771,17 +768,26 @@ fi
 
 # ---- Optional axes ----------------------------------------------------------
 KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
-
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
+
+SYNTHETIC_ACCEPT_LEN=2.45
 SPEC_ARGS=(
     --speculative-config
-    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 )
 
-MAX_CUDAGRAPH_CAPTURE_SIZE=$((2 * CONC))
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
+MAX_NUM_SEQS=$((1 * CONC))
+# Capture cudagraphs up to the DSpark MTP verify batch. The served slot cap is
+# MAX_NUM_SEQS (1*CONC), but capture is sized off 2*CONC decode slots, each
+# expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
+# (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
+# temp_graph.sh config validated for capture even though max-num-seqs is lower.
+# mode 3 (piecewise compile) with an explicit even-step capture list and no
+# cudagraph_mode, matching temp_graph.sh.
+MAX_CUDAGRAPH_CAPTURE_SIZE=$(( 2 * CONC * (1 + SPEC_NUM_TOKENS) ))
+CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 4 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 GPU_MEM_UTIL="0.9"
-MAX_NUM_SEQS=$((2 * CONC))
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
