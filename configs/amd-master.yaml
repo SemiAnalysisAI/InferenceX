@@ -1018,6 +1018,50 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+# ---------------------------------------------------------------------------
+# Pre-#50582 image controls.
+#
+# vllm-project/vllm#50582 renamed the vLLM-side a8w4 flag
+# AITER_SITUV2_A8W4 -> VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4 with no back-compat
+# alias. The recipe set only the old name, so on nightly-cb8104839 vLLM shuffled
+# w13 in the SEPARATED layout while AITER still dispatched the interleaved fp8
+# kernels -- silent numerical garbage. gsm8k went 1.0 -> 0.0 (eval run
+# 31017384280), and perf run 30982145794 (717.31 tok/s/GPU) was measured on a
+# model emitting degenerate repetition.
+#
+# The recipe now exports both names, which fixes cb8104839. These two keys pin
+# the last known-good image, 124154a8843d (pre-#50582), as the control: if the
+# fix is complete, the cb8104839 keys and these should agree on gsm8k and land
+# in the same throughput band.
+#
+# 124154a8843d also predates vllm#50476, so its Gluon verify flatten is the
+# non-causal version. That only matters off the PS route; both of these keys
+# run MLA_FORCE_PS=1, so verify goes to the asm PS kernel either way.
+# apply_k3_container_patches.sh carries a pre-/post-#50476 variant of the
+# rocm_aiter_mla.py hunk so both images patch to a byte-identical file.
+# ---------------------------------------------------------------------------
+
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c8-img124154a8:
+  # Control for -asm-fp8-k3-c8. fp8 KV + asm VERIFY, GPU-only c8, k=3.
+  image: vllm/vllm-openai-rocm:nightly-124154a8843d1f8e4d4e2d5d466e2d3ebc3716da
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
+
+# No bf16 sibling here on purpose. -asm-k3-c8 is documented as the bf16 arm but
+# is now byte-identical to -asm-fp8-k3-c8: KV_CACHE_DTYPE defaults to fp8 in the
+# recipe (kimik3_fp4_mi355x_mtp.sh:244) and the config schema is extra='forbid'
+# with no env passthrough, so a key cannot select bf16. A real bf16 A/B needs a
+# recipe change, not another key.
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-ps-c8:
   # vllm#51088 PS ASM decode route, GPU-only c8, single variable against run
   # 30928884574 (496.19 tok/s/GPU, 142 reqs, TTFT 27.6 s, acceptance 1.21/3.00).

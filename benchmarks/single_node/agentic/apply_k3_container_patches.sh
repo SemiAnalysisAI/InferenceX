@@ -44,6 +44,34 @@ apply_idem() {  # $1=dir  $2=diff  $3=label
   fi
 }
 
+# Same edit, two source baselines. vllm#50476 ("Mask the AITER MLA small-head
+# verify flatten causally") rewrote the exact block that the rocm_aiter_mla.py
+# hunk replaces, so the context differs between nightlies on either side of it.
+# Both variants converge on a byte-identical file, so the reverse-check for
+# idempotency works whichever one landed. Fails loudly if neither applies --
+# a silently skipped fp8 MLA verify fix is worse than a dead cell.
+apply_one_of() {  # $1=dir  $2=label  $3..=candidate diffs
+  local dir="$1" label="$2"; shift 2
+  cd "$dir"
+  local d
+  for d in "$@"; do
+    if git apply --reverse --check -p1 "$d" 2>/dev/null; then
+      echo "[patch] $label: already applied ($(basename "$d")), skipping"
+      return 0
+    fi
+  done
+  for d in "$@"; do
+    if git apply --check -p1 "$d" 2>/dev/null; then
+      git apply -p1 "$d"
+      echo "[patch] $label: applied ($(basename "$d"))"
+      return 0
+    fi
+  done
+  echo "[patch] $label: NO VARIANT APPLIES -- tried: $*" >&2
+  for d in "$@"; do echo "[patch] --- $(basename "$d") ---" >&2; git apply --check -p1 "$d" >&2 2>&1 || true; done
+  return 1
+}
+
 cat > /tmp/pr50619_vllm.diff <<'PR50619_EOF'
 diff --git a/vllm/models/kimi_k3/nvidia/mla.py b/vllm/models/kimi_k3/nvidia/mla.py
 index 3334f3bbbb49..f46e98624e37 100644
@@ -85,6 +113,60 @@ index 3334f3bbbb49..f46e98624e37 100644
              cache = self.kv_cache
              if cache.dtype != torch.float8_e4m3fn:
                  cache = cache.view(torch.float8_e4m3fn)
+diff --git a/vllm/v1/worker/gpu/attn_utils.py b/vllm/v1/worker/gpu/attn_utils.py
+index 598bddf47ab0..010d53210115 100644
+--- a/vllm/v1/worker/gpu/attn_utils.py
++++ b/vllm/v1/worker/gpu/attn_utils.py
+@@ -92,6 +92,7 @@ def init_attn_backend(
+     kv_cache_config: KVCacheConfig,
+     vllm_config: VllmConfig,
+     device: torch.device,
++    cg_support_exclude_layers: set[str] | None = None,
+     active_layer_names: set[str] | None = None,
+ ) -> tuple[list[list[AttentionGroup]], AttentionCGSupportInfo, list[int]]:
+     # Phase 1: discover attention groups for each kv cache group.
+@@ -165,6 +166,15 @@ def init_attn_backend(
+             else:
+                 if hasattr(builder, "set_workspace_buffer"):
+                     builder.set_workspace_buffer(attn_backend_workspace)
++            # A group owned entirely by a separately-managed model part must
++            # not constrain this runner: a spec-decode draft gets its own
++            # CudaGraphManager and has a first-class eager fallback, so letting
++            # it in here downgrades the target for a decision it does not share.
++            if (
++                cg_support_exclude_layers is not None
++                and set(group.layer_names) <= cg_support_exclude_layers
++            ):
++                continue
+             # Check cudagraph support for the attention backend
+             cg_support = builder.get_cudagraph_support(
+                 vllm_config,
+diff --git a/vllm/v1/worker/gpu/model_runner.py b/vllm/v1/worker/gpu/model_runner.py
+index cea735c0e804..492dd4fcac7a 100644
+--- a/vllm/v1/worker/gpu/model_runner.py
++++ b/vllm/v1/worker/gpu/model_runner.py
+@@ -470,7 +470,14 @@ def initialize_kv_cache(self, kv_cache_config: KVCacheConfig) -> None:
+             max_num_blocks_per_group.append(max_num_blocks)
+ 
+         self.attn_groups, attn_cg_support, self.kernel_block_sizes = init_attn_backend(
+-            self.kv_cache_config, self.vllm_config, self.device
++            self.kv_cache_config,
++            self.vllm_config,
++            self.device,
++            cg_support_exclude_layers=(
++                self.speculator.draft_attn_layer_names
++                if isinstance(self.speculator, DraftModelSpeculator)
++                else None
++            ),
+         )
+         attn_cg_support = attn_cg_support.narrow(
+             *self.model_state.get_additional_cg_support()
+PR50619_EOF
+
+# rocm_aiter_mla.py is split out because its context straddles vllm#50476.
+# _post50476: nightlies at/after cb8104839 (causal flatten present upstream).
+# _pre50476:  nightlies before it, e.g. 124154a8843d (non-causal flatten).
+cat > /tmp/pr50619_ram_post50476.diff <<'RAM_POST_EOF'
 diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
 index 43584998a0bb..e502dccc12cf 100644
 --- a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
@@ -252,55 +334,159 @@ index 43584998a0bb..e502dccc12cf 100644
  
          if type(q) is tuple:
              q = torch.cat(q, dim=-1)
-diff --git a/vllm/v1/worker/gpu/attn_utils.py b/vllm/v1/worker/gpu/attn_utils.py
-index 598bddf47ab0..010d53210115 100644
---- a/vllm/v1/worker/gpu/attn_utils.py
-+++ b/vllm/v1/worker/gpu/attn_utils.py
-@@ -92,6 +92,7 @@ def init_attn_backend(
-     kv_cache_config: KVCacheConfig,
-     vllm_config: VllmConfig,
-     device: torch.device,
-+    cg_support_exclude_layers: set[str] | None = None,
-     active_layer_names: set[str] | None = None,
- ) -> tuple[list[list[AttentionGroup]], AttentionCGSupportInfo, list[int]]:
-     # Phase 1: discover attention groups for each kv cache group.
-@@ -165,6 +166,15 @@ def init_attn_backend(
-             else:
-                 if hasattr(builder, "set_workspace_buffer"):
-                     builder.set_workspace_buffer(attn_backend_workspace)
-+            # A group owned entirely by a separately-managed model part must
-+            # not constrain this runner: a spec-decode draft gets its own
-+            # CudaGraphManager and has a first-class eager fallback, so letting
-+            # it in here downgrades the target for a decision it does not share.
-+            if (
-+                cg_support_exclude_layers is not None
-+                and set(group.layer_names) <= cg_support_exclude_layers
-+            ):
-+                continue
-             # Check cudagraph support for the attention backend
-             cg_support = builder.get_cudagraph_support(
-                 vllm_config,
-diff --git a/vllm/v1/worker/gpu/model_runner.py b/vllm/v1/worker/gpu/model_runner.py
-index cea735c0e804..492dd4fcac7a 100644
---- a/vllm/v1/worker/gpu/model_runner.py
-+++ b/vllm/v1/worker/gpu/model_runner.py
-@@ -470,7 +470,14 @@ def initialize_kv_cache(self, kv_cache_config: KVCacheConfig) -> None:
-             max_num_blocks_per_group.append(max_num_blocks)
- 
-         self.attn_groups, attn_cg_support, self.kernel_block_sizes = init_attn_backend(
--            self.kv_cache_config, self.vllm_config, self.device
-+            self.kv_cache_config,
-+            self.vllm_config,
-+            self.device,
-+            cg_support_exclude_layers=(
-+                self.speculator.draft_attn_layer_names
-+                if isinstance(self.speculator, DraftModelSpeculator)
-+                else None
-+            ),
+RAM_POST_EOF
+
+cat > /tmp/pr50619_ram_pre50476.diff <<'RAM_PRE_EOF'
+diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
+--- a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
++++ b/vllm/v1/attention/backends/mla/rocm_aiter_mla.py
+@@ -20,6 +20,7 @@
+     QueryLenSupport,
+ )
+ from vllm.triton_utils import tl, triton
++from vllm.utils.torch_utils import is_quantized_kv_cache
+ from vllm.v1.attention.backend import (
+     AttentionCGSupport,
+     AttentionLayer,
+@@ -861,6 +862,17 @@
          )
-         attn_cg_support = attn_cg_support.narrow(
-             *self.model_state.get_additional_cg_support()
-PR50619_EOF
+         AiterMLAHelper.check_num_heads_validity(num_heads)
+ 
++        # Decode with fewer than 16 heads is served by AITER's Gluon MLA
++        # kernel. Its fp8 KV regime (bh16bn128) takes a bf16 query and folds
++        # the KV dequant scale into the QK temperature, so a pre-quantized
++        # query is rejected with "q_nope/q_pe must be bf16". Tell the common
++        # layer to leave the query alone, as TritonMLAImpl already does for
++        # its own fp8 KV path.
++        if num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS and is_quantized_kv_cache(
++            self.kv_cache_dtype
++        ):
++            self.supports_quant_query_input = False
++
+         unsupported_features = [alibi_slopes, sliding_window, logits_soft_cap]
+         if any(unsupported_features):
+             raise NotImplementedError(
+@@ -1073,101 +1085,51 @@
+         assert decode.max_qo_len is not None
+         assert decode.paged_kv_indptr is not None
+         assert decode.paged_kv_indices is not None
+-        if decode.use_gluon_decode:
+-            if type(q) is tuple:
+-                q_nope, q_pe = q
+-            else:
+-                q_nope, q_pe = torch.split(
+-                    q, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+-                )
+-            B, num_q_heads, _ = q_nope.shape
+-            o = torch.empty(
+-                B,
+-                num_q_heads,
+-                self.kv_lora_rank,
+-                dtype=decode.attn_out_dtype,
+-                device=q_nope.device,
+-            )
+-            kv_buffer = kv_c_and_k_pe_cache.reshape(-1, kv_c_and_k_pe_cache.shape[-1])
+-            mla_gluon = _get_mla_gluon()
+-            mla_gluon(
+-                q_nope=q_nope,
+-                q_pe=q_pe,
+-                kv_c=kv_buffer,
+-                o=o,
+-                page_table=decode.paged_kv_indices,
+-                seq_info=decode.paged_kv_indptr,
+-                sm_scale=self.scale,
+-                k_pe=None,
+-                kv_pe_offset=self.kv_lora_rank,
+-                use_2d_view=False,
+-                kv_scale=1.0,
+-                min_kv_seq_len=decode.min_kv_seq_len,
+-            )
+-            return o, None
+-
+-        # 12-head (<16) non-causal multi-token verify (DSpark): the asm path has
+-        # no gqa<16, qseqlen>1 kernel. Flatten each verify token to a qseqlen=1
+-        # gluon decode over the same committed prefix (non-causal), mirroring the
+-        # TRITON_MLA / sparse-backend flatten but on the fast gluon kernel. Each
+-        # request's KV metadata is repeated max_qo_len times.
+-        if (
++        if decode.use_gluon_decode or (
+             self.num_heads < AiterMLAHelper._AITER_MIN_MLA_HEADS
+             and int(decode.max_qo_len) > 1
+         ):
+-            qlen = int(decode.max_qo_len)
+             if type(q) is tuple:
+                 q_nope, q_pe = q
+             else:
+                 q_nope, q_pe = torch.split(
+                     q, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1
+                 )
+-            B, num_q_heads, _ = q_nope.shape
++            num_tokens, num_q_heads, _ = q_nope.shape
++            qlen = int(decode.max_qo_len)
++            if num_tokens % qlen != 0:
++                raise ValueError(
++                    f"Gluon MLA requires uniform query lengths, got "
++                    f"{num_tokens} tokens and query length {qlen}"
++                )
++            batch_size = num_tokens // qlen
++            if qlen > 1:
++                # Gluon applies the causal tail for native 4-D MTP queries.
++                q_nope = q_nope.view(batch_size, qlen, num_q_heads, self.kv_lora_rank)
++                q_pe = q_pe.view(batch_size, qlen, num_q_heads, self.qk_rope_head_dim)
+             o = torch.empty(
+-                B,
+-                num_q_heads,
++                *q_nope.shape[:-1],
+                 self.kv_lora_rank,
+                 dtype=decode.attn_out_dtype,
+                 device=q_nope.device,
+             )
+             kv_buffer = kv_c_and_k_pe_cache.reshape(-1, kv_c_and_k_pe_cache.shape[-1])
+-            # Expand per-request paged-KV to per-verify-token: each request's KV
+-            # block is repeated qlen times (row r*qlen+t attends request r's
+-            # committed prefix). Fully vectorized (no host loop).
+-            old_indptr = decode.paged_kv_indptr
+-            per_req_len = old_indptr[1:] - old_indptr[:-1]
+-            dev = q_nope.device
+-            row_req = torch.arange(per_req_len.shape[0], device=dev).repeat_interleave(
+-                qlen
+-            )
+-            row_len = per_req_len[row_req]
+-            new_indptr = torch.cat([old_indptr.new_zeros(1), row_len.cumsum(0)]).to(
+-                torch.int32
+-            )
+-            total = int(new_indptr[-1].item())
+-            within = torch.arange(total, device=dev, dtype=torch.int64) - new_indptr[
+-                :-1
+-            ].to(torch.int64).repeat_interleave(row_len)
+-            src = (
+-                old_indptr[row_req].to(torch.int64).repeat_interleave(row_len) + within
+-            )
+-            new_indices = decode.paged_kv_indices[src]
+             mla_gluon = _get_mla_gluon()
+             mla_gluon(
+                 q_nope=q_nope,
+                 q_pe=q_pe,
+                 kv_c=kv_buffer,
+                 o=o,
+-                page_table=new_indices,
+-                seq_info=new_indptr,
++                page_table=decode.paged_kv_indices,
++                seq_info=decode.paged_kv_indptr,
+                 sm_scale=self.scale,
+                 k_pe=None,
+                 kv_pe_offset=self.kv_lora_rank,
+                 use_2d_view=False,
+                 kv_scale=1.0,
+-                min_kv_seq_len=int(per_req_len.min()),
++                min_kv_seq_len=decode.min_kv_seq_len,
+             )
+-            return o, None
++            return o.view(num_tokens, num_q_heads, self.kv_lora_rank), None
+ 
+         if type(q) is tuple:
+             q = torch.cat(q, dim=-1)
+RAM_PRE_EOF
 
 cat > /tmp/aiter_mla_gluon_batch.diff <<'BATCH_EOF'
 diff --git a/aiter/ops/triton/gluon/mla_gluon.py b/aiter/ops/triton/gluon/mla_gluon.py
@@ -364,6 +550,8 @@ PR4474_EOF
 
 # ---- apply source patches (order: vllm, then aiter batch, then aiter #4474) ----
 apply_idem "$VLLM_DIR"  /tmp/pr50619_vllm.diff          "vLLM PR #50619 (K3 fp8 MLA verify)"
+apply_one_of "$VLLM_DIR" "vLLM PR #50619 (rocm_aiter_mla.py)" \
+    /tmp/pr50619_ram_post50476.diff /tmp/pr50619_ram_pre50476.diff
 apply_idem "$AITER_DIR" /tmp/aiter_mla_gluon_batch.diff "aiter mla_gluon bh16bn128 batch relax"
 apply_idem "$AITER_DIR" /tmp/aiter_pr4474.diff          "aiter PR #4474 (int64 KV stride)"
 
