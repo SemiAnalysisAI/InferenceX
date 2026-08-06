@@ -5475,3 +5475,11 @@
     - "9 MTP configs: 1P1D DEP2+1D TEP16 (conc 48), 1P4D DEP2+4D TP16 (conc 4), 1P7D DEP2+7D TEP8 (conc 42), 2P15D DEP2+15D TP4 (conc 90), 3P4D DEP2+4D TEP8 (conc 192), 3P7D DEP2+7D TEP8 (conc 168), 4P1D DEP2+1D DEP16 (conc 384), 6P5D DEP2+5D TEP8 (conc 480), 9P1D DEP2+1D DEP16 (conc 1536)."
     - "Runner: launch_gb300-nv.sh updated to clone NVIDIA/srt-slurm@v1.0.29 and overlay local recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/ for the dynamo-trt+qwen3.5+fp4 path; --no-preflight added for model on compute-node /scratch."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2218
+
+- config-keys:
+    - kimik2.6-fp4-b200-dynamo-vllm
+  description:
+    - "Run the Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration on the b200-new runner."
+    - "Remove the 1P/1D DEP4-to-DEP8 concurrency-1024 configuration."
+    - "Image: vllm/vllm-openai:v0.25.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2438
