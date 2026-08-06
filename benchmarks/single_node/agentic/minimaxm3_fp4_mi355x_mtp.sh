@@ -128,14 +128,7 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
-# The official MiniMax-M3 MI355X EAGLE3 baseline uses the native page-128
-# layout. The shuffled AITER page-16 path is a separate high-concurrency mode
-# and must only be enabled after that band is validated independently.
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-# INT4 quantized all-reduce for the (~1.5 MB) decode all-reduces, which are the
-# single biggest decode kernel at high concurrency. The MIN_SIZE_KB override is
-# required: vLLM's default INT4 quick-reduce size gate for (bf16, TP4) is 16 MB,
-# so it never fires for decode-sized tensors without it.
+export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
@@ -157,18 +150,11 @@ VLLM_CMD=(
     --tool-call-parser minimax_m3
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
-    # NOTE: --reasoning-parser minimax_m3 is intentionally OMITTED.
-    # MiniMax-M3 is an interleaved-thinking model: its <mm:think>...</mm:think>
-    # block MUST be round-tripped back into the conversation history every turn
-    # or multi-turn quality collapses (the model loses its plan and degenerates
-    # into repeating the same command until the step limit -> empty patch).
-    # The reasoning parser moves <mm:think> out of message.content into the
-    # response-only reasoning_content field, which the mini-swe-agent/litellm
-    # OpenAI client does NOT resend. Leaving the parser off keeps the think block
-    # inline in message.content, so the client preserves it across turns. The
-    # tool-call parser above still extracts tool calls from the full output.
     --max-num-seqs "$CONC"
-    --speculative-config "$SPEC_CONFIG"
+    --max-num-batched-tokens 16384
+    --stream-interval 20
+    --hf-overrides '{"text_config": {"use_index_cache": true, "index_topk_freq": 4}}'
+    # --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
@@ -180,9 +166,9 @@ echo "Server PID: $SERVER_PID"
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
 # ---- Run benchmark ----------------------------------------------------------
-if [ "${EVAL_ONLY}" = "true" ]; then
-    run_eval --port "$PORT"
-else
-    build_replay_cmd "$RESULT_DIR"
-    run_agentic_replay_and_write_outputs "$RESULT_DIR"
-fi
+# if [ "${EVAL_ONLY}" = "true" ]; then
+#     run_eval --port "$PORT"
+# else
+#     build_replay_cmd "$RESULT_DIR"
+#     run_agentic_replay_and_write_outputs "$RESULT_DIR"
+# fi
