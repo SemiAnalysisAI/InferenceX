@@ -431,6 +431,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        # Note (wenyao): on this cluster the DSV4-Pro checkpoint lives on the
+        # compute-node /mnt/numa1 NVMe (same staging the agentic path and the
+        # llm-d sweeps load from); the lustre alias target the shared dsv4
+        # block exports is not present here. Scoped to the power lane so the
+        # non-power lane keeps whatever the external-cluster staging expects.
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
         git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
         git checkout "$POWER_SRT_SLURM_PIN" || exit 1
@@ -650,11 +656,12 @@ python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH
 # srtctl itself still resolves through PATH (.venv/bin is on it).
 unset VIRTUAL_ENV
 
-# --no-preflight is only used on the agentic path, where the recipe resolves
-# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
-# runner can't see. Fixed-seq-len recipes keep enforcement on.
+# --no-preflight is used where the recipe resolves model.path to /mnt/numa1
+# (compute-node-only NVMe) that the login-node runner can't see: the agentic
+# path, and the dsv4 power lane (same /mnt/numa1 checkpoint). Other
+# fixed-seq-len recipes keep enforcement on.
 PREFLIGHT_ARGS=()
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" ]] || [[ "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" ]]; then
     PREFLIGHT_ARGS=(--no-preflight)
 fi
 
