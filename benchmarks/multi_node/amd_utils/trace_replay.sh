@@ -56,13 +56,13 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 #   L3 (umbp / mooncake store):         POST /hicache/storage-backend/clear
 #       — HTTP != 200 when L3 is off, tolerated.
 #
-# vLLM speaks neither endpoint. Its equivalent is POST /reset_prefix_cache, which
-# drops the GPU prefix-cache blocks and returns 200 with no body. There is no
-# vLLM API that clears an *external* KV tier, so a MooncakeStoreConnector /
-# LMCache store stays warm across concurrency points; that is reported rather
-# than silently assumed, because it changes how a with/without-offload
-# comparison should be read (later conc points see a store warmed by earlier
-# ones — realistic for a long-lived deployment, but not "cold").
+# vLLM speaks neither endpoint. Its equivalent is
+#   POST /reset_prefix_cache?reset_external=<bool>
+# which drops the GPU prefix cache and, with reset_external=true, the
+# connector-managed tier (MooncakeStore / LMCache) too -- so a vLLM conc point can
+# be made as cold as an SGLang one. That route is registered only when the server
+# runs with VLLM_SERVER_DEV_MODE=1; without it every call is a 404 and the sweep
+# silently measures warm-cache carry-over, so the 404 is called out loudly.
 # Best-effort: logs WARN, never hard-fails the sweep.
 clear_kv_caches() {
     local drain_tmo="${FLUSH_DRAIN_TIMEOUT:-120}"
@@ -81,23 +81,33 @@ clear_kv_caches() {
         [[ -n "$url" ]] || continue
 
         if [[ "$is_vllm" == 1 ]]; then
-            # vLLM: GPU prefix cache only. Also a no-op while requests are in
-            # flight, so drain-retry on a non-200 the same way.
-            start=$(date +%s); ok=0; code=000
+            # /reset_prefix_cache?reset_external=true drops the GPU prefix cache and,
+            # when a connector manages one, the external tier as well. It returns
+            # {"success": bool} and reports false (not an HTTP error) while blocks are
+            # still held by running requests or in-flight async offload transfers, so
+            # drain-retry on the body, not just the status.
+            local ext=false
+            [[ "${KV_OFFLOADING:-none}" != "none" ]] && ext=true
+            start=$(date +%s); ok=0; code=000; resp=""
             while :; do
-                code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' \
-                        -X POST "${url}/reset_prefix_cache" 2>/dev/null || echo 000)
-                [[ "$code" == 200 ]] && { ok=1; break; }
+                resp=$(curl -s -m 30 -w '\n%{http_code}' \
+                        -X POST "${url}/reset_prefix_cache?reset_external=${ext}" 2>/dev/null)
+                code=$(printf '%s' "$resp" | tail -1)
+                if [[ "$code" == 404 ]]; then
+                    # The route lives behind VLLM_SERVER_DEV_MODE=1. Retrying a
+                    # missing route for the full drain window just burns minutes
+                    # per concurrency point, so say what is wrong and stop.
+                    echo "[clear_caches] WARN ${url}: /reset_prefix_cache is 404 -- the server was not started with VLLM_SERVER_DEV_MODE=1, so caches are NOT being cleared between conc points" >&2
+                    break
+                fi
+                [[ "$code" == 200 ]] && printf '%s' "$resp" | grep -q '"success": *true' && { ok=1; break; }
                 (( $(date +%s) - start >= drain_tmo )) && break
                 sleep 3
             done
             if [[ "$ok" == 1 ]]; then
-                echo "[clear_caches] ${url}: GPU prefix cache reset"
-            else
-                echo "[clear_caches] WARN ${url}: /reset_prefix_cache not confirmed after ${drain_tmo}s (http=${code})" >&2
-            fi
-            if [[ "${KV_OFFLOADING:-none}" != "none" ]]; then
-                echo "[clear_caches] ${url}: external ${KV_OFFLOAD_BACKEND:-dram} tier NOT cleared (no vLLM API) — stays warm across conc points"
+                echo "[clear_caches] ${url}: prefix cache reset (external=${ext})"
+            elif [[ "$code" != 404 ]]; then
+                echo "[clear_caches] WARN ${url}: reset not confirmed after ${drain_tmo}s (http=${code} body='$(printf '%s' "$resp" | head -1)')" >&2
             fi
             continue
         fi

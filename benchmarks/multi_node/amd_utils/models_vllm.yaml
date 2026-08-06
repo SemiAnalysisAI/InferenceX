@@ -58,7 +58,13 @@ Kimi-K3:
   # native 1M default set in benchmarks/multi_node/agentic/kimik3_*.sh.
   prefill_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 16 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
   decode_flags: "--tensor-parallel-size 8 --trust-remote-code --mm-encoder-tp-mode data --reasoning-parser kimi_k3 --attention-backend ROCM_AITER_MLA --language-model-only --load-format auto --max-num-batched-tokens 4096 --max-num-seqs 16 --block-size 128 --enable-prefix-caching --mamba-cache-mode all --speculative-config '{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":7,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}'"
-  env: "VLLM_USE_V1=1 PYTHONHASHSEED=0 VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_SSM_CONV_STATE_LAYOUT=DS VLLM_KV_CACHE_LAYOUT=HND HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200"
+  # VLLM_SERVER_DEV_MODE=1 registers POST /reset_prefix_cache. That is what
+  # trace_replay.sh's CLEAR_CACHE_BETWEEN_CONC uses to make each concurrency point
+  # cold, including the Mooncake tier via ?reset_external=true. Without it the
+  # route 404s and a multi-conc sweep silently measures warm-cache carry-over from
+  # the previous point. It only adds cache-reset endpoints; no serving behaviour
+  # changes.
+  env: "VLLM_USE_V1=1 PYTHONHASHSEED=0 VLLM_ROCM_USE_AITER=1 SAFETENSORS_FAST_GPU=1 AITER_SITUV2_A8W4=1 AITER_BF16_FP8_MOE_BOUND=0 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_SSM_CONV_STATE_LAYOUT=DS VLLM_KV_CACHE_LAYOUT=HND HSA_NO_SCRATCH_RECLAIM=1 VLLM_ENGINE_READY_TIMEOUT_S=3600 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=1200 VLLM_SERVER_DEV_MODE=1"
   hf_dir: "models--moonshotai--Kimi-K3"
 
 MiniMax-M2.5:
