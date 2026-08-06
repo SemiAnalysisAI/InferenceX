@@ -176,6 +176,7 @@
       "launcher": "mi-amds",
       "backends": {"mori": [8], "uccl-ep": [8]},
       "ll_backends": {"mori": [8]},
+      "kv_backends": {"mori-io": ["rdma"]},
       "fabric": {"nic": "Pollara 400GbE", "switch": "Arista 7060X6-64PE (Tomahawk5, 51.2T)"},
       "network": {
         "socket_ifname": "eno0",
