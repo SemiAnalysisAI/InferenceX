@@ -327,14 +327,20 @@ row without it simply predates the chain. Quote `roundtrip` for how long one col
 to the other, and never rank a chained cell against a pre-chain one on the headline column —
 `summarize.py` footnotes its table whenever both appear in it.
 
-The chain runs free on every backend today. Because it lets ranks drift by up to about one
-iteration, a backend whose receive buffer cannot absorb that drift would read a half-written plane,
-so `EPBackend.chain_barrier` exists as an escape valve: it inserts a one-element on-stream
-all-reduce **between pairs** (never between the two collectives of one pair, and after the pair's
-end event, so its ~10µs sits in neither the pair window nor an op window), which re-aligns the ranks
-at the cost of the cross-pair overlap the measurement exists to capture. A barrier-mode period is
-therefore an upper bound on the free-running one, `implementation.chain_barrier` records which was
-used, and the two must not be pooled or ranked together. No backend sets it. DeepEP V2's **normal**
+**The published period always means one thing: free-running.** Because the chain lets ranks drift
+by up to about one iteration, a backend whose receive buffer cannot absorb that drift would read a
+half-written plane, so `EPBackend.chain_barrier` exists as an escape valve: it inserts a one-element
+on-stream all-reduce **between pairs** (never between the two collectives of one pair, and after the
+pair's end event, so its ~10µs sits in neither the pair window nor an op window), re-aligning the
+ranks at the cost of the cross-pair overlap the measurement exists to capture. That makes it a
+differently-defined quantity, not a slower reading of the same one — so **a run with the barrier on
+publishes no chained field at all**: `pair_period`, both `chain_floor_us` entries and
+`chain_health.pair_spread_us` emit the standard unavailable block, the measured numbers go to
+rank-0 stdout labelled as a diagnostic, and `implementation.chain_barrier: true` remains as the
+record of why they are missing. The valve is a bring-up diagnostic for a backend that cannot yet be
+chained, not a second publishable mode: a backend that needs it is a bug to fix, not a variant to
+compare, which is also why the chained-regime oracle below is skipped alongside it — there is no
+chained number left in the artifact for it to stand behind. No backend sets it. DeepEP V2's **normal**
 mode was the one genuinely unaudited cell — its ElasticBuffer inter-iteration flow control had never
 been exercised un-synced — and it was hand-probed on B200 (2026-08-06, pin `01dc3aaa`) with 256
 un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over RoCE) at both precisions: all
@@ -430,8 +436,19 @@ routing cannot pass an identity roundtrip. For every rank and point it verifies:
 1. destination rank/expert, source token, multiplicity, gate weight, and receive counts;
 2. dispatched payload and metadata before timing;
 3. combined output before timing;
-4. unchanged semantic inputs through all timed samples; and
-5. dispatched payload/metadata and combined output again after timing.
+4. unchanged semantic inputs through all timed samples;
+5. dispatched payload/metadata and combined output again after timing; and
+6. the same full check once more against the state the **free-running chain** leaves behind.
+
+Check 6 exists because checks 2-5 only ever see drained calls, so without it the headline
+`pair_period` would be published from a regime no oracle had ever inspected — and a backend that
+transports correctly when drained but corrupts under back-to-back pairs would present as the
+fastest cell in the suite. It runs once per ladder point, after that point's final chain trial, on
+the settled communicator (`benchmark_chain` ends synchronized). Its result is reported per row as
+`correctness.chain_regime_passed` and **folded into `correctness.passed`**, so a chained-regime
+failure invalidates the case and fails the leg exactly as any other oracle failure does. It is
+`null`, and scored as neither pass nor fail, only when the chain published nothing to gate — the
+barrier mode described above, which `implementation.chain_barrier` names.
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values

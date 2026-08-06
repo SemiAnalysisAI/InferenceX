@@ -489,11 +489,17 @@ class EPBackend(abc.ABC):
     # runs pairs back-to-back with no host sync -- that IS the measurement -- but the same rank
     # drift `pipeline_pairs` reasons about applies: a receive buffer that cannot absorb roughly
     # one iteration of drift would be read half-written. A backend that wedges sets this and gets
-    # a one-element on-stream all_reduce between pairs, which costs ~10us and gives up some of the
-    # cross-pair overlap the chain exists to measure. The artifact stamps it
-    # (`implementation.chain_barrier`) so a barrier-mode period is never silently compared against
-    # a free-running one. Defaults live here, not in the adapters, so the decision is auditable in
-    # one place.
+    # a one-element on-stream all_reduce between pairs.
+    #
+    # SETTING IT SUPPRESSES PUBLICATION. The barrier adds its own ~10us and removes the cross-pair
+    # overlap, so what the chain then measures is a different quantity from the free-running period
+    # this suite defines -- and the published period has to have exactly ONE definition, or two
+    # cells ranked against each other may not be answering the same question. So `run_sweep` emits
+    # `pair_period`, `chain_floor_us` and `chain_health` as unavailable in barrier mode and sends
+    # the measured numbers to rank-0 stdout instead, with `implementation.chain_barrier` left as
+    # the record of why. The valve is a BRING-UP DIAGNOSTIC for a backend that cannot be chained
+    # free: a backend needing it is a bug to fix, not a variant to compare. Defaults live here,
+    # not in the adapters, so the decision is auditable in one place.
     #
     # NOTHING SETS IT TODAY, on evidence rather than optimism. deepep-v2's NORMAL mode was the one
     # genuinely unknown cell -- ElasticBuffer's inter-iteration flow control had not been audited
@@ -532,6 +538,17 @@ class EPBackend(abc.ABC):
 
         `drop` discards the head of each chain: the first pairs run into an empty pipeline and
         measure fill, not period.
+
+        This is also a regime the correctness oracle covers. `run_sweep` runs the full expert
+        oracle once per ladder point against the state the last chain leaves behind, on top of the
+        drained checks it already ran before and after timing, and folds the result into the
+        point's verdict -- so a backend that transports correctly when drained but corrupts under
+        free-running pairs fails the case instead of publishing the suite's fastest period. The
+        method ends synchronized, so that check sees a settled communicator.
+
+        Under `chain_barrier` the loop still runs but `run_sweep` publishes nothing from it (see
+        the attribute's comment), and skips the chained oracle with it: there is no chained field
+        left in the artifact for it to stand behind.
         """
         import torch
 

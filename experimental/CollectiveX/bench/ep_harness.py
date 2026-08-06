@@ -1014,6 +1014,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "max_rel": oracle["max_elementwise_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
+            # Filled by Pass 2b after that point's last chain trial. Stays None only when the
+            # chain publishes nothing (barrier mode), where there is no chained number to gate.
+            "oracle_chain": None,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
@@ -1084,7 +1087,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # running it 256 times would multiply the leg's wall clock for no extra convergence. The
     # ladder order still rotates per trial for the same reason it does above -- so no point is
     # always measured on a just-warmed or a long-running device. ----
+    # Whether the chain is publishing, which is also whether it needs gating: barrier mode runs
+    # the chain purely as a bring-up diagnostic and emits no chained field, so there is nothing
+    # for a chained-regime oracle to stand behind (see Pass 4). Uniform across ranks -- it is a
+    # class attribute -- so the collective branches below are entered by every rank or by none.
+    chain_published = not bool(getattr(backend, "chain_barrier", False))
     for trial_index in range(args.chain_trials):
+        final_chain_trial = trial_index == args.chain_trials - 1
         for T in trial_order(list(ladder), trial_index):
             pair, dispatch_window, combine_window = backend.benchmark_chain(
                 problems[T], args.warmup, args.chain_iters, args.chain_drop
@@ -1098,6 +1107,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # which is the op with the wait excluded. See benchmark_chain.
             dfloor_pool[T] += _reduce_vec(torch, dist, device, dispatch_window, MIN)
             cfloor_pool[T] += _reduce_vec(torch, dist, device, combine_window, MIN)
+            if final_chain_trial and chain_published:
+                # GATE THE REGIME WE PUBLISH. Passes 1 and 3 only ever check drained calls, so
+                # without this the pair period would be published from a regime no oracle has
+                # ever seen -- and a backend that silently corrupts under free-running pairs
+                # would present as the fastest one in the suite. Exactly the machinery Pass 3
+                # uses, against the communicator state this point's chain just left behind
+                # (benchmark_chain ends synchronized, so the last pair is complete). Once per
+                # ladder point, after the final trial only: the failure mode it catches is a
+                # backend that cannot sustain chaining at all, which one clean pass over the
+                # settled state rules out as well as one per trial would.
+                idx_g, w_g = global_traces[T]
+                gate[T]["oracle_chain"] = _run_expert_oracle(
+                    torch, routing, backend, problems[T], idx_g, w_g, rank,
+                    experts_per_rank, scale_up_domain, args.seed,
+                )
 
     # ---- Pass 3: prove timed inputs were immutable and repeat the full oracle. ----
     for T in ladder:
@@ -1114,12 +1138,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             scale_up_domain, args.seed,
         )
         pre = gate[T]["oracle_pre"]
+        # The chained-regime oracle is ANDed in exactly like the other two: a backend that
+        # corrupts only under free-running pairs is a defect, so it invalidates the case and reds
+        # the leg rather than quietly leaving a field out. None means the chain published nothing
+        # to gate (barrier mode), which is not a failure and must not be scored as one.
+        chain_oracle = gate[T]["oracle_chain"]
+        chain_ok = chain_oracle is None or bool(chain_oracle["passed"])
         gate[T].update({
             "input_unchanged": input_unchanged,
-            "local_ok": int(pre["passed"] and post["passed"] and input_unchanged),
+            "local_ok": int(pre["passed"] and post["passed"] and chain_ok and input_unchanged),
+            "chain_local_ok": int(chain_ok),
             "max_rel": max(
                 pre["max_elementwise_relative_error"] or 0.0,
                 post["max_elementwise_relative_error"] or 0.0,
+                (chain_oracle["max_elementwise_relative_error"] or 0.0)
+                if chain_oracle is not None else 0.0,
             ),
             "oracle_post": post,
         })
@@ -1144,6 +1177,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
+        # Agreed across ranks like `passed` and `max_relative_error`, not reported from rank 0's
+        # local view: a chained-regime failure on one rank must be visible in the field that
+        # explains why the point failed. The branch is collectively safe because `oracle_chain`
+        # is None on every rank or on none (it keys on the backend's class attribute).
+        chain_regime_passed = (
+            bool(_reduce_int(torch, dist, device, g["chain_local_ok"], MIN))
+            if g["oracle_chain"] is not None else None
+        )
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
         throughput = {
@@ -1178,7 +1219,19 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
         spread = spread_pool[T]
-        chain, chain_spread = chain_pool[T], chain_spread_pool[T]
+        # The chained family, published only when the chain ran FREE. In barrier mode the chain
+        # still ran -- it stays the bring-up diagnostic for a backend that wedges without it --
+        # but nothing chained is emitted: the barrier both adds its own ~10us and removes the
+        # cross-pair overlap, so a barrier-mode period is a DIFFERENT QUANTITY from the one this
+        # suite defines, and publishing it into fields something may rank across SKUs would
+        # silently compare two definitions. The published period therefore has exactly one
+        # meaning. A backend that needs the valve is a bug to fix, not a variant to compare, and
+        # `implementation.chain_barrier` is the record of why these blocks are unavailable; the
+        # measured numbers go to rank-0 stdout below, labeled as the diagnostic they are.
+        chain = chain_pool[T] if chain_published else []
+        chain_spread = chain_spread_pool[T] if chain_published else []
+        dfloor = dfloor_pool[T] if chain_published else []
+        cfloor = cfloor_pool[T] if chain_published else []
         chainp = _pcts(chain)
         rows.append({
             "components": {
@@ -1205,12 +1258,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # because the floor tracks profiler kernel time closely enough to substitute for one,
             # and because floor-vs-period is what shows how much of a pair is transport.
             "chain_floor_us": {
-                "combine": _component(
-                    _pcts(cfloor_pool[T]), len(cfloor_pool[T]), origin=CHAIN_FLOOR_ORIGIN
-                ),
-                "dispatch": _component(
-                    _pcts(dfloor_pool[T]), len(dfloor_pool[T]), origin=CHAIN_FLOOR_ORIGIN
-                ),
+                "combine": _component(_pcts(cfloor), len(cfloor), origin=CHAIN_FLOOR_ORIGIN),
+                "dispatch": _component(_pcts(dfloor), len(dfloor), origin=CHAIN_FLOOR_ORIGIN),
             },
             # Whether the ranks actually ran the chain in lockstep, which is the precondition for
             # the median above meaning anything. Small next to `pair_period` => every rank held the
@@ -1233,6 +1282,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Large relative to the roundtrip => the point is skew-inflated; read it with care.
             "cross_rank_spread_us": _component(_pcts(spread), len(spread)),
             "correctness": {
+                # Whether the oracle also passed against the state the FREE-RUNNING chain left
+                # behind, rather than only against the drained calls of Passes 1 and 3. Folded
+                # into `passed`, so false here means the point (and the leg) failed. `null` means
+                # the check did not run because the chain published nothing to gate -- barrier
+                # mode, which `implementation.chain_barrier` names -- and is not a failure.
+                "chain_regime_passed": chain_regime_passed,
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,
@@ -1270,6 +1325,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                              f"comb {cp['p50']:6.1f}/{cp['p99']:6.1f} " if dp and cp
                              else "components=unavailable ")
             period_log = f"period={chainp['p50']:7.1f}us " if chainp else "period=n/a "
+            if not chain_published:
+                # Barrier mode: stdout is the ONLY place these numbers appear, precisely so
+                # nothing downstream can rank a barrier-mode period against a free-running one.
+                barrier_period = _pcts(chain_pool[T])
+                barrier_dfloor, barrier_cfloor = _pcts(dfloor_pool[T]), _pcts(cfloor_pool[T])
+                barrier_spread = _pcts(chain_spread_pool[T])
+                diagnostic = (
+                    f"period p50={barrier_period['p50']:.1f}us "
+                    f"floor d/c p50={barrier_dfloor['p50']:.1f}/{barrier_cfloor['p50']:.1f}us "
+                    f"pair spread p50={barrier_spread['p50']:.1f}us"
+                    if barrier_period and barrier_dfloor and barrier_cfloor and barrier_spread
+                    else "unavailable"
+                )
+                print(f"  T={T:<5} DIAGNOSTIC ONLY, not published (chain_barrier=on): "
+                      f"barrier-mode {diagnostic}")
             print(f"  T={T:<5} {component_log}{period_log}"
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(rt)} fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // world_size}/{recv_max} "

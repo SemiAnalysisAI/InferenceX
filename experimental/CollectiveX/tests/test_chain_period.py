@@ -16,7 +16,6 @@ value and a window that brackets the wrong work is a numeric mismatch, not a jud
 """
 from __future__ import annotations
 
-import ast
 import contextlib
 import io
 import sys
@@ -30,9 +29,6 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 
 import ep_backend  # noqa: E402
 import ep_harness  # noqa: E402
-
-HAS_CHAIN = hasattr(ep_backend.EPBackend, "benchmark_chain")
-CHAIN_MISSING = "EPBackend.benchmark_chain is not implemented yet"
 
 # Per-operation device cost in the stub clock (ms). Distinct primes so that any window
 # reports a sum unique to the operations it actually brackets.
@@ -185,7 +181,6 @@ def all_reduce_splits_a_pair(calls):
     return False
 
 
-@unittest.skipUnless(HAS_CHAIN, CHAIN_MISSING)
 class ChainedPairPeriod(unittest.TestCase):
     def test_warms_once_before_the_chain_and_never_inside_it(self):
         backend = _ChainBackend()
@@ -306,7 +301,6 @@ class ChainedPairPeriod(unittest.TestCase):
             self.assertAlmostEqual(value, DISPATCH_MS * 1000.0)
 
 
-@unittest.skipUnless(HAS_CHAIN, CHAIN_MISSING)
 class ChainBarrier(unittest.TestCase):
     """The escape valve for a backend that wedges when pairs are free-running.
 
@@ -398,110 +392,16 @@ class ChainBudgetGate(unittest.TestCase):
         self.assertIn("iters/trials/warmup", output)
 
 
-class ChainArtifactSchema(unittest.TestCase):
-    """The row fields the chain publishes, locked by name.
+class ChainComponentContract(unittest.TestCase):
+    """The two chain contracts a driven sweep does not show.
 
-    `run_sweep` needs torch, dist and a device, so these read the module's own dict literals
-    instead of driving it: what a consumer keys on is the field NAME and the origin STRING, and
-    both are visible in the source without a GPU. Not skipped when the implementation lags --
-    an absent field is the failure these are for.
+    Field names, origins and placement are asserted against a real emitted row in
+    test_run_sweep_chain.py, which is strictly stronger than reading them out of the source, so
+    the AST guards that used to live here are gone. What is left is what that run does not
+    exercise: the constants a consumer imports by name, and `_component`'s behaviour on the two
+    paths no chain row takes.
     """
 
-    SOURCE = ast.parse((ROOT / "bench" / "ep_harness.py").read_text())
-
-    @classmethod
-    def dict_keys(cls) -> set:
-        keys = set()
-        for node in ast.walk(cls.SOURCE):
-            if isinstance(node, ast.Dict):
-                keys.update(
-                    key.value for key in node.keys
-                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
-                )
-        return keys
-
-    @classmethod
-    def strings(cls) -> set:
-        return {
-            node.value for node in ast.walk(cls.SOURCE)
-            if isinstance(node, ast.Constant) and isinstance(node.value, str)
-        }
-
-    @classmethod
-    def blocks_under(cls, name: str) -> list:
-        """Key sets of every dict literal that is the value of key `name`."""
-        blocks = []
-        for node in ast.walk(cls.SOURCE):
-            if not isinstance(node, ast.Dict):
-                continue
-            for key, value in zip(node.keys, node.values):
-                if (isinstance(key, ast.Constant) and key.value == name
-                        and isinstance(value, ast.Dict)):
-                    blocks.append({
-                        inner.value for inner in value.keys
-                        if isinstance(inner, ast.Constant) and isinstance(inner.value, str)
-                    })
-        return blocks
-
-    def test_the_chain_fields_are_emitted_as_row_keys(self):
-        expected = {
-            "pair_period", "chain_floor_us", "chain_health", "pair_spread_us",
-            "chained_period", "chain_barrier",
-        }
-        missing = sorted(expected - self.dict_keys())
-        self.assertFalse(missing, f"ep_harness emits no row key named: {missing}")
-
-    def test_the_chain_origin_strings_are_locked(self):
-        # A consumer distinguishes a chained number from a fresh-entry one by `origin` alone;
-        # renaming either string silently reclassifies every row that carries it.
-        missing = sorted({"chained-median", "chained-cross-rank-min"} - self.strings())
-        self.assertFalse(missing, f"ep_harness carries no origin string: {missing}")
-
-    def test_the_pair_period_sits_inside_the_components_block(self):
-        blocks = self.blocks_under("components")
-        if not blocks:
-            self.skipTest("run_sweep no longer builds `components` as a dict literal")
-        self.assertTrue(
-            any("pair_period" in keys for keys in blocks),
-            "no `components` literal carries pair_period",
-        )
-
-    def test_the_chain_floor_carries_both_per_op_floors(self):
-        blocks = self.blocks_under("chain_floor_us")
-        if not blocks:
-            self.skipTest("chain_floor_us is not built as a dict literal")
-        self.assertTrue(
-            any({"dispatch", "combine"} <= keys for keys in blocks),
-            "chain_floor_us must carry a dispatch and a combine floor",
-        )
-
-    def test_the_implementation_block_stamps_the_chain_flags(self):
-        # Mixed chain_barrier semantics across SKUs are only readable because the row says
-        # which one it measured; an unstamped row is indistinguishable from a free-running one.
-        blocks = self.blocks_under("implementation")
-        if not blocks:
-            self.skipTest("the implementation block is not a dict literal")
-        self.assertTrue(
-            any({"chained_period", "chain_barrier"} <= keys for keys in blocks),
-            "the implementation block must stamp chained_period and chain_barrier",
-        )
-
-    def test_the_chain_components_reuse_the_standard_component_shape(self):
-        # pair_period and the floors are components like any other, so a consumer reads them
-        # with the same four keys it already reads roundtrip with.
-        self.assertEqual(
-            set(ep_harness._component({"p50": 1.0}, 3)),
-            {"availability", "origin", "percentiles_us", "sample_count"},
-        )
-        self.assertEqual(
-            set(ep_harness._component(None, 0)),
-            {"availability", "origin", "percentiles_us", "sample_count"},
-        )
-
-    @unittest.skipUnless(
-        hasattr(ep_harness, "CHAIN_PERIOD_ORIGIN") and hasattr(ep_harness, "CHAIN_FLOOR_ORIGIN"),
-        "ep_harness does not expose the chain origin strings as constants",
-    )
     def test_the_origin_constants_carry_the_published_values(self):
         self.assertEqual(ep_harness.CHAIN_PERIOD_ORIGIN, "chained-median")
         self.assertEqual(ep_harness.CHAIN_FLOOR_ORIGIN, "chained-cross-rank-min")

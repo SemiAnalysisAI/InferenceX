@@ -192,10 +192,6 @@ class WarmStaging(unittest.TestCase):
         self._warm(b, 5)
         self.assertEqual(b.calls.count("stage"), 5)
 
-@unittest.skipUnless(
-    hasattr(ep_backend.EPBackend, "benchmark_chain"),
-    "EPBackend.benchmark_chain is not implemented yet",
-)
 class ChainStaging(unittest.TestCase):
     """The chained period inherits the roundtrip's staging rule, or it measures a third thing.
 
