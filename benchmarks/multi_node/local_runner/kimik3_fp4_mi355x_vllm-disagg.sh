@@ -100,7 +100,16 @@ export DECODE_DP_ATTN="${DECODE_DP_ATTN:-false}"
 
 # --- KV transfer: MoRIIO RDMA P/D + Mooncake DRAM (MultiConnector) --------------
 export KV_OFFLOADING="${KV_OFFLOADING:-dram}"
-export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-mooncake}"
+# Only default the backend when the tier is actually on. benchmark_lib.sh rejects
+# KV_OFFLOADING=none with a non-empty KV_OFFLOAD_BACKEND, and "${VAR:-mooncake}"
+# substitutes for empty as well as unset -- so an unconditional default made the
+# no-offload arm impossible to express through this runner at all, which is
+# exactly the baseline a with/without-Mooncake comparison needs.
+if [[ "${KV_OFFLOADING}" == "none" ]]; then
+    export KV_OFFLOAD_BACKEND=""
+else
+    export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-mooncake}"
+fi
 # Sized the way the cloud path sizes it, instead of a round placeholder. CI never
 # sets this directly: generate_sweep_configs.agentic_dram_offload_gb() derives it
 # from the recipe's `dram-utilization: 0.80` and the runner's hardware metadata --
