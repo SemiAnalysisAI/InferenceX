@@ -747,6 +747,7 @@ jobs:
         if: >-
             ${{
               !cancelled() &&
+              !contains(github.event.pull_request.labels.*.name, 'agentx-fast') &&
               needs.setup.result == 'success' &&
               needs.setup.outputs.reuse-enabled != 'true' &&
               (needs.canary-sweep.result == 'success' || needs.canary-sweep.result == 'skipped') &&
