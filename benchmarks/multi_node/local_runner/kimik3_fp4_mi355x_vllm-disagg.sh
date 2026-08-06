@@ -118,18 +118,23 @@ export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-2400}"
 # same file CI goes through (gmu 0.88 per PR #2403's fleet measurements, and the
 # native 1M context that benchmark_lib.sh's agentic unset enforces). Overriding
 # either from the local runner would make local numbers non-comparable.
-# Measured here for reference (TP8, dummy, fp8 KV, DSpark n=7, eager):
-#   gmu 0.90 -> 58.36 GiB KV -> 3,221,959 tokens. PR #2403 warns 0.90 later dies
-#   mid-prefill with HSA_STATUS_ERROR_OUT_OF_RESOURCES, hence 0.88.
-# fp8 KV, on the aiter ASM decode path. Backend ladder for K3 TP8 (12 heads/rank):
+#
+# KV dtype: bf16 (empty == do not pass --kv-cache-dtype), same as the recipe.
+# Backend ladder for K3 TP8 (96/8 = 12 MLA heads/rank, so nhead <= 16 and aiter
+# serves decode from mla_gluon, which picks its regime by KV dtype):
 #   TRITON_MLA            - head-agnostic but slow
-#   aiter gluon bh16bn64  - bf16 KV only (fp8 -> bh16bn128, batch_size==1)
-#   aiter ASM  (this)     - batched AND fp8 (mla_decode_fwd takes q_scale/kv_scale)
-# ASM is only reachable once head padding handles 12 -> 16, which is what
-# VLLM_PATCH_MLA_HEAD_PAD does; upstream's repeat_interleave(16//12) is a no-op
-# and so upstream detours every <16-head decode to gluon.
-export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
-export VLLM_PATCH_MLA_HEAD_PAD="${VLLM_PATCH_MLA_HEAD_PAD:-1}"
+#   aiter gluon bh16bn64  - bf16 KV, batch_size >= 1        <-- this
+#   aiter gluon bh16bn128 - fp8  KV, batch_size == 1 ONLY
+#   aiter ASM             - batched AND fp8, but needs nhead % 16 == 0
+# This file used to default to fp8 KV + VLLM_PATCH_MLA_HEAD_PAD=1 to reach ASM.
+# That is a dead end under DSpark: ASM rejects qo_len > 4 outside persistent mode
+# and the n=7 verify step presents 8, while plain fp8 without the pad patch lands
+# on bh16bn128 and aborts every conc > 1 with "mla_gluon[bh16bn128] requires
+# batch_size=1". bf16 KV batches normally and is what the validated real-weight
+# run (GSM8K 44/50) served on, so local now matches
+# configs/amd-master.yaml's kimik3-fp4-mi355x-vllm-disagg-agentic{,-dummy}.
+export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-}"
+export VLLM_PATCH_MLA_HEAD_PAD="${VLLM_PATCH_MLA_HEAD_PAD:-0}"
 # Empty -> keep models_vllm.yaml's ROCM_AITER_MLA (bh16bn64 on bf16 KV), which is
 # what the validated real-weight run used. Set TRITON_MLA only to A/B against it.
 export ATTENTION_BACKEND="${ATTENTION_BACKEND:-}"
@@ -184,7 +189,7 @@ cat > "${BENCHMARK_LOGS_DIR}/local_runner_notes.txt" <<EOF
 Local-only runner (do NOT source from CI).
 MODEL=${MODEL} MODEL_PATH=${MODEL_PATH} IMAGE=${IMAGE}
 LOAD_FORMAT=${LOAD_FORMAT} DISABLE_SPECULATIVE=${DISABLE_SPECULATIVE} SPEC_DECODING=${SPEC_DECODING}
-KV_OFFLOADING=${KV_OFFLOADING}/${KV_OFFLOAD_BACKEND} KV_CACHE_DTYPE=${KV_CACHE_DTYPE} ENFORCE_EAGER=${ENFORCE_EAGER}
+KV_OFFLOADING=${KV_OFFLOADING}/${KV_OFFLOAD_BACKEND} KV_CACHE_DTYPE=${KV_CACHE_DTYPE:-<bf16, no flag>} ENFORCE_EAGER=${ENFORCE_EAGER}
 ATTENTION_BACKEND=${ATTENTION_BACKEND:-<yaml ROCM_AITER_MLA>} SPEC_ATTN_BACKEND=${SPEC_ATTN_BACKEND:-<yaml TRITON_MLA>}
 VLLM_PATCH_MLA_HEAD_PAD=${VLLM_PATCH_MLA_HEAD_PAD} VLLM_PATCH_MLA_PERSISTENT_MTP=${VLLM_PATCH_MLA_PERSISTENT_MTP}
 GMU/MAX_MODEL_LEN: set downstream by benchmarks/multi_node/agentic/kimik3_fp4_mi355x_vllm-disagg.sh
