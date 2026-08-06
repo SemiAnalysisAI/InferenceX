@@ -36,6 +36,7 @@
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
       "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
+      "kv_backends": {"nixl": ["rdma"]},
       "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
       "operator": {
         "partition": "main",
