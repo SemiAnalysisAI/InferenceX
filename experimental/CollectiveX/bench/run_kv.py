@@ -62,6 +62,23 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
                     help="per-worker wire rate in Gbit/s for the %%-of-wire column; 0 = unknown")
 
 
+def export_ucx_selectors(environ=os.environ) -> None:
+    """Pin the UCX fabric to the operator's validated RDMA selectors.
+
+    UCX auto-selection is a wrong-fabric trap on several SKUs (b200-nscale's
+    quad-port aux card, b300's storage IB), and the launcher's network profile
+    only exports the COLLX_* names. Explicit UCX_* values always win.
+    """
+    devices = environ.get("COLLX_RDMA_DEVICES", "")
+    if devices and "UCX_NET_DEVICES" not in environ:
+        environ["UCX_NET_DEVICES"] = ",".join(
+            device if ":" in device else f"{device}:1"
+            for device in devices.split(",") if device)
+    gid = environ.get("COLLX_IB_GID_INDEX", "")
+    if gid and "UCX_IB_GID_INDEX" not in environ:
+        environ["UCX_IB_GID_INDEX"] = str(gid)
+
+
 def kv_case(args) -> dict:
     return {
         "backend": args.backend,
@@ -103,6 +120,7 @@ def main() -> int:
         os.environ.setdefault("UCX_CUDA_IPC_ENABLE_MNNVL", "y")
     if args.socket_ifname:
         os.environ.setdefault("GLOO_SOCKET_IFNAME", args.socket_ifname)
+    export_ucx_selectors()
 
     import torch
     import torch.distributed as dist
