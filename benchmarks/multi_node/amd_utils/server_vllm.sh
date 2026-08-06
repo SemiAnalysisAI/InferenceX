@@ -772,6 +772,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
         prefill_pid=$!
     fi
 
+    # SERVER_UP_TIMEOUT: how long to wait for every worker to bind its port, i.e.
+    # essentially how long weight loading may take. 1800 s is fine for a 300-600 GB
+    # checkpoint but not for Kimi-K3: 1.7 TB over 96 shards off wekafs, read by both
+    # nodes at once, measured ~23 s/shard = ~37 min, so the old fixed 30 min expired
+    # ~10 min before the servers were ready. server_vllm.sh has no `set -e`, so the
+    # failure was survivable (the router /health barrier that follows granted another
+    # 1800 s) -- but it logged a spurious "Timeout ... waiting for ports to open"
+    # followed by "Congratulations!!! All prefill and decode servers are up", which
+    # is a confusing pair to debug from.
     echo "Waiting for all prefill and decode servers to be up . . ."
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
@@ -780,7 +789,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout "${SERVER_UP_TIMEOUT:-1800}"
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
