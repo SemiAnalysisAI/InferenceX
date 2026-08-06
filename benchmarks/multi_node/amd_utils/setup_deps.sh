@@ -148,8 +148,16 @@ install_kimi_k3_vllm_fork() {
     local src="${VLLM_K3_FORK_SRC:-/opt/vllm-k3-fork}"
     local marker="${src}/.inferencex_installed_ref"
 
-    if [[ -f "$marker" ]] && [[ "$(cat "$marker" 2>/dev/null)" == "${repo}@${ref}" ]]; then
-        echo "[SETUP] Kimi-K3 vLLM fork already overlaid (${repo}@${ref})"
+    # The marker records the resolved commit, not just repo@ref. Keying it on the
+    # branch name alone meant that once a node had overlaid the branch, later
+    # commits pushed to that same branch were silently skipped -- the container
+    # kept running whatever it happened to clone first. Cloud runs start from a
+    # pristine image so they never saw it; any reused/committed image would.
+    local remote_sha
+    remote_sha=$(git ls-remote "$repo" "$ref" 2>/dev/null | awk 'NR==1{print $1}')
+    if [[ -f "$marker" ]] && [[ -n "$remote_sha" ]] \
+       && [[ "$(cat "$marker" 2>/dev/null)" == "${repo}@${remote_sha}" ]]; then
+        echo "[SETUP] Kimi-K3 vLLM fork already overlaid (${repo}@${ref} = ${remote_sha})"
         return 0
     fi
 
@@ -196,7 +204,7 @@ PY
     python3 -c "import vllm; from vllm.distributed.kv_transfer.kv_connector.v1.multi_connector import MultiConnector; print('[SETUP] vLLM fork overlay import OK', vllm.__file__)" \
         || { echo "[SETUP] ERROR: vLLM import failed after fork overlay"; exit 1; }
 
-    echo "${repo}@${ref}" > "$marker"
+    echo "${repo}@$(cd "$src" && git rev-parse HEAD)" > "$marker"
     _SETUP_INSTALLED+=("vllm-k3-fork-overlay@${ref}")
 }
 
