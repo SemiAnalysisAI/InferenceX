@@ -5459,4 +5459,14 @@
     - "Use the Inferact/MiniMax-M3-EAGLE3-GQA draft model with three speculative tokens and synthetic rejection sampling; thinking-on synthetic acceptance length is 2.78."
     - "Use vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 with prefix caching enabled, default KV-cache dtype, FlashInfer TRT-LLM attention with FP8 indexer KV, and the EAGLE3 drafter on FLASH_ATTN."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
-  
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3 MXFP4 DSpark speculative decoding on TP8 MI355X with the validated haihub007/hc-gpu:kimik3-dspark-lmcache-fix2 image"
+    - "Run LMCache 0.5.3rc2 MP host-DRAM offload with a 906 GB L1 pool, FP8 KV cache, Mamba alignment, and concurrency 4"
+    - "Use TRITON_MLA with PIECEWISE CUDA graphs, fused RMS norm gating, and Inferact/Kimi-K3-DSpark with three speculative tokens, probabilistic drafting, block rejection, and a 3000-token scheduler cap"
+    - "Combine vLLM PRs #50618, #50619, and #51040 with AITER PR #4474, remove the integration import shadow, and disable skinny GEMM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2496
