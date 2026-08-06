@@ -859,7 +859,7 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 # differ.
 SPEC_ARGS=(
     --speculative-config
-    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"greedy\",\"rejection_sample_method\":\"block\"}"
 )
 
 # mns and the cudagraph capture ceiling are 2*CONC, capped at MNS_CAP.
