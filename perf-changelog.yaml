@@ -5425,3 +5425,15 @@
   description:
     - "Extend the search space to include the TP2EP1 configuration for fixed seq len 8k1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2446
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add single-node agentic-coding recipe for Kimi-K3 (MXFP4, 2.8T MoE, 896 experts, KDA/MLA hybrid, 1M native context) on MI355X (gfx950) with vLLM + DSpark MTP speculative decoding. Agentic-coding scenario only -- no fixed-seq-len (1k1k / 8k1k) arms."
+    - "TP8 only: the ~1.56 TB MXFP4 checkpoint is ~195 GB/GPU across 8 gfx950 288 GB parts; TP4 would need ~390 GB/GPU and cannot load, matching upstream strategy_min_gpus."
+    - "In-container filesystem patches applied via an idempotent git-apply wrapper (apply_k3_container_patches.sh): KDA fused_recurrent state_indices coercion (PIECEWISE cudagraph boot), triton_mla UNIFORM_BATCH cudagraph support for the non-causal DSpark draft group, rocm_aiter_mla small-head (<16 heads at TP8) multi-token MTP-verify paged-KV buffers (vLLM PR #50619 path), and aiter mla_gluon int64 KV stride on the >2GB path (aiter PR #4474); plus Triton 3.7.0 (ROCm 7.2.0) + tabulate for Gluon MLA PaddedSharedLayout."
+    - "Piecewise cudagraph capture: compilation-config mode 3 with an explicit even-step cudagraph_capture_sizes list up to 2*CONC*(1+SPEC_NUM_TOKENS) (6*CONC at spec=2), no cudagraph_mode. Capture range is decoupled from --max-num-seqs (1*CONC) so it covers the DSpark verify batch (each decode slot expands to 1+num_speculative_tokens rows) even though the served slot cap is lower."
+    - "Speculative config: method dspark on the Inferact/Kimi-K3-DSpark draft head, num_speculative_tokens 2, attention_backend TRITON_MLA, draft_sample_method probabilistic, rejection_sample_method synthetic with synthetic_acceptance_length 2.45."
+    - "Serve flags: --moe-backend auto, --load-format fastsafetensors, --language-model-only, --kv-cache-dtype auto (bf16 KV), --enable-prefix-caching, gpu-memory-utilization 0.9, kimi_k3 reasoning/tool-call parsers, max-model-len 1048576. Env: VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1, AITER_BF16_FP8_MOE_BOUND=0, VLLM_USE_BREAKABLE_CUDAGRAPH=0, SAFETENSORS_FAST_GPU=1."
+    - "Search space is one TP8 GPU-resident arm (kv-offloading none) at conc-list [4, 8, 10, 12, 14, 16]; the LMCache/vllm-native/SimpleCPUOffload DRAM-offload backends are wired in the recipe but off this sweep's ladder."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2508
