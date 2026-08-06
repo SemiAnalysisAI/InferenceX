@@ -42,7 +42,7 @@ Run `ls` for details. Key paths:
 - `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
 - `utils/bench_serving/` - `benchmark_serving.py` and backends.
 - `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `collect_*.py`, `compare_results.py`.
+- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `aggregate_power.py` (single-node GPU energy validation + aggregation), `aggregate_power_multinode.py` (multinode srt-slurm `dcgm-power` artifact validation), `collect_*.py`, `compare_results.py`.
 - `experimental/` - non-core experiments.
 
 ## Terminology
@@ -95,7 +95,7 @@ PRs do not run the sweep automatically - `run-sweep.yml` is gated on a primary s
 - `full-sweep-fail-fast` - runs the full intermediate concurrency sweep behind the same sequential single-node canary gate as `full-sweep-enabled` (so a globally broken change burns one job, not the whole fan-out), and with `strategy.fail-fast` enabled on every matrix: the first failure in a matrix cancels that matrix's remaining jobs. Fail-fast is matrix-scoped, so the other matrices (1k1k vs 8k1k vs agentic vs evals) keep running and self-terminate on their own first failure; their completed results remain valid. The failing job keeps its red *failure* conclusion and the run concludes failed. **This is the strongly recommended default for full sweeps** (image bumps, recipe changes, bring-up) - a failure means the rest of that matrix is wasted GPU time. Caveat: one flaky job kills its matrix's in-flight results; if that repeatedly bites a specific config, fall back to `full-sweep-enabled` for that PR.
 - `full-sweep-fail-fast-no-canary` - same as `full-sweep-fail-fast` but without the canary gate: all matrices fan out immediately. Use when the canary is flaky or not representative of the affected configuration but you still want per-matrix fail-fast.
 
-`all-evals`, `evals-only`, and `agentx-fast` are optional modifier labels. Combine them with one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset; combining both eval modifiers runs every eval and no throughput. `agentx-fast` applies the 5-minute warmup and 20-minute profiling preset to single- and multi-node AgentX throughput jobs only; fixed-sequence and eval jobs are unchanged. `all-evals` remains eligible for artifact reuse when paired with an eligible full-sweep label. Runs with `evals-only` or `agentx-fast` are not eligible for artifact reuse.
+`all-evals`, `evals-only`, and `agentx-fast` are optional modifier labels. Combine them with one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset; combining both eval modifiers runs every eval and no throughput. `agentx-fast` reduces deterministic warmup to one request per lane and profiling to 20 minutes for single- and multi-node AgentX throughput jobs; fixed-sequence and eval jobs are unchanged. `all-evals` remains eligible for artifact reuse when paired with an eligible full-sweep label. Runs with `evals-only` or `agentx-fast` are not eligible for artifact reuse.
 
 **The sweep does not trigger while the PR has merge conflicts.** Even with a sweep label applied, the `run-sweep.yml` workflow will not start until the PR cleanly merges into main — a stale claude/* or update-* branch with a `perf-changelog.yaml` conflict (the common case) will sit in NO_SWEEP / NO_SUCCESS until rebased. Resolution recipe is documented in `KLAUD_DEBUG.md §1.1`: `git merge origin/main`, then `git checkout origin/main -- perf-changelog.yaml`, then re-append the PR's own changelog entry at the tail. Don't 3-way merge `perf-changelog.yaml`; whitespace edits silently re-trigger the deletion check.
 
@@ -117,9 +117,9 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value.
+Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value. `inputs[require-power]` fails single-node fixed-sequence jobs when GPU power telemetry is invalid (default: power is best-effort and never fails a run).
 
-For an AgentX preflight, add `-F 'inputs[agentx-fast]=true'` to the dispatch command. This selects a 5-minute cache warmup and 20-minute profile for every AgentX job in that e2e dispatch and takes precedence over `duration-override`. Use it to get faster signal while debugging, then run the official sweep without `agentx-fast`; canonical AgentX timing remains a 10-minute cache warmup and 1-hour profile.
+For an AgentX preflight, add `-F 'inputs[agentx-fast]=true'` to the dispatch command. This reduces deterministic warmup to one request per lane and profiling to 20 minutes for every AgentX job. Use it to get faster feedback while debugging, then run the official sweep without `agentx-fast`; canonical AgentX warmup remains 10 requests per lane with a 1-hour profile.
 
 The POST returns no body and no run ID - find the run with `gh run list` below.
 
@@ -148,6 +148,8 @@ Add to `configs/runners.yaml`, create launcher in `runners/`, add the runner typ
 For `dynamo-sglang` / `dynamo-trt` disaggregated multi-node configs, see `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` for the full mapping from srtslurm recipe YAML to `nvidia-master.yaml` entries.
 
 Multi-node srt-slurm changes must edit the recipe yaml AND `nvidia-master.yaml` together. `srtctl` reads only the recipe (`model.container`, resources, prefill/decode workers); the sweep generator (`utils/matrix_logic/generate_sweep_configs.py`) reads `nvidia-master.yaml` for frontend labels - its prefill/decode numbers never reach `srtctl`. Recipe-only edits mislabel results, master-only edits don't take effect. For image bumps, `model.container` must equal `image:`, since the launcher uses the latter as the container-alias key.
+
+Power lanes: a recipe `telemetry:` block with `provider: dcgm-power` enables official energy collection for that config. The launcher (`runners/launch_gb200-nv.sh`, `launch_gb300-nv.sh`) is the single source of truth for the producer pin (`POWER_SRT_SLURM_PIN`); CI derives `POWER_PRODUCER_SHA` from the launcher's stamp file, and `utils/test_gb200_power_official_contract.py` / `test_gb300_power_official_contract.py` lock the recipe↔launcher contract. dcgm-power lanes are validated for `PRECISION=fp8` only.
 
 ### Updating Docker images
 
@@ -200,6 +202,10 @@ cat ./results/agg_bmk.json | jq '[.[] | select(.infmax_model_prefix == "gptoss")
 
 `tput_per_gpu` (total throughput per GPU, tok/s), `output_tput_per_gpu` (output token throughput), `mean_ttft` / `p99_ttft` (time to first token), `mean_tpot` (time per output token), `mean_e2el` (end-to-end latency).
 
+Single-node fixed-sequence results also carry GPU power metrics when telemetry is valid: `power_valid` (1/0), `avg_power_w` (average board power per GPU), `avg_total_gpu_power_w` (all observed GPUs), `total_gpu_energy_j` (integrated over the formal benchmark window), and `joules_per_successful_query` / `joules_per_input_token` / `joules_per_output_token` / `joules_per_total_token`. Invalid telemetry records `power_valid: 0` and no energy metrics; it fails the job only under `REQUIRE_POWER=1` (see the `require-power` dispatch input).
+
+Multinode disaggregated results add role energy metrics: `prefill_gpu_energy_j` / `decode_gpu_energy_j` (board energy of that role's GPUs integrated over the FULL formal window — not kernel-level phase energies) and `prefill_joules_per_input_token` / `decode_joules_per_output_token`.
+
 ### Artifacts
 
-`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded).
+`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded). `power_audit_<result>` → `power_validation_<result>.json` single-node, `power_validation_<result>_*.json` multinode (canonical power validity verdict + reason codes; uploaded even when invalid).

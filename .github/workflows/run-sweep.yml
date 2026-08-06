@@ -190,6 +190,7 @@ jobs:
               (
                 github.event_name == 'pull_request' &&
                 !github.event.pull_request.draft &&
+                github.event.pull_request.head.repo.full_name == github.repository &&
                 needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
                 (
                   contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
@@ -738,7 +739,7 @@ jobs:
             run-eval: true
             eval-only: true
 
-    # Agentic (SWE-bench) eval rows carry the agentic input shape, so they are
+    # Agentic GSM8K eval rows carry the agentic input shape, so they are
     # dispatched with sweep-agentic's inputs rather than sweep-evals' fixed-seq-len
     # inputs (isl/osl/max-model-len, which agentic rows don't have).
     sweep-agentic-evals:

@@ -229,17 +229,28 @@ def _write_json_atomic(path: str, value) -> None:
 def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[float]:
     """Per-iteration CUDA-event latencies (µs) for THIS rank.
 
-    Without `pre`: times `fn()`. With `pre`: runs `pre()` UNTIMED each iteration (sync
-    before the start event so its GPU work can't bleed in), then times `fn(pre_result)`.
-    `post(result)` runs after the end event and synchronization, so stateful backends can
-    consume/reset a timed operation without charging that cleanup to its latency. Returns
-    the raw per-iteration series; the caller reduces across ranks per iteration before
+    Without `pre`: times `fn()`. With `pre`: runs `pre()` UNTIMED each iteration, then times
+    `fn(pre_result)`. `post(result)` runs after the end event and synchronization, so stateful
+    backends can consume/reset a timed operation without charging that cleanup to its latency.
+    Returns the raw per-iteration series; the caller reduces across ranks per iteration before
     percentiling.
+
+    There is deliberately NO host sync between `pre()` and the start event. Stream ordering
+    already keeps pre()'s work out of the s->e window: `s` is enqueued behind pre()'s kernels,
+    so the event timestamps when the stream REACHES it, not when the host recorded it. The sync
+    that used to sit here did not add that guarantee -- it drained the GPU, which put the host's
+    launch of `fn` inside the measured window and, because `fn` is a collective, let per-rank
+    launch jitter desynchronise ranks that pre() had just aligned. Each rank then blocked on the
+    slowest peer and run_sweep's cross-rank MAX reported that stagger as latency. Measured on
+    b200 uccl-ep low-latency combine: 113.4us -> 87.4us at T=1 with the ranks aligned, and no
+    change at T=32, which is what produced a *falling* latency curve as tokens grew.
+
+    The end-of-iteration sync stays: the warmup note below documents why iterations must not
+    overlap (iter N+1's dispatch races iter N's combine on the persistent comm buffer), so only
+    one pre/fn pair is ever in flight.
     """
     def sample():
         arg = pre() if pre is not None else None
-        if pre is not None:
-            torch.cuda.synchronize()
         s = torch.cuda.Event(enable_timing=True)
         e = torch.cuda.Event(enable_timing=True)
         s.record()
@@ -355,8 +366,50 @@ def _expert_transform(torch, payload, expert_ids, weights, combine_weight_semant
     return transformed.to(payload.dtype)
 
 
+def _topk_slot_tree_combine(torch, destination, valid, messages, dtype):
+    """Reduce the per-rank messages the way a payload-dtype accumulator does.
+
+    Most combine kernels accumulate in FP32 and narrow once. FlashInfer's one-sided kernel
+    (<= 0.6.15) instead holds its top-k accumulators IN the payload dtype and reduces them
+    with a hand-unrolled pairwise tree, so every level rounds:
+
+        acc[k] = message of destination[k], or 0 if a lower k already claimed that rank
+        (a0+=a1) (a2+=a3) (a4+=a5) (a6+=a7); (a0+=a2) (a4+=a6); (a0+=a4)   -- and store
+
+    Three BF16 roundings on partials near a contribution's own magnitude is a few ulps of
+    error, which is the whole gap a plain FP32 sum leaves against this backend. Operands sit
+    at their ORIGINAL top-k slot -- the kernel blanks duplicate-rank slots in place rather
+    than compacting -- so the tree's shape depends on the routing, not just the rank count.
+    The generic halving below reproduces the unrolled K=6/8/10 trees exactly.
+
+    Unlike the domain reduction, which folds into one accumulator, this holds a message per
+    rank AND a slot per top-k position, so oracle memory is O(ep_size * tokens * hidden):
+    ~8 GiB at EP16 with the 8192-token prefill rung. Fine against 180+ GiB HBM at the EP
+    sizes here, but it is the term that would need streaming before EP32.
+    """
+    tokens = torch.arange(destination.shape[0], device=destination.device)
+    zero = torch.zeros_like(messages[0])
+    slots = []
+    for slot in range(destination.shape[1]):
+        rank_id = destination[:, slot]
+        claimed = valid[:, slot].clone()
+        for earlier in range(slot):
+            claimed &= ~(valid[:, earlier] & (destination[:, earlier] == rank_id))
+        slots.append(torch.where(claimed.unsqueeze(1), messages[rank_id, tokens], zero))
+    while len(slots) > 1:
+        merged = [
+            (slots[i] + slots[i + 1]).to(dtype).float()
+            for i in range(0, len(slots) - 1, 2)
+        ]
+        if len(slots) % 2:
+            merged.append(slots[-1])
+        slots = merged
+    return slots[0]
+
+
 def _expected_transformed_combine(
-    torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+    torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
+    combine_reduction="domain-fp32",
 ):
     """Reproduce the reduction combine actually performs so the expectation carries the
     same BF16 rounding a correct backend does rather than hiding it in a wide tolerance.
@@ -378,6 +431,10 @@ def _expected_transformed_combine(
     cases) there is a single domain and no scale-out rounding; a multi-node RoCE EP16 group
     has one BF16 partial per node, and omitting that cast is what left the scale-out
     combine ~0.048 off a single-domain reference.
+
+    A backend whose accumulator is the payload dtype rather than FP32 declares
+    ``combine_reduction = "topk-slot-tree"`` and takes the model in
+    :func:`_topk_slot_tree_combine` instead of the domain reduction below.
     """
     semantic_x = getattr(problem, "oracle_x", problem.x)
     expert_ids = problem.topk_idx.to(torch.int64)
@@ -400,19 +457,42 @@ def _expected_transformed_combine(
         return expected
     if combine_weight_semantics != "unweighted-rank-sum":
         raise ValueError(f"unknown combine semantics {combine_weight_semantics!r}")
-    destination = expert_ids // experts_per_rank
-    ranks_per_domain = max(1, scale_up_domain)
-    domains: dict[int, object] = {}
+    valid = expert_ids >= 0
+    destination = torch.where(valid, expert_ids, torch.zeros_like(expert_ids))
+    destination //= experts_per_rank
     scale, offset_a, offset_b = _expert_coefficients(torch, expert_ids)
-    for rank_id in destination.unique().tolist():
-        gate = weights * (destination == rank_id)
-        # Per-rank BF16 output, FP32-accumulated within its scale-up domain.
-        contribution = (
+
+    def rank_message(rank_id):
+        """The one BF16 row this destination rank stages back for every token.
+
+        The narrowing here is the ADAPTER's — torch producing the staged combine input —
+        not the kernel's, so it is always round-to-nearest regardless of what the kernel
+        does with its own accumulator.
+        """
+        gate = weights * (destination == rank_id) * valid
+        return (
             semantic_x.float() * (gate * scale).sum(dim=1, keepdim=True)
             + (gate * offset_a).sum(dim=1, keepdim=True)
             + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
         ).to(dtype).float()
+
+    present = sorted(destination[valid].unique().tolist())
+    if combine_reduction == "topk-slot-tree":
+        messages = torch.zeros(
+            (max(present, default=0) + 1,) + semantic_x.shape,
+            dtype=torch.float32, device=semantic_x.device,
+        )
+        for rank_id in present:
+            messages[rank_id] = rank_message(rank_id)
+        return _topk_slot_tree_combine(torch, destination, valid, messages, dtype)
+    if combine_reduction != "domain-fp32":
+        raise ValueError(f"unknown combine reduction {combine_reduction!r}")
+    ranks_per_domain = max(1, scale_up_domain)
+    domains: dict[int, object] = {}
+    for rank_id in present:
+        # Per-rank BF16 output, FP32-accumulated within its scale-up domain.
         domain = rank_id // ranks_per_domain
+        contribution = rank_message(rank_id)
         if domain in domains:
             domains[domain] += contribution
         else:
@@ -560,7 +640,8 @@ def _run_expert_oracle(
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
-        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
+        getattr(backend, "combine_reduction", "domain-fp32"),
     )
     if combined.shape == expected_combined.shape:
         # Zero errors stand when the rank legitimately combined nothing.
@@ -728,7 +809,7 @@ def _run_ll_expert_oracle(
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(
-        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics
+        torch, problem, experts_per_rank, scale_up_domain, combine_weight_semantics,
     )
     if combined.shape == expected_combined.shape:
         max_absolute_error = max_elementwise_relative_error = 0.0
@@ -779,7 +860,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
 
     ep_size = world_size
-    num_logical = getattr(args, "num_logical_experts", args.experts)
     if args.experts % ep_size != 0:
         if rank == 0:
             print(f"ERROR: experts ({args.experts}) must divide ep_size ({ep_size})")
@@ -882,6 +962,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
     comb_pool = {T: [] for T in ladder}     # ... combine
     rt_pool = {T: [] for T in ladder}       # independently measured round trip
+    spread_pool = {T: [] for T in ladder}   # cross-rank (max-min) of the round trip, per iter
+    # Cross-rank MIN per component. The LAST rank to enter a collective is the one that waited
+    # least -- it started when its peers were already there -- so its duration is the closest
+    # estimate of the operation's cost with entry skew excluded. MAX (reported as the latency)
+    # is that cost PLUS the skew, i.e. what the earliest-entering rank observed.
+    dmin_pool = {T: [] for T in ladder}
+    cmin_pool = {T: [] for T in ladder}
+    rtmin_pool = {T: [] for T in ladder}
     for trial_index in range(args.trials):
         order = trial_order(list(ladder), trial_index)
         for T in order:
@@ -903,7 +991,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 comb_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MAX)
             if measured["stage"]:
                 stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
-            rt_pool[T] += _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
+            rt_max = _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
+            rt_pool[T] += rt_max
+            # Cross-rank SPREAD (max-min) of the same iterations. A collective cannot finish
+            # before its slowest participant, so when ranks enter together every rank measures
+            # nearly the same duration and the spread is small; a large spread means the ranks
+            # were staggered and the reported MAX is charging one rank's wait for the others.
+            # Emitted as a diagnostic so a skew-inflated point is visible in the artifact
+            # instead of being mistaken for the operation getting slower.
+            rt_min = _reduce_vec(torch, dist, device, measured["roundtrip"], MIN)
+            spread_pool[T] += [hi - lo for hi, lo in zip(rt_max, rt_min)]
+            rtmin_pool[T] += rt_min
+            if measured["dispatch"]:
+                dmin_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
+                cmin_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
     # ---- Pass 3: prove timed inputs were immutable and repeat the full oracle. ----
     for T in ladder:
@@ -969,6 +1070,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
+        spread = spread_pool[T]
         rows.append({
             "components": {
                 "combine": _component(cp, len(c)),
@@ -977,6 +1079,19 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "roundtrip": _component(rtp, len(rt)),
                 "stage": _component(sp, len(s)),
             },
+            # Skew-excluded companion to `components`: same iterations reduced with cross-rank
+            # MIN instead of MAX. Compare against `components` to see how much of a point is the
+            # operation and how much is rank stagger; a curve that dips in MAX but not in MIN was
+            # never the operation getting faster.
+            "cross_rank_min_us": {
+                "combine": _component(_pcts(cmin_pool[T]), len(cmin_pool[T])),
+                "dispatch": _component(_pcts(dmin_pool[T]), len(dmin_pool[T])),
+                "roundtrip": _component(_pcts(rtmin_pool[T]), len(rtmin_pool[T])),
+            },
+            # Diagnostic, NOT a latency: per-iteration cross-rank (max-min) of the round trip.
+            # Small => ranks entered together and the reported MAX is the operation's cost.
+            # Large relative to the roundtrip => the point is skew-inflated; read it with care.
+            "cross_rank_spread_us": _component(_pcts(spread), len(spread)),
             "correctness": {
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
@@ -1017,7 +1132,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     scheduled_case = {
             "backend": backend.name,
             "ep": ep_size,
-            "experts": num_logical,
+            "experts": args.experts,
             "gpus_per_node": gpn,
             "hidden": args.hidden,
             "ladder": " ".join(map(str, ladder)),
@@ -1085,6 +1200,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # EPBackend.fp8_consume. Only meaningful when the case dispatches FP8.
             "fp8_consume": getattr(backend, "fp8_consume", None),
             "kernel_generation": kernel_generation(backend),
+            # Which reduction the correctness oracle held the kernel to. A backend may
+            # pick this per installed library version (flashinfer-ep does), so without it
+            # a wheel bump silently changes the arithmetic behind `passed` with no trace.
+            "combine_reduction": getattr(backend, "combine_reduction", "domain-fp32"),
+            # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
+            "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,
         },
         "topology": {
