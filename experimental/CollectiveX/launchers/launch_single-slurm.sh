@@ -22,8 +22,11 @@ case "$RUNNER" in
     PRODUCT=h200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=0
     SRUN_EXTRA=(--container-remap-root)
     ;;
-  b200-dgxc)
-    PRODUCT=b200; DEFAULT_TIME=30; REQUIRE_ACCOUNT=1
+  b200-nscale)
+    # Bare-metal B200 (nsc): native IB rails + gdrdrv, so the deepep low-latency EP16 rows
+    # the virtualized dgxc pool could never run are dispatchable here. 45 min rather than
+    # dgxc's 30 because a fresh pool pays first-run backend builds inside the allocation.
+    PRODUCT=b200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     ;;
   b300)

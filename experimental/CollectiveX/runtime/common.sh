@@ -616,8 +616,14 @@ collx_prepare_stage_dir() {
           "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
-      h200-dgxc|b200-dgxc)
+      h200-dgxc)
         COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base)" \
+          || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
+        ;;
+      b200-nscale)
+        # Anchor at the squash dir's parent (/data/home/sa-shared), the compute-visible share
+        # the campaign validated, rather than trusting the runner account's passwd home.
+        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "${COLLX_SQUASH_DIR%/*}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       mi300x|mi325x|mi355x)

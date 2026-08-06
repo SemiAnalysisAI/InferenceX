@@ -216,7 +216,7 @@ class MatrixTests(unittest.TestCase):
             if item["case"]["backend"] == "uccl-ep" and item["disposition"] == "unsupported"
         }
         supported_skus = {
-            "h100-dgxc", "h200-dgxc", "b200-dgxc", "mi355x", "mi325x-tw", "mi300x-tw",
+            "h100-dgxc", "h200-dgxc", "b200-nscale", "mi355x", "mi325x-tw", "mi300x-tw",
         }
         # EP8 runnable on all six; nothing runnable at EP16.
         self.assertEqual({sku for sku, _ in runnable}, supported_skus)
@@ -237,7 +237,7 @@ class MatrixTests(unittest.TestCase):
             if item["case"]["backend"] == "uccl-ep"
             and item["case"]["mode"] == "low-latency"
         }
-        self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-dgxc"})
+        self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-nscale"})
 
     def test_flashinfer_ep_rollout_shape(self):
         # FlashInfer one-sided is the transport a GB deployment actually runs: vLLM picks
@@ -277,7 +277,7 @@ class MatrixTests(unittest.TestCase):
         # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
         #   * RDMA scale-out SKUs (h100/h200/b200/b300): EP8 runnable, EP16 an UNSUPPORTED coverage
         #     row. EP16 cross-node rides NCCL's kernel-initiated GDAKI GIN, which faults identically
-        #     on RoCE (h100/b200/b300) and InfiniBand (h200) — a reproducible NCCL-EP v0.1.0 internode
+        #     on RoCE (h100/b300) and InfiniBand (h200/b200-nscale) — a reproducible NCCL-EP v0.1.0 internode
         #     limitation, so EP16 is scoped out like uccl-ep's.
         #   * GB NVL72 SKUs (gb200/gb300, MNNVL, gb-nv launcher, 4 GPU/node): EP8 AND EP16 runnable —
         #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),
@@ -304,7 +304,7 @@ class MatrixTests(unittest.TestCase):
             for item in document["requested_cases"]
             if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "unsupported"
         }
-        rdma_skus = {"h100-dgxc", "h200-dgxc", "b200-dgxc", "b300"}
+        rdma_skus = {"h100-dgxc", "h200-dgxc", "b200-nscale", "b300"}
         gb_skus = {"gb200", "gb300"}
         # RDMA SKUs: EP8 runnable + EP16 unsupported. GB SKUs: EP8 and EP16 both runnable.
         self.assertEqual(

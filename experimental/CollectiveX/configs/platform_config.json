@@ -45,7 +45,7 @@
         "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7"
       }
     },
-    "b200-dgxc": {
+    "b200-nscale": {
       "arch": "sm100",
       "product": "b200",
       "image": "lmsysorg/sglang:v0.5.11-cu130",
@@ -55,18 +55,16 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
-      "fabric": {"nic": "ConnectX-7 400GbE", "switch": "Whitebox Tomahawk3 leaf + Tomahawk4 (RoCE)"},
+      "ll_backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
+      "fabric": {"nic": "8x ConnectX-7-class 400G InfiniBand rails (bare metal, gdrdrv)", "switch": "InfiniBand (model not surveyed)"},
       "operator": {
-        "partition": "gpu-2",
+        "partition": "batch_1",
         "account": "benchmark",
-        "qos": "gpu-2_qos",
-        "squash_dir": "/home/sa-shared/containers",
-        "exclude_nodes": "gpu-2-6"
+        "squash_dir": "/data/home/sa-shared/sqsh"
       },
       "network": {
-        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_6,mlx5_7",
-        "ib_gid_index": "3"
+        "socket_ifname": "bond0",
+        "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11"
       }
     },
     "b300": {
