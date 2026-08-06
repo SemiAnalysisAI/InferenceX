@@ -412,6 +412,38 @@ else
 fi
 CONTEXT_LEN=1048576
 
+# ROCm RoPE + KV-cache fusion (opt-in, ROCM_ROPE_KVCACHE_FUSION=1).
+#
+# vLLM's O3 defaults enable fuse_rope_kvcache / fuse_rope_kvcache_cat_mla on
+# ROCm (see enable_rope_kvcache_fusion in vllm/config/vllm.py), but both land
+# disabled here. The gate is splitting_ops, not the custom-op list: when
+# splitting_ops is left unset, set_splitting_ops_for_v1 populates it from
+# _attention_ops -- which appends unified_kv_cache_update /
+# unified_mla_kv_cache_update -- and then explicitly disables fuse_rope_kvcache
+# with "splitting_ops is None and Inductor graph partition is not enabled".
+# The profiled run shows exactly that list, so the fusion never ran.
+# ("+rotary_embedding" is appended automatically when the flag survives, so it
+# does not need to be listed by hand.)
+#
+# Passing an explicit empty splitting_ops takes the documented escape hatch.
+# FULL_DECODE_ONLY is unaffected by the empty list: the downgrade branch for
+# empty splitting_ops only rewrites PIECEWISE and FULL_AND_PIECEWISE.
+#
+# Trace evidence for the payoff (194 decode steps, MI355X agentic):
+#   _inverse_rope_gptj_kernel                    78.6 ms  n=12800  6.14 us avg
+#   fusedDeepseekV4QNormRopeKVRopeQuantInsert    80.3 ms  n=12800  6.27 us avg
+#   _finalize_norm_rope_quant_store              31.8 ms  n=6200   5.14 us avg
+# All three sit on the ~4 us MI355X dispatch floor, so most of that time is
+# launch overhead rather than work. rope_kvcache_fusion_max_token_num defaults
+# to 256 and decode steps here verify 16-28 tokens, so decode stays in range.
+#
+# Left off by default: this changes the compiled graph structure and needs its
+# own accuracy gate before it becomes the baseline.
+COMPILATION_CONFIG='{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
+if [ "${ROCM_ROPE_KVCACHE_FUSION:-0}" = "1" ]; then
+    COMPILATION_CONFIG='{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","splitting_ops":[],"pass_config":{"fuse_rope_kvcache":true,"fuse_rope_kvcache_cat_mla":true}}'
+fi
+
 # MTP: cudagraph capture sizes are in TOKENS. With num_speculative_tokens=N,
 # every uniform decode batch of S seqs verifies S*(1+N) tokens, so capture the
 # explicit multiples (1+N), 2*(1+N), ..., MAX_NUM_SEQS*(1+N) -- one graph per
@@ -442,8 +474,17 @@ fi
 # "available KV cache memory ... larger than ..." on the tighter (eval-only)
 # relaunch. 0.86 (247.7 GiB) adds ~2.6 GiB, nearly all to KV (~26.5 GiB), so
 # the KV check clears with margin while still keeping ~8 GiB free-mem headroom
-# below the ~256 GiB hard-fail ceiling. Additional 0.9 for mooncake headroom
-GPU_MEM_UTIL=0.90
+# below the ~256 GiB hard-fail ceiling.
+#
+# The DRAM-offload arms (mooncake/lmcache) wanted extra headroom and pushed this
+# to 0.90, but those arms are commented out in amd-master.yaml -- the active arms
+# are both kv-offloading:none. 0.90 (259.2 GiB) is above the ~256 GiB hard-fail
+# ceiling the comment above documents, so keep the derived 0.86 for GPU-resident
+# runs and only raise it when a DRAM-offload arm is re-enabled.
+GPU_MEM_UTIL=0.86
+if [ "$KV_OFFLOADING" != "none" ]; then
+    GPU_MEM_UTIL=0.90
+fi
 
 # Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
 # vLLM's default 300s worker RPC timeout, killing the engine with
@@ -472,7 +513,7 @@ VLLM_CMD=(
     "${MODE_ARGS[@]}"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --moe-backend aiter
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
+    --compilation-config "$COMPILATION_CONFIG"
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4

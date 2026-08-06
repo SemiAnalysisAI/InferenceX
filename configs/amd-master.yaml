@@ -1550,9 +1550,31 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       search-space:
       #- { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "v0.3.12" }, spec-decoding: mtp, conc-list: [48], router: { name: vllm-router, version: "0.1.14" } }
       #- { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "v0.5.2" }, spec-decoding: mtp, conc-list: [48], router: { name: vllm-router, version: "0.1.14" } }
-      # DP+TP 160.9 GiB   
-      # TP    134.9 GiB   
+      # DP+TP 160.9 GiB
+      # TP    134.9 GiB
+      # Baseline: pure TP8, no EP. This is the arm the MI355X agentic profile was
+      # captured on (--tensor-parallel-size 8 --data-parallel-size 1, no all2all).
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 16, 32, 40, 48] }
+      # DEP8: DP-attention + EP8. The entry comment above ("Sweeps DP-attention
+      # on/off and EP=8") and the script header both describe this arm, but no
+      # search-space row enabled it -- every row was ep:1/dp-attn:false, so
+      # neither --enable-expert-parallel nor the DP path was ever exercised.
+      #
+      # Profile-driven motivation (MI355X dsv4 agentic trace, 200 steps):
+      #   * MoE GEMMs scale super-linearly with per-rank batch -- mfma_moe1 x2.16
+      #     and mfma_moe2 x2.78 going from 16 to 28 decode tokens/step. They are
+      #     latency-bound at small batch, so raising per-rank batch via DP-attn
+      #     is a direct win on 1643 ms (20.6% of all kernel time).
+      #   * cross_device_reduce_2stage costs 577.8 ms (7.2%) as the per-layer MoE
+      #     allreduce that EP replaces with all2all dispatch/combine.
+      # Both effects need measurement, not extrapolation: all2all on MI355X is
+      # many small messages and may not beat the fused allreduce. Hence this arm.
+      #
+      # conc starts at 32: under DP-attn --max-num-seqs is applied PER DP rank,
+      # so conc<8 leaves most of the 8 ranks empty and DEP is strictly worse.
+      # router is required -- it expands the single HTTP backend into one logical
+      # worker per DP rank and stamps X-data-parallel-rank on forwarded requests.
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64], router: { name: vllm-router, version: "0.1.14" } }
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
