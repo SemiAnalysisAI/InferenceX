@@ -5485,3 +5485,4 @@
     - "Keep server-reported completion-token counts aligned with the full HTTP response lifecycle when Kimi-K3 stops emitting parsed content at an end-of-message marker but continues raw generation."
     - "Exercise the Kimi-K3 B300 concurrency-1 GPU-resident and DRAM-offload points as the targeted regression for the previously inflated visible-content interactivity calculation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2504
+  
