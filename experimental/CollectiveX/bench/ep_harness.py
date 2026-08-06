@@ -345,10 +345,8 @@ def _reduce_vec_median_spread(torch, dist, device, vals):
 def _gather_scalar(torch, dist, device, val):
     """Every rank's copy of one per-rank scalar, in rank order, identical on every rank.
 
-    For the chain-health diagnostics, whose per-rank statistic is already a single number per
-    trial: the caller picks the cross-rank reduction (median for a shared-cadence property,
-    max-magnitude for an any-rank-trips-it property) from the same gathered list, so the two
-    cannot disagree about which trial they describe.
+    The chain-health caller picks its own cross-rank reduction (median or max-magnitude) from
+    the one gathered list, so two reductions cannot disagree about which trial they describe.
     """
     local = torch.tensor([float(val)], device=device, dtype=torch.float64)
     gathered = [torch.empty_like(local) for _ in range(dist.get_world_size())]
@@ -1125,17 +1123,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # minimum is the last-entering rank's window, which is the op with the wait excluded.
             dfloor_pool[T] += _reduce_vec(torch, dist, device, chained["dispatch"], MIN)
             cfloor_pool[T] += _reduce_vec(torch, dist, device, chained["combine"], MIN)
-            # Chain-health scalars, one per trial. `interpair_gap_us` is the start-to-start
-            # median minus the pair-window median: the per-pair cost of everything OUTSIDE the
-            # published window (this harness's two record() calls plus any inter-pair stall).
-            # It is the in-artifact regression guard for instrumentation self-charging -- the
-            # first version of the chain put four more events INSIDE the window and the fleet
-            # published a ~flat 10-30us host constant as transport; had this field existed, one
-            # artifact would have shown it. `settle_drift_us` is the late-half minus early-half
-            # period median: a chain still converging (or a device still clocking up) drifts,
-            # and `chain_drop` alone cannot prove it didn't. Median across ranks for the gap (a
-            # shared-cadence property); max-magnitude for the drift (one unsettled rank taints
-            # the trial, and the sign says which way it moved).
+            # Chain-health scalars, one per trial. `interpair_gap_us` = start-to-start median
+            # minus pair-window median: the per-pair cost OUTSIDE the published window (the two
+            # record() calls plus any inter-pair stall) -- the in-artifact regression guard for
+            # instrumentation self-charging, the defect class benchmark_chain's WHY TWO PASSES
+            # describes. `settle_drift_us` = late-half minus early-half period median: the
+            # convergence proof `chain_drop` alone cannot give. Cross-rank median for the gap (a
+            # shared-cadence property); max-magnitude, signed, for the drift (one unsettled rank
+            # taints the trial).
             if len(pair) >= 2 and chained["start_to_start"]:
                 s2s_p50 = _pcts(chained["start_to_start"])["p50"]
                 gaps = _gather_scalar(
@@ -1293,32 +1288,24 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "period": _component(_pcts(period_pool[T]), len(period_pool[T])),
                 "stage": _component(sp, len(s)),
             },
-            # Per-op floors from the FLOORS sibling chain (op-window events only; the period
-            # chain above carries none -- see benchmark_chain's WHY TWO PASSES): the cross-rank
-            # MINIMUM of each op's window, i.e. the last-entering rank's, which is the one that
-            # waited least. These are NOT the chained cost of dispatch and combine -- an
-            # unsynchronized chain parks each rank's inter-rank wait in whichever op window it
-            # blocked in, so only the minimum is an operation cost and only the pair period above
-            # is a pipeline cost. They are here because the floor tracks profiler kernel time
-            # closely enough to substitute for one, and because floor-vs-period is what shows how
-            # much of a pair is transport.
+            # Per-op floors from the FLOORS sibling chain (the period chain carries no op
+            # events): cross-rank MINIMUM of each op's window -- the last-entering rank's, the
+            # one that waited least. NOT the chained cost of dispatch/combine (waits park in op
+            # windows; only the minimum is an operation cost, only the pair period a pipeline
+            # cost). Here because the floor tracks profiler kernel time to ~10%, and
+            # floor-vs-period shows how much of a pair is transport.
             "chain_floor_us": {
                 "combine": _component(_pcts(cfloor), len(cfloor), origin=CHAIN_FLOOR_ORIGIN),
                 "dispatch": _component(_pcts(dfloor), len(dfloor), origin=CHAIN_FLOOR_ORIGIN),
             },
             # Whether the chain was actually the steady state the period claims to be.
-            # `pair_spread_us`: per-iteration cross-rank (max-min) of the pair window -- small
-            # next to `pair_period` means every rank held the same cadence; large means a paced
-            # or slow rank, and the point should not be read as a steady-state period at all.
-            # `interpair_gap_us`: start-to-start median minus pair-window median, per trial --
-            # the per-pair cost sitting OUTSIDE the published window (the harness's own two
-            # record() calls plus any inter-pair stall). Growth here is the measurement loop
-            # contaminating the chain, not the fabric slowing down; it exists because the
-            # first version of this chain charged four inner record() calls INTO the window and
-            # published a ~flat 10-30us host constant as transport at the bottom of the ladder.
-            # `settle_drift_us`: late-half minus early-half period median, per trial, signed,
-            # cross-rank max-magnitude -- proof the chain converged, which `chain_drop` assumes
-            # but cannot show.
+            # `pair_spread_us`: per-iteration cross-rank (max-min) of the pair -- large next to
+            # `pair_period` means a paced or slow rank, and the point is not a steady-state
+            # period. `interpair_gap_us`: the per-pair cost OUTSIDE the published window; growth
+            # here is the measurement loop contaminating the chain, not the fabric slowing down.
+            # `settle_drift_us`: signed late-half minus early-half period -- proof the chain
+            # converged, which `chain_drop` assumes but cannot show. See Pass 2b for how each is
+            # reduced.
             "chain_health": {
                 "interpair_gap_us": _component(_pcts(chain_gap), len(chain_gap)),
                 "pair_spread_us": _component(_pcts(chain_spread), len(chain_spread)),

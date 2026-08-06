@@ -1,28 +1,18 @@
 #!/usr/bin/env python3
 """Contract for the chained steady-state pair period.
 
-`roundtrip` drains the GPU around every pair, so it reports the latency of an idle pipeline
-and charges inter-rank entry stagger to whichever op the ranks happened to enter unevenly. A
-decode loop never stops between layers, so what it actually pays per layer is the free-running
-PERIOD of the dispatch->combine chain. Measuring that means issuing pairs back-to-back with no
-host sync inside the loop, which is exactly what is delicate about it: these tests pin the call
-order, that a hoisted stage stays out of every pair window, that the discarded iterations are
-the head (pipeline fill) and not the tail, and that the opt-in re-alignment barrier lands
-BETWEEN pairs and never between a dispatch and its own combine.
+What a decode loop pays per layer is the free-running PERIOD of the dispatch->combine chain,
+measured with no host sync inside the loop -- which is exactly what is delicate: these tests pin
+the call order, the staged hoist, head-not-tail dropping, and the barrier landing BETWEEN pairs.
+The method runs TWO sibling chains (floors: op events only; period: outer pair events only)
+because its first version's six record() calls per pair published the four inner ones as a
+~flat 10-30us of fake transport wherever the device outran the host (+20-38% at T=1,
+fleet-wide) -- so event PLACEMENT per chain is itself contract here.
 
-The method runs TWO sibling chains -- a floors chain carrying only per-op events, then a period
-chain carrying only the outer pair events -- because its first version timed one chain with six
-record() calls per pair and, wherever the device outran the host, published the four inner ones
-as a ~flat 10-30us of fake transport (+20-38% on the T=1 period, fleet-wide). The event
-placement per chain is therefore itself contract here: a period pair carries NOTHING between
-its two collectives, and every event a floors pair carries hugs an op boundary.
-
-Torch-free: a stub `torch` supplies CUDA events whose elapsed_time reads a clock the fake
-backend advances by a fixed cost per operation, so every reported window has an exact expected
-value and a window that brackets the wrong work is a numeric mismatch, not a judgement call.
-Event record() calls are logged into the same trace as the backend's operations, so "which
-events sit inside which chain" is asserted on the trace, not inferred from timings the stub
-clock cannot see (host cost is exactly what the stub charges nothing for).
+Torch-free: stub CUDA events read a clock only the fake backend's operations advance, so every
+window has an exact expected value; record() calls are logged into the same trace as the ops,
+so placement is asserted on the trace, not inferred from timings the stub cannot see (host cost
+is exactly what the stub charges nothing for).
 """
 from __future__ import annotations
 
@@ -58,12 +48,8 @@ class _Clock:
 
 
 class _FakeEvent:
-    """torch.cuda.Event stand-in: records the clock, reports ms between two records.
-
-    record() also logs into the shared call trace, so event PLACEMENT relative to the backend's
-    operations is assertable -- the two-pass split exists precisely because inner records are
-    host work the device clock cannot see.
-    """
+    """torch.cuda.Event stand-in: records the clock, reports ms between two records, and logs
+    record() into the shared call trace so event PLACEMENT is assertable."""
 
     def __init__(self, clock, log=None):
         self._clock = clock
@@ -130,6 +116,7 @@ class _ChainBackend(ep_backend.EPBackend):
     def __init__(self, stage_device_work=True, fp8_consume="native", precision="fp8",
                  dispatch_schedule=None):
         self.calls: list[str] = []
+        self.consumed: list = []
         self.clock = _Clock()
         self.stage_device_work = stage_device_work
         self.fp8_consume = fp8_consume
@@ -156,6 +143,7 @@ class _ChainBackend(ep_backend.EPBackend):
 
     def combine(self, problem, handle):
         self.calls.append("combine")
+        self.consumed.append(handle.combine_input)
         self.clock.advance(COMBINE_MS)
         return handle.combine_input
 
@@ -175,12 +163,8 @@ def new_problem():
 
 
 def timed_tail(calls, iters, per_pair):
-    """The PERIOD chain's operations: the last `per_pair * iters` op entries.
-
-    Trailing syncs and event records are removed -- event placement has its own helper and its
-    own tests. Everything before the tail is warm-up, the untimed staged hoist, and the floors
-    chain, which have their own contracts.
-    """
+    """The PERIOD chain's ops: the last `per_pair * iters` op entries, records/syncs removed
+    (placement has its own helper; everything earlier is warm-up, hoist, and the floors chain)."""
     trace = [entry for entry in calls if entry != "record"]
     while trace and trace[-1] in ("sync", "all_reduce", "dist_barrier"):
         trace.pop()
@@ -193,12 +177,8 @@ def ops_only(calls):
 
 
 def chain_sections(calls):
-    """(floors_chain, period_chain) slices of the raw trace, records included.
-
-    The two timed chains are the trace between the last three syncs: whatever precedes them
-    (warm-up iterations, the staged hoist) always ends in its own sync, the floors chain ends in
-    the inter-chain sync, and the period chain ends in the final one.
-    """
+    """(floors_chain, period_chain) raw-trace slices: the chains sit between the last three
+    syncs (warm-up/hoist end in their own, floors in the inter-chain one, period in the last)."""
     sync_idx = [i for i, entry in enumerate(calls) if entry == "sync"]
     end_period, end_floors = sync_idx[-1], sync_idx[-2]
     start_floors = sync_idx[-3] + 1 if len(sync_idx) >= 3 else 0
@@ -242,19 +222,21 @@ class ChainedPairPeriod(unittest.TestCase):
         )
 
     def test_a_hoisted_stage_runs_once_and_stays_out_of_every_pair_window(self):
-        # Same hoist benchmark_roundtrip performs: with a real device copy in `stage`, the
-        # conversion is materialised once, untimed, so the chained pair is dispatch -> combine
-        # in BOTH sibling chains.
-        for precision in ("bf16", "fp8"):
-            with self.subTest(precision=precision):
+        # Same hoist benchmark_roundtrip performs: the conversion is materialised once, untimed,
+        # so the chained pair is dispatch -> combine in BOTH sibling chains -- and every chained
+        # combine consumes the staged tensor, not a fresh one. The dequant hatch is fp8-only, so
+        # a bf16 row keeps its hoist even with the hatch set.
+        for precision, consume in (("bf16", "native"), ("fp8", "native"), ("bf16", "dequant")):
+            with self.subTest(precision=precision, consume=consume):
                 iters = 6
                 backend = _ChainBackend(
-                    stage_device_work=True, fp8_consume="native", precision=precision
+                    stage_device_work=True, fp8_consume=consume, precision=precision
                 )
                 self.assertTrue(backend.stage_excluded_from_roundtrip)
                 with fake_torch(backend.clock, backend.calls):
                     series = backend.benchmark_chain(new_problem(), 0, iters, 2)
                 self.assertEqual(backend.calls.count("stage"), 1)
+                self.assertEqual(backend.consumed, ["staged-by-stage"] * (2 * iters + 1))
                 floors, period = chain_sections(backend.calls)
                 self.assertEqual(ops_only(floors), ["dispatch", "combine"] * iters)
                 self.assertEqual(ops_only(period), ["dispatch", "combine"] * iters)
@@ -352,15 +334,10 @@ class ChainedPairPeriod(unittest.TestCase):
 
 
 class EventPlacement(unittest.TestCase):
-    """The two-pass contract itself: which events each sibling chain is allowed to carry.
+    """The two-pass contract itself: which events each sibling chain may carry.
 
-    The first version of `benchmark_chain` ran ONE chain with six record() calls per pair.
-    Wherever the device drained faster than the host enqueued -- the bottom of the token ladder
-    -- every event executed the moment it was issued, the pair window degenerated to host
-    elapsed time, and the four inner records published as a ~flat 10-30us of fake transport:
-    +20-38% on the T=1 period, on every vendor and fabric at once. The stub clock charges host
-    work nothing, so these tests assert the PLACEMENT of the records in the trace -- the only
-    property of the loop the defect depended on.
+    The stub clock charges host work nothing, so these assert record PLACEMENT in the trace --
+    the only property of the loop the six-events defect depended on (see the module docstring).
     """
 
     def _sections(self, **backend_kwargs):
@@ -408,23 +385,10 @@ class EventPlacement(unittest.TestCase):
             ["record", "dispatch", "record", "record", "combine", "record"] * iters,
         )
 
-    def test_the_floors_chain_runs_before_the_period_chain(self):
-        # Order is part of the contract: the instrumented chain doubles as settling for the
-        # lean one, so the period is measured on the better-settled device.
-        iters, floors, period = self._sections(
-            stage_device_work=False, fp8_consume="native", precision="bf16"
-        )
-        self.assertEqual(floors.count("record"), 4 * iters)
-        self.assertEqual(period.count("record"), 2 * iters)
-
 
 class ChainBarrier(unittest.TestCase):
-    """The escape valve for a backend that wedges when pairs are free-running.
-
-    It re-aligns the ranks BETWEEN pairs. Between a dispatch and its own combine it would do
-    the opposite of its job: that is the window whose overlap the period is measuring, and a
-    collective dropped into it serialises the very thing under test.
-    """
+    """The escape valve for a backend that wedges free-running: it re-aligns ranks BETWEEN
+    pairs -- inside a pair it would serialise the very overlap under test."""
 
     def test_off_by_default_so_no_backend_pays_for_a_barrier_it_did_not_ask_for(self):
         self.assertFalse(ep_backend.EPBackend.chain_barrier)
@@ -469,13 +433,9 @@ class ChainBarrier(unittest.TestCase):
 
 
 class ChainBudgetGate(unittest.TestCase):
-    """A chain budget that could publish nothing must stop the leg before it measures.
-
-    `pair_period` reduced from zero kept pairs serialises as merely "unavailable", which reads
-    identically to a backend that could not be chained at all -- so a drop at or past the
-    iteration count would spend the whole leg and then emit a row nobody can interpret. The
-    gate sits above run_sweep's lazy torch imports, which is what makes it reachable here.
-    """
+    """A chain budget that could publish nothing must stop the leg before it measures: zero
+    kept pairs serialises as "unavailable", indistinguishable from a backend that cannot chain.
+    The gate sits above run_sweep's lazy torch imports, which is what makes it reachable here."""
 
     @staticmethod
     def _args(**updates):
@@ -514,14 +474,8 @@ class ChainBudgetGate(unittest.TestCase):
 
 
 class ChainComponentContract(unittest.TestCase):
-    """The two chain contracts a driven sweep does not show.
-
-    Field names, origins and placement are asserted against a real emitted row in
-    test_run_sweep_chain.py, which is strictly stronger than reading them out of the source, so
-    the AST guards that used to live here are gone. What is left is what that run does not
-    exercise: the constants a consumer imports by name, and `_component`'s behaviour on the two
-    paths no chain row takes.
-    """
+    """What the driven sweep (test_run_sweep_chain.py) does not exercise: the constants a
+    consumer imports by name, and `_component` on the two paths no chain row takes."""
 
     def test_the_origin_constants_carry_the_published_values(self):
         self.assertEqual(ep_harness.CHAIN_PERIOD_ORIGIN, "chained-median")

@@ -192,86 +192,11 @@ class WarmStaging(unittest.TestCase):
         self._warm(b, 5)
         self.assertEqual(b.calls.count("stage"), 5)
 
-class ChainStaging(unittest.TestCase):
-    """The chained period inherits the roundtrip's staging rule, or it measures a third thing.
+# The chained-period staging contract (hoist-once, inline no-op stage, the dequant hatch,
+# and that every chained combine consumes the staged tensor) lives in
+# tests/test_chain_period.py, which asserts it per sibling chain WITH window values --
+# strictly stronger than the call-order mirror that used to sit here.
 
-    `benchmark_chain` reuses `run_roundtrip`'s branch structure rather than calling it, so that
-    per-op events can bracket dispatch and combine individually. That duplication is exactly
-    where the two can drift apart: a chain that stages on every iteration would publish a
-    period for a pipeline no backend runs, and one that hoists under the `dequant` hatch would
-    drop the conversion the hatch exists to model. These mirror the four gate cases above.
-    """
-
-    @staticmethod
-    def _chain(backend, iters, drop=0):
-        # `benchmark_chain` imports torch for its events and a post-loop synchronize; a stub
-        # keeps this runnable without a GPU. The call order is the subject here, not the times.
-        fake = types.ModuleType("torch")
-        fake.cuda = types.SimpleNamespace(
-            Event=lambda *args, **kwargs: types.SimpleNamespace(
-                record=lambda *a, **k: None, elapsed_time=lambda *a, **k: 0.0,
-            ),
-            synchronize=lambda: None,
-        )
-        saved = sys.modules.get("torch")
-        sys.modules["torch"] = fake
-        try:
-            return backend.benchmark_chain(types.SimpleNamespace(), 0, iters, drop)
-        finally:
-            if saved is None:
-                del sys.modules["torch"]
-            else:
-                sys.modules["torch"] = saved
-
-    def test_a_hoisted_stage_is_materialised_once_for_the_whole_chain(self):
-        # MoRI/FlashInfer BF16 and every native-consume FP8 row: the copy is lifted, so each
-        # chained iteration is dispatch -> combine and nothing else.
-        for precision in ("bf16", "fp8"):
-            with self.subTest(precision=precision):
-                iters = 4
-                b = _StubBackend(
-                    stage_device_work=True, fp8_consume="native", precision=precision
-                )
-                self._chain(b, iters)
-                self.assertEqual(b.calls.count("stage"), 1)
-                self.assertEqual(
-                    b.calls[-2 * iters:],
-                    ["dispatch", "combine(staged-by-stage)"] * iters,
-                )
-
-    def test_a_no_op_stage_stays_inline_in_the_chain(self):
-        # deepep-v2 / uccl-ep / nccl-ep at BF16: nothing to lift, and lifting anyway would hand
-        # a low-latency backend a view into its double-buffered receive. Both sibling chains
-        # stage, so the inline count is doubled (the tail slice below is the period chain).
-        iters = 4
-        b = _StubBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
-        self._chain(b, iters)
-        self.assertEqual(b.calls.count("stage"), 2 * iters)
-        self.assertEqual(
-            b.calls[-3 * iters:],
-            ["dispatch", "stage", "combine(staged-by-stage)"] * iters,
-        )
-
-    def test_the_dequant_hatch_puts_the_conversion_back_in_every_iteration(self):
-        iters = 4
-        b = _StubBackend(stage_device_work=True, fp8_consume="dequant", precision="fp8")
-        self._chain(b, iters)
-        self.assertEqual(b.calls.count("stage"), 2 * iters)
-        self.assertEqual(
-            b.calls[-3 * iters:],
-            ["dispatch", "stage", "combine(staged-by-stage)"] * iters,
-        )
-
-    def test_the_hatch_does_not_reach_bf16_rows_in_the_chain_either(self):
-        # The hatch is about fp8 consumption; a BF16 row has no conversion to model, so its
-        # chain keeps the hoist.
-        iters = 4
-        b = _StubBackend(stage_device_work=True, fp8_consume="dequant", precision="bf16")
-        self._chain(b, iters)
-        self.assertEqual(b.calls.count("stage"), 1)
-        self.assertEqual(
-            b.calls[-2 * iters:], ["dispatch", "combine(staged-by-stage)"] * iters,
-        )
 
 class SteadyStatePeriod(unittest.TestCase):
     """`period` is opt-in, because the overlap it measures is only sound for some backends.

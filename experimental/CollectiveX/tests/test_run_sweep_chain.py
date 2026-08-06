@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
-"""Driven contract for the chained regime's oracle gate and its barrier-mode suppression.
+"""Driven contract for the chained regime: run_sweep end to end against stub torch/dist/
+routing and a stub backend, asserted on the artifact it writes -- field presence in source says
+nothing about a real row's origin, sample count, or tri-state.
 
-These drive `run_sweep` end to end against stub torch/dist/routing modules and a stub backend,
-then assert on the artifact it writes. That is the level the two review amendments actually
-live at: whether a field name appears somewhere in the module says nothing about whether a real
-row carries it with the right origin, the right sample count and the right tri-state.
-
-SCOPE -- wiring, not arithmetic. `_run_expert_oracle` is replaced by a scripted verdict, so what
-is covered here is that the chained oracle RUNS once per ladder point after that point's final
-chain trial, with Pass 3's invocation shape, and that its verdict reaches
-`correctness.chain_regime_passed`, `correctness.passed`, `correctness.max_relative_error` and
-the process exit code -- and that barrier mode skips it. The oracle's own expected-combine math
-is a different subject with a different fixture (it needs real tensors): nothing here would
-catch a wrong expectation, only a verdict that was computed and then dropped on the floor.
+SCOPE -- wiring, not arithmetic: `_run_expert_oracle` is a scripted verdict, so this covers that
+the chained oracle RUNS once per point after its final chain trial with Pass 3's shape, that the
+verdict reaches `chain_regime_passed`/`passed`/`max_relative_error` and the exit code, and that
+barrier mode skips it. The oracle's own math needs real tensors and lives elsewhere.
 """
 from __future__ import annotations
 
@@ -247,16 +241,10 @@ def make_args(out):
 
 
 def phases_by_index(oracle_count, points):
-    """Which pass each oracle call belongs to, by position.
-
-    Pass 1 opens with one call per ladder point and Pass 3 closes with one per point, so
-    anything between them is the chained gate. Deliberately positional rather than inferred
-    from neighbouring chain calls: in barrier mode the chained gate does not run, and Pass 3's
-    first call then sits immediately after a chain call too, which is exactly where a
-    neighbour rule quietly mislabels it. The tests below assert this structure directly on the
-    raw event log, so nothing here is assumed -- this only spares the failure cases from
-    hardcoding a call index.
-    """
+    """Which pass each oracle call belongs to, by position (Pass 1 opens and Pass 3 closes
+    with one per point; the middle is the chained gate). Positional on purpose: in barrier mode
+    Pass 3's first call sits right after a chain call, where a neighbour rule mislabels it. The
+    tests assert the structure on the raw log; this only spares hardcoded call indices."""
     return (
         ["pre"] * points
         + ["chain"] * (oracle_count - 2 * points)

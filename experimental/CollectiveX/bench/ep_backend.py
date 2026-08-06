@@ -485,96 +485,62 @@ class EPBackend(abc.ABC):
             samples.append(start.elapsed_time(end) * 1000.0 / pairs)
         return samples
 
-    # Whether this backend needs its ranks re-aligned between chained pairs. `benchmark_chain`
-    # runs pairs back-to-back with no host sync -- that IS the measurement -- but the same rank
-    # drift `pipeline_pairs` reasons about applies: a receive buffer that cannot absorb roughly
-    # one iteration of drift would be read half-written. A backend that wedges sets this and gets
-    # a one-element on-stream all_reduce between pairs.
+    # Whether this backend needs its ranks re-aligned between chained pairs (a one-element
+    # on-stream all_reduce): the rank drift `pipeline_pairs` reasons about would read a receive
+    # buffer that cannot absorb ~one iteration of it half-written. SETTING IT SUPPRESSES
+    # PUBLICATION -- the barrier adds ~10us and removes the cross-pair overlap, a different
+    # quantity from the free-running period, and the published period must have exactly ONE
+    # definition -- so `run_sweep` emits every chained field as unavailable in barrier mode and
+    # sends the numbers to rank-0 stdout, with `implementation.chain_barrier` as the record of
+    # why. The valve is a bring-up diagnostic; needing it is a bug to fix, not a comparison
+    # variant. Defaults live here, not in the adapters, so the decision audits in one place.
     #
-    # SETTING IT SUPPRESSES PUBLICATION. The barrier adds its own ~10us and removes the cross-pair
-    # overlap, so what the chain then measures is a different quantity from the free-running period
-    # this suite defines -- and the published period has to have exactly ONE definition, or two
-    # cells ranked against each other may not be answering the same question. So `run_sweep` emits
-    # `pair_period`, `chain_floor_us` and `chain_health` as unavailable in barrier mode and sends
-    # the measured numbers to rank-0 stdout instead, with `implementation.chain_barrier` left as
-    # the record of why. The valve is a BRING-UP DIAGNOSTIC for a backend that cannot be chained
-    # free: a backend needing it is a bug to fix, not a variant to compare. Defaults live here,
-    # not in the adapters, so the decision is auditable in one place.
-    #
-    # NOTHING SETS IT TODAY, on evidence rather than optimism. deepep-v2's NORMAL mode was the one
-    # genuinely unknown cell -- ElasticBuffer's inter-iteration flow control had not been audited
-    # for un-synced chaining -- so it was hand-probed on b200 (2026-08-06, pin 01dc3aaa, on the
-    # then-current virtualized dgxc pool; the CI pool has since moved to nscale bare metal) with 256
-    # un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over that pool's RoCE) at both precisions:
-    # all four passed, with finite outputs, timed inputs unchanged, and cross-rank period agreement
-    # within 1us. Every other backend either double-buffers per dispatch (deepep-v2/uccl-ep
-    # low-latency), enforces strict pairing through its own contract flags (MoRI, FlashInfer EP),
-    # or completes each op on a reusable handle (nccl-ep). The valve stays implemented because the
-    # next backend or the next pin is not covered by that probe.
+    # NOTHING SETS IT TODAY, on evidence: deepep-v2 NORMAL (the one unaudited cell) was
+    # hand-probed with 256 un-synced pairs at T=128, EP8+EP16, both precisions (2026-08-06, pin
+    # 01dc3aaa, the then-current dgxc pool's hybrid GIN over RoCE) -- all passed, outputs finite,
+    # inputs unchanged, cross-rank period agreement within 1us. Every other backend
+    # double-buffers per dispatch, enforces strict pairing by contract, or completes each op on
+    # a reusable handle. The valve stays implemented because the next backend or pin is not
+    # covered by that probe.
     chain_barrier = False
 
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync: a floors chain, then a period chain.
 
-        This is the number a serving stack pays. `roundtrip` drains the GPU around every pair, so
-        it reports an idle pipeline's latency and charges inter-rank entry stagger to whichever
-        component the ranks happened to enter unevenly; a decode loop never stops between layers,
-        so the collectives phase-lock the ranks and entry skew amortises across the chain instead
-        of landing on one op. Both are real -- see `benchmark_period` for the same argument at the
-        level of the opt-in `period` component -- but only this one is measured for every backend,
-        because here the pairing is preserved exactly as `run_roundtrip` orders it (dispatch, then
-        stage-or-staged, then combine) and the paired-API backends therefore stay in contract.
+        This is the number a serving stack pays: a decode loop never stops between layers, so the
+        collectives phase-lock the ranks and entry skew amortises across the chain instead of
+        landing on one op the way `roundtrip`'s drained windows charge it. The pairing is exactly
+        `run_roundtrip`'s (dispatch, then stage-or-staged, then combine), so paired-API backends
+        stay in contract, and unlike the opt-in `period` this is measured for every backend.
 
-        WHY TWO PASSES. This method's first version timed one chain with six record() calls per
-        pair -- pair start/end plus both op windows. When the device drains faster than the host
-        enqueues (the bottom of the ladder), every event's timestamp is set the moment the idle
-        stream reaches it, so the pair window degenerates to HOST elapsed time and the four inner
-        record() calls (plus the glue between them) are charged into the published period. The
-        fleet said so before a profiler did: period minus the sum of the op floors sat at a
-        roughly T-independent 10-30us on every vendor and fabric at once -- a host constant, not
-        transport -- inflating the T=1 period by 20-38%. So the statistics are now collected from
-        two sibling chains, each carrying only the events its statistic needs:
+        WHY TWO PASSES. The first version timed one chain with six record() calls per pair.
+        Wherever the device drains faster than the host enqueues (the bottom of the ladder), every
+        event executes the moment it is issued, the pair window degenerates to HOST elapsed time,
+        and the four inner records plus glue were published as transport: period minus floor-sum
+        sat at a ~T-independent 10-30us on every vendor and fabric at once (+20-38% on the T=1
+        period). So each statistic now gets its own chain, carrying only the events it needs: a
+        FLOORS chain with op-window events only (the floor was never the contaminated statistic;
+        it tracks profiler kernel time to ~10%), then a PERIOD chain with one outer event pair and
+        NOTHING between its two collectives -- both records' host cost lands in the inter-pair
+        gap, outside the window, so the period carries what any uninstrumented caller pays. The
+        floors chain runs first (extra settling for the period chain; `drop` re-discards the
+        refill after the inter-chain synchronize). The period chain also yields a start-to-start
+        series whose median minus the window median is the per-pair apparatus residual, published
+        as `chain_health.interpair_gap_us` -- the in-artifact regression guard for this defect.
 
-          * FLOORS chain: op-window events only. Its per-op minima are the publishable floors,
-            and the records sit at the window edges, where they always were -- the floor was
-            never the contaminated statistic (it tracks profiler kernel time to ~10%).
-          * PERIOD chain: one pair-window event pair and nothing between the two collectives.
-            Both records' host cost lands in the inter-pair gap, OUTSIDE the window, so the
-            published period carries what any uninstrumented caller would pay -- launches, glue,
-            kernels -- and none of this harness's measurement apparatus.
+        WHY ONLY THE PAIR PERIOD AND THE PER-OP MINIMA ARE PUBLISHABLE. Un-synced, each rank's
+        inter-rank wait PARKS in whichever op window it blocks in: stable per rank, arbitrary
+        across ranks, bistable across identical runs -- while the pair period is conserved. A
+        chained per-op median therefore measures where the wait sat, not what the op cost;
+        cross-rank MIN removes it (the last rank in waited least). `run_sweep` enforces pair ->
+        cross-rank median, per-op -> cross-rank minimum, never a chained per-op median or p99.
 
-        The floors chain runs first: it doubles as extra settling for the period chain, and
-        `drop` re-discards the refill after the synchronize between them. The period chain also
-        yields a start-to-start series (pair i's start to pair i+1's start); its median minus the
-        pair-window median is the per-pair apparatus + stall residual, which `run_sweep` publishes
-        as `chain_health.interpair_gap_us` so a regression of this exact kind is visible in every
-        artifact instead of needing six of them side by side.
-
-        WHY ONLY THE PAIR PERIOD AND THE PER-OP MINIMA ARE PUBLISHABLE. Without a host sync the
-        ranks are free to arrive at each collective at slightly different times, and the resulting
-        wait has to be spent somewhere: it PARKS in whichever op window a given rank happens to
-        block in. That parking is stable per rank (so a single rank's per-op numbers look clean and
-        convincing), arbitrary across ranks (rank 3's dispatch is long exactly where rank 5's
-        combine is), and bistable across runs of the identical configuration -- while the sum, the
-        pair period, is conserved. So a chained per-op MEDIAN measures where the wait sat on that
-        run, not what the op cost, and the floors chain's per-op series is published only after a
-        cross-rank MIN: the last rank into a collective is the one that waited least, so its window
-        is the op's floor. `run_sweep` enforces that -- pair to a cross-rank median, dispatch and
-        combine to a cross-rank minimum, and never a chained per-op median or p99.
-
-        `drop` discards the head of each chain: the first pairs run into an empty pipeline and
-        measure fill, not period.
-
-        This is also a regime the correctness oracle covers. `run_sweep` runs the full expert
-        oracle once per ladder point against the state the last chain leaves behind, on top of the
-        drained checks it already ran before and after timing, and folds the result into the
-        point's verdict -- so a backend that transports correctly when drained but corrupts under
-        free-running pairs fails the case instead of publishing the suite's fastest period. The
-        method ends synchronized, so that check sees a settled communicator.
-
-        Under `chain_barrier` both chains still run but `run_sweep` publishes nothing from them
-        (see the attribute's comment), and skips the chained oracle with it: there is no chained
-        field left in the artifact for it to stand behind.
+        `drop` discards each chain's head (pipeline fill, not period). The regime is oracle-gated:
+        `run_sweep` reruns the full expert oracle against the state the last chain leaves behind
+        and folds it into the point's verdict, so silent chained corruption reds the case instead
+        of publishing the suite's fastest period; the method ends synchronized for that check.
+        Under `chain_barrier` both chains still run but nothing is published and the chained
+        oracle is skipped (see the attribute's comment).
 
         Returns a dict of post-`drop` series in microseconds: `pair` and `start_to_start` from
         the period chain (the latter one element shorter), `dispatch` and `combine` from the

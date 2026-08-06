@@ -299,49 +299,42 @@ backends stay in contract and `pair_period` excludes expert-output staging on th
 `roundtrip` does.
 
 Each trial runs **two sibling chains** of `chain_iters` (128) pairs, because the statistics must
-not carry the instrumentation that collects them. This method's first version ran ONE chain with
-six `record()` calls per pair — pair start/end plus both op windows. Wherever the device drains
-faster than the host enqueues (the bottom of the token ladder), every event executes the moment it
-is issued, the pair window degenerates to host elapsed time, and the four inner records plus the
-glue between them are charged into the published period. The fleet exposed it before a profiler
-did: period minus the sum of the op floors sat at a roughly T-independent 10–30µs on every vendor
-and fabric at once — a host constant, not transport — inflating T=1 periods by 20–38%. So now a
-**floors chain** runs first carrying only the four op-window events, and a **period chain** runs
-second carrying only the outer pair events, with nothing between its two collectives; both of the
-period chain's records land in the inter-pair gap, outside the published window, so the period
-carries what any uninstrumented caller pays — launches, glue, kernels — and none of the harness's
-measurement apparatus. (An eager-mode launch floor remains, as it does for any eager caller; a
-CUDA-graphs decode loop pays less host per pair than any eager harness can.)
+not carry the instrumentation that collects them. The first version ran ONE chain with six
+`record()` calls per pair; wherever the device drains faster than the host enqueues (the bottom
+of the ladder), every event executes the moment it is issued, the pair window degenerates to host
+elapsed time, and the four inner records plus glue were charged into the published period. The
+fleet exposed it before a profiler did: period minus floor-sum sat at a roughly T-independent
+10–30µs on every vendor and fabric at once — a host constant, not transport — inflating T=1
+periods by 20–38%. So a **floors chain** runs first carrying only the four op-window events, and
+a **period chain** runs second carrying only the outer pair events, nothing between its two
+collectives: both records' host cost lands in the inter-pair gap, outside the window, so the
+period carries what any uninstrumented caller pays. (An eager-mode launch floor remains, as for
+any eager caller; a CUDA-graphs decode loop pays less host per pair than any eager harness can.)
 
 Five statistics come out of the two chains, and deliberately only five:
 
 - `components.pair_period` (origin `chained-median`) — the per-pair period from the period chain,
-  reduced across ranks by MEDIAN. MAX is right for a drained component, because a layer is not
-  finished until its slowest rank is — but the period is not a completion time, it is a **rate**,
-  and since the collectives phase-lock every rank into the same cadence, a MAX would publish
-  whichever rank hiccuped on each iteration as the pipeline's speed.
+  reduced across ranks by MEDIAN. MAX is right for a drained component (a layer finishes with its
+  slowest rank), but the period is a **rate**: the collectives phase-lock every rank into one
+  cadence, and a MAX would publish whichever rank hiccuped as the pipeline's speed.
 - `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`) — each op's window from
-  the floors chain, reduced across ranks by MIN. The last rank into a collective is the one that
-  waited least, so its window is that operation's floor. Where this has been triangulated the floor
-  lands within ~10% of profiler kernel time, which makes it a free substitute for a Kineto trace.
-  Because the floors come from the FIRST sibling chain and the period from the second,
-  better-settled one, the two can sit a few microseconds apart in absolute level — a period a
-  single-digit-µs *below* the floor sum at the bottom of the ladder is that cross-chain offset,
-  not an error (observed on gb200/h200 fp8 low-latency in run 31089556516). Read floor-vs-period
-  as transport share, not as an identity that must close to zero.
-- `chain_health.pair_spread_us` — the per-iteration cross-rank max-minus-min of the pair, which is
-  the *proof* the median means anything. Small next to `pair_period` means every rank held the same
-  cadence; large means a paced or slow rank, and the point should not be read as a steady-state
-  period at all.
-- `chain_health.interpair_gap_us` — the period chain's start-to-start median minus its pair-window
-  median, once per trial: the per-pair cost sitting OUTSIDE the published window, which is the
-  harness's own two `record()` calls plus any inter-pair stall. This is the in-artifact regression
-  guard for exactly the six-events defect above — instrumentation creeping back into the loop grows
-  this gap, in every artifact, rather than needing six of them diffed side by side.
-- `chain_health.settle_drift_us` — the late-half minus early-half period median, once per trial,
-  signed, reduced across ranks by max-magnitude. `chain_drop` *assumes* the chain has settled by
-  the time the kept pairs start; this is the proof, and a chain still converging (or a device
-  clocking down mid-chain) publishes its drift instead of a clean-looking period.
+  the floors chain, reduced across ranks by MIN: the last rank into a collective waited least, so
+  its window is the op's floor, and it tracks profiler kernel time to ~10% — a free Kineto
+  substitute. The floors chain runs first and the period chain second, better-settled, so the two
+  can sit a few µs apart in level: a period single-digit-µs *below* the floor sum at small T is
+  that cross-chain offset, not an error (gb200/h200 fp8 LL, run 31089556516). Read
+  floor-vs-period as transport share, not an identity that must close to zero.
+- `chain_health.pair_spread_us` — per-iteration cross-rank max-minus-min of the pair: the *proof*
+  the median means anything. Large next to `pair_period` means a paced or slow rank, and the
+  point should not be read as a steady-state period at all.
+- `chain_health.interpair_gap_us` — start-to-start median minus pair-window median, once per
+  trial: the per-pair cost OUTSIDE the published window (the harness's own two `record()` calls
+  plus any inter-pair stall) — the in-artifact regression guard for exactly the six-events defect
+  above, visible in every artifact rather than needing six diffed side by side.
+- `chain_health.settle_drift_us` — late-half minus early-half period median, once per trial,
+  signed, cross-rank max-magnitude. `chain_drop` *assumes* the chain settled before the kept
+  pairs; this is the proof, and an unconverged chain (or a device clocking down mid-chain)
+  publishes its drift instead of a clean-looking period.
 
 **Chained per-op medians and p99s are never published, and the omission is not an oversight.**
 Without a host sync the ranks arrive at each collective at slightly different times, and the
@@ -377,18 +370,15 @@ rank-0 stdout labelled as a diagnostic, and `implementation.chain_barrier: true`
 record of why they are missing. The valve is a bring-up diagnostic for a backend that cannot yet be
 chained, not a second publishable mode: a backend that needs it is a bug to fix, not a variant to
 compare, which is also why the chained-regime oracle below is skipped alongside it — there is no
-chained number left in the artifact for it to stand behind. No backend sets it. DeepEP V2's **normal**
-mode was the one genuinely unaudited cell — its ElasticBuffer inter-iteration flow control had never
-been exercised un-synced — and it was hand-probed on B200 (2026-08-06, pin `01dc3aaa`, on the
-then-current virtualized dgxc pool; the CI pool has since moved to nscale bare metal) with 256
-un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over that pool's RoCE) at both precisions: all
-four passed with finite outputs, timed inputs unchanged, and cross-rank period agreement within
-1µs. The measured gap against the synced pacing is the size of the effect this section is about —
-EP8 105.4µs against 125.4µs at BF16 and 216.6µs against 272.3µs at FP8; EP16 838µs against 863µs at
-BF16 and 820µs against 897µs at FP8. Every other backend either double-buffers per dispatch
-(DeepEP V2 and UCCL-EP low-latency), enforces strict pairing through its own contract flags (MoRI,
-FlashInfer EP), or completes each op on a reusable handle (NCCL EP). The valve stays implemented
-because the next backend, or the next pin, is not covered by that probe.
+chained number left in the artifact for it to stand behind. No backend sets it: DeepEP V2's
+**normal** mode, the one genuinely unaudited cell, was hand-probed with 256 un-synchronized pairs
+at T=128, EP8+EP16, both precisions (2026-08-06, pin `01dc3aaa`, the then-current dgxc pool's
+hybrid GIN over RoCE) — all passed, outputs finite, timed inputs unchanged, cross-rank period
+agreement within 1µs, and the chain-vs-synced gap is the size of the effect this section is about
+(EP8 105.4 vs 125.4µs BF16, 216.6 vs 272.3µs FP8; EP16 838 vs 863µs and 820 vs 897µs). Every
+other backend double-buffers per dispatch, enforces strict pairing by contract, or completes each
+op on a reusable handle. The valve stays implemented because the next backend, or the next pin,
+is not covered by that probe.
 
 One backend's timed window omits a cost the others pay, deliberately. nccl-ep binds routing with
 `ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than with

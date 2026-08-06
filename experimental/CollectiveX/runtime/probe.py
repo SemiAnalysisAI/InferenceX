@@ -19,12 +19,10 @@ def default_route_interface(route_path: Path = Path("/proc/net/route")) -> str:
 
 def prepare_cache(parent_path: str) -> str:
     path = Path(parent_path).resolve() / f".collectivex-backend-cache-{os.getuid()}"
-    # parents=True: the parent is the operator's squash_dir, which on an established cluster
-    # was created by the first container import long ago -- but this probe runs BEFORE that
-    # import, so on a fresh pool the parent does not exist yet and a bare mkdir throws
-    # FileNotFoundError (every b200-nscale leg of run 31092445934 died on exactly this, four
-    # seconds in). The 0o700 applies to the cache dir; the squash dir itself stays
-    # default-permissioned, as the import path's own mkdir -p would leave it.
+    # parents=True: this runs BEFORE the first container import, so on a fresh pool the operator
+    # squash_dir does not exist yet and a bare mkdir throws FileNotFoundError (every b200-nscale
+    # leg of run 31092445934 died on this). 0o700 applies to the cache dir only; the created
+    # parent stays default-permissioned, as the import path's own mkdir -p would leave it.
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path, 0o700)
     return str(path)
