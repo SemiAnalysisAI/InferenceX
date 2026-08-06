@@ -645,13 +645,23 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c4:
       - { tp: 8, kv-offloading: none, conc-list: [4], spec-decoding: mtp}
 
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-sweep:
-  # Concurrency sweep around the c8 result (run 30982145794): fp8 KV + asm
-  # verify, GPU-only, k=3 -- 717.31 tok/s/GPU, 203 reqs, TTFT 2.51 s, prefix hit
-  # 88.5%, acceptance 1.22 mean / 1.35 max against a 4.00 ceiling.
+  # Concurrency sweep around the c8 result. fp8 KV + asm verify, GPU-only, k=3.
+  #
+  # Baseline is run 31065394450, NOT 30982145794. The latter predates the a8w4
+  # env fix (vllm#50582 rename) and was measured while the MoE was reading gate
+  # and up from the wrong halves of w13 -- the model emitted degenerate
+  # repetition and gsm8k scored 0.0, so its 717.31 tok/s/GPU and 1.22 acceptance
+  # are void. Every number that run produced has been struck from this file.
+  #
+  # Valid c8 baseline (31065394450): 43.63 out / 7414.32 in tok/s (~932
+  # tok/s/GPU), 256 reqs, TTFT 3.30 s avg, ITL 112.20 ms, prefix hit 84.7% mean
+  # / 89.3% steady, KV peak 73.4%, acceptance 1.77 mean against a 4.00 ceiling
+  # (per-position 0.354 / 0.232 / 0.182). gsm8k em_strict 0.9689 on the same
+  # build (run 31065409070).
   #
   # c16 has never survived on any K3 DSpark arm; the nightly's bf16 c16 cell
   # died on the illegal-address abort. It is included because fp8 changes the
-  # premise -- the c8 arm ran at 79.6% KV while serving 43% more requests, so
+  # premise -- the c8 arm peaked at 73.4% KV while serving 256 requests, so
   # there is headroom that did not exist before.
   #
   # mns and max_cudagraph_capture_size are both 2*CONC in the recipe, so they
