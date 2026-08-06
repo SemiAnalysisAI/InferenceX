@@ -5403,7 +5403,7 @@
     - "Bump vLLM nightly image to nightly-5e35a6f4f9bbc217c599692157ca985c894373f7 (fixed-len MiniMax-M3 fix); update 2p1d-dep2-dep4 recipe YAML container to match"
     - "Enable minimax_m3_msa_decode_backend=cutlass in decode attention-config"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2483
-  
+
 - config-keys:
     - minimaxm3-fp4-b300-vllm
   description:
@@ -5449,7 +5449,7 @@
     - "Enable prefill-only INT4 quick-reduce: set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048 on the prefill workers via a new prefill_env channel (mirrors the existing decode_env path in server_vllm.sh)."
     - "Cap the 1P1D TP4 concurrency sweep at 256 (was 512); drop the 2P1D TP4 layout (128/256/512) as it is CI-flaky with negligible curve impact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1943
-  
+
 - config-keys:
     - minimaxm3-fp4-b300-vllm-agentic-mtp
   scenario-type:
