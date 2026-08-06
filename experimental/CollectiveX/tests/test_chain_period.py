@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Contract for the chained steady-state pair period: call order, the staged hoist, head-not-tail
-dropping, the barrier between pairs, and which events each of the two sibling chains carries (the
-first version's six record() calls per pair published +20-38% of fake transport at T=1).
+dropping, and which events each of the two sibling chains carries (the first version's six
+record() calls per pair published +20-38% of fake transport at T=1).
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class _FakeEvent:
 
 
 class _FakeTensor:
-    """Absorbs whatever a barrier payload is asked to do."""
+    """Absorbs whatever a tensor is asked to do."""
 
     def __getattr__(self, _name):
         return lambda *args, **kwargs: self
@@ -170,19 +170,6 @@ def chain_sections(calls):
     end_period, end_floors = sync_idx[-1], sync_idx[-2]
     start_floors = sync_idx[-3] + 1 if len(sync_idx) >= 3 else 0
     return calls[start_floors:end_floors], calls[end_floors + 1:end_period]
-
-
-def all_reduce_splits_a_pair(calls):
-    """True if any all_reduce lands between a dispatch and the combine that closes it."""
-    inside = False
-    for entry in calls:
-        if entry == "dispatch":
-            inside = True
-        elif entry == "combine":
-            inside = False
-        elif entry == "all_reduce" and inside:
-            return True
-    return False
 
 
 class ChainedPairPeriod(unittest.TestCase):
@@ -364,49 +351,15 @@ class EventPlacement(unittest.TestCase):
         )
 
 
-class ChainBarrier(unittest.TestCase):
-    """The escape valve for a backend that wedges free-running: it re-aligns ranks between pairs,
-    since inside a pair it would serialise the overlap under test."""
+class ChainFreeRunning(unittest.TestCase):
+    """The published period means free-running: no cross-rank call may land between pairs."""
 
-    def test_off_by_default_so_no_backend_pays_for_a_barrier_it_did_not_ask_for(self):
-        self.assertFalse(ep_backend.EPBackend.chain_barrier)
-
-    def test_no_barrier_is_issued_while_the_flag_is_off(self):
+    def test_no_synchronization_is_issued_between_chained_pairs(self):
         backend = _ChainBackend()
         with fake_torch(backend.clock, backend.calls):
             backend.benchmark_chain(new_problem(), 0, 5, 1)
         self.assertNotIn("all_reduce", backend.calls)
-
-    def test_the_barrier_runs_once_between_pairs(self):
-        iters = 6
-        backend = _ChainBackend()
-        backend.chain_barrier = True
-        with fake_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, iters, 2)
-        # iters-1 gaps per chain, or one per iteration; both sound. The valve must pace both
-        # sibling chains, since a floors chain that wedges takes the period chain down with it.
-        self.assertIn(
-            backend.calls.count("all_reduce"), (2 * (iters - 1), 2 * iters)
-        )
-
-    def test_the_barrier_never_splits_a_dispatch_from_its_combine(self):
-        backend = _ChainBackend()
-        backend.chain_barrier = True
-        with fake_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, 6, 2)
-        self.assertFalse(
-            all_reduce_splits_a_pair(backend.calls),
-            f"barrier landed inside a pair: {backend.calls}",
-        )
-
-    def test_the_barrier_does_not_disturb_the_pair_sequence(self):
-        iters = 6
-        backend = _ChainBackend()
-        backend.chain_barrier = True
-        with fake_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, iters, 2)
-        pairs = [entry for entry in backend.calls if entry in ("dispatch", "combine")]
-        self.assertEqual(pairs[-2 * iters:], ["dispatch", "combine"] * iters)
+        self.assertNotIn("dist_barrier", backend.calls)
 
 
 class ChainBudgetGate(unittest.TestCase):

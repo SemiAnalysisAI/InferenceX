@@ -80,10 +80,7 @@ or re-meant and the sweep `version` stays 1, so consumers key on the presence of
 The chained regime is correctness-gated like every other: the full oracle runs once per ladder point
 against the state the chain leaves behind, reports as `correctness.chain_regime_passed`, and is
 folded into `correctness.passed`, so a backend that corrupts under free-running pairs fails the case
-rather than publishing the suite's fastest period. `EPBackend.chain_barrier` remains as a bring-up
-valve for a backend that cannot yet be chained free, but turning it on **suppresses every chained
-field** (they emit the unavailable block, the numbers go to stdout as a diagnostic, and
-`implementation.chain_barrier` records why): a barrier-mode chain measures a different quantity.
+rather than publishing the suite's fastest period.
 
 `roundtrip` means dispatch then combine — the transport — in every row. Expert-output staging sits
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding

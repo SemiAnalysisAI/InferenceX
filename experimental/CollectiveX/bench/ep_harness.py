@@ -1012,8 +1012,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "max_rel": oracle["max_elementwise_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
-            # Filled by Pass 2b after that point's last chain trial. Stays None only when the
-            # chain publishes nothing (barrier mode), where there is no chained number to gate.
+            # Filled by Pass 2b after that point's last chain trial.
             "oracle_chain": None,
             "pre_input_unchanged": pre_input_unchanged,
         }
@@ -1024,7 +1023,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
     comb_pool = {T: [] for T in ladder}     # ... combine
     rt_pool = {T: [] for T in ladder}       # independently measured round trip
-    period_pool = {T: [] for T in ladder}   # steady-state per-pair cost, opt-in backends only
     spread_pool = {T: [] for T in ladder}   # cross-rank (max-min) of the round trip, per iter
     # Cross-rank MIN per component. The LAST rank to enter a collective is the one that waited
     # least -- it started when its peers were already there -- so its duration is the closest
@@ -1048,7 +1046,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # timed_components() encodes the roundtrip-only vs full-component contract
             # (and whether stage launches device work) once, in the base class.
             component_order = trial_order(backend.timed_components(), trial_index)
-            measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip", "period")}
+            measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
             for component_name in component_order:
                 # The base template gives every component the same synchronized
                 # full-roundtrip warm-up before its timed trial and encodes the two
@@ -1064,8 +1062,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
             rt_max = _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
             rt_pool[T] += rt_max
-            if measured["period"]:
-                period_pool[T] += _reduce_vec(torch, dist, device, measured["period"], MAX)
             # Cross-rank SPREAD (max-min) of the same iterations. A collective cannot finish
             # before its slowest participant, so when ranks enter together every rank measures
             # nearly the same duration and the spread is small; a large spread means the ranks
@@ -1083,10 +1079,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # already yields chain_iters free-running pairs, so a handful of trials out-samples the
     # fresh-entry components' 256 for a fraction of the wall clock. Ladder order still rotates
     # per trial, as above. ----
-    # Whether the chain publishes, which is also whether it needs gating: barrier mode runs it as
-    # a bring-up diagnostic only (see Pass 4). Uniform across ranks -- a class attribute -- so the
-    # collective branches below are entered by every rank or by none.
-    chain_published = not bool(getattr(backend, "chain_barrier", False))
     for trial_index in range(args.chain_trials):
         final_chain_trial = trial_index == args.chain_trials - 1
         for T in trial_order(list(ladder), trial_index):
@@ -1118,7 +1110,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                     _pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"],
                 )
                 settle_pool[T].append(max(drifts, key=abs))
-            if final_chain_trial and chain_published:
+            if final_chain_trial:
                 # Gate the regime we publish: Passes 1 and 3 only check drained calls, so without
                 # this a backend that corrupts under free-running pairs would present as the
                 # fastest in the suite. Pass 3's machinery against the state this point's chain
@@ -1145,7 +1137,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         )
         pre = gate[T]["oracle_pre"]
         # ANDed in like the other two, so a chained-regime failure reds the leg. None means the
-        # chain published nothing to gate (barrier mode), which is not a failure.
+        # chain never ran (chain_trials=0), which is not a failure.
         chain_oracle = gate[T]["oracle_chain"]
         chain_ok = chain_oracle is None or bool(chain_oracle["passed"])
         gate[T].update({
@@ -1217,17 +1209,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
         spread = spread_pool[T]
-        # The chained family, published only when the chain ran free. A barrier adds its own
-        # ~10us and removes the cross-pair overlap, so a barrier-mode period is a different
-        # quantity and emitting it would let something rank two definitions against each other.
-        # `implementation.chain_barrier` records why these blocks are unavailable; the numbers
-        # still reach rank-0 stdout below as the diagnostic they are.
-        chain = chain_pool[T] if chain_published else []
-        chain_spread = chain_spread_pool[T] if chain_published else []
-        dfloor = dfloor_pool[T] if chain_published else []
-        cfloor = cfloor_pool[T] if chain_published else []
-        chain_gap = gap_pool[T] if chain_published else []
-        chain_settle = settle_pool[T] if chain_published else []
+        chain = chain_pool[T]
+        chain_spread = chain_spread_pool[T]
+        dfloor = dfloor_pool[T]
+        cfloor = cfloor_pool[T]
+        chain_gap = gap_pool[T]
+        chain_settle = settle_pool[T]
         chainp = _pcts(chain)
         rows.append({
             "components": {
@@ -1236,11 +1223,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "isolated_sum": _component(isum, 0, derived=True),
                 # What a serving decode loop pays per MoE layer: the steady-state period of
                 # back-to-back dispatch->combine pairs, every backend, cross-rank median. Not
-                # `period` (opt-in `pipeline_pairs`, MAX over drained batches) and not `roundtrip`
-                # (drained around every pair, an idle-pipeline latency). Do not sum it.
+                # `roundtrip` (drained around every pair, an idle-pipeline latency). Do not sum it.
                 "pair_period": _component(chainp, len(chain), origin=CHAIN_PERIOD_ORIGIN),
                 "roundtrip": _component(rtp, len(rt)),
-                "period": _component(_pcts(period_pool[T]), len(period_pool[T])),
                 "stage": _component(sp, len(s)),
             },
             # Per-op floors from the FLOORS sibling chain: cross-rank MINIMUM of each op's window,
@@ -1275,7 +1260,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "correctness": {
                 # Whether the oracle also passed against the state the free-running chain left
                 # behind. Folded into `passed`, so false means the point failed; `null` means the
-                # chain published nothing to gate (barrier mode) and is not a failure.
+                # chain never ran and is not a failure.
                 "chain_regime_passed": chain_regime_passed,
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
@@ -1312,21 +1297,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                              f"comb {cp['p50']:6.1f}/{cp['p99']:6.1f} " if dp and cp
                              else "components=unavailable ")
             period_log = f"period={chainp['p50']:7.1f}us " if chainp else "period=n/a "
-            if not chain_published:
-                # Barrier mode: stdout is the ONLY place these numbers appear, precisely so
-                # nothing downstream can rank a barrier-mode period against a free-running one.
-                barrier_period = _pcts(chain_pool[T])
-                barrier_dfloor, barrier_cfloor = _pcts(dfloor_pool[T]), _pcts(cfloor_pool[T])
-                barrier_spread = _pcts(chain_spread_pool[T])
-                diagnostic = (
-                    f"period p50={barrier_period['p50']:.1f}us "
-                    f"floor d/c p50={barrier_dfloor['p50']:.1f}/{barrier_cfloor['p50']:.1f}us "
-                    f"pair spread p50={barrier_spread['p50']:.1f}us"
-                    if barrier_period and barrier_dfloor and barrier_cfloor and barrier_spread
-                    else "unavailable"
-                )
-                print(f"  T={T:<5} DIAGNOSTIC ONLY, not published (chain_barrier=on): "
-                      f"barrier-mode {diagnostic}")
             print(f"  T={T:<5} {component_log}{period_log}"
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(rt)} fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // world_size}/{recv_max} "
@@ -1436,9 +1406,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Whether this document's rows carry the chained family. Consumers key the headline on
             # presence, as for `stage_excluded_from_roundtrip`; the sweep `version` does not move.
             "chained_period": True,
-            # Whether the chain paid an on-stream barrier between pairs. True makes the period an
-            # upper bound on the free-running one; the two must not be pooled or ranked together.
-            "chain_barrier": bool(getattr(backend, "chain_barrier", False)),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,

@@ -154,8 +154,7 @@ class _StubBackend(ep_backend.EPBackend):
     name = "stub"
     maturity = "candidate"
 
-    def __init__(self, chain_barrier=False):
-        self.chain_barrier = chain_barrier
+    def __init__(self):
         self.mode = "normal"
         self.precision = "bf16"
         self.stage_device_work = False
@@ -234,7 +233,7 @@ def make_args(out):
 
 def phases_by_index(oracle_count, points):
     """Which pass each oracle call belongs to, by position: Pass 1 opens and Pass 3 closes with one
-    per point, the middle is the chained gate. Neighbour rules mislabel Pass 3 in barrier mode."""
+    per point, the middle is the chained gate."""
     return (
         ["pre"] * points
         + ["chain"] * (oracle_count - 2 * points)
@@ -242,9 +241,9 @@ def phases_by_index(oracle_count, points):
     )
 
 
-def _sweep(chain_barrier, fail_indices, error_indices, chain_error, backend_factory=None):
+def _sweep(fail_indices, error_indices, chain_error, backend_factory=None):
     """One full run_sweep against the stubs; failures scripted by oracle call index."""
-    backend = (backend_factory or _StubBackend)(chain_barrier=chain_barrier)
+    backend = (backend_factory or _StubBackend)()
     events = backend.events
     oracle_calls = []
 
@@ -278,17 +277,17 @@ def _sweep(chain_barrier, fail_indices, error_indices, chain_error, backend_fact
     )
 
 
-def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0, backend_factory=None):
+def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None):
     """Run the sweep, optionally failing every oracle of a given pass; a clean probe run first
     learns the oracle call count, so failures are selected by phase rather than by hardcoded index."""
-    probe = _sweep(chain_barrier, frozenset(), frozenset(), 0.0, backend_factory)
+    probe = _sweep(frozenset(), frozenset(), 0.0, backend_factory)
     if not fail_phases and not chain_error:
         return probe
     selected = lambda wanted: frozenset(  # noqa: E731
         index for index, phase in enumerate(probe.phases) if phase in wanted
     )
     return _sweep(
-        chain_barrier, selected(set(fail_phases)),
+        selected(set(fail_phases)),
         selected({"chain"}) if chain_error else frozenset(), chain_error, backend_factory,
     )
 
@@ -443,7 +442,6 @@ class ChainedPublication(unittest.TestCase):
     def test_the_doc_stamps_the_chain_as_free_running(self):
         implementation = self.swept.doc["implementation"]
         self.assertIs(implementation["chained_period"], True)
-        self.assertIs(implementation["chain_barrier"], False)
 
     def test_the_sampling_block_records_the_chain_budget(self):
         sampling = self.swept.doc["measurement"]["sampling"]
@@ -486,63 +484,6 @@ class SettleDrift(unittest.TestCase):
                 drift = row["chain_health"]["settle_drift_us"]
                 self.assertEqual(drift["percentiles_us"]["p50"], DRIFT_US)
                 self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
-
-
-class BarrierModeSuppression(unittest.TestCase):
-    """A barrier-mode period is a different quantity -- the barrier adds cost and removes the
-    cross-pair overlap -- so the chain runs as a diagnostic and the fields stay unavailable."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.swept = drive(chain_barrier=True)
-
-    def test_the_chain_still_runs(self):
-        self.assertEqual(
-            [kind for kind, _ in self.swept.events].count("chain"),
-            CHAIN_TRIALS * len(LADDER),
-        )
-
-    def test_nothing_chained_is_published(self):
-        for row in self.swept.rows:
-            tokens = row["tokens_per_rank"]
-            with self.subTest(tokens=tokens):
-                self.assertEqual(row["components"]["pair_period"], UNAVAILABLE)
-                self.assertEqual(row["chain_floor_us"]["dispatch"], UNAVAILABLE)
-                self.assertEqual(row["chain_floor_us"]["combine"], UNAVAILABLE)
-                for health in ("pair_spread_us", "interpair_gap_us", "settle_drift_us"):
-                    self.assertEqual(row["chain_health"][health], UNAVAILABLE)
-
-    def test_the_chained_oracle_is_skipped(self):
-        # With nothing chained published there is nothing to stand behind, and a gate that ran
-        # anyway could red a leg over a number no one can read.
-        points = len(LADDER)
-        kinds = [kind for kind, _ in self.swept.events]
-        self.assertEqual(kinds.count("oracle"), 2 * points)
-        middle = self.swept.events[points:-points]
-        self.assertEqual(
-            [kind for kind, _ in middle], ["chain"] * (CHAIN_TRIALS * points),
-        )
-
-    def test_the_regime_verdict_is_null_rather_than_failed(self):
-        # No chained number to gate is not the same as one that failed its gate; false here
-        # would red a leg for a check that never ran.
-        self.assertEqual(self.swept.rc, 0)
-        self.assertEqual(self.swept.doc["outcome"]["status"], "success")
-        for row in self.swept.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertIsNone(row["correctness"]["chain_regime_passed"])
-                self.assertIs(row["correctness"]["passed"], True)
-
-    def test_the_doc_records_why_the_blocks_are_unavailable(self):
-        implementation = self.swept.doc["implementation"]
-        self.assertIs(implementation["chain_barrier"], True)
-        # The chain ran, so the case still measured the chained regime; only publication stopped.
-        self.assertIs(implementation["chained_period"], True)
-
-    def test_the_measured_numbers_survive_only_on_stdout_labeled_as_diagnostic(self):
-        self.assertIn("period=n/a", self.swept.stdout)
-        self.assertIn("not published (chain_barrier=on)", self.swept.stdout)
-        self.assertIn(f"period p50={PAIR_US:.1f}us", self.swept.stdout)
 
 
 if __name__ == "__main__":

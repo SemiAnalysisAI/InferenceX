@@ -226,18 +226,6 @@ the per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they shar
 where in-kernel quantisation makes the heavier dispatch self-align the ranks. The term is not
 subtractable in any principled way, so MAX alone taxes some rows more than others.
 
-Some rows also carry a `period` component: a batch of `pipeline_pairs` pairs issued back-to-back
-inside one drained window, divided by the pair count and reduced by MAX. It answers the same
-question as the chained family below, on an older per-backend opt-in, so quote `roundtrip` for how
-long one collective takes and `period` for what a continuous stream costs — never sum them or treat
-one as a correction to the other. It is opt-in because issuing pairs back-to-back lets ranks drift,
-and dispatch is a peer WRITE into another rank's buffer — stream order on the receiver does not
-order the sender's remote writes. A collective bounds that drift to roughly one iteration, since a
-dispatch cannot complete until every rank enters it, so a receive buffer double-buffered per
-dispatch is safe and one shared buffer is not. Only DeepEP V2's low-latency path opts in today, the
-same two-micro-batch overlap SGLang and vLLM run; a row without the component simply did not
-measure it.
-
 Every row therefore also carries `cross_rank_min_us` (the same iterations reduced with MIN — the
 skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN as a
 bracket: two cells whose MAX gap is smaller than the larger contender's spread are not separated by
@@ -249,7 +237,7 @@ rather than per-operation costs; the paired roundtrip is the comparable quantity
 
 ### Chained Pair Period
 
-Everything above except `period` measures **fresh entry**: drained around each timed window, so every
+Everything above measures **fresh entry**: drained around each timed window, so every
 sample starts from an idle pipeline and the ranks re-stagger before each one. A decode loop never
 stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every row therefore
 carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
@@ -315,25 +303,18 @@ consumer keys on the presence of `components.pair_period`; a row without it pred
 Never rank a chained cell against a pre-chain one on the headline column — `summarize.py` footnotes
 its table whenever both appear in it.
 
-**The published period always means one thing: free-running.** Because the chain lets ranks drift
-by up to about one iteration, a backend whose receive buffer cannot absorb that drift would read a
-half-written plane, so `EPBackend.chain_barrier` exists as an escape valve: a one-element on-stream
-all-reduce **between pairs** (never between the two collectives of one pair, and after the pair's
-end event, so its ~10µs sits in neither the pair window nor an op window), re-aligning the ranks at
-the cost of the cross-pair overlap the measurement exists to capture. That is a differently-defined
-quantity, so **a run with the barrier on publishes no chained field at all**: `pair_period`, both
-`chain_floor_us` entries and every `chain_health` field emit the standard unavailable block, the
-measured numbers go to rank-0 stdout as a diagnostic, and `implementation.chain_barrier: true`
-records why they are missing. The chained-regime oracle below is skipped alongside them, having no
-published number left to stand behind. It is a bring-up valve, not a second publishable mode. No
-backend sets it: DeepEP V2's **normal** mode, the one genuinely unaudited cell, was hand-probed with
+**The published period always means one thing: free-running.** The chain lets ranks drift by up to
+about one iteration, which is only sound where the receive plane tolerates it: every backend
+double-buffers per dispatch, enforces strict pairing by contract, or completes each op on a reusable
+handle, and DeepEP V2's **normal** mode — the one genuinely unaudited cell — was hand-probed with
 256 un-synchronized pairs at T=128, EP8+EP16, both precisions (2026-08-06, pin `01dc3aaa`, the
-then-current dgxc pool's hybrid GIN over RoCE) — all passed, outputs finite, timed inputs unchanged,
+then-current dgxc pool's hybrid GIN over RoCE): all passed, outputs finite, timed inputs unchanged,
 cross-rank period agreement within 1µs, and the chain-vs-synced gap is the size of the effect this
 section is about (EP8 105.4 vs 125.4µs BF16, 216.6 vs 272.3µs FP8; EP16 838 vs 863µs and 820 vs
-897µs). Every other backend double-buffers per dispatch, enforces strict pairing by contract, or
-completes each op on a reusable handle; the valve stays implemented because the next backend, or the
-next pin, is not covered by that probe.
+897µs). A backend that cannot run free belongs behind a fix, not a measurement variant: re-aligning
+ranks between pairs adds its own ~10µs and removes the cross-pair overlap the measurement exists to
+capture — a differently-defined quantity that must never share a column with the free-running
+period.
 
 One backend's timed window omits a cost the others pay, deliberately. nccl-ep binds routing with
 `ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than the
@@ -431,8 +412,7 @@ runs once per ladder point, after that point's final chain trial, on the settled
 (`benchmark_chain` ends synchronized). Its result is reported per row as
 `correctness.chain_regime_passed` and **folded into `correctness.passed`**, so a chained-regime
 failure fails the leg exactly as any other oracle failure does. It is `null`, scored as neither pass
-nor fail, only when the chain published nothing to gate — the barrier mode above, which
-`implementation.chain_barrier` names.
+nor fail, only when the chain never ran.
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values
@@ -475,8 +455,7 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
   `--all2all-backend` or SGLang's `--moe-a2a-backend`; `candidate` = a real transport we
   benchmark that no engine ships a selector for, so its numbers describe the library rather
   than a deployable configuration). The same map is in the registry's `backend_maturity`. It also
-  carries `chained_period` (whether this document's rows carry the chained family at all) and
-  `chain_barrier` (whether that chain paid an on-stream barrier between pairs);
+  carries `chained_period` (whether this document's rows carry the chained family at all);
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.

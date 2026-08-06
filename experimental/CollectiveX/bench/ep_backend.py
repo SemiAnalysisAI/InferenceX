@@ -369,15 +369,6 @@ class EPBackend(abc.ABC):
 
     # ---- Timing template methods -----------------------------------------------------
 
-    # Pairs issued back-to-back per `period` sample; 0 disables the component. A serving decode
-    # loop never stops between layers, so its cost per layer is the pipeline's period, not the
-    # sum of separately-drained stages that `roundtrip` measures. Opt-in because the overlap is
-    # only sound where the backend tolerates rank drift: dispatch is a peer write the receiver's
-    # stream order does not order, bounded to roughly one iteration by the collective, so a
-    # per-dispatch double-buffered receive is safe and a single shared buffer yields a fast
-    # number over corrupted data.
-    pipeline_pairs = 0
-
     def timed_components(self):
         """Components measured for this backend: roundtrip always; the rest unless
         the backend exposes only a stateful paired round trip."""
@@ -386,8 +377,6 @@ class EPBackend(abc.ABC):
             components.extend(["dispatch", "combine"])
             if self.stage_device_work:
                 components.append("stage")
-        if self.pipeline_pairs > 1:
-            components.append("period")
         return components
 
     def warm(self, problem, count, stage_every=False):
@@ -433,43 +422,6 @@ class EPBackend(abc.ABC):
             setattr(handle, self.combine_input_attr, staged)
         return self.combine(problem, handle)
 
-    def benchmark_period(self, problem, warmup, iters):
-        """Steady-state cost per dispatch->combine pair, pairs issued back-to-back.
-
-        `roundtrip` drains the GPU around every pair, so it reports an idle pipeline's latency
-        and charges inter-rank entry stagger to whichever component the ranks entered unevenly;
-        a decode loop pays this period instead. The two are different quantities, not competing
-        estimates of one, so never sum or compare them. Only backends that opt in via
-        `pipeline_pairs` report it.
-        """
-        import torch
-
-        self.warm(problem, warmup)
-        pairs = max(2, int(self.pipeline_pairs))
-        samples = []
-        for _ in range(iters):
-            start = torch.cuda.Event(enable_timing=True)
-            end = torch.cuda.Event(enable_timing=True)
-            start.record()
-            for _ in range(pairs):
-                handle = self.dispatch(problem)
-                self.stage(problem, handle)
-                self.combine(problem, handle)
-            end.record()
-            torch.cuda.synchronize()
-            samples.append(start.elapsed_time(end) * 1000.0 / pairs)
-        return samples
-
-    # Re-align ranks between chained pairs (a one-element on-stream all_reduce) when a backend's
-    # receive buffer cannot absorb inter-pair drift. Setting it SUPPRESSES publication: the
-    # barrier adds ~10us and removes cross-pair overlap, so it measures a different quantity --
-    # `run_sweep` emits every chained field as unavailable and logs the numbers to rank-0 stdout,
-    # with `implementation.chain_barrier` as the record of why. Bring-up valve, not a comparison
-    # variant. Nothing sets it: deepep-v2 NORMAL probed clean with 256 un-synced pairs (T=128,
-    # EP8+EP16, both precisions, 2026-08-06, pin 01dc3aaa); every other backend double-buffers
-    # per dispatch or completes each op on a reusable handle.
-    chain_barrier = False
-
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync: a floors chain, then a period chain.
 
@@ -493,8 +445,10 @@ class EPBackend(abc.ABC):
         `drop` discards each chain's head (pipeline fill, not period). `run_sweep` reruns the full
         expert oracle against the state the last chain leaves behind and folds it into the point's
         verdict, so silent chained corruption reds the case; the method ends synchronized for it.
-        Under `chain_barrier` nothing is published (see that attribute). Returns post-`drop`
-        series in microseconds: `pair` and `start_to_start` from the period chain (the latter one
+        Free-running is safe fleet-wide: every backend double-buffers per dispatch or completes
+        each op on a reusable handle, and deepep-v2 NORMAL probed clean with 256 un-synced pairs
+        (T=128, EP8+EP16, both precisions, 2026-08-06, pin 01dc3aaa). Returns post-`drop` series
+        in microseconds: `pair` and `start_to_start` from the period chain (the latter one
         element shorter), `dispatch` and `combine` from the floors chain.
         """
         import torch
@@ -511,10 +465,9 @@ class EPBackend(abc.ABC):
             staged = getattr(handle, self.combine_input_attr)
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
-        barrier = torch.zeros(1, device=self.device) if self.chain_barrier else None
-        # Events and the barrier tensor are allocated BEFORE the loops: an allocation between two
-        # record() calls is host work inside a window meant to belong to the stream, a measurable
-        # fraction of the period at the bottom of the ladder.
+        # Events are allocated BEFORE the loops: an allocation between two record() calls is host
+        # work inside a window meant to belong to the stream, a measurable fraction of the period
+        # at the bottom of the ladder.
         def events():
             return [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
 
@@ -534,11 +487,6 @@ class EPBackend(abc.ABC):
             combine_start[i].record()
             self.combine(problem, handle)
             combine_end[i].record()
-            if barrier is not None:
-                # Between PAIRS, never between the two collectives of one pair, and outside every
-                # window so its cost sits in no published number -- only the overlap it removes
-                # shows up, which is why the artifact records that this row ran with it.
-                torch.distributed.all_reduce(barrier)
         torch.cuda.synchronize()
 
         # ---- Period chain: nothing between the pair's collectives but the pair itself. ----
@@ -551,8 +499,6 @@ class EPBackend(abc.ABC):
                 setattr(handle, self.combine_input_attr, staged)
             self.combine(problem, handle)
             pair_end[i].record()
-            if barrier is not None:
-                torch.distributed.all_reduce(barrier)
         torch.cuda.synchronize()
 
         def series(starts, ends):
@@ -572,8 +518,6 @@ class EPBackend(abc.ABC):
         """Measure one named component; every component gets the same warm-up first."""
         if component == "roundtrip":
             return self.benchmark_roundtrip(problem, warmup, iters)
-        if component == "period":
-            return self.benchmark_period(problem, warmup, iters)
         if component == "dispatch":
             return self.benchmark_dispatch(problem, warmup, iters)
         if component == "stage":

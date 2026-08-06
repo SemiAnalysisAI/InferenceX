@@ -206,10 +206,6 @@ class DeepEPV2Backend(EPBackend):
                 )
             self.max_tokens = _LL_BUFFER_CAP
             self._create_ll_buffer(spec)
-            # The legacy LL receive is double-buffered with a per-dispatch parity flip, and a
-            # collective bounds rank drift to about one iteration, so two parities cover the worst
-            # overlap and pairs may be issued back-to-back (as SGLang and vLLM do). LL only.
-            self.pipeline_pairs = 8
             return
         _require_runtime()
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])

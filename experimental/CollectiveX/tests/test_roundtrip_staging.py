@@ -182,28 +182,5 @@ class WarmStaging(unittest.TestCase):
 # sibling chain with window values.
 
 
-class SteadyStatePeriod(unittest.TestCase):
-    """`period` is opt-in: back-to-back pairs let ranks drift, and dispatch is a peer write that
-    stream order on the receiver does not order, so a single shared receive buffer corrupts."""
-
-    def test_off_by_default_so_no_backend_pipelines_accidentally(self):
-        b = _StubBackend(stage_device_work=False, fp8_consume="native")
-        self.assertEqual(b.pipeline_pairs, 0)
-        self.assertNotIn("period", b.timed_components())
-
-    def test_declaring_pairs_adds_the_component(self):
-        b = _StubBackend(stage_device_work=False, fp8_consume="native")
-        b.pipeline_pairs = 8
-        self.assertIn("period", b.timed_components())
-        # and it never displaces the drained latency measurement
-        self.assertIn("roundtrip", b.timed_components())
-
-    def test_a_single_pair_is_not_a_pipeline(self):
-        # pipeline_pairs = 1 measures exactly what roundtrip already does.
-        b = _StubBackend(stage_device_work=False, fp8_consume="native")
-        b.pipeline_pairs = 1
-        self.assertNotIn("period", b.timed_components())
-
-
 if __name__ == "__main__":
     unittest.main()
