@@ -52,8 +52,6 @@ plugins:
   - type: queue-scorer
   - type: active-request-scorer
   - type: weighted-random-picker
-    parameters:
-      threshold: "0.1"
 
 schedulingProfiles:
   - name: prefill
