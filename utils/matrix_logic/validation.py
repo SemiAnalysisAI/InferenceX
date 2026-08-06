@@ -72,6 +72,8 @@ class Fields(Enum):
     AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
     DRAM_UTILIZATION = 'dram-utilization'
     GPUS_PER_NODE = 'gpus-per-node'
+    NUM_NODES = 'num-nodes'
+    NODE_COUNT = 'node-count'
     DURATION = 'duration'
 
     # Matrix entry fields
@@ -227,6 +229,9 @@ class MultiNodeMatrixEntry(BaseModel):
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
+    node_count: Optional[int] = Field(
+        default=None, alias=Fields.NODE_COUNT.value, gt=0, strict=True
+    )
     isl: int
     osl: int
     prefill: WorkerConfig
@@ -318,6 +323,9 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
+    node_count: Optional[int] = Field(
+        default=None, alias=Fields.NODE_COUNT.value, gt=0, strict=True
+    )
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
@@ -512,6 +520,8 @@ class MultiNodeSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: WorkerConfig
     decode: WorkerConfig
+    num_nodes: Optional[int] = Field(
+        default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     router: Optional[ComponentMetadata] = None
     kv_p2p_transfer: Optional[str] = Field(
         default=None, alias=Fields.KV_P2P_TRANSFER.value, min_length=1
@@ -568,6 +578,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
+    num_nodes: Optional[int] = Field(
+        default=None, alias=Fields.NUM_NODES.value, gt=0, strict=True)
     kv_offloading: Optional[Literal["none", "dram"]] = Field(
         default=None, alias=Fields.KV_OFFLOADING.value
     )
@@ -684,9 +696,9 @@ class MultiNodeScenarios(BaseModel):
         return self
 
 
-def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
-    """Require unambiguous component metadata across a master config."""
-    search_space_entries = [
+def _master_search_space_entries(self: BaseModel) -> list[BaseModel]:
+    """Return every search-space entry in a master config."""
+    return [
         entry
         for scenario_configs in (
             self.scenarios.fixed_seq_len,
@@ -695,6 +707,11 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
         for scenario_config in scenario_configs or []
         for entry in scenario_config.search_space
     ]
+
+
+def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
+    """Require unambiguous component metadata across a master config."""
+    search_space_entries = _master_search_space_entries(self)
 
     for field in (Fields.ROUTER, Fields.KV_P2P_TRANSFER):
         attribute = field.value.replace("-", "_")
@@ -733,6 +750,22 @@ def _validate_component_metadata_scope(self: BaseModel) -> BaseModel:
     return self
 
 
+def _validate_num_nodes_scope(self: BaseModel) -> BaseModel:
+    """Allow explicit node counts only for aggregated multinode entries."""
+    search_space_entries = _master_search_space_entries(self)
+    entries_with_num_nodes = [
+        entry for entry in search_space_entries
+        if getattr(entry, "num_nodes", None) is not None
+    ]
+
+    if (not self.multinode or self.disagg) and entries_with_num_nodes:
+        raise ValueError(
+            f"{Fields.NUM_NODES.value} is only valid when "
+            f"{Fields.MULTINODE.value}=true and {Fields.DISAGG.value}=false"
+        )
+    return self
+
+
 class SingleNodeMasterConfigEntry(BaseModel):
     """Top-level single node master configuration entry."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -756,6 +789,10 @@ class SingleNodeMasterConfigEntry(BaseModel):
     @model_validator(mode='after')
     def validate_component_metadata_scope(self):
         return _validate_component_metadata_scope(self)
+
+    @model_validator(mode='after')
+    def validate_num_nodes_scope(self):
+        return _validate_num_nodes_scope(self)
 
 
 class MultiNodeMasterConfigEntry(BaseModel):
@@ -784,6 +821,10 @@ class MultiNodeMasterConfigEntry(BaseModel):
     @model_validator(mode='after')
     def validate_component_metadata_scope(self):
         return _validate_component_metadata_scope(self)
+
+    @model_validator(mode='after')
+    def validate_num_nodes_scope(self):
+        return _validate_num_nodes_scope(self)
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:
