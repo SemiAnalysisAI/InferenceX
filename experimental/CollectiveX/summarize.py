@@ -72,20 +72,24 @@ def _wire_basis(document: dict) -> str:
     return {"per-assignment": "assign", "rank-deduplicated": "dedup"}.get(copies.get("wire"), "-")
 
 
-# HOLD on the chained headline. The first fleet sweep to carry `pair_period` (run 31076616039)
-# measured it with the original one-chain primitive: six record() calls per pair, four of them
-# INSIDE the pair window. Wherever the device outruns the host (the bottom of the ladder) the
-# window degenerates to host elapsed time, and those records published as a roughly T-independent
-# 10-30us constant on every vendor and fabric at once — +20-38% on the T=1 period, visible as
-# period minus (dispatch floor + combine floor). `benchmark_chain` has since been split so the
-# period chain carries only the outer event pair, and the first two-pass fleet artifacts confirm
-# the fix: run 31092783122 (b200-nscale) lands the LL fp8 T=16 period at 52.6us against the ~58us
-# hand reference, with period-minus-floors at +3-10us instead of the defect's flat 10-30us and
-# `chain_health.interpair_gap_us` steady at ~3us. The hold stays until the remaining hand
-# references (h200 ~51.3us, gb200 62.6-99.5us) are confirmed the same way from a fleet-wide
-# two-pass sweep — releasing it is a deliberate one-line flip, not a side effect. Artifacts emit
-# `pair_period` either way; only the headline preference is held.
-HEADLINE_PREFERS_PAIR_PERIOD = False
+# The chained headline. `pair_period` (two-pass chain, cross-rank median) is what a decode loop
+# pays per MoE layer, so a row that carries one headlines it; rows predating the chain fall back
+# to the drained roundtrip, and render() footnotes which quantity the starred columns hold.
+#
+# This shipped False first — a HOLD — because the first fleet sweep to carry the field (run
+# 31076616039) measured it with the original one-chain primitive: six record() calls per pair,
+# four of them INSIDE the pair window. Wherever the device outran the host (the bottom of the
+# ladder) the window degenerated to host elapsed time and published a roughly T-independent
+# 10-30us host constant as transport — +20-38% on the T=1 period, visible as period minus
+# (dispatch floor + combine floor). `benchmark_chain` was split so the period chain carries only
+# the outer event pair, and the hold was RELEASED on 2026-08-06 once every hand reference was
+# confirmed against two-pass fleet artifacts: b200 52.6us against the ~58us reference (run
+# 31092783122), h200 43.8us against ~51.3us and gb200 within +2.9%/-13.3% of 62.6-99.5us (run
+# 31089556516) — at or below the references, the OPPOSITE polarity from the defect (the hand
+# references carried four events per pair themselves), with interpair_gap_us steady at ~3us and
+# the floors tracking. Flipping this in either direction is a reviewed one-line diff pinned by
+# tests/test_summarize_headline.py.
+HEADLINE_PREFERS_PAIR_PERIOD = True
 
 
 def _headline(document: dict) -> tuple:

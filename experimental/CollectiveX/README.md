@@ -64,9 +64,10 @@ trial runs **two sibling chains** — a floors chain carrying only per-op events
 carrying only the outer pair events — because the first version's single six-events-per-pair chain
 charged its four inner `record()` calls into the period wherever the device outran the host,
 publishing a ~flat 10–30µs host constant as transport (+20–38% at T=1, fleet-wide).
-`components.pair_period` is *intended* as the headline latency, but that flip is **held**
-(`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`) until a sweep measured by the two-pass chain is
-cross-checked against the hand references; `summarize.py` footnotes what its starred columns hold
+`components.pair_period` is the headline latency for every row that carries one
+(`summarize.HEADLINE_PREFERS_PAIR_PERIOD = True` — shipped held while the six-events chain was
+replaced, released 2026-08-06 after the b200/h200/gb200 hand references were confirmed against
+two-pass fleet artifacts); `summarize.py` footnotes what its starred columns hold
 either way, because period and roundtrip are different quantities. The floors chain publishes the
 per-op floors (`chain_floor_us`, the cross-rank minimum of each op's window); the period chain
 also yields `chain_health.pair_spread_us` (cross-rank cadence proof), `interpair_gap_us` (the

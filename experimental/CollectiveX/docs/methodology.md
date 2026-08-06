@@ -231,14 +231,14 @@ will wrongly subtract a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is intended to be the **chained pair period** (`components.pair_period`, defined
+Headline latency is the **chained pair period** (`components.pair_period`, defined
 under Chained Pair Period below) for every row that carries one, and the p99 of the per-iteration
-cross-rank MAX of `roundtrip` for the rows measured before that field existed. **That flip is
-currently HELD** (`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`): the first fleet sweep to
-carry the field measured it with the six-events-per-pair chain described under Chained Pair
-Period, whose inner records inflated small-T periods fleet-wide, so the headline stays on the
-drained `roundtrip` until a sweep measured by the two-pass chain is cross-checked against the
-hand references. Both `p50` and `p99` are emitted
+cross-rank MAX of `roundtrip` for the rows measured before that field existed. The flip shipped
+**held** (`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`) while the six-events-per-pair chain
+described under Chained Pair Period — whose inner records inflated small-T periods fleet-wide —
+was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200 and gb200
+hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
+31089556516). Both `p50` and `p99` are emitted
 either way and `summarize.py` prints both. The rest of this paragraph describes the second of those
 — the fresh-entry family, which every row still carries unchanged, and which the p99-of-MAX
 argument below applies to. That is not in
@@ -424,8 +424,8 @@ and baked into every scheduled case:
 `measurement.sampling` carries both halves of that profile, because `sample_count` alone cannot be
 decomposed back into them and a 128x4 chain is not the same measurement as a 512x1 one.
 
-The chained pair period is intended as the headline latency where a row carries one (held today —
-see the hold note above), and measured roundtrip p99 otherwise. Decode and prefill identify the serving regime
+The chained pair period is the headline latency where a row carries one, and measured roundtrip
+p99 otherwise. Decode and prefill identify the serving regime
 represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
 identical shape. Ascending through the ladder, each measured shape is conditioned with 8 untimed
 full roundtrips — settling clocks, fabric, and buffer state — before it is correctness-checked;
