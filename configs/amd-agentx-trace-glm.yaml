@@ -1,0 +1,44 @@
+# One-off GLM-5.2 AgentX disagg configs. Not part of any sweep — full-sweep and
+# perf-changelog only touch amd-master.yaml. Reachable via explicit
+# --config-files only.
+#
+# STP (no MTP), TP8 1P1D, GPU-resident KV — example dispatch conc 16:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-nohicache-stp-trace \
+#     --conc 16
+#
+# Recipe: benchmarks/multi_node/agentic/glm5.2_fp4_mi355x_sglang-disagg.sh
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-nohicache-stp-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        kv-offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
