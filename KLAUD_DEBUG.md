@@ -52,7 +52,7 @@ and waits for the PR checks automatically.
 
 **Fix:** in `benchmarks/single_node/<recipe>.sh`, either:
 1. **Lower `--gpu-memory-utilization`** (`0.95 → 0.90`, sometimes 0.85). Matches the H100/H200/B200 NVIDIA pattern. Smallest blast radius.
-2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/kimik2.5_fp4_b200.sh:65`.
+2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/deprecated/kimik2.5_fp4_b200.sh:65`.
 
 Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi300x-vllm — needed 0.90), #1461 (dsv4-fp8-h200-vllm — needed 0.90).
 
@@ -206,16 +206,11 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 ### 7.1 Reuse after matrix-generation policy changes
 
 Reusable source artifacts are authoritative. The merge-time
-`reuse-ingest-artifacts` job validates that downloaded artifacts are readable,
-non-duplicated, and internally consistent, but it does not require them to
-match a matrix regenerated from the merge commit. A generator-policy change
+dispatch passes the source and merge run IDs directly to InferenceX-app. The app
+keeps the newest upload for each exact artifact name and sends the resulting
+directory to the normal ingestion code. The only reuse-specific substitution is
+that changelog metadata comes from the merge run. A generator-policy change
 between the PR sweep and merge therefore does not require another GPU sweep.
-
-Raw and aggregate eval identities must still match, as must agentic point/raw
-artifacts and summaries. Batched eval identities come from
-`completed_eval_concs`, so an explicitly pinned failed run may reuse only the
-points it completed. Missing or invalid metadata, duplicate identities, and
-raw/aggregate disagreement still fail reuse.
 
 ---
 

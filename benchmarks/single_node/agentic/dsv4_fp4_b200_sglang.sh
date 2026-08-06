@@ -243,6 +243,10 @@ if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
     trap capture_cache_metrics EXIT
 fi
 
-build_replay_cmd "$RESULT_DIR"
-REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

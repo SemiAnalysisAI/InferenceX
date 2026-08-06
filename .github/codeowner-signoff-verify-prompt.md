@@ -121,7 +121,7 @@ For the commit that passed Check 1, confirm the eval numbers are real and meet t
   the same inference-engine image as this PR's config. FAIL if evals are
   skipped/failed/empty/below bar, or the image differs — say exactly which.
 
-## Check 3 — Recipe linked AND complete (SINGLE-NODE recipes only)
+## Check 3 — Recipe linked, MERGED, AND complete (SINGLE-NODE recipes only)
 APPLICABILITY — read this first: the recipe-link requirement covers SINGLE-NODE
 recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
 cookbook) publish single-node serve commands. Disaggregated / multi-node
@@ -134,23 +134,31 @@ exclusively multi-node/disagg — files under `benchmarks/multi_node/**` (includ
 single-node recipes only` and DO NOT fail it. A sign-off note like "this is a
 disagg submission, no recipe update required" is a legitimate statement of that
 fact, not a violation. If the PR touches BOTH single-node and multi-node recipes,
-apply (a)/(b) below to the single-node portion only.
+apply (a)/(b)/(c) below to the single-node portion only.
 
 The InferenceX "recipe" for this PR = the files it changes under
 `benchmarks/single_node/**` plus its entry in `configs/*-master.yaml`. The merge
-standard is: the community must be able to reproduce this benchmark from a public
-recipe.
+standard is: the community must be able to reproduce this benchmark from merged,
+public upstream documentation.
 - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
-  the corresponding recipe — a PR/commit in
+  the corresponding merged recipe PR in
   `https://github.com/vllm-project/recipes` or
   `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
   published recipe page (`https://recipes.vllm.ai/` or
   `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
-- (b) MAJOR SERVER ARGS MATCH: Fetch the linked recipe (use the `fetch` MCP tool or
-  WebFetch; for a recipe PR, read its diff via `gh pr diff` against that repo if
-  accessible) and compare it to this PR's launch command. The recipe only needs to
-  match the MAJOR, deployment-defining server args — NOT every flag, and explicitly
-  NOT the knobs that are specific to InferenceX benchmark/harness tuning.
+- (b) UPSTREAM CHANGE MERGED: For a linked GitHub PR, query the upstream repository
+  directly (for example, `gh pr view <URL> --json state,mergedAt,url`) and require
+  `state: MERGED` with a non-null `mergedAt`. An open PR, draft PR, closed-unmerged
+  PR, bare branch, or bare commit does NOT pass. A published recipe/cookbook page
+  containing the required recipe counts as merged upstream documentation. If the
+  linked artifact's merge/publication status cannot be verified, FAIL; never infer
+  that it merged from an approval, a green check, or the sign-off author's claim.
+- (c) MAJOR SERVER ARGS MATCH: Fetch the merged or published recipe (use the `fetch`
+  MCP tool or WebFetch; for a merged recipe PR, read its diff via `gh pr diff` against
+  that repo if accessible) and compare it to this PR's launch command. The recipe
+  only needs to match the MAJOR, deployment-defining server args — NOT every flag,
+  and explicitly NOT the knobs that are specific to InferenceX benchmark/harness
+  tuning.
     MAJOR (must match — these define the model, parallelism, precision, and which
     kernels run, so they determine the perf profile):
       - model / model-path, hardware/SKU
@@ -165,13 +173,14 @@ recipe.
     `--scheduler-recv-interval`, `--chunked-prefill-size`, `--disable-piecewise-cuda-graph`,
     `SGLANG_RADIX_FORCE_MISS` and similar env toggles, concurrency / sequence-length
     sweep ranges, ports, result filenames, and image tag/version.
-  FAIL only if a MAJOR arg in this PR is missing from (or contradicts) the recipe;
-  list exactly those. Treat the InferenceX-specific diffs as expected and mention them
-  only as a brief informational note, not as blockers. If a flag's effect is
-  equivalent to a recipe default (e.g. quantization auto-detected from an FP4 model),
-  say so and do not count it against the recipe.
+  FAIL if a MAJOR arg in this PR is missing from (or contradicts) the merged/published
+  recipe; list exactly those. Treat the InferenceX-specific diffs as expected and
+  mention them only as a brief informational note, not as blockers. If a flag's effect
+  is equivalent to a recipe default (e.g. quantization auto-detected from an FP4
+  model), say so and do not count it against the recipe.
 - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
-  link does not pass this workflow's standard — a link is required.
+  link to merged/published upstream documentation does not pass this workflow's
+  standard.
 
 ## Check 4 — Reuse-sweep command explicitly posted
 The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`),
@@ -237,7 +246,20 @@ and read its `framework:`, `runner:`, and `image:` fields.
   the matching entry named.
 - N/A if the PR changes no master-config entries (state that in one line).
 
-## Check 7 — No benchmark hacks that change the model architecture
+## Check 7 — No submissions for deprecated models or scenarios
+Read the current `MODELS.md` in the checked-out default branch. It is the source of
+truth for active and deprecated models, scenarios, and model-scenario combinations.
+For every benchmark configuration or recipe that the PR adds, changes, or re-enables,
+identify its model prefix and scenario, including fixed-sequence, agentic, single-node,
+and multi-node entries.
+- Use `date -u +%F` to establish the review date. Honor an effective date in
+  `MODELS.md`, so a scheduled future deprecation is allowed until its stated date.
+- FAIL if the PR submits a model that is retired on the review date, a deprecated
+  scenario, or a deprecated model-scenario combination. Name the model prefix,
+  scenario, and the `MODELS.md` row or notice that prohibits it.
+- N/A if the PR adds, changes, or re-enables no benchmark configurations or recipes.
+
+## Check 8 — No benchmark hacks that change the model architecture
 Verify from the PR diff (server args in `benchmarks/**` and master-config changes)
 that nothing alters the model architecture or reduces its FLOPs — e.g. `--hf-overrides`
 that skip the indexer every N layers on a model that doesn't natively support it,
@@ -252,7 +274,7 @@ production by accuracy-sensitive customers.
 - FAIL with the exact flag/value if architecture FLOPs are reduced without native
   model support. PASS in one line otherwise; N/A if the PR touches no server args.
 
-## Check 8 — Speculative-decoding configs benchmark through chat templates
+## Check 9 — Speculative-decoding configs benchmark through chat templates
 If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
 flags such as `--speculative-config`, `--speculative-algorithm`, `spec-decode`, config
 names ending in `-mtp`), verify the benchmark client exercises the model through its
@@ -262,7 +284,7 @@ completions) so the acceptance-length distribution matches real-world traffic.
   name the config and script line.
 - N/A if the PR has no speculative-decoding changes.
 
-## Check 9 — No engine patches without a waiver
+## Check 10 — No engine patches without a waiver
 The pinned upstream image must run AS SHIPPED — the community must be able to
 reproduce the number from the released image. From the PR diff (scripts under
 `benchmarks/**`, master configs, workflow changes), scan for anything that modifies
@@ -291,7 +313,7 @@ Installing the benchmark harness and client-side deps (aiperf, eval tooling) is 
   waiver not linked / waiver does not cover this patch).
 - N/A if the PR touches no benchmark scripts, images, or configs.
 
-## Check 10 — Agentic spec-decode configs use the golden simulated acceptance length
+## Check 11 — Agentic spec-decode configs use the golden simulated acceptance length
 APPLICABILITY: this check covers AGENTIC-workload benchmark changes that enable
 speculative decoding. From the PR diff, identify configs that are BOTH:
 - agentic — scripts under `benchmarks/single_node/agentic/**`, multi-node recipes
@@ -314,25 +336,31 @@ Verify BOTH:
     YAMLs, or exported before launch in benchmark scripts).
   - vLLM: the `--speculative-config` JSON contains BOTH
     `"rejection_sample_method": "synthetic"` and `"synthetic_acceptance_length": <AL>`.
+  - TRT-LLM: env var `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS: <AL - 1>` in the
+    server/decode environment. The value counts accepted DRAFT tokens only and
+    EXCLUDES the bonus/verification token, so it must be the golden AL minus 1
+    (fractional values allowed — e.g. golden AL 3.5 -> 2.5).
   FAIL if an agentic spec-decode config runs real (unsimulated) acceptance — name the
   config/script and line.
 - (b) AL VALUE MATCHES THE GOLDEN CURVE. Read the committed golden AL YAML for the
   model in `golden_al_distribution/` (default-branch checkout; e.g. `qwen3.5_mtp.yaml`,
   `kimik2.5_eagle3.yaml`) and confirm the pinned AL equals the golden value for that
   model, thinking mode, and the config's `num_speculative_tokens` / MTP level (e.g.
-  qwen3.5 thinking_on with 3 speculative tokens -> 3.39). A submission may choose any
+  qwen3.5 thinking_on with 3 speculative tokens -> 3.39). For TRT-LLM configs, compare
+  the pinned `TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS` value PLUS 1 against the
+  golden AL (the env var excludes the bonus token). A submission may choose any
   supported draft length, but it may NOT substitute a different acceptance target.
   FAIL on a mismatch — name the config, the pinned value, and the expected golden
   value. If the model has no committed golden curve yet, do not guess: the sign-off's
   additional detail section must state the source of the AL value (e.g. a pending
   golden-curve collection run); FAIL if it does not.
 - Also FAIL (as a benchmark hack) if simulated/synthetic-acceptance knobs appear on a
-  NON-agentic spec-decode config, where Check 8's real-traffic AL standard applies —
+  NON-agentic spec-decode config, where Check 9's real-traffic AL standard applies —
   unless the sign-off documents a sanctioned exception.
 - N/A if the PR has no agentic speculative-decoding changes (state that in one line).
 
 ## Verdict and output
-Decide PASS only if Checks 0-10 ALL pass (a check reported as `N/A` counts as a pass —
+Decide PASS only if Checks 0-11 ALL pass (a check reported as `N/A` counts as a pass —
 keep the `N/A — <reason>` row so the reviewer sees it was considered). Post EXACTLY ONE summary comment on
 PR #${PR_NUMBER} using `gh pr comment`. Start the comment with
 the hidden marker so reruns are identifiable:
@@ -358,8 +386,7 @@ single terse line either. Rules:
   restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
   run/recipe instead of describing it.
 
-- If everything is to standard: post the verdict header + the eleven one-line rows
-  (with the green run URL). Do NOT @-mention anyone on a pass.
+- If everything is to standard: post the verdict header + the twelve one-line rows
 - If anything is NOT to standard: the verdict header must be immediately followed by a
   line that @-mentions the sign-off author as `@${SIGNOFF_AUTHOR}`
   with the blocking summary. Then the per-check lines, each failing one led by its root

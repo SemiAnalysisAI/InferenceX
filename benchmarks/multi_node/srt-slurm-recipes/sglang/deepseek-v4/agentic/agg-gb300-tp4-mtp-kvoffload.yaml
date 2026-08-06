@@ -1,0 +1,154 @@
+name: "agg-gb300-tp4-mtp-kvoffload"
+
+# Agentic-coding SGLang aggregated recipe for DeepSeek-V4-Pro on GB300
+# (single aggregated worker, TP4, MTP + hierarchical-cache KV offload).
+#
+# Uses the flat single-variant schema the agentic CI flow expects. Concurrency is NOT
+# a recipe field here: the GHA matrix fans out one job per concurrency from
+# the master-config conc-list, exporting CONC into agentic_srt.sh. Modeled on
+# the flat vllm/deepseek-v4/agentic recipes (agentic infra + benchmark wiring)
+# and the flat sglang/deepseek-v4/8k1k recipes (sglang backend schema).
+
+model:
+  path: "deepseek-v4-pro"
+  container: "dynamo-sglang"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev1"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 4
+
+infra:
+  # Dedicated etcd/nats node — matches the vllm agentic recipes; under the
+  # dynamo router + multiple frontends the infra services need their own node.
+  etcd_nats_dedicated_node: true
+  # cc-traces prompts (~125K tokens) serialize to ~2.8MB; the 1 MiB NATS
+  # default drops them. 32 MiB matches the agentic vllm recipes (~10x headroom
+  # over the largest observed payload); schema recommends 24+ for long ISL.
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  nginx_session_affinity: true
+  nginx_session_affinity_header: X-Correlation-ID
+  enable_multiple_frontends: true
+  num_additional_frontends: 4
+  env:
+    DYN_ROUTER_TEMPERATURE: "10000000"
+    # The sglang image is PEP 668 externally-managed; the runtime dynamo
+    # install (dynamo_wheels.py / source build) runs pip and fails with
+    # "externally-managed-environment" without this. Lets pip install into
+    # the system env. Applies to both dynamo.hash (source) and dynamo.wheel.
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+  args:
+    router-mode: "kv"
+    router-reset-states: true
+    active-decode-blocks-threshold: "None"
+    active-prefill-tokens-threshold: "None"
+    active-prefill-tokens-threshold-frac: "None"
+
+backend:
+  type: sglang
+
+  aggregated_environment:
+    SGLANG_DEFAULT_THINKING: '1'
+    SGLANG_DSV4_REASONING_EFFORT: high
+    SGLANG_SIMULATE_ACC_LEN: '2.49'
+    SGLANG_SIMULATE_ACC_METHOD: match-expected
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+    # Lets the runtime dynamo install's pip bypass PEP 668 on the sglang image.
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+    # from submission for B300
+    SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS: "1"
+    SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
+    SGLANG_OPT_USE_ONLINE_COMPRESS: "0"
+    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
+    SGLANG_OPT_USE_JIT_NORM: "1"
+    SGLANG_OPT_USE_TOPK_V2: "True"
+    # for kvcache offload
+    SGLANG_ENABLE_UNIFIED_RADIX_TREE: "1"
+
+  sglang_config:
+    aggregated:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      trust-remote-code: true
+      stream-interval: 50
+      watchdog-timeout: 1000000
+      mem-fraction-static: 0.90
+      chunked-prefill-size: 8192  # can only support 11000 for TP
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+      swa-full-tokens-ratio: 0.1
+      max-running-requests: 128
+      cuda-graph-max-bs: 128
+
+      scheduler-recv-interval: 30
+      dp-size: 1
+      tp-size: 4
+      ep-size: 1
+      # kv-cache offload
+      enable-hierarchical-cache: true
+      hicache-ratio: 6
+      hicache-write-policy: write_through
+      hicache-io-backend: kernel
+      # mtp section
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "144"
+
+srun_options:
+  mem: "0"
+  # gb300-nv: pyxis maps the calling user into the container as a non-root
+  # uid; agentic_srt.sh's apt-get install git step needs EUID 0. Remap to
+  # uid 0 inside the container. srt-slurm renders empty-string values as
+  # flag-only srun args.
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    # Aggregated: one worker serves both prefill and decode, so GPU accounting
+    # is the single-worker form num_gpus = TP (not the disagg prefill+decode
+    # sum). The multinode post-processing path assumes disagg and would divide
+    # throughput by prefill_gpus + decode_gpus; force the single-node code path
+    # in process_agentic_result.py instead. TP must match sglang_config tp-size.
+    IS_MULTINODE: "false"
+    TP: "4"
+    # Enable dynamo conv-aware routing (per-session affinity so multi-turn
+    # KV cache is reused across turns). Previously opted out because the
+    # frontend 400'd on aiperf's nvext.session_control actions; re-enabled
+    # to test with the current build.
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    # Container-side path of the aiperf mmap dataset cache; host-side mount
+    # wired via launch_gb300-*.sh srtslurm.yaml default_mounts. Without it,
+    # aiperf re-tokenizes + re-writes the dataset mmap on every run.
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    # Persistent HF hub cache (also via default_mounts) so the trace dataset
+    # isn't re-downloaded each run; overrides the workflow-level HF_HUB_CACHE.
+    HF_HUB_CACHE: "/hf_hub_cache"
+

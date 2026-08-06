@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using vLLM.
@@ -14,21 +14,26 @@ set -x
 #       Highest aggregate throughput at large CONC.
 #
 # Image is configured in nvidia-master.yaml. block_size=256,
-# kv-cache-dtype=fp8, FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph
-# capture with custom_ops=all (per the vLLM blog recipe at
-# https://vllm.ai/blog/deepseek-v4).
+# kv-cache-dtype=fp8, FLASHINFER_MLA_SPARSE_DSV4 attention with the FP4 indexer
+# cache, FULL_DECODE_ONLY cudagraph capture, and (in EP tiers) mega-MoE backend.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=mooncake.
+# Pure TP is GPU-resident (KV_OFFLOADING=none). DEP tiers offload KV to host
+# DRAM: KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=vllm-simple, mooncake,
+# or lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-DCP_SIZE="${DCP_SIZE:-1}"
-PCP_SIZE="${PCP_SIZE:-1}"
+if [ -z "$DCP_SIZE" ]; then
+    DCP_SIZE=1
+fi
+if [ -z "$PCP_SIZE" ]; then
+    PCP_SIZE=1
+fi
 VLLM_CP_ARGS=()
 if [ "$DCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
@@ -37,21 +42,21 @@ if [ "$PCP_SIZE" -gt 1 ]; then
     VLLM_CP_ARGS+=(--prefill-context-parallel-size "$PCP_SIZE")
 fi
 
-GPU_COUNT="${GPU_COUNT:-$((TP * PCP_SIZE))}"
+GPU_COUNT=$TP
 if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
     echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
     exit 1
 fi
 export GPU_COUNT
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+if [[ -n "$SLURM_JOB_ID" ]]; then
+    echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
 # `hf download` creates the target dir if missing and is itself idempotent.
 # When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
 # Either way, MODEL_PATH is what the server is launched with.
-if [[ -n "${MODEL_PATH:-}" ]]; then
+if [[ -n "$MODEL_PATH" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
@@ -64,12 +69,6 @@ nvidia-smi
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
-
-# vLLM v0.22.1 can ship CUTLASS DSL 4.5.2 with stale native MLIR bindings,
-# which fails DSV4 indexer compilation with mlir_global_dtors(..., data).
-# Reinstall the matching native wheel until NVIDIA/cutlass#3259 is resolved.
-agentic_pip_install --quiet --force-reinstall --no-deps \
-    'nvidia-cutlass-dsl-libs-cu13==4.5.2'
 
 # vllm-project/router expands the one HTTP backend into one logical worker per
 # DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
@@ -94,20 +93,55 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # vllm-project/vllm#44774 applies the same reachability policy to Mooncake's
 # store mask. 32k matches the trace-replay tuning validated for this workload.
 export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
+export VLLM_USE_V2_MODEL_RUNNER=1
+export VLLM_USE_RUST_FRONTEND=1
+export VLLM_DSV4_MEGA_FP8_COMBINE=1
+export VLLM_RPC_TIMEOUT=600000
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
+LMCACHE_SERVER_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
+LMCACHE_SERVER_PID=""
 
 OFFLOAD_ARGS=()
-
-if require_agentic_kv_offload_backend mooncake; then
+# vLLM's cuMem/VMM allocator is the recipe default; the lmcache arm clears
+# this (see the lmcache case below).
+CUMEM_ARGS=(--enable-cumem-allocator)
+case "$KV_OFFLOAD_BACKEND" in
+    "")
+        require_agentic_kv_offload_none
+        ;;
+    vllm-simple)
+        require_agentic_kv_offload_backend vllm-simple
+        CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
+        # Identical prefixes must hash to identical block keys across DP ranks.
+        export PYTHONHASHSEED=42
+        OFFLOAD_CONFIG=$(cat <<EOF
+{
+  "kv_connector": "SimpleCPUOffloadConnector",
+  "kv_role": "kv_both",
+  "kv_connector_extra_config": {
+    "cpu_bytes_to_use_per_rank": ${CPU_BYTES_PER_RANK},
+    "lazy_offload": false,
+    "enable_cross_layers_blocks": "true"
+  }
+}
+EOF
+)
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "$OFFLOAD_CONFIG"
+        )
+        ;;
+    mooncake)
+        require_agentic_kv_offload_backend mooncake
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / GPU_COUNT))
@@ -127,16 +161,14 @@ if require_agentic_kv_offload_backend mooncake; then
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": "mlx5_0",
+  "device_name": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_10,mlx5_11",
   "enable_offload": false
 }
 EOF
         export MOONCAKE_CONFIG_PATH
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
-        # B200 GPU memory registration works through DMA-BUF, but the compute
-        # nodes do not expose nvidia_peermem. Force Mooncake's DMA-BUF
-        # GPUDirect RDMA path instead of its legacy ibv_reg_mr path.
         export WITH_NVIDIA_PEERMEM=0
         export MC_SLICE_SIZE=1048576
         export MC_WORKERS_PER_CTX=4
@@ -167,7 +199,100 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
-fi
+        ;;
+    lmcache)
+        require_agentic_kv_offload_backend lmcache
+        # The LMCache MP server owns the host-DRAM KV pool as one shared
+        # tier; vLLM ranks attach via LMCacheMPConnector, so the aggregate
+        # host budget is passed through undivided (unlike Mooncake's
+        # per-rank segments). Follows the LMCache DeepSeek-V4 recipe
+        # (docs.lmcache.ai/recipes/deepseek_v4_flash.html); LMCache handles
+        # DSV4's Sparse-MLA hybrid KV geometries automatically.
+        LMCACHE_VERSION=0.5.1
+        agentic_pip_install --quiet --no-cache-dir "lmcache==$LMCACHE_VERSION"
+        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+
+        LMCACHE_HOST=127.0.0.1
+        LMCACHE_PORT=$((PORT + 12000))
+        LMCACHE_HTTP_PORT=$((PORT + 13000))
+        # LMCacheMPConnector concatenates lmcache.mp.host and port into the
+        # ZMQ endpoint. Bind the server to a raw host, but pass the connector
+        # a ZMQ-style host string.
+        LMCACHE_CONNECT_HOST="tcp://$LMCACHE_HOST"
+        # Pool target derated to 75% of the aggregate budget: pinned host
+        # memory is unswappable and also consumes GPU-side mapping
+        # resources, so leave headroom for vLLM host buffers and the OS.
+        # Full-budget targets OOM-killed the node (host OOM-killer or
+        # cudaErrorMemoryAllocation) as the cache filled past ~2 TB during
+        # PR #2153 bring-up.
+        LMCACHE_L1_SIZE_GB=$((TOTAL_CPU_DRAM_GB * 3 / 4))
+        # The pool grows lazily from the initial allocation, so the full
+        # --l1-size-gb target is not pinned at startup.
+        LMCACHE_L1_INIT_SIZE_GB=20
+        LMCACHE_MQ_TIMEOUT=300
+        # Identical prefixes must hash to identical cache keys across DP ranks.
+        export PYTHONHASHSEED=0
+        # LMCacheMPConnector exports the KV cache to the LMCache server
+        # through legacy CUDA IPC handles, and cuMem/VMM allocations cannot
+        # be exported that way (register_kv_caches fails with
+        # cudaErrorInvalidValue), so drop the allocator for this arm only.
+        CUMEM_ARGS=()
+        # Per-engine scheduler stats every 5s, to diagnose per-DP-rank KV
+        # cache imbalance under the session-sticky router.
+        export VLLM_LOG_STATS_INTERVAL=5
+
+        echo "Starting LMCache MP server on port $LMCACHE_PORT..."
+        # One GPU-side transfer worker avoids concurrent-GPU-transfer stalls
+        # under heavy async-load pressure; CPU-side workers stay at 8.
+        lmcache server \
+            --host "$LMCACHE_HOST" \
+            --port "$LMCACHE_PORT" \
+            --http-host "$LMCACHE_HOST" \
+            --http-port "$LMCACHE_HTTP_PORT" \
+            --l1-size-gb "$LMCACHE_L1_SIZE_GB" \
+            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB" \
+            --max-gpu-workers 1 \
+            --max-cpu-workers 8 \
+            --chunk-size 1024 \
+            --l1-align-bytes 16384 \
+            --eviction-trigger-watermark 0.85 \
+            --eviction-ratio 0.10 \
+            --eviction-policy LRU \
+            --supported-transfer-mode lmcache_driven \
+            --no-separate-object-groups \
+            > "$LMCACHE_SERVER_LOG" 2>&1 &
+        LMCACHE_SERVER_PID=$!
+        LMCACHE_READY=0
+        for _ in $(seq 1 60); do
+            if ! kill -0 "$LMCACHE_SERVER_PID" 2>/dev/null; then
+                echo "LMCache server died during startup." >&2
+                cat "$LMCACHE_SERVER_LOG" >&2
+                exit 1
+            fi
+            if curl --output /dev/null --silent --fail \
+                "http://127.0.0.1:$LMCACHE_HTTP_PORT/healthcheck"; then
+                LMCACHE_READY=1
+                break
+            fi
+            sleep 2
+        done
+        if [ "$LMCACHE_READY" -ne 1 ]; then
+            echo "LMCache server did not become healthy in time." >&2
+            cat "$LMCACHE_SERVER_LOG" >&2
+            exit 1
+        fi
+
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":$LMCACHE_MQ_TIMEOUT}}"
+        )
+        ;;
+    *)
+        echo "Error: unsupported B200 KV_OFFLOAD_BACKEND='$KV_OFFLOAD_BACKEND'" >&2
+        exit 1
+        ;;
+esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -175,8 +300,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
 fi
 
 EP_ARGS=()
+FAST_MOE_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
+    FAST_MOE_ARGS=(
+        --moe-backend deep_gemm_amxf4_mega_moe
+        --enable-ep-weight-filter
+        --prefill-schedule-interval 16
+    )
 fi
 
 # AgentX concurrency counts live session trees, not individual requests.
@@ -197,18 +328,23 @@ VLLM_CMD=(
     --trust-remote-code
     --kv-cache-dtype fp8
     --block-size 256
+    --max-model-len 1048576
+    --gpu-memory-utilization 0.92
+    --numa-bind
+    "${CUMEM_ARGS[@]}"
+    --no-enable-flashinfer-autotune
+    --tokenizer-mode deepseek_v4
+    --reasoning-parser deepseek_v4
+    --attention-config '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
+    --no-disable-hybrid-kv-cache-manager
+    --disable-uvicorn-access-log
+    --compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+    --max-num-seqs "$MAX_NUM_SEQS"
+    --max-cudagraph-capture-size "$MAX_NUM_SEQS"
     "${PARALLEL_ARGS[@]}"
     "${VLLM_CP_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-    --attention_config.use_fp4_indexer_cache=True
-    --tokenizer-mode deepseek_v4
-    --tool-call-parser deepseek_v4
-    --enable-auto-tool-choice
-    --reasoning-parser deepseek_v4
-    --enable-prefix-caching
-    --no-disable-hybrid-kv-cache-manager
-    --max-num-seqs "$MAX_NUM_SEQS"
+    "${FAST_MOE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
@@ -236,7 +372,9 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-# ---- Run benchmark ----------------------------------------------------------
-build_replay_cmd "$RESULT_DIR"
-
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    run_eval --port "$PORT"
+else
+    build_replay_cmd "$RESULT_DIR"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi

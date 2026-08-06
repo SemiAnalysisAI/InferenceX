@@ -1,0 +1,116 @@
+name: "minimax-m3-vllm-disagg-gb300-2p1d-dep2-dep8-mxfp8-8k1k-eagle3-c512"
+
+model:
+  path: "minimax-m3-mxfp8"
+  container: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
+  precision: "fp8"
+
+identity:
+  model:
+    repo: "MiniMaxAI/MiniMax-M3-MXFP8"
+    revision: "c5454eb03678d8710e54a4e0fc681b9f3b4a3dba"
+  container:
+    image: "vllm/vllm-openai:nightly-5e35a6f4f9bbc217c599692157ca985c894373f7"
+  frameworks:
+    dynamo: "1.4.0.dev20260730"
+    vllm: "0.26.1rc1.dev255+g5e35a6f4f"
+
+dynamo:
+  install: true
+  version: "1.4.0.dev20260730"
+  request_plane: "nats"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
+
+srun_options:
+  mem: "0"
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  decode_nodes: 2
+  prefill_workers: 2
+  decode_workers: 1
+  gpus_per_prefill: 2
+  gpus_per_decode: 8
+
+frontend:
+  type: "dynamo"
+  enable_multiple_frontends: false
+
+backend:
+  type: "vllm"
+  connector: null
+
+  prefill_environment: &worker-environment
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    UCX_MODULE_DIR: "/usr/local/lib/python3.12/dist-packages/nixl_cu13.libs/ucx"
+    UCX_RNDV_PIPELINE_ERROR_HANDLING: "y"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+
+  decode_environment: *worker-environment
+
+  vllm_config:
+    prefill:
+      no-enable-flashinfer-autotune: true
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+      tensor-parallel-size: 1
+      data-parallel-size: 2
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      max-model-len: 9472
+      language-model-only: true
+      kv-cache-dtype: "fp8"
+      stream-interval: 32
+      max-cudagraph-capture-size: 2048
+      max-num-batched-tokens: 16384
+
+    decode:
+      no-enable-flashinfer-autotune: true
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8", "minimax_m3_msa_decode_backend": "cutlass"}'
+      speculative-config: '{"method":"eagle3","model":"Inferact/MiniMax-M3-EAGLE3-GQA","num_speculative_tokens":3,"attention_backend":"FLASH_ATTN"}'
+      tensor-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      max-model-len: 9472
+      language-model-only: true
+      kv-cache-dtype: "fp8"
+      stream-interval: 32
+      max-num-seqs: 1024
+      max-num-batched-tokens: 16384
+      max-cudagraph-capture-size: 2048
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY"}'
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "512"
+  req_rate: "inf"
+  num_warmup_mult: 2
+  random_range_ratio: 0.8
+  use_chat_template: true

@@ -1,0 +1,140 @@
+name: "kimik3-vllm-agg-b200-tp8pp2-retention0-agentic"
+
+# Kimi-K3 MXFP4 B200 AGGREGATED TP8 x PP2 agentic recipe (2 nodes / 16 GPUs).
+# The native MXFP4 checkpoint (2.8T total params, ~1.4TB of weights) does not
+# fit one 8xB200 node, so TP8 shards attention/dense (/8) and PP2 splits the
+# 93 layers (/2) across 16 GPUs. Plain TP (NOT TEP): expert parallelism is
+# deliberately off, so the 896 routed experts are TP-sharded inside each
+# pipeline stage. Node allocation = tp*pp/gpus_per_node = 8*2/8 = 2 nodes.
+# Aggregated (single worker, decode num-worker 0) — no P/D split, no NIXL.
+# VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION fuses the K3 LatentMoE tail path in
+# the kimi-k3 bring-up image.
+model:
+  path: "kimik3"
+  container: "vllm/vllm-openai:kimi-k3"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "moonshotai/Kimi-K3"
+  container:
+    image: "vllm/vllm-openai:kimi-k3"
+
+# Direct vLLM serving (frontend.type: vllm, srt-slurm PR #278 + the
+# multinode extension on functionstackx/srt-slurm-nv branch
+# klaud/direct-vllm-multinode): `vllm serve` owns the OpenAI port itself, so
+# no Dynamo frontend/worker is involved and no dynamo install is needed.
+dynamo:
+  install: false
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  interval_seconds: 10
+  max_attempts: 1440
+
+resources:
+  gpu_type: "b200"
+  gpus_per_node: 8
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 16
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  # Direct vLLM OpenAI server (srt-slurm PR #278): the vllm serve leader owns
+  # the public port; rank-1 runs a headless engine worker (vLLM-native
+  # multi-node TP8xPP2 via --master-addr/--nnodes/--node-rank, carried by the
+  # functionstackx/srt-slurm-nv klaud/direct-vllm-multinode branch).
+  type: vllm
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    # ~1.4TB of MXFP4 weights off shared Lustre: keep the engine-ready window
+    # generous, and let one long AgentX request hold a PP stage beyond vLLM's
+    # 300-second model-execution default.
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    # Prefix-cache retention (variant G): 0, on the otherwise-unchanged
+    # GPU-resident variant D config. Any positive value must be a multiple of
+    # Kimi-K3's KDA-hybrid scheduler_block_size (3145728; the GB recipes'
+    # 32768 is hard-rejected at engine init — verified on this PR family), so
+    # 0 is the only value below one 3.1M-token scheduler block.
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "0"
+    # No VLLM_PREFIX_CACHE_RETENTION_INTERVAL: the GB200/GB300 AgentX value
+    # (32768) hard-fails engine init on Kimi-K3 — the KDA hybrid gives it a
+    # scheduler_block_size of 3145728 and the interval must be a multiple of
+    # it ("VLLM_PREFIX_CACHE_RETENTION_INTERVAL (32768) must be non-negative
+    # and a multiple of scheduler_block_size (3145728)"). Default retention
+    # served fine in earlier runs.
+    NCCL_CUMEM_ENABLE: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_10:1,mlx5_11:1"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+  vllm_config:
+    aggregated:
+      served-model-name: "moonshotai/Kimi-K3"
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 2
+      trust-remote-code: true
+      load-format: fastsafetensors
+      moe-backend: auto
+      # 0.90, not 0.95: the flashinfer trtllm MXFP4 MoE kernel allocates a
+      # ~1.6 GiB runtime workspace OUTSIDE vLLM's memory pool on the first
+      # forward; at 0.95 a 178 GiB B200 has only ~1.35 GiB free and the first
+      # warmup request OOMs (seen on the dynamo-frontend variants). 0.90
+      # matches the GB200/GB300 agentic recipes.
+      gpu-memory-utilization: 0.90
+      no-enable-flashinfer-autotune: true
+      # kimi_k3 parsers via the native vllm serve OpenAI-frontend flags —
+      # legitimate here because this recipe serves directly with vllm serve
+      # (frontend.type: vllm), not through the dynamo worker entrypoint that
+      # rejects them.
+      enable-auto-tool-choice: true
+      tool-call-parser: kimi_k3
+      reasoning-parser: kimi_k3
+      # No explicit max-model-len: let vLLM derive the native 1M window from
+      # the model config (agentic trajectories blow past any small cap, and
+      # K3's KDA layers keep per-token KV small — only the 24 gated-MLA
+      # layers hold cache). Prefix caching stays on (default) for trajectory
+      # reuse. Cap prefill chunks so a single long request cannot OOM a
+      # pipeline stage; let vLLM pick max-num-seqs.
+      max-num-batched-tokens: 8192
+
+sbatch_directives:
+  segment: "1"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    # Keep the aggregate worker in the multinode result schema so ingestion
+    # uses the zero decode-worker count instead of duplicating TP into P and D.
+    IS_MULTINODE: "true"
+    # aiperf's conv-aware routing emits nvext.session_control, a removed POC
+    # field this dynamo build 400-rejects at warmup (schema moved to
+    # router/routing_constraints/agent_hints). Same opt-out as the GB300
+    # aggregate AgentX recipes — and with a single aggregate worker there is
+    # no P/D routing to bind anyway.
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

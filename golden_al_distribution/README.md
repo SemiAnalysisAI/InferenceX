@@ -39,6 +39,20 @@ vllm serve MODEL \
 
 The option was unified across vLLM model runners in [vllm-project/vllm#40662](https://github.com/vllm-project/vllm/pull/40662).
 
+SGLang supports the same policy through its simulated-acceptance environment variables, set in the server environment (the `aggregated_environment` / `decode_environment` sections of srt-slurm YAMLs, or exported before launch in benchmark scripts):
+
+```yaml
+SGLANG_SIMULATE_ACC_LEN: '3.24'   # AL from the committed golden YAML
+SGLANG_SIMULATE_ACC_METHOD: match-expected
+SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
+```
+
+TensorRT-LLM supports it through [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078). **Note the off-by-one:** this variable counts accepted *draft* tokens only and excludes the bonus/verification token, so set it to the golden AL **minus 1**. Fractional values are supported — the integer part is accepted every iteration and the fractional part is the probability of accepting one additional draft token. For example, a golden AL of `3.5` becomes:
+
+```bash
+TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
+```
+
 This policy follows the same broad principle as MLPerf Inference: prescribe the workload rules needed for comparable system measurements. InferenceX is evaluating inference-system performance, not the ability to fine-tune a benchmark-specific speculative head.
 
 ## How a golden AL curve is collected
@@ -98,6 +112,7 @@ Before accepting an updated curve, reviewers should verify:
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
 | MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 
 ## Primary references
 

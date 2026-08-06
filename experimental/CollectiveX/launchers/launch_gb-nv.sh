@@ -36,7 +36,7 @@ export COLLX_TRANSPORT=mnnvl
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
-  deepep-v2) ;;
+  deepep-v2 | nccl-ep | flashinfer-ep) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
@@ -53,10 +53,12 @@ collx_select_image "$IMAGE"
 MOUNT_SRC="$(collx_stage_path "$REPO_ROOT" "$COLLX_STAGE_DIR")"
 collx_stage_repo "$REPO_ROOT" "$MOUNT_SRC"
 CONTAINER_MOUNTS="$MOUNT_SRC:/ix"
-# ---- backend-setup: pinned DeepEP source + isolated build cache -------------
-# The backend case above admits only deepep-v2, so its staging is unconditional.
-collx_prepare_deepep_source "$MOUNT_SRC" \
-  || collx_die "cannot stage the pinned backend source"
+# ---- backend-setup: pinned source (deepep-v2 only) + isolated build cache ----
+# nccl-ep is pip-only (nccl4py wheel; no source stage); deepep-v2 needs its pinned tree.
+if [ "$COLLX_BENCH" = deepep-v2 ]; then
+  collx_prepare_deepep_source "$MOUNT_SRC" \
+    || collx_die "cannot stage the pinned backend source"
+fi
 export COLLX_BACKEND_SOURCE_ROOT=/ix/experimental/CollectiveX/.collx_sources
 collx_prepare_backend_cache "$COLLX_SQUASH_DIR" \
   || collx_die "cannot prepare the isolated backend cache"
