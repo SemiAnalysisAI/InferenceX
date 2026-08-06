@@ -118,6 +118,27 @@ class MatrixTests(unittest.TestCase):
         for item in document["requested_cases"]:
             self.assertTrue(item["case"]["case_id"].endswith(item["case"]["precision"]))
 
+    def test_every_case_carries_the_chain_knobs_in_its_timing_profile(self):
+        # The chain's budget is case identity, baked in beside iters/trials/warmup rather than
+        # decided by the harness. This is the producer half of the codec CaseArgvContract tests
+        # the consumer half of: if the profile silently went back to three fields, those tests
+        # would still pass against their hand-built case while every real case ran on defaults.
+        document = matrix(backend="all")
+        profiles = {item["case"]["timing"] for item in document["requested_cases"]}
+        self.assertTrue(profiles)
+        for profile in sorted(profiles):
+            with self.subTest(timing=profile):
+                fields = profile.split(":")
+                self.assertEqual(
+                    len(fields), 6,
+                    "expected iters:trials:warmup:chain_iters:chain_trials:chain_drop",
+                )
+                self.assertTrue(all(field.isdigit() for field in fields), profile)
+                _, _, _, chain_iters, chain_trials, chain_drop = map(int, fields)
+                # A chain that discards everything it measured leaves nothing to reduce.
+                self.assertGreater(chain_iters, chain_drop)
+                self.assertGreater(chain_trials, 0)
+
     def test_low_latency_is_decode_only_and_capability_gated(self):
         # Low-latency cases are additive: they appear only for (sku, backend, ep) cells
         # listed in the platform registry's ll_backends map, only in the decode phase, and

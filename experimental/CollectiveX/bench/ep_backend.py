@@ -485,6 +485,113 @@ class EPBackend(abc.ABC):
             samples.append(start.elapsed_time(end) * 1000.0 / pairs)
         return samples
 
+    # Whether this backend needs its ranks re-aligned between chained pairs. `benchmark_chain`
+    # runs pairs back-to-back with no host sync -- that IS the measurement -- but the same rank
+    # drift `pipeline_pairs` reasons about applies: a receive buffer that cannot absorb roughly
+    # one iteration of drift would be read half-written. A backend that wedges sets this and gets
+    # a one-element on-stream all_reduce between pairs, which costs ~10us and gives up some of the
+    # cross-pair overlap the chain exists to measure. The artifact stamps it
+    # (`implementation.chain_barrier`) so a barrier-mode period is never silently compared against
+    # a free-running one. Defaults live here, not in the adapters, so the decision is auditable in
+    # one place.
+    #
+    # NOTHING SETS IT TODAY, on evidence rather than optimism. deepep-v2's NORMAL mode was the one
+    # genuinely unknown cell -- ElasticBuffer's inter-iteration flow control had not been audited
+    # for un-synced chaining -- so it was hand-probed on b200 (2026-08-06, pin 01dc3aaa) with 256
+    # un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over RoCE) at both precisions:
+    # all four passed, with finite outputs, timed inputs unchanged, and cross-rank period agreement
+    # within 1us. Every other backend either double-buffers per dispatch (deepep-v2/uccl-ep
+    # low-latency), enforces strict pairing through its own contract flags (MoRI, FlashInfer EP),
+    # or completes each op on a reusable handle (nccl-ep). The valve stays implemented because the
+    # next backend or the next pin is not covered by that probe.
+    chain_barrier = False
+
+    def benchmark_chain(self, problem, warmup, iters, drop):
+        """Free-running dispatch->combine pairs: per-pair and per-op CUDA events, no host sync.
+
+        This is the number a serving stack pays. `roundtrip` drains the GPU around every pair, so
+        it reports an idle pipeline's latency and charges inter-rank entry stagger to whichever
+        component the ranks happened to enter unevenly; a decode loop never stops between layers,
+        so the collectives phase-lock the ranks and entry skew amortises across the chain instead
+        of landing on one op. Both are real -- see `benchmark_period` for the same argument at the
+        level of the opt-in `period` component -- but only this one is measured for every backend,
+        because here the pairing is preserved exactly as `run_roundtrip` orders it (dispatch, then
+        stage-or-staged, then combine) and the paired-API backends therefore stay in contract.
+
+        WHY ONLY THE PAIR PERIOD AND THE PER-OP MINIMA ARE PUBLISHABLE. Without a host sync the
+        ranks are free to arrive at each collective at slightly different times, and the resulting
+        wait has to be spent somewhere: it PARKS in whichever op window a given rank happens to
+        block in. That parking is stable per rank (so a single rank's per-op numbers look clean and
+        convincing), arbitrary across ranks (rank 3's dispatch is long exactly where rank 5's
+        combine is), and bistable across runs of the identical configuration -- while the sum, the
+        pair period, is conserved. So a chained per-op MEDIAN measures where the wait sat on that
+        run, not what the op cost, and this method's per-op series is published only after a
+        cross-rank MIN: the last rank into a collective is the one that waited least, so its window
+        is the op's floor. `run_sweep` enforces that -- pair to a cross-rank median, dispatch and
+        combine to a cross-rank minimum, and never a chained per-op median or p99.
+
+        `drop` discards the head of each chain: the first pairs run into an empty pipeline and
+        measure fill, not period.
+        """
+        import torch
+
+        self.warm(problem, warmup)
+        staged = None
+        if self.stage_excluded_from_roundtrip:
+            # The same hoist `benchmark_roundtrip` performs, for the same reason and read back
+            # through the same attribute: the chain must be dispatch -> combine and nothing else.
+            # The `CX_FP8_CONSUME=dequant` hatch leaves `staged` None and so keeps the conversion
+            # inline, where it lands inside the pair period and inside NEITHER per-op window --
+            # which is the honest placement: it is work between the two collectives, not part of
+            # either one.
+            handle = self.dispatch(problem)
+            self.stage(problem, handle)
+            staged = getattr(handle, self.combine_input_attr)
+            self.combine(problem, handle)  # drain the pair backends require
+            torch.cuda.synchronize()
+        barrier = torch.zeros(1, device=self.device) if self.chain_barrier else None
+        # Every event and the barrier tensor are allocated BEFORE the loop. An allocation between
+        # two record() calls is host work inside a window that is supposed to belong to the stream,
+        # and at the bottom of the ladder that is a measurable fraction of the period.
+        def events():
+            return [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
+
+        pair_start, pair_end = events(), events()
+        dispatch_start, dispatch_end = events(), events()
+        combine_start, combine_end = events(), events()
+        for i in range(iters):
+            pair_start[i].record()
+            dispatch_start[i].record()
+            handle = self.dispatch(problem)
+            dispatch_end[i].record()
+            if staged is None:
+                self.stage(problem, handle)
+            else:
+                setattr(handle, self.combine_input_attr, staged)
+            combine_start[i].record()
+            self.combine(problem, handle)
+            combine_end[i].record()
+            pair_end[i].record()
+            if barrier is not None:
+                # Between PAIRS, never between the two collectives of one pair, and after the
+                # pair's end event so its cost sits in neither the pair window nor an op window.
+                # The serialization still shows up -- as overlap the period no longer gets --
+                # which is exactly why the artifact records that this row ran with it.
+                torch.distributed.all_reduce(barrier)
+        torch.cuda.synchronize()
+
+        def series(starts, ends):
+            return [
+                start.elapsed_time(end) * 1000.0  # ms -> us
+                for start, end in zip(starts[drop:], ends[drop:])
+            ]
+
+        return (
+            series(pair_start, pair_end),
+            series(dispatch_start, dispatch_end),
+            series(combine_start, combine_end),
+        )
+
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""
         if component == "roundtrip":

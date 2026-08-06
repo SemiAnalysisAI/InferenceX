@@ -49,8 +49,21 @@ Cases use a fixed timing profile from `configs/sweep.json`: 256 trials x 8 timed
 samples per component) with 32 synchronized full roundtrip warmups before each measured component at
 every trial/point. Component measurement order rotates each trial so every timed component occupies
 every position in the sequence; each iteration takes the cross-rank maximum before nearest-rank
-p50/p90/p95/p99, and roundtrip p99 is the headline latency. A keyed BLAKE2b counter produces
+p50/p90/p95/p99. A keyed BLAKE2b counter produces
 byte-identical routing and gate weights on every runtime.
+
+Those components all measure **fresh entry** — the GPU is drained around every timed window — which
+is the latency of an idle pipeline, not what a decode loop pays. So every row also carries the
+**chained pair period**: 4 trials x (128 dispatch→combine pairs issued back-to-back with no host
+sync, first 16 dropped as pipeline fill) = 448 observations, reduced across ranks by median.
+`components.pair_period` is the headline latency, with roundtrip p99 remaining the headline for rows
+measured before the field existed — `summarize.py` footnotes any table holding both, because they
+are different quantities. The same chain also publishes per-op floors (`chain_floor_us`, the
+cross-rank minimum of each op's window) and `chain_health.pair_spread_us`; chained per-op *medians*
+are deliberately never published, because inter-rank wait parks in whichever op window a rank
+blocks in — stable per rank, arbitrary across ranks, and conserved only in the pair total. Nothing
+existing was renamed or re-meant, and the sweep `version` stays 1, so consumers key on the presence
+of `components.pair_period`.
 
 `roundtrip` means dispatch then combine — the transport — in every row. Expert-output staging sits
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding

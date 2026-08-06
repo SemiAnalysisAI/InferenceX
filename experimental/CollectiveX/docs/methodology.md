@@ -228,8 +228,12 @@ will wrongly subtract a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is the p99 of the per-iteration cross-rank MAX (`p50` is emitted alongside it, and
-`summarize.py` prints both; the p99 is the figure the published cohorts rank on). That is not in
+Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
+Pair Period below) for every row that carries one, and the p99 of the per-iteration cross-rank MAX
+of `roundtrip` for the rows measured before that field existed. Both `p50` and `p99` are emitted
+either way and `summarize.py` prints both. The rest of this paragraph describes the second of those
+— the fresh-entry family, which every row still carries unchanged, and which the p99-of-MAX
+argument below applies to. That is not in
 tension with the guidance below to rank by hand on p50: the published cohorts do not order cells by
 raw p99, they group them into bootstrap equivalence bands, so a cell whose p99 is dominated by
 worst-rank stalls rather than transport lands in a tie band instead of being declared a winner or a
@@ -271,6 +275,77 @@ isolated components inherit the preceding operation's per-rank exit stagger, so 
 residual-wait diagnostics rather than per-operation costs; the paired roundtrip is the
 comparable quantity.
 
+### Chained Pair Period
+
+Everything above measures **fresh entry**: the GPU is drained around each timed window, so every
+sample starts from an idle pipeline and the ranks re-stagger before each one. A serving stack never
+runs that way. Its decode loop issues dispatch, combine, dispatch, combine without stopping, and
+what it pays per MoE layer is the pipeline's steady-state **period**, not the latency of one
+collective measured in isolation. Every row therefore also carries the chained family, measured by
+`benchmark_chain`: `chain_iters` (128) dispatch→combine pairs issued back-to-back with CUDA events
+enqueued on-stream and **no host synchronization inside the loop**, the first `chain_drop` (16)
+pairs discarded as pipeline fill, pooled over `chain_trials` (4) per point on the same rotated
+ladder order as the rest of Pass 2. The pairing is exactly `run_roundtrip`'s — dispatch, then the
+staged combine input (or an inline `stage` under the `CX_FP8_CONSUME=dequant` hatch), then combine —
+so the paired-API backends stay in contract and `pair_period` excludes expert-output staging on the
+same rule `roundtrip` does.
+
+Three statistics come out of it, and deliberately only three:
+
+- `components.pair_period` (origin `chained-median`) — the per-pair period, reduced across ranks by
+  MEDIAN. MAX is right for a drained component, because a layer is not finished until its slowest
+  rank is — but the period is not a completion time, it is a **rate**, and since the collectives
+  phase-lock every rank into the same cadence, a MAX would publish whichever rank hiccuped on each
+  iteration as the pipeline's speed.
+- `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`) — each op's window
+  reduced across ranks by MIN. The last rank into a collective is the one that waited least, so its
+  window is that operation's floor. Where this has been triangulated the floor lands within ~10% of
+  profiler kernel time, which makes it a free substitute for a Kineto trace.
+- `chain_health.pair_spread_us` — the per-iteration cross-rank max-minus-min of the pair, which is
+  the *proof* the median means anything. Small next to `pair_period` means every rank held the same
+  cadence; large means a paced or slow rank, and the point should not be read as a steady-state
+  period at all.
+
+**Chained per-op medians and p99s are never published, and the omission is not an oversight.**
+Without a host sync the ranks arrive at each collective at slightly different times, and the
+resulting wait has to be spent somewhere: it parks in whichever op window a given rank happens to
+block in. That parking is stable per rank — so one rank's per-op numbers look clean and convincing
+— arbitrary across ranks, with rank 3's dispatch long exactly where rank 5's combine is, and
+bistable across runs of an identical configuration, while the sum, the pair period, is conserved.
+A chained per-op median therefore measures where the wait sat on that run rather than what the
+operation cost. The cross-rank MIN is the one reduction that removes it, which is why the floors
+are published and the medians are not; a p99 of a chained window would mix the same noise back in
+through the tail.
+
+The fresh-entry family keeps its meaning exactly. `components.roundtrip`, `dispatch`, `combine`,
+`stage`, `isolated_sum`, `cross_rank_min_us` and `cross_rank_spread_us` are measured and reduced
+as they always were, at the same 256×8 sampling, and no stored row was re-meant or re-measured.
+The sweep `version` stays 1 across the change for that reason, exactly as it did for
+`stage_excluded_from_roundtrip`: a consumer keys on the presence of `components.pair_period`, and a
+row without it simply predates the chain. Quote `roundtrip` for how long one collective takes and
+`pair_period` for what a continuous stream costs; never sum them, never treat one as a correction
+to the other, and never rank a chained cell against a pre-chain one on the headline column —
+`summarize.py` footnotes its table whenever both appear in it.
+
+The chain runs free on every backend today. Because it lets ranks drift by up to about one
+iteration, a backend whose receive buffer cannot absorb that drift would read a half-written plane,
+so `EPBackend.chain_barrier` exists as an escape valve: it inserts a one-element on-stream
+all-reduce **between pairs** (never between the two collectives of one pair, and after the pair's
+end event, so its ~10µs sits in neither the pair window nor an op window), which re-aligns the ranks
+at the cost of the cross-pair overlap the measurement exists to capture. A barrier-mode period is
+therefore an upper bound on the free-running one, `implementation.chain_barrier` records which was
+used, and the two must not be pooled or ranked together. No backend sets it. DeepEP V2's **normal**
+mode was the one genuinely unaudited cell — its ElasticBuffer inter-iteration flow control had never
+been exercised un-synced — and it was hand-probed on B200 (2026-08-06, pin `01dc3aaa`) with 256
+un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over RoCE) at both precisions: all
+four passed with finite outputs, timed inputs unchanged, and cross-rank period agreement within
+1µs. The measured gap against the synced pacing is the size of the effect this section is about —
+EP8 105.4µs against 125.4µs at BF16 and 216.6µs against 272.3µs at FP8; EP16 838µs against 863µs at
+BF16 and 820µs against 897µs at FP8. Every other backend either double-buffers per dispatch
+(DeepEP V2 and UCCL-EP low-latency), enforces strict pairing through its own contract flags (MoRI,
+FlashInfer EP), or completes each op on a reusable handle (NCCL EP). The valve stays implemented
+because the next backend, or the next pin, is not covered by that probe.
+
 One backend's timed window omits a cost the others pay, deliberately. nccl-ep binds routing with
 `ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than with
 the token count, so charging it per iteration would import a ladder-max-proportional term into
@@ -288,14 +363,23 @@ contracts separate.
 Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
 and baked into every scheduled case:
 
-- 256 trials x 8 timed iterations = 2048 observations;
+- 256 trials x 8 timed iterations = 2048 observations for the fresh-entry family;
+- 4 chain trials x (128 free-running pairs - 16 dropped for pipeline fill) = 448 observations for
+  the chained family, sampled separately because one call already yields 128 pairs and the
+  fresh-entry trial count would multiply the leg's wall clock without buying convergence;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at
-  every trial/point;
+  every trial/point, and before each chain trial;
 - component measurement order rotates each trial (`trial_order`) so every timed component occupies
-  every position in the sequence, over a per-trial-rotated token ladder; and
-- per-iteration maximum latency across ranks before nearest-rank p50/p90/p95/p99.
+  every position in the sequence, over a per-trial-rotated token ladder, which the chain trials
+  rotate the same way; and
+- per-iteration maximum latency across ranks before nearest-rank p50/p90/p95/p99 (the chained
+  family reduces by median and minimum instead — see Chained Pair Period).
 
-Measured roundtrip p99 is the headline latency. Decode and prefill identify the serving regime
+`measurement.sampling` carries both halves of that profile, because `sample_count` alone cannot be
+decomposed back into them and a 128x4 chain is not the same measurement as a 512x1 one.
+
+The chained pair period is the headline latency where a row carries one, and measured roundtrip p99
+on the rows that predate it. Decode and prefill identify the serving regime
 represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
 identical shape. Ascending through the ladder, each measured shape is conditioned with 8 untimed
 full roundtrips — settling clocks, fabric, and buffer state — before it is correctness-checked;
@@ -389,12 +473,16 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
   inference engine can select this transport today (`production` = exposed by vLLM's
   `--all2all-backend` or SGLang's `--moe-a2a-backend`; `candidate` = a real transport we
   benchmark that no engine ships a selector for, so its numbers describe the library rather
-  than a deployable configuration). The same map is in the registry's `backend_maturity`;
+  than a deployable configuration). The same map is in the registry's `backend_maturity`. It also
+  carries `chained_period` (whether this document's rows carry the chained family at all) and
+  `chain_barrier` (whether that chain paid an on-stream barrier between pairs);
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
-Each `rows` entry carries point latency, byte accounting, token rate, correctness, load, and fanout;
+Each `rows` entry carries point latency (the fresh-entry `components` plus the chained
+`components.pair_period`, `chain_floor_us` and `chain_health` — see Chained Pair Period), byte
+accounting, token rate, correctness, load, and fanout;
 per-point statistics are summarized in place, not emitted as separate documents. Each dispatched
 case writes exactly this one raw result document; unsupported or never-run cells produce no
 synthetic record.

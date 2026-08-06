@@ -134,6 +134,18 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="timed iterations per trial")
     ap.add_argument("--trials", type=int, required=True,
                     help="timed trials")
+    # Chain sampling, kept on its own knobs because the chain measures a different quantity at a
+    # different cost: it runs free (no per-iteration host sync), so a long run of pairs is cheap,
+    # and it needs far fewer trials than the fresh-entry components to converge. The matrix bakes
+    # these from the same configs/sweep.json `timing:` block, appended after the fresh-entry three;
+    # these defaults are what a case scheduled before the fields existed (or a hand invocation)
+    # decodes to, so they are deliberately identical to the config's values and not required.
+    ap.add_argument("--chain-iters", type=int, default=128,
+                    help="free-running dispatch->combine pairs per chain trial")
+    ap.add_argument("--chain-trials", type=int, default=4,
+                    help="chain trials per ladder point")
+    ap.add_argument("--chain-drop", type=int, default=16,
+                    help="head pairs discarded per chain trial (pipeline fill, not period)")
     # provenance / output
     ap.add_argument("--runner", required=True)
     ap.add_argument("--topology-class", required=True)
@@ -180,13 +192,28 @@ def _pcts(xs):
              "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
 
 
-def _component(percentiles, count, *, derived=False):
+# The `origin` values the chained family publishes. Named constants because they are a CONSUMER
+# CONTRACT, not labels: the frontend and the durable store key the headline on
+# `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo here is a silent
+# downstream fallback to the drained roundtrip rather than a visible failure.
+CHAIN_PERIOD_ORIGIN = "chained-median"
+CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
+
+
+def _component(percentiles, count, *, derived=False, origin=None):
+    """One component block: availability, the reduction behind it, percentiles, sample count.
+
+    `origin` names that reduction wherever it is not this suite's default of a per-iteration
+    cross-rank MAX over fresh-entry samples. The chained families set it ("chained-median",
+    "chained-cross-rank-min") because they are differently-reduced statistics sharing a block
+    shape, and a consumer must not have to infer which one it is reading from the field name.
+    """
     if percentiles is None:
         return {"availability": "unavailable", "origin": None,
                 "percentiles_us": None, "sample_count": 0}
     return {
         "availability": "derived" if derived else "measured",
-        "origin": "derived-percentile-sum" if derived else "measured",
+        "origin": origin or ("derived-percentile-sum" if derived else "measured"),
         "percentiles_us": percentiles,
         "sample_count": 0 if derived else count,
     }
@@ -287,6 +314,32 @@ def _reduce_vec(torch, dist, device, vals, op):
     t = torch.tensor(vals, device=device, dtype=torch.float64)
     dist.all_reduce(t, op=op)
     return [float(x) for x in t.tolist()]
+
+
+def _reduce_vec_median_spread(torch, dist, device, vals):
+    """Per-element cross-rank (MEDIAN, MAX-MIN) for a chained series, from one all_gather.
+
+    MAX is the right reduction for a drained component -- a layer is not finished until its
+    slowest rank is, so MAX is the completion cost. The chained pair PERIOD is not a completion
+    cost but a RATE: every rank runs the same free-running loop, phase-locked by the collectives,
+    so in a healthy chain the ranks agree to about a microsecond and MAX would publish whichever
+    rank hiccuped on each iteration as the pipeline's speed. The median is that agreed cadence and
+    the spread is the proof it was agreed -- read a spread that is large next to the period as
+    "one rank was paced or slow", the same way `cross_rank_spread_us` is read for the fresh-entry
+    family, and distrust the point.
+
+    Both come out of one gather rather than three reductions so they cannot disagree about which
+    iterations they describe, and because MEDIAN is not a `ReduceOp` in the first place. Every rank
+    gathers the same matrix in rank order, so every rank computes an identical value and the
+    artifact does not depend on which rank wrote it.
+    """
+    local = torch.tensor(vals, device=device, dtype=torch.float64)
+    gathered = [torch.empty_like(local) for _ in range(dist.get_world_size())]
+    dist.all_gather(gathered, local)
+    stacked = torch.stack(gathered)
+    median = stacked.median(dim=0).values
+    spread = stacked.max(dim=0).values - stacked.min(dim=0).values
+    return [float(x) for x in median.tolist()], [float(x) for x in spread.tolist()]
 
 
 def _reduce_int(torch, dist, device, v: int, op) -> int:
@@ -857,6 +910,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: iters/trials/warmup must be positive; got "
                   f"{args.iters}:{args.trials}:{args.warmup}")
         return 2
+    # Fail closed rather than emit an empty chain block: a drop at or past the iteration count
+    # discards every pair and would publish `pair_period` as merely "unavailable", which reads
+    # identically to a backend that could not be chained at all.
+    if min(args.chain_iters, args.chain_trials) <= 0 or not 0 <= args.chain_drop < args.chain_iters:
+        if rank == 0:
+            print(f"ERROR: chain iters/trials must be positive and 0 <= drop < iters; got "
+                  f"{args.chain_iters}:{args.chain_trials}:{args.chain_drop}")
+        return 2
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
 
     ep_size = world_size
@@ -971,6 +1032,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     dmin_pool = {T: [] for T in ladder}
     cmin_pool = {T: [] for T in ladder}
     rtmin_pool = {T: [] for T in ladder}
+    # The chained family, measured by the same Pass-2 loop shape but on its own (much smaller)
+    # trial count -- see backend.benchmark_chain for what it measures and why only these three
+    # reductions of it are publishable.
+    chain_pool = {T: [] for T in ladder}         # pair period, cross-rank MEDIAN per iteration
+    chain_spread_pool = {T: [] for T in ladder}  # ... and its cross-rank (max-min), as the proof
+    dfloor_pool = {T: [] for T in ladder}        # chained dispatch window, cross-rank MIN
+    cfloor_pool = {T: [] for T in ladder}        # ... combine
     for trial_index in range(args.trials):
         order = trial_order(list(ladder), trial_index)
         for T in order:
@@ -1008,6 +1076,28 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             if measured["dispatch"]:
                 dmin_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
                 cmin_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MIN)
+
+    # ---- Pass 2b: the chained family, on its own trial count.
+    # A separate loop rather than another component inside the loop above, because the chain is
+    # sampled differently: one call already yields chain_iters (128) free-running pairs, so a
+    # handful of trials pools more observations than the fresh-entry components get from 256, and
+    # running it 256 times would multiply the leg's wall clock for no extra convergence. The
+    # ladder order still rotates per trial for the same reason it does above -- so no point is
+    # always measured on a just-warmed or a long-running device. ----
+    for trial_index in range(args.chain_trials):
+        for T in trial_order(list(ladder), trial_index):
+            pair, dispatch_window, combine_window = backend.benchmark_chain(
+                problems[T], args.warmup, args.chain_iters, args.chain_drop
+            )
+            pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
+            chain_pool[T] += pair_median
+            chain_spread_pool[T] += pair_spread
+            # Per-op: cross-rank MIN and nothing else. The chained per-op windows carry each
+            # rank's inter-rank wait wherever it parked, so their medians describe that run's
+            # parking rather than the operation; the minimum is the last-entering rank's window,
+            # which is the op with the wait excluded. See benchmark_chain.
+            dfloor_pool[T] += _reduce_vec(torch, dist, device, dispatch_window, MIN)
+            cfloor_pool[T] += _reduce_vec(torch, dist, device, combine_window, MIN)
 
     # ---- Pass 3: prove timed inputs were immutable and repeat the full oracle. ----
     for T in ladder:
@@ -1088,14 +1178,46 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
         spread = spread_pool[T]
+        chain, chain_spread = chain_pool[T], chain_spread_pool[T]
+        chainp = _pcts(chain)
         rows.append({
             "components": {
                 "combine": _component(cp, len(c)),
                 "dispatch": _component(dp, len(d)),
                 "isolated_sum": _component(isum, 0, derived=True),
+                # What a serving decode loop pays per MoE layer: the steady-state period of
+                # dispatch->combine pairs issued back-to-back with no host sync between them.
+                # Distinct from `period`, which measures the same idea only for the backends that
+                # opt into `pipeline_pairs` and reduces with MAX over drained batches of pairs;
+                # this one is measured for every backend and reduced with a cross-rank median.
+                # Distinct from `roundtrip`, which drains the pipeline around every pair and so
+                # reports an idle-pipeline latency. Do not sum it with anything.
+                "pair_period": _component(chainp, len(chain), origin=CHAIN_PERIOD_ORIGIN),
                 "roundtrip": _component(rtp, len(rt)),
                 "period": _component(_pcts(period_pool[T]), len(period_pool[T])),
                 "stage": _component(sp, len(s)),
+            },
+            # Per-op floors from the same chained pairs: the cross-rank MINIMUM of each op's
+            # window, i.e. the last-entering rank's, which is the one that waited least. These are
+            # NOT the chained cost of dispatch and combine -- an unsynchronized chain parks each
+            # rank's inter-rank wait in whichever op window it blocked in, so only the minimum is
+            # an operation cost and only the pair period above is a pipeline cost. They are here
+            # because the floor tracks profiler kernel time closely enough to substitute for one,
+            # and because floor-vs-period is what shows how much of a pair is transport.
+            "chain_floor_us": {
+                "combine": _component(
+                    _pcts(cfloor_pool[T]), len(cfloor_pool[T]), origin=CHAIN_FLOOR_ORIGIN
+                ),
+                "dispatch": _component(
+                    _pcts(dfloor_pool[T]), len(dfloor_pool[T]), origin=CHAIN_FLOOR_ORIGIN
+                ),
+            },
+            # Whether the ranks actually ran the chain in lockstep, which is the precondition for
+            # the median above meaning anything. Small next to `pair_period` => every rank held the
+            # same cadence. Large => a paced or slow rank, and the point should not be read as a
+            # steady-state period at all.
+            "chain_health": {
+                "pair_spread_us": _component(_pcts(chain_spread), len(chain_spread)),
             },
             # Skew-excluded companion to `components`: same iterations reduced with cross-rank
             # MIN instead of MAX. Compare against `components` to see how much of a point is the
@@ -1147,7 +1269,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             component_log = (f"disp p50/p99={dp['p50']:7.1f}/{dp['p99']:7.1f} "
                              f"comb {cp['p50']:6.1f}/{cp['p99']:6.1f} " if dp and cp
                              else "components=unavailable ")
-            print(f"  T={T:<5} {component_log}"
+            period_log = f"period={chainp['p50']:7.1f}us " if chainp else "period=n/a "
+            print(f"  T={T:<5} {component_log}{period_log}"
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(rt)} fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // world_size}/{recv_max} "
                   f"correct={point_ok}")
@@ -1226,10 +1349,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "payload_unit": "token-rank",
             "rows": rows,
             "sampling": {
+                # The fresh-entry family (dispatch/stage/combine/roundtrip and their cross-rank
+                # companions). The chained family below is sampled separately and its counts are
+                # NOT derivable from these.
                 "iterations_per_trial": args.iters,
                 "samples_per_component": args.iters * args.trials,
                 "trials": args.trials,
                 "warmup_iterations": args.warmup,
+                # `pair_period`, `chain_floor_us` and `chain_health`: free-running pairs per trial,
+                # the head discarded as pipeline fill, and the trial count they are pooled over.
+                # Emitted because `sample_count` alone cannot be decomposed back into them, and a
+                # 128x4 chain and a 512x1 chain are not the same measurement.
+                "chain_drop": args.chain_drop,
+                "chain_iterations_per_trial": args.chain_iters,
+                "chain_trials": args.chain_trials,
             },
         },
         "implementation": {
@@ -1254,6 +1387,16 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "stage_excluded_from_roundtrip": bool(
                 getattr(backend, "stage_excluded_from_roundtrip", False)
             ),
+            # Whether this document's rows carry the chained family at all. Rows measured before
+            # it existed do not, and a consumer keys the headline on presence exactly as it does for
+            # `stage_excluded_from_roundtrip` -- the sweep `version` does not separate the two
+            # generations, because nothing existing changed meaning.
+            "chained_period": True,
+            # Whether the chain paid an on-stream barrier between pairs. True means the ranks were
+            # re-aligned every pair, so the period includes ~10us of barrier and excludes the
+            # cross-pair overlap a free-running chain gets: a barrier-mode period is an upper bound
+            # on the free-running one and the two must not be pooled or ranked together.
+            "chain_barrier": bool(getattr(backend, "chain_barrier", False)),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,
@@ -1292,10 +1435,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 summary_rows.append(row)
 
         def _point_summary(row):
+            period = row["components"]["pair_period"]["percentiles_us"]
+            period_summary = f" period_p50={period['p50']:.1f}us" if period else ""
             percentiles = row["components"]["dispatch"]["percentiles_us"]
             if not percentiles:
-                return f"T={row['tokens_per_rank']}:n/a"
-            return f"T={row['tokens_per_rank']}:disp_p99={percentiles['p99']:.1f}us"
+                return f"T={row['tokens_per_rank']}:n/a{period_summary}"
+            return (f"T={row['tokens_per_rank']}:disp_p99={percentiles['p99']:.1f}us"
+                    f"{period_summary}")
 
         component_summary = " ".join(_point_summary(row) for row in summary_rows)
         print(f"{backend.name} ep-dispatch-combine [{args.phase}/{mode}]: "

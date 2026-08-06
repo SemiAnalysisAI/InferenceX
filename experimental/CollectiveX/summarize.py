@@ -75,23 +75,33 @@ def _wire_basis(document: dict) -> str:
 def _headline(document: dict) -> tuple:
     """Headline row, with the skew bracket beside it.
 
-    `p50`/`p99` are the cross-rank MAX: a layer is not finished until its slowest rank is, so
-    MAX is the completion cost. But entry stagger is charged to it, and how much is a property
-    of the BACKEND, not just the fleet — on identical h200 low-latency cells the per-iteration
-    spread is 9.2us for deepep-v2 and uccl-ep (which share a kernel family) against 2.0us for
-    nccl-ep, flat across the whole ladder. So MAX alone taxes some backends more than others,
-    and two cells whose MAX gap is smaller than that spread are not separated by the data.
-    `min50` is the same iterations reduced with MIN — the skew-excluded floor — and `skew` is
-    the per-iteration MAX-MIN. Read the pair as a bracket, not the two ends as rival metrics.
+    `p50`/`p99` are the chained pair PERIOD where the row carries one — what a decode loop pays
+    per MoE layer, measured with pairs issued back-to-back and no host sync, reduced across ranks
+    by median. Rows written before the chain existed fall back to `roundtrip`, which drains the
+    pipeline around every pair and so reports an idle-pipeline latency reduced by cross-rank MAX.
+    They are different quantities, not two estimates of one, so the last element of the tuple says
+    which was used and `render` footnotes the table whenever both appear in it.
+
+    The MAX in that fallback is the completion cost — a layer is not finished until its slowest
+    rank is — but entry stagger is charged to it, and how much is a property of the BACKEND, not
+    just the fleet: on identical h200 low-latency cells the per-iteration spread is 9.2us for
+    deepep-v2 and uccl-ep (which share a kernel family) against 2.0us for nccl-ep, flat across the
+    whole ladder. So MAX alone taxes some backends more than others, and two cells whose MAX gap is
+    smaller than that spread are not separated by the data. `min50` is the same iterations reduced
+    with MIN — the skew-excluded floor — and `skew` is the per-iteration MAX-MIN. Read the pair as
+    a bracket, not the two ends as rival metrics. The chained headline is largely indifferent to
+    that argument, which is the point of it: the collectives phase-lock the ranks, so the stagger
+    amortises across the chain rather than landing on one measured window.
     """
     rows = document["measurement"]["rows"]
     if not rows:
         # This renderer validates nothing and must degrade rather than crash: a shard that
         # reported an outcome but no measurement rows is malformed, not a reason to lose the
-        # whole table.
-        return ("-", "-", "-", "-", "-")
+        # whole table. No row means nothing to attribute, so it votes on neither footnote.
+        return ("-", "-", "-", "-", "-", None)
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
-    latency = row["components"]["roundtrip"]["percentiles_us"]
+    period = (row["components"].get("pair_period") or {}).get("percentiles_us")
+    latency = period or row["components"]["roundtrip"]["percentiles_us"]
 
     def percentile(block: str, name: str) -> float | str:
         # Absent on rows measured before the skew diagnostics were emitted.
@@ -102,6 +112,7 @@ def _headline(document: dict) -> tuple:
         row["tokens_per_rank"], latency["p50"], latency["p99"],
         percentile("cross_rank_min_us", "roundtrip"),
         percentile("cross_rank_spread_us", ""),
+        period is not None,
     )
 
 
@@ -119,12 +130,15 @@ def render(documents: list[dict]) -> str:
         lines.append("")
     lines += [
         "| ver | sku | backend | mode | precision | suite | phase | routing | ep | topo "
-        "| wire | outcome | T* | p50 us | p99 us | min50 us | skew us |",
+        "| wire | outcome | T* | p50* us | p99* us | min50 us | skew us |",
         "|--:|---|---|---|---|---|---|---|--:|---|---|---|--:|--:|--:|--:|--:|",
     ]
+    chained = []
     for document in documents:
         sku, backend, suite, routing, mode, phase, ep, precision = _identity(document)
-        token, p50, p99, min50, skew = _headline(document)
+        token, p50, p99, min50, skew, row_chained = _headline(document)
+        if row_chained is not None:
+            chained.append(row_chained)
         topo, wire = _topology(document), _wire_basis(document)
         lines.append(
             f"| {document['version']} | {sku} | `{backend}` | {mode} | {precision} | {suite} | "
@@ -133,6 +147,26 @@ def render(documents: list[dict]) -> str:
         )
     if not documents:
         lines.append("\n> No valid native outcome documents found.")
+    # The starred columns can hold two different quantities, so the table always says which — and
+    # says so loudly when it holds both, because a mixed column silently compares a steady-state
+    # period against an idle-pipeline latency.
+    if chained:
+        fallbacks = chained.count(False)
+        period_note = ("`*` chained pair period (back-to-back pairs, cross-rank median) — what a "
+                       "decode loop pays per layer")
+        if fallbacks and any(chained):
+            lines.append(
+                f"\n> {period_note}; **{fallbacks} of {len(chained)} row(s) predate it** and fall "
+                "back to the drained `roundtrip` (cross-rank MAX). The two are different "
+                "quantities — do not rank across them."
+            )
+        elif fallbacks:
+            lines.append(
+                "\n> `*` drained `roundtrip` (cross-rank MAX): no row here carries a chained "
+                "pair period."
+            )
+        else:
+            lines.append(f"\n> {period_note}.")
     return "\n".join(lines)
 
 

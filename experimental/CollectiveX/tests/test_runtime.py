@@ -382,6 +382,47 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
         self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_bf16_normal_decode_TS-c000.json")
 
+    def test_chain_knobs_round_trip_through_the_run_ep_parser(self) -> None:
+        # The chain's iteration budget is case identity exactly like iters/trials/warmup, so it
+        # rides the same timing string. Hardcoding it in the harness instead would leave two
+        # sweeps measured over different chain lengths indistinguishable in the artifact.
+        case = {**self.CASE, "timing": "8:256:32:128:4:16"}
+        argv = self._case_argv(["16", "2", "8", "8"], case=case)
+        args = self._run_ep_parser().parse_args(argv)
+        self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
+        self.assertEqual((args.chain_iters, args.chain_trials, args.chain_drop), (128, 4, 16))
+
+    def test_a_timing_profile_without_chain_knobs_still_round_trips(self) -> None:
+        # Sweep `version` does not bump for the chain, so a shard written before it -- or one
+        # built by hand -- must still produce a runnable argv rather than a codec crash.
+        args = self._run_ep_parser().parse_args(self._case_argv(["16", "2", "8", "8"]))
+        for flag in ("chain_iters", "chain_trials", "chain_drop"):
+            with self.subTest(flag=flag):
+                self.assertIsInstance(getattr(args, flag), int)
+        # A chain that drops everything it measured has no samples left to reduce.
+        self.assertGreater(args.chain_iters, args.chain_drop)
+        self.assertGreater(args.chain_trials, 0)
+
+    def test_a_timing_profile_of_the_wrong_arity_fails_closed(self) -> None:
+        # Three fields is the pre-chain profile and six is the chain profile; any other length is
+        # a shard built against a codec that no longer exists. Guessing which fields were meant
+        # would run the case on a budget nobody chose, so the codec refuses instead.
+        for profile in ("8:256", "8:256:32:128", "8:256:32:128:4:16:2", ""):
+            with self.subTest(timing=profile):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": profile})
+
+    def test_a_non_numeric_timing_field_cannot_reach_a_run(self) -> None:
+        # The codec checks arity, not types -- as it always has for iters/trials/warmup -- so the
+        # property worth holding is that the argv it emits still cannot parse into a run. Typing
+        # lives in argparse and range-checking in the harness; this pins that nothing slips past
+        # all three and reaches a GPU as a silently defaulted knob.
+        argv = self._case_argv(
+            ["16", "2", "8", "8"], case={**self.CASE, "timing": "8:256:32:128:4:x"},
+        )
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self._run_ep_parser().parse_args(argv)
+
     def test_case_args_fails_closed_on_placement_mismatch(self) -> None:
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
