@@ -65,17 +65,8 @@ def _wheel_has_fp32_combine(version: str) -> bool:
     against a per-level-rounding kernel, which can exceed COMBINE_REL_TOL and red a correct run.
     The opposite error costs a few ulps, so anything unparseable answers False.
     """
-    try:
-        from packaging.version import InvalidVersion, Version
-    except ImportError:  # pragma: no cover - packaging ships with torch
-        digits = re.match(r"(?:\d+!)?(\d+(?:\.\d+){0,2})", version.strip())
-        if digits is None:
-            return False
-        release = tuple(int(n) for n in digits.group(1).split("."))
-        # No pre-release ordering available, so treat a marked pre-release as below its release.
-        if re.match(r"[._-]?(a|b|c|rc|alpha|beta|dev|pre)", version[digits.end():]):
-            return release > _COMBINE_FP32_SINCE
-        return release >= _COMBINE_FP32_SINCE
+    from packaging.version import InvalidVersion, Version
+
     try:
         return Version(version) >= Version(".".join(str(n) for n in _COMBINE_FP32_SINCE))
     except InvalidVersion:

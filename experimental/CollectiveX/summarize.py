@@ -69,27 +69,13 @@ def _wire_basis(document: dict) -> str:
     return {"per-assignment": "assign", "rank-deduplicated": "dedup"}.get(copies.get("wire"), "-")
 
 
-# The chained headline. `pair_period` (two-pass chain, cross-rank median) is what a decode loop
-# pays per MoE layer, so a row that carries one headlines it; rows predating the chain fall back
-# to the drained roundtrip, and render() footnotes which quantity the starred columns hold.
-#
-# This shipped False as a HOLD: the one-chain primitive charged four in-window record() calls to
-# the pair, publishing a host constant as transport (+20-38% at T=1). `benchmark_chain` was split
-# into two passes and the hold was RELEASED on 2026-08-06, once all three hand references
-# confirmed — b200 52.6us vs ~58us, h200 43.8us vs ~51.3us, gb200 inside 62.6-99.5us. At or below
-# the references is the expected polarity: they carried four events per pair themselves. Flipping
-# this is a reviewed one-line diff pinned by tests/test_summarize_headline.py.
-HEADLINE_PREFERS_PAIR_PERIOD = True
-
-
 def _headline(document: dict) -> tuple:
     """Headline row, with the skew bracket beside it.
 
-    `p50`/`p99` are the chained pair period where the row carries one and
-    `HEADLINE_PREFERS_PAIR_PERIOD` allows it — what a decode loop pays per MoE layer, cross-rank
-    median over back-to-back pairs. Otherwise `roundtrip`, an idle-pipeline latency reduced by
-    cross-rank MAX. Different quantities, so the last tuple element reports which the row carries
-    and `render` footnotes the table accordingly.
+    `p50`/`p99` are the chained pair period where the row carries one — what a decode loop pays
+    per MoE layer, cross-rank median over back-to-back pairs. Otherwise `roundtrip`, an
+    idle-pipeline latency reduced by cross-rank MAX. Different quantities, so the last tuple
+    element reports which the row carries and `render` footnotes the table accordingly.
 
     That MAX charges entry stagger to the operation, by an amount that is a property of the
     backend — on identical h200 low-latency cells the per-iteration spread is 9.2us for
@@ -103,9 +89,7 @@ def _headline(document: dict) -> tuple:
         return ("-", "-", "-", "-", "-", None)
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
     period = (row["components"].get("pair_period") or {}).get("percentiles_us")
-    latency = (
-        period if HEADLINE_PREFERS_PAIR_PERIOD else None
-    ) or row["components"]["roundtrip"]["percentiles_us"]
+    latency = period or row["components"]["roundtrip"]["percentiles_us"]
 
     def percentile(block: str, name: str) -> float | str:
         # Absent on rows measured before the skew diagnostics were emitted.
@@ -153,36 +137,25 @@ def render(documents: list[dict]) -> str:
         lines.append("\n> No valid native outcome documents found.")
     # The starred columns can hold two different quantities, so the table always says which — and
     # says so loudly when it holds both, since a mixed column silently compares a steady-state
-    # period against an idle-pipeline latency. See HEADLINE_PREFERS_PAIR_PERIOD.
+    # period against an idle-pipeline latency.
     if chained:
         carrying = sum(1 for flag in chained if flag)
-        if not HEADLINE_PREFERS_PAIR_PERIOD:
-            note = "\n> `*` drained `roundtrip` (cross-rank MAX)."
-            if carrying:
-                note += (
-                    f" {carrying} of {len(chained)} row(s) carry a chained `pair_period` that is "
-                    "NOT headlined: the fleet's chained numbers predate the two-pass chain and "
-                    "carry per-pair instrumentation at the bottom of the ladder (see "
-                    "`summarize.HEADLINE_PREFERS_PAIR_PERIOD`)."
-                )
-            lines.append(note)
+        fallbacks = chained.count(False)
+        period_note = ("`*` chained pair period (back-to-back pairs, cross-rank median) — "
+                       "what a decode loop pays per layer")
+        if fallbacks and carrying:
+            lines.append(
+                f"\n> {period_note}; **{fallbacks} of {len(chained)} row(s) predate it** and "
+                "fall back to the drained `roundtrip` (cross-rank MAX). The two are different "
+                "quantities — do not rank across them."
+            )
+        elif fallbacks:
+            lines.append(
+                "\n> `*` drained `roundtrip` (cross-rank MAX): no row here carries a chained "
+                "pair period."
+            )
         else:
-            fallbacks = chained.count(False)
-            period_note = ("`*` chained pair period (back-to-back pairs, cross-rank median) — "
-                           "what a decode loop pays per layer")
-            if fallbacks and carrying:
-                lines.append(
-                    f"\n> {period_note}; **{fallbacks} of {len(chained)} row(s) predate it** and "
-                    "fall back to the drained `roundtrip` (cross-rank MAX). The two are different "
-                    "quantities — do not rank across them."
-                )
-            elif fallbacks:
-                lines.append(
-                    "\n> `*` drained `roundtrip` (cross-rank MAX): no row here carries a chained "
-                    "pair period."
-                )
-            else:
-                lines.append(f"\n> {period_note}.")
+            lines.append(f"\n> {period_note}.")
     return "\n".join(lines)
 
 

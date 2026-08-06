@@ -89,56 +89,25 @@ class RoundtripStagingGate(unittest.TestCase):
     """`roundtrip` must mean dispatch -> combine in every row, or it is not comparable: the gate
     is `stage_device_work` alone, with `CX_FP8_CONSUME=dequant` as the sole opt-out."""
 
-    def test_bf16_with_device_staging_now_lifts_the_copy_out(self):
-        # MoRI BF16 scale-up and FlashInfer BF16: a real device copy, previously charged here
-        # and to no other backend's roundtrip.
-        mori_intranode_bf16 = _StubBackend(
-            stage_device_work=True, fp8_consume="native", precision="bf16"
+    def test_the_gate_truth_table(self):
+        table = (
+            # A real device copy hoists regardless of precision (MoRI BF16 scale-up and
+            # FlashInfer BF16 were previously charged here and to no other roundtrip)...
+            (True, "native", "bf16", True),
+            (True, "native", "fp8", True),
+            # ...a pointer-assignment stage never does: hoisting would hand a low-latency
+            # backend a view into its double-buffered receive...
+            (False, "native", "bf16", False),
+            (False, "native", "fp8", False),
+            # ...and CX_FP8_CONSUME=dequant restores the inline stage for fp8 only -- a stack
+            # that really converts between the collectives -- with nothing to model at BF16.
+            (True, "dequant", "fp8", False),
+            (True, "dequant", "bf16", True),
         )
-        self.assertTrue(mori_intranode_bf16.stage_excluded_from_roundtrip)
-        mori_intranode_bf16.run_roundtrip(object(), staged="pre-materialised")
-        self.assertEqual(
-            mori_intranode_bf16.calls, ["dispatch", "combine(pre-materialised)"]
-        )
-
-    def test_fp8_with_device_staging_lifts_the_conversion_out(self):
-        self.assertTrue(
-            _StubBackend(
-                stage_device_work=True, fp8_consume="native", precision="fp8"
-            ).stage_excluded_from_roundtrip
-        )
-
-    def test_a_no_op_stage_is_never_hoisted(self):
-        # deepep-v2 / uccl-ep / nccl-ep at BF16: `stage` is a pointer assignment, and hoisting
-        # would hand a low-latency backend a view into its double-buffered receive.
-        self.assertFalse(
-            _StubBackend(
-                stage_device_work=False, fp8_consume="native", precision="bf16"
-            ).stage_excluded_from_roundtrip
-        )
-        self.assertFalse(
-            _StubBackend(
-                stage_device_work=False, fp8_consume="native", precision="fp8"
-            ).stage_excluded_from_roundtrip
-        )
-
-    def test_the_dequant_hatch_restores_the_inline_stage(self):
-        # CX_FP8_CONSUME=dequant models a stack that really does convert between the two
-        # collectives, so that run wants the stage back inside.
-        backend = _StubBackend(
-            stage_device_work=True, fp8_consume="dequant", precision="fp8"
-        )
-        self.assertFalse(backend.stage_excluded_from_roundtrip)
-        backend.run_roundtrip(object())
-        self.assertEqual(backend.calls, ["dispatch", "stage", "combine(staged-by-stage)"])
-
-    def test_the_hatch_does_not_apply_to_bf16(self):
-        # The hatch is about fp8 consumption; a BF16 row has no conversion to model.
-        self.assertTrue(
-            _StubBackend(
-                stage_device_work=True, fp8_consume="dequant", precision="bf16"
-            ).stage_excluded_from_roundtrip
-        )
+        for stage_device_work, consume, precision, hoisted in table:
+            with self.subTest(stage=stage_device_work, consume=consume, precision=precision):
+                backend = _StubBackend(stage_device_work, consume, precision)
+                self.assertEqual(bool(backend.stage_excluded_from_roundtrip), hoisted)
 
 class WarmStaging(unittest.TestCase):
     """Warm-up must not rehearse work the timed region skips: where staging is excluded from the

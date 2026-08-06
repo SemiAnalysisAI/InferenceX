@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""The summary headline's switch between the chained pair period and the drained roundtrip:
-`summarize._headline` prefers `components.pair_period` only when `HEADLINE_PREFERS_PAIR_PERIOD`
-is set, which shipped False as a hold and flipped True on 2026-08-06. Both positions are pinned.
+"""The summary headline: `components.pair_period` when a row carries one, the drained
+`roundtrip` otherwise, with the table footnoting which quantity the starred columns hold.
 """
 from __future__ import annotations
 
 import sys
 import unittest
 from pathlib import Path
-from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT)]
@@ -53,41 +51,28 @@ def document(with_period):
     }
 
 
-class HeadlineHold(unittest.TestCase):
-    def test_the_shipped_tree_prefers_the_period(self):
-        # The hold was released 2026-08-06, once the b200, h200 and gb200 hand references were
-        # confirmed against two-pass fleet artifacts.
-        self.assertTrue(summarize.HEADLINE_PREFERS_PAIR_PERIOD)
-
-    def test_under_the_hold_the_headline_is_the_roundtrip_even_when_a_period_exists(self):
-        with mock.patch.object(summarize, "HEADLINE_PREFERS_PAIR_PERIOD", False):
-            tokens, p50, p99, _, _, carries = summarize._headline(document(with_period=True))
-        self.assertEqual((tokens, p50, p99), (64, ROUNDTRIP["p50"], ROUNDTRIP["p99"]))
-        # Presence is still reported, so the footnote can say a period exists unheadlined.
+class Headline(unittest.TestCase):
+    def test_the_headline_is_the_pair_period_when_a_row_carries_one(self):
+        tokens, p50, p99, _, _, carries = summarize._headline(document(with_period=True))
+        self.assertEqual((tokens, p50, p99), (64, PERIOD["p50"], PERIOD["p99"]))
         self.assertTrue(carries)
+        self.assertIn("chained pair period", summarize.render([document(with_period=True)]))
 
-    def test_the_hold_footnote_names_the_unheadlined_periods(self):
-        with mock.patch.object(summarize, "HEADLINE_PREFERS_PAIR_PERIOD", False):
-            rendered = summarize.render([document(with_period=True)])
-        self.assertIn("drained `roundtrip`", rendered)
-        self.assertIn("NOT headlined", rendered)
-        self.assertIn(f"| {ROUNDTRIP['p50']} | {ROUNDTRIP['p99']} |", rendered)
+    def test_a_row_without_a_period_falls_back_to_the_roundtrip(self):
+        _, p50, p99, _, _, carries = summarize._headline(document(with_period=False))
+        self.assertEqual((p50, p99), (ROUNDTRIP["p50"], ROUNDTRIP["p99"]))
+        self.assertFalse(carries)
+        self.assertIn(
+            "no row here carries a chained pair period",
+            summarize.render([document(with_period=False)]),
+        )
 
-    def test_released_the_headline_prefers_the_period_again(self):
-        with mock.patch.object(summarize, "HEADLINE_PREFERS_PAIR_PERIOD", True):
-            _, p50, p99, _, _, carries = summarize._headline(document(with_period=True))
-            rendered = summarize.render([document(with_period=True)])
-        self.assertEqual((p50, p99), (PERIOD["p50"], PERIOD["p99"]))
-        self.assertTrue(carries)
-        self.assertIn("chained pair period", rendered)
-
-    def test_a_row_without_a_period_falls_back_to_the_roundtrip_in_both_positions(self):
-        for prefers in (False, True):
-            with self.subTest(prefers=prefers), \
-                    mock.patch.object(summarize, "HEADLINE_PREFERS_PAIR_PERIOD", prefers):
-                _, p50, p99, _, _, carries = summarize._headline(document(with_period=False))
-            self.assertEqual((p50, p99), (ROUNDTRIP["p50"], ROUNDTRIP["p99"]))
-            self.assertFalse(carries)
+    def test_a_mixed_table_footnotes_the_fallback_rows_as_incomparable(self):
+        rendered = summarize.render(
+            [document(with_period=True), document(with_period=False)]
+        )
+        self.assertIn("1 of 2 row(s) predate it", rendered)
+        self.assertIn("do not rank across them", rendered)
 
 
 if __name__ == "__main__":

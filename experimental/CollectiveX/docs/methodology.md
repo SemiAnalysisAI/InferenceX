@@ -212,11 +212,11 @@ availability, origin, and sample count. A paired-only API reports null isolated 
 
 Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
 Pair Period below) for every row that carries one, and the p99 of the per-iteration cross-rank MAX
-of `roundtrip` for rows measured before that field existed. The flip shipped **held**
-(`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`) while the six-events-per-pair chain described
-below — whose inner records inflated small-T periods fleet-wide — was replaced by the two-pass
-chain, and was released on 2026-08-06 once the b200, h200 and gb200 hand references were confirmed
-against two-pass fleet artifacts (runs 31092783122 and 31089556516). Both `p50` and `p99` are
+of `roundtrip` for rows measured before that field existed. The flip shipped **held** while the
+six-events-per-pair chain described below — whose inner records inflated small-T periods
+fleet-wide — was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200
+and gb200 hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
+31089556516). Both `p50` and `p99` are
 emitted either way and `summarize.py` prints both. MAX is the fresh-entry family's reduction because
 a layer is not finished until its slowest rank is, so MAX is the completion cost, and it charges
 inter-rank entry stagger to whichever component the ranks entered unevenly. That stagger depends on
