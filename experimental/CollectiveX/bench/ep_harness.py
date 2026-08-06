@@ -1050,8 +1050,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     cmin_pool = {T: [] for T in ladder}
     rtmin_pool = {T: [] for T in ladder}
     # The chained family, measured by the same Pass-2 loop shape but on its own (much smaller)
-    # trial count -- see backend.benchmark_chain for what it measures and why only these three
-    # reductions of it are publishable.
+    # trial count -- see backend.benchmark_chain for what its two sibling chains measure and why
+    # only these reductions of them are publishable.
     chain_pool = {T: [] for T in ladder}         # pair period, cross-rank MEDIAN per iteration
     chain_spread_pool = {T: [] for T in ladder}  # ... and its cross-rank (max-min), as the proof
     dfloor_pool = {T: [] for T in ladder}        # chained dispatch window, cross-rank MIN
