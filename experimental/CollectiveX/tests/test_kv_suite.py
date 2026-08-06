@@ -107,6 +107,36 @@ class KVArgvCodec(unittest.TestCase):
             self._captured_argv(case, "sku")
 
 
+class UCXSelectors(unittest.TestCase):
+    """run_kv pins UCX to the operator's validated RDMA selectors — UCX
+    auto-selection is a wrong-fabric trap (b200-nscale's aux quad-port card,
+    b300's storage IB) — while explicit UCX_* values always win."""
+
+    def test_registry_selectors_map_to_ucx(self):
+        import run_kv
+
+        env = {"COLLX_RDMA_DEVICES": "mlx5_0,mlx5_10", "COLLX_IB_GID_INDEX": "3"}
+        run_kv.export_ucx_selectors(env)
+        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_0:1,mlx5_10:1")
+        self.assertEqual(env["UCX_IB_GID_INDEX"], "3")
+
+    def test_explicit_ucx_env_wins(self):
+        import run_kv
+
+        env = {"COLLX_RDMA_DEVICES": "mlx5_0", "UCX_NET_DEVICES": "rdma0:1",
+               "COLLX_IB_GID_INDEX": "3", "UCX_IB_GID_INDEX": "1"}
+        run_kv.export_ucx_selectors(env)
+        self.assertEqual(env["UCX_NET_DEVICES"], "rdma0:1")
+        self.assertEqual(env["UCX_IB_GID_INDEX"], "1")
+
+    def test_ports_in_selectors_pass_through(self):
+        import run_kv
+
+        env = {"COLLX_RDMA_DEVICES": "mlx5_18:1,mlx5_19"}
+        run_kv.export_ucx_selectors(env)
+        self.assertEqual(env["UCX_NET_DEVICES"], "mlx5_18:1,mlx5_19:1")
+
+
 def _kv_document(status="success", sku="b200-nscale"):
     def row(kind, page, op, gbps, p50):
         return {"kind": kind, "preset": "mla", "isl": 32768, "page_tokens": page,
