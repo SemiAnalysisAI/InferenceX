@@ -513,7 +513,7 @@ class EPBackend(abc.ABC):
     chain_barrier = False
 
     def benchmark_chain(self, problem, warmup, iters, drop):
-        """Free-running dispatch->combine pairs: per-pair and per-op CUDA events, no host sync.
+        """Free-running dispatch->combine pairs, no host sync: a floors chain, then a period chain.
 
         This is the number a serving stack pays. `roundtrip` drains the GPU around every pair, so
         it reports an idle pipeline's latency and charges inter-rank entry stagger to whichever
@@ -524,6 +524,31 @@ class EPBackend(abc.ABC):
         because here the pairing is preserved exactly as `run_roundtrip` orders it (dispatch, then
         stage-or-staged, then combine) and the paired-API backends therefore stay in contract.
 
+        WHY TWO PASSES. This method's first version timed one chain with six record() calls per
+        pair -- pair start/end plus both op windows. When the device drains faster than the host
+        enqueues (the bottom of the ladder), every event's timestamp is set the moment the idle
+        stream reaches it, so the pair window degenerates to HOST elapsed time and the four inner
+        record() calls (plus the glue between them) are charged into the published period. The
+        fleet said so before a profiler did: period minus the sum of the op floors sat at a
+        roughly T-independent 10-30us on every vendor and fabric at once -- a host constant, not
+        transport -- inflating the T=1 period by 20-38%. So the statistics are now collected from
+        two sibling chains, each carrying only the events its statistic needs:
+
+          * FLOORS chain: op-window events only. Its per-op minima are the publishable floors,
+            and the records sit at the window edges, where they always were -- the floor was
+            never the contaminated statistic (it tracks profiler kernel time to ~10%).
+          * PERIOD chain: one pair-window event pair and nothing between the two collectives.
+            Both records' host cost lands in the inter-pair gap, OUTSIDE the window, so the
+            published period carries what any uninstrumented caller would pay -- launches, glue,
+            kernels -- and none of this harness's measurement apparatus.
+
+        The floors chain runs first: it doubles as extra settling for the period chain, and
+        `drop` re-discards the refill after the synchronize between them. The period chain also
+        yields a start-to-start series (pair i's start to pair i+1's start); its median minus the
+        pair-window median is the per-pair apparatus + stall residual, which `run_sweep` publishes
+        as `chain_health.interpair_gap_us` so a regression of this exact kind is visible in every
+        artifact instead of needing six of them side by side.
+
         WHY ONLY THE PAIR PERIOD AND THE PER-OP MINIMA ARE PUBLISHABLE. Without a host sync the
         ranks are free to arrive at each collective at slightly different times, and the resulting
         wait has to be spent somewhere: it PARKS in whichever op window a given rank happens to
@@ -531,7 +556,7 @@ class EPBackend(abc.ABC):
         convincing), arbitrary across ranks (rank 3's dispatch is long exactly where rank 5's
         combine is), and bistable across runs of the identical configuration -- while the sum, the
         pair period, is conserved. So a chained per-op MEDIAN measures where the wait sat on that
-        run, not what the op cost, and this method's per-op series is published only after a
+        run, not what the op cost, and the floors chain's per-op series is published only after a
         cross-rank MIN: the last rank into a collective is the one that waited least, so its window
         is the op's floor. `run_sweep` enforces that -- pair to a cross-rank median, dispatch and
         combine to a cross-rank minimum, and never a chained per-op median or p99.
@@ -546,9 +571,13 @@ class EPBackend(abc.ABC):
         free-running pairs fails the case instead of publishing the suite's fastest period. The
         method ends synchronized, so that check sees a settled communicator.
 
-        Under `chain_barrier` the loop still runs but `run_sweep` publishes nothing from it (see
-        the attribute's comment), and skips the chained oracle with it: there is no chained field
-        left in the artifact for it to stand behind.
+        Under `chain_barrier` both chains still run but `run_sweep` publishes nothing from them
+        (see the attribute's comment), and skips the chained oracle with it: there is no chained
+        field left in the artifact for it to stand behind.
+
+        Returns a dict of post-`drop` series in microseconds: `pair` and `start_to_start` from
+        the period chain (the latter one element shorter), `dispatch` and `combine` from the
+        floors chain.
         """
         import torch
 
@@ -567,17 +596,19 @@ class EPBackend(abc.ABC):
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
         barrier = torch.zeros(1, device=self.device) if self.chain_barrier else None
-        # Every event and the barrier tensor are allocated BEFORE the loop. An allocation between
+        # Every event and the barrier tensor are allocated BEFORE the loops. An allocation between
         # two record() calls is host work inside a window that is supposed to belong to the stream,
-        # and at the bottom of the ladder that is a measurable fraction of the period.
+        # and at the bottom of the ladder that is a measurable fraction of the period -- the same
+        # arithmetic that split this method into two passes.
         def events():
             return [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
 
-        pair_start, pair_end = events(), events()
         dispatch_start, dispatch_end = events(), events()
         combine_start, combine_end = events(), events()
+        pair_start, pair_end = events(), events()
+
+        # ---- Floors chain: op windows only, pair boundaries uninstrumented. ----
         for i in range(iters):
-            pair_start[i].record()
             dispatch_start[i].record()
             handle = self.dispatch(problem)
             dispatch_end[i].record()
@@ -588,12 +619,25 @@ class EPBackend(abc.ABC):
             combine_start[i].record()
             self.combine(problem, handle)
             combine_end[i].record()
+            if barrier is not None:
+                # Between PAIRS, never between the two collectives of one pair, and outside every
+                # window so its cost sits in no published number. The serialization still shows up
+                # -- as overlap the period no longer gets -- which is exactly why the artifact
+                # records that this row ran with it.
+                torch.distributed.all_reduce(barrier)
+        torch.cuda.synchronize()
+
+        # ---- Period chain: nothing between the pair's collectives but the pair itself. ----
+        for i in range(iters):
+            pair_start[i].record()
+            handle = self.dispatch(problem)
+            if staged is None:
+                self.stage(problem, handle)
+            else:
+                setattr(handle, self.combine_input_attr, staged)
+            self.combine(problem, handle)
             pair_end[i].record()
             if barrier is not None:
-                # Between PAIRS, never between the two collectives of one pair, and after the
-                # pair's end event so its cost sits in neither the pair window nor an op window.
-                # The serialization still shows up -- as overlap the period no longer gets --
-                # which is exactly why the artifact records that this row ran with it.
                 torch.distributed.all_reduce(barrier)
         torch.cuda.synchronize()
 
@@ -603,11 +647,12 @@ class EPBackend(abc.ABC):
                 for start, end in zip(starts[drop:], ends[drop:])
             ]
 
-        return (
-            series(pair_start, pair_end),
-            series(dispatch_start, dispatch_end),
-            series(combine_start, combine_end),
-        )
+        return {
+            "pair": series(pair_start, pair_end),
+            "start_to_start": series(pair_start[:-1], pair_start[1:]),
+            "dispatch": series(dispatch_start, dispatch_end),
+            "combine": series(combine_start, combine_end),
+        }
 
     def benchmark_component(self, component, problem, warmup, iters):
         """Measure one named component; every component gets the same warm-up first."""

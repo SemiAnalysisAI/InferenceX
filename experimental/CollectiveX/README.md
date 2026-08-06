@@ -55,11 +55,20 @@ byte-identical routing and gate weights on every runtime.
 Those components all measure **fresh entry** — the GPU is drained around every timed window — which
 is the latency of an idle pipeline, not what a decode loop pays. So every row also carries the
 **chained pair period**: 4 trials x (128 dispatch→combine pairs issued back-to-back with no host
-sync, first 16 dropped as pipeline fill) = 448 observations, reduced across ranks by median.
-`components.pair_period` is the headline latency, with roundtrip p99 remaining the headline for rows
-measured before the field existed — `summarize.py` footnotes any table holding both, because they
-are different quantities. The same chain also publishes per-op floors (`chain_floor_us`, the
-cross-rank minimum of each op's window) and `chain_health.pair_spread_us`; chained per-op *medians*
+sync, first 16 dropped as pipeline fill) = 448 observations, reduced across ranks by median. Each
+trial runs **two sibling chains** — a floors chain carrying only per-op events, then a period chain
+carrying only the outer pair events — because the first version's single six-events-per-pair chain
+charged its four inner `record()` calls into the period wherever the device outran the host,
+publishing a ~flat 10–30µs host constant as transport (+20–38% at T=1, fleet-wide).
+`components.pair_period` is *intended* as the headline latency, but that flip is **held**
+(`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`) until a sweep measured by the two-pass chain is
+cross-checked against the hand references; `summarize.py` footnotes what its starred columns hold
+either way, because period and roundtrip are different quantities. The floors chain publishes the
+per-op floors (`chain_floor_us`, the cross-rank minimum of each op's window); the period chain
+also yields `chain_health.pair_spread_us` (cross-rank cadence proof), `interpair_gap_us` (the
+per-pair cost outside the published window — the regression guard for instrumentation creeping
+back in) and `settle_drift_us` (late-half minus early-half period — the convergence proof
+`chain_drop` otherwise merely assumes). Chained per-op *medians*
 are deliberately never published, because inter-rank wait parks in whichever op window a rank
 blocks in — stable per rank, arbitrary across ranks, and conserved only in the pair total. Nothing
 existing was renamed or re-meant, and the sweep `version` stays 1, so consumers key on the presence

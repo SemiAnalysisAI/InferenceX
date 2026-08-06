@@ -241,11 +241,12 @@ class ChainStaging(unittest.TestCase):
 
     def test_a_no_op_stage_stays_inline_in_the_chain(self):
         # deepep-v2 / uccl-ep / nccl-ep at BF16: nothing to lift, and lifting anyway would hand
-        # a low-latency backend a view into its double-buffered receive.
+        # a low-latency backend a view into its double-buffered receive. Both sibling chains
+        # stage, so the inline count is doubled (the tail slice below is the period chain).
         iters = 4
         b = _StubBackend(stage_device_work=False, fp8_consume="native", precision="bf16")
         self._chain(b, iters)
-        self.assertEqual(b.calls.count("stage"), iters)
+        self.assertEqual(b.calls.count("stage"), 2 * iters)
         self.assertEqual(
             b.calls[-3 * iters:],
             ["dispatch", "stage", "combine(staged-by-stage)"] * iters,
@@ -255,7 +256,7 @@ class ChainStaging(unittest.TestCase):
         iters = 4
         b = _StubBackend(stage_device_work=True, fp8_consume="dequant", precision="fp8")
         self._chain(b, iters)
-        self.assertEqual(b.calls.count("stage"), iters)
+        self.assertEqual(b.calls.count("stage"), 2 * iters)
         self.assertEqual(
             b.calls[-3 * iters:],
             ["dispatch", "stage", "combine(staged-by-stage)"] * iters,

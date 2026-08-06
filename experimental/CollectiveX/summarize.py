@@ -72,15 +72,30 @@ def _wire_basis(document: dict) -> str:
     return {"per-assignment": "assign", "rank-deduplicated": "dedup"}.get(copies.get("wire"), "-")
 
 
+# HOLD on the chained headline. The first fleet sweep to carry `pair_period` (run 31076616039)
+# measured it with the original one-chain primitive: six record() calls per pair, four of them
+# INSIDE the pair window. Wherever the device outruns the host (the bottom of the ladder) the
+# window degenerates to host elapsed time, and those records published as a roughly T-independent
+# 10-30us constant on every vendor and fabric at once — +20-38% on the T=1 period, visible as
+# period minus (dispatch floor + combine floor). `benchmark_chain` has since been split so the
+# period chain carries only the outer event pair, but no fleet artifact measured that way exists
+# yet: flipping this on before a post-fix validation sweep is cross-checked against the
+# hand-measured references (b200 ~58us @T=16, h200 ~51.3us, gb200 62.6-99.5us) would put the
+# inflated numbers on the top line. Artifacts emit `pair_period` either way — only the headline
+# preference is held.
+HEADLINE_PREFERS_PAIR_PERIOD = False
+
+
 def _headline(document: dict) -> tuple:
     """Headline row, with the skew bracket beside it.
 
-    `p50`/`p99` are the chained pair PERIOD where the row carries one — what a decode loop pays
-    per MoE layer, measured with pairs issued back-to-back and no host sync, reduced across ranks
-    by median. Rows written before the chain existed fall back to `roundtrip`, which drains the
-    pipeline around every pair and so reports an idle-pipeline latency reduced by cross-rank MAX.
-    They are different quantities, not two estimates of one, so the last element of the tuple says
-    which was used and `render` footnotes the table whenever both appear in it.
+    `p50`/`p99` are the chained pair PERIOD where the row carries one and
+    `HEADLINE_PREFERS_PAIR_PERIOD` says the chained fleet numbers are trustworthy — what a decode
+    loop pays per MoE layer, measured with pairs issued back-to-back and no host sync, reduced
+    across ranks by median. Otherwise `roundtrip`, which drains the pipeline around every pair and
+    so reports an idle-pipeline latency reduced by cross-rank MAX. They are different quantities,
+    not two estimates of one, so the last element of the tuple says whether the row CARRIES a
+    period and `render` footnotes the table with which quantity the starred columns hold.
 
     The MAX in that fallback is the completion cost — a layer is not finished until its slowest
     rank is — but entry stagger is charged to it, and how much is a property of the BACKEND, not
@@ -101,7 +116,9 @@ def _headline(document: dict) -> tuple:
         return ("-", "-", "-", "-", "-", None)
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
     period = (row["components"].get("pair_period") or {}).get("percentiles_us")
-    latency = period or row["components"]["roundtrip"]["percentiles_us"]
+    latency = (
+        period if HEADLINE_PREFERS_PAIR_PERIOD else None
+    ) or row["components"]["roundtrip"]["percentiles_us"]
 
     def percentile(block: str, name: str) -> float | str:
         # Absent on rows measured before the skew diagnostics were emitted.
@@ -149,24 +166,38 @@ def render(documents: list[dict]) -> str:
         lines.append("\n> No valid native outcome documents found.")
     # The starred columns can hold two different quantities, so the table always says which — and
     # says so loudly when it holds both, because a mixed column silently compares a steady-state
-    # period against an idle-pipeline latency.
+    # period against an idle-pipeline latency. Under the hold (see HEADLINE_PREFERS_PAIR_PERIOD)
+    # they hold exactly one: the drained roundtrip, with the presence of unheadlined periods
+    # called out so nobody hunts for why the artifact and the table disagree.
     if chained:
-        fallbacks = chained.count(False)
-        period_note = ("`*` chained pair period (back-to-back pairs, cross-rank median) — what a "
-                       "decode loop pays per layer")
-        if fallbacks and any(chained):
-            lines.append(
-                f"\n> {period_note}; **{fallbacks} of {len(chained)} row(s) predate it** and fall "
-                "back to the drained `roundtrip` (cross-rank MAX). The two are different "
-                "quantities — do not rank across them."
-            )
-        elif fallbacks:
-            lines.append(
-                "\n> `*` drained `roundtrip` (cross-rank MAX): no row here carries a chained "
-                "pair period."
-            )
+        carrying = sum(1 for flag in chained if flag)
+        if not HEADLINE_PREFERS_PAIR_PERIOD:
+            note = "\n> `*` drained `roundtrip` (cross-rank MAX)."
+            if carrying:
+                note += (
+                    f" {carrying} of {len(chained)} row(s) carry a chained `pair_period` that is "
+                    "NOT headlined: the fleet's chained numbers predate the two-pass chain and "
+                    "carry per-pair instrumentation at the bottom of the ladder (see "
+                    "`summarize.HEADLINE_PREFERS_PAIR_PERIOD`)."
+                )
+            lines.append(note)
         else:
-            lines.append(f"\n> {period_note}.")
+            fallbacks = chained.count(False)
+            period_note = ("`*` chained pair period (back-to-back pairs, cross-rank median) — "
+                           "what a decode loop pays per layer")
+            if fallbacks and carrying:
+                lines.append(
+                    f"\n> {period_note}; **{fallbacks} of {len(chained)} row(s) predate it** and "
+                    "fall back to the drained `roundtrip` (cross-rank MAX). The two are different "
+                    "quantities — do not rank across them."
+                )
+            elif fallbacks:
+                lines.append(
+                    "\n> `*` drained `roundtrip` (cross-rank MAX): no row here carries a chained "
+                    "pair period."
+                )
+            else:
+                lines.append(f"\n> {period_note}.")
     return "\n".join(lines)
 
 

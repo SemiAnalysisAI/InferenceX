@@ -228,9 +228,14 @@ will wrongly subtract a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
-Pair Period below) for every row that carries one, and the p99 of the per-iteration cross-rank MAX
-of `roundtrip` for the rows measured before that field existed. Both `p50` and `p99` are emitted
+Headline latency is intended to be the **chained pair period** (`components.pair_period`, defined
+under Chained Pair Period below) for every row that carries one, and the p99 of the per-iteration
+cross-rank MAX of `roundtrip` for the rows measured before that field existed. **That flip is
+currently HELD** (`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`): the first fleet sweep to
+carry the field measured it with the six-events-per-pair chain described under Chained Pair
+Period, whose inner records inflated small-T periods fleet-wide, so the headline stays on the
+drained `roundtrip` until a sweep measured by the two-pass chain is cross-checked against the
+hand references. Both `p50` and `p99` are emitted
 either way and `summarize.py` prints both. The rest of this paragraph describes the second of those
 — the fresh-entry family, which every row still carries unchanged, and which the p99-of-MAX
 argument below applies to. That is not in
@@ -282,29 +287,53 @@ sample starts from an idle pipeline and the ranks re-stagger before each one. A 
 runs that way. Its decode loop issues dispatch, combine, dispatch, combine without stopping, and
 what it pays per MoE layer is the pipeline's steady-state **period**, not the latency of one
 collective measured in isolation. Every row therefore also carries the chained family, measured by
-`benchmark_chain`: `chain_iters` (128) dispatch→combine pairs issued back-to-back with CUDA events
-enqueued on-stream and **no host synchronization inside the loop**, the first `chain_drop` (16)
-pairs discarded as pipeline fill, pooled over `chain_trials` (4) per point on the same rotated
-ladder order as the rest of Pass 2. The pairing is exactly `run_roundtrip`'s — dispatch, then the
-staged combine input (or an inline `stage` under the `CX_FP8_CONSUME=dequant` hatch), then combine —
-so the paired-API backends stay in contract and `pair_period` excludes expert-output staging on the
-same rule `roundtrip` does.
+`benchmark_chain`: dispatch→combine pairs issued back-to-back with CUDA events enqueued on-stream
+and **no host synchronization inside the loop**, the first `chain_drop` (16) pairs discarded as
+pipeline fill, pooled over `chain_trials` (4) per point on the same rotated ladder order as the
+rest of Pass 2. The pairing is exactly `run_roundtrip`'s — dispatch, then the staged combine input
+(or an inline `stage` under the `CX_FP8_CONSUME=dequant` hatch), then combine — so the paired-API
+backends stay in contract and `pair_period` excludes expert-output staging on the same rule
+`roundtrip` does.
 
-Three statistics come out of it, and deliberately only three:
+Each trial runs **two sibling chains** of `chain_iters` (128) pairs, because the statistics must
+not carry the instrumentation that collects them. This method's first version ran ONE chain with
+six `record()` calls per pair — pair start/end plus both op windows. Wherever the device drains
+faster than the host enqueues (the bottom of the token ladder), every event executes the moment it
+is issued, the pair window degenerates to host elapsed time, and the four inner records plus the
+glue between them are charged into the published period. The fleet exposed it before a profiler
+did: period minus the sum of the op floors sat at a roughly T-independent 10–30µs on every vendor
+and fabric at once — a host constant, not transport — inflating T=1 periods by 20–38%. So now a
+**floors chain** runs first carrying only the four op-window events, and a **period chain** runs
+second carrying only the outer pair events, with nothing between its two collectives; both of the
+period chain's records land in the inter-pair gap, outside the published window, so the period
+carries what any uninstrumented caller pays — launches, glue, kernels — and none of the harness's
+measurement apparatus. (An eager-mode launch floor remains, as it does for any eager caller; a
+CUDA-graphs decode loop pays less host per pair than any eager harness can.)
 
-- `components.pair_period` (origin `chained-median`) — the per-pair period, reduced across ranks by
-  MEDIAN. MAX is right for a drained component, because a layer is not finished until its slowest
-  rank is — but the period is not a completion time, it is a **rate**, and since the collectives
-  phase-lock every rank into the same cadence, a MAX would publish whichever rank hiccuped on each
-  iteration as the pipeline's speed.
-- `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`) — each op's window
-  reduced across ranks by MIN. The last rank into a collective is the one that waited least, so its
-  window is that operation's floor. Where this has been triangulated the floor lands within ~10% of
-  profiler kernel time, which makes it a free substitute for a Kineto trace.
+Five statistics come out of the two chains, and deliberately only five:
+
+- `components.pair_period` (origin `chained-median`) — the per-pair period from the period chain,
+  reduced across ranks by MEDIAN. MAX is right for a drained component, because a layer is not
+  finished until its slowest rank is — but the period is not a completion time, it is a **rate**,
+  and since the collectives phase-lock every rank into the same cadence, a MAX would publish
+  whichever rank hiccuped on each iteration as the pipeline's speed.
+- `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`) — each op's window from
+  the floors chain, reduced across ranks by MIN. The last rank into a collective is the one that
+  waited least, so its window is that operation's floor. Where this has been triangulated the floor
+  lands within ~10% of profiler kernel time, which makes it a free substitute for a Kineto trace.
 - `chain_health.pair_spread_us` — the per-iteration cross-rank max-minus-min of the pair, which is
   the *proof* the median means anything. Small next to `pair_period` means every rank held the same
   cadence; large means a paced or slow rank, and the point should not be read as a steady-state
   period at all.
+- `chain_health.interpair_gap_us` — the period chain's start-to-start median minus its pair-window
+  median, once per trial: the per-pair cost sitting OUTSIDE the published window, which is the
+  harness's own two `record()` calls plus any inter-pair stall. This is the in-artifact regression
+  guard for exactly the six-events defect above — instrumentation creeping back into the loop grows
+  this gap, in every artifact, rather than needing six of them diffed side by side.
+- `chain_health.settle_drift_us` — the late-half minus early-half period median, once per trial,
+  signed, reduced across ranks by max-magnitude. `chain_drop` *assumes* the chain has settled by
+  the time the kept pairs start; this is the proof, and a chain still converging (or a device
+  clocking down mid-chain) publishes its drift instead of a clean-looking period.
 
 **Chained per-op medians and p99s are never published, and the omission is not an oversight.**
 Without a host sync the ranks arrive at each collective at slightly different times, and the
@@ -334,8 +363,8 @@ on-stream all-reduce **between pairs** (never between the two collectives of one
 pair's end event, so its ~10µs sits in neither the pair window nor an op window), re-aligning the
 ranks at the cost of the cross-pair overlap the measurement exists to capture. That makes it a
 differently-defined quantity, not a slower reading of the same one — so **a run with the barrier on
-publishes no chained field at all**: `pair_period`, both `chain_floor_us` entries and
-`chain_health.pair_spread_us` emit the standard unavailable block, the measured numbers go to
+publishes no chained field at all**: `pair_period`, both `chain_floor_us` entries and every
+`chain_health` field emit the standard unavailable block, the measured numbers go to
 rank-0 stdout labelled as a diagnostic, and `implementation.chain_barrier: true` remains as the
 record of why they are missing. The valve is a bring-up diagnostic for a backend that cannot yet be
 chained, not a second publishable mode: a backend that needs it is a bug to fix, not a variant to
@@ -371,8 +400,10 @@ and baked into every scheduled case:
 
 - 256 trials x 8 timed iterations = 2048 observations for the fresh-entry family;
 - 4 chain trials x (128 free-running pairs - 16 dropped for pipeline fill) = 448 observations for
-  the chained family, sampled separately because one call already yields 128 pairs and the
-  fresh-entry trial count would multiply the leg's wall clock without buying convergence;
+  the pair period and another 448 for the op floors — each trial runs the two sibling chains
+  (floors first, then the lean period chain) — sampled separately because one call already yields
+  128 pairs and the fresh-entry trial count would multiply the leg's wall clock without buying
+  convergence;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at
   every trial/point, and before each chain trial;
 - component measurement order rotates each trial (`trial_order`) so every timed component occupies
@@ -384,8 +415,8 @@ and baked into every scheduled case:
 `measurement.sampling` carries both halves of that profile, because `sample_count` alone cannot be
 decomposed back into them and a 128x4 chain is not the same measurement as a 512x1 one.
 
-The chained pair period is the headline latency where a row carries one, and measured roundtrip p99
-on the rows that predate it. Decode and prefill identify the serving regime
+The chained pair period is intended as the headline latency where a row carries one (held today —
+see the hold note above), and measured roundtrip p99 otherwise. Decode and prefill identify the serving regime
 represented by one MoE-layer collective; they do not change the timed primitive at an otherwise
 identical shape. Ascending through the ladder, each measured shape is conditioned with 8 untimed
 full roundtrips — settling clocks, fabric, and buffer state — before it is correctness-checked;

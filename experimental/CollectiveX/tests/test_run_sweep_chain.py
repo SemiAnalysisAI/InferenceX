@@ -40,8 +40,12 @@ LADDER = [4, 8]
 CHAIN_ITERS, CHAIN_DROP, CHAIN_TRIALS = 8, 2, 2
 KEPT_PER_TRIAL = CHAIN_ITERS - CHAIN_DROP
 # What the stub backend reports for every chained iteration, so a published number is traceable
-# to the op it came from rather than to an accidental sum.
+# to the op it came from rather than to an accidental sum. The start-to-start series sits a
+# fixed GAP above the pair window -- the shape of a real chain, where the gap is the harness's
+# own two record() calls plus any inter-pair stall -- so `interpair_gap_us` has an exact
+# expected value too. DRIFT_US is what the drifting variant slows its late half by.
 PAIR_US, DISPATCH_FLOOR_US, COMBINE_FLOOR_US = 50.0, 20.0, 25.0
+GAP_US, DRIFT_US = 4.0, 8.0
 UNAVAILABLE = {
     "availability": "unavailable", "origin": None, "percentiles_us": None, "sample_count": 0,
 }
@@ -201,7 +205,12 @@ class _StubBackend(ep_backend.EPBackend):
     def benchmark_chain(self, problem, warmup, iters, drop):
         self.events.append(("chain", problem.T))
         kept = iters - drop
-        return ([PAIR_US] * kept, [DISPATCH_FLOOR_US] * kept, [COMBINE_FLOOR_US] * kept)
+        return {
+            "pair": [PAIR_US] * kept,
+            "start_to_start": [PAIR_US + GAP_US] * (kept - 1),
+            "dispatch": [DISPATCH_FLOOR_US] * kept,
+            "combine": [COMBINE_FLOOR_US] * kept,
+        }
 
     def dispatch(self, problem):
         return SimpleNamespace(combine_input=None)
@@ -255,9 +264,9 @@ def phases_by_index(oracle_count, points):
     )
 
 
-def _sweep(chain_barrier, fail_indices, error_indices, chain_error):
+def _sweep(chain_barrier, fail_indices, error_indices, chain_error, backend_factory=None):
     """One full run_sweep against the stubs; failures scripted by oracle call index."""
-    backend = _StubBackend(chain_barrier=chain_barrier)
+    backend = (backend_factory or _StubBackend)(chain_barrier=chain_barrier)
     events = backend.events
     oracle_calls = []
 
@@ -291,7 +300,7 @@ def _sweep(chain_barrier, fail_indices, error_indices, chain_error):
     )
 
 
-def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0):
+def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0, backend_factory=None):
     """Run the sweep, optionally failing every oracle of a given pass.
 
     A clean probe run first, to learn how many oracle calls the configuration makes; the phase
@@ -299,7 +308,7 @@ def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0):
     is what keeps the failure cases from hardcoding "call 3 and 4", which would silently start
     failing a different pass the moment the ladder or the trial count changed.
     """
-    probe = _sweep(chain_barrier, frozenset(), frozenset(), 0.0)
+    probe = _sweep(chain_barrier, frozenset(), frozenset(), 0.0, backend_factory)
     if not fail_phases and not chain_error:
         return probe
     selected = lambda wanted: frozenset(  # noqa: E731
@@ -307,7 +316,7 @@ def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0):
     )
     return _sweep(
         chain_barrier, selected(set(fail_phases)),
-        selected({"chain"}) if chain_error else frozenset(), chain_error,
+        selected({"chain"}) if chain_error else frozenset(), chain_error, backend_factory,
     )
 
 
@@ -440,6 +449,24 @@ class ChainedPublication(unittest.TestCase):
                 self.assertEqual(spread["percentiles_us"]["p50"], 0.0)
                 self.assertEqual(set(spread), set(UNAVAILABLE))
 
+    def test_the_interpair_gap_is_published_from_the_start_to_start_series(self):
+        # start-to-start median minus pair-window median: the per-pair cost OUTSIDE the
+        # published window. This is the in-artifact guard against the six-events-per-pair
+        # defect -- instrumentation creeping back into the loop shows up here, per trial.
+        for row in self.swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                gap = row["chain_health"]["interpair_gap_us"]
+                self.assertEqual(gap["percentiles_us"]["p50"], GAP_US)
+                self.assertEqual(gap["availability"], "measured")
+                self.assertEqual(gap["sample_count"], CHAIN_TRIALS)
+
+    def test_a_steady_chain_publishes_zero_settle_drift(self):
+        for row in self.swept.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                drift = row["chain_health"]["settle_drift_us"]
+                self.assertEqual(drift["percentiles_us"]["p50"], 0.0)
+                self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
+
     def test_the_period_does_not_displace_the_fresh_entry_family(self):
         # The chained family is additive: roundtrip and the isolated components keep their
         # fresh-entry meaning, and old consumers keep reading them unchanged.
@@ -463,6 +490,39 @@ class ChainedPublication(unittest.TestCase):
     def test_the_per_point_line_reports_the_period(self):
         self.assertIn("period=", self.swept.stdout)
         self.assertNotIn("period=n/a", self.swept.stdout)
+
+
+class _DriftingBackend(_StubBackend):
+    """A chain whose late half runs DRIFT_US slower -- an unconverged (or down-clocking) run."""
+
+    def benchmark_chain(self, problem, warmup, iters, drop):
+        self.events.append(("chain", problem.T))
+        kept = iters - drop
+        half = kept // 2
+        pair = [PAIR_US] * half + [PAIR_US + DRIFT_US] * (kept - half)
+        return {
+            "pair": pair,
+            "start_to_start": [value + GAP_US for value in pair[:-1]],
+            "dispatch": [DISPATCH_FLOOR_US] * kept,
+            "combine": [COMBINE_FLOOR_US] * kept,
+        }
+
+
+class SettleDrift(unittest.TestCase):
+    """The convergence proof the review asked for: `chain_drop` ASSUMES the chain settled by the
+    time the kept iterations start, and nothing else in the artifact could show that it hadn't.
+    A drifting chain must publish its drift, signed, rather than a clean-looking period."""
+
+    def test_an_unconverged_chain_publishes_its_drift(self):
+        run = drive(backend_factory=_DriftingBackend)
+        # The drift is a health diagnostic, not a gate: the case stays green and the reader
+        # gets the number that says how much to distrust the period.
+        self.assertEqual(run.rc, 0)
+        for row in run.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                drift = row["chain_health"]["settle_drift_us"]
+                self.assertEqual(drift["percentiles_us"]["p50"], DRIFT_US)
+                self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
 
 
 class BarrierModeSuppression(unittest.TestCase):
@@ -490,7 +550,8 @@ class BarrierModeSuppression(unittest.TestCase):
                 self.assertEqual(row["components"]["pair_period"], UNAVAILABLE)
                 self.assertEqual(row["chain_floor_us"]["dispatch"], UNAVAILABLE)
                 self.assertEqual(row["chain_floor_us"]["combine"], UNAVAILABLE)
-                self.assertEqual(row["chain_health"]["pair_spread_us"], UNAVAILABLE)
+                for health in ("pair_spread_us", "interpair_gap_us", "settle_drift_us"):
+                    self.assertEqual(row["chain_health"][health], UNAVAILABLE)
 
     def test_the_chained_oracle_is_skipped(self):
         # Pass 1 and Pass 3 only: with nothing chained published there is nothing to stand
