@@ -55,6 +55,14 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 #       FLUSH_DRAIN_TIMEOUT (default 120s) elapses.
 #   L3 (umbp / mooncake store):         POST /hicache/storage-backend/clear
 #       — HTTP != 200 when L3 is off, tolerated.
+#
+# vLLM speaks neither endpoint. Its equivalent is POST /reset_prefix_cache, which
+# drops the GPU prefix-cache blocks and returns 200 with no body. There is no
+# vLLM API that clears an *external* KV tier, so a MooncakeStoreConnector /
+# LMCache store stays warm across concurrency points; that is reported rather
+# than silently assumed, because it changes how a with/without-offload
+# comparison should be read (later conc points see a store warmed by earlier
+# ones — realistic for a long-lived deployment, but not "cold").
 # Best-effort: logs WARN, never hard-fails the sweep.
 clear_kv_caches() {
     local drain_tmo="${FLUSH_DRAIN_TIMEOUT:-120}"
@@ -66,8 +74,34 @@ clear_kv_caches() {
     local -a urls
     IFS=',' read -r -a urls <<< "$urls_csv"
     local url start ok resp code
+    local is_vllm=0
+    [[ "${ENGINE:-}" == vllm* ]] && is_vllm=1
+
     for url in "${urls[@]}"; do
         [[ -n "$url" ]] || continue
+
+        if [[ "$is_vllm" == 1 ]]; then
+            # vLLM: GPU prefix cache only. Also a no-op while requests are in
+            # flight, so drain-retry on a non-200 the same way.
+            start=$(date +%s); ok=0; code=000
+            while :; do
+                code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' \
+                        -X POST "${url}/reset_prefix_cache" 2>/dev/null || echo 000)
+                [[ "$code" == 200 ]] && { ok=1; break; }
+                (( $(date +%s) - start >= drain_tmo )) && break
+                sleep 3
+            done
+            if [[ "$ok" == 1 ]]; then
+                echo "[clear_caches] ${url}: GPU prefix cache reset"
+            else
+                echo "[clear_caches] WARN ${url}: /reset_prefix_cache not confirmed after ${drain_tmo}s (http=${code})" >&2
+            fi
+            if [[ "${KV_OFFLOADING:-none}" != "none" ]]; then
+                echo "[clear_caches] ${url}: external ${KV_OFFLOAD_BACKEND:-dram} tier NOT cleared (no vLLM API) — stays warm across conc points"
+            fi
+            continue
+        fi
+
         # L1 + L2: drain-retry until flushed (no-op while requests in flight).
         start=$(date +%s); ok=0; resp=""
         while :; do
