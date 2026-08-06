@@ -883,9 +883,9 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 #
 # Set SPEC_REJECTION_METHOD=block to restore real verification.
 SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
-SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.45}"
+SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.51}"
 
-SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
+SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"greedy\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
 if [ "$SPEC_REJECTION_METHOD" = "synthetic" ]; then
     SPEC_CFG="$SPEC_CFG,\"synthetic_acceptance_length\":$SPEC_SYNTHETIC_ACCEPTANCE_LENGTH"
     # Loud banner + an on-disk marker so a result directory is self-identifying
