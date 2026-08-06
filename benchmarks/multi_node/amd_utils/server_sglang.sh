@@ -215,6 +215,15 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]] && [[ "$PREFILL_ENABLE_EP" == "true" ]];
     echo "[DP+EP override] Prefill: max-running-requests=$prefill_max_running_requests, MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_PREFILL"
 fi
 
+if [[ -n "${AGENTIC_PREFILL_MAX_RUNNING_REQUESTS_FACTOR:-}" ]]; then
+    prefill_max_running_requests=$(( AGENTIC_PREFILL_MAX_RUNNING_REQUESTS_FACTOR * BENCH_MAX_CONC_VALUE ))
+    echo "[Agentic] Prefill max-running-requests=${prefill_max_running_requests} (${AGENTIC_PREFILL_MAX_RUNNING_REQUESTS_FACTOR} * CONC=${BENCH_MAX_CONC_VALUE})"
+fi
+if [[ -n "${PREFILL_CUDA_GRAPH_BS_CAP:-}" ]]; then
+    prefill_cuda_graph_bs=($(seq 1 "${PREFILL_CUDA_GRAPH_BS_CAP}"))
+    echo "[Agentic] Prefill cuda-graph-bs 1..${PREFILL_CUDA_GRAPH_BS_CAP}"
+fi
+
 # Compute DP-dependent decode parameters (3-way: DP > EP-only > no_dp)
 if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
     decode_cuda_graph_bs=($(seq $DECODE_CUDA_GRAPH_BS_DP_START $DECODE_CUDA_GRAPH_BS_DP_END))

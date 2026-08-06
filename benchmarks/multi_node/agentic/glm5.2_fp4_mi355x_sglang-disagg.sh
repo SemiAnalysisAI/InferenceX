@@ -106,7 +106,7 @@ fi
 # MoRI IO QP tuning for this recipe: amd_utils/env.sh when MODEL_NAME=GLM-5.2-MXFP4
 # and DISAGG=true (ionic MSN-safe overrides; other models/topologies unchanged).
 
-export PREFILL_ROUTER_POLICY="${PREFILL_ROUTER_POLICY:-cache_aware}"
+export ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-${PREFILL_ROUTER_POLICY:-cache_aware}}"
 export ENABLE_METRICS="${ENABLE_METRICS:-1}"
 
 if [[ "${SPEC_DECODING:-none}" == "mtp" || "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
