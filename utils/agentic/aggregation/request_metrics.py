@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .aggregation_common import percentile, stats_for, to_float, to_int
+from .stability_metrics import compute_stability_metrics
 from .trace_metadata import expected_output_lengths
 
 
@@ -266,6 +267,26 @@ def compute_throughput_stats(
     return flat, nested
 
 
+def _aiperf_metric_avg(aggregate: dict[str, Any], metric_name: str) -> float | None:
+    """Read an AIPerf aggregate metric, accepting the legacy scalar shape."""
+    metric = aggregate.get(metric_name)
+    if isinstance(metric, dict):
+        metric = metric.get("avg")
+    return to_float(metric)
+
+
+def _benchmark_duration_s(aggregate: dict[str, Any]) -> float | None:
+    """Prefer the configured duration over AIPerf's measured wall time."""
+    input_config = aggregate.get("input_config")
+    if isinstance(input_config, dict):
+        loadgen = input_config.get("loadgen")
+        if isinstance(loadgen, dict):
+            configured = to_float(loadgen.get("benchmark_duration"))
+            if configured is not None and configured > 0:
+                return configured
+    return _aiperf_metric_avg(aggregate, "benchmark_duration")
+
+
 def _aiperf_percent_metric_as_rate(
     aggregate: dict[str, Any],
     metric_name: str,
@@ -315,6 +336,10 @@ def compute_request_metrics(
     workload_flat, workload_nested = compute_workload_stats(records)
     cache_flat, cache_nested = compute_cache_stats(records, aggregate)
     throughput_flat, throughput_nested = compute_throughput_stats(records)
+    stability_nested = compute_stability_metrics(
+        records,
+        benchmark_duration_s=_benchmark_duration_s(aggregate),
+    )
 
     for part in (qps_flat, latency_flat, workload_flat, cache_flat, throughput_flat):
         flat.update(part)
@@ -326,6 +351,7 @@ def compute_request_metrics(
             "tokens": workload_nested,
             "throughput": throughput_nested,
             "cache": cache_nested,
+            "stability": stability_nested,
         }
     )
     return flat, nested
