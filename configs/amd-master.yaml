@@ -804,6 +804,53 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c8-img124154a8:
 # with no env passthrough, so a key cannot select bf16. A real bf16 A/B needs a
 # recipe change, not another key.
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c16:
+  # c16 GPU-only, first attempt under the MNS_CAP=16 workaround.
+  #
+  # c16 has failed 2/2 before this with hipErrorIllegalAddress in
+  # KimiGDNLinearAttention._forward during warmup_kernels/_run_decode_step
+  # (runs 30987878388 and 31071548896, nodes g14 and g09, both pre- and
+  # post-a8w4-fix builds). mns 32 was the trigger; the recipe now caps mns and
+  # the cudagraph ladder at 16, the largest value c8 has proven end to end.
+  #
+  # So this is 1x scheduler headroom, not the 2x every other cell runs. It is
+  # NOT the c8 config at a different concurrency -- say so when comparing.
+  # c8 baseline: ~932 tok/s/GPU, 256 reqs, acceptance 1.77, KV peak 73.4%.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [16], spec-decoding: mtp}
+
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-lmc-c16:
+  # LMCache sibling of -asm-fp8-k3-c16. Same MNS_CAP=16 workaround.
+  #
+  # Note this arm now actually runs at GPU_MEM_UTIL 0.8 as the LMCache block
+  # intended. Until this commit, that block's GMU 0.8 and mns 32 were dead code
+  # -- overwritten unconditionally further down the recipe -- so every earlier
+  # LMCache run really executed at GMU 0.9. The extra GPU-side consumer is the
+  # reason 0.8 was specified, so earlier LMCache arms were running with less
+  # slack than their comments claim.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-ps-c8:
   # vllm#51088 PS ASM decode route, GPU-only c8, single variable against run
   # 30928884574 (496.19 tok/s/GPU, 142 reqs, TTFT 27.6 s, acceptance 1.21/3.00).
