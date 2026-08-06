@@ -5461,6 +5461,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
   
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.15-rocm720-mi35x-20260713 to lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260730"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2433
+
+- config-keys:
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg
     - qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg
   description:
