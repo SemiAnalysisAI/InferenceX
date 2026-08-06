@@ -895,12 +895,30 @@ SPEC_ARGS=(
 # line and GPU_MEM_UTIL below assigned unconditionally, so the LMCache arm's
 # mns 32 / GMU 0.8 and the documented GPU_MEM_UTIL override were dead code --
 # every LMCache run so far actually ran at GMU 0.9.
-MNS_CAP="${MNS_CAP:-16}"
+# PIN, not a cap. c4 (mns 8) dies capturing graph size 8 -- the exact graph c8
+# (mns 16) captures successfully. Identical shape, different outcome, and mns is
+# the only difference. So this is not a shape bug: it is a latent out-of-bounds
+# read whose fault depends on allocation layout, since mns sizes the
+# preallocated state/index buffers and therefore what sits adjacent to the bad
+# address. That is also the only story consistent with the non-monotonic
+# pass/fail (mns 2 pass, 8 fail, 16 pass, 32 fail).
+#
+#   mns 2  (c1)  capture path never exercised -- ladder [1,2] has no entry
+#                divisible by k+1=4, so 0 FULL graphs. Pass is uninformative.
+#   mns 8  (c4)  captures {4,8}; dies on size 8. 3/3 runs, nodes g10, g10, g12.
+#   mns 16 (c8)  captures {4,8,16}; all pass. 2/2 runs, nodes g12, and one more.
+#   mns 32 (c16) faults earlier, in warmup_kernels/_run_decode_step. 2/2 runs.
+#
+# 16 is the only value with a clean record, so pin every cell that exercises the
+# capture path to it. c1 stays at 2 deliberately: raising it to 16 would start
+# capturing spec graphs there and could expose the same fault on a cell that
+# currently works.
+MNS_PIN="${MNS_PIN:-16}"
 MNS_BASE="${MAX_NUM_SEQS:-$(( 2 * CONC ))}"
-MAX_NUM_SEQS=$(( MNS_BASE > MNS_CAP ? MNS_CAP : MNS_BASE ))
+if [ "$MNS_BASE" -ge 4 ]; then MAX_NUM_SEQS="$MNS_PIN"; else MAX_NUM_SEQS="$MNS_BASE"; fi
 MAX_CUDAGRAPH_CAPTURE_SIZE=$MAX_NUM_SEQS
 if [ "$MAX_NUM_SEQS" -ne "$MNS_BASE" ]; then
-    echo "MNS_CAP=$MNS_CAP: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
+    echo "MNS_PIN=$MNS_PIN: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
 fi
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
