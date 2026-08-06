@@ -862,10 +862,48 @@ SPEC_ARGS=(
     "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
 )
 
-MAX_CUDAGRAPH_CAPTURE_SIZE=$((2 * CONC))
+# mns and the cudagraph capture ceiling are 2*CONC, capped at MNS_CAP.
+#
+# The cap exists because KimiGDNLinearAttention._forward faults with
+# hipErrorIllegalAddress above mns 16. At CONC=16 (mns 32) the non-spec KDA
+# decode dies in warmup_kernels/_run_decode_step -- reproduced twice, on two
+# different nodes, on both the pre- and post-a8w4-fix builds:
+#   run 30987878388 c16 (node g14) -> kimi_gdn_linear_attn.py:607
+#                                     fused_recurrent_kda_packed_decode
+#   run 31071548896 c16 (node g09) -> kimi_gdn_linear_attn.py:597
+#                                     causal_conv1d_update
+# Both dereference decode_conv_indices into the state cache; the slot load at
+# fused_recurrent.py:479 is unmasked, so a bad index reads out of bounds.
+#
+# 16 is the largest value proven safe end to end: c8 (mns 16) clears warmup,
+# capture and 3600 s of serving on the same nodes (runs 30982145794,
+# 31065394450). Not a node issue -- g12 ran c4 (failed) and c8 (passed), g14 ran
+# c16 (failed) and c1 (passed).
+#
+# This is a WORKAROUND. The real fix is bounds-checking the KDA state index
+# upstream. It also does NOT help c4, which fails in a different phase
+# (capture_model, kimi_gdn_linear_attn.py:478, the spec branch) and is not
+# size-driven -- c8 captures a strict superset of c4's ladder and passes.
+#
+# Both values must move together: capture size may not exceed mns, or the
+# capture ladder escapes mns*(k+1).
+#
+# NOTE: at CONC=16 this gives 1x scheduler headroom instead of 2x, so c16 is no
+# longer "the c8 config at a different concurrency". Say so when comparing.
+# Respect a value already set upstream (the LMCache block at ~391 sets 32, and
+# MAX_NUM_SEQS is a documented knob); default to 2*CONC. Before this, both this
+# line and GPU_MEM_UTIL below assigned unconditionally, so the LMCache arm's
+# mns 32 / GMU 0.8 and the documented GPU_MEM_UTIL override were dead code --
+# every LMCache run so far actually ran at GMU 0.9.
+MNS_CAP="${MNS_CAP:-16}"
+MNS_BASE="${MAX_NUM_SEQS:-$(( 2 * CONC ))}"
+MAX_NUM_SEQS=$(( MNS_BASE > MNS_CAP ? MNS_CAP : MNS_BASE ))
+MAX_CUDAGRAPH_CAPTURE_SIZE=$MAX_NUM_SEQS
+if [ "$MAX_NUM_SEQS" -ne "$MNS_BASE" ]; then
+    echo "MNS_CAP=$MNS_CAP: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
+fi
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
-GPU_MEM_UTIL="0.9"
-MAX_NUM_SEQS=$((2 * CONC))
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
 
 # vllm-project/vllm#51088 -- "[ROCm][MLA] Add small-head PS ASM decode route".
 #
