@@ -465,7 +465,7 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
 kimik3-fp4-mi355x-vllm-agentic:
-  image: haihub007/hc-gpu:kimik3-dspark-lmcache-pr50618-pr51040-aiter4474-20260806
+  image: haihub007/hc-gpu:kimik3-dspark-lmcache-pr50618-pr51040-aiter4474-20260806-shadowfix1
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:mi355x-amds

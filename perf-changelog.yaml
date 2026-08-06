@@ -5465,7 +5465,7 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add Kimi-K3 MXFP4 DSpark speculative decoding on TP8 MI355X with the validated haihub007/hc-gpu:kimik3-dspark-lmcache-pr50618-pr51040-aiter4474-20260806 image"
+    - "Add Kimi-K3 MXFP4 DSpark speculative decoding on TP8 MI355X with the validated haihub007/hc-gpu:kimik3-dspark-lmcache-pr50618-pr51040-aiter4474-20260806-shadowfix1 image"
     - "Run LMCache 0.5.3rc2 MP host-DRAM offload with a 906 GB L1 pool, FP8 KV cache, Mamba alignment, and concurrency 2"
     - "Use Inferact/Kimi-K3-DSpark with three speculative tokens, probabilistic drafting, TRITON_MLA, block rejection, eager execution, and a 3000-token scheduler cap"
     - "Combine vLLM PRs #50618, #50619, and #51040 with AITER PR #4474, remove the integration import shadow, and disable skinny GEMM"
