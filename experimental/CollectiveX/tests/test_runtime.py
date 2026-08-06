@@ -89,6 +89,19 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(first, second)
             self.assertEqual(first.stat().st_mode & 0o777, 0o700)
 
+    def test_prepare_cache_bootstraps_a_missing_squash_dir(self) -> None:
+        # The probe runs BEFORE the first container import, so on a fresh pool the operator's
+        # squash_dir does not exist yet; a bare mkdir threw FileNotFoundError and killed every
+        # b200-nscale leg of the pool's first sweep four seconds in. The cache dir keeps its
+        # private mode; the created parent is left default like the import path would leave it.
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / "sqsh"
+            self.assertFalse(parent.exists())
+            cache = Path(probe.prepare_cache(str(parent)))
+            self.assertTrue(cache.is_dir())
+            self.assertEqual(cache.parent, parent.resolve())
+            self.assertEqual(cache.stat().st_mode & 0o777, 0o700)
+
 
 class ConfigTests(unittest.TestCase):
     def test_operator_config_emits_allowlisted_values(self) -> None:
