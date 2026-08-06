@@ -127,6 +127,23 @@ def main() -> int:
     ops = args.ops.split()
     pool_bytes = max(cfg["pool_bytes"] for cfg in configs)
     bulk_bytes = min(max(cfg["req_bytes"] for cfg in configs), BULK_CAP)
+
+    # RDMA registration pins the whole pool; a small inherited soft memlock
+    # limit fails it with an unhelpful ENOMEM/EIO deep inside the library
+    # (Slurm propagates the SUBMITTER's limits into steps). Raise soft to hard
+    # when possible; otherwise fail here with the actual numbers.
+    import resource
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_MEMLOCK)
+    need = pool_bytes + bulk_bytes
+    if soft != resource.RLIM_INFINITY and (hard == resource.RLIM_INFINITY or soft < hard):
+        resource.setrlimit(resource.RLIMIT_MEMLOCK, (hard, hard))
+        soft = hard
+    if soft != resource.RLIM_INFINITY and soft < need:
+        print(f"ERROR: RLIMIT_MEMLOCK {soft} < {need} needed to register the KV pools; "
+              "submit with --propagate=NONE or raise the limit", file=sys.stderr)
+        return 2
+
     pool = torch.empty(pool_bytes, dtype=torch.uint8, device=device)
     bulk = torch.empty(bulk_bytes, dtype=torch.uint8, device=device)
 
