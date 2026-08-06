@@ -142,8 +142,6 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.85
     --enable-chunked-prefill
     --max-num-batched-tokens 32768
-    --max-num-partial-prefills 8
-    --max-long-partial-prefills 4
     --language-model-only
     --enable-prefix-caching
     --attention-backend TRITON_ATTN
