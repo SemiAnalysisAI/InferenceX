@@ -775,8 +775,16 @@ kimik2.5-fp4-mi355x-vllm-disagg:
 # smoke pass; widen once green.
 # image/model/draft match the single-node reference PR #2403
 # (kimik3-fp4-mi355x-vllm-agentic-dspark) and the validated local 1P1D run
-# (k3-agentx/gen_k3_mc.sh). GMU 0.70 + max-model-len 10240 keep the DSpark draft
-# weights + MoRIIO KV RDMA registration within budget (see DSpark bring-up notes).
+# (k3-agentx/gen_k3_mc.sh).
+#
+# GMU/MAX_MODEL_LEN are deliberately NOT pinned here any more. They used to be
+# 0.70 / 10240, which silently capped every agentic run to a 10k window against
+# a corpus whose peak trace is ~1M -- the exact bug the sibling -dummy arm calls
+# out and avoids. Leaving them unset lets benchmarks/multi_node/agentic/ supply
+# gmu 0.88 and K3's native 1M, matching the -dummy arm and the merged B300 K3
+# agentic arm. That now fits on ROCM_AITER_MLA: at TP8 / bf16 KV / gmu 0.88 the
+# 52.59 GiB pool holds 1,624,554 tokens (1.55x a 1M request) once the draft's
+# MLA layers stop forming their own padded KV group (fork commit 1755c10c).
 kimik3-fp4-mi355x-vllm-disagg-agentic:
   image: vllm/vllm-openai-rocm:kimi-k3
   model: moonshotai/Kimi-K3
@@ -803,8 +811,6 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "GPU_MEMORY_UTILIZATION=0.70"
-          - "MAX_MODEL_LEN=10240"
           - "VLLM_PATCH_46240=1"
           - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
@@ -817,8 +823,6 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-          - "GPU_MEMORY_UTILIZATION=0.70"
-          - "MAX_MODEL_LEN=10240"
           - "VLLM_PATCH_46240=1"
           - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
@@ -846,9 +850,24 @@ kimik3-fp4-mi355x-vllm-disagg-agentic:
 # so --kv-cache-dtype fp8 is what pins decode to batch 1 and aborts conc > 1 with
 # "mla_gluon[bh16bn128] requires batch_size=1". bf16 KV batches normally, which
 # is why the validated real-weight run (GSM8K 44/50) served fine on aiter MLA.
+# The settings below now match that: KV_CACHE_DTYPE=fp8 and the aiter head-pad
+# patch (which only exists to reach the fp8 ASM decoder) used to be listed here
+# and directly contradicted this paragraph -- and the fp8 ASM path then dies on
+# DSpark anyway, since it rejects qo_len > 4 outside persistent mode while the
+# n=7 verify step presents 8.
+#
+# Graphs: keep them on, but expect PIECEWISE rather than FULL. The DSpark draft
+# cannot leave TRITON_MLA ("non-causal attention not supported" on aiter), and
+# TritonMLABackend only declares UNIFORM_SINGLE_TOKEN_DECODE, so under
+# spec-decode vLLM demotes FULL_AND_PIECEWISE -> PIECEWISE for the whole engine
+# regardless of the target's backend. 35 shapes capture in ~20 s / 0.6 GiB,
+# DSpark speculator included; --enforce-eager was never actually required.
+#
 # Host-DRAM capacity comes from the Mooncake tier instead -- that is the point of
-# this recipe. Validated on MIA g05/g06 via benchmarks/multi_node/local_runner/:
-# warmup 87/87 errors=0, peak_open=8, Mooncake ext_cache_hit ~50%, ~203/256 GB.
+# this recipe. Sized from dram-utilization below, not pinned here: for
+# cluster:mi355x-amds a TP8 prefill worker resolves to 2400 GB.
+# Validated on MIA g05/g06 via benchmarks/multi_node/local_runner/:
+# warmup 87/87 errors=0, peak_open=8, Mooncake ext_cache_hit ~50%.
 # See k3-disagg-agenticx/spec/debug.md + perf-baseline.md.
 kimik3-fp4-mi355x-vllm-disagg-agentic-dummy:
   image: vllm/vllm-openai-rocm:kimi-k3
@@ -878,8 +897,6 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-dummy:
           - "PREFILL_NODES=1"
           - "LOAD_FORMAT=dummy"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
-          - "KV_CACHE_DTYPE=fp8"
-          - "VLLM_PATCH_MLA_HEAD_PAD=1"
           - "VLLM_PATCH_46240=1"
           - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
@@ -894,8 +911,9 @@ kimik3-fp4-mi355x-vllm-disagg-agentic-dummy:
           - "DECODE_NODES=1"
           - "LOAD_FORMAT=dummy"
           - "IX_AIPERF_TOKENIZER=moonshotai/Kimi-K3"
-          - "KV_CACHE_DTYPE=fp8"
-          - "VLLM_PATCH_MLA_HEAD_PAD=1"
+          # Was missing on decode while prefill had it, so the scheduler patch
+          # only landed on one side of the pair.
+          - "VLLM_PATCH_46240=1"
           - "VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark"
           - "HF_HUB_CACHE=/models/.cache/huggingface/hub"
           - "INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32"
