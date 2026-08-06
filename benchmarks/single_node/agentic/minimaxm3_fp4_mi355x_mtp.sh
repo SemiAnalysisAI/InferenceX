@@ -11,8 +11,6 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-EVAL_ONLY="false"
-
 # Force the eval framework to lm-eval for this recipe. run_eval derives its
 # default as swebench for agentic scenarios (scenario_default=swebench when
 # IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but EVAL_FRAMEWORK takes precedence
@@ -142,6 +140,10 @@ VLLM_CMD=(
     --trust-remote-code
     --block-size 128
     --gpu-memory-utilization 0.85
+    --enable-chunked-prefill
+    --max-num-batched-tokens 32768
+    --max-num-partial-prefills 8
+    --max-long-partial-prefills 4
     --language-model-only
     --enable-prefix-caching
     --attention-backend TRITON_ATTN
@@ -151,7 +153,6 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --default-chat-template-kwargs '{"thinking_mode":"enabled"}'
     --max-num-seqs "$CONC"
-    --max-num-batched-tokens 16384
     --stream-interval 20
     --hf-overrides '{"text_config": {"use_index_cache": true, "index_topk_freq": 4}}'
     # --speculative-config "$SPEC_CONFIG"
