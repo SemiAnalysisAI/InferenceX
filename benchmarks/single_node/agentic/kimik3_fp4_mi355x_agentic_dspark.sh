@@ -188,8 +188,6 @@ VLLM_CMD=(
     --enable-prefix-caching
     --mamba-cache-mode align
     --kv-cache-dtype fp8
-    # Keep eager execution until the patched graph path is validated in this image.
-    --enforce-eager
     --speculative-config "$SPEC_CONFIG"
     --kv-transfer-config "$KV_TRANSFER_CONFIG"
 )
