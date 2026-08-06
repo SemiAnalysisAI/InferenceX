@@ -236,6 +236,20 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==${VLLM_ROUTER_VERSION:-0.1.14}"
 fi
 
+# Preflight the ports. These nodes are shared and --network host means a
+# neighbour's server on the same port kills ours -- but only after the ~9min
+# weight load and graph capture, since the bind happens last. Checking up front
+# turns a 9-minute waste into an immediate, self-explaining failure. The
+# DP-attention path needs the pair (router on PORT, backend on PORT+1).
+for _p in "$PORT" $([ "$USE_VLLM_ROUTER" = true ] && echo "$VLLM_BACKEND_PORT"); do
+    if ss -ltn 2>/dev/null | grep -q ":$_p "; then
+        echo "Error: port $_p is already in use on this node." >&2
+        echo "       Pick a free pair with PORT=<n> (DP-attention also uses n+1)." >&2
+        exit 1
+    fi
+done
+unset _p
+
 # ---- Compilation -------------------------------------------------------------
 # See the long note in dsv4_fp4_mi355x_vllm_mtp.sh: the gate on ROCm's
 # fuse_rope_kvcache / fuse_rope_kvcache_cat_mla is splitting_ops, not the
