@@ -627,10 +627,24 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-lmc-c16-spur:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: lmcache-k3, version: "git" }, conc-list: [16], spec-decoding: mtp}
 
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c4:
-  # c4 on its own. The c4 cell of the -sweep key wedged in `Launch job script`
-  # for 6h04m with no step progress and no artifacts (run 30987878388) and was
-  # cancelled; c1 and c16 from that dispatch are already collected, so rerunning
-  # the whole sweep would burn two nodes to re-measure known results.
+  # c4 on its own, retried under MNS_PIN=16.
+  #
+  # c4 has failed 3/3 (runs 30987878388, 31015053833, 31071548896; nodes g10,
+  # g10, g12), always the same way: hipErrorIllegalAddress in
+  # KimiGDNLinearAttention._forward:478 (the spec-branch causal_conv1d_update)
+  # while capturing FULL cudagraph 2 of 2. Every rank then dies, the srun job
+  # never exits, and the cell holds a node until cancelled -- 6h04m the first
+  # time. What looked like a wedge was always this fault plus a missing
+  # hang guard.
+  #
+  # Graph 2 is capture size 8, which c8 (mns 16) captures successfully. Same
+  # shape, different outcome, mns the only difference -- so this is a latent
+  # OOB read that faults or not depending on allocation layout, and mns sizes
+  # the buffers around it. The recipe now pins mns to 16 for every cell that
+  # captures spec graphs, which is the only value with a clean record.
+  #
+  # This means c4 runs 4x scheduler headroom instead of 2x. Not a like-for-like
+  # concurrency curve against c1; note it when comparing.
   image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
