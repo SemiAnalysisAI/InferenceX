@@ -42,7 +42,7 @@ Run `ls` for details. Key paths:
 - `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
 - `utils/bench_serving/` - `benchmark_serving.py` and backends.
 - `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `collect_*.py`, `compare_results.py`.
+- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `aggregate_power.py` (single-node GPU energy validation + aggregation), `aggregate_power_multinode.py` (multinode srt-slurm `dcgm-power` artifact validation), `collect_*.py`, `compare_results.py`.
 - `experimental/` - non-core experiments.
 
 ## Terminology
@@ -117,7 +117,7 @@ gh api -X POST \
   -f 'inputs[duration-override]='
 ```
 
-Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value.
+Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value. `inputs[require-power]` fails single-node fixed-sequence jobs when GPU power telemetry is invalid (default: power is best-effort and never fails a run).
 
 For an AgentX preflight, add `-F 'inputs[agentx-fast]=true'` to the dispatch command. This reduces deterministic warmup to one request per lane and profiling to 20 minutes for every AgentX job. Use it to get faster feedback while debugging, then run the official sweep without `agentx-fast`; canonical AgentX warmup remains 10 requests per lane with a 1-hour profile.
 
@@ -148,6 +148,8 @@ Add to `configs/runners.yaml`, create launcher in `runners/`, add the runner typ
 For `dynamo-sglang` / `dynamo-trt` disaggregated multi-node configs, see `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` for the full mapping from srtslurm recipe YAML to `nvidia-master.yaml` entries.
 
 Multi-node srt-slurm changes must edit the recipe yaml AND `nvidia-master.yaml` together. `srtctl` reads only the recipe (`model.container`, resources, prefill/decode workers); the sweep generator (`utils/matrix_logic/generate_sweep_configs.py`) reads `nvidia-master.yaml` for frontend labels - its prefill/decode numbers never reach `srtctl`. Recipe-only edits mislabel results, master-only edits don't take effect. For image bumps, `model.container` must equal `image:`, since the launcher uses the latter as the container-alias key.
+
+Power lanes: a recipe `telemetry:` block with `provider: dcgm-power` enables official energy collection for that config. The launcher (`runners/launch_gb200-nv.sh`, `launch_gb300-nv.sh`) is the single source of truth for the producer pin (`POWER_SRT_SLURM_PIN`); CI derives `POWER_PRODUCER_SHA` from the launcher's stamp file, and `utils/test_gb200_power_official_contract.py` / `test_gb300_power_official_contract.py` lock the recipe↔launcher contract. dcgm-power lanes are validated for `PRECISION=fp8` only.
 
 ### Updating Docker images
 
@@ -200,6 +202,10 @@ cat ./results/agg_bmk.json | jq '[.[] | select(.infmax_model_prefix == "gptoss")
 
 `tput_per_gpu` (total throughput per GPU, tok/s), `output_tput_per_gpu` (output token throughput), `mean_ttft` / `p99_ttft` (time to first token), `mean_tpot` (time per output token), `mean_e2el` (end-to-end latency).
 
+Single-node fixed-sequence results also carry GPU power metrics when telemetry is valid: `power_valid` (1/0), `avg_power_w` (average board power per GPU), `avg_total_gpu_power_w` (all observed GPUs), `total_gpu_energy_j` (integrated over the formal benchmark window), and `joules_per_successful_query` / `joules_per_input_token` / `joules_per_output_token` / `joules_per_total_token`. Invalid telemetry records `power_valid: 0` and no energy metrics; it fails the job only under `REQUIRE_POWER=1` (see the `require-power` dispatch input).
+
+Multinode disaggregated results add role energy metrics: `prefill_gpu_energy_j` / `decode_gpu_energy_j` (board energy of that role's GPUs integrated over the FULL formal window — not kernel-level phase energies) and `prefill_joules_per_input_token` / `decode_joules_per_output_token`.
+
 ### Artifacts
 
-`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded).
+`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded). `power_audit_<result>` → `power_validation_<result>.json` single-node, `power_validation_<result>_*.json` multinode (canonical power validity verdict + reason codes; uploaded even when invalid).
