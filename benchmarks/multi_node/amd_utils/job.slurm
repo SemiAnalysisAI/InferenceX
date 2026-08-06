@@ -472,6 +472,8 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_CHUNKED_PREFILL_SIZE=\${PREFILL_CHUNKED_PREFILL_SIZE:-}
     -e DISABLE_CUSTOM_ALL_REDUCE=\${DISABLE_CUSTOM_ALL_REDUCE:-}
     -e MAX_MODEL_LEN=\${MAX_MODEL_LEN:-}
+    # Bring-up-only context cap; survives the agentic unset of MAX_MODEL_LEN.
+    -e MAX_MODEL_LEN_OVERRIDE=\${MAX_MODEL_LEN_OVERRIDE:-}
     -e GPU_MEMORY_UTILIZATION=\${GPU_MEMORY_UTILIZATION:-}
     -e ENABLE_PREFIX_CACHING=\${ENABLE_PREFIX_CACHING:-0}
     -e DURATION=\${DURATION:-1800}
@@ -487,6 +489,10 @@ DOCKER_ENV_COMMON=(
     # Generalise aiter MLA head padding so 12 heads/rank (K3 TP8) reach the ASM
     # decode kernel instead of the batch_size=1 fp8 gluon regime.
     -e VLLM_PATCH_MLA_HEAD_PAD=\${VLLM_PATCH_MLA_HEAD_PAD:-}
+    # Persistent-mode metadata for qo_len>4 fp8 ASM decode. Shelved (default off).
+    -e VLLM_PATCH_MLA_PERSISTENT_MTP=\${VLLM_PATCH_MLA_PERSISTENT_MTP:-}
+    # Log-only KV-cache layer bucketing dump (padding-waste attribution).
+    -e VLLM_PATCH_KV_GROUP_DEBUG=\${VLLM_PATCH_KV_GROUP_DEBUG:-}
     # Kimi-K3: online-install the vLLM DSpark/MoRIIO-KDA fork over the base image
     # (setup_deps.sh install_kimi_k3_vllm_fork). REF empty -> skipped.
     -e VLLM_K3_FORK_REF=\${VLLM_K3_FORK_REF:-}
@@ -499,6 +505,8 @@ DOCKER_ENV_COMMON=(
     -e KV_CACHE_DTYPE=\${KV_CACHE_DTYPE:-}
     # Target --attention-backend override (K3 TP8 needs TRITON_MLA; see server_vllm.sh).
     -e ATTENTION_BACKEND=\${ATTENTION_BACKEND:-}
+    # Draft-model attention backend ("attention_backend" in --speculative-config).
+    -e SPEC_ATTN_BACKEND=\${SPEC_ATTN_BACKEND:-}
     # Let setup_deps continue when the diagnostics-only RDMA CLI tools cannot be
     # apt-installed (flaky mirror). Unset in CI -> still a hard failure there.
     -e ALLOW_MISSING_RDMA_TOOLS=\${ALLOW_MISSING_RDMA_TOOLS:-}

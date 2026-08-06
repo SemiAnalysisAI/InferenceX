@@ -225,6 +225,20 @@ fi
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 
+# MAX_MODEL_LEN_OVERRIDE: bring-up-only escape hatch, deliberately separate from
+# MAX_MODEL_LEN. The agentic entrypoints unset MAX_MODEL_LEN before applying the
+# model's native window, so a recipe cannot quietly shrink the context and
+# flatter its numbers -- that guard must stay. But a plumbing smoke sometimes has
+# to fit a smaller window to reach the code under test at all (ROCM_AITER_MLA
+# wants 54.56 GiB for a 1M request against a 52.59 GiB pool, so engine init dies
+# before graph capture). This knob is loud, separately named, and never set by
+# any recipe or by CI, so it cannot be mistaken for a scoring configuration.
+if [[ -n "${MAX_MODEL_LEN_OVERRIDE:-}" ]]; then
+    echo "WARNING: MAX_MODEL_LEN_OVERRIDE=${MAX_MODEL_LEN_OVERRIDE} replaces MAX_MODEL_LEN=${MAX_MODEL_LEN:-<unset>}."
+    echo "WARNING: bring-up only -- results from this run are NOT comparable to a native-context run."
+    MAX_MODEL_LEN="${MAX_MODEL_LEN_OVERRIDE}"
+fi
+
 apply_max_model_len() {
     local cfg="$1"
     if [[ -n "${MAX_MODEL_LEN:-}" && "${MAX_MODEL_LEN}" != "0" ]]; then
@@ -330,6 +344,34 @@ if [[ -n "${ATTENTION_BACKEND:-}" ]]; then
     PREFILL_SERVER_CONFIG="$(apply_attention_backend "$PREFILL_SERVER_CONFIG")"
     DECODE_SERVER_CONFIG="$(apply_attention_backend "$DECODE_SERVER_CONFIG")"
     echo "Applied ATTENTION_BACKEND=${ATTENTION_BACKEND}"
+fi
+
+# SPEC_ATTN_BACKEND: override the DRAFT model's attention backend, i.e. the
+# "attention_backend" key inside --speculative-config's JSON. Independent axis
+# from ATTENTION_BACKEND above, which only moves the target model.
+#
+# The draft runs its own MLA over the same KV pages, one token per step
+# (qo_len == 1), so it never hits the qo_len > 4 persistent-mode gate that the
+# target's MTP verify step does -- which makes it safe to A/B on its own.
+# models_vllm.yaml pins TRITON_MLA there (PR #2403); ROCM_AITER_MLA is the arm
+# worth measuring, since 7 of every 8 forward passes in a DSpark n=7 step are
+# draft passes.
+# "attention_backend" is unique to the speculative-config JSON (the target uses
+# the --attention-backend CLI flag), so a global substitution is unambiguous.
+apply_spec_attn_backend() {
+    local cfg="$1"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q '"attention_backend"'; then
+        echo "$cfg" | sed -E "s/(\"attention_backend\"[[:space:]]*:[[:space:]]*)\"[A-Za-z0-9_]+\"/\1\"${SPEC_ATTN_BACKEND}\"/g"
+    else
+        echo "$cfg" | sed -E "s/(--speculative-config[[:space:]]+'\\{)/\\1\"attention_backend\":\"${SPEC_ATTN_BACKEND}\",/"
+    fi
+}
+if [[ -n "${SPEC_ATTN_BACKEND:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_attn_backend "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_spec_attn_backend "$DECODE_SERVER_CONFIG")"
+    echo "Applied SPEC_ATTN_BACKEND=${SPEC_ATTN_BACKEND} (draft/speculative-config)"
 fi
 
 # ENFORCE_EAGER: disable CUDA graphs. Escape hatch, not a default -- AiterMLA
@@ -556,6 +598,29 @@ if [[ "${VLLM_PATCH_46240:-${KV_OFFLOADING:-none}}" == "dram" || "${VLLM_PATCH_4
     python3 "$PATCH_SCRIPT"
 fi
 
+# Two more hybrid-KV bugs found during the K3 1P1D bring-up are NOT patched here
+# any more -- they are fixed in the pinned vLLM fork
+# (VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark), which is where they belong:
+#   eed3a092  scheduler._update_requests_with_invalid_blocks unpacked
+#             get_block_ids() as one KV-cache group, so a failed Mooncake load
+#             ValueError'd and killed EngineCore instead of recomputing.
+#   1755c10c  MLAAttentionSpec.merge required indexes_kv_by_block_stride to
+#             match, which split the DSpark draft's 5 MLA layers into their own
+#             KV group padded to 24 -- the whole 1.65x KV bytes/token penalty
+#             ROCM_AITER_MLA paid over TRITON_MLA, and what put the native 1M
+#             context out of reach on aiter.
+
+# Log-only: dump the KV-cache layer bucketing. Explains "Add N padding layers"
+# warnings, and specifically which bucket the DSpark draft's MLA layers land in.
+if [[ "${VLLM_PATCH_KV_GROUP_DEBUG:-0}" == "1" || "${VLLM_PATCH_KV_GROUP_DEBUG:-}" == "true" ]]; then
+    KV_GROUP_DEBUG_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_kv_group_debug.py"
+    if [[ ! -f "$KV_GROUP_DEBUG_PATCH_SCRIPT" ]]; then
+        echo "ERROR: missing $KV_GROUP_DEBUG_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$KV_GROUP_DEBUG_PATCH_SCRIPT"
+fi
+
 # aiter MLA head padding: lets the ASM decode kernel serve head counts that do
 # not divide 16 (Kimi-K3 TP8 -> 12 heads/rank). Without it those decodes are
 # routed to mla_gluon, whose fp8 regime (bh16bn128) is batch_size=1 only, so
@@ -580,12 +645,19 @@ if [[ "${VLLM_PATCH_MLA_HEAD_PAD:-0}" == "1" || "${VLLM_PATCH_MLA_HEAD_PAD:-}" =
 
     # gfx950 fp8 ASM decode needs persistent mode once qo_len > 4 (DSpark n=7
     # verifies 8), but vLLM only builds persistent metadata for qo_len == 1.
-    MLA_PERSIST_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_aiter_mla_persistent_mtp.py"
-    if [[ ! -f "$MLA_PERSIST_PATCH_SCRIPT" ]]; then
-        echo "ERROR: missing $MLA_PERSIST_PATCH_SCRIPT" >&2
-        exit 1
+    # Off by default: setting work_meta_data on the metadata object is not enough
+    # for the kernel to accept qo_len=8 -- the flag is not reaching the launch
+    # site -- so the patch changes metadata construction without lifting the gate,
+    # which only muddies any other experiment sharing the run. Set
+    # VLLM_PATCH_MLA_PERSISTENT_MTP=1 to resume work on it.
+    if [[ "${VLLM_PATCH_MLA_PERSISTENT_MTP:-0}" == "1" || "${VLLM_PATCH_MLA_PERSISTENT_MTP:-}" == "true" ]]; then
+        MLA_PERSIST_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_aiter_mla_persistent_mtp.py"
+        if [[ ! -f "$MLA_PERSIST_PATCH_SCRIPT" ]]; then
+            echo "ERROR: missing $MLA_PERSIST_PATCH_SCRIPT" >&2
+            exit 1
+        fi
+        python3 "$MLA_PERSIST_PATCH_SCRIPT"
     fi
-    python3 "$MLA_PERSIST_PATCH_SCRIPT"
 fi
 
 # =============================================================================

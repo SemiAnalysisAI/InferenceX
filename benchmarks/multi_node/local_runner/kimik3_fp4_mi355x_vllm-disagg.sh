@@ -101,7 +101,18 @@ export DECODE_DP_ATTN="${DECODE_DP_ATTN:-false}"
 # --- KV transfer: MoRIIO RDMA P/D + Mooncake DRAM (MultiConnector) --------------
 export KV_OFFLOADING="${KV_OFFLOADING:-dram}"
 export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-mooncake}"
-export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-256}"
+# Sized the way the cloud path sizes it, instead of a round placeholder. CI never
+# sets this directly: generate_sweep_configs.agentic_dram_offload_gb() derives it
+# from the recipe's `dram-utilization: 0.80` and the runner's hardware metadata --
+#   min(available-cpu-dram-mib, MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB=2_861_022)
+#     * 0.80 * prefill_gpus_per_node / gpus-per-node
+# For cluster:mi355x-amds (3_095_781 MiB, 8 GPUs/node) the cap binds, so a TP8
+# prefill worker gets 2400 GB. The old hard-coded 256 was ~9x under that, and it
+# is what made MooncakeStore fail every put once the corpus got large:
+#   client_service.cpp: BatchPut failed for 32 keys due to insufficient space
+# which then failed the decode request and aborted the replay in warmup. Nodes
+# have ~2.9 TB, so this fits; lower it only to deliberately study a smaller tier.
+export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-2400}"
 # GMU / MAX_MODEL_LEN are deliberately NOT set here: they come from
 # benchmarks/multi_node/agentic/kimik3_fp4_mi355x_vllm-disagg.sh, which is the
 # same file CI goes through (gmu 0.88 per PR #2403's fleet measurements, and the
@@ -122,6 +133,18 @@ export VLLM_PATCH_MLA_HEAD_PAD="${VLLM_PATCH_MLA_HEAD_PAD:-1}"
 # Empty -> keep models_vllm.yaml's ROCM_AITER_MLA (bh16bn64 on bf16 KV), which is
 # what the validated real-weight run used. Set TRITON_MLA only to A/B against it.
 export ATTENTION_BACKEND="${ATTENTION_BACKEND:-}"
+# Draft (DSpark) attention backend. Empty -> models_vllm.yaml's TRITON_MLA.
+# ROCM_AITER_MLA is the A/B arm: the draft is qo_len==1 so it never trips the
+# target's qo_len>4 fp8 ASM gate, yet it runs 7 of the 8 passes per DSpark step.
+export SPEC_ATTN_BACKEND="${SPEC_ATTN_BACKEND:-}"
+# Persistent-metadata patch for the target's qo_len>4 fp8 ASM decode: shelved.
+export VLLM_PATCH_MLA_PERSISTENT_MTP="${VLLM_PATCH_MLA_PERSISTENT_MTP:-0}"
+# The draft/target KV-group split that cost aiter 1.65x KV bytes/token, and the
+# hybrid invalid-block crash, are both fixed in the pinned fork now (1755c10c,
+# eed3a092) -- no runtime patch knob for them any more. Measured on g05, TP8,
+# dummy, bf16 KV, ROCM_AITER_MLA:
+#   before -> bucket_sizes=[69,24,5] group_size=24 -> 1,000,400 tokens
+#   after  -> bucket_sizes=[69,29]   group_size=29 -> 1,624,554 tokens (== Triton)
 # Graphs ON: AiterMLA declares UNIFORM_BATCH cudagraph support and the K3 fork
 # adds _uniform_padded_mtp_qo_len for padded MTP capture. Set 1 to fall back.
 export ENFORCE_EAGER="${ENFORCE_EAGER:-0}"
@@ -162,6 +185,8 @@ Local-only runner (do NOT source from CI).
 MODEL=${MODEL} MODEL_PATH=${MODEL_PATH} IMAGE=${IMAGE}
 LOAD_FORMAT=${LOAD_FORMAT} DISABLE_SPECULATIVE=${DISABLE_SPECULATIVE} SPEC_DECODING=${SPEC_DECODING}
 KV_OFFLOADING=${KV_OFFLOADING}/${KV_OFFLOAD_BACKEND} KV_CACHE_DTYPE=${KV_CACHE_DTYPE} ENFORCE_EAGER=${ENFORCE_EAGER}
+ATTENTION_BACKEND=${ATTENTION_BACKEND:-<yaml ROCM_AITER_MLA>} SPEC_ATTN_BACKEND=${SPEC_ATTN_BACKEND:-<yaml TRITON_MLA>}
+VLLM_PATCH_MLA_HEAD_PAD=${VLLM_PATCH_MLA_HEAD_PAD} VLLM_PATCH_MLA_PERSISTENT_MTP=${VLLM_PATCH_MLA_PERSISTENT_MTP}
 GMU/MAX_MODEL_LEN: set downstream by benchmarks/multi_node/agentic/kimik3_fp4_mi355x_vllm-disagg.sh
   (GMU=${GPU_MEMORY_UTILIZATION:-<agentic default 0.88>} MAX_MODEL_LEN=${MAX_MODEL_LEN:-<agentic native 1048576>})
 NODELIST=${NODELIST}
