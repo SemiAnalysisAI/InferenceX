@@ -7,6 +7,16 @@
 #     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-nohicache-stp-trace \
 #     --conc 16
 #
+# STP, TP8 1P1D + HiCache (ratio 2, write_through + wait_complete prefetch) — conc 16:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-hicache-stp-trace \
+#     --conc 16
+#
+# STP, TP8 1P1D + HiCache (ratio 2, write_through + timeout prefetch) — conc 16:
+#   test-config --config-files configs/amd-agentx-trace-glm.yaml \
+#     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-hicache-stp-prefetch-timeout-trace \
+#     --conc 16
+#
 # STP, prefill TP8+DP8+DPA+HiCache (ratio 2, write_back), decode TP8 no DPA — e.g. conc 48:
 #   test-config --config-files configs/amd-agentx-trace-glm.yaml \
 #     --config-keys glm5.2-fp4-mi355x-sglang-disagg-agentic-p8dp8-hicache-stp-trace \
@@ -39,6 +49,88 @@ glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-nohicache-stp-trace:
           additional-settings:
           - "PREFILL_NODES=1"
           - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-hicache-stp-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+          - "HICACHE_RATIO=2"
+          - "HICACHE_WRITE_POLICY=write_through"
+          - "HICACHE_PREFETCH_POLICY=wait_complete"
+          - "HICACHE_MEM_LAYOUT=page_first_direct"
+          - "HICACHE_IO_BACKEND=direct"
+          - "HICACHE_PAGE_SIZE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+glm5.2-fp4-mi355x-sglang-disagg-agentic-tp8-hicache-stp-prefetch-timeout-trace:
+  image: lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729
+  model: amd/GLM-5.2-MXFP4
+  model-prefix: glm5.2
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2, 4, 8, 16, 32 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260729"
+          - "HICACHE_RATIO=2"
+          - "HICACHE_WRITE_POLICY=write_through"
+          - "HICACHE_PREFETCH_POLICY=timeout"
+          - "HICACHE_MEM_LAYOUT=page_first_direct"
+          - "HICACHE_IO_BACKEND=direct"
+          - "HICACHE_PAGE_SIZE=1"
         decode:
           num-worker: 1
           tp: 8
