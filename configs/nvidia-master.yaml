@@ -860,7 +860,7 @@ dsr1-fp8-b300-dynamo-trt:
           ep: 8
           dp-attn: true
 dsr1-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12.post1
+  image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -884,7 +884,7 @@ dsr1-fp4-b200-sglang:
     #   - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
 
 dsr1-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12.post1
+  image: lmsysorg/sglang:v0.5.16-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
