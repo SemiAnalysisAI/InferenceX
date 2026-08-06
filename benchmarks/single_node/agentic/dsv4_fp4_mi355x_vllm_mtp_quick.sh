@@ -31,13 +31,25 @@ set -eo pipefail
 # VARIANTS
 # --------
 #   VARIANT=srok    PR #2381 head as authored (seungrokj): gpu-mem-util 0.90,
-#                   no RoPE+KV fusion, pure TP8.
+#                   no RoPE+KV fusion, pure TP8. Runs on the image that PR
+#                   pins in amd-master.yaml.
 #   VARIANT=mine    this branch's changes: gpu-mem-util 0.86 (derived for the
 #                   kv-offloading:none arms), RoPE+KV fusion on.
 #   VARIANT=dep8    mine + DP-attention + EP8 (the arm amd-master.yaml adds).
 #                   Needs the vllm-router, same as the agentic recipe.
 #   VARIANT=custom  touch nothing; every knob comes from the environment.
 # Any individual knob set in the environment wins over the variant preset.
+#
+# IMAGES ARE NOT THE SAME ACROSS VARIANTS
+# ---------------------------------------
+# srok runs on the vLLM nightly its PR pins; mine/dep8 run on a build carrying
+# the AITER 4269 shared-expert work. Each variant reports the image it ran on
+# (VARIANT_IMAGE below) and the launcher script selects it. This means an
+# srok-vs-mine delta is engine-build + flags together, NOT flags alone -- so
+# for a clean flag-only attribution also run both on one image:
+#     VARIANT=srok IMAGE=<mine's image> ...
+# The three-way with per-variant images answers "which configuration is
+# fastest today"; the same-image pair answers "which change caused it".
 #
 # USAGE
 #   MODEL_PATH=/mnt/models/DeepSeek-V4-Pro VARIANT=mine CONC=16 \
@@ -81,6 +93,15 @@ fi
 export MODEL_PATH
 
 # ---- Variant presets ---------------------------------------------------------
+# The per-variant container image. This script runs INSIDE the container, so it
+# only records which image a variant expects; the launcher
+# (dsv4_quick_ab_g05.sh) is what actually selects it. Recording it here keeps
+# the mapping in one place and stamps it into the result dir.
+#   srok    -> the nightly PR #2381 pins in amd-master.yaml
+#   others  -> the AITER 4269 shared-expert build
+SROK_IMAGE="${SROK_IMAGE:-vllm/vllm-openai-rocm:nightly-b88916617d3d2249bff0dae5cecb6b727c980a20}"
+OPTIMAL_IMAGE="${OPTIMAL_IMAGE:-jiahcao/vllm-dsv4:optimal-fse-aiter4269}"
+
 VARIANT="${VARIANT:-mine}"
 case "$VARIANT" in
     srok)
@@ -88,24 +109,28 @@ case "$VARIANT" in
         : "${ROCM_ROPE_KVCACHE_FUSION:=0}"
         : "${DP_ATTENTION:=false}"
         : "${EP_SIZE:=1}"
+        : "${VARIANT_IMAGE:=$SROK_IMAGE}"
         ;;
     mine)
         : "${GPU_MEM_UTIL:=0.86}"
         : "${ROCM_ROPE_KVCACHE_FUSION:=1}"
         : "${DP_ATTENTION:=false}"
         : "${EP_SIZE:=1}"
+        : "${VARIANT_IMAGE:=$OPTIMAL_IMAGE}"
         ;;
     dep8)
         : "${GPU_MEM_UTIL:=0.86}"
         : "${ROCM_ROPE_KVCACHE_FUSION:=1}"
         : "${DP_ATTENTION:=true}"
         : "${EP_SIZE:=8}"
+        : "${VARIANT_IMAGE:=$OPTIMAL_IMAGE}"
         ;;
     custom)
         : "${GPU_MEM_UTIL:=0.86}"
         : "${ROCM_ROPE_KVCACHE_FUSION:=0}"
         : "${DP_ATTENTION:=false}"
         : "${EP_SIZE:=1}"
+        : "${VARIANT_IMAGE:=$OPTIMAL_IMAGE}"
         ;;
     *)
         echo "Error: unknown VARIANT '$VARIANT' (expected: srok, mine, dep8, custom)" >&2
@@ -295,6 +320,12 @@ VLLM_CMD=(
     echo "GPU_MEM_UTIL=$GPU_MEM_UTIL ROCM_ROPE_KVCACHE_FUSION=${ROCM_ROPE_KVCACHE_FUSION} DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE"
     echo "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=$VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS"
     echo "MTP_SYNTHETIC=${MTP_SYNTHETIC:-1} NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
+    echo "VARIANT_IMAGE=$VARIANT_IMAGE"
+    # What is actually running, independent of what the variant expected: the
+    # launcher can be pointed at any image, and a mismatch between these two
+    # lines is the first thing to check when an A/B looks wrong.
+    echo "RUNNING_IMAGE=${QUICK_RUNNING_IMAGE:-unknown}"
+    echo "VLLM_VERSION=$(python3 -c 'import vllm; print(vllm.__version__)' 2>/dev/null || echo unknown)"
     printf '%q ' "${VLLM_CMD[@]}"
     printf '\n'
 } | tee "$RESULT_DIR/vllm_command.txt"
