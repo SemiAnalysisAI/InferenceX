@@ -23,9 +23,8 @@ case "$RUNNER" in
     SRUN_EXTRA=(--container-remap-root)
     ;;
   b200-nscale)
-    # Bare-metal B200 (nsc): native IB rails + gdrdrv, so the deepep low-latency EP16 rows
-    # the virtualized dgxc pool could never run are dispatchable here. 45 min rather than
-    # dgxc's 30 because a fresh pool pays first-run backend builds inside the allocation.
+    # Bare-metal B200 (nsc): native IB rails + gdrdrv make the deepep low-latency EP16 rows
+    # dispatchable, unlike the virtualized dgxc pool. 45 min covers first-run backend builds.
     PRODUCT=b200; DEFAULT_TIME=45; REQUIRE_ACCOUNT=1
     ALLOC_EXTRA=(--mem=0)
     ;;
@@ -125,8 +124,7 @@ for allocation_attempt in 1 2 3; do
   retryable=0
   [ "$RUNNER:$validation_failure" != h100-dgxc:network ] || retryable=1
   [ "$RUNNER:$validation_failure" != b300:cuda-context ] || retryable=1
-  # A throttled GPU is always someone else's node to fix, never this leg's to tolerate: one
-  # clamped device paces every rank, so retrying elsewhere is right on every SKU.
+  # A throttled GPU paces every rank, so retrying on another node is right on every SKU.
   [ "$validation_failure" != gpu-health ] || retryable=1
   if [ "$retryable" = 0 ] || [ "$allocation_attempt" = 3 ]; then
     if [ "$validation_failure" = network ]; then

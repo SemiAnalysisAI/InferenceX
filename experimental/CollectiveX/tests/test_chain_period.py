@@ -1,18 +1,7 @@
 #!/usr/bin/env python3
-"""Contract for the chained steady-state pair period.
-
-What a decode loop pays per layer is the free-running PERIOD of the dispatch->combine chain,
-measured with no host sync inside the loop -- which is exactly what is delicate: these tests pin
-the call order, the staged hoist, head-not-tail dropping, and the barrier landing BETWEEN pairs.
-The method runs TWO sibling chains (floors: op events only; period: outer pair events only)
-because its first version's six record() calls per pair published the four inner ones as a
-~flat 10-30us of fake transport wherever the device outran the host (+20-38% at T=1,
-fleet-wide) -- so event PLACEMENT per chain is itself contract here.
-
-Torch-free: stub CUDA events read a clock only the fake backend's operations advance, so every
-window has an exact expected value; record() calls are logged into the same trace as the ops,
-so placement is asserted on the trace, not inferred from timings the stub cannot see (host cost
-is exactly what the stub charges nothing for).
+"""Contract for the chained steady-state pair period: call order, the staged hoist, head-not-tail
+dropping, the barrier between pairs, and which events each of the two sibling chains carries (the
+first version's six record() calls per pair published +20-38% of fake transport at T=1).
 """
 from __future__ import annotations
 
@@ -48,8 +37,8 @@ class _Clock:
 
 
 class _FakeEvent:
-    """torch.cuda.Event stand-in: records the clock, reports ms between two records, and logs
-    record() into the shared call trace so event PLACEMENT is assertable."""
+    """torch.cuda.Event stand-in; logs record() into the shared call trace so placement is
+    assertable."""
 
     def __init__(self, clock, log=None):
         self._clock = clock
@@ -163,8 +152,7 @@ def new_problem():
 
 
 def timed_tail(calls, iters, per_pair):
-    """The PERIOD chain's ops: the last `per_pair * iters` op entries, records/syncs removed
-    (placement has its own helper; everything earlier is warm-up, hoist, and the floors chain)."""
+    """The period chain's ops: the last `per_pair * iters` op entries, records and syncs removed."""
     trace = [entry for entry in calls if entry != "record"]
     while trace and trace[-1] in ("sync", "all_reduce", "dist_barrier"):
         trace.pop()
@@ -177,8 +165,7 @@ def ops_only(calls):
 
 
 def chain_sections(calls):
-    """(floors_chain, period_chain) raw-trace slices: the chains sit between the last three
-    syncs (warm-up/hoist end in their own, floors in the inter-chain one, period in the last)."""
+    """(floors_chain, period_chain) raw-trace slices; the chains sit between the last three syncs."""
     sync_idx = [i for i, entry in enumerate(calls) if entry == "sync"]
     end_period, end_floors = sync_idx[-1], sync_idx[-2]
     start_floors = sync_idx[-3] + 1 if len(sync_idx) >= 3 else 0
@@ -211,8 +198,8 @@ class ChainedPairPeriod(unittest.TestCase):
         self.assertEqual(warm.call_args.args[1], 4)
 
     def test_the_loop_is_dispatch_combine_pairs_with_no_sync_between_them(self):
-        # The whole point of the chain: iterations overlap. A host sync inside the loop drains
-        # the GPU and turns the period back into a sequence of drained roundtrips.
+        # A host sync inside the loop drains the GPU and turns the period back into a sequence
+        # of drained roundtrips.
         iters = 6
         backend = _ChainBackend()
         with fake_torch(backend.clock, backend.calls):
@@ -222,10 +209,8 @@ class ChainedPairPeriod(unittest.TestCase):
         )
 
     def test_a_hoisted_stage_runs_once_and_stays_out_of_every_pair_window(self):
-        # Same hoist benchmark_roundtrip performs: the conversion is materialised once, untimed,
-        # so the chained pair is dispatch -> combine in BOTH sibling chains -- and every chained
-        # combine consumes the staged tensor, not a fresh one. The dequant hatch is fp8-only, so
-        # a bf16 row keeps its hoist even with the hatch set.
+        # The conversion is materialised once, untimed, so the pair is dispatch -> combine in
+        # both chains. The dequant hatch is fp8-only, so a bf16 row keeps its hoist regardless.
         for precision, consume in (("bf16", "native"), ("fp8", "native"), ("bf16", "dequant")):
             with self.subTest(precision=precision, consume=consume):
                 iters = 6
@@ -252,7 +237,7 @@ class ChainedPairPeriod(unittest.TestCase):
 
     def test_the_dequant_hatch_stages_inside_every_pair(self):
         # CX_FP8_CONSUME=dequant models a stack that really does convert between the two
-        # collectives, so BOTH chains must carry that conversion on every iteration.
+        # collectives, so both chains carry that conversion on every iteration.
         iters = 5
         backend = _ChainBackend(
             stage_device_work=True, fp8_consume="dequant", precision="fp8"
@@ -283,9 +268,8 @@ class ChainedPairPeriod(unittest.TestCase):
         )
 
     def test_the_pair_itself_satisfies_the_backends_that_need_a_paired_call(self):
-        # combine_needs_redispatch (a combine consumes its dispatch) and
-        # dispatch_needs_combine_cleanup (a dispatch must be drained) are both satisfied by
-        # the chain's structure, so neither may inject an extra untimed call into the loop.
+        # combine_needs_redispatch and dispatch_needs_combine_cleanup are both satisfied by the
+        # chain's structure, so neither may inject an extra untimed call into the loop.
         iters = 5
         backend = _ChainBackend(
             stage_device_work=False, fp8_consume="native", precision="bf16"
@@ -313,9 +297,8 @@ class ChainedPairPeriod(unittest.TestCase):
                 self.assertEqual(len(series["start_to_start"]), max(iters - drop - 1, 0))
 
     def test_the_dropped_iterations_are_the_head_of_each_chain(self):
-        # `drop` exists to discard pipeline fill, so it must cut the head of BOTH chains -- the
-        # period chain refills after the inter-chain synchronize. A tail cut would keep exactly
-        # the unfilled iterations it is meant to remove.
+        # `drop` discards pipeline fill, so it must cut the head of both chains -- the period
+        # chain refills after the inter-chain synchronize.
         iters, drop = 6, 2
         slow_head = [50.0] * drop + [DISPATCH_MS] * (iters - drop)
         backend = _ChainBackend(
@@ -334,11 +317,8 @@ class ChainedPairPeriod(unittest.TestCase):
 
 
 class EventPlacement(unittest.TestCase):
-    """The two-pass contract itself: which events each sibling chain may carry.
-
-    The stub clock charges host work nothing, so these assert record PLACEMENT in the trace --
-    the only property of the loop the six-events defect depended on (see the module docstring).
-    """
+    """Which events each sibling chain may carry. The stub charges host work nothing, so these
+    assert record placement in the trace rather than window values."""
 
     def _sections(self, **backend_kwargs):
         iters = 4
@@ -349,9 +329,8 @@ class EventPlacement(unittest.TestCase):
         return iters, floors, period
 
     def test_the_period_pairs_carry_only_the_outer_events(self):
-        # One record before the dispatch, one after the combine, NOTHING between the two
-        # collectives: both records' host cost lands in the inter-pair gap, outside the
-        # published window.
+        # One record before the dispatch, one after the combine, nothing between: both records'
+        # host cost lands in the inter-pair gap, outside the published window.
         iters, _, period = self._sections(
             stage_device_work=False, fp8_consume="native", precision="bf16"
         )
@@ -361,8 +340,8 @@ class EventPlacement(unittest.TestCase):
         )
 
     def test_the_floors_pairs_carry_only_op_edge_events(self):
-        # Four records per pair, every one hugging an op boundary; no pair-window events, so
-        # nothing this chain measures can charge the pair boundary either.
+        # Every record hugs an op boundary; with no pair-window events, nothing this chain
+        # measures can charge the pair boundary either.
         iters, floors, _ = self._sections(
             stage_device_work=False, fp8_consume="native", precision="bf16"
         )
@@ -372,8 +351,7 @@ class EventPlacement(unittest.TestCase):
         )
 
     def test_the_hoisted_stage_keeps_both_placements(self):
-        # With the conversion hoisted, the pair is dispatch -> combine and the placement rules
-        # are unchanged: outer-only in the period chain, op-edge-only in the floors chain.
+        # With the conversion hoisted the pair is dispatch -> combine; placement is unchanged.
         iters, floors, period = self._sections(
             stage_device_work=True, fp8_consume="native", precision="fp8"
         )
@@ -387,8 +365,8 @@ class EventPlacement(unittest.TestCase):
 
 
 class ChainBarrier(unittest.TestCase):
-    """The escape valve for a backend that wedges free-running: it re-aligns ranks BETWEEN
-    pairs -- inside a pair it would serialise the very overlap under test."""
+    """The escape valve for a backend that wedges free-running: it re-aligns ranks between pairs,
+    since inside a pair it would serialise the overlap under test."""
 
     def test_off_by_default_so_no_backend_pays_for_a_barrier_it_did_not_ask_for(self):
         self.assertFalse(ep_backend.EPBackend.chain_barrier)
@@ -405,9 +383,8 @@ class ChainBarrier(unittest.TestCase):
         backend.chain_barrier = True
         with fake_torch(backend.clock, backend.calls):
             backend.benchmark_chain(new_problem(), 0, iters, 2)
-        # Between pairs is iters-1 gaps per chain; one per iteration is equally sound. Two
-        # sibling chains run, and the valve must pace both -- a floors chain that wedges
-        # without it would take the period chain down with it.
+        # iters-1 gaps per chain, or one per iteration; both sound. The valve must pace both
+        # sibling chains, since a floors chain that wedges takes the period chain down with it.
         self.assertIn(
             backend.calls.count("all_reduce"), (2 * (iters - 1), 2 * iters)
         )
@@ -433,9 +410,8 @@ class ChainBarrier(unittest.TestCase):
 
 
 class ChainBudgetGate(unittest.TestCase):
-    """A chain budget that could publish nothing must stop the leg before it measures: zero
-    kept pairs serialises as "unavailable", indistinguishable from a backend that cannot chain.
-    The gate sits above run_sweep's lazy torch imports, which is what makes it reachable here."""
+    """A budget that could publish nothing must stop the leg first: zero kept pairs serialises as
+    "unavailable", indistinguishable from a backend that cannot chain at all."""
 
     @staticmethod
     def _args(**updates):
@@ -466,8 +442,8 @@ class ChainBudgetGate(unittest.TestCase):
                 self.assertIn("chain", output)
 
     def test_the_chain_gate_did_not_displace_the_fresh_entry_one(self):
-        # Both budgets are still checked, and each names its own fields, so an operator reading
-        # the failure knows which profile field to fix.
+        # Both budgets are checked and each names its own fields, so the failure says which
+        # profile field to fix.
         rc, output = self._gate(iters=0)
         self.assertEqual(rc, 2)
         self.assertIn("iters/trials/warmup", output)
@@ -482,9 +458,8 @@ class ChainComponentContract(unittest.TestCase):
         self.assertEqual(ep_harness.CHAIN_FLOOR_ORIGIN, "chained-cross-rank-min")
 
     def test_an_overridden_origin_leaves_the_rest_of_the_component_alone(self):
-        # The chain families reach the artifact through `_component`'s `origin` override, which
-        # every pre-chain row also flows through. Omitting it must reproduce the old strings
-        # exactly, or the chain silently reclassifies rows that have nothing to do with it.
+        # Every pre-chain row also flows through `_component`, so omitting the override must
+        # reproduce the old strings exactly or the chain reclassifies unrelated rows.
         percentiles = {"p50": 1.0, "p90": 2.0, "p95": 3.0, "p99": 4.0}
         self.assertEqual(ep_harness._component(percentiles, 3)["origin"], "measured")
         self.assertEqual(
@@ -495,7 +470,6 @@ class ChainComponentContract(unittest.TestCase):
 
         overridden = ep_harness._component(percentiles, 3, origin="chained-median")
         self.assertEqual(overridden["origin"], "chained-median")
-        # Only the origin moves: availability, the percentiles and the count are untouched.
         self.assertEqual(overridden["availability"], "measured")
         self.assertEqual(overridden["percentiles_us"], percentiles)
         self.assertEqual(overridden["sample_count"], 3)

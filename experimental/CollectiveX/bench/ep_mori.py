@@ -54,10 +54,8 @@ class MoRIBackend(EPBackend):
         # argv. FP8 dispatch is caller-prequantized: MoRI's dispatch kernel keys purely
         # on the passed tensor dtype, so handing it an e4m3 tensor selects the FP8
         # dispatch kernel with no in-kernel cast. Combine stays genuinely BF16 (quant_type
-        # "none"). With use_external_inp_buf True (the engines' setting, pinned unconditionally
-        # below) the launcher selects EpCombineIntraNodeKernel_bf16_nop2p; the _p2p variant is the
-        # registered-buffer path this adapter no longer takes, and _fp8cast stays unreachable
-        # because combine's quant_type is "none".
+        # "none"). With use_external_inp_buf True (pinned below) the launcher selects
+        # EpCombineIntraNodeKernel_bf16_nop2p; _p2p is the registered path, _fp8cast unreachable.
         self._fp8_dtype = None
         if self._fp8:
             arch = torch.cuda.get_device_properties(device).gcnArchName
@@ -81,12 +79,9 @@ class MoRIBackend(EPBackend):
         # default; `kernel_type` kwarg omitted); scale-out EP16 uses InterNodeV1, whose
         # required enum member is an image-lineage check.
         # (kernel, generation label, (block_num, rdma_block_num, dispatch_warps, combine_warps))
-        # Scale-up matches the config the engines pin: vLLM and SGLang both set block_num 80,
-        # rdma_block_num 0 and ONE warp_num_per_block of 16 that applies to dispatch and combine
-        # alike, and neither sets MORI_EP_LAUNCH_CONFIG_MODE, so production runs MANUAL with
-        # these numbers. 16 is also the kernel's hard ceiling (kMaxWarpGroups 8 x kWarpsPerGroup
-        # 2, with groupData[8] indexed by warpId/2 and no upstream guard), so it cannot go
-        # higher. The scale-out tuple is left as-is: EP16 is walled and never dispatched.
+        # Scale-up matches what the engines pin: vLLM and SGLang both set block_num 80,
+        # rdma_block_num 0 and one warp_num_per_block of 16 for dispatch and combine alike. 16 is
+        # also the kernel ceiling (kMaxWarpGroups 8 x kWarpsPerGroup 2). Scale-out is unchanged.
         kernel_name, self.kernel_generation, blocks = (
             ("InterNodeV1", "inter-node-v1", (96, 64, 8, 8)) if scale_out
             else ("IntraNode", "intranode", (80, 0, 16, 16))
@@ -125,11 +120,9 @@ class MoRIBackend(EPBackend):
         self._inter_node = kernel_name == "InterNodeV1"
         self.num_qps = 1
         self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
-        # External input buffer everywhere, as the engines run it (vLLM leaves MoRI's default,
-        # SGLang sets it explicitly). It must move together with `combine_warps`: MoRI's tuned
-        # tables key combine on `zero_copy`, so the engines' 16 warps belong to this mode and
-        # 4-8 to the registered one. The registered branches below stay, to keep the mode a
-        # one-line A/B; methodology.md carries the measured cost of mismatching them.
+        # External input buffer everywhere, as the engines run it. It must move together with
+        # `combine_warps`: MoRI's tuned tables key combine on `zero_copy`, so 16 warps belong to
+        # this mode and 4-8 to the registered one. methodology.md has the cost of mismatching them.
         self._external_input = True
         # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
         # input kernels consume the dispatch output directly, so their stage is not applicable.
@@ -141,12 +134,9 @@ class MoRIBackend(EPBackend):
 
     def buffer_cap(self, args):
         if self.mode == "low-latency":
-            # 256 tokens/rank, matching deepep-v2, uccl-ep and nccl-ep, so every backend's
-            # low-latency ladder ends at the same rung. MoRI imposes no bound of its own here
-            # -- this adapter previously allowed 512, which published a T=512 decode rung no
-            # other backend has, so the top of the ladder was unusable for any cross-vendor
-            # comparison. 256 is also vLLM's DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP,
-            # i.e. the capacity a deployment actually configures.
+            # 256 tokens/rank, matching deepep-v2, uccl-ep and nccl-ep so every backend's
+            # low-latency ladder ends at the same rung. MoRI imposes no bound of its own; 256 is
+            # also vLLM's DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP.
             return 256
         return None
 
@@ -174,12 +164,8 @@ class MoRIBackend(EPBackend):
                 f"MoRI realized {realized_qps} QPs per PE; {self.num_qps} required"
             )
 
-        # MoRI preallocates one communicator buffer for the case's entire ladder. 256 matches
-        # the other three backends' low-latency cap and vLLM's own
-        # DEFAULT_MAX_NUM_BATCHED_TOKENS_FOR_BATCHED_DP; the previous 512 was this adapter's
-        # invention -- no MoRI bound requires it -- and it published a T=512 low-latency rung
-        # that no other backend has, so no cross-vendor comparison could use the top of the
-        # ladder. Normal mode still takes the ladder maximum, which is larger.
+        # MoRI preallocates one communicator buffer for the case's entire ladder; 256 is the
+        # low-latency cap (see `buffer_cap`). Normal mode still takes the larger ladder maximum.
         self._cap = max(256, spec.max_tokens_per_rank)
         # quant_type stays "none" for both precisions: dispatch precision is carried by
         # the passed tensor dtype (caller-prequantized e4m3 under FP8, BF16 otherwise),
@@ -251,10 +237,8 @@ class MoRIBackend(EPBackend):
         if not self._fp8:
             return x, None
         # Send BF16 and cast inside dispatch, where production pays it: vLLM and SGLang both run
-        # an aiter per-1x128 quant immediately before mori's dispatch, once per forward pass.
-        # MoRI's cast needs no compile -- it is already a single eager elementwise kernel, and
-        # elementwise is per-row invariant, so it carries none of the identity risk the blockwise
-        # backends do. oracle_x is the round trip, computed once here, untimed.
+        # an aiter quant immediately before mori's dispatch. MoRI's cast is a single eager
+        # elementwise kernel, so it needs no compile. oracle_x is the round trip, untimed.
         return x, x.to(self._fp8_dtype).to(torch.bfloat16)
 
     def make_problem(self, T, idx, weights, x):
@@ -276,10 +260,8 @@ class MoRIBackend(EPBackend):
         return problem
 
     def dispatch(self, p):
-        # See _encode_dispatch: the fp8 cast belongs in the timed window because production runs
-        # it per forward pass just before this collective. Low-latency is cast here too -- MoRI's
-        # IntraNodeLL takes a caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL
-        # kernels quantise internally, so there is no in-kernel cost already being charged.
+        # See _encode_dispatch. Low-latency casts here too: MoRI's IntraNodeLL takes a
+        # caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL kernels quantise in-kernel.
         dispatch_x = p.dispatch_x.to(self._fp8_dtype) if self._fp8 else p.dispatch_x
         dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (
             self.op.dispatch(
@@ -305,24 +287,18 @@ class MoRIBackend(EPBackend):
         if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
         if self._external_input:
-            # The kernel's own staging copy is bounded by the receive count, not the buffer: with
-            # an external input buffer and combine quant_type "none" the launcher selects
-            # `EpCombineIntraNodeKernel_bf16_nop2p`, whose write-based staging loop is bounded by
-            # `tokenIdx < totalRecvTokenNum` over `args.inpTokenBuf`. (The `UseP2PRead` loop at
-            # intranode.hpp:542 carries the same bound but is compile-time dead on this path.)
-            # So it never reads past `rows` and only the filled rows need converting.
+            # The kernel's staging loop is bounded by `tokenIdx < totalRecvTokenNum` over
+            # `args.inpTokenBuf`, not by the buffer, so it never reads past `rows` and only the
+            # filled rows need converting. (intranode.hpp:542's P2P loop is dead on this path.)
             h.combine_input = (
                 h.dispatch_output[:rows].to(torch.bfloat16) if self._fp8 else h.dispatch_output
             )
             return None
-        # Zero-copy path: combine only ever reads the `rows` slots dispatch filled, so cast
-        # and copy just those. `dispatch_output` is sized to the buffer cap times the world,
-        # independent of the token count, so casting all of it made this stage flat in T --
-        # 61-114us across the whole decode ladder against 6-30us for BF16, ~99.8% of it
-        # padding at T=1.
+        # Zero-copy path: combine only reads the `rows` slots dispatch filled, so cast and copy
+        # just those. `dispatch_output` is sized to buffer cap x world regardless of T, so casting
+        # all of it made this stage flat in T -- 61-114us across the decode ladder.
         source = h.dispatch_output[:rows]
         if self._fp8:
-            # FP8: dispatch delivered an e4m3 payload; dequantize it to the BF16 combine sends.
             source = source.to(torch.bfloat16)
         buffer = self.op.get_registered_combine_input_buffer(
             torch.bfloat16, hidden_dim=h.dispatch_output.size(1)

@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Contract for what the chained roundtrip measures.
 
-`stage` is not an FP8-only cost: deepep-v2, uccl-ep and MoRI all set
-`stage_device_work = self._fp8` (MoRI's `self._fp8 or not self._external_input` collapses to that,
-now that it always uses an external input buffer), but FlashInfer sets it unconditionally, so its
-BF16 rows do real device work there. Charging it to the chained roundtrip therefore made
-`roundtrip` mean different things in different rows. Real stacks decide
+`stage` is not an FP8-only cost: deepep-v2/uccl-ep/MoRI set `stage_device_work = self._fp8` but
+FlashInfer sets it unconditionally, so charging it to the chained roundtrip made `roundtrip` mean
+different things in different rows. Real stacks decide
 this on quant-format match: SGLang's DeepEP dispatcher contains no dequant at all, and vLLM
 returns the dispatched fp8 + scales untouched when `block_k == DEEPEP_QUANT_BLOCK_SIZE`,
 dequantising only as a mismatch fallback. These tests pin both models.
@@ -68,8 +66,7 @@ class RoundtripStaging(unittest.TestCase):
 
     def test_without_staged_input_the_stage_runs_inline(self):
         # The fp8 `dequant` model takes this path, as does any backend whose `stage` is a bare
-        # pointer assignment. mori/flashinfer-ep no longer do: their real device copy is
-        # hoisted, so the chained roundtrip is dispatch -> combine for every row.
+        # pointer assignment; mori/flashinfer-ep hoist their real device copy instead.
         b = _StubBackend(stage_device_work=True, fp8_consume="dequant")
         b.run_roundtrip(object())
         self.assertEqual(b.calls, ["dispatch", "stage", "combine(staged-by-stage)"])
@@ -89,17 +86,12 @@ class RoundtripStaging(unittest.TestCase):
 
 
 class RoundtripStagingGate(unittest.TestCase):
-    """`roundtrip` must mean dispatch -> combine in EVERY row, or it is not comparable.
-
-    The gate was previously precision-dependent, which left `stage` inside the roundtrip for
-    exactly two configurations -- MoRI BF16 scale-up and FlashInfer BF16 -- and transport-only
-    for every other, so the headline compared two different quantities. It is now gated on
-    `stage_device_work` alone, with `CX_FP8_CONSUME=dequant` as the sole opt-out.
-    """
+    """`roundtrip` must mean dispatch -> combine in every row, or it is not comparable: the gate
+    is `stage_device_work` alone, with `CX_FP8_CONSUME=dequant` as the sole opt-out."""
 
     def test_bf16_with_device_staging_now_lifts_the_copy_out(self):
-        # MoRI BF16 scale-up and FlashInfer BF16: a real device copy, previously charged to
-        # the chained roundtrip and to nothing else's.
+        # MoRI BF16 scale-up and FlashInfer BF16: a real device copy, previously charged here
+        # and to no other backend's roundtrip.
         mori_intranode_bf16 = _StubBackend(
             stage_device_work=True, fp8_consume="native", precision="bf16"
         )
@@ -117,9 +109,8 @@ class RoundtripStagingGate(unittest.TestCase):
         )
 
     def test_a_no_op_stage_is_never_hoisted(self):
-        # deepep-v2 / uccl-ep / nccl-ep at BF16: `stage` is a pointer assignment, so there is
-        # nothing to lift -- and hoisting anyway would hand the low-latency backends a view
-        # into their double-buffered receive, whose parity flips on each re-dispatch.
+        # deepep-v2 / uccl-ep / nccl-ep at BF16: `stage` is a pointer assignment, and hoisting
+        # would hand a low-latency backend a view into its double-buffered receive.
         self.assertFalse(
             _StubBackend(
                 stage_device_work=False, fp8_consume="native", precision="bf16"
@@ -133,7 +124,7 @@ class RoundtripStagingGate(unittest.TestCase):
 
     def test_the_dequant_hatch_restores_the_inline_stage(self):
         # CX_FP8_CONSUME=dequant models a stack that really does convert between the two
-        # collectives, so that run wants the stage back inside the chain.
+        # collectives, so that run wants the stage back inside.
         backend = _StubBackend(
             stage_device_work=True, fp8_consume="dequant", precision="fp8"
         )
@@ -150,13 +141,8 @@ class RoundtripStagingGate(unittest.TestCase):
         )
 
 class WarmStaging(unittest.TestCase):
-    """Warm-up must not rehearse work the timed region skips.
-
-    Where staging is excluded from the chain, the timed roundtrip stages nothing, so staging on
-    every warm iteration warms a path the measurement never takes. For an FP8 dequant that was
-    the largest single cost in the leg (~247us x 32 iterations x every component x every trial).
-    `benchmark_stage` is the exception: staging is its timed operation.
-    """
+    """Warm-up must not rehearse work the timed region skips: where staging is excluded from the
+    chain it was the leg's largest single cost (~247us x 32 iters x every component x trial)."""
 
     @staticmethod
     def _warm(backend, count, **kwargs):
@@ -192,22 +178,13 @@ class WarmStaging(unittest.TestCase):
         self._warm(b, 5)
         self.assertEqual(b.calls.count("stage"), 5)
 
-# The chained-period staging contract (hoist-once, inline no-op stage, the dequant hatch,
-# and that every chained combine consumes the staged tensor) lives in
-# tests/test_chain_period.py, which asserts it per sibling chain WITH window values --
-# strictly stronger than the call-order mirror that used to sit here.
+# The chained-period staging contract lives in tests/test_chain_period.py, which asserts it per
+# sibling chain with window values.
 
 
 class SteadyStatePeriod(unittest.TestCase):
-    """`period` is opt-in, because the overlap it measures is only sound for some backends.
-
-    A decode loop never stops between layers, so its per-layer cost is the pipeline's period,
-    not the sum of separately-drained stages. Measuring that means issuing pairs back-to-back,
-    which lets ranks drift — and dispatch is a peer WRITE into another rank's buffer, so stream
-    order on the receiver does not order the sender's remote writes. A double-buffered receive
-    covers the ~one iteration of drift a collective permits; a single shared buffer does not.
-    Defaulting this on would produce a fast number over corrupted data.
-    """
+    """`period` is opt-in: back-to-back pairs let ranks drift, and dispatch is a peer write that
+    stream order on the receiver does not order, so a single shared receive buffer corrupts."""
 
     def test_off_by_default_so_no_backend_pipelines_accidentally(self):
         b = _StubBackend(stage_device_work=False, fp8_consume="native")
@@ -222,8 +199,7 @@ class SteadyStatePeriod(unittest.TestCase):
         self.assertIn("roundtrip", b.timed_components())
 
     def test_a_single_pair_is_not_a_pipeline(self):
-        # pipeline_pairs = 1 measures exactly what roundtrip already does, so it must not
-        # advertise a second name for the same quantity.
+        # pipeline_pairs = 1 measures exactly what roundtrip already does.
         b = _StubBackend(stage_device_work=False, fp8_consume="native")
         b.pipeline_pairs = 1
         self.assertNotIn("period", b.timed_components())

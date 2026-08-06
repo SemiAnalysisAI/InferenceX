@@ -24,37 +24,31 @@ placement, and one pinned fixed resource profile per backend/topology. Combine i
 dispatch precision is a swept dimension — a BF16 control and, on the backends whose FP8 dispatch is
 supported upstream (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch (`bf16`, `fp8`),
 caller-prequantized in `normal` mode (the `low-latency` kernels quantize FP8 internally from BF16 on
-DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). Because `normal`-mode FP8 is
-caller-prequantized, that quantize is a cost a production forward pass pays on the critical path, so
-it is charged **inside the measured dispatch** rather than prepared ahead of the timing window. On
-DeepEP V2, UCCL-EP and FlashInfer EP it is issued as one fused kernel and guarded bitwise against its
-eager reference; MoRI needs neither, because its quantize is a single plain dtype cast. This means an FP8
-`normal` dispatch number covers quantize-plus-transport while its BF16 control covers transport
-alone, and it is why an FP8 `normal` row is not comparable to one measured before that change. The
-sweep `version` deliberately stays 1 across it, so the version tag does NOT separate the two
-generations — `implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component
-are the only discriminators, and a consumer comparing rows across that boundary has to key on them.
+DeepEP and UCCL-EP, and stay caller-prequantized on MoRI). That caller-side quantize is charged
+**inside the measured dispatch**, because a production forward pass pays it on the critical path. It
+is one fused kernel on DeepEP V2, UCCL-EP and FlashInfer EP, guarded bitwise against its eager
+reference; MoRI's is a plain dtype cast and needs neither. So an FP8 `normal` dispatch covers
+quantize-plus-transport while its BF16 control covers transport alone, and is not comparable to a row
+measured before that change. The sweep `version` deliberately stays 1 across it, so
+`implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component are the only
+discriminators.
 
-Read that charge as a **fixed per-call cost, not a payload-proportional one**, or the FP8-versus-BF16
-comparison will be misread at the bottom of the ladder. Measured on DeepEP V2 decode, FP8 dispatch p50
-minus its BF16 control is roughly flat until the transport starts to dominate — 65us on h100, 59us on
-b200, 27us on b300 and 57us on gb300 at T=1, holding within a microsecond or two through T=64, then
-decaying, and by T=512 it has gone slightly negative on h100 and b300 where halved payload bytes more
-than repay it. FlashInfer EP carries a larger one (~107us on gb300) because its codec is its own and
-FP8 adds a fourth dispatch payload. At T=1 the FP8 path moves *fewer* bytes than BF16, so none of this
-is transport: it is per-call work, and it exceeds the fused quantize's own device time (1.5-3.6us,
-measured per SKU) by more than an order of magnitude, because the timing window has no host sync
-before its start event (see below) and a near-idle stream at T=1 lets host-side launch cost land
+Read that charge as a **fixed per-call cost, not a payload-proportional one**. On DeepEP V2 decode,
+FP8 dispatch p50 minus its BF16 control is 65us on h100, 59us on b200, 27us on b300 and 57us on
+gb300 at T=1, flat within a microsecond or two through T=64, then decaying; by T=512 it is slightly
+negative on h100 and b300, where halved payload bytes more than repay it. FlashInfer EP carries
+~107us on gb300 (its own codec, and a fourth dispatch payload under FP8). At T=1 the FP8 path moves
+*fewer* bytes than BF16, so this is per-call work, not transport, and it exceeds the fused quantize's
+own device time (1.5-3.6us per SKU) by more than an order of magnitude: the timing window has no host
+sync before its start event (see below), so a near-idle stream at T=1 lets host-side launch cost land
 inside it. Compiling the quantize reduces this rather than causing it — an eager quantize measures
-33-39us worse per decode dispatch on h100 through the same window — but a production forward pass
-issues one custom quantize op into a stream that is already busy, so the small-T end of an FP8
-`normal` row is the least production-representative number the suite emits. Compare FP8 and BF16 at
-the top of the ladder, where the charge is repaid, rather than at T=1.
-`low-latency` rows are unaffected: those kernels either quantize internally (nothing for the caller
-to charge) or take pre-quantized input by API contract. NCCL EP is BF16-only this release, so its
-cells carry the control alone; the per-backend precision set lives in `sweep_matrix.py`'s
-`BACKEND_PRECISIONS` and a backend never emits a case for a precision it does not support.
-`normal`-mode cases use the
+33-39us worse per decode dispatch on h100 through the same window — but production issues one custom
+quantize op into an already-busy stream, so the small-T end of an FP8 `normal` row is the least
+production-representative number the suite emits. Compare FP8 and BF16 at the top of the ladder.
+`low-latency` rows are unaffected: those kernels quantize internally or take pre-quantized input by
+API contract. NCCL EP is BF16-only this release, so its cells carry the control alone; the
+per-backend precision set lives in `sweep_matrix.py`'s `BACKEND_PRECISIONS` and a backend never
+emits a case for a precision it does not support. `normal`-mode cases use the
 `layout-and-dispatch-v1` semantics; `low-latency` cases use each backend's decode-kernel semantics
 (detailed below).
 
@@ -68,18 +62,15 @@ record what ran and what did not. DeepEP V2 in `low-latency` mode pre-allocates 
 so its ladder cannot exceed that buffer; both are 256, so the decode ladder runs to its full
 extent and only the 512 point is dropped.
 
-That clamp was briefly load-bearing and the episode is worth recording, because it is the kind of
-defect that reads as a measurement bug. DeepEP's low-latency combine corrupted the 256 rung on
-every Blackwell SKU — B200, GB200 and GB300, EP8 and EP16, both precisions, MNNVL and RDMA alike
-— while Hopper stayed clean, stochastically at roughly 1.5-3.3% per invocation, surfacing as one
-wrong token row whose norm still matched to 4 significant figures. Upstream fixed it in PR #642
-with a CTA-scope fence so the combine consumer's shared-memory reads retire before its staging
-buffer is recycled; the commit we pinned was a pre-merge branch head that predated the fix, so we
-carried the defect and clamped the measured ladder to 128 to keep the corrupt rung out of the
-results. The pin now tracks upstream main and the rung is measured again. The receive is sized
-from a constant rather than from `max(ladder)` so that clamping the ladder cannot change the
-footprint, since that footprint drives both the transport's memory traffic and the FP8 dequant
-volume and would otherwise shift every remaining rung.
+That clamp was briefly load-bearing. DeepEP's low-latency combine corrupted the 256 rung on every
+Blackwell SKU — B200, GB200 and GB300, EP8 and EP16, both precisions, MNNVL and RDMA alike — while
+Hopper stayed clean, stochastically at roughly 1.5-3.3% per invocation, surfacing as one wrong token
+row whose norm still matched to 4 significant figures. Upstream PR #642 fixed it with a CTA-scope
+fence retiring the combine consumer's shared-memory reads before its staging buffer is recycled; the
+commit we pinned was a pre-merge branch head that predated it, so we clamped the measured ladder to
+128 until the pin moved to upstream main. The receive is sized from a constant rather than from
+`max(ladder)` so clamping cannot change the footprint, which drives both the transport's memory
+traffic and the FP8 dequant volume.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
 matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`,
@@ -106,40 +97,32 @@ represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB
 scale-up and uses LSA. MoRI EP8 uses the direct IntraNode kernel on every CDNA SKU; its EP16 InterNodeV1 path is
 configured but unsupported (transport-layer combine corruption, ROCm/mori#475) and never dispatched.
 MoRI runs under its MANUAL launch mode with a pinned launch config, because that is what the engines
-run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and for the BF16 and FP8 paths this
-suite sweeps both pin block_num 80,
-rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, applied to dispatch and
-combine alike (neither passes a per-call override, so combine inherits the 16). Both also run with an
-external input buffer, which is MoRI's default and which SGLang sets explicitly. Those two settings
-are pinned together deliberately: MoRI's own tuning tables key combine on `zero_copy`, selecting
-roughly 16 warps for external input against 4-8 for a registered buffer, so taking the engines' warp
-count while keeping a registered buffer would match neither, and the mismatch is not hypothetical in
-either direction. Measured on MI300X, MI325X and MI355X: **in registered-buffer mode** 16 warps costs
-+13-18% combine at T=128 and +61-78% at T=512 against 8, while **in the external-input mode the
-engines actually run** the same 16 warps *wins* — 14-19% at T=128, 26-27% at T=256, and 9-14% at every
-prefill rung including T=8192, the true top of the ladder. Below T=32 it gives up 0.2-2.5us, which is
-the only rung range where 8 is ahead. All arms were correct at every rung, so the pairing is a
-throughput question, not a correctness one. With an external input buffer the kernel does its own
-staging copy, bounded by the receive count, so BF16 rows hand over the dispatch output unchanged:
-their `stage` component is still declared, as an explicit unavailable marker with a null percentile
-block and a zero sample count, the same way any backend whose staging is a bare pointer assignment
-reports it. FP8 rows still stage for real, because the received payload has to be dequantized. These
-numbers therefore describe the engine-integrated configuration, not MoRI's peak: its shipped tuning
-tables reach a faster combine with per-shape block and warp counts no engine selects, and AUTO would
-not reproduce them uniformly anyway: gfx950 ships no IntraNodeLL combine table and no BF16 rule for
-normal-mode IntraNode dispatch, so AUTO falls back to hard-coded defaults for exactly those two and
-couples the result to whichever MoRI revision is pinned. It would find genuinely tuned rules for the
-other two paths, which is its own problem — a config that is tuned on some paths and defaulted on
-others is not one number about the hardware. How far off peak is arch-dependent and only partly measured: comparing across
-buffer modes on MI355X, with the registered mode's excluded BF16 stage added back so the comparison is
-not flattered, a registered buffer at 8 warps is still 15% faster at T=512 decode and 8% at T=8192
-prefill than the shipped pairing. That margin did not reproduce as a clear win on gfx942, so treat
-0-15% as the honest range rather than a single figure -- and note that the faster configuration is one
-no engine runs, which is why this suite does not chase it. One
-asymmetry is worth stating: the low-latency arm has no engine-integrated configuration to match at
-all, because SGLang's low-latency path pins `AsyncLL` at 8 warps while this suite uses `IntraNodeLL`
-(`AsyncLL` is split-phase and fails silently under a single-call harness), so the low-latency launch
-config is inherited from the normal-mode tuple by choice rather than by precedent. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
+run: neither vLLM nor SGLang sets `MORI_EP_LAUNCH_CONFIG_MODE`, and both pin block_num 80,
+rdma_block_num 0, and `warp_num_per_block` 16 for the intra-node kernel, on dispatch and combine
+alike (neither passes a per-call override), with an external input buffer — MoRI's default, which
+SGLang sets explicitly. The two are pinned together deliberately: MoRI's tuning tables key combine on
+`zero_copy`, selecting roughly 16 warps for external input against 4-8 for a registered buffer, and
+the mismatch is measurable in both directions. On MI300X, MI325X and MI355X,
+**in registered-buffer mode** 16 warps costs +13-18% combine at T=128 and +61-78% at T=512 against 8;
+**in the external-input mode the engines actually run** the same 16 warps *wins* — 14-19% at T=128,
+26-27% at T=256, and 9-14% at every prefill rung including T=8192. Below T=32 it gives up 0.2-2.5us,
+the only range where 8 is ahead; all arms were correct at every rung. With an external input buffer
+the kernel does its own staging copy, bounded by the receive count, so BF16 rows hand over the
+dispatch output unchanged and declare `stage` as an explicit unavailable marker (null percentiles,
+zero samples); FP8 rows still stage for real, to dequantize the received payload. These numbers
+describe the engine-integrated configuration, not MoRI's peak: its shipped tuning tables reach a
+faster combine with per-shape block and warp counts no engine selects, and AUTO would not reproduce
+them uniformly — gfx950 ships no IntraNodeLL combine table and no BF16 rule for normal-mode
+IntraNode dispatch, so AUTO defaults exactly those two (coupling the result to whichever MoRI
+revision is pinned) while tuning the other two, which is not one number about the hardware. How far
+off peak is arch-dependent: across buffer modes on MI355X, with
+the registered mode's excluded BF16 stage added back, a registered buffer at 8 warps is still 15%
+faster at T=512 decode and 8% at T=8192 prefill than the shipped pairing, but that did not reproduce
+on gfx942, so treat 0-15% as the honest range for a configuration no engine runs. The low-latency
+arm has no engine-integrated configuration to match at all: SGLang's low-latency path pins `AsyncLL`
+at 8 warps while this suite uses `IntraNodeLL` (`AsyncLL` is split-phase and fails silently under a
+single-call harness), so its launch config is inherited from the normal-mode tuple by choice rather
+than by precedent. UCCL-EP is a drop-in, API-identical DeepEP replacement that keeps the legacy `Buffer`
 `dispatch`/`combine` (unweighted rank-sum) but routes it over CPU-proxy GPUDirect RDMA on plain
 `libibverbs` — no NVSHMEM/IBGDA — with software message ordering, atomics, and flow control; its
 scale-up is single-node `cudaIpc` over NVLink/XGMI (so the scale-up domain is one physical node,
@@ -166,9 +149,8 @@ does not fit the single-call dispatch/combine contract). Low latency is a decode
 whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
 cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs; it is
 currently enabled for DeepEP V2 at EP8 on H100/H200 and at EP8 and EP16 on B200 (the nscale
-bare-metal pool: IBGDA over native IB rails with `/dev/gdrdrv`, which is what a low-latency
-scale-out needs on x86 and no virtualized pool has) and on GB200/GB300 (EP16 inside the MNNVL
-scale-up domain), MoRI
+bare-metal pool: IBGDA over native IB rails with `/dev/gdrdrv`, which an x86 low-latency scale-out
+needs and no virtualized pool has) and on GB200/GB300 (EP16 inside the MNNVL scale-up domain), MoRI
 EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency kernels; at EP8 these
 run `cudaIpc` over NVLink, not the CPU-proxy RDMA path, because the adapter passes `is_intranode`
 and UCCL then never starts its proxies. The AMD SKUs drop LL: upstream raised `kNumMaxTopK` 9 -> 16
@@ -201,117 +183,97 @@ Adapters may not generate routing or reinterpret one quantity as the other.
 Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
 combine returns activation payload through an unweighted rank-sum path. Expert-output staging is
 outside isolated combine timing AND outside the measured paired roundtrip, so `roundtrip` means
-dispatch then combine — the transport — in every row. It is reported as its own `stage` component
-wherever it does device work. The one exception is the `CX_FP8_CONSUME=dequant` verification hatch,
-which puts the conversion back inside the chain on purpose.
+dispatch then combine — the transport — in every row, and staging is reported as its own `stage`
+component wherever it does device work. The `CX_FP8_CONSUME=dequant` verification hatch is the one
+exception, putting the conversion back inside the chain on purpose.
 
-Under FP8, treat `stage` as **harness scaffolding rather than a phase a serving stack has**. Its work
-is converting the received FP8 payload to the BF16 that combine sends, and in production nothing does
-that as a separate step: the FP8 lands in the expert GEMM, which reads FP8 operands natively and emits
-BF16, and that GEMM output is what combine receives. This suite deliberately does not run the expert
-GEMM — it measures the collective, not the layer — so `stage` stands in for it. That is why `stage` is
-excluded from `roundtrip`, and it is also why **`stage` must not be summed into a total or compared
-between backends**: each adapter converts a different amount. DeepEP V2 and UCCL-EP convert only the
-received rows in `normal` mode but the whole padded plane in `low-latency`, where the receive buffer is
-`[experts, cap * ranks, hidden]` regardless of token count; MoRI converts only the received rows;
-FlashInfer only the filled slots. So the same component name covers several different quantities, and
-for two of the backends it covers a different one per mode. The one production path that *does* pay a separate materialised dequant is
-a quant-format mismatch fallback (vLLM dequantises when `block_k` disagrees with DeepEP's block size);
-`CX_FP8_CONSUME=dequant` exists to model exactly that case, and it is not the default because it is
-not the fast path.
+Under FP8, treat `stage` as **harness scaffolding rather than a phase a serving stack has**: it
+converts the received FP8 payload to the BF16 combine sends, work production never does separately —
+the FP8 lands in the expert GEMM, which reads FP8 operands natively and emits the BF16 combine
+receives. This suite measures the collective, not the layer, so `stage` stands in for that GEMM,
+which is why it is excluded from `roundtrip` and why **`stage` must not be summed into a total or
+compared between backends**: each adapter converts a different amount. DeepEP V2 and UCCL-EP convert
+only the received rows in `normal` mode but the whole padded plane in `low-latency`, where the
+receive buffer is `[experts, cap * ranks, hidden]` regardless of token count; MoRI converts only the
+received rows; FlashInfer only the filled slots. The one production path that *does* pay a separate
+materialised dequant is a quant-format mismatch fallback (vLLM dequantises when `block_k` disagrees
+with DeepEP's block size), which `CX_FP8_CONSUME=dequant` models; it is not the default because it
+is not the fast path.
 
 Read `implementation.stage_excluded_from_roundtrip` as "there was device-work staging and it was
 hoisted out of the chain", not as "this row's roundtrip is stage-free". It is gated on whether the
-backend's `stage()` does device work at all, so it is `false` in two unrelated situations, and the
-`stage` component is what separates them: **absent** means the backend has nothing to stage (the
-staging is a bare pointer assignment, as for NCCL EP and for every BF16 row that hands the receive
-buffer straight to combine), while **present alongside `false`** means the `dequant` hatch put the
-conversion back inside the chain. A reader that treats `false` alone as "roundtrip includes staging"
-will wrongly subtract a cost the row never paid. Each component declares
+backend's `stage()` does device work at all, so `false` covers two unrelated situations that the
+`stage` component separates: **absent** means the backend has nothing to stage (a bare pointer
+assignment, as for NCCL EP and every BF16 row that hands the receive buffer straight to combine),
+**present alongside `false`** means the `dequant` hatch put the conversion back inside the chain.
+Reading `false` alone as "roundtrip includes staging" subtracts a cost the row never paid. Each component declares
 availability, origin, and sample count. A paired-only API reports null isolated components.
 `isolated_sum` is derived.
 
-Headline latency is the **chained pair period** (`components.pair_period`, defined
-under Chained Pair Period below) for every row that carries one, and the p99 of the per-iteration
-cross-rank MAX of `roundtrip` for the rows measured before that field existed. The flip shipped
-**held** (`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`) while the six-events-per-pair chain
-described under Chained Pair Period — whose inner records inflated small-T periods fleet-wide —
-was replaced by the two-pass chain, and was released on 2026-08-06 once the b200, h200 and gb200
-hand references were confirmed against two-pass fleet artifacts (runs 31092783122 and
-31089556516). Both `p50` and `p99` are emitted
-either way and `summarize.py` prints both. The rest of this paragraph describes the second of those
-— the fresh-entry family, which every row still carries unchanged, and which the p99-of-MAX
-argument below applies to. That is not in
-tension with the guidance below to rank by hand on p50: the published cohorts do not order cells by
-raw p99, they group them into bootstrap equivalence bands, so a cell whose p99 is dominated by
-worst-rank stalls rather than transport lands in a tie band instead of being declared a winner or a
-loser. Reading a single pair of cells yourself has no such machinery, which is why the bracket below
-is the manual procedure. MAX is the
-reduction because a layer is not finished until
-its slowest rank is, so MAX is the completion cost, and it charges inter-rank entry stagger to
-whichever component the ranks entered unevenly. How much stagger there is depends on the code
-path AND the precision, not only on the fleet: on identical h200 low-latency decode cells the
-per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they share the legacy
-`Buffer` path) against ~2.6 us for nccl-ep, and it collapses to ~2.8 us for those same two under
-FP8, where the kernel quantises in-kernel and the heavier dispatch self-aligns the ranks. So the
-term is not subtractable in any principled way, and MAX alone taxes some rows more than others.
+Headline latency is the **chained pair period** (`components.pair_period`, defined under Chained
+Pair Period below) for every row that carries one, and the p99 of the per-iteration cross-rank MAX
+of `roundtrip` for rows measured before that field existed. The flip shipped **held**
+(`summarize.HEADLINE_PREFERS_PAIR_PERIOD = False`) while the six-events-per-pair chain described
+below — whose inner records inflated small-T periods fleet-wide — was replaced by the two-pass
+chain, and was released on 2026-08-06 once the b200, h200 and gb200 hand references were confirmed
+against two-pass fleet artifacts (runs 31092783122 and 31089556516). Both `p50` and `p99` are
+emitted either way and `summarize.py` prints both. MAX is the fresh-entry family's reduction because
+a layer is not finished until its slowest rank is, so MAX is the completion cost, and it charges
+inter-rank entry stagger to whichever component the ranks entered unevenly. That stagger depends on
+the code path AND the precision, not only on the fleet: on identical h200 low-latency decode cells
+the per-iteration spread is ~9.3 us for deepep-v2 and uccl-ep at BF16 (they share the legacy
+`Buffer` path) against ~2.6 us for nccl-ep, and collapses to ~2.8 us for those same two under FP8,
+where in-kernel quantisation makes the heavier dispatch self-align the ranks. The term is not
+subtractable in any principled way, so MAX alone taxes some rows more than others.
 
-Some rows also carry a `period` component, and it answers a different question from `roundtrip`.
-`roundtrip` drains the GPU around each pair, so it reports the latency of an idle pipeline. A decode
-loop never stops between layers — the next dispatch is already in flight while the previous combine's
-stragglers land — so what a serving stack pays per layer is the pipeline's PERIOD, which is smaller
-than the sum of separately-drained stages and is also indifferent to how inter-rank entry stagger gets
-attributed. Both are real; quote `roundtrip` for how long one collective takes and `period` for what a
-continuous stream costs, and never sum them or treat one as a correction to the other.
-
-`period` is opt-in per backend (`pipeline_pairs`) rather than universal, because issuing pairs
-back-to-back lets ranks drift, and dispatch is a peer WRITE into another rank's buffer — stream order
-on the receiver does not order the sender's remote writes. A collective bounds that drift to roughly
-one iteration, since a dispatch cannot complete until every rank enters it, so a receive buffer that
-is double-buffered per dispatch is safe and one shared buffer is not. Today only DeepEP V2's
-low-latency path opts in, which is the same two-micro-batch overlap SGLang and vLLM run. Enabling it
-where the buffer cannot absorb the drift would produce a fast number over corrupted data, so it is off
-by default and a row without the component simply did not measure it.
+Some rows also carry a `period` component: a batch of `pipeline_pairs` pairs issued back-to-back
+inside one drained window, divided by the pair count and reduced by MAX. It answers the same
+question as the chained family below, on an older per-backend opt-in, so quote `roundtrip` for how
+long one collective takes and `period` for what a continuous stream costs — never sum them or treat
+one as a correction to the other. It is opt-in because issuing pairs back-to-back lets ranks drift,
+and dispatch is a peer WRITE into another rank's buffer — stream order on the receiver does not
+order the sender's remote writes. A collective bounds that drift to roughly one iteration, since a
+dispatch cannot complete until every rank enters it, so a receive buffer double-buffered per
+dispatch is safe and one shared buffer is not. Only DeepEP V2's low-latency path opts in today, the
+same two-micro-batch overlap SGLang and vLLM run; a row without the component simply did not
+measure it.
 
 Every row therefore also carries `cross_rank_min_us` (the same iterations reduced with MIN — the
-skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN
-as a bracket. Two cells whose MAX gap is smaller than the larger contender's spread are not
-separated by the data: rank on roundtrip p50 and call a winner only where MAX and MIN agree on
-the ordering. Do not rank on p99 of MAX for multi-node decode cells, where it is dominated by
-worst-rank stalls rather than transport — p99 of MIN is the synchronized-cost tail beside it. The
-isolated components inherit the preceding operation's per-rank exit stagger, so treat them as
-residual-wait diagnostics rather than per-operation costs; the paired roundtrip is the
-comparable quantity.
+skew-excluded floor) and `cross_rank_spread_us` (per-iteration MAX minus MIN). Read MAX and MIN as a
+bracket: two cells whose MAX gap is smaller than the larger contender's spread are not separated by
+the data. Rank on roundtrip p50 and call a winner only where MAX and MIN agree on the ordering. Do
+not rank on p99 of MAX for multi-node decode cells, where it is dominated by worst-rank stalls
+rather than transport — p99 of MIN is the synchronized-cost tail beside it. The isolated components
+inherit the preceding operation's per-rank exit stagger, so treat them as residual-wait diagnostics
+rather than per-operation costs; the paired roundtrip is the comparable quantity.
 
 ### Chained Pair Period
 
-Everything above measures **fresh entry**: the GPU is drained around each timed window, so every
-sample starts from an idle pipeline and the ranks re-stagger before each one. A serving stack never
-runs that way. Its decode loop issues dispatch, combine, dispatch, combine without stopping, and
-what it pays per MoE layer is the pipeline's steady-state **period**, not the latency of one
-collective measured in isolation. Every row therefore also carries the chained family, measured by
-`benchmark_chain`: dispatch→combine pairs issued back-to-back with CUDA events enqueued on-stream
-and **no host synchronization inside the loop**, the first `chain_drop` (16) pairs discarded as
-pipeline fill, pooled over `chain_trials` (4) per point on the same rotated ladder order as the
-rest of Pass 2. The pairing is exactly `run_roundtrip`'s — dispatch, then the staged combine input
-(or an inline `stage` under the `CX_FP8_CONSUME=dequant` hatch), then combine — so the paired-API
-backends stay in contract and `pair_period` excludes expert-output staging on the same rule
-`roundtrip` does.
+Everything above except `period` measures **fresh entry**: drained around each timed window, so every
+sample starts from an idle pipeline and the ranks re-stagger before each one. A decode loop never
+stops, and what it pays per MoE layer is the pipeline's steady-state **period**. Every row therefore
+carries the chained family, measured by `benchmark_chain`: dispatch→combine pairs issued
+back-to-back with CUDA events enqueued on-stream and **no host synchronization inside the loop**,
+the first `chain_drop` (16) pairs discarded as pipeline fill, pooled over `chain_trials` (4) per
+point on the same rotated ladder order as the rest of Pass 2. The pairing is exactly
+`run_roundtrip`'s — dispatch, the staged combine input (or an inline `stage` under the
+`CX_FP8_CONSUME=dequant` hatch), then combine — so paired-API backends stay in contract and
+`pair_period` excludes expert-output staging on the same rule `roundtrip` does.
 
 Each trial runs **two sibling chains** of `chain_iters` (128) pairs, because the statistics must
 not carry the instrumentation that collects them. The first version ran ONE chain with six
 `record()` calls per pair; wherever the device drains faster than the host enqueues (the bottom
-of the ladder), every event executes the moment it is issued, the pair window degenerates to host
-elapsed time, and the four inner records plus glue were charged into the published period. The
-fleet exposed it before a profiler did: period minus floor-sum sat at a roughly T-independent
-10–30µs on every vendor and fabric at once — a host constant, not transport — inflating T=1
-periods by 20–38%. So a **floors chain** runs first carrying only the four op-window events, and
-a **period chain** runs second carrying only the outer pair events, nothing between its two
-collectives: both records' host cost lands in the inter-pair gap, outside the window, so the
-period carries what any uninstrumented caller pays. (An eager-mode launch floor remains, as for
-any eager caller; a CUDA-graphs decode loop pays less host per pair than any eager harness can.)
+of the ladder), every event executes as issued, the pair window degenerates to host elapsed time,
+and the four inner records plus glue were charged into the published period. The fleet exposed it
+before a profiler did: period minus floor-sum sat at a roughly T-independent 10–30µs on every
+vendor and fabric at once — a host constant, not transport — inflating T=1 periods by 20–38%. So a
+**floors chain** runs first carrying only the four op-window events, and a **period chain** runs
+second carrying only the outer pair events, nothing between its two collectives: both records' host
+cost lands in the inter-pair gap, outside the window, so the period carries what an uninstrumented
+caller pays. (An eager-mode launch floor remains, as for any eager caller; a CUDA-graphs decode loop
+pays less host per pair than any eager harness can.)
 
-Five statistics come out of the two chains, and deliberately only five:
+The two chains publish five statistics, and only five:
 
 - `components.pair_period` (origin `chained-median`) — the per-pair period from the period chain,
   reduced across ranks by MEDIAN. MAX is right for a drained component (a layer finishes with its
@@ -322,87 +284,79 @@ Five statistics come out of the two chains, and deliberately only five:
   its window is the op's floor, and it tracks profiler kernel time to ~10% — a free Kineto
   substitute. The floors chain runs first and the period chain second, better-settled, so the two
   can sit a few µs apart in level: a period single-digit-µs *below* the floor sum at small T is
-  that cross-chain offset, not an error (gb200/h200 fp8 LL, run 31089556516). Read
+  that cross-chain settling offset, not an error (gb200/h200 fp8 LL, run 31089556516). Read
   floor-vs-period as transport share, not an identity that must close to zero.
 - `chain_health.pair_spread_us` — per-iteration cross-rank max-minus-min of the pair: the *proof*
   the median means anything. Large next to `pair_period` means a paced or slow rank, and the
   point should not be read as a steady-state period at all.
 - `chain_health.interpair_gap_us` — start-to-start median minus pair-window median, once per
   trial: the per-pair cost OUTSIDE the published window (the harness's own two `record()` calls
-  plus any inter-pair stall) — the in-artifact regression guard for exactly the six-events defect
-  above, visible in every artifact rather than needing six diffed side by side.
+  plus any inter-pair stall), and the in-artifact regression guard against the six-events defect
+  above.
 - `chain_health.settle_drift_us` — late-half minus early-half period median, once per trial,
   signed, cross-rank max-magnitude. `chain_drop` *assumes* the chain settled before the kept
   pairs; this is the proof, and an unconverged chain (or a device clocking down mid-chain)
   publishes its drift instead of a clean-looking period.
 
-**Chained per-op medians and p99s are never published, and the omission is not an oversight.**
-Without a host sync the ranks arrive at each collective at slightly different times, and the
-resulting wait has to be spent somewhere: it parks in whichever op window a given rank happens to
-block in. That parking is stable per rank — so one rank's per-op numbers look clean and convincing
-— arbitrary across ranks, with rank 3's dispatch long exactly where rank 5's combine is, and
-bistable across runs of an identical configuration, while the sum, the pair period, is conserved.
-A chained per-op median therefore measures where the wait sat on that run rather than what the
-operation cost. The cross-rank MIN is the one reduction that removes it, which is why the floors
-are published and the medians are not; a p99 of a chained window would mix the same noise back in
+**Chained per-op medians and p99s are never published.** Without a host sync the ranks arrive at
+each collective at slightly different times, and the resulting wait parks in whichever op window a
+given rank happens to block in — stable per rank (so one rank's per-op numbers look clean and
+convincing), arbitrary across ranks, with rank 3's dispatch long exactly where rank 5's combine is,
+and bistable across runs of an identical configuration, while the sum, the pair period, is
+conserved. A chained per-op median measures where the wait sat on that run rather than what the
+operation cost. The cross-rank MIN is the one reduction that removes it, which is why the floors are
+published and the medians are not; a p99 of a chained window would mix the same noise back in
 through the tail.
 
-The fresh-entry family keeps its meaning exactly. `components.roundtrip`, `dispatch`, `combine`,
+The fresh-entry family keeps its meaning exactly: `components.roundtrip`, `dispatch`, `combine`,
 `stage`, `isolated_sum`, `cross_rank_min_us` and `cross_rank_spread_us` are measured and reduced
-as they always were, at the same 256×8 sampling, and no stored row was re-meant or re-measured.
-The sweep `version` stays 1 across the change for that reason, exactly as it did for
-`stage_excluded_from_roundtrip`: a consumer keys on the presence of `components.pair_period`, and a
-row without it simply predates the chain. Quote `roundtrip` for how long one collective takes and
-`pair_period` for what a continuous stream costs; never sum them, never treat one as a correction
-to the other, and never rank a chained cell against a pre-chain one on the headline column —
-`summarize.py` footnotes its table whenever both appear in it.
+as they always were, at the same 256×8 sampling, and no stored row was re-meant or re-measured. A
+consumer keys on the presence of `components.pair_period`; a row without it predates the chain.
+Never rank a chained cell against a pre-chain one on the headline column — `summarize.py` footnotes
+its table whenever both appear in it.
 
 **The published period always means one thing: free-running.** Because the chain lets ranks drift
 by up to about one iteration, a backend whose receive buffer cannot absorb that drift would read a
-half-written plane, so `EPBackend.chain_barrier` exists as an escape valve: it inserts a one-element
-on-stream all-reduce **between pairs** (never between the two collectives of one pair, and after the
-pair's end event, so its ~10µs sits in neither the pair window nor an op window), re-aligning the
-ranks at the cost of the cross-pair overlap the measurement exists to capture. That makes it a
-differently-defined quantity, not a slower reading of the same one — so **a run with the barrier on
-publishes no chained field at all**: `pair_period`, both `chain_floor_us` entries and every
-`chain_health` field emit the standard unavailable block, the measured numbers go to
-rank-0 stdout labelled as a diagnostic, and `implementation.chain_barrier: true` remains as the
-record of why they are missing. The valve is a bring-up diagnostic for a backend that cannot yet be
-chained, not a second publishable mode: a backend that needs it is a bug to fix, not a variant to
-compare, which is also why the chained-regime oracle below is skipped alongside it — there is no
-chained number left in the artifact for it to stand behind. No backend sets it: DeepEP V2's
-**normal** mode, the one genuinely unaudited cell, was hand-probed with 256 un-synchronized pairs
-at T=128, EP8+EP16, both precisions (2026-08-06, pin `01dc3aaa`, the then-current dgxc pool's
-hybrid GIN over RoCE) — all passed, outputs finite, timed inputs unchanged, cross-rank period
-agreement within 1µs, and the chain-vs-synced gap is the size of the effect this section is about
-(EP8 105.4 vs 125.4µs BF16, 216.6 vs 272.3µs FP8; EP16 838 vs 863µs and 820 vs 897µs). Every
-other backend double-buffers per dispatch, enforces strict pairing by contract, or completes each
-op on a reusable handle. The valve stays implemented because the next backend, or the next pin,
-is not covered by that probe.
+half-written plane, so `EPBackend.chain_barrier` exists as an escape valve: a one-element on-stream
+all-reduce **between pairs** (never between the two collectives of one pair, and after the pair's
+end event, so its ~10µs sits in neither the pair window nor an op window), re-aligning the ranks at
+the cost of the cross-pair overlap the measurement exists to capture. That is a differently-defined
+quantity, so **a run with the barrier on publishes no chained field at all**: `pair_period`, both
+`chain_floor_us` entries and every `chain_health` field emit the standard unavailable block, the
+measured numbers go to rank-0 stdout as a diagnostic, and `implementation.chain_barrier: true`
+records why they are missing. The chained-regime oracle below is skipped alongside them, having no
+published number left to stand behind. It is a bring-up valve, not a second publishable mode. No
+backend sets it: DeepEP V2's **normal** mode, the one genuinely unaudited cell, was hand-probed with
+256 un-synchronized pairs at T=128, EP8+EP16, both precisions (2026-08-06, pin `01dc3aaa`, the
+then-current dgxc pool's hybrid GIN over RoCE) — all passed, outputs finite, timed inputs unchanged,
+cross-rank period agreement within 1µs, and the chain-vs-synced gap is the size of the effect this
+section is about (EP8 105.4 vs 125.4µs BF16, 216.6 vs 272.3µs FP8; EP16 838 vs 863µs and 820 vs
+897µs). Every other backend double-buffers per dispatch, enforces strict pairing by contract, or
+completes each op on a reusable handle; the valve stays implemented because the next backend, or the
+next pin, is not covered by that probe.
 
 One backend's timed window omits a cost the others pay, deliberately. nccl-ep binds routing with
-`ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than with
-the token count, so charging it per iteration would import a ladder-max-proportional term into
-dispatch -- the same shape of artifact that sizing HT's combine input to the ladder maximum used to
-put under combine. It is therefore bound during the untimed warm-up, which is also what NVIDIA's own
-`ep_bench` does (CUDA events around dispatch and combine only, handle update outside the loop). In
-low-latency mode there is nothing to exclude: `ncclEpUpdateHandle` returns immediately and the kernel
-reads the cached routing inside the timed dispatch. Every other backend pays its layout per timed
-call -- uccl-ep calls `get_dispatch_layout` inside dispatch; deepep-v2, MoRI and FlashInfer pass
-routing on every call -- and those costs scale with tokens, so they belong in the window.
+`ncclEpUpdateHandle`, a collective whose cost scales with the group's token capacity rather than the
+token count, so charging it per iteration would import a ladder-max-proportional term into dispatch
+-- the same artifact that sizing HT's combine input to the ladder maximum used to put under combine.
+It is bound during the untimed warm-up, as NVIDIA's own `ep_bench` does (CUDA events around dispatch
+and combine only, handle update outside the loop). Low-latency mode has nothing to exclude:
+`ncclEpUpdateHandle` returns immediately and the kernel reads the cached routing inside the timed
+dispatch. Every other backend's layout cost scales with tokens and belongs in the window -- uccl-ep
+calls `get_dispatch_layout` inside dispatch; deepep-v2, MoRI and FlashInfer pass routing on every
+call.
 
-The artifact records the mode so a reader can keep distinct measurement
-contracts separate.
+The artifact records the mode so a reader can keep distinct measurement contracts separate.
 
 Every measured component uses one fixed timing profile, defined once in `configs/sweep.json`
 and baked into every scheduled case:
 
 - 256 trials x 8 timed iterations = 2048 observations for the fresh-entry family;
 - 4 chain trials x (128 free-running pairs - 16 dropped for pipeline fill) = 448 observations for
-  the pair period and another 448 for the op floors — each trial runs the two sibling chains
-  (floors first, then the lean period chain) — sampled separately because one call already yields
-  128 pairs and the fresh-entry trial count would multiply the leg's wall clock without buying
-  convergence;
+  the pair period and another 448 for the op floors, each trial running the two sibling chains
+  (floors first, then the lean period chain); the trial count is lower than the fresh-entry family's
+  because one call already yields 128 pairs, and matching it would multiply the leg's wall clock
+  without buying convergence;
 - 32 synchronized full dispatch-stage-combine warmups before each available measured component at
   every trial/point, and before each chain trial;
 - component measurement order rotates each trial (`trial_order`) so every timed component occupies
@@ -445,12 +399,12 @@ dispatch moves 1 byte per value, plus per-128-block FP32 scales for every blockw
 DeepEP V2, UCCL-EP and FlashInfer EP, which carries them as a fourth dispatch payload — and none for
 MoRI's plain e4m3 cast, while combine stays BF16 — so the dispatch and combine directions can carry
 different byte counts and the roundtrip is their per-field sum. The rank-deduplicated count is exact
-for the normal-mode layout. It is also exact for a low-latency kernel that deduplicates per rank
-(MoRI's `IntraNodeLL`, whose combine is an unweighted rank-sum). The low-latency kernels that apply
-top-k weights inside combine instead send one copy per (token, expert) assignment rather than per
+for the normal-mode layout, and for a low-latency kernel that deduplicates per rank (MoRI's
+`IntraNodeLL`, whose combine is an unweighted rank-sum). The low-latency kernels that apply top-k
+weights inside combine instead send one copy per (token, expert) assignment rather than per
 (token, rank), so for a token whose experts share a destination rank this logical count is a lower
-bound on the bytes those kernels actually move. Each row states which basis it used in
-`logical_copies`, so the two are never silently mixed. Latency (the headline) is
+bound on the bytes those kernels move. Each row states which basis it used in `logical_copies`, so
+the two are never silently mixed. Latency (the headline) is
 measured directly and is unaffected. Algorithm bandwidth, bus bandwidth,
 wire utilization, and physical-link utilization are not emitted without a defined primitive model or
 transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
@@ -470,15 +424,15 @@ routing cannot pass an identity roundtrip. For every rank and point it verifies:
 5. dispatched payload/metadata and combined output again after timing; and
 6. the same full check once more against the state the **free-running chain** leaves behind.
 
-Check 6 exists because checks 2-5 only ever see drained calls, so without it the headline
-`pair_period` would be published from a regime no oracle had ever inspected — and a backend that
-transports correctly when drained but corrupts under back-to-back pairs would present as the
-fastest cell in the suite. It runs once per ladder point, after that point's final chain trial, on
-the settled communicator (`benchmark_chain` ends synchronized). Its result is reported per row as
+Check 6 exists because checks 2-5 only ever see drained calls: without it the headline `pair_period`
+would come from a regime no oracle had inspected, and a backend that transports correctly when
+drained but corrupts under back-to-back pairs would present as the fastest cell in the suite. It
+runs once per ladder point, after that point's final chain trial, on the settled communicator
+(`benchmark_chain` ends synchronized). Its result is reported per row as
 `correctness.chain_regime_passed` and **folded into `correctness.passed`**, so a chained-regime
-failure invalidates the case and fails the leg exactly as any other oracle failure does. It is
-`null`, and scored as neither pass nor fail, only when the chain published nothing to gate — the
-barrier mode described above, which `implementation.chain_barrier` names.
+failure fails the leg exactly as any other oracle failure does. It is `null`, scored as neither pass
+nor fail, only when the chain published nothing to gate — the barrier mode above, which
+`implementation.chain_barrier` names.
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values

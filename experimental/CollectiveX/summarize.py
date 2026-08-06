@@ -46,10 +46,8 @@ def _identity(document: dict) -> tuple[str, str, str, str, str, str, int, str]:
 def _topology(document: dict) -> str:
     """Scale-up shape, because the same `ep` label is not the same hardware.
 
-    GB200/GB300 run 4 GPUs per node inside a 72-GPU MNNVL domain, so their "EP8" spans two
-    trays over a rack fabric while every other SKU's EP8 is 8 GPUs in one node over NVLink or
-    XGMI. Nothing in the timing can fix that; printing it stops a reader comparing the two as
-    though they were the same configuration.
+    GB200/GB300 run 4 GPUs per node in a 72-GPU MNNVL domain, so their EP8 spans two trays while
+    every other SKU's EP8 is one node over NVLink or XGMI. Printing it stops the false comparison.
     """
     topology = document.get("topology") or {}
     per_node = topology.get("gpus_per_node")
@@ -63,9 +61,8 @@ def _topology(document: dict) -> str:
 def _wire_basis(document: dict) -> str:
     """Which copy basis this backend's kernels actually move.
 
-    Low-latency deepep-v2/uccl-ep/nccl-ep receive one copy per (token, expert); MoRI's
-    IntraNodeLL deduplicates by destination rank. At the same token count that is ~1.5x
-    different combine traffic at EP8, so two low-latency rows are not doing equal work.
+    Low-latency deepep-v2/uccl-ep/nccl-ep receive one copy per (token, expert); MoRI's IntraNodeLL
+    deduplicates by destination rank -- ~1.5x different combine traffic at EP8, so not equal work.
     """
     rows = document["measurement"]["rows"]
     copies = (rows[0] if rows else {}).get("logical_copies") or {}
@@ -76,49 +73,33 @@ def _wire_basis(document: dict) -> str:
 # pays per MoE layer, so a row that carries one headlines it; rows predating the chain fall back
 # to the drained roundtrip, and render() footnotes which quantity the starred columns hold.
 #
-# This shipped False first — a HOLD — because the first fleet sweep to carry the field (run
-# 31076616039) measured it with the original one-chain primitive: six record() calls per pair,
-# four of them INSIDE the pair window. Wherever the device outran the host (the bottom of the
-# ladder) the window degenerated to host elapsed time and published a roughly T-independent
-# 10-30us host constant as transport — +20-38% on the T=1 period, visible as period minus
-# (dispatch floor + combine floor). `benchmark_chain` was split so the period chain carries only
-# the outer event pair, and the hold was RELEASED on 2026-08-06 once every hand reference was
-# confirmed against two-pass fleet artifacts: b200 52.6us against the ~58us reference (run
-# 31092783122), h200 43.8us against ~51.3us and gb200 within +2.9%/-13.3% of 62.6-99.5us (run
-# 31089556516) — at or below the references, the OPPOSITE polarity from the defect (the hand
-# references carried four events per pair themselves), with interpair_gap_us steady at ~3us and
-# the floors tracking. Flipping this in either direction is a reviewed one-line diff pinned by
-# tests/test_summarize_headline.py.
+# This shipped False as a HOLD: the one-chain primitive charged four in-window record() calls to
+# the pair, publishing a host constant as transport (+20-38% at T=1). `benchmark_chain` was split
+# into two passes and the hold was RELEASED on 2026-08-06, once all three hand references
+# confirmed — b200 52.6us vs ~58us, h200 43.8us vs ~51.3us, gb200 inside 62.6-99.5us. At or below
+# the references is the expected polarity: they carried four events per pair themselves. Flipping
+# this is a reviewed one-line diff pinned by tests/test_summarize_headline.py.
 HEADLINE_PREFERS_PAIR_PERIOD = True
 
 
 def _headline(document: dict) -> tuple:
     """Headline row, with the skew bracket beside it.
 
-    `p50`/`p99` are the chained pair PERIOD where the row carries one and
-    `HEADLINE_PREFERS_PAIR_PERIOD` says the chained fleet numbers are trustworthy — what a decode
-    loop pays per MoE layer, measured with pairs issued back-to-back and no host sync, reduced
-    across ranks by median. Otherwise `roundtrip`, which drains the pipeline around every pair and
-    so reports an idle-pipeline latency reduced by cross-rank MAX. They are different quantities,
-    not two estimates of one, so the last element of the tuple says whether the row CARRIES a
-    period and `render` footnotes the table with which quantity the starred columns hold.
+    `p50`/`p99` are the chained pair period where the row carries one and
+    `HEADLINE_PREFERS_PAIR_PERIOD` allows it — what a decode loop pays per MoE layer, cross-rank
+    median over back-to-back pairs. Otherwise `roundtrip`, an idle-pipeline latency reduced by
+    cross-rank MAX. Different quantities, so the last tuple element reports which the row carries
+    and `render` footnotes the table accordingly.
 
-    The MAX in that fallback is the completion cost — a layer is not finished until its slowest
-    rank is — but entry stagger is charged to it, and how much is a property of the BACKEND, not
-    just the fleet: on identical h200 low-latency cells the per-iteration spread is 9.2us for
-    deepep-v2 and uccl-ep (which share a kernel family) against 2.0us for nccl-ep, flat across the
-    whole ladder. So MAX alone taxes some backends more than others, and two cells whose MAX gap is
-    smaller than that spread are not separated by the data. `min50` is the same iterations reduced
-    with MIN — the skew-excluded floor — and `skew` is the per-iteration MAX-MIN. Read the pair as
-    a bracket, not the two ends as rival metrics. The chained headline is largely indifferent to
-    that argument, which is the point of it: the collectives phase-lock the ranks, so the stagger
-    amortises across the chain rather than landing on one measured window.
+    That MAX charges entry stagger to the operation, by an amount that is a property of the
+    backend — on identical h200 low-latency cells the per-iteration spread is 9.2us for
+    deepep-v2/uccl-ep against 2.0us for nccl-ep. `min50` (MIN over the same iterations) and `skew`
+    (per-iteration MAX-MIN) bracket it.
     """
     rows = document["measurement"]["rows"]
     if not rows:
-        # This renderer validates nothing and must degrade rather than crash: a shard that
-        # reported an outcome but no measurement rows is malformed, not a reason to lose the
-        # whole table. No row means nothing to attribute, so it votes on neither footnote.
+        # Degrade rather than crash: one malformed shard must not lose the whole table. No row
+        # means nothing to attribute, so it votes on neither footnote.
         return ("-", "-", "-", "-", "-", None)
     row = next((item for item in rows if item["tokens_per_rank"] == 64), rows[len(rows) // 2])
     period = (row["components"].get("pair_period") or {}).get("percentiles_us")
@@ -171,10 +152,8 @@ def render(documents: list[dict]) -> str:
     if not documents:
         lines.append("\n> No valid native outcome documents found.")
     # The starred columns can hold two different quantities, so the table always says which — and
-    # says so loudly when it holds both, because a mixed column silently compares a steady-state
-    # period against an idle-pipeline latency. Under the hold (see HEADLINE_PREFERS_PAIR_PERIOD)
-    # they hold exactly one: the drained roundtrip, with the presence of unheadlined periods
-    # called out so nobody hunts for why the artifact and the table disagree.
+    # says so loudly when it holds both, since a mixed column silently compares a steady-state
+    # period against an idle-pipeline latency. See HEADLINE_PREFERS_PAIR_PERIOD.
     if chained:
         carrying = sum(1 for flag in chained if flag)
         if not HEADLINE_PREFERS_PAIR_PERIOD:

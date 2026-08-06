@@ -119,10 +119,8 @@ class MatrixTests(unittest.TestCase):
             self.assertTrue(item["case"]["case_id"].endswith(item["case"]["precision"]))
 
     def test_every_case_carries_the_chain_knobs_in_its_timing_profile(self):
-        # The chain's budget is case identity, baked in beside iters/trials/warmup rather than
-        # decided by the harness. This is the producer half of the codec CaseArgvContract tests
-        # the consumer half of: if the profile silently went back to three fields, those tests
-        # would still pass against their hand-built case while every real case ran on defaults.
+        # The producer half of the codec CaseArgvContract tests the consumer half of: a profile
+        # back at three fields passes there while every real case runs on harness defaults.
         document = matrix(backend="all")
         profiles = {item["case"]["timing"] for item in document["requested_cases"]}
         self.assertTrue(profiles)
@@ -263,10 +261,8 @@ class MatrixTests(unittest.TestCase):
             for item in cases if item["disposition"] == "runnable"
         }
         self.assertEqual(runnable, {(sku, ep) for sku in ("gb200", "gb300") for ep in (8, 16)})
-        # FP8 is dispatch-side only: scales ride as a fourth payload (the kernel's kMaxPayloads
-        # is exactly 4) and combine stays BF16, so none of the 0.6.16+ combine-quant API is
-        # needed. Same per-128-block e4m3 recipe as deepep-v2/uccl-ep, so the axis stays
-        # comparable across backends.
+        # FP8 is dispatch-side only: scales ride as a fourth payload (kMaxPayloads is exactly 4)
+        # and combine stays BF16, so none of the 0.6.16+ combine-quant API is needed.
         self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16", "fp8"})
         # Normal mode only — no low-latency cell on any SKU.
         self.assertEqual({item["case"]["mode"] for item in cases}, {"normal"})
@@ -277,7 +273,7 @@ class MatrixTests(unittest.TestCase):
         # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
         #   * RDMA scale-out SKUs (h100/h200/b200/b300): EP8 runnable, EP16 an UNSUPPORTED coverage
         #     row. EP16 cross-node rides NCCL's kernel-initiated GDAKI GIN, which faults identically
-        #     on RoCE (h100/b300) and InfiniBand (h200/b200-nscale) — a reproducible NCCL-EP v0.1.0 internode
+        #     on RoCE (h100/b300) and IB (h200/b200-nscale) — a reproducible NCCL-EP v0.1.0 internode
         #     limitation, so EP16 is scoped out like uccl-ep's.
         #   * GB NVL72 SKUs (gb200/gb300, MNNVL, gb-nv launcher, 4 GPU/node): EP8 AND EP16 runnable —
         #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),

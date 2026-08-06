@@ -110,12 +110,10 @@ class EPBackend(abc.ABC):
     #
     # `dequant` is a VERIFICATION HATCH, not a second metric: never a sweep axis, never a
     # default. It is retained because it costs nothing (BF16 needs the same staged-is-None
-    # branch) and because it reproduces historical numbers for regression checks on the
-    # backends whose stage this repo has not since changed -- measured 302.0us against 302.5us
-    # in run 30177021271 at T=1 for deepep-v2/uccl-ep. It no longer reproduces MoRI fp8, whose
-    # stage now casts only the rows dispatch filled rather than the whole padded plane; and no
-    # env combination reproduces pre-hoist BF16 MoRI/FlashInfer roundtrips, because the hatch
-    # is fp8-only by design.
+    # branch) and because it still reproduces historical deepep-v2/uccl-ep numbers for regression
+    # checks -- 302.0us against 302.5us in run 30177021271 at T=1. It does not reproduce MoRI fp8
+    # (that stage now casts only the rows dispatch filled) or any pre-hoist BF16 roundtrip (the
+    # hatch is fp8-only by design).
     #
     # A second measured mode is unnecessary because the mismatched-config cost is DERIVABLE
     # from what every run already emits:
@@ -139,23 +137,19 @@ class EPBackend(abc.ABC):
     def stage_excluded_from_roundtrip(self) -> bool:
         """Whether the chained roundtrip skips the per-iteration `stage()`.
 
-        `roundtrip` must mean the same thing in every row, or it cannot be compared across
-        backends. It means dispatch -> combine: the transport, staging excluded. So the
-        answer is yes whenever `stage()` does device work, regardless of precision.
-
-        This was previously gated on precision as well, which left `stage` inside the
-        roundtrip for exactly two configurations -- MoRI BF16 scale-up and FlashInfer BF16 --
-        and transport-only for all 800+ other rows, so the headline compared two different
-        quantities and penalised those two.
+        `roundtrip` must mean dispatch -> combine -- the transport, staging excluded -- in every
+        row or it cannot be compared across backends, so the answer is yes whenever `stage()`
+        does device work, regardless of precision. Gating on precision as well left staging
+        inside the roundtrip for MoRI BF16 scale-up and FlashInfer BF16 alone, against 800+
+        transport-only rows.
 
         Gated on `stage_device_work` rather than applied blanket: where `stage()` is a bare
         pointer assignment there is nothing to lift, and hoisting anyway would hand the
-        low-latency backends a VIEW into their double-buffered receive, whose parity flips on
+        low-latency backends a view into their double-buffered receive, whose parity flips on
         each timed re-dispatch -- combine would then read the stale-parity buffer.
 
-        `CX_FP8_CONSUME=dequant` still opts an fp8 run back into the inline stage, because
-        that switch exists to model a stack that really does dequantise between the two
-        collectives (see `fp8_consume`).
+        `CX_FP8_CONSUME=dequant` opts an fp8 run back into the inline stage, to model a stack
+        that really does dequantise between the two collectives (see `fp8_consume`).
         """
         if not self.stage_device_work:
             return False
@@ -164,25 +158,15 @@ class EPBackend(abc.ABC):
     def fused_quantize(self, eager):
         """The fp8 quantize the TIMED dispatch should call, keyed on mode.
 
-        Production quantises bf16->fp8 once per forward pass, with a single fused kernel, just
-        before the dispatch collective. This benchmark used to do it once per SHAPE in
-        `make_problem` -- outside every timed window -- so it omitted a real cost. Moving the
-        eager helper inside the window would have been worse than omitting it: the eager form is
-        a 9-launch composite (measured 19.2us on H100, 53.6us on MI300X) against ~1.5-4.9us for
-        the compiled single kernel, so charging it would publish this harness's kernel count
-        rather than production's cost, and flip fp8-vs-bf16 verdicts on that basis.
-
-        LOW-LATENCY GETS THE EAGER FORM, unchanged and deliberately. Its dispatch kernel
-        quantises internally (`use_fp8`), so the cost is already inside the timed window, and
-        the oracle's payload gate compares the received bytes against `semantic_payload` -- which
-        must therefore keep matching the kernel's arithmetic, i.e. the eager helper's bits.
-        Swapping this globally would red every low-latency fp8 cell without touching LL timing.
-
-        Compiled with `dynamic=False`: a dynamic-shape build of this same math measured 6.3x
-        slower once, and here that lands inside the timed window as silently inflated numbers.
-        The cache limit is raised because the quantize legitimately sees ~20+ shapes (one per
-        ladder rung, plus the oracle's receive-count shapes) against a default of 8, and
-        exceeding it makes dynamo fall back to EAGER SILENTLY -- the same failure class.
+        Production quantises bf16->fp8 once per forward pass, fused, just before dispatch, so
+        the harness compiles it once outside the timed window: charging the eager 9-launch
+        composite (19.2us H100, 53.6us MI300X, against ~1.5-4.9us compiled) would publish this
+        harness's kernel count rather than production's cost and flip fp8-vs-bf16 verdicts on
+        that basis. Low-latency keeps the eager form -- its dispatch quantises internally so that
+        cost is already in-window, and the oracle's payload gate must keep matching the eager
+        helper's bits. `dynamic=False` because a dynamic build measured 6.3x slower; the cache
+        limit is raised because ~20+ shapes exceed the default of 8 and overflow falls back to
+        eager SILENTLY.
         """
         if self.mode == "low-latency":
             return eager
@@ -197,12 +181,11 @@ class EPBackend(abc.ABC):
     def assert_quantize_identity(self, eager, fused, x) -> None:
         """Fail loudly, untimed, if the compiled quantize is not the eager one bit-for-bit.
 
-        The correctness oracle's payload gate is a `torch.equal`, and it compares the SENDER's
-        [T, hidden] quantize against the ORACLE's [receive_count, hidden] one -- so identity has
-        to hold per row, across batch sizes, not merely deterministically. Both properties were
-        verified on-metal for e4m3fn (H100) and e4m3fnuz (MI300X/MI325X) before this was enabled;
-        this check is what turns a future toolchain regression into a named failure here instead
-        of an unexplained payload mismatch across the whole fleet.
+        The oracle's payload gate is a `torch.equal` between the sender's [T, hidden] quantize
+        and the oracle's [receive_count, hidden] one, so identity has to hold per row across
+        batch sizes, not merely deterministically. Both properties were verified on-metal for
+        e4m3fn and e4m3fnuz; this check names a future toolchain regression here instead of
+        leaving an unexplained fleet-wide payload mismatch.
         """
         if fused is eager:
             return
@@ -387,15 +370,12 @@ class EPBackend(abc.ABC):
     # ---- Timing template methods -----------------------------------------------------
 
     # Pairs issued back-to-back per `period` sample; 0 disables the component. A serving decode
-    # loop runs dispatch->combine->dispatch->combine without stopping, so its cost per layer is
-    # the pipeline's PERIOD, not the sum of separately-drained stages -- `roundtrip` measures the
-    # latter and overstates the former. Opt-in rather than default because the overlap is only
-    # sound where the backend tolerates rank drift: dispatch is a peer WRITE into another rank's
-    # buffer, and stream order on the receiver does not order the sender's remote writes. The
-    # collective bounds that drift to roughly one iteration (a dispatch cannot complete until
-    # every rank enters it), so a backend whose receive buffer is double-buffered per dispatch is
-    # safe and one with a single shared buffer is not. Enabling it for a backend that is not
-    # means a fast number over corrupted data, which is why the default is off.
+    # loop never stops between layers, so its cost per layer is the pipeline's period, not the
+    # sum of separately-drained stages that `roundtrip` measures. Opt-in because the overlap is
+    # only sound where the backend tolerates rank drift: dispatch is a peer write the receiver's
+    # stream order does not order, bounded to roughly one iteration by the collective, so a
+    # per-dispatch double-buffered receive is safe and a single shared buffer yields a fast
+    # number over corrupted data.
     pipeline_pairs = 0
 
     def timed_components(self):
@@ -416,13 +396,11 @@ class EPBackend(abc.ABC):
         Caches the dynamic receive cardinality once so adapters never read a device
         scalar during a timed trial (the count is stable for a fixed routing trace).
 
-        `stage_every` re-materialises the combine input on every iteration. The default hoists it
-        after the first, mirroring `benchmark_roundtrip` on the same reasoning: where staging is
-        excluded from the chain the timed region stages nothing at all, so staging once per warm
-        iteration warms work the measurement never performs. For an FP8 dequant that is not free --
-        it is ~247us against a 61us roundtrip, and at 32 warm iterations per component per trial it
-        was the largest single cost in the leg. `benchmark_stage` opts in, because there staging IS
-        the timed operation and its warm-up has to match.
+        `stage_every` re-materialises the combine input on every iteration; the default hoists it
+        after the first, mirroring `benchmark_roundtrip`. Where staging is excluded from the chain
+        the timed region stages nothing, so warming it warms work the measurement never performs
+        -- ~247us per FP8 dequant against a 61us roundtrip, the leg's largest single cost.
+        `benchmark_stage` opts in, because there staging is the timed operation.
         """
         import torch
 
@@ -444,10 +422,9 @@ class EPBackend(abc.ABC):
         """One chained round trip; returns combined activations.
 
         `staged` supplies a pre-materialised combine input so staging stays out of the timed
-        region, which is the default for every backend that does device work there (see
-        `stage_excluded_from_roundtrip`). It is None only when `stage()` is a bare pointer
-        assignment -- deepep-v2, uccl-ep and nccl-ep at BF16, where there is nothing to lift --
-        or under the `CX_FP8_CONSUME=dequant` hatch, which wants the conversion back in the chain.
+        region -- the default wherever `stage()` does device work (see
+        `stage_excluded_from_roundtrip`). It is None where `stage()` is a bare pointer
+        assignment, or under the `CX_FP8_CONSUME=dequant` hatch that wants it back in the chain.
         """
         handle = self.dispatch(problem)
         if staged is None:
@@ -459,13 +436,11 @@ class EPBackend(abc.ABC):
     def benchmark_period(self, problem, warmup, iters):
         """Steady-state cost per dispatch->combine pair, pairs issued back-to-back.
 
-        `roundtrip` drains the GPU around every pair, so it reports the latency of an idle
-        pipeline and charges inter-rank entry stagger to whichever component the ranks entered
-        unevenly. A decode loop never stops between layers, so what it pays per layer is this
-        period. The two are different quantities, not competing estimates of one: quote
-        `roundtrip` for how long a single collective takes and `period` for what a continuous
-        stream costs, and never sum or compare them across backends -- only backends that opt in
-        via `pipeline_pairs` report it at all.
+        `roundtrip` drains the GPU around every pair, so it reports an idle pipeline's latency
+        and charges inter-rank entry stagger to whichever component the ranks entered unevenly;
+        a decode loop pays this period instead. The two are different quantities, not competing
+        estimates of one, so never sum or compare them. Only backends that opt in via
+        `pipeline_pairs` report it.
         """
         import torch
 
@@ -485,88 +460,61 @@ class EPBackend(abc.ABC):
             samples.append(start.elapsed_time(end) * 1000.0 / pairs)
         return samples
 
-    # Whether this backend needs its ranks re-aligned between chained pairs (a one-element
-    # on-stream all_reduce): the rank drift `pipeline_pairs` reasons about would read a receive
-    # buffer that cannot absorb ~one iteration of it half-written. SETTING IT SUPPRESSES
-    # PUBLICATION -- the barrier adds ~10us and removes the cross-pair overlap, a different
-    # quantity from the free-running period, and the published period must have exactly ONE
-    # definition -- so `run_sweep` emits every chained field as unavailable in barrier mode and
-    # sends the numbers to rank-0 stdout, with `implementation.chain_barrier` as the record of
-    # why. The valve is a bring-up diagnostic; needing it is a bug to fix, not a comparison
-    # variant. Defaults live here, not in the adapters, so the decision audits in one place.
-    #
-    # NOTHING SETS IT TODAY, on evidence: deepep-v2 NORMAL (the one unaudited cell) was
-    # hand-probed with 256 un-synced pairs at T=128, EP8+EP16, both precisions (2026-08-06, pin
-    # 01dc3aaa, the then-current dgxc pool's hybrid GIN over RoCE) -- all passed, outputs finite,
-    # inputs unchanged, cross-rank period agreement within 1us. Every other backend
-    # double-buffers per dispatch, enforces strict pairing by contract, or completes each op on
-    # a reusable handle. The valve stays implemented because the next backend or pin is not
-    # covered by that probe.
+    # Re-align ranks between chained pairs (a one-element on-stream all_reduce) when a backend's
+    # receive buffer cannot absorb inter-pair drift. Setting it SUPPRESSES publication: the
+    # barrier adds ~10us and removes cross-pair overlap, so it measures a different quantity --
+    # `run_sweep` emits every chained field as unavailable and logs the numbers to rank-0 stdout,
+    # with `implementation.chain_barrier` as the record of why. Bring-up valve, not a comparison
+    # variant. Nothing sets it: deepep-v2 NORMAL probed clean with 256 un-synced pairs (T=128,
+    # EP8+EP16, both precisions, 2026-08-06, pin 01dc3aaa); every other backend double-buffers
+    # per dispatch or completes each op on a reusable handle.
     chain_barrier = False
 
     def benchmark_chain(self, problem, warmup, iters, drop):
         """Free-running dispatch->combine pairs, no host sync: a floors chain, then a period chain.
 
-        This is the number a serving stack pays: a decode loop never stops between layers, so the
-        collectives phase-lock the ranks and entry skew amortises across the chain instead of
-        landing on one op the way `roundtrip`'s drained windows charge it. The pairing is exactly
-        `run_roundtrip`'s (dispatch, then stage-or-staged, then combine), so paired-API backends
-        stay in contract, and unlike the opt-in `period` this is measured for every backend.
+        This is what a serving stack pays: a decode loop never stops between layers, so entry
+        skew amortises across the chain instead of landing on one op the way `roundtrip`'s
+        drained windows charge it. The pairing is `run_roundtrip`'s, so paired-API backends stay
+        in contract; every backend is measured.
 
-        WHY TWO PASSES. The first version timed one chain with six record() calls per pair.
-        Wherever the device drains faster than the host enqueues (the bottom of the ladder), every
-        event executes the moment it is issued, the pair window degenerates to HOST elapsed time,
-        and the four inner records plus glue were published as transport: period minus floor-sum
-        sat at a ~T-independent 10-30us on every vendor and fabric at once (+20-38% on the T=1
-        period). So each statistic now gets its own chain, carrying only the events it needs: a
-        FLOORS chain with op-window events only (the floor was never the contaminated statistic;
-        it tracks profiler kernel time to ~10%), then a PERIOD chain with one outer event pair and
-        NOTHING between its two collectives -- both records' host cost lands in the inter-pair
-        gap, outside the window, so the period carries what any uninstrumented caller pays. The
-        floors chain runs first (extra settling for the period chain; `drop` re-discards the
-        refill after the inter-chain synchronize). The period chain also yields a start-to-start
-        series whose median minus the window median is the per-pair apparatus residual, published
-        as `chain_health.interpair_gap_us` -- the in-artifact regression guard for this defect.
+        Two chains, because per-op events inside a chained pair execute immediately on an idle
+        stream, landing the host's record() cost in the pair window: six events per pair
+        published a flat +10-30us host constant on every vendor (+20-38% at T=1, decaying with
+        T). So the floors chain carries op-window events only, the period chain one outer pair
+        with nothing between its two collectives, and `chain_health.interpair_gap_us`
+        (start-to-start median minus window median) guards that defect in-artifact.
 
-        WHY ONLY THE PAIR PERIOD AND THE PER-OP MINIMA ARE PUBLISHABLE. Un-synced, each rank's
-        inter-rank wait PARKS in whichever op window it blocks in: stable per rank, arbitrary
-        across ranks, bistable across identical runs -- while the pair period is conserved. A
-        chained per-op median therefore measures where the wait sat, not what the op cost;
-        cross-rank MIN removes it (the last rank in waited least). `run_sweep` enforces pair ->
-        cross-rank median, per-op -> cross-rank minimum, never a chained per-op median or p99.
+        Only the pair period and the per-op minima are publishable: each rank's inter-rank wait
+        parks in whichever op window it blocks in while the period is conserved, so `run_sweep`
+        enforces pair -> cross-rank median, per-op -> cross-rank minimum, never a chained per-op
+        median or p99.
 
-        `drop` discards each chain's head (pipeline fill, not period). The regime is oracle-gated:
-        `run_sweep` reruns the full expert oracle against the state the last chain leaves behind
-        and folds it into the point's verdict, so silent chained corruption reds the case instead
-        of publishing the suite's fastest period; the method ends synchronized for that check.
-        Under `chain_barrier` both chains still run but nothing is published and the chained
-        oracle is skipped (see the attribute's comment).
-
-        Returns a dict of post-`drop` series in microseconds: `pair` and `start_to_start` from
-        the period chain (the latter one element shorter), `dispatch` and `combine` from the
-        floors chain.
+        `drop` discards each chain's head (pipeline fill, not period). `run_sweep` reruns the full
+        expert oracle against the state the last chain leaves behind and folds it into the point's
+        verdict, so silent chained corruption reds the case; the method ends synchronized for it.
+        Under `chain_barrier` nothing is published (see that attribute). Returns post-`drop`
+        series in microseconds: `pair` and `start_to_start` from the period chain (the latter one
+        element shorter), `dispatch` and `combine` from the floors chain.
         """
         import torch
 
         self.warm(problem, warmup)
         staged = None
         if self.stage_excluded_from_roundtrip:
-            # The same hoist `benchmark_roundtrip` performs, for the same reason and read back
-            # through the same attribute: the chain must be dispatch -> combine and nothing else.
-            # The `CX_FP8_CONSUME=dequant` hatch leaves `staged` None and so keeps the conversion
-            # inline, where it lands inside the pair period and inside NEITHER per-op window --
-            # which is the honest placement: it is work between the two collectives, not part of
-            # either one.
+            # The same hoist `benchmark_roundtrip` performs, so the chain is dispatch -> combine
+            # and nothing else. The `CX_FP8_CONSUME=dequant` hatch leaves `staged` None, putting
+            # the conversion inside the pair period and inside neither per-op window -- where
+            # work between the two collectives belongs.
             handle = self.dispatch(problem)
             self.stage(problem, handle)
             staged = getattr(handle, self.combine_input_attr)
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
         barrier = torch.zeros(1, device=self.device) if self.chain_barrier else None
-        # Every event and the barrier tensor are allocated BEFORE the loops. An allocation between
-        # two record() calls is host work inside a window that is supposed to belong to the stream,
-        # and at the bottom of the ladder that is a measurable fraction of the period -- the same
-        # arithmetic that split this method into two passes.
+        # Events and the barrier tensor are allocated BEFORE the loops: an allocation between two
+        # record() calls is host work inside a window meant to belong to the stream, a measurable
+        # fraction of the period at the bottom of the ladder.
         def events():
             return [torch.cuda.Event(enable_timing=True) for _ in range(iters)]
 
@@ -588,9 +536,8 @@ class EPBackend(abc.ABC):
             combine_end[i].record()
             if barrier is not None:
                 # Between PAIRS, never between the two collectives of one pair, and outside every
-                # window so its cost sits in no published number. The serialization still shows up
-                # -- as overlap the period no longer gets -- which is exactly why the artifact
-                # records that this row ran with it.
+                # window so its cost sits in no published number -- only the overlap it removes
+                # shows up, which is why the artifact records that this row ran with it.
                 torch.distributed.all_reduce(barrier)
         torch.cuda.synchronize()
 
@@ -641,18 +588,13 @@ class EPBackend(abc.ABC):
         self.warm(problem, warmup)
         staged = None
         if self.stage_excluded_from_roundtrip:
-            # Materialise the expert-output stand-in ONCE, untimed, so the chained
-            # measurement is dispatch -> combine and nothing else. Routing is fixed for a
-            # ladder point, so the same staged tensor is valid for every iteration (for MoRI it is
-            # the dispatch output itself at BF16, or a fresh `[:rows]` BF16 cast under FP8; for
-            # FlashInfer it is the workspace combine region, which dispatch cannot clobber because
-            # that region sits past the end of every dispatch receive plane).
-            #
-            # Read the staged payload back through `combine_input_attr` rather than
-            # constructing one, so whatever the adapter put there round-trips unchanged. No
-            # current backend needs that -- nccl-ep is the one whose attribute holds a
-            # non-torch wrapper, and its `stage()` does no device work so it never reaches
-            # here -- but constructing a tensor instead would silently break it if it did.
+            # Materialise the expert-output stand-in ONCE, untimed, so the chained measurement is
+            # dispatch -> combine and nothing else. Routing is fixed for a ladder point, so the
+            # same staged tensor is valid for every iteration -- MoRI's is the dispatch output at
+            # BF16 or a `[:rows]` BF16 cast under FP8, FlashInfer's the workspace combine region,
+            # which sits past the end of every dispatch receive plane. Read back through
+            # `combine_input_attr` rather than constructed, so an adapter's non-torch payload
+            # (nccl-ep) would round-trip unchanged if one ever reached here.
             handle = self.dispatch(problem)
             self.stage(problem, handle)
             staged = getattr(handle, self.combine_input_attr)

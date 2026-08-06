@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""Torch-free tests for the nccl-ep single-handle contract.
-
-The invariant under test: ONE handle per group, rebound per problem shape. Two handles built
-from the same group config resolve to the same LL parity signal slots while advancing their
-parity independently, which corrupts signalling (NVIDIA/nccl#2303) -- so a regression that
-reintroduces per-shape handles must fail loudly here rather than on a cluster.
-
-torch and nccl are stubbed so this runs without the benchmark image.
+"""Torch-free tests for the nccl-ep single-handle contract: one handle per group, rebound per
+problem shape. Two handles from the same group config resolve to the same LL parity signal slots
+while advancing parity independently, which corrupts signalling (NVIDIA/nccl#2303).
 """
 from __future__ import annotations
 
@@ -50,9 +45,8 @@ def _stub_modules():
 
 sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 
-# Import ep_nccl against the stubs, then withdraw them: leaving a fake torch in sys.modules
-# makes the genuinely torch-dependent modules in this process (test_runtime, test_ll_oracle)
-# error instead of skipping. Dropping ep_nccl too keeps the stub-built module private to us.
+# Import ep_nccl against the stubs, then withdraw them: a fake torch left in sys.modules makes
+# genuinely torch-dependent modules (test_runtime, test_ll_oracle) error instead of skipping.
 with mock.patch.dict(sys.modules, _stub_modules()):
     import ep_nccl  # noqa: E402
 
@@ -96,9 +90,8 @@ def backend(ll=True):
     b.args = types.SimpleNamespace(hidden=16)
     b._t = lambda x: x
     b._stream = lambda: 0
-    # create_buffer always runs before the first _ensure_handle, so the HT receive plane
-    # exists by then: `_bind_ht_recv_count` slices it to the received-token count. A list
-    # stands in for the tensor because `_t` is identity here and only the slice is exercised.
+    # create_buffer always runs before the first _ensure_handle, so the HT receive plane exists
+    # by then; a list stands in for the tensor because `_t` is identity here.
     b._recv_x = list(range(64))
     return b
 
@@ -127,8 +120,8 @@ class TestSingleHandle(unittest.TestCase):
         b._ensure_handle(pb)
         self.assertEqual(len(b._ep_group.handle.updates), 1)
 
-        # Re-entering the bound problem repeatedly -- the timed loop's steady state -- must not
-        # enter a collective, otherwise every iteration gains a rank-synchronising step.
+        # Re-entering the bound problem must not enter a collective, or every iteration of the
+        # timed loop gains a rank-synchronising step.
         for _ in range(8):
             b._ensure_handle(pb)
         self.assertEqual(len(b._ep_group.handle.updates), 1)
@@ -151,37 +144,27 @@ class TestSingleHandle(unittest.TestCase):
         self.assertEqual([info for _, info in b._ep_group.handle.updates], [None])
 
     def test_ll_gate_wrapper_is_built_once_per_handle(self):
-        """LL applies the gate in combine, so its weights wrapper must be cached like the rest.
-
-        Building one per timed combine costs a torch resolve, an np.asarray and a cybind
-        allocation, and `time_us` charges host work inside the window — a per-call tax no other
-        backend pays. HT never needs it: FWD forbids input weights on its combine.
-        """
+        """LL applies the gate in combine, so its weights wrapper must be cached: building one
+        per timed combine puts a torch resolve and an np.asarray inside `time_us`."""
         ll = backend(ll=True)
         pa = problem(1)
         h = ll._ensure_handle(pa)
         self.assertTrue(hasattr(h, "combine_weights_t"))
         self.assertEqual(h.combine_weights_t, "w1")
-        # Re-entering the SAME problem -- the timed loop's steady state -- reuses the handle and
-        # therefore the wrapper; a fresh problem object legitimately builds its own.
+        # Re-entering the same problem reuses the handle and therefore the wrapper.
         self.assertIs(ll._ensure_handle(pa).combine_weights_t, h.combine_weights_t)
 
         ht = backend(ll=False)
         self.assertFalse(hasattr(ht._ensure_handle(problem(1)), "combine_weights_t"))
 
     def test_ht_combine_input_is_sliced_to_the_received_count(self):
-        """HT combine's staging copy is sized by the tensor it is handed, not by the group.
-
-        Passing the whole ladder-max receive plane made combine copy max(ladder) * world rows
-        on every call regardless of T, which put a rung-independent floor under it. LL must keep
-        the full padded plane -- its kernel asserts that shape.
-        """
+        """HT combine's staging copy is sized by the tensor it is handed: the whole ladder-max
+        receive plane put a rung-independent floor under it. LL keeps the full padded plane."""
         b = backend(ll=False)
         h = b._ensure_handle(problem(1))
         # 7 is what the stubbed `torch.zeros(...).item()` reports as the received count.
         self.assertEqual(h.count, 7)
         self.assertEqual(h.combine_in_t, list(range(7)))
-        # The point of the fix: the slice, not the whole 64-row plane.
         self.assertLess(len(h.combine_in_t), len(b._recv_x))
 
         ll = backend(ll=True)

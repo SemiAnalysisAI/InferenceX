@@ -12,19 +12,13 @@ collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
 COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
-# Upstream main. This replaced the head of PR #605 (fa8a9b16), which was a pre-merge branch
-# commit: #605 merged on 2026-04-29 and useful fixes landed on main afterwards that the branch
-# never received. Its one unique commit was the #630 single-node V2 init fix, which main carries
-# as 56169594e, so nothing was lost by moving. What was gained, and why this bump happened:
-#   #642 fence.proxy.async.shared::cta in LOW_LATENCY_COMBINE_RECV -- the fix for the Blackwell
-#        low-latency combine corruption at the top ladder rung (DeepEP issue #700)
-#   #715 system-scope release before the GIN barrier when scale-up spans NVLink and RDMA
-#   #688 NCCL Device API compat: use the runtime version for ncclDevCommCreate
-#   #178 SM90 compatibility; #641 internode dispatch args
-#   #640/#627 match "libnccl" and resolve real NVSHMEM/NCCL SO names for pip-wheel installs,
-#        which is the upstream form of the rewrite collx_prepare_deepep_source applies below
-# The backend cache directory is keyed on this value, so changing it forces a rebuild rather
-# than silently reusing a build of the old source.
+# Upstream main, replacing the pre-merge head of PR #605 (fa8a9b16). #605 merged 2026-04-29 and
+# main carries its one unique commit, the #630 single-node V2 init fix, as 56169594e -- plus fixes
+# the branch never received: #642 fence.proxy.async.shared::cta in LOW_LATENCY_COMBINE_RECV, which
+# fixes the Blackwell low-latency combine corruption at the top ladder rung (DeepEP issue #700);
+# #715 system-scope release before the GIN barrier when scale-up spans NVLink and RDMA; #688 NCCL
+# Device API compat; #178 SM90; #641 internode dispatch args; #640/#627 NVSHMEM/NCCL SO-name
+# resolution for pip wheels. The backend cache is keyed on this value, so a change forces a rebuild.
 COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
@@ -621,8 +615,8 @@ collx_prepare_stage_dir() {
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       b200-nscale)
-        # Anchor at the squash dir's parent (/data/home/sa-shared), the compute-visible share
-        # the campaign validated, rather than trusting the runner account's passwd home.
+        # Anchor at the squash dir's parent (/data/home/sa-shared): the passwd home is not
+        # compute-visible.
         COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "${COLLX_SQUASH_DIR%/*}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
@@ -780,11 +774,9 @@ BASH
 }
 
 # Reject an allocation whose GPUs are throttled: collectives are barriers, so one clamped device
-# paces every rank. `--gres` mirrors the cuda-context probe below rather than relying on a step
-# inheriting the job's GRES by default, so the probe provably sees the devices it is judging --
-# a gate that sees none would pass everything while looking like protection. `--time` bounds the
-# worst case: nvidia-smi can wedge uninterruptible on exactly the sick hardware this looks for,
-# and Python's own timeout cannot reap a process in D-state.
+# paces every rank. `--gres` mirrors the cuda-context probe below so the step provably sees the
+# devices it judges; `--time` bounds nvidia-smi wedging in D-state on the sick hardware itself,
+# which Python's own timeout cannot reap.
 collx_validate_gpu_health_on_job() {
   local job_id="$1" nodes="$2" gpus_per_node="$3" log_label=gpu-health log
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
@@ -946,17 +938,11 @@ collx_run_shard() {
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
-    # A hang guard, NOT a work budget: at 900 it killed FP8 prefill cases that had already
-    # written complete, all-rungs-passed artifacts, and at 1800 it killed b200 and h200 multi-node
-    # EP16 prefill in run 31020463440 (b200 EP16 decode 185s -> 287s, h200 127s -> 270s, both
-    # prefills past 1800s). What is NOT established is why. The obvious suspect was #715, which
-    # the same pin bump introduced and which adds a system-scope release before the GIN barrier
-    # when scale-up spans NVLink and RDMA -- but h100-dgxc has that identical 2-node RDMA+GIN
-    # topology and did not move at all (decode 161s -> 165s, prefill 681s -> 678s), and the two
-    # runs compared were nine hours apart, so cluster contention is not excluded either. Treat
-    # the cause as open; a same-window A/B on one cluster is what would settle it.
-    # Raising the guard is right regardless of cause: truncating a legitimate measurement is a
-    # worse failure than a late one, and 5400 stays well inside the 300-minute allocation.
+    # A hang guard, not a work budget: at 900 it killed FP8 prefill cases that had already written
+    # complete artifacts, and at 1800 it killed b200 and h200 multi-node EP16 prefill (run
+    # 31020463440). Why those legs slowed is open -- h100-dgxc has the same 2-node RDMA+GIN topology
+    # and did not move. Truncating a real measurement is worse than a late one, and 5400 stays
+    # inside the 300-minute allocation.
     if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \

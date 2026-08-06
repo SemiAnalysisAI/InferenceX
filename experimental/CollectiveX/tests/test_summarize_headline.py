@@ -1,14 +1,7 @@
 #!/usr/bin/env python3
-"""The summary headline's switch between the chained pair period and the drained roundtrip.
-
-`summarize._headline` prefers `components.pair_period` for the starred p50/p99 columns ONLY
-when `HEADLINE_PREFERS_PAIR_PERIOD` says the fleet's chained numbers are trustworthy. It
-shipped False — a hold — while the six-events-per-pair chain (which charged four host-side
-record() calls into the pair window at the bottom of the ladder) was replaced by the two-pass
-chain, and flipped True on 2026-08-06 once every hand reference was confirmed against
-two-pass fleet artifacts (see the constant's comment for the numbers). These tests pin both
-positions of the switch, so flipping it in either direction is a reviewed one-line diff and
-an accidental flip is a test failure, not a silent headline change.
+"""The summary headline's switch between the chained pair period and the drained roundtrip:
+`summarize._headline` prefers `components.pair_period` only when `HEADLINE_PREFERS_PAIR_PERIOD`
+is set, which shipped False as a hold and flipped True on 2026-08-06. Both positions are pinned.
 """
 from __future__ import annotations
 
@@ -62,9 +55,8 @@ def document(with_period):
 
 class HeadlineHold(unittest.TestCase):
     def test_the_shipped_tree_prefers_the_period(self):
-        # The intent of the current tree: the hold was released 2026-08-06 after the b200, h200
-        # and gb200 hand references were confirmed against two-pass fleet artifacts, so the
-        # chained pair period is the headline wherever a row carries one.
+        # The hold was released 2026-08-06, once the b200, h200 and gb200 hand references were
+        # confirmed against two-pass fleet artifacts.
         self.assertTrue(summarize.HEADLINE_PREFERS_PAIR_PERIOD)
 
     def test_under_the_hold_the_headline_is_the_roundtrip_even_when_a_period_exists(self):

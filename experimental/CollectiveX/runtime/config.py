@@ -125,12 +125,9 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
         "--workload-name", str(case["workload"]),
         "--version", str(version),
     ]
-    # The timing profile is positional and append-only (see sweep_matrix.py): three fields is the
-    # fresh-entry-only profile every case carried before the chain existed, six adds the chain
-    # knobs. A three-field case emits no --chain-* flags at all, so its values come from run_ep's
-    # own argparse defaults instead of being duplicated here -- one default per knob, one place.
-    # Any other length is a malformed profile and fails closed rather than silently dropping a
-    # field, exactly as the old three-way unpack did.
+    # Positional and append-only (see sweep_matrix.py): three fields is the pre-chain profile, six
+    # adds the chain knobs. A three-field case emits no --chain-* flags, so those values come from
+    # run_ep's argparse defaults rather than being duplicated here; any other length fails closed.
     timing = str(case["timing"]).split(":")
     if len(timing) not in (3, 6):
         print(f"unrecognised timing profile {case['timing']!r}", file=sys.stderr)
@@ -140,10 +137,8 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
         timing,
     ):
         argv += [flag, value]
-    # precision and mode are in the filename so a cell's legs -- distinct shards sharing
-    # runner/backend/phase, each numbering cases from index 0 -- cannot overwrite each other in
-    # the shared results/ dir when they share a second-resolution ts, as they do whenever
-    # several shards are driven from one loop rather than one CI job each.
+    # precision and mode are in the filename so a cell's legs -- shards sharing runner/backend/
+    # phase, each numbering from index 0 -- cannot collide in results/ under one shared ts.
     out = (
         f"results/{runner}_{case['backend']}_{case['precision']}_{case['mode']}_{case['phase']}"
         f"_{ts}-c{index:03d}.json"

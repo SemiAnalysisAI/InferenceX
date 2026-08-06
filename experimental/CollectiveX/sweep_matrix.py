@@ -137,11 +137,8 @@ def resolve_matrix(
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     timing = SWEEP["timing"]
-    # Positional and APPEND-ONLY: the chain fields go after the fresh-entry three so a consumer
-    # reading the profile by position keeps decoding the same values it always did, and a case
-    # scheduled before they existed still decodes (runtime/config.py fills the tail from run_ep's
-    # own defaults rather than inventing values here). The profile is not part of `case_id`, so
-    # extending it renames nothing.
+    # Positional and append-only: chain fields go after the fresh-entry three, so an older case
+    # still decodes (runtime/config.py fills the tail from run_ep's defaults) and no case_id moves.
     timing_profile = ":".join(str(timing[key]) for key in (
         "iters_per_trial", "trials_per_point", "warmup_iters_per_trial",
         "chain_iters_per_trial", "chain_trials_per_point", "chain_drop",

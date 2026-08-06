@@ -17,9 +17,9 @@ dimension — a BF16 control plus, on every backend whose FP8 dispatch is suppor
 (DeepEP V2, MoRI, UCCL-EP, FlashInfer EP), an FP8 dispatch, caller-prequantized in `normal` mode (in
 `low-latency` the DeepEP and UCCL-EP kernels quantize internally from BF16; MoRI stays
 caller-prequantized; FlashInfer has no `low-latency` path). That caller-side quantize is charged
-inside the measured dispatch, because a production forward pass pays it on the critical path. NCCL
-EP is BF16-only this release, so it emits the control alone. Coverage is uniform routing only. Cases
-run in one of two modes:
+inside the measured dispatch, because a production forward pass pays it on the critical path. NCCL EP
+is BF16-only this release, so it emits the control alone. Coverage is uniform routing only. Cases run
+in one of two modes:
 
 - `normal` uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only,
   unweighted rank-sum combine. It runs the full decode and prefill ladders.
@@ -42,8 +42,8 @@ run in one of two modes:
   [NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303) signal aliasing that had wedged them.
   B300 carries the `candidate` NCCL EP as its *only* low-latency row, so it has no production
   decode coverage; DeepEP V2 emits no LL row at all on B300 (the IBGDA address-handle wall in the
-  backend table below) — `_ll_runnable` adds
-  only runnable cells, so that wall is prose here, not a classified matrix row).
+  backend table below), and `_ll_runnable` adds only runnable cells, so that wall is prose here
+  rather than a classified matrix row).
   Scoped single-node EP8 runs over the intra-node NVLink/XGMI
   low-latency path (no `/dev/gdrdrv` needed — validated on H200 with it absent); NVSHMEM/IBGDA on the
   wire carries payload only on a multi-node scale-out (EP16) run; the legacy Buffer still
@@ -56,48 +56,44 @@ every position in the sequence; each iteration takes the cross-rank maximum befo
 p50/p90/p95/p99. A keyed BLAKE2b counter produces
 byte-identical routing and gate weights on every runtime.
 
-Those components all measure **fresh entry** — the GPU is drained around every timed window — which
-is the latency of an idle pipeline, not what a decode loop pays. So every row also carries the
-**chained pair period**: 4 trials x (128 dispatch→combine pairs issued back-to-back with no host
-sync, first 16 dropped as pipeline fill) = 448 observations, reduced across ranks by median. Each
-trial runs **two sibling chains** — a floors chain carrying only per-op events, then a period chain
-carrying only the outer pair events — because the first version's single six-events-per-pair chain
-charged its four inner `record()` calls into the period wherever the device outran the host,
-publishing a ~flat 10–30µs host constant as transport (+20–38% at T=1, fleet-wide).
-`components.pair_period` is the headline latency for every row that carries one
-(`summarize.HEADLINE_PREFERS_PAIR_PERIOD = True` — shipped held while the six-events chain was
-replaced, released 2026-08-06 after the b200/h200/gb200 hand references were confirmed against
-two-pass fleet artifacts); `summarize.py` footnotes what its starred columns hold
-either way, because period and roundtrip are different quantities. The floors chain publishes the
-per-op floors (`chain_floor_us`, the cross-rank minimum of each op's window); the period chain
-also yields `chain_health.pair_spread_us` (cross-rank cadence proof), `interpair_gap_us` (the
-per-pair cost outside the published window — the regression guard for instrumentation creeping
-back in) and `settle_drift_us` (late-half minus early-half period — the convergence proof
-`chain_drop` otherwise merely assumes). Chained per-op *medians*
-are deliberately never published, because inter-rank wait parks in whichever op window a rank
-blocks in — stable per rank, arbitrary across ranks, and conserved only in the pair total. Nothing
-existing was renamed or re-meant, and the sweep `version` stays 1, so consumers key on the presence
-of `components.pair_period`.
+Those components all measure **fresh entry** — the GPU is drained around every timed window — the
+latency of an idle pipeline, not what a decode loop pays. So every row also carries the **chained
+pair period**: 4 trials x (128 dispatch→combine pairs issued back-to-back with no host sync, first
+16 dropped as pipeline fill) = 448 observations, reduced across ranks by median. Each trial runs
+**two sibling chains** — a floors chain carrying only per-op events, then a period chain carrying
+only the outer pair events — because the first version's single six-events-per-pair chain charged
+its four inner `record()` calls into the period wherever the device outran the host, publishing a
+~flat 10–30µs host constant as transport (+20–38% at T=1, fleet-wide). `components.pair_period` is
+the headline latency for every row that carries one (`summarize.HEADLINE_PREFERS_PAIR_PERIOD = True`
+— shipped held while the six-events chain was replaced, released 2026-08-06 after the
+b200/h200/gb200 hand references were confirmed against two-pass fleet artifacts), and `summarize.py`
+footnotes what its starred columns hold either way. The floors chain publishes `chain_floor_us`, the
+cross-rank minimum of each op's window; the period chain also yields `chain_health.pair_spread_us`
+(cross-rank cadence proof), `interpair_gap_us` (the per-pair cost outside the published window — the
+regression guard for instrumentation creeping back in) and `settle_drift_us` (late-half minus
+early-half period — the convergence proof `chain_drop` otherwise merely assumes). Chained per-op
+*medians* are never published: inter-rank wait parks in whichever op window a rank blocks in, stable
+per rank, arbitrary across ranks, and conserved only in the pair total. Nothing existing was renamed
+or re-meant and the sweep `version` stays 1, so consumers key on the presence of
+`components.pair_period`.
 
 The chained regime is correctness-gated like every other: the full oracle runs once per ladder point
 against the state the chain leaves behind, reports as `correctness.chain_regime_passed`, and is
-folded into `correctness.passed` — a backend that transports correctly when drained but corrupts
-under free-running pairs fails the case rather than publishing the suite's fastest period. The
-published period also has exactly one definition. `EPBackend.chain_barrier` remains as a bring-up
+folded into `correctness.passed`, so a backend that corrupts under free-running pairs fails the case
+rather than publishing the suite's fastest period. `EPBackend.chain_barrier` remains as a bring-up
 valve for a backend that cannot yet be chained free, but turning it on **suppresses every chained
 field** (they emit the unavailable block, the numbers go to stdout as a diagnostic, and
-`implementation.chain_barrier` records why) — a barrier-mode chain measures a different quantity,
-and a backend needing it is a bug to fix, not a variant to compare.
+`implementation.chain_barrier` records why): a barrier-mode chain measures a different quantity.
 
 `roundtrip` means dispatch then combine — the transport — in every row. Expert-output staging sits
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding
 standing in for the expert GEMM, which in production consumes FP8 operands natively rather than
 materialising a BF16 copy, so `stage` must not be summed into a total or compared between backends.
-That was not always true: rows measured before this change carried the staging copy inside the chain
-for MoRI BF16 and FlashInfer BF16, so `roundtrip` meant different things in different rows. The sweep
-`version` stays 1 across the change, so `implementation.stage_excluded_from_roundtrip` and whether a
-`stage` component is present are the only way to tell the two generations apart.
-See [docs/methodology.md](docs/methodology.md) for the full contract.
+Rows measured before this change carried the staging copy inside the chain for MoRI BF16 and
+FlashInfer BF16, and the sweep `version` stays 1 across it, so
+`implementation.stage_excluded_from_roundtrip` and whether a `stage` component is present are the
+only way to tell the two generations apart. See [docs/methodology.md](docs/methodology.md) for the
+full contract.
 
 Correctness is checked against an implementation-independent oracle that reproduces the backend's
 two-level reduction — intra-scale-up-domain FP32, then a BF16 cast of each domain's partial for the
@@ -139,8 +135,8 @@ GIN is unavailable), [PR #640](https://github.com/deepseek-ai/DeepEP/pull/640) (
 shared-memory mappings being misclassified as duplicate NCCL libraries), and
 [PR #642](https://github.com/deepseek-ai/DeepEP/pull/642) (the low-latency combine fence that fixes
 the Blackwell top-rung corruption of
-[issue #700](https://github.com/deepseek-ai/DeepEP/issues/700)). It previously pinned the #630 head
-on the pre-merge #605 branch, which predated #642. Scale-up cases request NCCL Device API LSA and fail closed
+[issue #700](https://github.com/deepseek-ai/DeepEP/issues/700)), which the previous pin — the #630
+head on the pre-merge #605 branch — predated. Scale-up cases request NCCL Device API LSA and fail closed
 unless the realized LSA team covers the full EP world. x86 EP16 scale-out cases instead require the
 hybrid path with GIN, two logical scale-out domains represented by two physical RDMA ranks, and eight
 scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. Whether a given

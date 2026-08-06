@@ -19,10 +19,8 @@ def default_route_interface(route_path: Path = Path("/proc/net/route")) -> str:
 
 def prepare_cache(parent_path: str) -> str:
     path = Path(parent_path).resolve() / f".collectivex-backend-cache-{os.getuid()}"
-    # parents=True: this runs BEFORE the first container import, so on a fresh pool the operator
-    # squash_dir does not exist yet and a bare mkdir throws FileNotFoundError (every b200-nscale
-    # leg of run 31092445934 died on this). 0o700 applies to the cache dir only; the created
-    # parent stays default-permissioned, as the import path's own mkdir -p would leave it.
+    # parents=True: this runs before the first container import, so a fresh pool's squash_dir may
+    # not exist yet (b200-nscale run 31092445934). 0o700 applies to the cache dir, not its parents.
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path, 0o700)
     return str(path)
@@ -42,9 +40,9 @@ _GPU_HEALTH_FIELDS = ("index", "clocks_event_reasons.sw_thermal_slowdown",
 def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
     """Throttled or overheating GPUs in an `nvidia-smi --format=csv,noheader` block.
 
-    Split out from the I/O so the parsing is testable without hardware; see
-    tests/test_runtime.py::GpuHealthProbe. Returns [] for anything it cannot read, because the
-    caller treats an unreadable probe as healthy rather than blocking a leg on it.
+    Split out from the I/O so parsing is testable without hardware; see
+    tests/test_runtime.py::GpuHealthProbe. Returns [] for anything unreadable -- the caller treats
+    an unreadable probe as healthy rather than blocking a leg on it.
     """
     faults = []
     for line in output.splitlines():
@@ -52,8 +50,8 @@ def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
         if len(cells) != len(_GPU_HEALTH_FIELDS):
             continue
         index, software, hardware, temperature = cells
-        # "Not Active" is the healthy reading, so compare exactly rather than searching for
-        # "Active" -- a substring test passes the fault straight through.
+        # "Not Active" is the healthy reading, so compare exactly -- a substring test for
+        # "Active" passes the fault straight through.
         throttled = "Active" in (software, hardware)
         try:
             too_hot = int(temperature.split()[0]) > max_temperature_c
@@ -69,14 +67,10 @@ def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
 def gpu_temperature_spread(output: str) -> tuple[int, int, int] | None:
     """`(hottest, median, spread)` GPU temperature, or None if unreadable.
 
-    Reported, NOT gated on. The absolute threshold in `gpu_health_faults` is architecture
-    dependent and can be unreachable: an H100 engages its software thermal slowdown at ~86-87 C,
-    so a clamped H100 never crosses a 90 C limit even under load, and at pre-flight it is idle
-    anyway. In the one fault measured end to end, the only signal visible at pre-flight time was
-    the RELATIVE one -- the sick GPU idled at 55 C against ~30 C for every sibling, then clamped
-    under load. Recording the spread every run is how that becomes a gate with evidence behind its
-    threshold instead of a heuristic picked from a single incident. Healthy references so far:
-    50-66 C under load on h100 (~16 C spread), 34-39 C on b200.
+    Reported, not gated on: the absolute threshold in `gpu_health_faults` can be unreachable (an
+    H100 clamps at ~86-87 C, under the 90 C gate), and in the one measured fault the only
+    pre-flight signal was relative -- the sick GPU idled at 55 C against ~30 C for its siblings.
+    Healthy references: 50-66 C under load on h100, 34-39 C on b200.
     """
     temperatures = []
     for line in output.splitlines():
@@ -97,17 +91,10 @@ def gpu_temperature_spread(output: str) -> tuple[int, int, int] | None:
 def validate_gpu_health(max_temperature_c: int = 90) -> None:
     """Reject an allocation holding a thermally throttled GPU.
 
-    Every collective is a barrier across all ranks, so one clamped device paces the whole leg. A
-    B200 with GPU 7 held at 120 MHz against 1965 MHz on its siblings ran a case 17x slower and was
-    killed by the wall-clock guard twice, at 900s and again at 1800s, looking exactly like a code
-    pathology. Rejecting the allocation costs seconds; diagnosing it cost two 30-minute burns.
-
-    The signal is the throttle FLAG, not the clock: the allocation is idle at this point and an idle
-    B200 also reads 120 MHz, so a clock threshold cannot tell health from idleness. Temperature is a
-    second, independent signal because the flag can clear between samples while the fault persists.
-
-    Fails OPEN on anything unexpected -- no `nvidia-smi`, non-zero exit, unparseable output. A check
-    that blocks legs when it cannot read the hardware is worse than the fault it looks for.
+    Every collective is a barrier, so one clamped device paces every rank: a B200 with GPU 7 at
+    120 MHz ran a case 17x slower and was killed twice by the wall-clock guard. Gate on the throttle
+    flag, not the clock -- an idle B200 also reads 120 MHz -- with temperature as an independent
+    second signal. Fails open on anything unreadable: no `nvidia-smi`, non-zero exit, bad output.
     """
     import shutil
     import subprocess
@@ -127,10 +114,8 @@ def validate_gpu_health(max_temperature_c: int = 90) -> None:
         _emit(f"gpu-health-fault {fault}")
     if faults:
         raise SystemExit(1)
-    # Positive control. Without it a gate that has gone BLIND -- no visible devices, or a driver
-    # old enough to spell these fields `clocks_throttle_reasons.*` -- writes an empty log and is
-    # indistinguishable from one that inspected eight healthy GPUs. Recording the count is what
-    # makes "the gate ran and saw N devices" checkable per cluster instead of assumed.
+    # Positive control: without it a blind gate -- no visible devices, or a driver spelling these
+    # fields `clocks_throttle_reasons.*` -- is indistinguishable from a healthy pass.
     spread = gpu_temperature_spread(output)
     detail = "" if spread is None else f" hottest={spread[0]}C median={spread[1]}C spread={spread[2]}C"
     _emit(

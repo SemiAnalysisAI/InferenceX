@@ -21,18 +21,14 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# The source pin in runtime/common.sh is upstream main, which carries #630 (the fix our previous
-# PR #605 branch pin was cut at) as well as #640, so the stage-time rewrite is now a no-op the
-# source already satisfies. This adapter does not verify the wheel's commit tag against the pin --
-# it checks only that the loaded deep_ep exposes ElasticBuffer (the PR #605 capability).
+# The source pin in runtime/common.sh is upstream main, which carries #630 and #640, so the
+# stage-time rewrite is now a no-op. This adapter does not check the wheel's commit tag, only
+# that the loaded deep_ep exposes ElasticBuffer.
 
-# Low-latency receive sizing. These are deliberately two numbers, not one: _LL_BUFFER_CAP
-# sizes the pre-allocated receive (and so fixes the transport footprint and the fp8 dequant
-# volume), while _LL_LADDER_CAP bounds which token counts are measured. They are equal today --
-# the ladder runs to the full receive -- but they stay separate because the buffer must not
-# follow the ladder (see `create_buffer`), and because clamping the measured ladder without
-# disturbing the footprint is the lever for a kernel defect at a specific token count, which is
-# how the Blackwell combine corruption at 256 was handled before #642 fixed it upstream.
+# Low-latency receive sizing, deliberately two numbers: _LL_BUFFER_CAP sizes the pre-allocated
+# receive (and so the transport footprint and fp8 dequant volume), _LL_LADDER_CAP bounds which
+# token counts are measured. Equal today, but kept separate so the ladder can be clamped around a
+# kernel defect at one rung without moving the footprint (see `create_buffer`).
 _LL_BUFFER_CAP = 256
 _LL_LADDER_CAP = 256
 assert _LL_LADDER_CAP <= _LL_BUFFER_CAP <= 511, (
@@ -61,8 +57,7 @@ def _ll_dequant_static(fp8, scales):
     ``[num_local_experts, cap*num_ranks, hidden]`` = (32, 2048, 7168) at EP8). The low-latency
     padded shape is constant on every dispatch, so a static (``dynamic=False``) compile fuses
     to one FP32 pass (~0.5 ms, 6.3x, bit-identical to the dynamic kernel on valid slots). The
-    dequant runs in every timed `stage` sample, in `benchmark_stage`'s warm-up, and once per
-    other component's warm-up (it was every warm iteration until the staging hoist), so the
+    dequant runs in every timed `stage` sample and once per other component's warm-up, so the
     call count is large enough that the dynamic kernel's per-call overhead overran the leg's
     wall-clock budget (all ranks SIGKILLed ~22 min in, no result); the static form brings FP8
     low-latency inside the budget BF16 already meets. Padding slots decode to NaN in both
@@ -166,9 +161,8 @@ class DeepEPV2Backend(EPBackend):
             # deep_ep.utils.math) so the timed stage() does no module lookup in the
             # measured region.
             self._to_fp8, self._cast_back = _fp8_cast_helpers()
-            # Normal/HT quantises inside the timed dispatch with the compiled single-kernel
-            # form; low-latency keeps the eager helper because its kernel quantises internally
-            # and the oracle gate is pinned to those bits. See EPBackend.fused_quantize.
+            # Normal/HT quantises inside the timed dispatch with the compiled form; low-latency
+            # keeps the eager helper, whose bits its in-kernel quantise matches. See fused_quantize.
             self._quant = self.fused_quantize(self._to_fp8)
         if self.mode == "low-latency":
             # Legacy Buffer IBGDA decode path: a distinct kernel family whose combine
@@ -185,22 +179,12 @@ class DeepEPV2Backend(EPBackend):
     def buffer_cap(self, args):
         if self.mode == "low-latency":
             # LL pre-allocates a fixed [num_local_experts, cap * num_ranks, hidden] receive
-            # buffer, so the cap is a hard per-rank dispatch-slot bound and the harness clamps
-            # the ladder to it, recording any dropped point in the artifact.
-            #
-            # History, because the value here is load-bearing: DeepEP's low-latency combine used
-            # to corrupt the T=256 rung on every Blackwell SKU (b200, gb200, gb300; EP8 and EP16;
-            # both precisions; MNNVL and RDMA alike) while Hopper stayed clean -- stochastically,
-            # ~1.5-3.3% per oracle invocation, surfacing as one token row whose norm still matched
-            # to 4 s.f. with 16-40% of elements wrong. That is DeepEP issue #700, and it was fixed
-            # upstream by #642, which adds a CTA-scope `fence.proxy.async.shared::cta` before
-            # `mbarrier_arrive(empty_barriers[stage_idx])` in LOW_LATENCY_COMBINE_RECV so the
-            # consumer's shared-memory reads retire before the stage is declared empty and the
-            # producer's next TMA load refills it. Our pin was the head of PR #605, branched
-            # before #642 merged, so we carried the defect and clamped this to 128 to keep the
-            # corrupt rung out of the results; the pin now tracks main and the ladder runs full.
-            # If the top rung ever reds again on Blackwell, clamping here is the containment
-            # lever -- but check the pin first rather than assuming the defect returned.
+            # buffer, so the cap is a hard per-rank dispatch-slot bound; the harness clamps the
+            # ladder to it and records any dropped point in the artifact. This was clamped to 128
+            # while DeepEP's low-latency combine stochastically corrupted the T=256 rung on
+            # Blackwell (issue #700, fixed upstream by #642); the pin now tracks main so the
+            # ladder runs full. If the top rung reds again, check the pin before assuming the
+            # defect returned -- clamping here is the containment lever either way.
             return _LL_LADDER_CAP
         return None
 
@@ -211,14 +195,10 @@ class DeepEPV2Backend(EPBackend):
         args, world_size = self.args, self.world_size
         self.max_tokens = spec.max_tokens_per_rank
         if self.mode == "low-latency":
-            # Size the LL buffer from the fixed cap, NOT from the clamped ladder. Deriving it
-            # from max(ladder) would halve the receive tensor the moment the ladder was
-            # clamped, and the receive footprint sets both the transport's memory traffic and
-            # the fp8 dequant volume (`_ll_recv_bf16` converts the whole padded receive) -- so
-            # every retained rung's numbers would shift and stop being comparable with the
-            # published series. Holding the buffer at 256 keeps them bit-comparable and leaves
-            # the top measured rung at half occupancy, which is the ladder/capacity decoupling
-            # the earlier capacity probe had to hand-roll.
+            # Size the LL buffer from the fixed cap, not from the clamped ladder: the receive
+            # footprint sets both the transport's memory traffic and the fp8 dequant volume
+            # (`_ll_recv_bf16` converts the whole padded receive), so following the ladder would
+            # shift every retained rung and break comparability with the published series.
             if spec.max_tokens_per_rank > _LL_BUFFER_CAP:
                 raise RuntimeError(
                     f"low-latency ladder maximum {spec.max_tokens_per_rank} exceeds the LL "
@@ -226,12 +206,9 @@ class DeepEPV2Backend(EPBackend):
                 )
             self.max_tokens = _LL_BUFFER_CAP
             self._create_ll_buffer(spec)
-            # The legacy LL receive is double-buffered with a parity that flips per dispatch,
-            # and a collective bounds rank drift to about one iteration (a dispatch cannot
-            # complete until every rank enters it), so two parities cover the worst overlap and
-            # pairs may be issued back-to-back. This is the pattern SGLang and vLLM use for
-            # two-micro-batch overlap. Only this path opts in; the ElasticBuffer normal-mode
-            # receive is not double-buffered that way.
+            # The legacy LL receive is double-buffered with a per-dispatch parity flip, and a
+            # collective bounds rank drift to about one iteration, so two parities cover the worst
+            # overlap and pairs may be issued back-to-back (as SGLang and vLLM do). LL only.
             self.pipeline_pairs = 8
             return
         _require_runtime()
@@ -304,13 +281,10 @@ class DeepEPV2Backend(EPBackend):
             self.max_tokens, args.hidden, world_size, args.experts
         )
         kwargs = {}
-        # On an MNNVL rack the scale-up fabric IS NVLink across trays, but the legacy Buffer
-        # defaults `allow_mnnvl=False` and a False there self-sets NVSHMEM_DISABLE_MNNVL --
-        # so leaving it unset forced the low-latency kernels onto IBGDA on exactly the systems
-        # whose fast path is MNNVL, and measured the rack's slow path. Keyed on the topology
-        # the platform already reports rather than on the SKU name. Passed only when the pinned
-        # wheel accepts it, so an older deep_ep keeps working instead of raising on an unknown
-        # keyword.
+        # On an MNNVL rack the scale-up fabric is NVLink across trays, but the legacy Buffer
+        # defaults `allow_mnnvl=False` and a False there self-sets NVSHMEM_DISABLE_MNNVL, so
+        # leaving it unset runs the low-latency kernels over IBGDA on exactly the systems whose
+        # fast path is MNNVL. Keyed on the reported topology, not the SKU name.
         if str(getattr(args, "scale_up_transport", "")) == "mnnvl":
             import inspect
             if "allow_mnnvl" in inspect.signature(deep_ep.Buffer.__init__).parameters:
@@ -357,8 +331,7 @@ class DeepEPV2Backend(EPBackend):
     def semantic_payload(self, x):
         if not self._fp8:
             return x
-        # Same callable the wire uses, so the oracle cannot disagree with the sender by
-        # construction (low-latency: both are the eager helper, matching its kernel).
+        # Same callable the wire uses, so oracle and sender cannot disagree by construction.
         return self._cast_back(*self._quant(x))
 
     def _encode_dispatch(self, x):
@@ -369,9 +342,8 @@ class DeepEPV2Backend(EPBackend):
             # send x unquantized; expose the host round-trip as the oracle semantic so the
             # combine expectation models the FP8 transport (same as semantic_payload).
             return x, self._cast_back(*self._to_fp8(x))
-        # Normal/HT: send BF16 and quantise inside dispatch, where production pays it. The
-        # payload is therefore x itself; oracle_x is still the round trip, computed once here,
-        # untimed -- which also compiles this rung's shape before any timed region.
+        # Normal/HT: send BF16 and quantise inside dispatch, where production pays it. oracle_x is
+        # the round trip, computed once here, untimed -- which also compiles this rung's shape.
         self.assert_quantize_identity(self._to_fp8, self._quant, x)
         return x, self._cast_back(*self._quant(x))
 

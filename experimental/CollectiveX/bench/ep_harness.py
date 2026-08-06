@@ -134,12 +134,9 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="timed iterations per trial")
     ap.add_argument("--trials", type=int, required=True,
                     help="timed trials")
-    # Chain sampling, kept on its own knobs because the chain measures a different quantity at a
-    # different cost: it runs free (no per-iteration host sync), so a long run of pairs is cheap,
-    # and it needs far fewer trials than the fresh-entry components to converge. The matrix bakes
-    # these from the same configs/sweep.json `timing:` block, appended after the fresh-entry three;
-    # these defaults are what a case scheduled before the fields existed (or a hand invocation)
-    # decodes to, so they are deliberately identical to the config's values and not required.
+    # Chain sampling on its own knobs: one call already yields chain_iters free-running pairs, so
+    # it converges in far fewer trials than the fresh-entry components. The matrix bakes these from
+    # configs/sweep.json `timing:`; the defaults match it, for cases scheduled before the fields.
     ap.add_argument("--chain-iters", type=int, default=128,
                     help="free-running dispatch->combine pairs per chain trial")
     ap.add_argument("--chain-trials", type=int, default=4,
@@ -192,10 +189,8 @@ def _pcts(xs):
              "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
 
 
-# The `origin` values the chained family publishes. Named constants because they are a CONSUMER
-# CONTRACT, not labels: the frontend and the durable store key the headline on
-# `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo here is a silent
-# downstream fallback to the drained roundtrip rather than a visible failure.
+# Consumer contract, not labels: the frontend and durable store key the headline on
+# `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo fails silently.
 CHAIN_PERIOD_ORIGIN = "chained-median"
 CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 
@@ -203,10 +198,9 @@ CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
 def _component(percentiles, count, *, derived=False, origin=None):
     """One component block: availability, the reduction behind it, percentiles, sample count.
 
-    `origin` names that reduction wherever it is not this suite's default of a per-iteration
-    cross-rank MAX over fresh-entry samples. The chained families set it ("chained-median",
-    "chained-cross-rank-min") because they are differently-reduced statistics sharing a block
-    shape, and a consumer must not have to infer which one it is reading from the field name.
+    `origin` names that reduction wherever it is not this suite's default per-iteration cross-rank
+    MAX. The chained families set it, because they share this block shape while being
+    differently-reduced statistics a consumer must not have to infer from the field name.
     """
     if percentiles is None:
         return {"availability": "unavailable", "origin": None,
@@ -319,19 +313,13 @@ def _reduce_vec(torch, dist, device, vals, op):
 def _reduce_vec_median_spread(torch, dist, device, vals):
     """Per-element cross-rank (MEDIAN, MAX-MIN) for a chained series, from one all_gather.
 
-    MAX is the right reduction for a drained component -- a layer is not finished until its
-    slowest rank is, so MAX is the completion cost. The chained pair PERIOD is not a completion
-    cost but a RATE: every rank runs the same free-running loop, phase-locked by the collectives,
-    so in a healthy chain the ranks agree to about a microsecond and MAX would publish whichever
-    rank hiccuped on each iteration as the pipeline's speed. The median is that agreed cadence and
-    the spread is the proof it was agreed -- read a spread that is large next to the period as
-    "one rank was paced or slow", the same way `cross_rank_spread_us` is read for the fresh-entry
-    family, and distrust the point.
+    The pair period is a RATE, not a completion cost: every rank runs the same phase-locked
+    free-running loop, so MAX would publish whichever rank hiccuped as the pipeline's speed. The
+    median is the agreed cadence; a spread large next to it means one rank was paced -- distrust.
 
-    Both come out of one gather rather than three reductions so they cannot disagree about which
-    iterations they describe, and because MEDIAN is not a `ReduceOp` in the first place. Every rank
-    gathers the same matrix in rank order, so every rank computes an identical value and the
-    artifact does not depend on which rank wrote it.
+    One gather rather than three reductions, so the two cannot disagree about which iterations
+    they describe (and MEDIAN is not a `ReduceOp`); every rank gathers the same matrix in rank
+    order, so the artifact does not depend on which rank wrote it.
     """
     local = torch.tensor(vals, device=device, dtype=torch.float64)
     gathered = [torch.empty_like(local) for _ in range(dist.get_world_size())]
@@ -345,8 +333,7 @@ def _reduce_vec_median_spread(torch, dist, device, vals):
 def _gather_scalar(torch, dist, device, val):
     """Every rank's copy of one per-rank scalar, in rank order, identical on every rank.
 
-    The chain-health caller picks its own cross-rank reduction (median or max-magnitude) from
-    the one gathered list, so two reductions cannot disagree about which trial they describe.
+    The chain-health caller reduces it two ways (median and max-magnitude) from this one list.
     """
     local = torch.tensor([float(val)], device=device, dtype=torch.float64)
     gathered = [torch.empty_like(local) for _ in range(dist.get_world_size())]
@@ -922,9 +909,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: iters/trials/warmup must be positive; got "
                   f"{args.iters}:{args.trials}:{args.warmup}")
         return 2
-    # Fail closed rather than emit an empty chain block: a drop at or past the iteration count
-    # discards every pair and would publish `pair_period` as merely "unavailable", which reads
-    # identically to a backend that could not be chained at all.
+    # Fail closed: a drop at or past the iteration count discards every pair and would publish
+    # `pair_period` as "unavailable", indistinguishable from a backend that cannot be chained.
     if min(args.chain_iters, args.chain_trials) <= 0 or not 0 <= args.chain_drop < args.chain_iters:
         if rank == 0:
             print(f"ERROR: chain iters/trials must be positive and 0 <= drop < iters; got "
@@ -1047,9 +1033,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     dmin_pool = {T: [] for T in ladder}
     cmin_pool = {T: [] for T in ladder}
     rtmin_pool = {T: [] for T in ladder}
-    # The chained family, measured by the same Pass-2 loop shape but on its own (much smaller)
-    # trial count -- see backend.benchmark_chain for what its two sibling chains measure and why
-    # only these reductions of them are publishable.
+    # The chained family, on its own (much smaller) trial count -- see backend.benchmark_chain for
+    # what its two sibling chains measure and why only these reductions are publishable.
     chain_pool = {T: [] for T in ladder}         # pair period, cross-rank MEDIAN per iteration
     chain_spread_pool = {T: [] for T in ladder}  # ... and its cross-rank (max-min), as the proof
     dfloor_pool = {T: [] for T in ladder}        # chained dispatch window, cross-rank MIN
@@ -1094,17 +1079,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 dmin_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
                 cmin_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
-    # ---- Pass 2b: the chained family, on its own trial count.
-    # A separate loop rather than another component inside the loop above, because the chain is
-    # sampled differently: one call already yields chain_iters (128) free-running pairs, so a
-    # handful of trials pools more observations than the fresh-entry components get from 256, and
-    # running it 256 times would multiply the leg's wall clock for no extra convergence. The
-    # ladder order still rotates per trial for the same reason it does above -- so no point is
-    # always measured on a just-warmed or a long-running device. ----
-    # Whether the chain is publishing, which is also whether it needs gating: barrier mode runs
-    # the chain purely as a bring-up diagnostic and emits no chained field, so there is nothing
-    # for a chained-regime oracle to stand behind (see Pass 4). Uniform across ranks -- it is a
-    # class attribute -- so the collective branches below are entered by every rank or by none.
+    # ---- Pass 2b: the chained family, on its own trial count. A separate loop because one call
+    # already yields chain_iters free-running pairs, so a handful of trials out-samples the
+    # fresh-entry components' 256 for a fraction of the wall clock. Ladder order still rotates
+    # per trial, as above. ----
+    # Whether the chain publishes, which is also whether it needs gating: barrier mode runs it as
+    # a bring-up diagnostic only (see Pass 4). Uniform across ranks -- a class attribute -- so the
+    # collective branches below are entered by every rank or by none.
     chain_published = not bool(getattr(backend, "chain_barrier", False))
     for trial_index in range(args.chain_trials):
         final_chain_trial = trial_index == args.chain_trials - 1
@@ -1116,21 +1097,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
             chain_pool[T] += pair_median
             chain_spread_pool[T] += pair_spread
-            # Per-op: cross-rank MIN and nothing else, taken from the FLOORS sibling chain (the
-            # period chain carries no per-op events -- see benchmark_chain's WHY TWO PASSES).
-            # The chained per-op windows carry each rank's inter-rank wait wherever it parked,
-            # so their medians describe that run's parking rather than the operation; the
-            # minimum is the last-entering rank's window, which is the op with the wait excluded.
+            # Per-op: cross-rank MIN only, from the FLOORS sibling chain (the period chain carries
+            # no per-op events). The chained windows park each rank's inter-rank wait, so only the
+            # minimum -- the last-entering rank's -- is the operation with the wait excluded.
             dfloor_pool[T] += _reduce_vec(torch, dist, device, chained["dispatch"], MIN)
             cfloor_pool[T] += _reduce_vec(torch, dist, device, chained["combine"], MIN)
-            # Chain-health scalars, one per trial. `interpair_gap_us` = start-to-start median
-            # minus pair-window median: the per-pair cost OUTSIDE the published window (the two
-            # record() calls plus any inter-pair stall) -- the in-artifact regression guard for
-            # instrumentation self-charging, the defect class benchmark_chain's WHY TWO PASSES
-            # describes. `settle_drift_us` = late-half minus early-half period median: the
-            # convergence proof `chain_drop` alone cannot give. Cross-rank median for the gap (a
-            # shared-cadence property); max-magnitude, signed, for the drift (one unsettled rank
-            # taints the trial).
+            # Chain-health scalars, one per trial. `interpair_gap_us` = start-to-start minus pair
+            # window: the per-pair cost outside the published window, the in-artifact guard against
+            # instrumentation self-charging. `settle_drift_us` = late-half minus early-half period.
+            # Median across ranks for the gap; signed max-magnitude for the drift.
             if len(pair) >= 2 and chained["start_to_start"]:
                 s2s_p50 = _pcts(chained["start_to_start"])["p50"]
                 gaps = _gather_scalar(
@@ -1144,15 +1119,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 )
                 settle_pool[T].append(max(drifts, key=abs))
             if final_chain_trial and chain_published:
-                # GATE THE REGIME WE PUBLISH. Passes 1 and 3 only ever check drained calls, so
-                # without this the pair period would be published from a regime no oracle has
-                # ever seen -- and a backend that silently corrupts under free-running pairs
-                # would present as the fastest one in the suite. Exactly the machinery Pass 3
-                # uses, against the communicator state this point's chain just left behind
-                # (benchmark_chain ends synchronized, so the last pair is complete). Once per
-                # ladder point, after the final trial only: the failure mode it catches is a
-                # backend that cannot sustain chaining at all, which one clean pass over the
-                # settled state rules out as well as one per trial would.
+                # Gate the regime we publish: Passes 1 and 3 only check drained calls, so without
+                # this a backend that corrupts under free-running pairs would present as the
+                # fastest in the suite. Pass 3's machinery against the state this point's chain
+                # left behind, once per ladder point -- the failure mode is all-or-nothing.
                 idx_g, w_g = global_traces[T]
                 gate[T]["oracle_chain"] = _run_expert_oracle(
                     torch, routing, backend, problems[T], idx_g, w_g, rank,
@@ -1174,10 +1144,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             scale_up_domain, args.seed,
         )
         pre = gate[T]["oracle_pre"]
-        # The chained-regime oracle is ANDed in exactly like the other two: a backend that
-        # corrupts only under free-running pairs is a defect, so it invalidates the case and reds
-        # the leg rather than quietly leaving a field out. None means the chain published nothing
-        # to gate (barrier mode), which is not a failure and must not be scored as one.
+        # ANDed in like the other two, so a chained-regime failure reds the leg. None means the
+        # chain published nothing to gate (barrier mode), which is not a failure.
         chain_oracle = gate[T]["oracle_chain"]
         chain_ok = chain_oracle is None or bool(chain_oracle["passed"])
         gate[T].update({
@@ -1213,10 +1181,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
-        # Agreed across ranks like `passed` and `max_relative_error`, not reported from rank 0's
-        # local view: a chained-regime failure on one rank must be visible in the field that
-        # explains why the point failed. The branch is collectively safe because `oracle_chain`
-        # is None on every rank or on none (it keys on the backend's class attribute).
+        # Agreed across ranks like `passed`, not rank 0's local view. The branch is collectively
+        # safe: `oracle_chain` is None on every rank or on none (it keys on a class attribute).
         chain_regime_passed = (
             bool(_reduce_int(torch, dist, device, g["chain_local_ok"], MIN))
             if g["oracle_chain"] is not None else None
@@ -1236,14 +1202,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy,
         )
         combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
-        # Second byte basis, for the backends whose wire really does carry one copy per
-        # (token, expert) rather than per (token, dest-rank). Which basis applies is a property
-        # of the RECEIVE, not of the mode: deepep-v2, uccl-ep and nccl-ep low-latency receive
-        # per assignment, but MoRI's IntraNodeLL genuinely deduplicates, so keying this on
-        # "low-latency" would overstate MoRI by the dedup factor (~1.5x at EP8). Key it on the
-        # combine contract instead, which already encodes the distinction. `routed_copies`
-        # stays the canonical comparable basis; this is emitted alongside so a reader can
-        # convert a low-latency row onto the wire basis without guessing the factor.
+        # Second byte basis, for backends whose wire carries one copy per (token, expert). Which
+        # applies is a property of the RECEIVE, not the mode -- MoRI's IntraNodeLL deduplicates
+        # where the other low-latency kernels do not -- so key it on the combine contract, which
+        # already encodes that. `routed_copies` stays the canonical comparable basis.
         assignment_copies = int(sum(rstats["expert_assignments_per_rank"]))
         wire_basis = (
             "per-assignment"
@@ -1255,15 +1217,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
         spread = spread_pool[T]
-        # The chained family, published only when the chain ran FREE. In barrier mode the chain
-        # still ran -- it stays the bring-up diagnostic for a backend that wedges without it --
-        # but nothing chained is emitted: the barrier both adds its own ~10us and removes the
-        # cross-pair overlap, so a barrier-mode period is a DIFFERENT QUANTITY from the one this
-        # suite defines, and publishing it into fields something may rank across SKUs would
-        # silently compare two definitions. The published period therefore has exactly one
-        # meaning. A backend that needs the valve is a bug to fix, not a variant to compare, and
-        # `implementation.chain_barrier` is the record of why these blocks are unavailable; the
-        # measured numbers go to rank-0 stdout below, labeled as the diagnostic they are.
+        # The chained family, published only when the chain ran free. A barrier adds its own
+        # ~10us and removes the cross-pair overlap, so a barrier-mode period is a different
+        # quantity and emitting it would let something rank two definitions against each other.
+        # `implementation.chain_barrier` records why these blocks are unavailable; the numbers
+        # still reach rank-0 stdout below as the diagnostic they are.
         chain = chain_pool[T] if chain_published else []
         chain_spread = chain_spread_pool[T] if chain_published else []
         dfloor = dfloor_pool[T] if chain_published else []
@@ -1277,35 +1235,25 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "dispatch": _component(dp, len(d)),
                 "isolated_sum": _component(isum, 0, derived=True),
                 # What a serving decode loop pays per MoE layer: the steady-state period of
-                # dispatch->combine pairs issued back-to-back with no host sync between them.
-                # Distinct from `period`, which measures the same idea only for the backends that
-                # opt into `pipeline_pairs` and reduces with MAX over drained batches of pairs;
-                # this one is measured for every backend and reduced with a cross-rank median.
-                # Distinct from `roundtrip`, which drains the pipeline around every pair and so
-                # reports an idle-pipeline latency. Do not sum it with anything.
+                # back-to-back dispatch->combine pairs, every backend, cross-rank median. Not
+                # `period` (opt-in `pipeline_pairs`, MAX over drained batches) and not `roundtrip`
+                # (drained around every pair, an idle-pipeline latency). Do not sum it.
                 "pair_period": _component(chainp, len(chain), origin=CHAIN_PERIOD_ORIGIN),
                 "roundtrip": _component(rtp, len(rt)),
                 "period": _component(_pcts(period_pool[T]), len(period_pool[T])),
                 "stage": _component(sp, len(s)),
             },
-            # Per-op floors from the FLOORS sibling chain (the period chain carries no op
-            # events): cross-rank MINIMUM of each op's window -- the last-entering rank's, the
-            # one that waited least. NOT the chained cost of dispatch/combine (waits park in op
-            # windows; only the minimum is an operation cost, only the pair period a pipeline
-            # cost). Here because the floor tracks profiler kernel time to ~10%, and
-            # floor-vs-period shows how much of a pair is transport.
+            # Per-op floors from the FLOORS sibling chain: cross-rank MINIMUM of each op's window,
+            # the last-entering rank's. Not the chained cost of dispatch/combine -- only the
+            # minimum excludes the parked wait. Tracks profiler kernel time to ~10%.
             "chain_floor_us": {
                 "combine": _component(_pcts(cfloor), len(cfloor), origin=CHAIN_FLOOR_ORIGIN),
                 "dispatch": _component(_pcts(dfloor), len(dfloor), origin=CHAIN_FLOOR_ORIGIN),
             },
-            # Whether the chain was actually the steady state the period claims to be.
-            # `pair_spread_us`: per-iteration cross-rank (max-min) of the pair -- large next to
-            # `pair_period` means a paced or slow rank, and the point is not a steady-state
-            # period. `interpair_gap_us`: the per-pair cost OUTSIDE the published window; growth
-            # here is the measurement loop contaminating the chain, not the fabric slowing down.
-            # `settle_drift_us`: signed late-half minus early-half period -- proof the chain
-            # converged, which `chain_drop` assumes but cannot show. See Pass 2b for how each is
-            # reduced.
+            # Whether the chain was the steady state the period claims. `pair_spread_us` large
+            # next to `pair_period` means a paced rank; `interpair_gap_us` growth is the
+            # measurement loop contaminating the chain, not the fabric; `settle_drift_us` is the
+            # convergence proof `chain_drop` assumes but cannot show. Pass 2b has the reductions.
             "chain_health": {
                 "interpair_gap_us": _component(_pcts(chain_gap), len(chain_gap)),
                 "pair_spread_us": _component(_pcts(chain_spread), len(chain_spread)),
@@ -1325,11 +1273,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Large relative to the roundtrip => the point is skew-inflated; read it with care.
             "cross_rank_spread_us": _component(_pcts(spread), len(spread)),
             "correctness": {
-                # Whether the oracle also passed against the state the FREE-RUNNING chain left
-                # behind, rather than only against the drained calls of Passes 1 and 3. Folded
-                # into `passed`, so false here means the point (and the leg) failed. `null` means
-                # the check did not run because the chain published nothing to gate -- barrier
-                # mode, which `implementation.chain_barrier` names -- and is not a failure.
+                # Whether the oracle also passed against the state the free-running chain left
+                # behind. Folded into `passed`, so false means the point failed; `null` means the
+                # chain published nothing to gate (barrier mode) and is not a failure.
                 "chain_regime_passed": chain_regime_passed,
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
@@ -1343,11 +1289,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
             },
-            # Copy counts behind the byte figures above, so a reader can rebase them. `routed`
-            # is the basis they use; `assignments` is the per-(token, expert) count; `wire` names
-            # which of the two this backend's kernels actually move. Kept OUT of
-            # `byte_provenance`, whose every value is a per-component byte breakdown -- a reader
-            # indexing it by component name must not meet a differently-shaped entry.
+            # Copy counts behind the byte figures above, so a reader can rebase them: `routed` is
+            # the basis they use, `assignments` the per-(token, expert) count, `wire` which the
+            # kernels move. Kept out of `byte_provenance`, whose values are all per-component.
             "logical_copies": {
                 "routed": int(rstats["routed_copies"]),
                 "assignments": assignment_copies,
@@ -1445,12 +1389,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "workload": {
             "cross_rank_consistent": routing_consistent,
-            # The ladder actually measured, plus any requested point the backend's cap
-            # excluded. This used to be a rank-0 stdout NOTE only, which made a clamped
-            # ladder invisible to anyone reading the artifact -- so a backend measuring a
-            # shorter ladder than the sweep requested looked identical to one that measured
-            # all of it. deepep-v2's low-latency mode clamps below its receive cap to avoid a
-            # rung upstream corrupts, and that omission has to be legible downstream.
+            # The ladder actually measured, plus any requested point the backend's cap excluded.
+            # In stdout only, a clamped ladder was invisible to anyone reading the artifact.
             "ladder_measured": list(ladder),
             "ladder_dropped": list(dropped),
             "ladder_cap": cap,
@@ -1462,17 +1402,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "payload_unit": "token-rank",
             "rows": rows,
             "sampling": {
-                # The fresh-entry family (dispatch/stage/combine/roundtrip and their cross-rank
-                # companions). The chained family below is sampled separately and its counts are
-                # NOT derivable from these.
+                # The fresh-entry family. The chained family below is sampled separately and its
+                # counts are not derivable from these.
                 "iterations_per_trial": args.iters,
                 "samples_per_component": args.iters * args.trials,
                 "trials": args.trials,
                 "warmup_iterations": args.warmup,
-                # `pair_period`, `chain_floor_us` and `chain_health`: free-running pairs per trial,
-                # the head discarded as pipeline fill, and the trial count they are pooled over.
-                # Emitted because `sample_count` alone cannot be decomposed back into them, and a
-                # 128x4 chain and a 512x1 chain are not the same measurement.
+                # `pair_period`, `chain_floor_us` and `chain_health` sampling. Emitted because
+                # `sample_count` cannot be decomposed back into them: 128x4 is not 512x1.
                 "chain_drop": args.chain_drop,
                 "chain_iterations_per_trial": args.chain_iters,
                 "chain_trials": args.chain_trials,
@@ -1487,28 +1424,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # pick this per installed library version (flashinfer-ep does), so without it
             # a wheel bump silently changes the arithmetic behind `passed` with no trace.
             "combine_reduction": getattr(backend, "combine_reduction", "domain-fp32"),
-            # The library version the line above was decided FROM, where the backend knows it.
-            # Recording only the outcome leaves the decision unauditable: a reader can see that
-            # the oracle used the slot-tree model but not which wheel selected it, and so cannot
-            # tell a correct selection from a mis-parse. None where a backend does not report one.
+            # The library version the line above was decided FROM: without it a reader cannot tell
+            # a correct selection from a mis-parse. None where a backend does not report one.
             "library_version": getattr(backend, "library_version", None),
-            # Whether `roundtrip` excludes expert-output staging. It always does now, unless
-            # the CX_FP8_CONSUME=dequant hatch is set, but it did not always: rows measured
-            # before that change carried the staging copy inside the chain for MoRI BF16 and
-            # FlashInfer BF16 only. Without this field those rows are indistinguishable from
-            # these ones while measuring a different quantity.
+            # Whether `roundtrip` excludes expert-output staging. It always does now, unless the
+            # CX_FP8_CONSUME=dequant hatch is set; older rows carried the staging copy inside the
+            # chain for MoRI and FlashInfer BF16, and without this field they look identical.
             "stage_excluded_from_roundtrip": bool(
                 getattr(backend, "stage_excluded_from_roundtrip", False)
             ),
-            # Whether this document's rows carry the chained family at all. Rows measured before
-            # it existed do not, and a consumer keys the headline on presence exactly as it does for
-            # `stage_excluded_from_roundtrip` -- the sweep `version` does not separate the two
-            # generations, because nothing existing changed meaning.
+            # Whether this document's rows carry the chained family. Consumers key the headline on
+            # presence, as for `stage_excluded_from_roundtrip`; the sweep `version` does not move.
             "chained_period": True,
-            # Whether the chain paid an on-stream barrier between pairs. True means the ranks were
-            # re-aligned every pair, so the period includes ~10us of barrier and excludes the
-            # cross-pair overlap a free-running chain gets: a barrier-mode period is an upper bound
-            # on the free-running one and the two must not be pooled or ranked together.
+            # Whether the chain paid an on-stream barrier between pairs. True makes the period an
+            # upper bound on the free-running one; the two must not be pooled or ranked together.
             "chain_barrier": bool(getattr(backend, "chain_barrier", False)),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",

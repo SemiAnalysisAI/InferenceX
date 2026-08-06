@@ -90,10 +90,8 @@ class ProbeTests(unittest.TestCase):
             self.assertEqual(first.stat().st_mode & 0o777, 0o700)
 
     def test_prepare_cache_bootstraps_a_missing_squash_dir(self) -> None:
-        # The probe runs BEFORE the first container import, so on a fresh pool the operator's
-        # squash_dir does not exist yet; a bare mkdir threw FileNotFoundError and killed every
-        # b200-nscale leg of the pool's first sweep four seconds in. The cache dir keeps its
-        # private mode; the created parent is left default like the import path would leave it.
+        # The probe runs before the first container import, so on a fresh pool squash_dir does
+        # not exist yet; a bare mkdir killed every b200-nscale leg of that pool's first sweep.
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory) / "sqsh"
             self.assertFalse(parent.exists())
@@ -396,9 +394,8 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_bf16_normal_decode_TS-c000.json")
 
     def test_chain_knobs_round_trip_through_the_run_ep_parser(self) -> None:
-        # The chain's iteration budget is case identity exactly like iters/trials/warmup, so it
-        # rides the same timing string. Hardcoding it in the harness instead would leave two
-        # sweeps measured over different chain lengths indistinguishable in the artifact.
+        # The chain budget is case identity like iters/trials/warmup, so it rides the same
+        # timing string; hardcoded in the harness, two chain lengths would look identical.
         case = {**self.CASE, "timing": "8:256:32:128:4:16"}
         argv = self._case_argv(["16", "2", "8", "8"], case=case)
         args = self._run_ep_parser().parse_args(argv)
@@ -417,19 +414,16 @@ class CaseArgvContract(unittest.TestCase):
         self.assertGreater(args.chain_trials, 0)
 
     def test_a_timing_profile_of_the_wrong_arity_fails_closed(self) -> None:
-        # Three fields is the pre-chain profile and six is the chain profile; any other length is
-        # a shard built against a codec that no longer exists. Guessing which fields were meant
-        # would run the case on a budget nobody chose, so the codec refuses instead.
+        # Three fields is the pre-chain profile and six is the chain profile; any other length
+        # is a shard built against a codec that no longer exists, so the codec refuses.
         for profile in ("8:256", "8:256:32:128", "8:256:32:128:4:16:2", ""):
             with self.subTest(timing=profile):
                 with self.assertRaises(subprocess.CalledProcessError):
                     self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": profile})
 
     def test_a_non_numeric_timing_field_cannot_reach_a_run(self) -> None:
-        # The codec checks arity, not types -- as it always has for iters/trials/warmup -- so the
-        # property worth holding is that the argv it emits still cannot parse into a run. Typing
-        # lives in argparse and range-checking in the harness; this pins that nothing slips past
-        # all three and reaches a GPU as a silently defaulted knob.
+        # The codec checks arity, not types -- as it always has for iters/trials/warmup -- so
+        # the property held here is that the argv it emits still cannot parse into a run.
         argv = self._case_argv(
             ["16", "2", "8", "8"], case={**self.CASE, "timing": "8:256:32:128:4:x"},
         )
@@ -456,12 +450,8 @@ class CaseArgvContract(unittest.TestCase):
         args = self._run_ep_parser().parse_args(argv)
         self.assertEqual((args.mode, args.phase, args.scope), ("low-latency", "decode", "scale-up"))
         self.assertEqual(args.case_id, ll_case["case_id"])
-        # The filename must carry the mode. Without it this case and its normal-mode sibling
-        # produce byte-identical paths (same runner, backend, precision, phase and index), so
-        # driving both under one timestamp silently overwrites one artifact with the other --
-        # which cost two on-metal runs before it was noticed. CI hides it by giving every leg
-        # its own job and therefore its own ts.
-        # ... which is what test_case_args_round_trips pins as `..._bf16_normal_decode_...`.
+        # Without the mode in the filename this case and its normal-mode sibling produce
+        # byte-identical paths, so driving both under one timestamp overwrites one artifact.
         self.assertEqual(
             args.out, "results/h200-dgxc_deepep-v2_bf16_low-latency_decode_TS-c000.json"
         )
@@ -720,12 +710,8 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
 
     def test_the_first_slot_claiming_a_rank_is_the_one_that_survives(self):
         torch = _torch
-        # Which duplicate the kernel blanks is invisible when the repeated payload is the only
-        # value in play, so the case above cannot tell keep-first from keep-last. These
-        # contributions cancel instead: blanking the LATER slot reduces (256+1)->256 and
-        # (-256+0)->-256 to 0.0, while blanking the EARLIER one gives (0+1)->1 and
-        # (-256+256)->0, i.e. 1.0. The 257 -> 256 step is the BF16 rounding that makes the two
-        # models disagree at all.
+        # These cancel only under keep-first: blanking the later slot reduces (256+1)->256 and
+        # (-256+0)->-256 to 0.0, blanking the earlier gives 1.0 (257->256 is BF16 rounding).
         destination = torch.tensor([[0, 1, 2, 0]])
         messages = torch.tensor([[[256.0]], [[1.0]], [[-256.0]]])
         combined = ep_harness._topk_slot_tree_combine(
@@ -738,20 +724,12 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
 
 @unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
 class FusedQuantizeGate(unittest.TestCase):
-    """The fp8 quantize moved inside the timed dispatch, so its identity is load-bearing.
-
-    The oracle's payload gate is a `torch.equal` that compares the SENDER's [T, hidden] quantize
-    against the ORACLE's [receive_count, hidden] one, so the callable must be bit-identical to
-    the eager helper AND per-row invariant across batch sizes. Verified on-metal for e4m3fn
-    (H100: 9 kernels/19.2us eager vs 1/1.51us fused) and e4m3fnuz (MI300X, the arch with no
-    prior precedent for a compiled fp32->fp8 convert). These tests pin the guard, not the
-    compiler.
-    """
+    """The oracle's payload gate compares the sender's [T, hidden] quantize against the oracle's
+    [receive_count, hidden] one, so a fused callable must be bit-identical and per-row invariant."""
 
     @staticmethod
     def _fuse(mode, eager):
-        # Both methods read only `self.mode`, so call them unbound rather than instantiating an
-        # abstract backend; that also documents that they depend on nothing else.
+        # Both methods read only `self.mode`, so call them unbound rather than build a backend.
         return ep_backend.EPBackend.fused_quantize(types.SimpleNamespace(mode=mode), eager)
 
     @staticmethod
@@ -762,7 +740,7 @@ class FusedQuantizeGate(unittest.TestCase):
 
     def test_low_latency_keeps_the_eager_helper(self):
         # Its dispatch kernel quantises internally and the oracle gate is pinned to those bits,
-        # so swapping in a compiled callable would red every LL fp8 cell without touching timing.
+        # so a compiled callable would red every LL fp8 cell without touching timing.
         def eager(x):
             return x, x
         self.assertIs(self._fuse("low-latency", eager), eager)
@@ -810,13 +788,8 @@ class FusedQuantizeGate(unittest.TestCase):
             self._check(eager, shape_dependent, x)
 
 class GpuHealthProbe(unittest.TestCase):
-    """Reject an allocation holding a throttled GPU before it burns the wall-clock guard.
-
-    Collectives are barriers, so one clamped device paces every rank. A B200 with GPU 7 held at
-    120 MHz against 1965 MHz on its siblings ran a case 17x slower and was killed twice, at 900s
-    and again at 1800s, looking exactly like a code pathology. The flag is the signal, not the
-    clock: the allocation is idle when this runs and an idle B200 also reads 120 MHz.
-    """
+    """Reject an allocation holding a throttled GPU before it burns the wall-clock guard: one
+    clamped device paces every rank (a B200 at 120 MHz against 1965 MHz ran a case 17x slower)."""
 
     HEALTHY = "\n".join(f"{i}, Not Active, Not Active, 3{i} " for i in range(8))
 
@@ -840,8 +813,7 @@ class GpuHealthProbe(unittest.TestCase):
                 self.assertEqual(len(probe.gpu_health_faults(output)), 1)
 
     def test_not_active_is_not_read_as_active(self):
-        # A substring search for "Active" matches "Not Active" and passes every fault through,
-        # which is the whole failure mode this probe exists to avoid.
+        # A substring search for "Active" also matches "Not Active".
         self.assertEqual(probe.gpu_health_faults(self.HEALTHY), [])
 
     def test_temperature_is_an_independent_signal(self):
@@ -884,9 +856,8 @@ class GpuHealthProbe(unittest.TestCase):
         return code, captured.getvalue()
 
     def test_a_healthy_check_records_how_many_gpus_it_saw(self):
-        # Without this marker a gate that went BLIND -- no visible devices, or a driver spelling
-        # the fields clocks_throttle_reasons.* -- writes an empty log and is indistinguishable
-        # from one that inspected eight healthy GPUs.
+        # Without this marker a gate that went blind -- no visible devices, or a driver spelling
+        # the fields clocks_throttle_reasons.* -- looks like one that saw eight healthy GPUs.
         code, out = self._run_validate(self.HEALTHY)
         self.assertEqual(code, 0)
         self.assertIn("gpu-health-checked gpus=8", out)
@@ -904,10 +875,8 @@ class GpuHealthProbe(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(out, "")
     def test_the_temperature_spread_is_reported_for_the_signal_no_gate_can_see(self):
-        # An H100 engages software thermal slowdown at ~86-87 C, so a clamped one never crosses the
-        # 90 C limit; and at pre-flight it is idle, so the flag is clear too. The measured fault was
-        # visible ONLY as an idle outlier (55 C against ~30 C siblings), so the spread is recorded
-        # every run to build the evidence a relative gate would need.
+        # An H100 engages software thermal slowdown at ~86-87 C, so a clamped one never crosses
+        # the 90 C limit; the measured fault showed only as an idle outlier (55 C vs ~30 C).
         sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
         self.assertEqual(probe.gpu_temperature_spread(sick), (55, 35, 20))
         hottest, median, spread = probe.gpu_temperature_spread(self.HEALTHY)
@@ -917,7 +886,7 @@ class GpuHealthProbe(unittest.TestCase):
     def test_the_spread_appears_in_the_healthy_marker(self):
         sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
         code, out = self._run_validate(sick)
-        self.assertEqual(code, 0)  # reported, deliberately NOT gated on
+        self.assertEqual(code, 0)  # reported, deliberately not gated on
         self.assertIn("spread=20C", out)
 
     def test_the_spread_is_none_when_unreadable(self):
@@ -928,15 +897,8 @@ class GpuHealthProbe(unittest.TestCase):
 
 
 class LowLatencyCapDecoupling(unittest.TestCase):
-    """The LL receive size and the measured ladder are two numbers and must stay two.
-
-    The measured ladder stops below the receive cap to skip a token count DeepEP's low-latency
-    combine corrupts on Blackwell (upstream #700; the fix is #642, which our pin predates). The
-    receive must NOT follow the ladder down: its footprint sets the transport's memory traffic
-    and the fp8 dequant volume, so sizing it from `max(ladder)` would shift every retained
-    rung and break comparability with the published series. Asserted over the source because
-    importing the adapter needs a built deep_ep.
-    """
+    """The LL receive size and the measured ladder must stay two numbers -- sizing the receive from
+    `max(ladder)` would shift every rung. Over the source: importing the adapter needs deep_ep."""
 
     @classmethod
     def setUpClass(cls):
@@ -959,10 +921,8 @@ class LowLatencyCapDecoupling(unittest.TestCase):
         buf, ladder = self.consts.get("_LL_BUFFER_CAP"), self.consts.get("_LL_LADDER_CAP")
         self.assertIsInstance(buf, int)
         self.assertIsInstance(ladder, int)
-        # Equality is expected while the ladder runs to the full receive; what must never happen
-        # is a ladder larger than the buffer, which would dispatch past the allocated slots.
-        # (This was `assertLess` while the ladder was clamped to 128 to dodge the pre-#642
-        # Blackwell combine defect -- that was a workaround, not an invariant.)
+        # Equality is expected while the ladder runs to the full receive; a ladder larger than
+        # the buffer would dispatch past the allocated slots.
         self.assertLessEqual(ladder, buf)
         # NVSHMEM_QP_DEPTH=1024 asserts nvshmem_qp_depth >= (cap + 1) * 2 at construction.
         self.assertLessEqual(buf, 511)
@@ -992,8 +952,7 @@ class LowLatencyCapDecoupling(unittest.TestCase):
 
     def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
         # A clamped ladder was previously visible only as a rank-0 stdout NOTE, so an artifact
-        # from a backend that measured 8 rungs was indistinguishable from one that measured 9.
-        # The emitted record must carry what ran and what was excluded.
+        # from a backend that measured 8 rungs looked identical to one that measured 9.
         harness = ast.parse((BENCH / "ep_harness.py").read_text())
         keys = {
             k.value for node in ast.walk(harness) if isinstance(node, ast.Dict)

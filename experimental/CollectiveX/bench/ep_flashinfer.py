@@ -61,10 +61,9 @@ _COMBINE_FP32_SINCE = (0, 6, 16)
 def _wheel_has_fp32_combine(version: str) -> bool:
     """Does this wheel accumulate combine in FP32, per `_COMBINE_FP32_SINCE`?
 
-    Needs real version ordering, not a digit scrape: `0.6.16rc1` predates the rewrite, and
-    reading it as 0.6.16 models FP32 against a kernel that still rounds per level, which can
-    exceed COMBINE_REL_TOL and RED a correct run. The opposite error costs a few ulps, so
-    anything unparseable answers False.
+    Needs real version ordering, not a digit scrape: reading `0.6.16rc1` as 0.6.16 models FP32
+    against a per-level-rounding kernel, which can exceed COMBINE_REL_TOL and red a correct run.
+    The opposite error costs a few ulps, so anything unparseable answers False.
     """
     try:
         from packaging.version import InvalidVersion, Version
@@ -90,12 +89,9 @@ _FP8_BLOCK = 128
 def _blockwise_cast_to_fp8(x):
     """Per-128-channel e4m3 quantize: (values [m, n], FP32 scales [m, n//128]).
 
-    A local pair rather than a shared one on purpose. deepep-v2 must use deep_ep's own helper
-    because its low-latency kernel quantises in-kernel and the oracle compares against those
-    bits; uccl-ep vendors a copy faithful to UCCL's. FlashInfer's combine is always BF16 and no
-    kernel here quantises, so nothing external pins the arithmetic -- the oracle only needs a
-    self-consistent round trip. Each copy is pinned to a different library's numerics, so this
-    is three contracts, not three copies of one.
+    Local rather than shared on purpose: deepep-v2 and uccl-ep must match their own libraries'
+    in-kernel bits, while nothing here quantises in-kernel, so this copy only has to round-trip
+    self-consistently. Three contracts, not three copies of one.
     """
     m, n = x.shape
     blocks = x.view(m, -1, _FP8_BLOCK)
@@ -116,12 +112,9 @@ class FlashInferEPBackend(EPBackend):
     maturity = "production"  # vLLM --all2all-backend flashinfer_nvlink_one_sided
     # One kernel family; see the module docstring for why there is no low-latency mode.
     SUPPORTED_MODES = ("normal",)
-    # FP8 is DISPATCH-side only: the scales ride as a fourth payload and combine stays BF16,
-    # so none of the 0.6.16+ combine-quant API is needed. The recipe is the same per-128-block
-    # e4m3 every other FP8 backend here uses, which keeps the fp8 axis comparable -- but note
-    # vLLM's integration accepts only nvfp4/mxfp8/bf16 on this transport, so an fp8 row here
-    # measures what the transport costs with the DeepSeek-V3 recipe rather than a configuration
-    # a deployment can currently select. `dispatch_dtype` records that per row.
+    # FP8 is dispatch-side only: scales ride as a fourth payload and combine stays BF16, so none
+    # of the 0.6.16+ combine-quant API is needed. vLLM accepts only nvfp4/mxfp8/bf16 on this
+    # transport, so an fp8 row measures the transport off-path; `dispatch_dtype` records that.
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     kernel_generation = "flashinfer-mnnvl-one-sided"
     # stage() now copies the received payload into the workspace combine region.
@@ -141,8 +134,7 @@ class FlashInferEPBackend(EPBackend):
         super().__init__(args, rank, world_size, local_rank, device)
         self._fp8 = self.precision == "fp8"
         if self._fp8:
-            # "-offpath" because vLLM cannot select this recipe on this transport today; the
-            # bytes and the block size match deepep-v2/uccl-ep so the axis stays comparable.
+            # "-offpath" per SUPPORTED_PRECISIONS; bytes and block size match deepep-v2/uccl-ep.
             self.dispatch_dtype = "fp8-e4m3fn-blockwise-offpath"
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = (
@@ -294,11 +286,9 @@ class FlashInferEPBackend(EPBackend):
     def _filled_slot_index(self, p, h):
         """Row indices of the receive slots dispatch actually filled, resolved once per rung.
 
-        `_valid_rows` gives a boolean mask, and indexing with one needs the match count on the
-        host, which would put a device read inside the timed stage. Routing is fixed for a
-        ladder point, so resolve it to an integer index on first use -- which is always the
-        untimed `warm()` pass -- and cache it on the problem, the way `warm` already caches
-        `recv_tokens` for the same reason.
+        Indexing with `_valid_rows`' boolean mask needs the match count on the host, which would
+        put a device read inside the timed stage. Routing is fixed per ladder point, so resolve to
+        an integer index on first use (always the untimed `warm()`) and cache it on the problem.
         """
         index = getattr(p, "flashinfer_filled_slots", None)
         if index is None:
@@ -315,12 +305,9 @@ class FlashInferEPBackend(EPBackend):
         that copy out of the combine measurement, where production does not pay it; it is
         still executed and reported, as `stage`.
 
-        Only the filled slots are copied, which is what the kernel's own staging path does --
-        `moeA2APrepareCombineKernel` returns early on `token_idx >= recv_counters[source]`.
-        Copying the whole plane moved 1/occupancy times too much: measured occupancy is
-        ~0.66 at EP8 and ~0.41 at EP16, i.e. 1.5x and 2.4x over-copy. The slots left
-        untouched are never read -- combine addresses peers exclusively through the
-        `topk_send_indices` recorded at dispatch, and an unfilled slot has none.
+        Only the filled slots are copied, matching the kernel's own staging path
+        (`moeA2APrepareCombineKernel` returns early past `recv_counters[source]`); copying the
+        whole plane over-copied 1.5x at EP8 and 2.4x at EP16. Untouched slots are never read.
         """
         buffer = self._combine_buffer(h)
         filled = self._filled_slot_index(p, h)
@@ -328,8 +315,8 @@ class FlashInferEPBackend(EPBackend):
         flat_buffer = buffer.view(-1, buffer.shape[-1])
         source = h.recv_x.view(-1, hidden)[filled]
         if self._fp8:
-            # Combine sends BF16, so the dequant lands here -- device work, which is why
-            # `stage` is a reported component for this backend under either precision.
+            # Combine sends BF16, so the dequant lands here -- device work, hence `stage` is
+            # a reported component under either precision.
             source = _blockwise_cast_back(
                 source, h.recv_scales.view(-1, h.recv_scales.shape[-1])[filled]
             )
@@ -367,8 +354,8 @@ class FlashInferEPBackend(EPBackend):
         hidden = h.recv_x.shape[-1]
         payload = h.recv_x.reshape(-1, hidden)[keep]
         if self._fp8:
-            # The oracle compares a BF16 payload against semantic_payload's round trip, so the
-            # received FP8 slice is dequantised with the same pair that produced it.
+            # Dequantised with the same pair semantic_payload used, so the oracle compares like
+            # for like.
             payload = _blockwise_cast_back(
                 payload, h.recv_scales.reshape(-1, h.recv_scales.shape[-1])[keep]
             )

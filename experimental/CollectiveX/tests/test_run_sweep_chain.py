@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""Driven contract for the chained regime: run_sweep end to end against stub torch/dist/
-routing and a stub backend, asserted on the artifact it writes -- field presence in source says
-nothing about a real row's origin, sample count, or tri-state.
-
-SCOPE -- wiring, not arithmetic: `_run_expert_oracle` is a scripted verdict, so this covers that
-the chained oracle RUNS once per point after its final chain trial with Pass 3's shape, that the
-verdict reaches `chain_regime_passed`/`passed`/`max_relative_error` and the exit code, and that
-barrier mode skips it. The oracle's own math needs real tensors and lives elsewhere.
+"""Driven contract for the chained regime: run_sweep end to end against stub torch/dist/routing
+and a stub backend, asserted on the artifact it writes. Scope is wiring, not arithmetic --
+`_run_expert_oracle` is a scripted verdict and the oracle's own math lives elsewhere.
 """
 from __future__ import annotations
 
@@ -33,11 +28,8 @@ import ep_harness  # noqa: E402
 LADDER = [4, 8]
 CHAIN_ITERS, CHAIN_DROP, CHAIN_TRIALS = 8, 2, 2
 KEPT_PER_TRIAL = CHAIN_ITERS - CHAIN_DROP
-# What the stub backend reports for every chained iteration, so a published number is traceable
-# to the op it came from rather than to an accidental sum. The start-to-start series sits a
-# fixed GAP above the pair window -- the shape of a real chain, where the gap is the harness's
-# own two record() calls plus any inter-pair stall -- so `interpair_gap_us` has an exact
-# expected value too. DRIFT_US is what the drifting variant slows its late half by.
+# What the stub backend reports for every chained iteration, distinct so a published number is
+# traceable to the op it came from; start_to_start sits a fixed GAP above the pair window.
 PAIR_US, DISPATCH_FLOOR_US, COMBINE_FLOOR_US = 50.0, 20.0, 25.0
 GAP_US, DRIFT_US = 4.0, 8.0
 UNAVAILABLE = {
@@ -241,10 +233,8 @@ def make_args(out):
 
 
 def phases_by_index(oracle_count, points):
-    """Which pass each oracle call belongs to, by position (Pass 1 opens and Pass 3 closes
-    with one per point; the middle is the chained gate). Positional on purpose: in barrier mode
-    Pass 3's first call sits right after a chain call, where a neighbour rule mislabels it. The
-    tests assert the structure on the raw log; this only spares hardcoded call indices."""
+    """Which pass each oracle call belongs to, by position: Pass 1 opens and Pass 3 closes with one
+    per point, the middle is the chained gate. Neighbour rules mislabel Pass 3 in barrier mode."""
     return (
         ["pre"] * points
         + ["chain"] * (oracle_count - 2 * points)
@@ -289,13 +279,8 @@ def _sweep(chain_barrier, fail_indices, error_indices, chain_error, backend_fact
 
 
 def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0, backend_factory=None):
-    """Run the sweep, optionally failing every oracle of a given pass.
-
-    A clean probe run first, to learn how many oracle calls the configuration makes; the phase
-    labels then follow from position and the real run scripts its failures by index. The probe
-    is what keeps the failure cases from hardcoding "call 3 and 4", which would silently start
-    failing a different pass the moment the ladder or the trial count changed.
-    """
+    """Run the sweep, optionally failing every oracle of a given pass; a clean probe run first
+    learns the oracle call count, so failures are selected by phase rather than by hardcoded index."""
     probe = _sweep(chain_barrier, frozenset(), frozenset(), 0.0, backend_factory)
     if not fail_phases and not chain_error:
         return probe
@@ -309,21 +294,16 @@ def drive(*, chain_barrier=False, fail_phases=(), chain_error=0.0, backend_facto
 
 
 class ChainedRegimeOracleGate(unittest.TestCase):
-    """The published regime has to be the gated one.
-
-    Passes 1 and 3 only ever check drained calls, so without a chained-regime check the pair
-    period would be published from a regime no oracle has ever seen -- and a backend that
-    corrupts only under free-running pairs would present as the fastest one in the suite.
-    """
+    """The published regime has to be the gated one: Passes 1 and 3 only ever check drained calls,
+    so a backend that corrupts only under free-running pairs would present as the suite's fastest."""
 
     def test_the_chained_oracle_runs_once_per_point_after_its_final_chain_trial(self):
         run = drive()
         points = len(LADDER)
         kinds = [kind for kind, _ in run.events]
 
-        # Pass 1 opens with one oracle per point; Pass 3 closes with one per point, in ladder
-        # order. Asserted on the raw log, so the positional phase labels rest on this and not
-        # the other way round.
+        # Asserted on the raw log, so the positional phase labels rest on this and not the
+        # other way round.
         self.assertEqual(kinds[:points], ["oracle"] * points)
         self.assertEqual(sorted(T for _, T in run.events[:points]), sorted(LADDER))
         self.assertEqual(kinds[-points:], ["oracle"] * points)
@@ -341,14 +321,13 @@ class ChainedRegimeOracleGate(unittest.TestCase):
             if kind != "oracle":
                 continue
             with self.subTest(tokens=T):
-                # It gated the state that point's own chain left behind ...
+                # Right after that point's own chain, and on its final trial.
                 self.assertEqual(middle[index - 1], ("chain", T))
-                # ... on the FINAL trial: no further chain for that point follows it.
                 self.assertNotIn(("chain", T), middle[index + 1:])
 
     def test_the_chained_oracle_is_invoked_with_pass_3s_shape(self):
-        # A stale global trace or a mismatched expert count here would gate a different problem
-        # than the one the chain just measured, which is worse than not gating at all.
+        # A stale trace or a mismatched expert count would gate a different problem than the
+        # one the chain just measured.
         run = drive()
         calls = {}
         for index, T, call_args in run.oracle_calls:
@@ -370,8 +349,7 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                 self.assertIs(row["correctness"]["passed"], True)
 
     def test_a_chained_oracle_failure_reds_the_case(self):
-        # It must invalidate the leg rather than quietly leave a field out: rc is the only
-        # success signal CI reads, and the doc is uploaded either way.
+        # rc is the only success signal CI reads, and the doc is uploaded either way.
         run = drive(fail_phases=("chain",))
         self.assertEqual(run.rc, 3)
         self.assertEqual(run.doc["outcome"]["status"], "invalid")
@@ -389,12 +367,11 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                 self.assertEqual(run.doc["outcome"]["status"], "invalid")
                 for row in run.rows:
                     self.assertIs(row["correctness"]["passed"], False)
-                    # The chained regime itself was clean, and says so.
                     self.assertIs(row["correctness"]["chain_regime_passed"], True)
 
     def test_the_chained_error_is_folded_into_max_relative_error(self):
-        # Maxed in like the other two oracles', so a chained regime that is within tolerance but
-        # noticeably worse than the drained one is visible instead of being averaged away.
+        # Maxed in like the other two oracles', so a chained regime that is within tolerance
+        # but worse than the drained one stays visible.
         run = drive(chain_error=0.25)
         self.assertEqual(run.rc, 0)
         for row in run.rows:
@@ -432,15 +409,14 @@ class ChainedPublication(unittest.TestCase):
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 spread = row["chain_health"]["pair_spread_us"]
-                # One rank, so the ranks trivially agree; the point is that it is emitted and
-                # component-shaped, since a wide spread is what disqualifies a period.
+                # One rank, so the ranks trivially agree; what matters is that it is emitted
+                # and component-shaped, since a wide spread is what disqualifies a period.
                 self.assertEqual(spread["percentiles_us"]["p50"], 0.0)
                 self.assertEqual(set(spread), set(UNAVAILABLE))
 
     def test_the_interpair_gap_is_published_from_the_start_to_start_series(self):
-        # start-to-start median minus pair-window median: the per-pair cost OUTSIDE the
-        # published window. This is the in-artifact guard against the six-events-per-pair
-        # defect -- instrumentation creeping back into the loop shows up here, per trial.
+        # start-to-start median minus pair-window median: the per-pair cost outside the published
+        # window, so instrumentation creeping back into the loop shows up here.
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 gap = row["chain_health"]["interpair_gap_us"]
@@ -457,7 +433,7 @@ class ChainedPublication(unittest.TestCase):
 
     def test_the_period_does_not_displace_the_fresh_entry_family(self):
         # The chained family is additive: roundtrip and the isolated components keep their
-        # fresh-entry meaning, and old consumers keep reading them unchanged.
+        # fresh-entry meaning.
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 self.assertEqual(row["components"]["roundtrip"]["origin"], "measured")
@@ -497,14 +473,13 @@ class _DriftingBackend(_StubBackend):
 
 
 class SettleDrift(unittest.TestCase):
-    """The convergence proof the review asked for: `chain_drop` ASSUMES the chain settled by the
-    time the kept iterations start, and nothing else in the artifact could show that it hadn't.
-    A drifting chain must publish its drift, signed, rather than a clean-looking period."""
+    """`chain_drop` assumes the chain settled by the time the kept iterations start, and nothing
+    else in the artifact could show that it hadn't -- so a drifting chain publishes its drift."""
 
     def test_an_unconverged_chain_publishes_its_drift(self):
         run = drive(backend_factory=_DriftingBackend)
-        # The drift is a health diagnostic, not a gate: the case stays green and the reader
-        # gets the number that says how much to distrust the period.
+        # A health diagnostic, not a gate: the case stays green and the number says how much
+        # to distrust the period.
         self.assertEqual(run.rc, 0)
         for row in run.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
@@ -514,12 +489,8 @@ class SettleDrift(unittest.TestCase):
 
 
 class BarrierModeSuppression(unittest.TestCase):
-    """A barrier-mode period is a different quantity, so it is measured and then not published.
-
-    The barrier adds its own cost and removes the cross-pair overlap the period is defined by.
-    Emitting it into the same fields would let something rank two definitions against each
-    other, so the chain still runs as a bring-up diagnostic and the fields stay unavailable.
-    """
+    """A barrier-mode period is a different quantity -- the barrier adds cost and removes the
+    cross-pair overlap -- so the chain runs as a diagnostic and the fields stay unavailable."""
 
     @classmethod
     def setUpClass(cls):
@@ -542,8 +513,8 @@ class BarrierModeSuppression(unittest.TestCase):
                     self.assertEqual(row["chain_health"][health], UNAVAILABLE)
 
     def test_the_chained_oracle_is_skipped(self):
-        # Pass 1 and Pass 3 only: with nothing chained published there is nothing to stand
-        # behind, and a gate that ran anyway could red a leg over a number no one can read.
+        # With nothing chained published there is nothing to stand behind, and a gate that ran
+        # anyway could red a leg over a number no one can read.
         points = len(LADDER)
         kinds = [kind for kind, _ in self.swept.events]
         self.assertEqual(kinds.count("oracle"), 2 * points)
@@ -553,8 +524,8 @@ class BarrierModeSuppression(unittest.TestCase):
         )
 
     def test_the_regime_verdict_is_null_rather_than_failed(self):
-        # There was no chained number to gate, which is not the same as a chained number that
-        # failed its gate; false here would red a leg for a check that never ran.
+        # No chained number to gate is not the same as one that failed its gate; false here
+        # would red a leg for a check that never ran.
         self.assertEqual(self.swept.rc, 0)
         self.assertEqual(self.swept.doc["outcome"]["status"], "success")
         for row in self.swept.rows:

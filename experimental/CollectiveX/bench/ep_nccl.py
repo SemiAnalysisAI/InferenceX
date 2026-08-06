@@ -281,11 +281,9 @@ class NCCLEPBackend(EPBackend):
         if not self._ll:
             h.in_weights_t = self._t(p.topk_weights)
         else:
-            # LL applies the gate in its COMBINE kernel, not on dispatch. Wrap the weights here
-            # with every other per-handle wrapper rather than per timed combine: building one
-            # costs a torch resolve, an np.asarray and a cybind allocation, and `time_us`
-            # charges host work inside the window, so a fresh wrapper per iteration was a
-            # per-call tax no other backend pays.
+            # LL applies the gate in its combine kernel, not on dispatch. Wrap the weights once
+            # per handle rather than per timed combine: the wrapper costs a torch resolve, an
+            # np.asarray and a cybind allocation, and `time_us` charges host work to the window.
             h.combine_weights_t = self._t(p.topk_weights)
         # combined output is restored to original token order: [num_tokens, hidden].
         h.out = torch.empty((p.T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
@@ -327,17 +325,11 @@ class NCCLEPBackend(EPBackend):
     def _bind_ht_recv_count(self, h):
         """Read HT's received-token count and pre-wrap the combine input at that size.
 
-        The combine call's staging copy is sized by the tensor it is HANDED -- upstream reads
-        `num_tokens = x->sizes[0]` and copies that many rows into the group's IPC staging --
-        not by the group's buffer. Handing it the whole ladder-max receive plane therefore made
-        HT combine copy `max(ladder) * world` rows on every call regardless of T, putting a
-        rung-independent floor under it: ~55-80us on a decode leg (ladder max 512) against
-        ~470-1295us on a prefill leg (max 8192), while the per-token slope stayed within 12%.
-        Slicing is free (a contiguous leading-dim view) and is what upstream's own ep_test does
-        when it sizes the combine input to the actual receive count.
-
-        Both callers are untimed -- handle creation and rebind, which only run on a shape change
-        -- so the `.item()` read never lands in a measured window.
+        Upstream sizes the combine staging copy from the tensor it is handed (`num_tokens =
+        x->sizes[0]`), not from the group's buffer, so handing it the whole ladder-max plane put a
+        rung-independent floor under HT combine -- ~470-1295us on a prefill leg (ladder max 8192).
+        Slicing is a free leading-dim view and matches upstream's own ep_test. Both callers are
+        untimed (handle creation and rebind), so the `.item()` read never lands in a window.
         """
         h.count = int(h.recv_total.item())
         # A rank that received nothing still needs a non-empty tensor for the shape checks; the
@@ -402,10 +394,8 @@ class NCCLEPBackend(EPBackend):
 
     def stage(self, p, h):
         # BF16 combine input is the received buffer itself; no device work (value correctness
-        # is exercised only through the oracle's combine_transformed path). LL takes the full
-        # padded plane -- its kernel asserts that shape -- while HT takes only the rows this
-        # routing actually received, so its staging copy scales with T (see
-        # `_bind_ht_recv_count`).
+        # is exercised only through the oracle's combine_transformed path). LL needs the full
+        # padded plane, HT only the received rows (see `_bind_ht_recv_count`).
         h.combine_input_t = self._recv_x_t if self._ll else h.combine_in_t
 
     def combine(self, p, h):
