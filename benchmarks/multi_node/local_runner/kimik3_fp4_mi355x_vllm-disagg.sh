@@ -119,9 +119,21 @@ fi
 # prefill worker gets 2400 GB. The old hard-coded 256 was ~9x under that, and it
 # is what made MooncakeStore fail every put once the corpus got large:
 #   client_service.cpp: BatchPut failed for 32 keys due to insufficient space
-# which then failed the decode request and aborted the replay in warmup. Nodes
-# have ~2.9 TB, so this fits; lower it only to deliberately study a smaller tier.
-export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-2400}"
+# which then failed the decode request and aborted the replay in warmup.
+#
+# 2400 does NOT fit for K3, though, even on a ~2.9 TB node: the pool is pinned for
+# RDMA, so it is not reclaimable page cache. Measured on g07 mid-run, each of the
+# 8 TP workers held ~231 GiB RSS (~1.85 TiB for the container) and only ~1.1 TiB
+# of the node was left available. On the decode node that tipped over: 556 GB of
+# the 892 GB swap in use, then
+#   multiproc_executor.py: Worker proc VllmWorker-6 died unexpectedly
+#     (exit code: None)   -> shm_broadcast RuntimeError("cancelled")
+#     -> EngineDeadError  -> aiperf --failed-request-threshold aborts the conc point
+# with no Python traceback anywhere, because the worker was signalled, not raised.
+# 1200 GB (150 GB/rank) leaves ~1.8 TB of headroom and is the size the earlier
+# validated local run used. Still far more DRAM than the GPU KV pool, so the tier
+# is not the limiting factor -- ext_cache_hit was already 87-92% at 2400.
+export TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-1200}"
 # GMU / MAX_MODEL_LEN are deliberately NOT set here: they come from
 # benchmarks/multi_node/agentic/kimik3_fp4_mi355x_vllm-disagg.sh, which is the
 # same file CI goes through (gmu 0.88 per PR #2403's fleet measurements, and the
