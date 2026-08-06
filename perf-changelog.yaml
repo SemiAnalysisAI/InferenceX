@@ -5467,4 +5467,3 @@
     - "Image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263"
     - "Throughput runs use synthetic EAGLE3 acceptance pinned to the minimax-m3 golden AL (thinking_on, num_speculative_tokens=5, AL=3.35); EVAL_ONLY accuracy runs keep real target verification"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2487
- 
