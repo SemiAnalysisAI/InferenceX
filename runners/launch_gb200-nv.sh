@@ -306,11 +306,12 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin descends from the fp8 srt-slurm lineage
-# (cargo/maturin bootstrap); a non-fp8 power recipe would silently clone the
-# wrong lineage, so fail fast instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then
-    echo "Error: dcgm-power lanes are only validated for PRECISION=fp8, got: $PRECISION" >&2
+# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
+# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
+# parse-verified against the pin); other frameworks clone diverging refs
+# (aflowers branch, sa-submission), so fail fast for them instead.
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
 fi
 
@@ -429,10 +430,25 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
-    # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        # Note (wenyao): on this cluster the DSV4-Pro checkpoint lives on the
+        # compute-node /mnt/numa1 NVMe (same staging the agentic path and the
+        # llm-d sweeps load from); the lustre alias target the shared dsv4
+        # block exports is not present here. Scoped to the power lane so the
+        # non-power lane keeps whatever the external-cluster staging expects.
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        # The power lane must run the exact pinned producer SHA, never a moving branch.
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
+        # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+    fi
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
@@ -640,11 +656,12 @@ python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH
 # srtctl itself still resolves through PATH (.venv/bin is on it).
 unset VIRTUAL_ENV
 
-# --no-preflight is only used on the agentic path, where the recipe resolves
-# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
-# runner can't see. Fixed-seq-len recipes keep enforcement on.
+# --no-preflight is used where the recipe resolves model.path to /mnt/numa1
+# (compute-node-only NVMe) that the login-node runner can't see: the agentic
+# path, and the dsv4 power lane (same /mnt/numa1 checkpoint). Other
+# fixed-seq-len recipes keep enforcement on.
 PREFLIGHT_ARGS=()
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" ]] || [[ "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" ]]; then
     PREFLIGHT_ARGS=(--no-preflight)
 fi
 

@@ -146,11 +146,12 @@ if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
     USES_DCGM_POWER=1
 fi
 
-# Note (wenyao): the producer pin descends from the fp8 v1.0.25 lineage
-# (cargo/maturin bootstrap); an fp4 power recipe would silently skip the
-# sa-submission branch it needs, so fail fast instead.
-if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then
-    echo "Error: dcgm-power lanes are only validated for PRECISION=fp8, got: $PRECISION" >&2
+# Note (wenyao): the producer pin follows the srt-slurm main lineage that the
+# dynamo-sglang lanes run on (fp8 validated end-to-end, fp4 recipes
+# parse-verified against the pin); other frameworks clone diverging refs
+# (aflowers branch, sa-submission), so fail fast for them instead.
+if [[ "$USES_DCGM_POWER" == "1" && "$FRAMEWORK" != "dynamo-sglang" ]]; then
+    echo "Error: dcgm-power lanes are only validated for FRAMEWORK=dynamo-sglang, got: $FRAMEWORK" >&2
     exit 1
 fi
 
@@ -294,6 +295,19 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION
     git checkout main
     mkdir -p recipes/vllm/kimi-k2.5-fp4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && "$USES_DCGM_POWER" == "1" ]]; then
+    # Note (wenyao): only the power lane routes here — non-power dsv4 sglang
+    # keeps the generic fallthrough untouched. The overlay is required: the
+    # telemetry-tagged DSV4 recipes are version-controlled in-repo only,
+    # neither upstream ref ships them.
+    git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+    # The power lane must run the exact pinned producer SHA, never a moving branch.
+    test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+    git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
     # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.
@@ -411,7 +425,10 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 #     /scratch/models, and
 #   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
 #     and which runs on srt-slurm:v1.0.25 (the release that has the preflight;
-#     qwen3.5 fp4 runs on sa-submission-q2-2026, which has none).
+#     qwen3.5 fp4 runs on sa-submission-q2-2026, which has none), and
+#   - the qwen3.5 fp4 and dsv4 sglang power lanes, which run the pinned
+#     producer (a main-lineage fork that has the preflight) against the same
+#     /scratch checkpoints.
 # The engine still fails loudly at runtime if the path is genuinely missing on
 # the compute node. Other fixed-seq-len recipes resolve model.path to a
 # login-visible location, so keep the precheck enforced for them.
@@ -419,7 +436,7 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) ]]; then
+if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" ) || ( "$USES_DCGM_POWER" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "dynamo-sglang" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
