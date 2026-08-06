@@ -103,7 +103,22 @@ export SAFETENSORS_FAST_GPU=1
 # AITER a8w4 MoE path for the MXFP4-weight / MXFP8-activation QAT checkpoint.
 # Upstream: "set AITER_SITUV2_A8W4 to 0 along with AITER master flag to use
 # aiter a16w4 MoE path. Set it to 1 to use aiter a8w4 MoE path." Swept.
+#
+# BOTH names must be set. vllm-project/vllm#50582 ("[ROCm][Kimi-K3] aiter moe
+# environment variable cleanup") renamed the vLLM-side flag
+# AITER_SITUV2_A8W4 -> VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4 with no
+# back-compat alias, while the AITER runtime still reads the old name
+# directly. Setting only the old name splits the two halves of the path:
+# vLLM's mxfp4.py shuffles w13 in the SEPARATED layout and passes
+# GateMode.SEPARATED (guinterleave=False), but AITER still dispatches the
+# gate/up-interleaved fp8 kernels (flydsl_moe1_afp8_wfp4_bf16_..._gui_...).
+# Gate and up are then read from the wrong halves of w13 -- no crash, pure
+# numerical garbage. That is what took gsm8k to 0.0 on
+# nightly-cb8104839c141609d99f1254459ef3a4f1bd4263 while
+# nightly-124154a8843d1f8e4d4e2d5d466e2d3ebc3716da (pre-#50582) scored 1.0.
+# Setting only the new name would split it the other way. Keep them equal.
 export AITER_SITUV2_A8W4="${AITER_A8W4:-1}"
+export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4="$AITER_SITUV2_A8W4"
 export AITER_BF16_FP8_MOE_BOUND=0
 # REQUIRED on ROCm per the upstream recipe: the build auto-enables this to 1.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
@@ -926,6 +941,40 @@ if [ "$MLA_FORCE_PS" = "1" ]; then
     echo "MLA_FORCE_PS=1: small-head decode routed to the PS ASM kernel"
 else
     echo "MLA_FORCE_PS=0: leaving small-head decode on Gluon (upstream default)"
+fi
+
+# vllm-project/vllm#51171 -- "[ROCm][MLA] Reach FULL cudagraphs for AITER MLA
+# speculative decoding". ONLY the triton_mla.py hunk is taken.
+#
+# The DRAFTER runs TRITON_MLA, whose _cudagraph_support is a class constant
+# reporting UNIFORM_SINGLE_TOKEN_DECODE. The engine takes the MINIMUM over
+# attention groups, so that one group downgrades the WHOLE engine off full
+# cudagraphs -- target included. The PR adds a get_cudagraph_support classmethod
+# returning UNIFORM_BATCH when the KV cache group is
+# non_causal_multi_token_decode, which a DSpark draft group is.
+#
+# Not taken: the PR's rocm_aiter_mla.py hunks move the small-head Gluon flatten
+# expansion into _build_decode to remove device->host syncs. That is the exact
+# path MLA_FORCE_PS bypasses (verify goes to the asm PS kernel instead), and it
+# would collide with both #51088 and vllm_dspark_ps_enable.py on forward_mqa.
+# Also not taken: the gpu_worker.py kv_cache_size_tokens fix, which is only
+# load-bearing for the persistent verify buffers those hunks introduce.
+#
+# Verified against this image: non_causal_multi_token_decode exists on the spec
+# (kv_cache_interface.py:397, OR'd across the group by MLAAttentionSpec.merge at
+# 458), so this is not a no-op.
+MLA_TRITON_CG="${MLA_TRITON_CG:-1}"
+if [ "$MLA_TRITON_CG" = "1" ]; then
+    TRITON_CG_DIFF="$(cd "$(dirname "$0")/patches" && pwd)/vllm_pr51171_triton_mla_cg.diff"
+    TCG_ROOT="$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')"
+    [ -f "$TRITON_CG_DIFF" ] || { echo "ERROR: $TRITON_CG_DIFF missing" >&2; exit 1; }
+    ( cd "$TCG_ROOT" && patch -p1 --forward --batch < "$TRITON_CG_DIFF" ) \
+        2>&1 | tee "$RESULT_DIR/vllm_pr51171.log"
+    python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
+        "$TCG_ROOT/vllm/v1/attention/backends/mla/triton_mla.py"
+    echo "MLA_TRITON_CG=1: drafter no longer downgrades the engine off FULL cudagraphs"
+else
+    echo "MLA_TRITON_CG=0: leaving the drafter's cudagraph support at upstream default"
 fi
 
 echo "Starting vllm server..."
