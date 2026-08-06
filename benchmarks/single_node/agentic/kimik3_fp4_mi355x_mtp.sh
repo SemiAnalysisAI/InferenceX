@@ -857,9 +857,59 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 # kimi_k3 assert the target now clears -- the drafter has no asm route. vLLM
 # keeps a separate kv_cache_dtype for the draft model precisely so the two can
 # differ.
+# Rejection sampling method. Default is now `synthetic` per the incoming recipe
+# update.
+#
+# ###################################################################
+# # WARNING: `synthetic` DOES NOT VERIFY DRAFT TOKENS.              #
+# ###################################################################
+#
+# Upstream (vllm/config/speculative.py): "'synthetic' accepts draft tokens with
+# a decaying probability calibrated to synthetic_acceptance_rate." No comparison
+# against the target is performed, so:
+#   - Emitted tokens are UNVERIFIED DRAFTS. Generated text is not the target
+#     model's output, and gsm8k / any accuracy gate will fail.
+#   - The reported "Mean acceptance length" echoes SYNTHETIC_ACCEPTANCE_LENGTH
+#     rather than measuring anything. B300 run 30425131777 set 2.51 and reported
+#     2.49/2.52, with ITL p50 0.07 ms -- physically impossible for a 2.8T model.
+#   - Throughput from this arm is a SIMULATION of "what if acceptance were X",
+#     not a measurement. Do not compare it against measured runs.
+#
+# For reference, the real measured acceptance on this trace at k=3:
+#   1.77  probabilistic + block, temperature 1.0  (run 31065394450)
+#   2.35  probabilistic + block, temperature 0    (run 31087323382)
+#   1.59  greedy + block, temperature 1.0         (run 31087303391)
+# so 2.45 sits ~38% above the current default-methodology result.
+#
+# Set SPEC_REJECTION_METHOD=block to restore real verification.
+SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
+SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.45}"
+
+SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
+if [ "$SPEC_REJECTION_METHOD" = "synthetic" ]; then
+    SPEC_CFG="$SPEC_CFG,\"synthetic_acceptance_length\":$SPEC_SYNTHETIC_ACCEPTANCE_LENGTH"
+    # Loud banner + an on-disk marker so a result directory is self-identifying
+    # and nobody mines these numbers as measured perf months from now.
+    echo "############################################################"
+    echo "# SIMULATED ACCEPTANCE: rejection_sample_method=synthetic"
+    echo "# synthetic_acceptance_length=$SPEC_SYNTHETIC_ACCEPTANCE_LENGTH"
+    echo "# Draft tokens are NOT verified against the target model."
+    echo "# Output text is unverified drafts; accuracy gates WILL fail."
+    echo "# Throughput and acceptance from this run are SIMULATED."
+    echo "############################################################"
+    {
+        echo "rejection_sample_method=synthetic"
+        echo "synthetic_acceptance_length=$SPEC_SYNTHETIC_ACCEPTANCE_LENGTH"
+        echo "NOT A MEASURED RESULT: draft tokens are accepted on a calibrated"
+        echo "probability, never verified against the target. Acceptance echoes"
+        echo "the configured value; throughput is a simulation."
+    } > "$RESULT_DIR/SIMULATED_ACCEPTANCE.txt"
+fi
+SPEC_CFG="$SPEC_CFG}"
+
 SPEC_ARGS=(
     --speculative-config
-    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\"}"
+    "$SPEC_CFG"
 )
 
 # mns and the cudagraph capture ceiling are 2*CONC, capped at MNS_CAP.
