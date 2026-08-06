@@ -10,6 +10,12 @@ export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 
+# dcgm-power producer pin — single source of truth for power lanes. Swap
+# URL+PIN here (and identically in launch_gb300-nv.sh) when the upstream
+# srt-slurm merge lands.
+POWER_SRT_SLURM_URL="https://github.com/edwingao28/srt-slurm.git"
+POWER_SRT_SLURM_PIN="6fc1bed01a0b82dae0088a105c03ce0cfb353443"
+
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
         export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
@@ -282,6 +288,41 @@ import_squash() {
 import_squash "$SQUASH_FILE" "$IMAGE"
 import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
+# Power lane is recipe-driven: on iff the recipe this run resolves carries an
+# enabled dcgm-power telemetry block. Read the workspace mirror (it overlays
+# the srt-slurm clone later), since the pin decision precedes the clone.
+USES_DCGM_POWER=0
+_RECIPE_REL="${CONFIG_FILE%%:*}"
+_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${_RECIPE_REL#recipes/}"
+# Note (wenyao): a stray "enabled: true" outside the telemetry block must
+# not flip the lane, so the match is scoped instead of file-wide greps.
+if [[ -n "$CONFIG_FILE" && -f "$_RECIPE_SRC" ]] && awk '
+    /^telemetry:/ { t = 1; next }
+    t && /^[^ ]/  { t = 0 }
+    t && /^  provider: dcgm-power$/ { p = 1 }
+    t && /^  enabled: true$/        { e = 1 }
+    END { exit !(p && e) }
+' "$_RECIPE_SRC"; then
+    USES_DCGM_POWER=1
+fi
+
+# Note (wenyao): the producer pin descends from the fp8 srt-slurm lineage
+# (cargo/maturin bootstrap); a non-fp8 power recipe would silently clone the
+# wrong lineage, so fail fast instead.
+if [[ "$USES_DCGM_POWER" == "1" && "$PRECISION" != "fp8" ]]; then
+    echo "Error: dcgm-power lanes are only validated for PRECISION=fp8, got: $PRECISION" >&2
+    exit 1
+fi
+
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    DCGM_EXPORTER_IMAGE="nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless"
+    DCGM_EXPORTER_SQSH="${SQUASH_DIR}/$(echo "$DCGM_EXPORTER_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
+    test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    unsquashfs -l "$DCGM_EXPORTER_SQSH" > /dev/null || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
+fi
+
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
 export ISL="$ISL"
@@ -401,8 +442,18 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR"
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        # Power lanes run the exact pinned producer SHA, never a moving
+        # branch; CI derives POWER_PRODUCER_SHA from the stamp file.
+        git clone "$POWER_SRT_SLURM_URL" "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout "$POWER_SRT_SLURM_PIN" || exit 1
+        test "$(git rev-parse HEAD)" = "$POWER_SRT_SLURM_PIN" || { echo "Error: srt-slurm HEAD does not match POWER_SRT_SLURM_PIN=$POWER_SRT_SLURM_PIN" >&2; exit 1; }
+        git rev-parse HEAD > "$GITHUB_WORKSPACE/power-producer-sha.txt"
+    else
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+    fi
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
@@ -528,6 +579,13 @@ use_segment_sbatch_directive: false
 ${DEFAULT_MOUNTS_BLOCK}
 EOF
 
+# Appended via sed so non-power lanes' generated yaml stays byte-identical.
+if [[ "$USES_DCGM_POWER" == "1" ]]; then
+    sed -i "/^  nginx-sqsh:/a\\  dcgm-exporter: ${DCGM_EXPORTER_SQSH}" srtslurm.yaml
+    # Note (wenyao): sed's append is a silent no-op if the anchor drifts.
+    grep -q "^  dcgm-exporter: " srtslurm.yaml || { echo "Error: dcgm-exporter injection failed: nginx-sqsh anchor not found in srtslurm.yaml" >&2; exit 1; }
+fi
+
 echo "Generated srtslurm.yaml:"
 cat srtslurm.yaml
 
@@ -631,6 +689,13 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
+    # Provenance markers travel inside the server-logs bundle so the offline
+    # audit can tie artifacts to the exact producer SHA and exporter image.
+    if [[ "$USES_DCGM_POWER" == "1" ]]; then
+        mkdir -p "$LOGS_DIR/power"
+        cp "$GITHUB_WORKSPACE/exporter-image.sha256" "$LOGS_DIR/power/exporter-image.sha256"
+        cp "$GITHUB_WORKSPACE/power-producer-sha.txt" "$LOGS_DIR/power/power-producer-sha.txt"
+    fi
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
     bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 else

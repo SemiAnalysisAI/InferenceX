@@ -52,7 +52,7 @@ and waits for the PR checks automatically.
 
 **Fix:** in `benchmarks/single_node/<recipe>.sh`, either:
 1. **Lower `--gpu-memory-utilization`** (`0.95 → 0.90`, sometimes 0.85). Matches the H100/H200/B200 NVIDIA pattern. Smallest blast radius.
-2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/kimik2.5_fp4_b200.sh:65`.
+2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/deprecated/kimik2.5_fp4_b200.sh:65`.
 
 Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi300x-vllm — needed 0.90), #1461 (dsv4-fp8-h200-vllm — needed 0.90).
 

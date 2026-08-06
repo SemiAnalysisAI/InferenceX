@@ -138,6 +138,16 @@ on:
         type: string
         required: false
         default: ""
+      require-power:
+        description: "Fail fixed-sequence result processing when GPU power is invalid"
+        type: boolean
+        required: false
+        default: false
+      power-producer-sha:
+        description: "Expected srt-slurm producer git commit for power validation"
+        type: string
+        required: false
+        default: ''
       # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
@@ -213,6 +223,8 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
+  REQUIRE_POWER: ${{ inputs.require-power && '1' || '0' }}
+  POWER_PRODUCER_SHA: ${{ inputs.power-producer-sha }}
   # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
@@ -358,6 +370,12 @@ jobs:
         env:
           RUNNER_TYPE: ${{ inputs.runner }}
         run: |
+          # Launcher stamp supplies the producer SHA unless the
+          # power-producer-sha input is set as a manual override
+          if [ -z "$POWER_PRODUCER_SHA" ] && [ -f power-producer-sha.txt ]; then
+            export POWER_PRODUCER_SHA="$(cat power-producer-sha.txt)"
+            echo "POWER_PRODUCER_SHA derived from launcher stamp: $POWER_PRODUCER_SHA"
+          fi
           # Process each result file
           for result_file in ${RESULT_FILENAME}_*.json; do
             if [ -f "$result_file" ]; then
@@ -385,6 +403,19 @@ jobs:
         with:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
+
+      - name: Upload power audit bundle
+        if: ${{ always() && !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: power_audit_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ env.RESULT_FILENAME }}_*.json
+            agg_${{ env.RESULT_FILENAME }}_*.json
+            power_validation_${{ env.RESULT_FILENAME }}_*.json
+            LOGS/power/**
+            LOGS/*/results_*.json
+          if-no-files-found: ignore
 
       - name: Upload server logs
         if: always()
