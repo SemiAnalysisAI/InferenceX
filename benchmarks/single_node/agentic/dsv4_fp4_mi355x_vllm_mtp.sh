@@ -495,6 +495,15 @@ echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+# DSv4-Pro is a mixed checkpoint: MXFP4 routed experts with FP8 shared experts
+# (the "fp8" in the path and the config.json quantization_config both describe
+# only part of it; the kernel name mfma_moe1_silu_mul_afp8_wfp4_* is what
+# confirms the split). The AITER shared-expert fusion is what builds the
+# combined shared+routed weight layout that split expects, so without this the
+# server does not merely run slower -- it fails a shape assertion during weight
+# load. Every validated manual run of this recipe exported it; the checked-in
+# script did not, so the two were not running the same configuration.
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
 sleep 180
 
