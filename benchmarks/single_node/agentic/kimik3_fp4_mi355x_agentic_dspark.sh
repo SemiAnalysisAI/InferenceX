@@ -188,6 +188,8 @@ VLLM_CMD=(
     --enable-prefix-caching
     --mamba-cache-mode align
     --kv-cache-dtype fp8
+    --attention-backend TRITON_MLA
+    --compilation-config '{"cudagraph_mode":"PIECEWISE","custom_ops":["+fused_rms_norm_gated"]}'
     --speculative-config "$SPEC_CONFIG"
     --kv-transfer-config "$KV_TRANSFER_CONFIG"
 )
