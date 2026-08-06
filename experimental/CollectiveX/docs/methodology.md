@@ -324,6 +324,11 @@ Five statistics come out of the two chains, and deliberately only five:
   the floors chain, reduced across ranks by MIN. The last rank into a collective is the one that
   waited least, so its window is that operation's floor. Where this has been triangulated the floor
   lands within ~10% of profiler kernel time, which makes it a free substitute for a Kineto trace.
+  Because the floors come from the FIRST sibling chain and the period from the second,
+  better-settled one, the two can sit a few microseconds apart in absolute level — a period a
+  single-digit-µs *below* the floor sum at the bottom of the ladder is that cross-chain offset,
+  not an error (observed on gb200/h200 fp8 low-latency in run 31089556516). Read floor-vs-period
+  as transport share, not as an identity that must close to zero.
 - `chain_health.pair_spread_us` — the per-iteration cross-rank max-minus-min of the pair, which is
   the *proof* the median means anything. Small next to `pair_period` means every rank held the same
   cadence; large means a paced or slow rank, and the point should not be read as a steady-state
