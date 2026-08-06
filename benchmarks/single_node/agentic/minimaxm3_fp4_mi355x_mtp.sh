@@ -164,7 +164,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
----- Run benchmark ----------------------------------------------------------
+# ---- Run benchmark ----------------------------------------------------------
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
