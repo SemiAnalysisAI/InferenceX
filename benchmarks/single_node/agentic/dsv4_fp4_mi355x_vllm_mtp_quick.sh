@@ -334,6 +334,14 @@ VLLM_CMD=(
     echo "GPU_MEM_UTIL=$GPU_MEM_UTIL ROCM_ROPE_KVCACHE_FUSION=${ROCM_ROPE_KVCACHE_FUSION} DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE"
     echo "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=$VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS"
     echo "MTP_SYNTHETIC=${MTP_SYNTHETIC:-1} NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
+    echo "MAX_NUM_SEQS=$MAX_NUM_SEQS"
+    # Router policy decides how requests spread over the DP ranks, and DP runs
+    # the MoE layers in lockstep -- every rank pads to the busiest one's token
+    # count each step. An uneven spread is therefore a throughput cost, not just
+    # a latency one, so the policy belongs in the run record.
+    if [ "$USE_VLLM_ROUTER" = "true" ]; then
+        echo "VLLM_ROUTER_POLICY=${VLLM_ROUTER_POLICY:-consistent_hash}"
+    fi
     echo "VARIANT_IMAGE=$VARIANT_IMAGE"
     # What is actually running, independent of what the variant expected: the
     # launcher can be pointed at any image, and a mismatch between these two
