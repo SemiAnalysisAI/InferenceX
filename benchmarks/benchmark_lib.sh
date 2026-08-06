@@ -1891,6 +1891,17 @@ build_replay_cmd() {
     if [ "$duration" -lt 900 ] || [ "${AIPERF_UNSAFE_OVERRIDE:-false}" = "true" ]; then
         REPLAY_CMD+=" --unsafe-override"
     fi
+    # A/B ONLY (branch kimik3-spec-temp0): force greedy target sampling.
+    # The trace loader sets no temperature and REPLAY_CMD passes none, so the
+    # agentic replay inherits the server default -- aiperf's own warning says
+    # "Most LLM servers default to temperature=1.0, introducing random sampling
+    # and run-to-run variance." A stochastic target caps speculative acceptance
+    # at 1 - TV(p,q); we measure 0.354 at position 1 / 1.77 mean on the agentic
+    # trace, versus 0.933 / 3.31-3.43 on gsm8k, which lm_eval runs at
+    # temperature 0 (benchmark_lib.sh run_lm_eval). This isolates how much of
+    # that gap is temperature rather than context length or content.
+    # key:value form, no shell quoting -- $REPLAY_CMD is word-split unquoted.
+    REPLAY_CMD+=" --extra-inputs temperature:0"
     REPLAY_CMD+=" $TRACE_SOURCE_FLAG"
 }
 
