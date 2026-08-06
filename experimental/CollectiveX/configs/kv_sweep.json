@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "suite": "kv-transfer",
+  "workloads": ["kv-mla", "kv-gqa"],
+  "precisions": ["bf16", "fp8"],
+  "isl_ladder": [512, 4096, 32768],
+  "page_tokens": [16, 64],
+  "ops": ["pull", "push"],
+  "timing": {
+    "warmup_per_trial": 2,
+    "reps_per_trial": 8,
+    "trials_per_point": 3
+  },
+  "pool_slack": 2.0,
+  "seed": 67
+}

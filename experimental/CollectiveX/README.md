@@ -1,8 +1,9 @@
 # CollectiveX
 
-CollectiveX is an experimental MoE expert-parallel communication benchmark. It measures dispatch,
-combine, and paired roundtrip latency across EP libraries and accelerator systems, then uploads
-neutral result artifacts.
+CollectiveX is an experimental inference-communication benchmark. Its EP suite measures MoE
+dispatch, combine, and paired roundtrip latency across EP libraries and accelerator systems; its
+KV-transfer suite measures disaggregated-serving KV-cache handoffs across transfer libraries and
+fabrics. Both upload neutral result artifacts.
 
 CollectiveX schedules benchmarks, executes them on real allocations, and uploads the neutral
 artifacts each run emits. It does not validate those artifacts, promote, rank, recommend, select, or
@@ -148,6 +149,24 @@ hybrid path with GIN, two logical scale-out domains represented by two physical 
 scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. Whether a given
 SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is decided by the
 benchmark's return code.
+
+## KV-Cache Transfer Suite
+
+`kv-transfer` legs run 2 nodes x 1 GPU — the per-worker prefill/decode pair a
+disaggregated deployment actually forms — and move one request's paged KV as
+layer-major descriptor lists over seed-keyed random block tables (the
+post-fragmentation layout vLLM and SGLang post), plus one contiguous bulk row as
+the wire-speed ceiling. Workloads name production shapes (`kv-mla` =
+DeepSeek-R1/Kimi-K2 class, `kv-gqa` = Qwen3-235B class) at bf16 and fp8; page
+sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
+SGLang disagg) both timed from the initiator with offset-pattern verification on
+the destination pool in both directions. Backends: `nixl` (what Dynamo/vLLM/
+SGLang ship — pip wheel on NVIDIA images, bundled in the ROCm image) everywhere
+the registry's `kv_backends` enables it, plus `mori-io` (AMD's native engine)
+on mi355x. Capability is registry-gated like `ll_backends`: no entry, no legs.
+See the methodology's KV-Cache Transfer section for measurement details and the
+known fabric caveats (gb200 MNNVL rows need fabric-handle allocations and are
+not yet enabled).
 
 ## Workflow And Artifacts
 

@@ -451,6 +451,40 @@ rates are named `rate_at_latency_percentile`: bytes or tokens divided by the mat
 percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted
 rate distribution.
 
+## KV-Cache Transfer Suite
+
+`suite: kv-transfer` measures the prefill→decode KV handoff of disaggregated serving as the
+libraries engines ship perform it: one-sided RDMA over registered GPU pools, initiated by one side
+(`pull` = READ, the vLLM NixlConnector shape; `push` = WRITE, the SGLang disagg shape). A leg is
+2 nodes x 1 GPU — the per-worker pair — with rank 0 owning the target pool and rank 1 posting and
+timing every transfer. Control is a gloo group (payload exchange + lockstep barriers); data never
+rides it.
+
+The transferred object is one request's paged KV: `isl` tokens paged at 16 or 64 tokens per block,
+per layer, addressed layer-major over a `[layer][page]` pool through seed-keyed random block
+tables on BOTH sides — the post-fragmentation layout a connector actually posts, not a contiguous
+buffer. Workload presets name production shapes (`kv-mla`: 61 layers x 576 elements/token/layer,
+the DeepSeek-R1/V4 and Kimi-K2 compressed latent; `kv-gqa`: 94 layers x 1024, the Qwen3-235B
+class) at bf16 and fp8 — fp8 halves page bytes, which pushes small pages deeper into the
+per-descriptor regime, so it is measured, never derived. One `bulk` row per ISL (a single
+descriptor of the same total bytes) is the wire-speed ceiling the paged rows are read against.
+
+Timing is host wall clock around post→completion — completion of a one-sided transfer is
+host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor
+build + handle creation are reported separately as `prep_ms` (engines amortize them through
+prepped-handle reuse) and never inside the timed transfer. Every point reports pooled
+trials x reps percentiles, GB/s at p50, and a verification verdict: the destination pool is
+pattern-checked after `pull` on the initiator and after `push` on the target (an offset-derived
+byte pattern makes any page's expected contents computable from its offset alone), and both pools
+are repainted between points. A failed verify flips the document `invalid` and the leg red.
+
+Known lane caveats, measured on the metal: 16-token pages are per-descriptor-bound (~1.5 µs/desc
+on x86 CX-7, ~0.9 µs on Grace) and land at 25–45% of the 64-token pages' bandwidth; single-WR
+bulk transfers above the provider's max message size must be split (the MoRI adapter caps WRs at
+1 GiB); and UCX's MNNVL cuda_ipc lane does not engage on `cudaMalloc` pools — with
+`UCX_CUDA_IPC_ENABLE_MNNVL=y` alone the transfer silently rides the IB rails, so GB-rack MNNVL
+rows stay out of the registry until the harness allocates fabric-mappable pools.
+
 ## Correctness
 
 An implementation-independent oracle uses an expert-specific deterministic transform so wrong expert
