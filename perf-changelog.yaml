@@ -5457,3 +5457,14 @@
     - "Enable prefill-only INT4 quick-reduce: set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048 on the prefill workers via a new prefill_env channel (mirrors the existing decode_env path in server_vllm.sh)."
     - "Cap the 1P1D TP4 concurrency sweep at 256 (was 512); drop the 2P1D TP4 layout (128/256/512) as it is CI-flaky with negligible curve impact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1943
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add five MiniMax-M3 NVFP4 B300 single-node aggregate vLLM AgentX points: TP8 concurrency 1; TP4 concurrency 1, 2, and 16; TP2 concurrency 2."
+    - "Use the Inferact/MiniMax-M3-EAGLE3-GQA draft model with three speculative tokens and synthetic rejection sampling; thinking-on synthetic acceptance length is 2.78."
+    - "Use vllm/vllm-openai:nightly-387189c42997b27e2c04b5d97ef8190ffa2bf909 with prefix caching enabled, default KV-cache dtype, FlashInfer TRT-LLM attention with FP8 indexer KV, and the EAGLE3 drafter on FLASH_ATTN."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
+  
