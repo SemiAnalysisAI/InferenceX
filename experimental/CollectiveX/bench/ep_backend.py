@@ -503,8 +503,9 @@ class EPBackend(abc.ABC):
     #
     # NOTHING SETS IT TODAY, on evidence rather than optimism. deepep-v2's NORMAL mode was the one
     # genuinely unknown cell -- ElasticBuffer's inter-iteration flow control had not been audited
-    # for un-synced chaining -- so it was hand-probed on b200 (2026-08-06, pin 01dc3aaa) with 256
-    # un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over RoCE) at both precisions:
+    # for un-synced chaining -- so it was hand-probed on b200 (2026-08-06, pin 01dc3aaa, on the
+    # then-current virtualized dgxc pool; the CI pool has since moved to nscale bare metal) with 256
+    # un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over that pool's RoCE) at both precisions:
     # all four passed, with finite outputs, timed inputs unchanged, and cross-rank period agreement
     # within 1us. Every other backend either double-buffers per dispatch (deepep-v2/uccl-ep
     # low-latency), enforces strict pairing through its own contract flags (MoRI, FlashInfer EP),

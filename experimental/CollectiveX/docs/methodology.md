@@ -165,7 +165,10 @@ rank-sum combine as the throughput `IntraNode` kernel, so it differs only by ker
 does not fit the single-call dispatch/combine contract). Low latency is a decode-phase-only addition
 whose runnable set is narrower than and distinct from the throughput kernels', so it is enabled
 cell-by-cell from the registry's `ll_backends` map rather than assumed wherever `normal` runs; it is
-currently enabled for DeepEP V2 EP8 on H100/H200/B200, MoRI
+currently enabled for DeepEP V2 at EP8 on H100/H200 and at EP8 and EP16 on B200 (the nscale
+bare-metal pool: IBGDA over native IB rails with `/dev/gdrdrv`, which is what a low-latency
+scale-out needs on x86 and no virtualized pool has) and on GB200/GB300 (EP16 inside the MNNVL
+scale-up domain), MoRI
 EP8 on MI300X/MI325X/MI355X, and UCCL-EP EP8 on H100/H200/B200 only (the legacy `Buffer` low-latency kernels; at EP8 these
 run `cudaIpc` over NVLink, not the CPU-proxy RDMA path, because the adapter passes `is_intranode`
 and UCCL then never starts its proxies. The AMD SKUs drop LL: upstream raised `kNumMaxTopK` 9 -> 16
@@ -173,8 +176,8 @@ six days before our pin, and the resulting host assert cannot hold on AMD's 16 w
 `LOW_LATENCY` algorithm is the DeepEP-derived decode path, EXPERT_MAJOR receive with a source-side
 weighted-kernel-sum combine. Those rows were dropped while every LL leg wedged on stale peer signals
 ([NVIDIA/nccl#2303](https://github.com/NVIDIA/nccl/issues/2303)) and restored once the single-handle
-adapter removed the aliasing that caused it. B300, GB200 and GB300 carry NCCL EP as their only
-low-latency row, and it is a `candidate` transport, so those three SKUs publish no production decode
+adapter removed the aliasing that caused it. B300 carries NCCL EP as its only
+low-latency row, and it is a `candidate` transport, so that SKU publishes no production decode
 coverage. Whether a given SKU/backend/EP/mode cell is attempted is a capability
 fact; whether it succeeded is decided only by the emitted artifact.
 
@@ -371,8 +374,9 @@ chained, not a second publishable mode: a backend that needs it is a bug to fix,
 compare, which is also why the chained-regime oracle below is skipped alongside it — there is no
 chained number left in the artifact for it to stand behind. No backend sets it. DeepEP V2's **normal**
 mode was the one genuinely unaudited cell — its ElasticBuffer inter-iteration flow control had never
-been exercised un-synced — and it was hand-probed on B200 (2026-08-06, pin `01dc3aaa`) with 256
-un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over RoCE) at both precisions: all
+been exercised un-synced — and it was hand-probed on B200 (2026-08-06, pin `01dc3aaa`, on the
+then-current virtualized dgxc pool; the CI pool has since moved to nscale bare metal) with 256
+un-synchronized pairs at T=128 across EP8 and EP16 (hybrid GIN over that pool's RoCE) at both precisions: all
 four passed with finite outputs, timed inputs unchanged, and cross-rank period agreement within
 1µs. The measured gap against the synced pacing is the size of the effect this section is about —
 EP8 105.4µs against 125.4µs at BF16 and 216.6µs against 272.3µs at FP8; EP16 838µs against 863µs at

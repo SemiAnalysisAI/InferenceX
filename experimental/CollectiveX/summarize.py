@@ -78,11 +78,13 @@ def _wire_basis(document: dict) -> str:
 # window degenerates to host elapsed time, and those records published as a roughly T-independent
 # 10-30us constant on every vendor and fabric at once — +20-38% on the T=1 period, visible as
 # period minus (dispatch floor + combine floor). `benchmark_chain` has since been split so the
-# period chain carries only the outer event pair, but no fleet artifact measured that way exists
-# yet: flipping this on before a post-fix validation sweep is cross-checked against the
-# hand-measured references (b200 ~58us @T=16, h200 ~51.3us, gb200 62.6-99.5us) would put the
-# inflated numbers on the top line. Artifacts emit `pair_period` either way — only the headline
-# preference is held.
+# period chain carries only the outer event pair, and the first two-pass fleet artifacts confirm
+# the fix: run 31092783122 (b200-nscale) lands the LL fp8 T=16 period at 52.6us against the ~58us
+# hand reference, with period-minus-floors at +3-10us instead of the defect's flat 10-30us and
+# `chain_health.interpair_gap_us` steady at ~3us. The hold stays until the remaining hand
+# references (h200 ~51.3us, gb200 62.6-99.5us) are confirmed the same way from a fleet-wide
+# two-pass sweep — releasing it is a deliberate one-line flip, not a side effect. Artifacts emit
+# `pair_period` either way; only the headline preference is held.
 HEADLINE_PREFERS_PAIR_PERIOD = False
 
 
