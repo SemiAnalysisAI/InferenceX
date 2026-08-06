@@ -268,36 +268,7 @@ else
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
 
     set -x
-    # Node denylist. mia1-p01-g14 chronically carries a stale ~32 GiB/GPU
-    # allocation from previous tenants, so vLLM refuses to start on it: only
-    # ~256 of 287.98 GiB is free and any gpu-memory-utilization above ~0.888
-    # trips "Free memory on device cuda:N ... is less than desired GPU memory
-    # utilization". It took out kimik3 cells in runs 30330955808 and
-    # 30331297999, and the same node did the same thing to the kimik2.7 -tune2
-    # cells.
-    #
-    # A BROAD denylist did not work: after excluding g11/g14/g15/g18, run
-    # 30412966635 still lost all three cells -- to g19 (hipErrorIllegalAddress),
-    # g17 (warmup_failure) and g16 (srun node failure), none of them on the
-    # list. Free memory on these nodes varies hour to hour, so a wide static
-    # list mostly just shrinks an already-contended pool and lengthens queue
-    # time. Don't reintroduce one.
-    #
-    # g11 is the exception and is excluded by default. It is not a
-    # free-memory-headroom case; it fails hard and across unrelated configs:
-    #   - kimik3 kvnone c2, run 30425820793: warmup_failure
-    #   - kimik3 vllm-simple-fp8 c8, run 30428781263: forward passes stalled
-    #     (returned=5 for 13 min at zero throughput), then EngineCore died
-    #   - plus the earlier kimik2.7 -tune2 cells noted above
-    # Four configs, one node, same outcome. Set SALLOC_EXCLUDE_NODES="" to
-    # clear it, or to a comma-separated list to widen it for a specific run.
-    SALLOC_EXCLUDE_NODES="${SALLOC_EXCLUDE_NODES-mia1-p01-g11}"
-    EXCLUDE_ARG=""
-    if [ -n "$SALLOC_EXCLUDE_NODES" ]; then
-        EXCLUDE_ARG="--exclude=$SALLOC_EXCLUDE_NODES"
-        echo "salloc excluding nodes: $SALLOC_EXCLUDE_NODES"
-    fi
-    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME" $EXCLUDE_ARG
+    salloc --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --cpus-per-task=128 --time=500 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID bash -c "docker stop \$(docker ps -a -q)"
@@ -332,14 +303,6 @@ else
     # they are pre-downloaded once to the NFS share instead. Covers both the
     # MiniMaxAI MXFP8 checkpoint and the amd MXFP4 atom checkpoint.
     if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* || "$MODEL" == amd/MiniMax-M3* ]]; then
-        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
-    fi
-
-    # Kimi-K3's MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
-    # safetensors) and does not fit the node-local /var/lib NVMe hub cache
-    # alongside anything else, so it is pre-staged once on the NFS share like
-    # MiniMax-M3.
-    if [[ "$MODEL" == moonshotai/Kimi-K3* ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 

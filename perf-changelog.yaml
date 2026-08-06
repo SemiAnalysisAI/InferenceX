@@ -5341,16 +5341,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2312
 
 - config-keys:
-    - kimik3-fp4-mi355x-vllm-agentic-dspark
-  description:
-    - "Add the Kimi-K3 MXFP4 MI355X AgentX DSpark recipe with Inferact/Kimi-K3-DSpark, seven draft tokens, probabilistic draft sampling, and TRITON_MLA on ROCm. This is the only key for this model/SKU: Kimi-K3 agentic is onboarded spec-decode-only from day 0, so the non-DSpark arm is neither run nor published (MODELS.md), and the key name matches the NVIDIA sibling kimik3-fp4-b300-vllm-agentic-dspark."
-    - "Align the first AgentX validation with the upstream AMD reproducer: GPU-only TP8 at concurrency 1, real block rejection, --gpu-memory-utilization 0.95, --max-num-batched-tokens 4096, --max-num-seqs 16, multimodal encoder data parallelism, and no --enforce-eager or explicit prefix-cache override."
-    - "Use VLLM_ROCM_USE_AITER=1, SAFETENSORS_FAST_GPU=1, AITER_SITUV2_A8W4=1, AITER_BF16_FP8_MOE_BOUND=0, and VLLM_USE_BREAKABLE_CUDAGRAPH=0 with the stock vllm/vllm-openai-rocm:kimi-k3 image."
-    - "The recipe is GPU-only (kv-offloading: none) and rejects a matrix row that asks for a host tier rather than silently ignoring it; the LMCache / SimpleCPUOffload / OffloadingConnector plumbing the bring-up sweeps used is not carried, and returns with the arm that needs it."
-    - "Passes spec-decoding and the kv-offload-backend metadata through to the agentic-eval job in e2e-tests.yml, which previously hardcoded spec-decoding: none and rendered an object-valued kv-offload-backend as a broken string. Without the spec-decoding passthrough the DSpark eval job would resolve to the non-DSpark script name."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2403
-
-- config-keys:
     - kimik2.6-fp4-b200-dynamo-vllm
   description:
     - "Add Kimi K2.6 NVFP4 B200 Dynamo vLLM disaggregated configuration."

@@ -616,35 +616,6 @@ kimik2.5-fp4-mi355x-atom-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
-# Kimi-K3 MXFP4 MI355X AgentX, DSpark only. Kimi-K3 agentic is onboarded
-# spec-decode-only from day 0 -- the non-DSpark arm is neither run nor
-# published (MODELS.md) -- so this is the single shipped key for this
-# model/SKU, and it is the AMD sibling of kimik3-fp4-b300-vllm-agentic-dspark
-# in configs/nvidia-master.yaml.
-#
-# TP=8 only: the MXFP4 checkpoint is 1.561 TB decimal (1.420 TiB, 96
-# safetensors), ~195 GB/GPU of the 288 GB part, so TP=4 cannot load. Upstream
-# strategy_min_gpus agrees (single_node_tp and multi_node_tep both 8, DEP 16+),
-# which is why there is no DP-attention arm either.
-kimik3-fp4-mi355x-vllm-agentic-dspark:
-  image: vllm/vllm-openai-rocm:kimi-k3
-  model: moonshotai/Kimi-K3
-  model-prefix: kimik3
-  runner: cluster:mi355x-amds
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-      # No dram-utilization: this arm is GPU-only, so the generator resolves
-      # TOTAL_CPU_DRAM_GB to 0 either way and the field would be inert.
-    - search-space:
-      # Exact upstream AMD DSpark reproducer: GPU-only TP8, seven draft tokens,
-      # probabilistic draft sampling, TRITON_MLA, and real block rejection.
-      # Start at c1; expand only after the AgentX-fast preflight is healthy.
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1] }
-
-
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: deepseek-ai/DeepSeek-R1-0528
