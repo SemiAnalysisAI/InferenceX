@@ -356,6 +356,14 @@ fi
 # --dsv4 routes prompts through DeepSeek-V4 chat encoding (auto-enables
 # --use-chat-template); MTP acceptance is trained on chat-formatted input and
 # silently regresses on raw random tokens.
+#
+# --tokenizer is not redundant with --model. benchmark_serving.py falls back to
+# args.model for the tokenizer id (tokenizer_id = args.tokenizer or args.model),
+# and --model here is the *served* name -- an HF repo id. With HF_HUB_OFFLINE=1
+# and no Hub cache the deepseek_v4 loader cannot resolve it and dies with a
+# misleading "you need sentencepiece or tiktoken installed". Both are in fact
+# installed; the id simply was not on disk. Point it at the mounted checkpoint,
+# which carries tokenizer.json and encoding/.
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -368,6 +376,7 @@ run_benchmark_serving \
     --result-filename "$RESULT_FILENAME" \
     --result-dir "$RESULT_DIR" \
     --bench-serving-dir "$BENCH_SERVING_DIR" \
+    --tokenizer "$MODEL_PATH" \
     --tokenizer-mode deepseek_v4 \
     --trust-remote-code \
     --dsv4
