@@ -5,7 +5,7 @@ name: "disagg-h200-2p2d-pcp8-tp8-dp8-hisparse-mtp"
 # thinking-on acceptance length for three speculative steps.
 
 model:
-  path: "glm5.2-fp8"
+  path: "hf:zai-org/GLM-5.2-FP8"
   container: "lmsysorg/sglang:v0.5.16-cu130"
   precision: "fp8"
 

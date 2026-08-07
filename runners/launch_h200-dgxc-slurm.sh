@@ -9,40 +9,6 @@ set -x
 
 source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
-resolve_complete_model_snapshot() {
-    python3 - "$1" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-model_cache_dir = Path(sys.argv[1])
-try:
-    revision = model_cache_dir.joinpath("refs/main").read_text().strip()
-except OSError:
-    raise SystemExit
-
-if not revision or Path(revision).name != revision:
-    raise SystemExit
-
-snapshot = model_cache_dir / "snapshots" / revision
-index_path = snapshot / "model.safetensors.index.json"
-required_files = (
-    snapshot / "config.json",
-    snapshot / "tokenizer_config.json",
-    index_path,
-)
-if not all(path.is_file() for path in required_files):
-    raise SystemExit
-try:
-    weight_map = json.loads(index_path.read_text())["weight_map"]
-except (KeyError, json.JSONDecodeError, OSError):
-    raise SystemExit
-shards = {snapshot / filename for filename in weight_map.values()}
-if shards and all(path.is_file() for path in shards):
-    print(snapshot)
-PY
-}
-
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ -z "${CONFIG_FILE:-}" ]]; then
@@ -60,17 +26,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
         elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
-            if [[ -n "${GLM52_FP8_MODEL_PATH:-}" ]]; then
-                MODEL_PATH="$GLM52_FP8_MODEL_PATH"
-            else
-                GLM52_FP8_MODEL_CACHE_DIR="/models/gharunners/hf-hub-cache/models--zai-org--GLM-5.2-FP8"
-                MODEL_PATH=$(resolve_complete_model_snapshot "$GLM52_FP8_MODEL_CACHE_DIR")
+            export MODEL_PATH="${GLM52_FP8_MODEL_PATH:-/models/GLM-5.2-FP8}"
+            if [[ ! -d "$MODEL_PATH" ]]; then
+                export MODEL_PATH="hf:zai-org/GLM-5.2-FP8"
             fi
-            if [[ ! -f "$MODEL_PATH/config.json" || ! -f "$MODEL_PATH/model.safetensors.index.json" ]]; then
-                echo "Complete GLM-5.2-FP8 model snapshot is unavailable at: $MODEL_PATH" >&2
-                exit 1
-            fi
-            export MODEL_PATH
             export SRT_SLURM_MODEL_PREFIX="glm5.2-fp8"
         else
             echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
