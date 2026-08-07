@@ -771,7 +771,7 @@ if [ "$LANGUAGE_MODEL_ONLY" = "true" ]; then
 fi
 
 # ---- Optional axes ----------------------------------------------------------
-KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "fp8")
+KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 
 SYNTHETIC_ACCEPT_LEN=2.51
@@ -797,7 +797,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( 2 * CONC * (1 + SPEC_NUM_TOKENS) ))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 4 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
-GPU_MEM_UTIL="0.9"
+GPU_MEM_UTIL="0.85"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
