@@ -1002,6 +1002,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
+    # KEEP_SERVER_ALIVE=1 holds the whole stack (router + prefill + decode) up after
+    # the benchmark instead of tearing it down, so a second load run costs only the
+    # load itself. Bringing 1P1D up is ~10 min even with --load-format dummy (weights,
+    # KV alloc, Mooncake DRAM registration, graph capture), which dominated every
+    # crash-repro iteration. Debug-only; the sentinel is deleted to release the job.
+    if [[ "${KEEP_SERVER_ALIVE:-0}" == "1" && "$DRY_RUN" -eq 0 ]]; then
+        KEEP_ALIVE_SENTINEL="/run_logs/slurm_job-${SLURM_JOB_ID}/KEEP_SERVER_ALIVE"
+        : > "$KEEP_ALIVE_SENTINEL"
+        echo "KEEP_SERVER_ALIVE=1: stack stays up; 'rm ${KEEP_ALIVE_SENTINEL}' to let it exit"
+        while [[ -f "$KEEP_ALIVE_SENTINEL" ]]; do sleep 15; done
+        echo "KEEP_SERVER_ALIVE: sentinel removed, proceeding to shutdown"
+    fi
+
     echo "Killing the prefill server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
         [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
