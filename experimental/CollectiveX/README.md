@@ -87,7 +87,9 @@ once per ladder point against the state the chain leaves behind
 chain stages per pair, and is `null` where staging is hoisted out of the chain — under the hoist
 neither regime combines an input matching its own dispatch, so the two are not comparable. That
 boundary was measured rather than assumed: identical h100 cases differ by 1000×–2966× the combine
-tolerance with the hoist and by exactly zero without it. See the methodology's Correctness section.
+tolerance with the hoist and by exactly zero without it. See the methodology's Correctness section. The null is a deliberate, bounded gap — an FP8-only,
+free-running-only, stateless corruption would red no gate — and the `CX_FP8_CONSUME=dequant` hatch
+is the standing probe for it.
 
 `roundtrip` means dispatch then combine — the transport — in every row. Expert-output staging sits
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding

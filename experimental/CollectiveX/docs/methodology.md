@@ -465,6 +465,22 @@ the `dequant` hatch. `null` there means the question was not asked, never a comp
 failed. If this boundary is ever moved, move it on a measured magnitude: the verdict alone
 justified two wrong calls in one day, and the number settled it in one probe each time.
 
+What the null leaves uncovered is the intersection of three conditions: a corruption that manifests
+only under free-running pairs (the drained oracles are blind by regime), leaves no state behind
+(the post-chain oracle is blind), and lives in a path the BF16 sibling row does not exercise (its
+still-gating check is blind). Anything short of all three still reds a gate — the DeepEP
+low-latency 256-rung corruption hit both precisions, so its BF16 rows would red
+`chain_last_output_passed` today, and a wedge trips the per-case hang guard. Note the hoisted chain
+also never consumes its own FP8 receive, so the exposure covers dispatch-side corruption as well as
+combine-side, and `chain_health` is a consistency guard, not a work guard: a regime defect that
+uniformly shortens the combine would publish a fast period no surviving check contradicts. The
+standing probe for the intersection is the `dequant` hatch — `CX_FP8_CONSUME=dequant` stages every
+pair from its own dispatch, restoring this check on FP8's own free-running pairs. Run one whenever
+an FP8 chained period moves in a way its BF16 sibling does not, and before first publishing a new
+FP8 backend. flashinfer-ep hoists at BF16 as well (its stage is the workspace staging copy), so its
+rows are null at every precision and the hatch does not reach it; its coverage is an open
+follow-up.
+
 Check 6 also publishes `correctness.chain_last_output_error` — the worst chained-vs-drained
 relative error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before
 reading the verdict. The check assumes a regime defect lands orders of magnitude past
