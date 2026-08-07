@@ -85,7 +85,14 @@ if [ "$DP_ATTENTION" = "true" ]; then
     USE_VLLM_ROUTER=true
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_VERSION=0.1.14
-    VLLM_ROUTER_POLICY=consistent_hash
+    # consistent_hash keyed on the session id set just below, so every turn of a
+    # conversation lands on the DP rank that already holds its prefix. On this
+    # trace that matters: ISL runs ~200x OSL, so re-prefilling a scattered
+    # session costs far more than any gain from a flatter spread. Left as the
+    # default deliberately -- the round_robin win measured on the 10/10 probe
+    # does not transfer, since that probe has no sessions and no prefix cache.
+    # Overridable so the two can be compared on this workload.
+    : "${VLLM_ROUTER_POLICY:=consistent_hash}"
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
