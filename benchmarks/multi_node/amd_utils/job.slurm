@@ -325,14 +325,22 @@ export BENCH_NUM_PROMPTS_MULTIPLIER=$BENCH_NUM_PROMPTS_MULTIPLIER
 export BENCH_MAX_CONCURRENCY=$BENCH_MAX_CONCURRENCY
 export BENCH_REQUEST_RATE=$BENCH_REQUEST_RATE
 export DRY_RUN="${DRY_RUN:-0}"
-# The ROCm runtime already tries to write a GPU core dump to /coredumps when a
-# kernel faults, and gives up with
+# GPU core dumps are the evidence that is missing when a worker dies on
+# HSA_STATUS_ERROR_EXCEPTION: the process is signalled, so there is no Python traceback
+# either. Mounting a writable directory was not enough -- the runtime still reported
 #   GPU coredump: Directory "/coredumps not writable or does not exist
-# which is exactly the evidence missing when a worker dies on
-# HSA_STATUS_ERROR_EXCEPTION: the process is signalled, so there is no Python
-# traceback either. Give it a writable node-local directory to land in.
+# Two things were actually missing:
+#   1. HSA_COREDUMP_PATTERN. Unset, the HSA runtime reads /proc/sys/kernel/core_pattern
+#      and, when that is a pipe handler (systemd-coredump), tries to exec a binary that
+#      does not exist in the container. An explicit file pattern bypasses the handler.
+#   2. RLIMIT_CORE. build_core_dump() checks getrlimit(RLIMIT_CORE) and silently skips
+#      the dump when the file would exceed it, and containers commonly default to 0.
+#      Hence --ulimit core=-1 on docker run.
 COREDUMP_DIR="${COREDUMP_DIR:-/tmp/gpu_coredumps-${SLURM_JOB_ID}}"
 export COREDUMP_DIR
+# %p expands to the pid, so concurrent TP ranks do not collide (the runtime opens with
+# O_EXCL and would otherwise lose all but the first).
+export HSA_COREDUMP_PATTERN="${HSA_COREDUMP_PATTERN:-/coredumps/gpucore.%p}"
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
 export ENGINE=$ENGINE
@@ -548,6 +556,7 @@ DOCKER_ENV_COMMON=(
     # every kernel, so an HSA_STATUS_ERROR_EXCEPTION is attributed to the kernel
     # that caused it instead of surfacing as an async queue abort with no Python
     # frame anywhere. Slow, so it is opt-in and unset by default.
+    -e HSA_COREDUMP_PATTERN=\${HSA_COREDUMP_PATTERN:-}
     -e AMD_SERIALIZE_KERNEL=\${AMD_SERIALIZE_KERNEL:-}
     -e AMD_LOG_LEVEL=\${AMD_LOG_LEVEL:-}
     -e HIP_LAUNCH_BLOCKING=\${HIP_LAUNCH_BLOCKING:-}
@@ -847,6 +856,7 @@ fi
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     --ulimit nofile=1048576:1048576 \
+    --ulimit core=-1 \
     --network host \
     --ipc host \
     --group-add video \
