@@ -52,6 +52,8 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+wait_for_amd_gpu_clean
+
 # Force the eval framework to lm-eval, matching minimaxm3_fp4_mi355x.sh.
 # run_eval derives its default as swebench for agentic scenarios
 # (scenario_default=swebench when IS_AGENTIC/SCENARIO_TYPE=agentic-coding), but
@@ -98,6 +100,8 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- Reference env block ----------------------------------------------------
+export VLLM_ROCM_AITER_MLA_ASM_PADDING=gluon
+export AITER_DISABLE_FMHA_OPUS=1   
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
 export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
@@ -770,24 +774,30 @@ fi
 KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 
-SYNTHETIC_ACCEPT_LEN=2.45
-SPEC_ARGS=(
-    --speculative-config
-    "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
-)
+SYNTHETIC_ACCEPT_LEN=2.51
 
-MAX_NUM_SEQS=$((1 * CONC))
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_ARGS=(
+        --speculative-config
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+    )
+else
+    SPEC_ARGS=(
+        --speculative-config
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+    )
+fi
+
+
+MAX_NUM_SEQS=$((2 * CONC))
 # Capture cudagraphs up to the DSpark MTP verify batch. The served slot cap is
 # MAX_NUM_SEQS (1*CONC), but capture is sized off 2*CONC decode slots, each
 # expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
 # (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
-# temp_graph.sh config validated for capture even though max-num-seqs is lower.
-# mode 3 (piecewise compile) with an explicit even-step capture list and no
-# cudagraph_mode, matching temp_graph.sh.
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( 2 * CONC * (1 + SPEC_NUM_TOKENS) ))
 CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 4 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
-GPU_MEM_UTIL="0.9"
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
+GPU_MEM_UTIL="0.95"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
@@ -813,6 +823,7 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
+    --disable-custom-all-reduce
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${LMCACHE_MAMBA_CACHE_MODE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
