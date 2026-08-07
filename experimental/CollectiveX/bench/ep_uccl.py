@@ -134,8 +134,8 @@ class UCCLEPBackend(EPBackend):
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     stage_device_work = False
-    combine_needs_redispatch = False
-    dispatch_needs_combine_cleanup = False
+    requires_fresh_pair = False
+    receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
@@ -164,9 +164,9 @@ class UCCLEPBackend(EPBackend):
             # are double-buffered and single-use per dispatch, so every timed combine needs a
             # fresh dispatch and every timed dispatch must be drained by its combine.
             self.kernel_generation = "uccl-legacy-buffer-ll"
+            self.receive_layout = "token-expert"
             self.combine_weight_semantics = "weighted-kernel-sum"
-            self.combine_needs_redispatch = True
-            self.dispatch_needs_combine_cleanup = True
+            self.requires_fresh_pair = True
 
     def buffer_cap(self, args):
         if self.mode == "low-latency":

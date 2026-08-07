@@ -92,12 +92,10 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(
             backend.timed_components(), ["roundtrip", "dispatch", "combine", "stage"]
         )
-        backend.roundtrip_only = True
-        self.assertEqual(backend.timed_components(), ["roundtrip"])
 
     def test_dispatch_cleanup_is_outside_timed_call(self):
         backend = FakeBackend(args())
-        backend.dispatch_needs_combine_cleanup = True
+        backend.requires_fresh_pair = True
         captured = {}
 
         def fake_time(_torch, operation, _warmup, _iters, **kwargs):
@@ -114,13 +112,13 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(backend.calls, ["dispatch", "stage", "combine"])
 
     def test_stage_cleanup_matches_the_dispatch_contract(self):
-        # MoRI-shaped backends (dispatch_needs_combine_cleanup) must not leak an
+        # MoRI-shaped backends (requires_fresh_pair) must not leak an
         # un-combined dispatch out of an isolated-stage iteration.
         for needs_cleanup, calls in (
             (True, ["dispatch", "stage", "combine"]), (False, ["dispatch", "stage"]),
         ):
             backend = FakeBackend(args())
-            backend.dispatch_needs_combine_cleanup = needs_cleanup
+            backend.requires_fresh_pair = needs_cleanup
 
             def fake_time(_torch, operation, _warmup, _iters, **kwargs):
                 result = operation(kwargs["pre"]())
@@ -141,8 +139,9 @@ class BackendTests(unittest.TestCase):
 
     def test_low_latency_mode_accepted_only_when_declared(self):
         # The base backend is normal-only, so it must reject low-latency; an adapter that
-        # declares it in SUPPORTED_MODES is accepted and can carry the weighted-kernel
-        # combine semantics the low-latency oracle path keys on.
+        # declares it in SUPPORTED_MODES is accepted and can carry the token-expert
+        # receive layout the low-latency oracle path keys on, alongside its
+        # weighted-kernel combine.
         with self.assertRaises(ValueError):
             FakeBackend(args(mode="low-latency"))
 
@@ -150,8 +149,10 @@ class BackendTests(unittest.TestCase):
             SUPPORTED_MODES = ("normal", "low-latency")
 
         backend = LowLatencyBackend(args(mode="low-latency"))
+        backend.receive_layout = "token-expert"
         backend.combine_weight_semantics = "weighted-kernel-sum"
         self.assertEqual(backend.mode, "low-latency")
+        self.assertEqual(backend.receive_layout, "token-expert")
         self.assertEqual(backend.combine_weight_semantics, "weighted-kernel-sum")
 
     def test_precision_is_fail_closed(self):

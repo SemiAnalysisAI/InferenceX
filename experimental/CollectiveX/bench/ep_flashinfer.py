@@ -117,8 +117,7 @@ class FlashInferEPBackend(EPBackend):
     # Set per wheel in create_buffer; see _COMBINE_FP32_SINCE.
     combine_reduction = "topk-slot-tree"
     # Forced by the phase asserts described in the module docstring.
-    combine_needs_redispatch = True
-    dispatch_needs_combine_cleanup = True
+    requires_fresh_pair = True
     combine_input_attr = "combine_input"
 
     def __init__(self, args, rank, world_size, local_rank, device):

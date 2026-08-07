@@ -77,12 +77,25 @@ class EPBackend(abc.ABC):
     # adapter that also sends an FP8-quantized dispatch payload widens this.
     SUPPORTED_PRECISIONS: tuple = ("bf16",)
     stage_device_work = False
-    combine_needs_redispatch = False
-    dispatch_needs_combine_cleanup = False
-    # Adapters that reduce activations and top-k weights independently must carry
-    # the complete local weighted expert sum in the activation tensor.
+    # Dispatch and combine form a single-use pair: every timed combine needs a fresh
+    # dispatch and every timed dispatch must be drained by a combine (double-buffered
+    # low-latency result tensors; MoRI/FlashInfer phase asserts). One flag, because a
+    # handle is either reusable or it is not -- no adapter has ever needed one
+    # direction without the other.
+    requires_fresh_pair = False
+    # Shape of the receive plane dispatch delivers -- "token-rank": one row per
+    # (source token, dest rank), rank-deduplicated; "token-expert": one row per
+    # (source token, expert) assignment (the low-latency padded layouts). Selects the
+    # correctness oracle and the artifact's `logical_copies.wire` label; independent
+    # of combine_weight_semantics (MoRI's IntraNodeLL is token-rank AND unweighted in
+    # low-latency mode).
+    receive_layout = "token-rank"
+    # WHERE the top-k gate weight enters the combine. "unweighted-rank-sum": the staged
+    # combine input carries the gate folded in -- adapters that reduce activations and
+    # top-k weights independently must carry the complete local weighted expert sum in
+    # the activation tensor -- and the kernel only sums. "weighted-kernel-sum": the
+    # kernel multiplies by the gate itself. Selects the expected-combine arithmetic.
     combine_weight_semantics = "unweighted-rank-sum"
-    roundtrip_only = False
     # Realized wire formats recorded in the artifact. Combine is always BF16;
     # dispatch_dtype is overridden per-run by an FP8 adapter (e.g. "fp8-e4m3fn").
     dispatch_dtype = "bf16"
@@ -370,13 +383,11 @@ class EPBackend(abc.ABC):
     # ---- Timing template methods -----------------------------------------------------
 
     def timed_components(self):
-        """Components measured for this backend: roundtrip always; the rest unless
-        the backend exposes only a stateful paired round trip."""
-        components = ["roundtrip"]
-        if not self.roundtrip_only:
-            components.extend(["dispatch", "combine"])
-            if self.stage_device_work:
-                components.append("stage")
+        """Components measured for this backend: roundtrip, dispatch and combine
+        always; stage only when it launches device work."""
+        components = ["roundtrip", "dispatch", "combine"]
+        if self.stage_device_work:
+            components.append("stage")
         return components
 
     def warm(self, problem, count, stage_every=False):
@@ -555,10 +566,9 @@ class EPBackend(abc.ABC):
             self.stage(p, hh)
             self.combine(p, hh)
 
-        dispatch_needs_cleanup = self.dispatch_needs_combine_cleanup
         return time_us(
             torch, lambda p=problem: self.dispatch(p), 0, iters,
-            post=finish_dispatch if dispatch_needs_cleanup else None,
+            post=finish_dispatch if self.requires_fresh_pair else None,
         )
 
     def benchmark_stage(self, problem, warmup, iters):
@@ -579,7 +589,7 @@ class EPBackend(abc.ABC):
         return time_us(
             torch, stage_op, 0, iters, pre=prep_stage,
             post=(lambda hh, p=problem: self.combine(p, hh))
-            if self.dispatch_needs_combine_cleanup else None,
+            if self.requires_fresh_pair else None,
         )
 
     def benchmark_combine(self, problem, warmup, iters):
@@ -592,7 +602,7 @@ class EPBackend(abc.ABC):
             self.stage(p, hh)
             return hh
 
-        if self.combine_needs_redispatch:
+        if self.requires_fresh_pair:
             return time_us(
                 torch, lambda hh, p=problem: self.combine(p, hh), 0, iters, pre=prep_combine,
             )

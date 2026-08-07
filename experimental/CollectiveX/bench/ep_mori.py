@@ -42,8 +42,7 @@ class MoRIBackend(EPBackend):
     maturity = "production"  # vLLM --all2all-backend mori_*; SGLang --moe-a2a-backend mori
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
-    combine_needs_redispatch = True
-    dispatch_needs_combine_cleanup = True
+    requires_fresh_pair = True
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)
@@ -94,7 +93,9 @@ class MoRIBackend(EPBackend):
             # layout. Its combine keeps the plain rank-deduplicated additive sum (combine is
             # called with weights=None -> weight_ptr 0 in mori.ops, so the gate is NOT applied
             # in-kernel), identical in semantics to IntraNode/normal mode ("unweighted-rank-sum",
-            # the base default the harness admits for low-latency). So LL differs from the normal
+            # the base default the harness admits for low-latency) over the same compact
+            # rank-deduplicated receive (the base "token-rank" receive_layout, so the
+            # artifact's wire basis stays rank-deduplicated). So LL differs from the normal
             # IntraNode path ONLY by kernel_type (set here vs omitted) and timing; every transport
             # method (dispatch/stage/combine/inspect_dispatch/combine_transformed) is reused as-is.
             # AsyncLL (enum 4) is deliberately NOT used: it is split-phase (dispatch_recv/

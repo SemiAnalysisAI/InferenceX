@@ -62,6 +62,16 @@ MODE_ALLOWED_SEMANTICS = {
     "low-latency": {"weighted-kernel-sum", "unweighted-rank-sum"},
 }
 
+# The (receive_layout, combine_weight_semantics) pairs the correctness oracles model.
+# The two axes are independent declarations, but only these combinations have an
+# expected-combine model; run_sweep fails closed on any other pairing. A backend
+# declaring an unmodeled pair may be correctly implemented -- it needs an oracle
+# written for it, not a silent verification against the wrong expectation.
+ORACLE_MODELED_CONTRACTS = {
+    ("token-rank", "unweighted-rank-sum"),
+    ("token-expert", "weighted-kernel-sum"),
+}
+
 def logical_byte_provenance(
     logical_copies: int,
     hidden: int,
@@ -597,11 +607,11 @@ def _run_expert_oracle(
     seed: int,
 ):
     """Verify one real dispatch/transform/combine without entering a timed region."""
-    # The low-latency decode kernels deliver a per-(source, expert) slot layout with a
-    # gate-weighted combine, which breaks this oracle's rank-deduplicated, unweighted
-    # assumptions. Route those cases to the dedicated per-slot oracle; keying on the
-    # declared combine semantics keeps the normal-mode path below untouched.
-    if getattr(backend, "combine_weight_semantics", None) == "weighted-kernel-sum":
+    # A per-(source, expert) slot receive breaks this oracle's rank-deduplicated
+    # assumptions. Route those layouts to the dedicated per-slot oracle; keying on the
+    # declared receive layout -- not the combine weighting, which is an independent
+    # declaration -- keeps the token-rank path below untouched.
+    if getattr(backend, "receive_layout", "token-rank") == "token-expert":
         return _run_ll_expert_oracle(
             torch, routing, backend, problem, global_idx, global_weights,
             rank, experts_per_rank, scale_up_domain, seed,
@@ -940,6 +950,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 f"backend declares {getattr(backend, 'combine_weight_semantics', None)!r}"
             )
         return 2
+    # Layout and weighting are declared independently; only two pairings have a
+    # correctness oracle (ORACLE_MODELED_CONTRACTS). Fail closed on the rest, so a
+    # backend whose declarations diverge errors with the missing model named instead
+    # of being verified against the wrong oracle and publishing the wrong wire basis.
+    declared_contract = (
+        getattr(backend, "receive_layout", "token-rank"),
+        getattr(backend, "combine_weight_semantics", None),
+    )
+    if declared_contract not in ORACLE_MODELED_CONTRACTS:
+        if rank == 0:
+            print(
+                "ERROR: no correctness oracle models receive_layout="
+                f"{declared_contract[0]!r} with combine semantics {declared_contract[1]!r}"
+            )
+        return 2
     # A non-control precision must realize a non-BF16 dispatch wire format. Otherwise a
     # backend that lists the precision in SUPPORTED_PRECISIONS but never overrode its
     # encode hooks would run the case in BF16 and emit an artifact mislabeled with the
@@ -1043,14 +1068,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         order = trial_order(list(ladder), trial_index)
         for T in order:
             problem = problems[T]
-            # timed_components() encodes the roundtrip-only vs full-component contract
-            # (and whether stage launches device work) once, in the base class.
+            # timed_components() encodes whether stage launches device work once, in
+            # the base class.
             component_order = trial_order(backend.timed_components(), trial_index)
             measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
             for component_name in component_order:
                 # The base template gives every component the same synchronized
-                # full-roundtrip warm-up before its timed trial and encodes the two
-                # branch rules (dispatch cleanup, combine re-dispatch) internally.
+                # full-roundtrip warm-up before its timed trial and encodes the
+                # fresh-pair rule (dispatch drain, combine re-dispatch) internally.
                 measured[component_name] = backend.benchmark_component(
                     component_name, problem, args.warmup, args.iters
                 )
@@ -1196,12 +1221,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
         # Second byte basis, for backends whose wire carries one copy per (token, expert). Which
         # applies is a property of the RECEIVE, not the mode -- MoRI's IntraNodeLL deduplicates
-        # where the other low-latency kernels do not -- so key it on the combine contract, which
-        # already encodes that. `routed_copies` stays the canonical comparable basis.
+        # where the other low-latency kernels do not -- so key it on the declared
+        # receive layout. `routed_copies` stays the canonical comparable basis.
         assignment_copies = int(sum(rstats["expert_assignments_per_rank"]))
         wire_basis = (
             "per-assignment"
-            if backend.combine_weight_semantics == "weighted-kernel-sum"
+            if backend.receive_layout == "token-expert"
             else "rank-deduplicated"
         )
         roundtrip_bytes = {

@@ -77,8 +77,8 @@ class NCCLEPBackend(EPBackend):
     SUPPORTED_PRECISIONS = ("bf16",)
     stage_device_work = False
     combine_input_attr = "combine_input_t"  # this adapter's combine reads combine_input_t
-    combine_needs_redispatch = False
-    dispatch_needs_combine_cleanup = False
+    requires_fresh_pair = False
+    receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
@@ -100,11 +100,12 @@ class NCCLEPBackend(EPBackend):
             # unweighted rank sum — the benchmark stages the UNWEIGHTED per-expert transform
             # and the kernel multiplies by the gate. Same contract as deepep-v2 low-latency.
             self.kernel_generation = "nccl-ep-ll"
+            self.receive_layout = "token-expert"
             self.combine_weight_semantics = "weighted-kernel-sum"
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
-        # both modes keep combine_needs_redispatch / dispatch_needs_combine_cleanup False.
+        # both modes keep requires_fresh_pair False.
         self._algorithm = Algorithm.LOW_LATENCY if self._ll else Algorithm.HIGH_THROUGHPUT
         self._layout = Layout.EXPERT_MAJOR if self._ll else Layout.FLAT
         # send_only=0 on every dispatch/combine (no staged execution). Handle.complete() is

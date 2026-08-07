@@ -598,6 +598,18 @@ class ModeSemanticsContract(unittest.TestCase):
             {"weighted-kernel-sum", "unweighted-rank-sum"},
         )
 
+    def test_oracle_modeled_contract_pairs(self) -> None:
+        # receive_layout and combine_weight_semantics are independent declarations;
+        # only these two pairings have an expected-combine model, and run_sweep fails
+        # closed on the other two rather than verify against the wrong oracle.
+        self.assertEqual(
+            ep_harness.ORACLE_MODELED_CONTRACTS,
+            {
+                ("token-rank", "unweighted-rank-sum"),
+                ("token-expert", "weighted-kernel-sum"),
+            },
+        )
+
 
 try:
     import torch as _torch

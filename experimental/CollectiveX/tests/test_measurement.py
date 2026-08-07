@@ -30,6 +30,7 @@ class _FakeLLBackend:
     per-expert order and combines by the source-side gate-weighted sum the kernel does."""
 
     name = "fake-ll"
+    receive_layout = "token-expert"
     combine_weight_semantics = "weighted-kernel-sum"
 
     def __init__(self, experts_per_rank: int, seed: int):

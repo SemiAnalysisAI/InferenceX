@@ -267,14 +267,13 @@ class ChainedPairPeriod(unittest.TestCase):
         )
 
     def test_the_pair_itself_satisfies_the_backends_that_need_a_paired_call(self):
-        # combine_needs_redispatch and dispatch_needs_combine_cleanup are both satisfied by the
-        # chain's structure, so neither may inject an extra untimed call into the loop.
+        # requires_fresh_pair is satisfied by the chain's structure, so it must not
+        # inject an extra untimed call into the loop.
         iters = 5
         backend = _ChainBackend(
             stage_device_work=False, fp8_consume="native", precision="bf16"
         )
-        backend.combine_needs_redispatch = True
-        backend.dispatch_needs_combine_cleanup = True
+        backend.requires_fresh_pair = True
         with trace_torch(backend.clock, backend.calls):
             backend.benchmark_chain(new_problem(), 0, iters, 1)
         self.assertEqual(
