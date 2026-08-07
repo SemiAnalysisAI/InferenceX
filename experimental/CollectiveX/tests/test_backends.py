@@ -2,6 +2,7 @@
 """EPBackend contracts: ladder/spec construction, the staging-vs-roundtrip gate, and the NCCL EP handle."""
 from __future__ import annotations
 
+import os
 import sys
 import types
 import unittest
@@ -252,6 +253,24 @@ class RoundtripStaging(unittest.TestCase):
     def test_default_models_the_native_path(self):
         # deepseek-v3 block-fp8 hits vLLM's matched branch and SGLang's no-dequant path.
         self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
+
+    def test_an_unrecognised_consume_mode_fails_instead_of_silently_meaning_native(self):
+        # The value is read at class-body evaluation, so a typo raises at import -- before
+        # any measurement -- rather than quietly running the default model and tagging the
+        # artifact with whatever the typo said.
+        import importlib
+
+        with mock.patch.dict(os.environ, {"CX_FP8_CONSUME": "dequantize"}):
+            with self.assertRaises(ValueError):
+                importlib.reload(ep_backend)
+        # Restore the module other tests hold references into.
+        importlib.reload(ep_backend)
+        self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
+
+    def test_a_backend_is_deployed_unless_it_says_otherwise(self):
+        # path_status is per-CASE: flashinfer-ep is a production BACKEND whose fp8 precision
+        # no engine can select, which per-backend maturity cannot express.
+        self.assertEqual(ep_backend.EPBackend.path_status, "deployed")
 
 
 class RoundtripStagingGate(unittest.TestCase):

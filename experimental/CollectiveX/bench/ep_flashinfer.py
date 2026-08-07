@@ -125,6 +125,10 @@ class FlashInferEPBackend(EPBackend):
         if self._fp8:
             # "-offpath" per SUPPORTED_PRECISIONS; bytes and block size match deepep-v2/uccl-ep.
             self.dispatch_dtype = "fp8-e4m3fn-blockwise-offpath"
+            # vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so the FP8 row measures
+            # the collective off any path an engine can select -- even though the BACKEND is
+            # "production". Kept in the matrix for cross-backend FP8 transport comparison.
+            self.path_status = "offpath"
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = (
                 (args.hidden + _FP8_BLOCK - 1) // _FP8_BLOCK

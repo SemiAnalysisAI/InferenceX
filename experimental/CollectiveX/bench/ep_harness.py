@@ -1484,6 +1484,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Whether this document's rows carry the chained family. Consumers key the headline on
             # presence, as for `stage_excluded_from_roundtrip`; the sweep `version` does not move.
             "chained_period": True,
+            # Whether this case's precision is a path a served engine selects on this
+            # transport. An "offpath" row measures the collective, not a deployment, even
+            # where backend maturity is "production" (flashinfer-ep fp8).
+            "path_status": getattr(backend, "path_status", "deployed"),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,

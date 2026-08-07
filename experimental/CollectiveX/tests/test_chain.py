@@ -1103,6 +1103,23 @@ class Headline(unittest.TestCase):
         self.assertIn("do not rank across them", rendered)
 
 
+class OffPathRowsAreMarkedInTheTable(unittest.TestCase):
+    # flashinfer-ep is a production BACKEND whose fp8 precision no engine can select, so
+    # per-backend maturity cannot express it and the summary would otherwise show the row
+    # as an ordinary deployable result.
+    def test_an_offpath_precision_is_marked(self):
+        record = document(with_period=True)
+        record["implementation"] = {"path_status": "offpath"}
+        self.assertIn("bf16 [offpath]", summarize.render([record]))
+
+    def test_a_deployed_row_and_a_row_predating_the_field_are_unmarked(self):
+        deployed = document(with_period=True)
+        deployed["implementation"] = {"path_status": "deployed"}
+        self.assertNotIn("[", summarize.render([deployed]).split("| ver |")[1])
+        # Rows written before path_status existed must render exactly as before.
+        self.assertNotIn("[offpath]", summarize.render([document(with_period=True)]))
+
+
 class RunnerFilterIsContentBased(unittest.TestCase):
     # --runner used to filter on `path.name.startswith(f"{runner}_")`, which coupled the
     # summary to the result filename. Naming results by case_id broke that silently: case_id

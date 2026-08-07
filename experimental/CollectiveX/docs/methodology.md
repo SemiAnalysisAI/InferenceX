@@ -482,7 +482,14 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
   `--all2all-backend` or SGLang's `--moe-a2a-backend`; `candidate` = a real transport we
   benchmark that no engine ships a selector for, so its numbers describe the library rather
   than a deployable configuration). The same map is in the registry's `backend_maturity`. It also
-  carries `chained_period` (whether this document's rows carry the chained family at all);
+  carries `path_status` — `maturity` is per-BACKEND and cannot express a backend that is deployed
+  at one precision and transport-only at another, so each case declares whether its own
+  (backend, precision) pair is something a served engine selects (`deployed`, the default) or not
+  (`offpath`). FlashInfer EP is the case in hand: a production transport whose FP8 dispatch no
+  engine can choose, kept in the matrix because it makes the FP8 wire comparable against
+  deepep-v2/uccl-ep at matching bytes and block size. `summarize.py` marks such rows in the
+  precision column. It also carries `chained_period` (whether this document's rows carry the
+  chained family at all);
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.

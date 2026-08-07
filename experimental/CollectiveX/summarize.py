@@ -129,6 +129,12 @@ def render(documents: list[dict]) -> str:
     chained = []
     for document in documents:
         sku, backend, suite, routing, mode, phase, ep, precision = _identity(document)
+        # An off-path precision measures the collective, not a deployment, even where the
+        # BACKEND is production (flashinfer-ep fp8). Without this the row is indistinguishable
+        # from a deployable one in the only view most readers see.
+        status = (document.get("implementation") or {}).get("path_status", "deployed")
+        if status != "deployed":
+            precision = f"{precision} [{status}]"
         token, p50, p99, min50, skew, row_chained = _headline(document)
         if row_chained is not None:
             chained.append(row_chained)
