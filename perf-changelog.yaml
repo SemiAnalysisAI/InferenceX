@@ -5580,3 +5580,16 @@
     - "Serve shape is otherwise identical to the non-MTP agentic sibling (SGLang HiCache host-DRAM offload with page-size 64 / kernel IO / page_first layout, flashinfer attention on sm_90, --quantization fp8, --kv-cache-dtype fp8_e4m3, --mamba-ssm-dtype bfloat16, --mem-fraction-static 0.75, qwen3 reasoning / qwen3_coder tool-call parsing inherited from the shared agentic replay path, the multi_tokenizer cached_tokens_details patch), so the spec-decode delta is readable at equal concurrency."
     - "Search space now runs on the AgentX MTP concurrency grid: the GPU-resident row [1, 4, 8, 12, 16] and the HiCache row [4, 8, 12, 16]. Every step is at least 2 concurrency apart and every arm stops hard at conc 16 -- single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and past conc 16 these SKUs are into the post-HBM-cliff thrashing regime that the non-MTP sweeps already characterized, which is not worth one GPU job per point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2427
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Add DSV4 B200 disaggregated Dynamo SGLang MTP configuration for 8k/1k"
+    - "Add five checked-in srt-slurm recipes with EAGLE speculative decoding and chat-template inputs"
+    - "Use the staged DSV4 checkpoint and its native quantization metadata"
+    - "Use the checkpoint-compatible MoE backend and remove loader-isolation overrides"
+    - "Use NIXL with the B200 UCX transport configuration for prefill-to-decode KV transfer"
+    - "Pin the B200 launcher bootstrap to the official uv 0.12.0 release with checksum verification"
+    - "Use the SGLang DSV4 disaggregated MTP state-transfer fix"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2252

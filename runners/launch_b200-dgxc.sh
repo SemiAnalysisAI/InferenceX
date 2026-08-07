@@ -18,18 +18,22 @@ elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
     export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
 elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
+    if [[ $FRAMEWORK == "dynamo-sglang" && $SPEC_DECODING == "mtp" ]]; then
+        export MODEL_PATH="/scratch/fsw/models/DeepSeek-V4-Pro"
     else
-        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
+        SELECTED_MODEL_PATH=""
+        if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+            SELECTED_MODEL_PATH="$MODEL_PATH"
+        else
+            for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
+                if [[ -d "$candidate" ]]; then
+                    SELECTED_MODEL_PATH="$candidate"
+                    break
+                fi
+            done
+        fi
+        export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
     fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
 elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
@@ -92,9 +96,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         exit 1
     fi
 
-    # Multinode dsv4 currently only ships with the dynamo-vllm recipe
-    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]]; then
-        echo "Unsupported framework for multinode dsv4: $FRAMEWORK (only dynamo-vllm)"
+    if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK != "dynamo-vllm" ]] &&
+       [[ $FRAMEWORK != "dynamo-sglang" || $SPEC_DECODING != "mtp" ]]; then
+        echo "Unsupported framework for multinode dsv4: $FRAMEWORK"
         exit 1
     fi
 
@@ -128,6 +132,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $SPEC_DECODING == "mtp" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout main
+        mkdir -p recipes/sglang/deepseek-v4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
     elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
         git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -170,7 +180,23 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    UV_VERSION="0.12.0"
+    UV_TARGET="uv-x86_64-unknown-linux-gnu"
+    UV_ARCHIVE="$GITHUB_WORKSPACE/.local/${UV_TARGET}.tar.gz"
+    mkdir -p "$UV_INSTALL_DIR"
+    curl -fL \
+        --retry 3 \
+        --retry-delay 2 \
+        --connect-timeout 15 \
+        --max-time 120 \
+        -o "$UV_ARCHIVE" \
+        "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${UV_TARGET}.tar.gz"
+    echo "eaf842262aa1c418d8ecc5605f02ee1ebfd369124fa48548e85f9481a47831a9  $UV_ARCHIVE" | sha256sum -c -
+    tar -xzf "$UV_ARCHIVE" \
+        -C "$UV_INSTALL_DIR" \
+        --strip-components=1 \
+        "${UV_TARGET}/uv" \
+        "${UV_TARGET}/uvx"
     export PATH="$UV_INSTALL_DIR:$PATH"
 
     if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -306,10 +332,10 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
-
     SRTCTL_PREFLIGHT_ARGS=()
-    # Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    # These weights are staged on the Slurm compute nodes, not the login node.
+    if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]] ||
+       [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $SPEC_DECODING == "mtp" ]]; then
         SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
     fi
 
