@@ -86,6 +86,23 @@ cleanup_container() {
 }
 trap cleanup_container EXIT
 
+# Forward any of the inner script's knobs that are set in this environment.
+# The inner script reads far more than the fixed list below, and a knob set on
+# the host but not forwarded is worse than one that errors: the run succeeds
+# with the default silently in place. That already cost one round_robin A/B.
+PASSTHRU=()
+for _v in VLLM_ROUTER_POLICY VLLM_ROUTER_VERSION MAX_NUM_SEQS GPU_MEM_UTIL \
+          ROCM_ROPE_KVCACHE_FUSION DP_ATTENTION EP_SIZE TP MAX_MODEL_LEN \
+          NUM_PROMPTS RANDOM_RANGE_RATIO RESULT_FILENAME NUM_SPEC_TOKENS \
+          MTP_SYNTHETIC VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS \
+          VLLM_ROCM_USE_AITER_MOE KV_OFFLOADING PROFILE RUN_EVAL; do
+    if [[ -n "${!_v+x}" ]]; then
+        PASSTHRU+=(-e "$_v=${!_v}")
+        echo " passthru  : $_v=${!_v}"
+    fi
+done
+unset _v
+
 # --entrypoint /bin/bash is mandatory: these images declare
 # ENTRYPOINT ["/bin/bash","-c"], so passing a command without overriding it
 # expands to `bash -c bash <args>` and the command is silently dropped -- the
@@ -112,6 +129,7 @@ docker run --rm --name "$CONTAINER_NAME" \
     -e QUICK_RUNNING_IMAGE="$IMAGE" \
     -e INFMAX_CONTAINER_WORKSPACE=/workspace \
     -e HF_HUB_OFFLINE=1 \
+    "${PASSTHRU[@]}" \
     "$IMAGE" \
     -lc 'set -o pipefail
          cd /workspace
