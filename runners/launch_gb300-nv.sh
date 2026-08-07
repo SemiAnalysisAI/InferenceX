@@ -185,8 +185,8 @@ SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.22: the two features the
-    # cquil11 fork was pinned for are merged upstream (present in v1.0.22) —
+    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.38: the two features the
+    # cquil11 fork was pinned for are merged upstream (present in v1.0.36) —
     #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
     #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
     #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
@@ -195,9 +195,13 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     #     genuinely missing on the compute node.
     #   - benchmark_stage propagates srun_options (container-remap-root must
     #     reach the agentic_srt.sh srun).
+    # v1.0.38 additionally injects AIPERF_SERVER_METRICS_URLS for custom
+    # benchmarks using each logical SGLang worker leader. This is required for
+    # complete AgentX trace artifacts; the public frontend alone may expose no
+    # Prometheus endpoint or only Dynamo frontend metrics.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.22
+    git checkout v1.0.38
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
         recipes/sglang/qwen3.5
@@ -229,6 +233,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/gb200-dsv4-recipes
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    # Fixed-length DeepSeek-V4 recipes are version-controlled in this repository;
+    # overlay them onto the srt-slurm release that bootstraps cargo/maturin for
+    # the hash-pinned Dynamo source build before launch.
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.25
+    mkdir -p recipes/sglang/deepseek-v4/8k1k
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/8k1k" \
+        recipes/sglang/deepseek-v4/8k1k
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -301,6 +315,13 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
+elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout v1.0.29
+    mkdir -p recipes/trtllm/qwen3.5/gb300-fp4/disagg
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg" \
+        recipes/trtllm/qwen3.5/gb300-fp4/disagg
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -411,7 +432,7 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 #     /scratch/models, and
 #   - qwen3.5 fp8, whose weights are also on the compute-node /scratch/models
 #     and which runs on srt-slurm:v1.0.25 (the release that has the preflight;
-#     qwen3.5 fp4 runs on sa-submission-q2-2026, which has none).
+#     qwen3.5 fp4 runs on v1.0.29, which has none).
 # The engine still fails loudly at runtime if the path is genuinely missing on
 # the compute node. Other fixed-seq-len recipes resolve model.path to a
 # login-visible location, so keep the precheck enforced for them.
@@ -419,7 +440,7 @@ SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) ]]; then
+if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp8" ) || ( "$MODEL_PREFIX" == "qwen3.5" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "dynamo-trt" ) ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then

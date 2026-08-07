@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu-2"
-SLURM_ACCOUNT="benchmark"
+SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
+SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
 set -x
 
@@ -57,7 +57,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
+    export MODEL_PATH="${MODEL_PATH:-/lustre/fsw/models/Kimi-K2.6-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
@@ -239,7 +239,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w 600 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else

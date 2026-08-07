@@ -47,10 +47,8 @@ backend:
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
 
-    NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    MC_FORCE_MNNVL: "1"
+    UCX_TLS: "rc,cuda_ipc,cuda_copy,tcp,self"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
@@ -68,10 +66,8 @@ backend:
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
 
-    NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
-    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
-    MC_FORCE_MNNVL: "1"
+    UCX_TLS: "rc,cuda_ipc,cuda_copy,tcp,self"
     SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
     SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
     SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
@@ -84,7 +80,7 @@ backend:
       trust-remote-code: true
       tool-call-parser: deepseekv4
       disaggregation-mode: "prefill"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
       data-parallel-size: 8
@@ -108,7 +104,7 @@ backend:
       trust-remote-code: true
       tool-call-parser: deepseekv4
       disaggregation-mode: "decode"
-      disaggregation-transfer-backend: mooncake
+      disaggregation-transfer-backend: nixl
 
       tensor-parallel-size: 8
       data-parallel-size: 8
