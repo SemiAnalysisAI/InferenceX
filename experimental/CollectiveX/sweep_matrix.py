@@ -41,11 +41,9 @@ BACKEND_PRECISIONS = {
     # NCCL EP is BF16-only on the strength of RELEASE.md's "No FP8 support" row, which is
     # worth re-testing — see the note in bench/ep_nccl.py.
     "nccl-ep": ("bf16",),
-    # FlashInfer one-sided is BF16-only this pass: the combine side accepts FP8 output
-    # dtypes, but an FP8 dispatch needs the scale payload plumbed as a second
-    # input_payload and validated against the oracle cast round-trip.
-    # FP8 is dispatch-side only here (scales as a fourth payload, combine stays BF16), and
-    # uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is comparable.
+    # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
+    # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
+    # comparable. No engine selects that precision on this transport -- see path_status.
     "flashinfer-ep": ("bf16", "fp8"),
 }
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
@@ -145,6 +143,15 @@ def resolve_matrix(
     ))
     workload = SWEEP["workload"]
     targets = _selected_backends(backend)
+    # Fail closed on a backend with no declared precisions. `.get(target, ("bf16",))` used to
+    # emit a silently BF16-only matrix for it: not a mislabelled case (run_sweep's
+    # non-bf16-dispatch guard catches those) but a missing one, which no gate can see.
+    undeclared = [target for target in targets if target not in BACKEND_PRECISIONS]
+    if undeclared:
+        raise SystemExit(
+            f"backends {undeclared} have no BACKEND_PRECISIONS entry; declare their dispatch "
+            "precisions rather than silently defaulting to bf16"
+        )
     requested_cases: list[dict[str, Any]] = []
     shards: dict[tuple[str, str, str, int, str], list[dict[str, Any]]] = {}
 
@@ -162,7 +169,7 @@ def resolve_matrix(
                     if runnable_eps is None:
                         continue
                     runnable = ep in runnable_eps
-                    backend_precisions = BACKEND_PRECISIONS.get(target, ("bf16",))
+                    backend_precisions = BACKEND_PRECISIONS[target]
                     supported = [
                         precision for precision in SWEEP["precisions"]
                         if precision in backend_precisions

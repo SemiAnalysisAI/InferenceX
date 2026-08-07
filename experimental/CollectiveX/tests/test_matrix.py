@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -333,6 +334,27 @@ class MatrixTests(unittest.TestCase):
         ):
             with self.subTest(options=options), self.assertRaises(SystemExit):
                 sweep_matrix.resolve_matrix(**options)
+
+
+class UndeclaredPrecisionsFailClosed(unittest.TestCase):
+    # A backend added to platform_config but missing from BACKEND_PRECISIONS used to default
+    # to bf16-only. That is a MISSING case, not a mislabelled one: run_sweep's
+    # non-bf16-dispatch guard can only catch a case that ran, so the fp8 coverage would just
+    # be absent from the matrix with nothing anywhere reporting it.
+    def test_a_backend_without_declared_precisions_stops_the_matrix(self):
+        pruned = {
+            name: value for name, value in sweep_matrix.BACKEND_PRECISIONS.items()
+            if name != "deepep-v2"
+        }
+        with mock.patch.object(sweep_matrix, "BACKEND_PRECISIONS", pruned):
+            with self.assertRaises(SystemExit) as caught:
+                sweep_matrix.resolve_matrix()
+        self.assertIn("deepep-v2", str(caught.exception))
+        self.assertIn("BACKEND_PRECISIONS", str(caught.exception))
+
+    def test_every_scheduled_backend_declares_its_precisions(self):
+        for backend in sweep_matrix.SWEEP_BACKENDS:
+            self.assertIn(backend, sweep_matrix.BACKEND_PRECISIONS, backend)
 
 
 class BackendMaturityTests(unittest.TestCase):
