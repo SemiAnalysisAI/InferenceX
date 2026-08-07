@@ -974,7 +974,7 @@ MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * (SPEC_NUM_TOKENS + 1) ))
 if [ "$MAX_NUM_SEQS" -ne "$MNS_BASE" ]; then
     echo "MNS_PIN=$MNS_PIN: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
 fi
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.9}"
 
 # vllm-project/vllm#51088 -- "[ROCm][MLA] Add small-head PS ASM decode route".
