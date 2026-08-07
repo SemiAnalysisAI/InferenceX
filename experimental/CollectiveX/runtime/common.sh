@@ -420,7 +420,10 @@ if [ "${COLLX_NODES:-1}" -gt 1 ] && [ "${COLLX_TRANSPORT:-}" != mnnvl ]; then
 fi
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$COLLX_GPUS_PER_NODE"
-exec python3 bench/run_ep.py "$@"
+entry=run_ep
+if [ "${1:-}" = "--entrypoint" ]; then entry="${2:-}"; shift 2; fi
+case "$entry" in run_ep|run_kv) ;; *) exit 67 ;; esac
+exec python3 "bench/${entry}.py" "$@"
 BASH
 }
 

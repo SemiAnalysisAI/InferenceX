@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "suite": "kv-transfer",
+  "workloads": {
+    "kv-dsv4": [
+      "fp8"
+    ]
+  },
+  "isl_ladder": [
+    512,
+    4096,
+    32768
+  ],
+  "page_tokens": [
+    16,
+    64
+  ],
+  "batch_sizes": [
+    1,
+    4,
+    16
+  ],
+  "ops": [
+    "pull",
+    "push"
+  ],
+  "timing": {
+    "warmup_per_trial": 2,
+    "reps_per_trial": 8,
+    "trials_per_point": 3
+  },
+  "pool_slack": 2.0,
+  "seed": 67
+}
