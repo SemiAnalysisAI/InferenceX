@@ -233,34 +233,25 @@ class MoRIBackend(EPBackend):
             return x
         return x.to(self._fp8_dtype).to(torch.bfloat16)
 
-    def _encode_dispatch(self, x):
-        if not self._fp8:
-            return x, None
-        # Send BF16 and cast inside dispatch, where production pays it: vLLM and SGLang both run
-        # an aiter quant immediately before mori's dispatch. MoRI's cast is a single eager
-        # elementwise kernel, so it needs no compile. oracle_x is the round trip, untimed.
-        return x, x.to(self._fp8_dtype).to(torch.bfloat16)
-
     def make_problem(self, T, idx, weights, x):
         indices = idx.to(torch.int32)
         gate_weights = weights.to(torch.float32)
-        dispatch_x, oracle_semantic = self._encode_dispatch(x)
-        problem = types.SimpleNamespace(
+        return types.SimpleNamespace(
             T=T,
             x=x,
-            dispatch_x=dispatch_x,
+            dispatch_x=x,
+            oracle_x=self.semantic_payload(x),
             topk_idx=indices,
             topk_weights=gate_weights,
             indices=indices,
             weights=gate_weights,
             scales=torch.empty((T, 0), dtype=torch.uint8, device=self.device),
         )
-        if oracle_semantic is not None:
-            problem.oracle_x = oracle_semantic
-        return problem
 
     def dispatch(self, p):
-        # See _encode_dispatch. Low-latency casts here too: MoRI's IntraNodeLL takes a
+        # Cast inside dispatch, where production pays it: vLLM and SGLang both run an aiter quant
+        # immediately before mori's dispatch. MoRI's cast is a single eager elementwise kernel, so
+        # it needs no compile. Low-latency casts here too: MoRI's IntraNodeLL takes a
         # caller-prequantized tensor, unlike deepep-v2/uccl-ep whose LL kernels quantise in-kernel.
         dispatch_x = p.dispatch_x.to(self._fp8_dtype) if self._fp8 else p.dispatch_x
         dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (

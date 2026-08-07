@@ -151,13 +151,9 @@ class FlashInferEPBackend(EPBackend):
         # Same callable the wire uses, so sender and oracle cannot disagree by construction.
         return _blockwise_cast_back(*self._quant(x))
 
-    def _encode_dispatch(self, x):
-        if not self._fp8:
-            return x, None
-        # Send BF16 and quantise inside dispatch, where production pays it. oracle_x is the
-        # round trip, computed once here, untimed -- which also compiles this rung's shape.
-        self.assert_quantize_identity(_blockwise_cast_to_fp8, self._quant, x)
-        return x, _blockwise_cast_back(*self._quant(x))
+    def _validate_quantizer(self, x):
+        if self._fp8:
+            self.assert_quantize_identity(_blockwise_cast_to_fp8, self._quant, x)
 
     def buffer_cap(self, args):
         # The workspace is sized from the ladder maximum rather than a fixed slot budget, so

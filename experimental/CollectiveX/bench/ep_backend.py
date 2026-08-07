@@ -63,7 +63,7 @@ class EPBackend(abc.ABC):
     combine, recv_tokens, inspect_dispatch, combine_transformed);
     everything the driver and the oracles need beyond that is provided here.
     Combine is always BF16; an adapter that supports FP8 dispatch overrides
-    SUPPORTED_PRECISIONS and the semantic_payload/_encode_dispatch hooks.
+    SUPPORTED_PRECISIONS and the semantic_payload/_validate_quantizer hooks.
     """
 
     name: str = ""
@@ -345,35 +345,33 @@ class EPBackend(abc.ABC):
         """
         return x
 
-    def _encode_dispatch(self, x):
-        """Return (dispatch_payload, oracle_semantic) for the source activations x.
-
-        Base identity: send x, no separate oracle payload (BF16). An FP8 adapter
-        returns the caller-prequantized dispatch payload and the dequantized BF16 the
-        oracle must expect after the backend's own dequant.
+    def _validate_quantizer(self, x) -> None:
+        """Per-shape hook, run untimed from make_problem. An FP8 adapter whose timed
+        dispatch calls a COMPILED quantizer overrides this to assert the compiled form
+        is bit-identical to the eager one (see assert_quantize_identity). The base has
+        no quantizer, and low-latency adapters keep the eager form, so neither checks.
         """
-        return x, None
 
     def make_problem(self, T, idx, weights, x):
         """Assemble the per-shape problem namespace.
 
-        dispatch_x is the payload actually sent (x itself in BF16; the caller-
-        prequantized encoding under FP8). oracle_x, when set, is the dequantized BF16
-        the combine oracle must expect, so the tight gate needs no tolerance change.
+        dispatch_x is always x: every adapter quantizes INSIDE dispatch, where production
+        pays it, so nothing is prequantized by the caller. oracle_x is semantic_payload(x)
+        -- identity in BF16, and the exact quant->dequant round-trip the wire performs under
+        FP8, so the combine gate stays tight without a tolerance change. Computing it here
+        also compiles this rung's quantizer shape outside the timed window.
         """
         import torch
 
-        dispatch_x, oracle_semantic = self._encode_dispatch(x)
-        problem = types.SimpleNamespace(
+        self._validate_quantizer(x)
+        return types.SimpleNamespace(
             T=T,
             x=x,
-            dispatch_x=dispatch_x,
+            dispatch_x=x,
+            oracle_x=self.semantic_payload(x),
             topk_idx=idx.to(self._topk_idx_dtype()),
             topk_weights=weights.to(torch.float32),
         )
-        if oracle_semantic is not None:
-            problem.oracle_x = oracle_semantic
-        return problem
 
     def _topk_idx_dtype(self):
         """Integer dtype the backend's kernels expect for top-k routing indices."""

@@ -279,17 +279,10 @@ class UCCLEPBackend(EPBackend):
         # Same callable the wire uses, so sender and oracle cannot disagree by construction.
         return per_token_cast_back(*self._quant(x))
 
-    def _encode_dispatch(self, x):
-        if not self._fp8:
-            return x, None
-        if self.mode == "low-latency":
-            # low_latency_dispatch takes BF16 x and casts to e4m3 inside the kernel, so send x
-            # unquantized; expose the host round-trip as the oracle semantic.
-            return x, per_token_cast_back(*per_token_cast_to_fp8(x))
-        # Normal/HT: send BF16 and quantise inside dispatch, where production pays it. oracle_x is
-        # the round trip, computed once here, untimed -- which also compiles this rung's shape.
-        self.assert_quantize_identity(per_token_cast_to_fp8, self._quant, x)
-        return x, per_token_cast_back(*self._quant(x))
+    def _validate_quantizer(self, x):
+        # Low-latency keeps the eager quantize; nothing to cross-check there.
+        if self._fp8 and self.mode != "low-latency":
+            self.assert_quantize_identity(per_token_cast_to_fp8, self._quant, x)
 
     def _ll_recv_bf16(self, recv_x):
         """The padded per-expert receive as BF16 [num_local_experts, cap*num_ranks, hidden].

@@ -331,18 +331,11 @@ class DeepEPV2Backend(EPBackend):
         # Same callable the wire uses, so oracle and sender cannot disagree by construction.
         return self._cast_back(*self._quant(x))
 
-    def _encode_dispatch(self, x):
-        if not self._fp8:
-            return x, None
-        if self.mode == "low-latency":
-            # low_latency_dispatch takes BF16 x and casts to e4m3fn inside the kernel, so
-            # send x unquantized; expose the host round-trip as the oracle semantic so the
-            # combine expectation models the FP8 transport (same as semantic_payload).
-            return x, self._cast_back(*self._to_fp8(x))
-        # Normal/HT: send BF16 and quantise inside dispatch, where production pays it. oracle_x is
-        # the round trip, computed once here, untimed -- which also compiles this rung's shape.
-        self.assert_quantize_identity(self._to_fp8, self._quant, x)
-        return x, self._cast_back(*self._quant(x))
+    def _validate_quantizer(self, x):
+        # Low-latency keeps the eager quantize (fused_quantize returns it unchanged), so
+        # _quant IS _to_fp8 there and there is nothing to cross-check.
+        if self._fp8 and self.mode != "low-latency":
+            self.assert_quantize_identity(self._to_fp8, self._quant, x)
 
     def _ll_dispatch(self, p):
         # Verified pinned signature (legacy.py:553):

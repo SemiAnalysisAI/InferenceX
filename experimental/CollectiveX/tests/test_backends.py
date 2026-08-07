@@ -162,14 +162,33 @@ class BackendTests(unittest.TestCase):
             FakeBackend(args(precision="fp8"))
 
     def test_base_dispatch_encoding_is_identity(self):
-        # BF16 default: semantic_payload is identity and make_problem attaches no
-        # oracle_x, so the combine oracle falls back to problem.x (unchanged behavior).
+        # BF16 default: semantic_payload is identity, so oracle_x is x itself and the
+        # combine oracle compares against the source activations (unchanged behavior).
         backend = FakeBackend(args())
         payload = object()
         self.assertIs(backend.semantic_payload(payload), payload)
-        self.assertEqual(backend._encode_dispatch(payload), (payload, None))
+        self.assertIsNone(backend._validate_quantizer(payload))
         self.assertEqual(backend.dispatch_dtype, "bf16")
         self.assertEqual(backend.combine_dtype, "bf16")
+
+    def test_make_problem_sends_x_and_points_the_oracle_at_semantic_payload(self):
+        # dispatch_x is always x -- adapters quantize inside dispatch(), where production
+        # pays it -- and oracle_x is the semantic round-trip, so the two can never drift
+        # apart the way two independent encode paths could.
+        backend = FakeBackend(args())
+        calls = []
+        backend.semantic_payload = lambda value: calls.append(value) or "semantic"
+        torch = types.ModuleType("torch")
+        torch.float32, torch.int64 = "float32", "int64"
+        cast = lambda dtype: f"cast:{dtype}"  # noqa: E731
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            problem = backend.make_problem(
+                4, types.SimpleNamespace(to=cast), types.SimpleNamespace(to=cast), "X"
+            )
+        self.assertIs(problem.dispatch_x, problem.x)
+        self.assertEqual(problem.dispatch_x, "X")
+        self.assertEqual(problem.oracle_x, "semantic")
+        self.assertEqual(calls, ["X"])
 
 
 # ---- from test_roundtrip_staging.py -----------------------------------------------
