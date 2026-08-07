@@ -554,12 +554,25 @@ mori_extra = {
 print(json.dumps({
     "kv_connector": "MultiConnector",
     "kv_role": "kv_both",
+    # KVTransferConfig.kv_load_failure_policy is read by the SCHEDULER from the
+    # TOP level (v1/core/sched/scheduler.py: kv_transfer_config.kv_load_failure_policy).
+    # It was previously set inside the MoRIIOConnector entry, where nothing reads it,
+    # so the effective policy was the "fail" default: any KV load that did not land
+    # killed the request outright. On the agentic corpus that shows up as
+    #   scheduler.py: Failing 1 request(s) due to KV load failure
+    #     (failure_policy=fail, 394752 tokens affected)
+    # on the largest traces, and aiperf then aborts the whole concurrency point
+    # because a root warmup request failed.
+    # "recompute" reschedules the request and recomputes the failed blocks instead.
+    # That path is _update_requests_with_invalid_blocks(), which the pinned fork
+    # already taught to handle a hybrid model's multiple KV-cache groups
+    # (commit eed3a092) -- the recipe simply never switched the policy over to use it.
+    "kv_load_failure_policy": os.environ.get("KV_LOAD_FAILURE_POLICY", "recompute"),
     "kv_connector_extra_config": {
         "connectors": [
             {
                 "kv_connector": "MoRIIOConnector",
                 "kv_role": os.environ["MORI_KV_ROLE"],
-                "kv_load_failure_policy": "fail",
                 "kv_connector_extra_config": mori_extra,
             },
             {
@@ -578,7 +591,7 @@ print(json.dumps({
     fi
 
     cat <<EOF
-{"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "read_mode": true}}
+{"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_load_failure_policy": "${KV_LOAD_FAILURE_POLICY:-recompute}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "read_mode": true}}
 EOF
 }
 
