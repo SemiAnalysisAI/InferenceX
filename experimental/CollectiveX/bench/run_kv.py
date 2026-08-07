@@ -57,7 +57,7 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--runner", required=True)
     ap.add_argument("--case-id", default="", help="scheduled case ID; computed when omitted")
     ap.add_argument("--suite", default="kv-transfer")
-    ap.add_argument("--version", default="1")
+    ap.add_argument("--version", type=int, default=1)
     ap.add_argument("--out", default="")
     ap.add_argument("--gpus-per-node", type=int, default=8)
     ap.add_argument("--scale-up-domain", type=int, default=8)
