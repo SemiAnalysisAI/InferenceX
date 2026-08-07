@@ -76,9 +76,11 @@ class NIXLBackend(KVBackend):
         self._handles.append(handle)
         agent = self._agent
 
-        def transfer_once():
+        def post():
             if agent.transfer(handle) == "ERR":
                 raise RuntimeError("nixl post failed")
+
+        def wait():
             while True:
                 state = agent.check_xfer_state(handle)
                 if state == "DONE":
@@ -86,11 +88,11 @@ class NIXLBackend(KVBackend):
                 if state == "ERR":
                     raise RuntimeError("nixl transfer errored")
 
-        return transfer_once, prep_s
+        return post, wait, prep_s
 
-    def make_paged(self, cfg, op, local_table, remote_table):
-        local_np = kv_workload.desc_array(self._pool.ptr, cfg, local_table, self._pool.device)
-        remote_np = kv_workload.desc_array(self._peer["pool_base"], cfg, remote_table,
+    def make_paged(self, cfg, op, local_tables, remote_tables):
+        local_np = kv_workload.desc_array(self._pool.ptr, cfg, local_tables, self._pool.device)
+        remote_np = kv_workload.desc_array(self._peer["pool_base"], cfg, remote_tables,
                                            self._peer["dev"])
         return self._make(local_np, remote_np, op)
 

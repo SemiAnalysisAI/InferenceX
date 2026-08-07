@@ -460,15 +460,28 @@ libraries engines ship perform it: one-sided RDMA over registered GPU pools, ini
 timing every transfer. Control is a gloo group (payload exchange + lockstep barriers); data never
 rides it.
 
-The transferred object is one request's paged KV: `isl` tokens paged at 16 or 64 tokens per block,
-per layer, addressed layer-major over a `[layer][page]` pool through seed-keyed random block
-tables on BOTH sides — the post-fragmentation layout a connector actually posts, not a contiguous
-buffer. Workload presets name production shapes (`kv-mla`: DeepSeek-V4-Pro, 61 layers x 704
-elements/token/layer — the MQA latent 1x512 + rope 64 plus the DSA indexer k cache 128 that
-vLLM's connector merges into its transfer regions; `kv-gqa`: 94 layers x 1024, the Qwen3-235B
-class) at bf16 and fp8 — fp8 halves page bytes, which pushes small pages deeper into the
-per-descriptor regime, so it is measured, never derived. One `bulk` row per ISL (a single
-descriptor of the same total bytes) is the wire-speed ceiling the paged rows are read against.
+The transferred object is a burst of `batch` concurrent requests' paged KV: per request, `isl`
+tokens paged at 16 or 64 tokens per block, per layer, addressed layer-major over a `[layer][page]`
+pool through seed-keyed random block tables on BOTH sides (batched requests slice disjoint ranges
+of one permutation, as live requests never alias pages) — the post-fragmentation layout a
+connector actually posts, not a contiguous buffer. Each request is its own prepped transfer; a
+burst posts all of them, then awaits all, the way a decode step admits several requests at once.
+Workload presets are transcribed from what vLLM actually allocates for the model class, region by
+region. `kv-dsv4` is DeepSeek-V4-Pro as vLLM serves it (MXFP4 checkpoints included — quantization
+covers weights, the cache layout is architectural): the config's `compress_ratios` interleave 30
+Compressed Sparse Attention layers (4 tokens per compressed entry) with 31 Heavily Compressed
+Attention layers (128 tokens per entry); every compressed entry is vLLM's 576 B `fp8_ds_mla` slot
+(UE8M0 block-scaled fp8 packed with the bf16 rope dims); CSA layers add a 132 B/entry lightning-
+indexer cache (128 fp8 + 4 scale bytes); and all 61 layers keep a 128-token uncompressed sliding-
+window cache that is its own paged cache spec, so the connector transfers it too. Precision is
+pinned fp8 because the dtype mix is architectural, and the whole thing computes to a few percent
+of an equivalent GQA-bf16 cache — which is why the suite keeps `kv-gqa` (94 layers x 1024
+elements/token/layer, the Qwen3-235B class) at bf16 and fp8 as the dense counterpoint; fp8 halves
+page bytes, which pushes small pages deeper into the per-descriptor regime, so it is measured,
+never derived. One `bulk` row per ISL (a single descriptor of the request's total bytes) is the
+wire-speed ceiling the paged rows are read against; bulk rows are batch 1 by construction. Grid
+points whose pool cannot hold the largest batch inside the per-rank pool budget (64 GiB, sized to
+the fleet's smallest HBM) shed their largest batches and say so, rather than dropping the point.
 
 Timing is host wall clock around post→completion — completion of a one-sided transfer is
 host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor

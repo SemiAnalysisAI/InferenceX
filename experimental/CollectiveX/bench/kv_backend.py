@@ -46,11 +46,12 @@ class KVBackend:
         pass
 
     # -- transfers (initiator only) --------------------------------------------
-    def make_paged(self, cfg: dict, op: str, local_table, remote_table):
-        """Return (transfer_once, prep_seconds) for one request's paged KV.
+    def make_paged(self, cfg: dict, op: str, local_tables, remote_tables):
+        """Return (post, wait, prep_seconds) for one request's paged KV.
 
-        ``transfer_once()`` posts the whole descriptor list and blocks until the
-        transfer completes — exactly one request handoff. Preparation cost
+        ``post()`` submits the whole descriptor list asynchronously; ``wait()``
+        blocks until it completes — split so a batch of requests overlaps like
+        a decode step admitting several requests at once. Preparation cost
         (descriptor build + handle creation) is amortized by engines through
         prepped-handle reuse, so it is reported separately, never inside the
         timed transfer.
@@ -58,17 +59,21 @@ class KVBackend:
         raise NotImplementedError
 
     def make_bulk(self, nbytes: int, op: str):
-        """Return (transfer_once, prep_seconds) for one contiguous transfer of
+        """Return (post, wait, prep_seconds) for one contiguous transfer of
         ``nbytes`` — the single-descriptor wire-speed ceiling row."""
         raise NotImplementedError
 
 
-def time_transfers(transfer_once, warmup: int, reps: int) -> list[float]:
-    """Wall-clock ms per completed transfer, warmups dropped."""
+def time_bursts(transfers, warmup: int, reps: int) -> list[float]:
+    """Wall-clock ms per completed burst (post all, then wait all), warmups
+    dropped. ``transfers`` is a list of (post, wait) pairs — one per request."""
     samples = []
     for rep in range(warmup + reps):
         start = time.perf_counter()
-        transfer_once()
+        for post, _ in transfers:
+            post()
+        for _, wait in transfers:
+            wait()
         if rep >= warmup:
             samples.append((time.perf_counter() - start) * 1e3)
     return samples
