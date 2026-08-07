@@ -6,8 +6,8 @@ set -x
 # with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
 # length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
 #
-# Identical to dsv4_fp4_b200_vllm.sh (same image, engine args, offload, GPU
-# topologies, and agentic aiperf rig) with exactly two MTP deltas:
+# This MTP-only recipe keeps the established image, engine args, offload, GPU
+# topologies, and agentic aiperf rig, with two speculative-decoding behaviors:
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   --max-cudagraph-capture-size expressed in TOKENS (see the capture block below).
 #

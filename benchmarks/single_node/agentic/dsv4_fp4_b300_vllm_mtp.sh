@@ -6,8 +6,8 @@ set -x
 # with MTP speculative decoding (num_speculative_tokens=3): synthetic acceptance
 # length 2.49 for throughput, real target verification for the EVAL_ONLY eval.
 #
-# Identical to dsv4_fp4_b300_vllm.sh (same image, engine args, offload, GPU
-# topologies, and agentic aiperf rig) with exactly two MTP deltas:
+# This MTP-only recipe keeps the established image, engine args, offload, GPU
+# topologies, and agentic aiperf rig, with two speculative-decoding behaviors:
 #   --speculative-config: synthetic acceptance length 2.49 (throughput) vs real MTP (EVAL_ONLY); see the SPEC_CONFIG block
 #   cudagraph capture sizes expressed in TOKENS (see the capture block below).
 #
@@ -92,6 +92,13 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
+
+# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
+# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
+# add the engine endpoint so every topology captures vLLM metrics; AIPerf
+# deduplicates it against the automatic endpoint in pure-TP runs.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
 # Match the environment used by v4pro-b300.yaml.
 export VLLM_USE_V2_MODEL_RUNNER=1

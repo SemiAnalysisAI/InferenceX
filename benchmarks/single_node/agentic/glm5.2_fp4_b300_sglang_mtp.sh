@@ -5,11 +5,9 @@ set -x
 # Agentic trace replay benchmark for GLM-5.2 NVFP4 on B300 using SGLang with
 # EAGLE/MTP speculative decoding.
 #
-# Spec-decode-only sibling of agentic/glm5.2_fp4_b300_sglang.sh, per the AgentX
-# policy that agentic recipes are run and published with speculative decoding
-# enabled rather than as an STP/MTP A/B (MODELS.md: GLM-5.2 agentic non-MTP is
-# deprecated after 2026-08-03). Everything outside the SPEC_ARGS and
-# SGLANG_SIMULATE_ACC_* blocks is the validated STP script unchanged.
+# MTP-only recipe following the AgentX policy that agentic recipes are run and
+# published with speculative decoding enabled rather than as an STP/MTP A/B
+# (MODELS.md: GLM-5.2 agentic non-MTP is deprecated after 2026-08-03).
 #
 # Server flags follow the SGLang cookbook B300 NVFP4 single-node recipes
 # (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2):
