@@ -129,17 +129,23 @@ def _nest_stats(prefix: str, flat: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _interactivity_stats(itl_stats: dict[str, Any], itls: list[float]) -> dict[str, float]:
+def _interactivity_stats(
+    itl_stats: dict[str, Any],
+    itls: list[float],
+    *,
+    itl_prefix: str = "itl",
+    intvty_prefix: str = "intvty",
+) -> dict[str, float]:
     """Derive slow-tail interactivity from the matching ITL statistic."""
     out: dict[str, float] = {}
     for key in ("mean", "p50", "p75", "p90", "p95"):
-        value = itl_stats.get(f"{key}_itl")
+        value = itl_stats.get(f"{key}_{itl_prefix}")
         if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
-            out[f"{key}_intvty"] = 1.0 / value
+            out[f"{key}_{intvty_prefix}"] = 1.0 / value
 
     per_request = [1.0 / value for value in itls if value > 0]
     if per_request:
-        out["std_intvty"] = (
+        out[f"std_{intvty_prefix}"] = (
             statistics.pstdev(per_request) if len(per_request) > 1 else 0.0
         )
     return out
@@ -149,11 +155,21 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
     ttfts = _ms_to_s(extract_per_record_floats(records, "time_to_first_token"))
     e2els = _ms_to_s(extract_per_record_floats(records, "request_latency"))
     itls = _ms_to_s(extract_per_record_floats(records, "inter_token_latency"))
+    full_response_itls = _ms_to_s(
+        extract_per_record_floats(records, "full_response_inter_token_latency")
+    )
     ttft_stats = stats_for("ttft", ttfts)
     e2el_stats = stats_for("e2el", e2els)
     itl_stats = stats_for("itl", itls)
     tpot_stats = stats_for("tpot", itls)
     intvty_stats = _interactivity_stats(itl_stats, itls)
+    full_response_itl_stats = stats_for("full_response_itl", full_response_itls)
+    full_response_intvty_stats = _interactivity_stats(
+        full_response_itl_stats,
+        full_response_itls,
+        itl_prefix="full_response_itl",
+        intvty_prefix="full_response_intvty",
+    )
 
     flat: dict[str, Any] = {}
     flat.update(ttft_stats)
@@ -161,6 +177,8 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
     flat.update(itl_stats)
     flat.update(tpot_stats)
     flat.update(intvty_stats)
+    flat.update(full_response_itl_stats)
+    flat.update(full_response_intvty_stats)
 
     nested = {
         "ttft": _nest_stats("ttft", ttft_stats),
@@ -168,6 +186,12 @@ def compute_latency_stats(records: list[dict[str, Any]]) -> tuple[dict[str, Any]
         "itl": _nest_stats("itl", itl_stats),
         "tpot": _nest_stats("tpot", tpot_stats),
         "intvty": _nest_stats("intvty", intvty_stats),
+        "full_response_itl": _nest_stats(
+            "full_response_itl", full_response_itl_stats
+        ),
+        "full_response_intvty": _nest_stats(
+            "full_response_intvty", full_response_intvty_stats
+        ),
     }
     return flat, nested
 

@@ -1219,6 +1219,23 @@ qwen3.5-fp8-b200-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
+qwen3.5-fp8-b200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 62, 64] }
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [64, 66, 68, 70, 72, 76] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 14] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 18, 20, 22, 24, 28, 32] }
+
 qwen3.5-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -1410,6 +1427,80 @@ kimik2.5-int4-h200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
+
+# Kimi K3 is a 2.8T MXFP4 MoE served on H200 nodes.
+# These are the three aggregated strategy classes from the official H200
+# recipe (https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=h200):
+# Wider TP is latency-oriented, while progressively wider DP is balanced or
+# throughput-oriented. EP32 keeps the model shards within HBM and preserves
+# the native 1M context on four H200 nodes. All arms use probabilistic DSpark K2
+# with synthetic acceptance pinned to the committed golden AL of 2.51.
+# The existing `mtp` matrix label covers speculative-decoding methods; the
+# checked-in recipes select DSpark explicitly. The H200 runner supplies
+# cluster paths while srt-slurm owns allocation, direct vLLM startup,
+# readiness, and log capture. P/D disaggregation is intentionally deferred.
+kimik3-fp4-h200-vllm-agentic:
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:h200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      # Latency-oriented: TP16 x DP2 with EP32 across four H200 nodes.
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
+        prefill:
+          num-worker: 2
+          tp: 16
+          ep: 32
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp16dp2ep32-latency-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 16
+          ep: 32
+          dp-attn: true
+      # Balanced: TP8 x DP4 with EP32 across four H200 nodes.
+      - spec-decoding: mtp
+        kv-offloading: none
+        conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16]
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 32
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp8dp4ep32-balanced-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 32
+          dp-attn: true
+      # Throughput-oriented hybrid TP/DEP/EP with vLLM's host-DRAM KV tier.
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple }
+        conc-list: [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32]
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 32
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-h200-tp8dp4ep32-vllm-simple-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 8
+          ep: 32
+          dp-attn: true
 
 # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
 # does not have a B300-specific recipe, so this config reuses the existing
@@ -7013,6 +7104,10 @@ qwen3.5-fp4-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+# GB300 SGLang AgentX, re-swept across low/mid/high concurrency after aiperf
+# restored real inter-tool-call pacing. The seven aggregate frontier points use
+# one TP2 worker with MTP/NEXTN + hierarchical KV cache. CONFIG_FILE carries the
+# full srtctl recipe; the matrix topology stays in sync for naming/GPU accounting.
 qwen3.5-fp4-gb300-dynamo-trt-mtp:
   image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -7175,42 +7270,125 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-agg:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.90
       search-space:
-      - spec-decoding: "mtp"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         conc-list: [1]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
-          tp: 4
+          tp: 2
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp4-c1-mtp-hicache-jid2191933.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c1-mtp-hicache-jid2530006.yaml"
         decode:
           num-worker: 0
-          tp: 4
+          tp: 2
           ep: 1
           dp-attn: false
-      - spec-decoding: "mtp"
-        conc-list: [96]
+      - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
+        conc-list: [24]
         prefill:
           num-worker: 1
-          tp: 4
+          tp: 2
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp4-c96-mtp-hicache-jid2195211.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c24-mtp-hicache-jid2530012.yaml"
         decode:
           num-worker: 0
-          tp: 4
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c32-mtp-hicache-jid2530013.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [40]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c40-mtp-hicache-jid2530015.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [48]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c48-mtp-hicache-jid2530017.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [52]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c52-mtp-hicache-jid2527406.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [64]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/agg-gb300-tp2-c64-mtp-hicache-jid2527410.yaml"
+        decode:
+          num-worker: 0
+          tp: 2
           ep: 1
           dp-attn: false
 
 
+# The seven disaggregated frontier points use six TP4 shapes plus one TP2
+# shape. Stable X-Dynamo-Session-ID affinity replaces the removed conv-aware
+# routing message path.
 qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260724-433429b1
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -7218,129 +7396,126 @@ qwen3.5-fp4-gb300-dynamo-sglang-agentic-disagg:
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-sglang
-  router: { name: dynamo-router, version: "8e4bfa69ba486f07f6083fbe8cd026f432f520bc" }
+  router: { name: dynamo-router, version: "5a638087d82c990d35c69cb8e41c2c2582e9ef9a" }
   kv-p2p-transfer: mooncake
   multinode: true
   disagg: true
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.90
       search-space:
-      # 1P1D STP (TP4 prefill / TP4 decode). 2 GB300 nodes.
-      - spec-decoding: "mtp"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c8-mtp-hicache-session-jid2530030.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c16-mtp-hicache-session-jid2530027.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         conc-list: [32]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c32-mtp-hicache-convaware-jid2212783.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c32-mtp-hicache-session-jid2530028.yaml"
         decode:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
-      - spec-decoding: "mtp"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         conc-list: [64]
-        kv-offloading: none
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c64-mtp-convaware-jid2214439.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c64-mtp-hicache-session-jid2530029.yaml"
         decode:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
-      - spec-decoding: "mtp"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         conc-list: [96]
-        kv-offloading: none
         prefill:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c96-mtp-convaware-jid2214440.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c96-mtp-hicache-session-jid2527409.yaml"
         decode:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
-      # 1P1D wide-EP (DEP4 prefill / DEP4 decode). 2 GB300 nodes.
-      - spec-decoding: "mtp"
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
         conc-list: [128]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
         prefill:
           num-worker: 1
           tp: 4
-          ep: 4
-          dp-attn: true
+          ep: 1
+          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-dep4-dep4-c128-mtp-hicache-convaware-jid2220685.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp4-tp4-c128-mtp-hicache-session-jid2527417.yaml"
         decode:
           num-worker: 1
           tp: 4
-          ep: 4
-          dp-attn: true
-      # 2P1D wide-EP (2x DEP4 prefill / DEP4 decode). 3 GB300 nodes.
-      - spec-decoding: "mtp"
-        conc-list: [192]
+          ep: 1
+          dp-attn: false
+      - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
+        conc-list: [72]
         prefill:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
+          num-worker: 1
+          tp: 2
+          ep: 1
+          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-2p1d-dep4-dep4-c192-mtp-hicache-convaware-jid2230562.yaml"
+          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-1p1d-tp2-tp2-c72-mtp-hicache-session-jid2527415.yaml"
         decode:
           num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-      # 3P1D wide-EP (3x DEP4 prefill / DEP8 decode). 5 GB300 nodes.
-      - spec-decoding: "mtp"
-        conc-list: [256]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-3p1d-dep4-dep8-c256-mtp-hicache-convaware-jid2228613.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      # 4P1D wide-EP (4x DEP4 prefill / DEP8 decode). 6 GB300 nodes.
-      - spec-decoding: "mtp"
-        conc-list: [384]
-        kv-offloading: dram
-        kv-offload-backend: { name: hicache }
-        prefill:
-          num-worker: 4
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/sglang/qwen3.5/gb300-fp4/agentic/disagg-gb300-4p1d-dep4-dep8-c384-mtp-hicache-convaware-jid2239740.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
+          tp: 2
+          ep: 1
+          dp-attn: false
 
     # ---------- 1k1k high-throughput (wide-EP decode, EAGLE MTP) ----------
 qwen3.5-fp8-b300-sglang-agentic-hicache:
@@ -7357,6 +7532,22 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       search-space:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
+
+qwen3.5-fp8-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:b300-nv
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 60, 64, 68, 72] }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32] }
+      - { tp: 2, ep: 2, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [32, 34, 36, 38, 40, 44, 48, 52, 56] }
 
 qwen3.5-fp4-b300-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
@@ -7943,6 +8134,101 @@ dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg:
           tp: 8
           ep: 8
           dp-attn: true
+
+# Day-0 Kimi K3 AgentX coverage on GB200. The three aggregate srt-slurm
+# profiles mirror the serving strategies synthesized by the official recipe:
+#   latency:    multi-node TP16       (4 GB200 nodes / 16 GPUs)
+#   balanced:   multi-node TEP16      (4 GB200 nodes / 16 GPUs)
+#   throughput: multi-node TP4 x DP4  (4 GB200 nodes / EP16)
+# All profiles enable Kimi K3 DSpark level 2 at the committed golden AL 2.51.
+# `spec-decoding: mtp` is the existing matrix label used for speculative
+# decoding methods; the checked-in recipes select DSpark explicitly.
+# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200
+kimik3-fp4-gb200-dynamo-vllm-agentic:
+  image: vllm/vllm-openai:kimi-k3
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: dynamo-vllm
+  router: { name: dynamo-router, version: "1.3.0" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.61
+      search-space:
+      # Latency oriented: multi_node_tp strategy, TP16 across four GB200
+      # nodes.
+      # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tp
+      - spec-decoding: mtp
+        conc-list: [1, 2, 4, 8]
+        prefill:
+          num-worker: 1
+          tp: 16
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tp16-latency-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 16
+          ep: 1
+          dp-attn: false
+      # Balanced: multi_node_tep strategy, TEP16 across four GB200 nodes.
+      # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_tep
+      - spec-decoding: mtp
+        conc-list: [8, 16, 24, 32]
+        prefill:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-tep16-balanced-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 16
+          ep: 16
+          dp-attn: false
+      # Throughput oriented: official multi_node_dep strategy, DEP16 across
+      # four GB200 nodes (TP4 x DP4 = EP16, one local DP rank per node).
+      # The recipe allows up to 3600s for full-context saturation warmup to drain.
+      # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
+      - spec-decoding: mtp
+        conc-list: [32, 64, 96, 128, 192, 256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-dep16-throughput-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 16
+          dp-attn: true
+      # High-concurrency DEP16 with vLLM Simple CPU KV offloading. c384
+      # exercises 384 of the 393 AgentX trajectories and remains below the
+      # aggregate max-num-seqs capacity of 512 (128 per DP rank).
+      - spec-decoding: mtp
+        kv-offloading: dram
+        kv-offload-backend: { name: vllm-simple, version: "13c59a3" }
+        conc-list: [128, 192, 256, 384]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k3/agentic/agg-gb200-dep16-throughput-vllm-simple-offload-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 4
+          ep: 16
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-sglang-agentic-agg:
   image: lmsysorg/sglang:nightly-dev-cu13-20260711-7de33ce8
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -8160,6 +8446,39 @@ glm5.2-fp4-b300-sglang-agentic:
       # radix cache (GPU hit 0.93->0.57 at 48->64) and thrashes on re-prefill, so it is
       # strictly dominated by conc 48 on both throughput and interactivity.
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [48], router: { name: sglang-router, version: "0.3.2" } }
+
+# GLM-5.2 B300 NVFP4 AgentX with EAGLE/MTP speculative decoding — the arm that
+# replaces the STP entry above once agentic non-MTP is deprecated (MODELS.md,
+# 2026-08-03). SGLang EAGLE off GLM-5.2's built-in nextn head (num-steps 3,
+# eagle-topk 1, 4 draft tokens = 3 speculative tokens), with acceptance pinned
+# to the golden AL 2.99 (golden_al_distribution/glm5.2_mtp.yaml, thinking_on,
+# K=3) through SGLANG_SIMULATE_ACC_*. Image is bumped to v0.5.16-cu130: it is
+# the first release that reads SGLANG_SIMULATE_ACC_TOKEN_MODE, and it is the
+# tag the GLM-5.2 GB300 dynamo-sglang agentic recipes already run.
+#
+# Cookbook low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM) only, on the AgentX
+# MTP concurrency grid [1, 4, 8, 12, 16]: steps of at least 2 because
+# single-step sampling cannot separate configurations by more than run-to-run
+# noise on the agentic corpus, and a hard stop at conc 16. The STP entry's DEP
+# throughput arm is deliberately not carried over — its frontier peak is conc
+# 48, well above that cap, and at conc <= 16 attention-DP leaves 2 sessions per
+# rank and is strictly dominated by TP8, so it would spend a GPU job per point
+# to re-measure a worse curve. Both arms of the STP entry offload to host DRAM,
+# so this one does too: without HiCache the working set outgrows HBM past conc
+# 8 and the radix hit rate collapses to <0.1.
+glm5.2-fp4-b300-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: nvidia/GLM-5.2-NVFP4
+  model-prefix: glm5.2
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [1, 4, 8, 12, 16] }
 
 qwen3.5-fp8-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.14-cu130@sha256:5027e95bf6ec536856b1b52a91d1f35ff5c564ab83e8a94758a169ff09bb8df3
