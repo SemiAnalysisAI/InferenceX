@@ -273,6 +273,31 @@ class RoundtripStaging(unittest.TestCase):
         self.assertEqual(ep_backend.EPBackend.path_status, "deployed")
 
 
+class NcclLowLatencyLadderClamp(unittest.TestCase):
+    """The measured ladder is clamped below the receive buffer around an unfixed upstream race."""
+
+    def _module(self):
+        with mock.patch.dict(sys.modules, _stub_modules()):
+            import importlib
+            import ep_nccl
+            return importlib.reload(ep_nccl)
+
+    def test_the_ladder_is_clamped_below_the_buffer(self):
+        # Two separate numbers on purpose: clamping the ladder must not shrink the transport
+        # footprint, or the rungs that remain quietly measure a smaller receive plane.
+        m = self._module()
+        self.assertLess(m._LL_LADDER_CAP, m._LL_BUFFER_CAP)
+        self.assertLessEqual(m._LL_BUFFER_CAP, 511)
+
+    def test_buffer_cap_bounds_the_ladder_not_the_allocation(self):
+        # buffer_cap() is what the harness clamps the ladder against, so it must report the
+        # LADDER cap; the allocation reads _LL_BUFFER_CAP directly.
+        m = self._module()
+        source = (ROOT / "bench" / "ep_nccl.py").read_text()
+        self.assertIn("return _LL_LADDER_CAP", source)
+        self.assertIn("_LL_BUFFER_CAP if self._ll else", source)
+
+
 class RoundtripStagingGate(unittest.TestCase):
     """`roundtrip` must mean dispatch -> combine in every row, or it is not comparable: the gate
     is `stage_device_work` alone, with `CX_FP8_CONSUME=dequant` as the sole opt-out."""
