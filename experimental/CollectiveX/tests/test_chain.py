@@ -831,18 +831,25 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                 self.assertIs(row["correctness"]["chain_last_output_passed"], True)
                 self.assertIs(row["correctness"]["passed"], False)
 
-    def test_a_chain_output_mismatch_reds_the_case_on_its_own(self):
-        # The two chained verdicts are independent: a chain whose own final output is wrong
-        # must red the case even when the state it leaves behind still passes a fresh oracle
-        # -- exactly the shape a stale-parity/aliased-signal defect presents.
+    def test_a_chain_output_mismatch_is_reported_but_does_not_red_the_case(self):
+        # DEMOTED 2026-08-07. The check shipped gating and failed 100% of fp8 cases on every
+        # SKU, backend and vendor while bf16 passed everywhere; the pre-check control run
+        # (31092783122) shows those same cases passing with byte-identical oracle errors. Until
+        # a measured `chain_last_output_error` says whether that is corruption or a tolerance
+        # too tight for a backend's accumulator, the verdict is evidence, not a gate.
+        # If this test starts failing because someone re-armed the gate, make sure a MAGNITUDE
+        # justified it -- the verdict alone is what shipped the bad version.
         run = drive(chain_output_ok=False)
-        self.assertEqual(run.rc, 3)
-        self.assertEqual(run.doc["outcome"]["status"], "invalid")
+        self.assertEqual(run.rc, 0)
+        self.assertEqual(run.doc["outcome"]["status"], "success")
         for row in run.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 self.assertIs(row["correctness"]["chain_last_output_passed"], False)
                 self.assertIs(row["correctness"]["post_chain_state_passed"], True)
-                self.assertIs(row["correctness"]["passed"], False)
+                # Reported, and the case still passes.
+                self.assertIs(row["correctness"]["passed"], True)
+                # The magnitude rides along so the verdict can be judged rather than believed.
+                self.assertGreater(row["correctness"]["chain_last_output_error"], 0.0)
 
     def test_the_drained_oracles_still_red_the_case_on_their_own(self):
         # The chained gate is an addition, not a replacement.
