@@ -77,7 +77,7 @@ HF_MODEL_ID="${HF_MODEL_ID:-nvidia/MiniMax-M3-NVFP4}"
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if ! checkpoint_is_complete "$MODEL_PATH"; then
         # Every concurrency of this sweep runs as its own allocation against
-        # the same shared path, so serialize: one cell pulls the ~220 GB
+        # the same shared path, so serialize: one cell pulls the ~250 GB
         # checkpoint and the rest wait on it rather than racing as writers.
         # `hf download` resumes into a partially-populated --local-dir.
         mkdir -p "$MODEL_PATH"
@@ -143,7 +143,7 @@ export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 # Same 0.9 the B300 sibling and the deprecated 8k1k B200 MiniMax-M3 NVFP4 MTP
 # recipe ran. Exposed as an override because B200's 180 GB leaves the TP2 arm
-# only ~52 GB/GPU beyond weights, and CUDA-graph capture OOM is the first thing
+# only ~37 GB/GPU beyond weights, and CUDA-graph capture OOM is the first thing
 # to try lowering if that arm does not boot (KLAUD_DEBUG.md).
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.9}"
 

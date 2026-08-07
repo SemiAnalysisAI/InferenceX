@@ -7891,9 +7891,9 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
 # directly comparable. This is MiniMax-M3's only active B200 configuration --
 # the 8k1k scenario that carried the previous B200 curves was removed in #2493.
 #
-# Concurrency is where B200 has to differ. The NVFP4 checkpoint is ~220 GB, so
-# at --gpu-memory-utilization 0.9 the KV budget is ~104 GB at TP2 and ~428 GB at
-# TP4, against ~298 GB and ~817 GB for the same topologies on B300's 288 GB
+# Concurrency is where B200 has to differ. The NVFP4 checkpoint is ~250 GB, so
+# at --gpu-memory-utilization 0.9 the KV budget is ~74 GB at TP2 and ~398 GB at
+# TP4, against ~268 GB and ~787 GB for the same topologies on B300's 288 GB
 # HBM3e. Each arm therefore keeps the B300 sampling grid but stops where B200's
 # smaller pool puts the HBM cliff, following the same B200/B300 asymmetry the
 # qwen3.5 AgentX MTP pair already publishes:
@@ -7903,7 +7903,7 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
 #   TP4 + SimpleCPU  picks up at 20 rather than B300's 30, since the host tier
 #         has to start absorbing the working set one step earlier, and stops at
 #         40 rather than following B300 to 75. Past 40 the host tier is
-#         absorbing a working set that never fit in B200's ~428 GB TP4 pool to
+#         absorbing a working set that never fit in B200's ~398 GB TP4 pool to
 #         begin with, so those points cost four engine starts each to trace a
 #         tail that is offload bandwidth, not the SKU.
 #
