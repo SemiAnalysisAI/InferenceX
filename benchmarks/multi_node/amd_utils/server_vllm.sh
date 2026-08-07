@@ -581,8 +581,18 @@ print(json.dumps({
                 "kv_connector": "MooncakeStoreConnector",
                 "kv_role": "kv_both",
                 "kv_connector_extra_config": {
-                    "load_async": True,
-                    "lookup_async": True,
+                    # Async load/lookup is the default and what the validated run
+                    # used. They are switchable because the Mooncake path is the
+                    # one variable that decides whether conc >= 8 survives: with the
+                    # tier on, a decode worker dies with
+                    #   HSA_STATUS_ERROR_EXCEPTION code: 0x1016
+                    # a few minutes into the replay, on either MLA backend; with the
+                    # tier off the same run completes clean. Making the loads
+                    # synchronous is the cheapest way to test whether the fault is a
+                    # race between an async store load and the GPU KV blocks it
+                    # writes into.
+                    "load_async": os.environ.get("MOONCAKE_LOAD_ASYNC", "1") == "1",
+                    "lookup_async": os.environ.get("MOONCAKE_LOOKUP_ASYNC", "1") == "1",
                 },
             },
         ],
