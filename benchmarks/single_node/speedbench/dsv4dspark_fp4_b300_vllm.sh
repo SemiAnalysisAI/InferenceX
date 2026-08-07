@@ -18,9 +18,12 @@
 # otherwise a copy of so the two AL curves stay directly comparable:
 #   - target model       DeepSeek-V4-Pro-DSpark (was DeepSeek-V4-Pro)
 #   - speculative-config method dspark + draft_sample_method (was method mtp)
-# Every serve flag is left byte-identical to the MTP collector: it already
-# matches the published DSpark recipe, and holding the serving config fixed is
-# what makes "DSpark vs MTP on DSV4-Pro" a like-for-like AL comparison.
+#   - --max-num-seqs and --gpu-memory-utilization pinned (MTP took the defaults)
+# The third one is a memory fix rather than a recipe change. AL is a per-draft
+# accept/reject property that does not depend on batch size or graph capture, so
+# pinning those two still leaves "DSpark vs MTP on DSV4-Pro" like-for-like; every
+# flag that does affect drafting is byte-identical to the MTP collector and to
+# the published DSpark recipe.
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=deepseek-ai/DeepSeek-V4-Pro-DSpark
@@ -35,6 +38,8 @@
 #   DRAFT_SAMPLE_METHOD    greedy|probabilistic     (default greedy)
 #   REJECTION_SAMPLE_METHOD  passed through to speculative-config when non-empty
 #                            (default: unset, i.e. the vLLM default)
+#   MAX_NUM_SEQS      engine max batch size         (default 64)
+#   GPU_MEM_UTIL      --gpu-memory-utilization      (default 0.90)
 
 set -uo pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -64,6 +69,18 @@ SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
 # nothing here sets speculative_disable_by_batch_size, so drafting stays on at
 # this batch size and the curves remain comparable.
 CONCURRENCY="${CONCURRENCY:-32}"
+# Engine batch size; must stay >= CONCURRENCY or the client's requests just queue.
+# Held far below the vLLM default of 1024 because that default sizes two
+# allocations the memory profiler never sees — the rejection sampler's fp32 logits
+# scratch, max_num_seqs * (1 + num_speculative_tokens) * vocab * 4B, which is
+# 2.5 GB at 4 speculative tokens and 4.4 GB at 8, and the spec-decode CUDA graphs,
+# which grow with the same product. DSV4-Pro has no room for either: 141.5 GiB of
+# weights plus a 100 GiB KV cache already fills 266 of the 268 GiB on each B300,
+# and warmup died asking for 2.47 GiB more at num_speculative_tokens=4.
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-64}"
+# vLLM's own default, exposed so the KV cache can be traded for headroom if some
+# higher num_speculative_tokens still runs out.
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
 # thinking-on chat_template_kwargs. MUST match the production/golden config:
 # the reference matrix (golden_al_distribution/dsv4_mtp.yaml) was measured with
@@ -286,6 +303,8 @@ run_cell() {
         --reasoning-parser deepseek_v4
         --max-cudagraph-capture-size 2048
         --max-model-len 16384
+        --max-num-seqs "$MAX_NUM_SEQS"
+        --gpu-memory-utilization "$GPU_MEM_UTIL"
         --speculative-config "{\"method\": \"dspark\", \"num_speculative_tokens\": $mtp, \"draft_sample_method\": \"$DRAFT_SAMPLE_METHOD\"$SPEC_EXTRA}"
     )
 
@@ -293,7 +312,11 @@ run_cell() {
     vllm serve "$SERVE_MODEL" "${serve_args[@]}" > "$server_log" 2>&1 &
     SERVER_PID=$!
 
-    if ! wait_for_server_ready --port "$PORT" --server-log "$server_log" --server-pid "$SERVER_PID"; then
+    # wait_for_server_ready exits the shell rather than returning when the server
+    # dies, which would make the N/A branch below unreachable and let one bad cell
+    # abort the whole matrix. Running it in a subshell keeps that exit local, so a
+    # cell that cannot start its server costs one cell instead of the run.
+    if ! (wait_for_server_ready --port "$PORT" --server-log "$server_log" --server-pid "$SERVER_PID"); then
         echo "  -> server failed to start (thinking=$mode dspark=$mtp), recording N/A"
         AL_RESULT["${mode}_${mtp}"]="N/A"
         cleanup_server
