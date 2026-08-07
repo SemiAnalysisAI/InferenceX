@@ -41,8 +41,9 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 MODEL="${MODEL:?MODEL env var required (e.g. deepseek-ai/DeepSeek-V4-Pro-DSpark)}"
 # Serve from the local weights dir resolved by the launcher (MODEL_PATH points
-# at the pre-staged copy, e.g. /scratch/models/DeepSeek-V4-Pro-DSpark). Falls
-# back to MODEL for a standalone local run where MODEL is itself a path.
+# at the writable models dir, e.g. /data/models/DeepSeek-V4-Pro-DSpark, until the
+# checkpoint is staged; see the download block below). Falls back to MODEL for a
+# standalone local run where MODEL is itself a path.
 SERVE_MODEL="${MODEL_PATH:-$MODEL}"
 TP="${TP:-8}"
 DP_ATTENTION="${DP_ATTENTION:-false}"
@@ -57,11 +58,12 @@ CATEGORY="${CATEGORY:-coding}"
 # lowercased.
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-# Kept at 1 to match the DSV4 MTP collector that produced the existing
-# deepseek-v4-pro golden curve; the DSpark numbers are only meaningful against
-# MTP if both were measured the same way. Raise it if the 8h allocation is the
-# binding constraint (AL itself is concurrency-independent).
-CONCURRENCY="${CONCURRENCY:-1}"
+# AL is a per-draft accept/reject property and is independent of batch size, so
+# the SPEED-Bench pass is batched to cut wall-clock. Note this differs from the
+# DSV4 MTP collector, which measured the existing deepseek-v4-pro curve at 1;
+# nothing here sets speculative_disable_by_batch_size, so drafting stays on at
+# this batch size and the curves remain comparable.
+CONCURRENCY="${CONCURRENCY:-32}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
 # thinking-on chat_template_kwargs. MUST match the production/golden config:
 # the reference matrix (golden_al_distribution/dsv4_mtp.yaml) was measured with
@@ -96,18 +98,21 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
 # ---- Resolve target weights ----
-# DeepSeek-V4-Pro-DSpark is in the launcher's STAGED_MODELS, so MODEL_PATH
-# resolves to the read-only staged mount and this block is a no-op. It still
-# covers a standalone run where the weights are not staged.
+# The DSpark checkpoint is NOT in the launcher's STAGED_MODELS (it is not staged
+# on the B300 cluster yet), so MODEL_PATH resolves to the writable models dir and
+# the ~960 GB download below runs once, on the first collection. Add the basename
+# back to STAGED_MODELS once the weights are staged to read them from the faster
+# read-only mount instead.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         if [[ ! -w "$(dirname "$MODEL_PATH")" ]]; then
             echo "CRITICAL: $MODEL_PATH is empty and $(dirname "$MODEL_PATH") is not writable."
-            echo "The DSpark checkpoint is not staged on this node. Ask for it to be staged,"
-            echo "or drop DeepSeek-V4-Pro-DSpark from STAGED_MODELS so MODEL_PATH resolves to"
-            echo "the writable models dir and the download below can run."
+            echo "This means the basename is listed in the launcher's STAGED_MODELS but the"
+            echo "weights were never staged. Either get them staged, or remove it from"
+            echo "STAGED_MODELS so MODEL_PATH resolves to the writable models dir instead."
             exit 1
         fi
+        echo "=== $MODEL_PATH is empty; downloading $MODEL (~960 GB, first run only) ==="
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
