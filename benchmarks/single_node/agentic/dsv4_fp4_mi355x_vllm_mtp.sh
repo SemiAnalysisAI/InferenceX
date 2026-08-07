@@ -521,6 +521,22 @@ if [ -z "${GPU_MEM_UTIL:-}" ]; then
     fi
 fi
 
+# MoE kernel backend. "aiter" is the validated default. "flydsl_mega_moe" fuses
+# EP dispatch, both expert GEMMs and EP combine into one launch chain, but
+# DeepseekV4MoE.__init__ raises NotImplementedError unless TP=1 AND expert
+# parallel is on -- under TP>1 the shared expert's partial sums are never
+# all-reduced, so it rejects rather than return wrong numerics. Fail here with
+# a readable message instead of ~9 min into weight load.
+MOE_BACKEND="${MOE_BACKEND:-aiter}"
+if [ "$MOE_BACKEND" = "flydsl_mega_moe" ]; then
+    if [ "$DP_ATTENTION" != "true" ] || [ "$EP_SIZE" -le 1 ]; then
+        echo "Error: MOE_BACKEND=flydsl_mega_moe requires DP_ATTENTION=true and EP_SIZE>1" >&2
+        echo "       (got DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE); vLLM would raise" >&2
+        echo "       NotImplementedError after the weight load." >&2
+        exit 1
+    fi
+fi
+
 # Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
 # vLLM's default 300s worker RPC timeout, killing the engine with
 # "RPC call to sample_tokens timed out". Widen it.
@@ -556,7 +572,7 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${MODE_ARGS[@]}"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
-    --moe-backend aiter
+    --moe-backend "$MOE_BACKEND"
     --compilation-config "$COMPILATION_CONFIG"
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
