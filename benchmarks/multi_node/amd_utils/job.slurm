@@ -356,6 +356,12 @@ export SCENARIO_TYPE="${SCENARIO_TYPE:-}"
 export EVAL_LIMIT="${EVAL_LIMIT:-}"
 export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS="${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}"
 export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-}"
+# Mooncake transfer slicing. MC_SLICE_SIZE is RDMA-only; the TCP transport reads
+# MC_TCP_SLICE_SIZE (default 65536). Both are forwarded so the granularity can be tuned
+# without editing server_vllm.sh -- see the SQ-overflow note there.
+export MC_SLICE_SIZE="${MC_SLICE_SIZE:-}"
+export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-}"
+export MOONCAKE_PREFERRED_SEGMENT="${MOONCAKE_PREFERRED_SEGMENT:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -504,11 +510,16 @@ DOCKER_ENV_COMMON=(
     -e KV_LOAD_FAILURE_POLICY=\${KV_LOAD_FAILURE_POLICY:-}
     -e MOONCAKE_LOAD_ASYNC=\${MOONCAKE_LOAD_ASYNC:-}
     -e MOONCAKE_LOOKUP_ASYNC=\${MOONCAKE_LOOKUP_ASYNC:-}
+    # MOONCAKE_PREFERRED_SEGMENT=local pins each TP rank to its own segment so KV puts
+    # and gets stay in-process instead of crossing to another rank over TCP loopback.
+    -e MOONCAKE_PREFERRED_SEGMENT=\${MOONCAKE_PREFERRED_SEGMENT:-}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
     -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
     -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}
     -e INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=\${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-}
     -e MC_WORKERS_PER_CTX=\${MC_WORKERS_PER_CTX:-}
+    -e MC_SLICE_SIZE=\${MC_SLICE_SIZE:-}
+    -e MC_TCP_SLICE_SIZE=\${MC_TCP_SLICE_SIZE:-}
     -e VLLM_PATCH_46240=\${VLLM_PATCH_46240:-}
     # Generalise aiter MLA head padding so 12 heads/rank (K3 TP8) reach the ASM
     # decode kernel instead of the batch_size=1 fp8 gluon regime.

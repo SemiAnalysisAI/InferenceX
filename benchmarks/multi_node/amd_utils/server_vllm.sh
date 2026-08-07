@@ -537,7 +537,16 @@ ensure_mooncake_kv_offload() {
   "enable_offload": false
 }
 EOF
-    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576
+    # MC_SLICE_SIZE only governs the RDMA transport. The TCP transport -- which is what
+    # "protocol": "tcp" above actually selects -- has its own knob, MC_TCP_SLICE_SIZE,
+    # defaulting to 65536. Setting only MC_SLICE_SIZE therefore left every Mooncake
+    # transfer sliced at 64KB, so a single ~650MB BatchPut needed thousands of queue
+    # entries and the session queue overflowed ("SQ full ... requested=4672 max=16384"),
+    # after which the completion path segfaulted in getTransferStatus and killed the
+    # decode worker. Keep both in step, and make them tunable.
+    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0
+    export MC_SLICE_SIZE="${MC_SLICE_SIZE:-1048576}"
+    export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-1048576}"
     export MC_TCP_ENABLE_CONNECTION_POOL=1
 
     local transfer_batch_keys_log="off"
