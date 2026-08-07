@@ -441,6 +441,12 @@ fi
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
+    # AIPerf discovers metrics from the request URL automatically when it
+    # talks directly to vLLM. With the DP-aware router in front, explicitly
+    # add the backend endpoint so engine/KV/cache metrics are still scraped.
+    if [ "$USE_VLLM_ROUTER" = "true" ]; then
+        export AIPERF_SERVER_METRICS_URLS="http://localhost:$VLLM_BACKEND_PORT/metrics"
+    fi
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
