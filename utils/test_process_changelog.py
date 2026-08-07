@@ -25,12 +25,13 @@ def test_trim_conc_supports_nested_backend_metadata():
         },
     }
     entries = [
-        {**common, "conc": 8},
-        {**common, "conc": 2},
+        {**common, "conc": 8, "exp-name": "kimi_tp8_conc8_kvdram"},
+        {**common, "conc": 2, "exp-name": "kimi_tp8_conc2_kvdram"},
         {
             **common,
             "kv-offload-backend": {"name": "lmcache"},
             "conc": 4,
+            "exp-name": "kimi_tp8_conc4_lmcache",
         },
     ]
 

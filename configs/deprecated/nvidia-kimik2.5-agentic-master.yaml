@@ -89,3 +89,23 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [16, 24, 32, 36] }
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+
+# Left behind by #2493: this key stayed in nvidia-master.yaml while its script
+# moved to benchmarks/single_node/agentic/deprecated/, so the config pointed at
+# a path that no longer existed. Archived here with its siblings.
+kimik2.5-int4-h100-vllm:
+  image: vllm/vllm-openai:v0.22.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: cluster:h100-dgxc
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # H100 has 80 GB HBM per GPU (smallest in this set); the KV cliff arrives
+    # early. Sweep saturates conc=20 to keep total HBM headroom.
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 12, 16, 20] }

@@ -123,7 +123,15 @@ SERVER_PROMPT_SOURCE_KEYS = {
     "raw",
 }
 REQUEST_METRICS_KEYS = {"qps", "latency", "tokens", "throughput", "cache"}
-REQUEST_LATENCY_KEYS = {"ttft", "e2el", "itl", "tpot", "intvty"}
+REQUEST_LATENCY_KEYS = {
+    "ttft",
+    "e2el",
+    "itl",
+    "tpot",
+    "intvty",
+    "full_response_itl",
+    "full_response_intvty",
+}
 REQUEST_TOKEN_KEYS = {"input", "output_actual", "output_expected"}
 REQUEST_THROUGHPUT_KEYS = {
     "input",
@@ -508,6 +516,48 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     assert per_gpu["output_tput_tps"] == pytest.approx(
         throughput["output"]["tokens_per_second"] / 16
     )
+
+
+def test_processor_aggregates_full_response_itl_and_interactivity(tmp_path: Path):
+    result_dir = tmp_path / "results"
+    artifact = result_dir / "aiperf_artifacts"
+    artifact.mkdir(parents=True)
+
+    full_response_itls_ms = (5.469791, 5.0, 4.0)
+    with open(artifact / "profile_export.jsonl", "w") as f:
+        for idx, full_response_itl_ms in enumerate(full_response_itls_ms):
+            record = _make_record(
+                conv_id=f"trace-{idx}",
+                turn_index=0,
+                isl=100,
+                osl=26_571,
+                ttft_ms=529.058811,
+                e2e_ms=610.559573,
+                itl_ms=0.003067398,
+                start_ns=(idx + 1) * 1_000_000_000,
+                end_ns=(idx + 1) * 1_000_000_000 + 145_861_451_008,
+            )
+            record["metrics"]["full_response_inter_token_latency"] = {
+                "value": full_response_itl_ms,
+                "unit": "ms",
+            }
+            f.write(json.dumps(record) + "\n")
+
+    with open(artifact / "profile_export_aiperf.json", "w") as f:
+        json.dump({"request_count": len(full_response_itls_ms)}, f)
+
+    agg = _run_processor(result_dir, tmp_path / "out")
+    latency = agg["request_metrics"]["latency"]
+    full_response_itl = latency["full_response_itl"]
+    full_response_intvty = latency["full_response_intvty"]
+
+    assert full_response_itl["p50"] == pytest.approx(0.005)
+    assert full_response_itl["p75"] == pytest.approx(0.00523)
+    assert full_response_intvty["p50"] == pytest.approx(
+        1 / full_response_itl["p50"]
+    )
+    assert full_response_intvty["p75"] == pytest.approx(1 / 0.0052348955)
+    assert full_response_intvty["p75"] < full_response_intvty["p50"]
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):

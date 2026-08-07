@@ -406,7 +406,9 @@ else
     # MODEL stays as the HF id for the client (--served-model-name, tokenizer);
     # MODEL_PATH is what the server reads weights from.
     MODEL_BASENAME="${MODEL##*/}"
-    if [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
+    if [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="${WRITABLE_MODELS_DIR%/}/${MODEL_BASENAME}"
+    elif [[ " ${STAGED_MODELS[*]} " == *" ${MODEL_BASENAME} "* ]]; then
         export MODEL_PATH="${HF_HUB_CACHE_MOUNT%/}/${MODEL_BASENAME}"
     else
         export MODEL_PATH="${WRITABLE_MODELS_DIR%/}/${MODEL_BASENAME}"

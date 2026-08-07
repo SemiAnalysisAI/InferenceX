@@ -68,8 +68,9 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     ``int`` (single-node) or ``list`` (multi-node). Other fields may contain
     nested dictionaries or lists, such as KV-offload backend metadata.
 
-    - Single-node entries: group by every other field and keep only the entry
-      with the lowest ``conc`` per group.
+    - Single-node entries: group by every configuration field other than
+      ``conc`` and the generated ``exp-name``, then keep only the entry with
+      the lowest ``conc`` per group.
     - Multi-node entries: trim the ``conc`` list in place to ``[min(conc)]``.
     """
     groups: dict[tuple, list[int]] = {}
@@ -87,7 +88,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
             sorted(
                 (k, _freeze_config_value(v))
                 for k, v in entry.items()
-                if k != "conc"
+                if k not in {"conc", "exp-name"}
             )
         )
         groups.setdefault(key, []).append(len(out))

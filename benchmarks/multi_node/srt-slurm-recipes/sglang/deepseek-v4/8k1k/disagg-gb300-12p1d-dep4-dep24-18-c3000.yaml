@@ -6,15 +6,12 @@ name: "disagg-gb300-12p1d-dep4-dep24-18-c3000"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
   precision: "fp4"
 
 dynamo:
   hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
   install: true
-
-slurm:
-  time_limit: "03:00:00"
 
 sbatch_directives:
   cpus-per-task: "144"

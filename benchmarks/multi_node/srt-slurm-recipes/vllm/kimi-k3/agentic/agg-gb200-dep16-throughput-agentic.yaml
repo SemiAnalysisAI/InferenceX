@@ -1,0 +1,145 @@
+name: "kimi-k3-vllm-agg-gb200-dep16-throughput-agentic"
+
+# Day-0 GB200 translation of the official throughput-oriented multi_node_dep
+# profile. TP4 x DP4 gives EP16 across four four-GPU GB200 nodes.
+# https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200&nodes=4&strategy=multi_node_dep
+
+model:
+  path: "kimi-k3"
+  container: "vllm/vllm-openai:kimi-k3"
+  precision: "fp4"
+
+identity:
+  model:
+    repo: "moonshotai/Kimi-K3"
+  container:
+    image: "vllm/vllm-openai:kimi-k3"
+  frameworks:
+    dynamo: "1.3.0"
+
+dynamo:
+  hash: "ba83080ecd31c1ce918559e576d3c5bc9e092ff1"
+  install: true
+
+setup_script: kimik3-dspark-config-compat.sh
+
+environment:
+  ETCD_LEASE_TTL: "7200"
+
+slurm:
+  time_limit: "12:00:00"
+
+health_check:
+  max_attempts: 2160
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 4
+  agg_workers: 1
+  gpus_per_agg: 16
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  args:
+    dyn-chat-processor: "dynamo"
+    router-mode: "kv"
+    router-kv-events: true
+    router-temperature: "0"
+    router-min-initial-workers: 1
+    kv-cache-block-size: 64
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    VLLM_ENGINE_READY_TIMEOUT_S: "7200"
+    VLLM_RPC_TIMEOUT: "600000"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
+    VLLM_ALLREDUCE_USE_FLASHINFER: "1"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
+    UCX_TLS: "rc,cuda_copy"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
+    NCCL_P2P_LEVEL: "NVL"
+    NVIDIA_GDRCOPY: "1"
+    PYTORCH_ALLOC_CONF: "expandable_segments:True"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-kimi-k3-gb200-dep16-{job_id}"
+  vllm_config:
+    aggregated:
+      served-model-name: "moonshotai/Kimi-K3"
+      tensor-parallel-size: 4
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      trust-remote-code: true
+      # FlashInfer's larger TP4 MoE representation leaves too little transient
+      # HBM for fastsafetensors' GPU-staging path when DSpark is loaded.
+      load-format: "safetensors"
+      safetensors-load-strategy: "lazy"
+      kv-cache-dtype: "fp8"
+      attention-backend: "FLASHINFER_MLA"
+      attention-config: '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+      # DeepGEMM mega-MoE grid barriers time out under DSpark MRV2 with the
+      # one-sided all-to-all worker; use the supported Kimi K3 FlashInfer path.
+      moe-backend: "flashinfer_trtllm"
+      kda-prefill-backend: "flashkda"
+      kernel-config: '{"enable_cutedsl_warmup":true}'
+      all2all-backend: "flashinfer_nvlink_one_sided"
+      gpu-memory-utilization: 0.94
+      # The largest regular DEP point is c256 / DP4 = 64 sequences per engine.
+      # Capturing 128 sequence slots consumes 10.9 GiB and leaves too little
+      # runtime workspace for FlashInfer's MXFP4 MoE kernel.
+      max-num-seqs: 64
+      max-num-batched-tokens: 16384
+      speculative-config: '{"method":"dspark","model":"/tmp/Kimi-K3-DSpark","num_speculative_tokens":2,"attention_backend":"FLASHINFER_MLA","draft_sample_method":"probabilistic","rejection_sample_method":"synthetic","synthetic_acceptance_length":2.51}'
+      compilation-config: '{"cudagraph_mode":"PIECEWISE","cudagraph_capture_sizes":[3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,72,75,78,81,84,87,90,93,96,99,102,105,108,111,114,117,120,123,126,129,132,135,138,141,144,147,150,153,156,159,162,165,168,171,174,177,180,183,186,189,192]}'
+      block-size: 64
+      language-model-only: true
+      disable-custom-all-reduce: true
+      enable-prefix-caching: true
+      scheduler-cls: "vllm.v1.core.sched.async_scheduler.AsyncScheduler"
+      dyn-tool-call-parser: "kimi_k3"
+      reasoning-parser: "kimi_k3"
+      dyn-reasoning-parser: "kimi_k3"
+      no-enable-flashinfer-autotune: true
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  aiperf_server_metrics: true
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
+    AIPERF_TRACE_IDLE_GAP_CAP_SECONDS: "300"
+    RESULT_DIR: "/logs/agentic"
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AGENTIC_WARMUP_GRACE_PERIOD: "3600"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

@@ -33,7 +33,7 @@ name: "disagg-gb300-1p1d-tp4-tp4-2-c1"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
   precision: "fp4"
 
 # See ../1k1k/disagg-gb200-1p1d-dep8-tep8.yaml for the dynamo pin
@@ -42,9 +42,6 @@ model:
 dynamo:
   hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
   install: true
-
-slurm:
-  time_limit: "03:00:00"
 
 # Match yangminl's working all-dynamo.yaml on the source cluster:
 #   cpus-per-task=144  — without this slurm hands out 1 CPU/task, which
