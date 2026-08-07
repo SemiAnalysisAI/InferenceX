@@ -98,6 +98,7 @@ backend:
       watchdog-timeout: 86400
       stream-interval: 60
       enable-metrics: true
+      enable-cache-report: true
 
     decode:
       host: 0.0.0.0
@@ -127,6 +128,7 @@ backend:
       watchdog-timeout: 86400
       stream-interval: 60
       enable-metrics: true
+      enable-cache-report: true
 
 sbatch_directives:
   mem: "0"
