@@ -7536,10 +7536,10 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
-# GLM-5.2 FP8 full-context AgentX refresh on H200. This preserves the
-# successful 2P2D PCP8/TP8-DP8 HiSparse topology and c8/c12/c16 curve from
-# Actions run 30133535261 while enabling native EAGLE MTP with golden AL.
-glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
+# GLM-5.2 FP8 full-context AgentX refresh on H200. This preserves the 2P2D
+# PCP8/TP8-DP8 topology and c8/c12/c16 curve from Actions run 30133535261 while
+# enabling native EAGLE MTP with golden AL and GPU-resident decode KV cache.
+glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: zai-org/GLM-5.2-FP8
   model-prefix: glm5.2
@@ -7556,8 +7556,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
       search-space:
       - spec-decoding: mtp
         conc-list: [8]
-        kv-offloading: dram
-        kv-offload-backend: { name: hisparse }
+        kv-offloading: none
         prefill:
           num-worker: 2
           tp: 1
@@ -7565,7 +7564,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-hisparse-mtp.yaml"
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -7573,8 +7572,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [12]
-        kv-offloading: dram
-        kv-offload-backend: { name: hisparse }
+        kv-offloading: none
         prefill:
           num-worker: 2
           tp: 1
@@ -7582,7 +7580,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-hisparse-mtp.yaml"
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -7590,8 +7588,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
           dp-attn: true
       - spec-decoding: mtp
         conc-list: [16]
-        kv-offloading: dram
-        kv-offload-backend: { name: hisparse }
+        kv-offloading: none
         prefill:
           num-worker: 2
           tp: 1
@@ -7599,7 +7596,7 @@ glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-hisparse-2p2d:
           ep: 1
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-hisparse-mtp.yaml"
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
         decode:
           num-worker: 2
           tp: 8
