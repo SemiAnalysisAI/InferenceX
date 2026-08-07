@@ -11,7 +11,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 2x200GbE", "switch": "Arista 7060DX5-64S (Tomahawk4, 25.6T)"},
       "operator": {
         "partition": "hpc-gpu-1",
@@ -35,7 +35,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
-      "ll_backends": {"deepep-v2": [8, 16], "uccl-ep": [8], "nccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "uccl-ep": [8], "nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-7 400G", "switch": "NVIDIA Quantum-2 QM9790 (25.6T, InfiniBand)"},
       "operator": {
         "partition": "main",
