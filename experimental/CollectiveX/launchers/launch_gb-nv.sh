@@ -32,12 +32,20 @@ if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
-export COLLX_TRANSPORT=mnnvl
+# EP on a GB rack always stays inside the NVL72 domain, but a kv-transfer
+# shard names its fabric: an rdma leg is real cross-node InfiniBand and must
+# get the same fail-closed network profile + validation every other scale-out
+# fabric gets, so its transport label must not read mnnvl.
+case "$COLLX_BENCH:${COLLX_MODE:-}" in
+  nixl:rdma | mooncake:rdma) export COLLX_TRANSPORT=mnnvl-rdma ;;
+  *) export COLLX_TRANSPORT=mnnvl ;;
+esac
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
   deepep-v2 | nccl-ep | flashinfer-ep) ;;
-  *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
+  nixl | mooncake) ;;  # kv-transfer suite
+  *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH
@@ -75,6 +83,14 @@ allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
 [ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
 collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
+# The rdma kv legs are the only gb-nv shards that leave the NVL domain; prove
+# their pinned socket interface and HCAs on the allocation like every other
+# scale-out launcher does (mnnvl shards skip, as elsewhere).
+if [ "$COLLX_TRANSPORT" != mnnvl ] \
+    && ! collx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$COLLX_TRANSPORT"; then
+  collx_cleanup_allocation
+  collx_die "network profile validation failed on the allocation"
+fi
 
 # ---- container-import: squash file resolved on the allocation ---------------
 SQUASH_FILE="$(collx_ensure_squash_on_job "$JOB_ID" "$SQUASH_DIR" "$IMAGE")"
