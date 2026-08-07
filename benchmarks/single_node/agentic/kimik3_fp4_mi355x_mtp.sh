@@ -882,7 +882,7 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 # so 2.45 sits ~38% above the current default-methodology result.
 #
 # Set SPEC_REJECTION_METHOD=block to restore real verification.
-SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
+SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-block}"
 SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.45}"
 
 SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
@@ -966,7 +966,11 @@ SPEC_ARGS=(
 MNS_PIN="${MNS_PIN:-16}"
 MNS_BASE="${MAX_NUM_SEQS:-$(( 2 * CONC ))}"
 if [ "$MNS_BASE" -ge 4 ]; then MAX_NUM_SEQS="$MNS_PIN"; else MAX_NUM_SEQS="$MNS_BASE"; fi
-MAX_CUDAGRAPH_CAPTURE_SIZE=$MAX_NUM_SEQS
+# Capture ceiling is mns * (k+1), NOT mns. A spec-decode graph is only usable at
+# sizes divisible by k+1, and the decode step is running*(k+1) tokens wide, so a
+# ceiling of mns only covers mns/(k+1) concurrent requests -- 4 of 16 at k=3.
+# B300 sets 96 = 32*3 for exactly this reason; we were 4x under.
+MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * (SPEC_NUM_TOKENS + 1) ))
 if [ "$MAX_NUM_SEQS" -ne "$MNS_BASE" ]; then
     echo "MNS_PIN=$MNS_PIN: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
 fi
