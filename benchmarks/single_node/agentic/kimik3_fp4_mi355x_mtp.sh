@@ -966,7 +966,11 @@ SPEC_ARGS=(
 MNS_PIN="${MNS_PIN:-16}"
 MNS_BASE="${MAX_NUM_SEQS:-$(( 2 * CONC ))}"
 if [ "$MNS_BASE" -ge 4 ]; then MAX_NUM_SEQS="$MNS_PIN"; else MAX_NUM_SEQS="$MNS_BASE"; fi
-MAX_CUDAGRAPH_CAPTURE_SIZE=$MAX_NUM_SEQS
+# Capture ceiling is mns * (k+1), NOT mns. A spec-decode graph is only usable at
+# sizes divisible by k+1, and the decode step is running*(k+1) tokens wide, so a
+# ceiling of mns only covers mns/(k+1) concurrent requests -- 4 of 16 at k=3.
+# B300 sets 96 = 32*3 for exactly this reason; we were 4x under.
+MAX_CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS * (SPEC_NUM_TOKENS + 1) ))
 if [ "$MAX_NUM_SEQS" -ne "$MNS_BASE" ]; then
     echo "MNS_PIN=$MNS_PIN: max_num_seqs $MNS_BASE -> $MAX_NUM_SEQS (KDA illegal-address workaround)"
 fi
