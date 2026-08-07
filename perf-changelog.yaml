@@ -5609,5 +5609,5 @@
   description:
     - "Refresh Actions run 29657732517 as an MTP sibling while preserving the single-node TP8/EP1, GPU-resident BF16 KV, TileLang DSA, 1M-context topology, and c1/c2/c3/c4/c5/c6/c8 search space"
     - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
-    - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
+    - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528

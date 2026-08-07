@@ -100,6 +100,7 @@ SGLANG_CMD=(
     --speculative-num-draft-tokens 4
     --watchdog-timeout 1800
     --enable-metrics
+    --enable-cache-report
 )
 
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
