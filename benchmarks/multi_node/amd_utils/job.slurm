@@ -335,9 +335,16 @@ export DRY_RUN="${DRY_RUN:-0}"
 #      does not exist in the container. An explicit file pattern bypasses the handler.
 #   2. RLIMIT_CORE. build_core_dump() checks getrlimit(RLIMIT_CORE) and silently skips
 #      the dump when the file would exceed it, and containers commonly default to 0.
-#      Hence --ulimit core=-1 on docker run.
+#      Hence --ulimit core on docker run -- but BOUNDED, not unlimited: a full dump is the
+#      whole VRAM image (measured 4671 PT_LOAD segments, past 71 GB per rank and still
+#      growing, with three ranks dumping at once and the engine hung on shm_broadcast
+#      meanwhile). The PT_NOTE segment that identifies the fault sits at offset ~256 KB,
+#      so a 2 GB cap keeps the useful part and drops the rest; build_core_dump() stops
+#      cleanly at the limit and logs "Core limit file reached. GPU core dump created".
+#      Raise COREDUMP_MAX_BYTES when a full VRAM image is genuinely wanted.
 COREDUMP_DIR="${COREDUMP_DIR:-/tmp/gpu_coredumps-${SLURM_JOB_ID}}"
 export COREDUMP_DIR
+export COREDUMP_MAX_BYTES="${COREDUMP_MAX_BYTES:-2147483648}"
 # %p expands to the pid, so concurrent TP ranks do not collide (the runtime opens with
 # O_EXCL and would otherwise lose all but the first).
 export HSA_COREDUMP_PATTERN="${HSA_COREDUMP_PATTERN:-/coredumps/gpucore.%p}"
@@ -860,7 +867,7 @@ fi
     --ulimit memlock=-1 \
     --ulimit stack=67108864 \
     --ulimit nofile=1048576:1048576 \
-    --ulimit core=-1 \
+    --ulimit core=\${COREDUMP_MAX_BYTES:-2147483648} \
     --network host \
     --ipc host \
     --group-add video \
