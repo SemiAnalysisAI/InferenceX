@@ -5533,5 +5533,6 @@
     - agentic-coding
   description:
     - "Refresh submission with up to date AgentX harness."
+    - "Collect every SGLang worker's metrics through AgentX and fail when required sglang: series are absent."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2521
   
