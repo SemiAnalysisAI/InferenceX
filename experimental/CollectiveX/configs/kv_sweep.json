@@ -17,7 +17,9 @@
   ],
   "batch_sizes": [
     1,
+    2,
     4,
+    8,
     16
   ],
   "ops": [
@@ -27,7 +29,7 @@
   "timing": {
     "warmup_per_trial": 2,
     "reps_per_trial": 8,
-    "trials_per_point": 3
+    "trials_per_point": 4
   },
   "pool_slack": 2.0,
   "seed": 67
