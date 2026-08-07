@@ -434,6 +434,14 @@ DOCKER_ENV_COMMON=(
     -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO
     -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER
     -e BENCH_MIN_NUM_PROMPTS=\${BENCH_MIN_NUM_PROMPTS:-}
+    # benchmark_lib.sh honours these three, but on the vLLM path they had no way to
+    # reach the container (server_sglang.sh only forwards them to a CLIENT_IMAGE
+    # sibling). Needed to shorten the aiperf warmup when reproducing a crash:
+    # priming caches is not what triggers it, and the default 10 requests/lane costs
+    # ~9 min per iteration at conc 8.
+    -e AIPERF_WARMUP_REQUESTS_PER_LANE=\${AIPERF_WARMUP_REQUESTS_PER_LANE:-}
+    -e AIPERF_FAILED_REQUEST_THRESHOLD=\${AIPERF_FAILED_REQUEST_THRESHOLD:-}
+    -e AGENTIC_WARMUP_GRACE_PERIOD=\${AGENTIC_WARMUP_GRACE_PERIOD:-}
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
     -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
