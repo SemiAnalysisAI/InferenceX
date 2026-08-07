@@ -929,17 +929,34 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c4:
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-sweep:
   # Concurrency sweep around the c8 result. fp8 KV + asm verify, GPU-only, k=3.
   #
-  # Baseline is run 31065394450, NOT 30982145794. The latter predates the a8w4
-  # env fix (vllm#50582 rename) and was measured while the MoE was reading gate
-  # and up from the wrong halves of w13 -- the model emitted degenerate
-  # repetition and gsm8k scored 0.0, so its 717.31 tok/s/GPU and 1.22 acceptance
-  # are void. Every number that run produced has been struck from this file.
+  # CURRENT c8 BASELINE: run 31106651433 -- SIMULATED ACCEPTANCE.
   #
-  # Valid c8 baseline (31065394450): 43.63 out / 7414.32 in tok/s (~932
-  # tok/s/GPU), 256 reqs, TTFT 3.30 s avg, ITL 112.20 ms, prefix hit 84.7% mean
-  # / 89.3% steady, KV peak 73.4%, acceptance 1.77 mean against a 4.00 ceiling
-  # (per-position 0.354 / 0.232 / 0.182). gsm8k em_strict 0.9689 on the same
-  # build (run 31065409070).
+  # The recipe now defaults to rejection_sample_method=synthetic, so this is the
+  # baseline that matches what the recipe actually runs. Read it accordingly:
+  #
+  #   1260.0 tok/s/GPU (61.35 out / 10018.52 in), 306 reqs, TTFT 2.74 s,
+  #   ITL 58.49 ms avg / 55.18 p50, P90 interactivity 196.19 tok/s/user,
+  #   ISL 119175 / OSL 729.74, KV peak 64.3%, prefix hit 85.3%, 0 faults.
+  #   Acceptance reports 2.51 -- that is the configured
+  #   synthetic_acceptance_length echoed back, NOT a measurement. Draft tokens
+  #   are never verified against the target, so the generated text is unverified
+  #   drafts and any accuracy gate fails by construction.
+  #
+  # REAL-VERIFICATION reference, kept because the simulated number cannot be
+  # compared to anything measured (run 31065394450, rejection_sample_method=
+  # block): 43.63 out / 7414.32 in tok/s (~932 tok/s/GPU), 256 reqs, TTFT 3.30 s,
+  # ITL 112.20 ms, P90 interactivity 18.91, prefix hit 84.7% mean / 89.3%
+  # steady, KV peak 73.4%, acceptance 1.77 measured against a 4.00 ceiling
+  # (per-position 0.354 / 0.232 / 0.182), gsm8k em_strict 0.9689 (run
+  # 31065409070). Set SPEC_REJECTION_METHOD=block to reproduce it.
+  #
+  # Also struck: run 30982145794. It predates the a8w4 env fix (vllm#50582
+  # rename) and was measured while the MoE read gate and up from the wrong
+  # halves of w13 -- degenerate repetition, gsm8k 0.0 -- so its 717.31
+  # tok/s/GPU and 1.22 acceptance are void.
+  #
+  # For scale: the no-MTP control (run 31135561811, SPEC_DECODE=false) reaches
+  # 2723.7 tok/s/GPU with real output, above both numbers above.
   #
   # c16 has never survived on any K3 DSpark arm; the nightly's bf16 c16 cell
   # died on the illegal-address abort. It is included because fp8 changes the
@@ -1097,7 +1114,10 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c16:
   #
   # So this is 1x scheduler headroom, not the 2x every other cell runs. It is
   # NOT the c8 config at a different concurrency -- say so when comparing.
-  # c8 baseline: ~932 tok/s/GPU, 256 reqs, acceptance 1.77, KV peak 73.4%.
+  # c8 baseline: 1260.0 tok/s/GPU, 306 reqs, KV peak 64.3% (run 31106651433,
+  # SIMULATED -- acceptance 2.51 is the synthetic dial, not a measurement).
+  # Real-verification c8 for comparison: 932 tok/s/GPU, 256 reqs, acceptance
+  # 1.77, KV peak 73.4% (run 31065394450, SPEC_REJECTION_METHOD=block).
   image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
