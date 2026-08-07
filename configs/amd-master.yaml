@@ -1698,7 +1698,7 @@ minimaxm3-fp4-mi355x-vllm-agentic:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 4, 8, 16] }
 
 dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -1712,7 +1712,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
     - dram-utilization: 0.80
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 2,4,8,16,32 ]
+        conc-list: [ 1,2,4,8,16,32 ]
         kv-offloading: dram
         kv-offload-backend: { name: hicache }
         prefill:
@@ -1722,13 +1722,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          # Node-0 sibling client: run the aiperf trace-replay in its own sibling
-          # container on node 0 (via the host docker socket) instead of inside the
-          # server container. Reuse the (publicly pullable) server image so
-          # upstream CI can fetch it; aiperf is built on the fly from
-          # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
-          # selects the sibling-container mode.
-          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
         decode:
           num-worker: 1
           tp: 8
@@ -1737,32 +1731,81 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
-      # - spec-decoding: "none"
-      #   conc-list: [ 64, 128 ]
-      #   kv-offloading: dram
-      #   kv-offload-backend: { name: hicache }
-      #   prefill:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: true
-      #     additional-settings:
-      #     - "PREFILL_NODES=1"
-      #     # Node-0 sibling client: run the aiperf trace-replay in its own sibling
-      #     # container on node 0 (via the host docker socket) instead of inside the
-      #     # server container. Reuse the (publicly pullable) server image so
-      #     # upstream CI can fetch it; aiperf is built on the fly from
-      #     # /workspace/utils/aiperf. Setting only CLIENT_IMAGE (no CLIENT_NODES)
-      #     # selects the sibling-container mode.
-      #     - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260710"
-      #   decode:
-      #     num-worker: 1
-      #     tp: 8
-      #     ep: 1
-      #     dp-attn: true
-      #     additional-settings:
-      #     - "DECODE_NODES=1"
-      #     - "DECODE_MTP_SIZE=0"
+      - spec-decoding: "none"
+        conc-list: [ 96, 128 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+dsv4-fp4-mi355x-sglang-disagg-agentic-hicache-mtp:
+  image: lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: sglang-disagg
+  kv-p2p-transfer: mori
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 1,2,4,8,16,32 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      - spec-decoding: "mtp"
+        conc-list: [ 96, 128 ]
+        kv-offloading: dram
+        kv-offload-backend: { name: hicache }
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "CLIENT_IMAGE=lmsysorg/sglang-rocm:v0.5.15.post1-rocm720-mi35x-20260719"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
 
 # DeepSeek-V4-Pro FP8 single-node on MI325X (gfx942) via vLLM.
 # EXTRAPOLATED bring-up. Same rationale as dsv4-fp8-mi300x-vllm: sglang has no
@@ -1813,3 +1856,4 @@ dsv4-fp8-mi325x-vllm-mtp:
       # is 55.8%. conc128 passed cleanly on the memory-tightest SKU (MI300X);
       # cap 8k1k MTP at 128 (normal holds 256, 1k1k holds 512).
       - { tp: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
+
