@@ -144,6 +144,7 @@ benchmark:
     # frontend 400'd on aiperf's nvext.session_control actions; re-enabled
     # to test with the current build.
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     # Container-side path of the aiperf mmap dataset cache; host-side mount
     # wired via launch_gb300-*.sh srtslurm.yaml default_mounts. Without it,
     # aiperf re-tokenizes + re-writes the dataset mmap on every run.
@@ -151,4 +152,3 @@ benchmark:
     # Persistent HF hub cache (also via default_mounts) so the trace dataset
     # isn't re-downloaded each run; overrides the workflow-level HF_HUB_CACHE.
     HF_HUB_CACHE: "/hf_hub_cache"
-
