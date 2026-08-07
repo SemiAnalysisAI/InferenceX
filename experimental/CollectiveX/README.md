@@ -157,7 +157,8 @@ disaggregated deployment actually forms — and move one request's paged KV as
 layer-major descriptor lists over seed-keyed random block tables (the
 post-fragmentation layout vLLM and SGLang post), plus one contiguous bulk row as
 the wire-speed ceiling. Workloads name production shapes (`kv-mla` =
-DeepSeek-R1/Kimi-K2 class, `kv-gqa` = Qwen3-235B class) at bf16 and fp8; page
+DeepSeek-V4-Pro incl. its DSA indexer cache, `kv-gqa` = Qwen3-235B class) at
+bf16 and fp8; page
 sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
 SGLang disagg) both timed from the initiator with offset-pattern verification on
 the destination pool in both directions. Backends: `nixl` (what Dynamo, vLLM,

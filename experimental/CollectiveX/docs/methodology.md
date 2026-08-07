@@ -463,8 +463,9 @@ rides it.
 The transferred object is one request's paged KV: `isl` tokens paged at 16 or 64 tokens per block,
 per layer, addressed layer-major over a `[layer][page]` pool through seed-keyed random block
 tables on BOTH sides — the post-fragmentation layout a connector actually posts, not a contiguous
-buffer. Workload presets name production shapes (`kv-mla`: 61 layers x 576 elements/token/layer,
-the DeepSeek-R1/V4 and Kimi-K2 compressed latent; `kv-gqa`: 94 layers x 1024, the Qwen3-235B
+buffer. Workload presets name production shapes (`kv-mla`: DeepSeek-V4-Pro, 61 layers x 704
+elements/token/layer — the MQA latent 1x512 + rope 64 plus the DSA indexer k cache 128 that
+vLLM's connector merges into its transfer regions; `kv-gqa`: 94 layers x 1024, the Qwen3-235B
 class) at bf16 and fp8 — fp8 halves page bytes, which pushes small pages deeper into the
 per-descriptor regime, so it is measured, never derived. One `bulk` row per ISL (a single
 descriptor of the same total bytes) is the wire-speed ceiling the paged rows are read against.
