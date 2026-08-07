@@ -58,7 +58,7 @@ MiniMax-M3-MXFP8:
   # --block-size 128 is mandatory (MSA sparse/index cache); text-only benchmark
   # so --language-model-only frees the vision encoder. gfx950 uses FP8 KV cache.
   # Serve flags + env kept in sync with the single-node recipe
-  # benchmarks/single_node/fixed_seq_len/minimaxm3_fp8_mi355x.sh:
+  # benchmarks/single_node/fixed_seq_len/deprecated/minimaxm3_fp8_mi355x.sh:
   #   --moe-backend aiter (AITER fused MoE), --linear-backend emulation, and the
   #   larger --max-num-batched-tokens 32768 prefill budget; plus the AITER
   #   router-append shared-experts fusion (self-disables under EP; the sweep is
