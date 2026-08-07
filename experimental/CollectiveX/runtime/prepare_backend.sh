@@ -607,7 +607,11 @@ try:
 except Exception:
     raise SystemExit(1)
 NIXLCHECK
-  python3 -m pip install -q --disable-pip-version-check --no-input 'nixl-cu13==1.3.2' \
+  # Noble-based images mark python externally managed (PEP 668); the retry flag
+  # is the uccl-prep pattern (older pips never refuse, so they never reach it).
+  { python3 -m pip install -q --disable-pip-version-check --no-input 'nixl-cu13==1.3.2' \
+      || python3 -m pip install -q --disable-pip-version-check --no-input \
+           --break-system-packages 'nixl-cu13==1.3.2'; } \
     || { collx_log "ERROR: nixl wheel install failed"; return 1; }
   python3 -c "import nixl" \
     || { collx_log "ERROR: nixl import failed after install"; return 1; }
@@ -629,8 +633,11 @@ main() {
     mooncake)
       # The wheel links libcudart.so.12; the adapter dlopens it from the
       # runtime package at import, so no LD_LIBRARY_PATH seam is needed.
-      python3 -m pip install -q --disable-pip-version-check --no-input \
-        'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+      { python3 -m pip install -q --disable-pip-version-check --no-input \
+          'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+          || python3 -m pip install -q --disable-pip-version-check --no-input \
+               --break-system-packages \
+               'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12; } \
         || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
       ;;
     mori-io)
