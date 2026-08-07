@@ -5526,4 +5526,13 @@
     - "Enable SGLang backend metrics on every aggregate, prefill, and decode engine, and fail before publishing a partial trace artifact if required sglang: metrics are absent."
     - "Record the recipes' active HiCache host-DRAM tier and, for disaggregated points, Dynamo router commit 5a638087 in nvidia-master metadata so generated artifacts no longer report kv_offloading=none, allocated_cpu_dram_gb=0, or a null router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2477
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 MI355X vLLM AgentX MTP submission with three speculative tokens."
+    - "Pin throughput to the committed DeepSeek-V4-Pro golden synthetic acceptance length of 2.49; eval-only runs retain real target verification."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2522
   
