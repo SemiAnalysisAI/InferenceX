@@ -217,11 +217,13 @@ elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX =
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic" \
         recipes/sglang/deepseek-v4/agentic
 elif [[ "$IS_AGENTIC" == "1" ]]; then
-    # Agentic recipes use NVIDIA/srt-slurm v1.0.36. This is the upstream
-    # version validated in InferenceX PR #2302 and includes per-node DP,
-    # matching Dynamo health counts, multi-node TP port handling, and
-    # Mooncake compatibility. Keep it pinned so sweeps are reproducible.
-    git clone --branch v1.0.36 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    # Agentic recipes use NVIDIA/srt-slurm v1.0.38. In addition to per-node
+    # DP, matching Dynamo health counts, multi-node TP port handling, and
+    # Mooncake compatibility, this release injects logical worker endpoint
+    # metadata and AIPERF_SERVER_METRICS_URLS into custom benchmarks. The
+    # latter is required for complete AgentX server-metrics artifacts.
+    # Keep the release pinned so sweeps are reproducible.
+    git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
 
     mkdir -p recipes/vllm/deepseek-v4/agentic || exit 1
