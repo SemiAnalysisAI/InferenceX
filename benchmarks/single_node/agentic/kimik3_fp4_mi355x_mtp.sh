@@ -817,7 +817,7 @@ VLLM_CMD=(
     --load-format fastsafetensors
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
-    --max-num-seqs "$MAX_CUDAGRAPH_CAPTURE_SIZE"
+    --max-num-seqs "$MAX_NUM_SEQS"
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3
