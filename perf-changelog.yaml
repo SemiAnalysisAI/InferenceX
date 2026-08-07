@@ -5547,3 +5547,11 @@
     - "Allow high-concurrency full-context AgentX jobs to complete the canonical warmup and one-hour profile with a 12-hour Slurm limit and 13-hour workflow envelope."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2404
   
+- config-keys:
+    - glm5.1-fp8-b200-tilert
+  description:
+    - "Add GLM-5.1 FP8 B200 prefill/decode-disaggregated benchmark via TileRT: vLLM prefill (TileRTConnector, kv_producer) + TileRT decode_server + OpenAI-compatible pd_router, framework=tilert (non-dynamo custom runtime, decode-only engine)"
+    - "Image ghcr.io/tile-ai/tilert:0.1.5 (tilert 0.1.5.post2 installed at container start); commands aligned to TileRT README Topology A -- NIXL KV transfer, --kv-cache-dtype fp8_ds_mla (prefill) <-> fp8 (decode), max-seq-len 202752; MTP speculative-config wired via spec-decoding=mtp"
+    - "Topology: 1 prefill node (TP8) + 1 decode node (TP8), each 8xB200 exclusive; TileRT decode is bs=1 only so conc-list is a single point [1], ISL 1k/8k OSL 1k"
+    - "Runner: launch_b200-dgxc.sh tilert early-return branch (zero impact on the dynamo path); tilert_utils/submit.sh issues two srun --ntasks=1, one per role, because prefill and decode need different container images; roles are dispatched by the TILERT_ROLE it exports, and torn down across nodes via a sentinel file on the shared /workspace"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2523
