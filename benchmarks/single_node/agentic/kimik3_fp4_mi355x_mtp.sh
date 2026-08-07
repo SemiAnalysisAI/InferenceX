@@ -884,9 +884,12 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
 # Set SPEC_REJECTION_METHOD=block to restore real verification.
 SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
 SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.45}"
+# Resolved here, ahead of the synthetic banner, so a no-speculation run does not
+# advertise a simulated acceptance it never used.
+SPEC_DECODE="${SPEC_DECODE:-false}"
 
 SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
-if [ "$SPEC_REJECTION_METHOD" = "synthetic" ]; then
+if [ "$SPEC_REJECTION_METHOD" = "synthetic" ] && [ "$SPEC_DECODE" = "true" ]; then
     SPEC_CFG="$SPEC_CFG,\"synthetic_acceptance_length\":$SPEC_SYNTHETIC_ACCEPTANCE_LENGTH"
     # Loud banner + an on-disk marker so a result directory is self-identifying
     # and nobody mines these numbers as measured perf months from now.
@@ -907,10 +910,32 @@ if [ "$SPEC_REJECTION_METHOD" = "synthetic" ]; then
 fi
 SPEC_CFG="$SPEC_CFG}"
 
-SPEC_ARGS=(
-    --speculative-config
-    "$SPEC_CFG"
-)
+# SPEC_DECODE is documented in the header as a knob but was never implemented --
+# SPEC_ARGS was built and passed unconditionally. Wire it up so a no-speculation
+# A/B is expressible.
+#
+# On this branch it defaults to FALSE: no --speculative-config at all, so the
+# target decodes one token per step with no drafter, no verify, and no
+# rejection sampling (synthetic included -- it has nothing to act on).
+#
+# Baseline to compare against is the measured DSpark c8: 932 tok/s/GPU,
+# P90 interactivity 18.91, acceptance 1.77, ITL 112.20 ms (run 31065394450,
+# real block verification). Everything else here is held: same image, fp8 KV,
+# MLA_FORCE_PS=1, MLA_TRITON_CG=1, mns 16, GMU 0.9.
+#
+# Note the two container patches become inert rather than harmful: #51171
+# patches the DRAFTER's cudagraph support and there is no drafter, and
+# MLA_FORCE_PS guards forward_mqa's multi-token branch, which is not entered
+# when max_qo_len == 1.
+if [ "$SPEC_DECODE" = "true" ]; then
+    SPEC_ARGS=(
+        --speculative-config
+        "$SPEC_CFG"
+    )
+else
+    SPEC_ARGS=()
+    echo "SPEC_DECODE=false: no --speculative-config (no-MTP control arm)"
+fi
 
 # mns and the cudagraph capture ceiling are 2*CONC, capped at MNS_CAP.
 #
