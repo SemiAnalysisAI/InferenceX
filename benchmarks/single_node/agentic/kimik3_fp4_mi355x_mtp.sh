@@ -771,7 +771,7 @@ if [ "$LANGUAGE_MODEL_ONLY" = "true" ]; then
 fi
 
 # ---- Optional axes ----------------------------------------------------------
-KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "auto")
+KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "fp8")
 SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 
 SYNTHETIC_ACCEPT_LEN=2.51
