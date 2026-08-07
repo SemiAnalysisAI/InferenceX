@@ -35,7 +35,9 @@ set -eo pipefail
 #                   pins in amd-master.yaml.
 #   VARIANT=mine    this branch's changes: gpu-mem-util 0.86 (derived for the
 #                   kv-offloading:none arms), RoPE+KV fusion on.
-#   VARIANT=dep8    mine + DP-attention + EP8 (the arm amd-master.yaml adds).
+#   VARIANT=dep8    mine + DP-attention + EP8 (the arm amd-master.yaml adds),
+#                   fronted by vllm-router on round_robin. The policy is not
+#                   incidental -- it is worth 2.9x here. See the Router block.
 #                   Needs the vllm-router, same as the agentic recipe.
 #   VARIANT=custom  touch nothing; every knob comes from the environment.
 # Any individual knob set in the environment wins over the variant preset.
@@ -234,6 +236,35 @@ if [ "$DP_ATTENTION" = "true" ]; then
     VLLM_BACKEND_PORT=$((PORT + 1))
     VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
     agentic_pip_install --quiet "vllm-router==${VLLM_ROUTER_VERSION:-0.1.14}"
+
+    # round_robin, not the consistent_hash the other agentic recipes hardcode.
+    #
+    # The DP ranks run the MoE layers in lockstep: each step every rank pads its
+    # batch out to the busiest rank's token count, so a step costs whatever the
+    # fullest rank costs and the idle ranks burn their slice on dummy tokens.
+    # Balance is therefore a throughput input, not just a latency one.
+    #
+    # consistent_hash spreads by request content, which for short requests is
+    # uneven enough to leave most ranks padding. Measured on this probe at c48
+    # (10/10, MI355X, DSv4-Pro FP4 + MTP) -- only the policy differs:
+    #
+    #   TP8 baseline              543 tok/s   TPOT 43.5ms
+    #   DEP + consistent_hash     261 tok/s   TPOT 94.6ms
+    #   DEP + round_robin         751 tok/s   TPOT 23.5ms
+    #
+    # The tell that this was maldistribution rather than an underfed engine:
+    # the DEP deficit held at a near-constant 2.2-2.4x across c16 and c48
+    # instead of shrinking as concurrency grew.
+    #
+    # Scope: this default is right for THIS probe -- fixed short random prompts
+    # with prefix caching off, where hashing buys nothing. consistent_hash earns
+    # its keep on session affinity and prefix-cache hits, so on a real agentic
+    # trace (long, multi-turn, prefix-reusing) the ranking may well invert, and
+    # cache_aware (vllm-router's own default) is the third option to measure.
+    # Do not propagate this to the full agentic recipes on this evidence alone.
+    # Override with VLLM_ROUTER_POLICY=<random|round_robin|cache_aware|
+    # power_of_two|consistent_hash>.
+    : "${VLLM_ROUTER_POLICY:=round_robin}"
 fi
 
 # Preflight the ports. These nodes are shared and --network host means a
@@ -340,7 +371,7 @@ VLLM_CMD=(
     # count each step. An uneven spread is therefore a throughput cost, not just
     # a latency one, so the policy belongs in the run record.
     if [ "$USE_VLLM_ROUTER" = "true" ]; then
-        echo "VLLM_ROUTER_POLICY=${VLLM_ROUTER_POLICY:-consistent_hash}"
+        echo "VLLM_ROUTER_POLICY=$VLLM_ROUTER_POLICY"
     fi
     echo "VARIANT_IMAGE=$VARIANT_IMAGE"
     # What is actually running, independent of what the variant expected: the
@@ -362,7 +393,7 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     echo "Starting native vLLM router on port $PORT for $TP DP ranks..."
     vllm-router \
         --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
-        --policy "${VLLM_ROUTER_POLICY:-consistent_hash}" \
+        --policy "$VLLM_ROUTER_POLICY" \
         --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \
