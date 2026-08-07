@@ -30,8 +30,29 @@ is one fused kernel on DeepEP V2, UCCL-EP and FlashInfer EP, guarded bitwise aga
 reference; MoRI's is a plain dtype cast and needs neither. So an FP8 `normal` dispatch covers
 quantize-plus-transport while its BF16 control covers transport alone, and is not comparable to a row
 measured before that change. The sweep `version` deliberately stays 1 across it, so
-`implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component are the only
-discriminators.
+`implementation.stage_excluded_from_roundtrip` and the presence of a `stage` component are the
+discriminators for THAT change.
+
+Those two fields do not separate every generation, and it is worth being exact about which ones
+they miss, because the version tag will not help. A same-cell comparison across the durable store
+puts numbers on it: the FP8 quantize charge moved dispatch by +64% to +110% (median, small T); the
+staging hoist widening moved FlashInfer roundtrip −46% and MoRI BF16 −23%; MoRI's move to the
+external input buffer with 16 warps moved FP8 combine +33% to +65% on gfx950; sizing the NCCL EP
+HT combine to its receive count moved combine −10% to −41%; and the two-pass chain moved
+`pair_period` −5% to −42% everywhere. Of those, only the first two are keyed by the fields above.
+
+Two more keys, for the rest. **`chain_health.interpair_gap_us` present** marks the two-pass chain:
+rows from the single six-events chain carry `chain_health` with `pair_spread_us` alone, and their
+`pair_period` is inflated by a host constant rather than being a different-but-valid quantity — so
+treat those rows as defective, not merely older. For the MoRI buffer-mode change and the NCCL EP
+combine sizing there is **no per-row discriminator at all** — `kernel_generation` reads the same on
+both sides — so pre-change rows for those two backends cannot be separated from post-change rows by
+any field, and must be excluded from the store rather than keyed around.
+
+If the sweep version is ever bumped, **skip 2 and go to 3.** A short-lived bump to 2 during this
+branch's development left stored documents tagged `version: 2` that are currently invisible only
+because the frontend reader accepts `[1]`. Publishing support for 2 would silently resurface that
+mid-development churn as valid data.
 
 Read that charge as a **fixed per-call cost, not a payload-proportional one**. On DeepEP V2 decode,
 FP8 dispatch p50 minus its BF16 control is 65us on h100, 59us on b200, 27us on b300 and 57us on
