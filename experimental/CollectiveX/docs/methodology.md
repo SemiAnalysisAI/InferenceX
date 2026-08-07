@@ -437,13 +437,28 @@ evidence. Check 6 is reported per row as `correctness.chain_last_output_passed` 
 trials) and check 7 as `correctness.post_chain_state_passed`. Check 7 is **folded into
 `correctness.passed`**, so its failure fails the leg exactly as any other oracle failure does.
 
-Check 6 is **reported but not gating** as of 2026-08-07. It shipped gating and failed 100% of FP8
-cases on every SKU, backend and vendor, while BF16 passed everywhere — and the sweep from before
-it existed (run 31092783122) shows those same FP8 cases passing with oracle errors identical to
-the last digit. Nothing about the transports changed; only this comparison did. That is not yet
-evidence of a defect, and a check that new should not hold a merge on a verdict nobody can
-justify. It re-arms when a measured `chain_last_output_error` shows which side of the tolerance
-the difference actually falls on — on the magnitude, never on the verdict alone.
+Check 6 is **also folded into `correctness.passed`**, and the magnitude is why. It was briefly
+demoted to reporting-only on 2026-08-07, on the theory that its tolerance was too tight for FP8;
+probe 31180411148 (h100, deepep-v2, EP8, low-latency) measured `chain_last_output_error` and
+falsified that outright:
+
+| precision | `chain_last_output_error` | vs `COMBINE_REL_TOL` |
+|---|--:|--:|
+| BF16 | `0.0` at every rung | bit-identical |
+| FP8 | 31 – 93 | **1000× – 2966×** |
+
+A mis-set tolerance lands *just* outside; this is three orders of magnitude past it, and the BF16
+control proves the comparison itself is exact rather than merely lenient. Meanwhile every oracle
+passes (`max_relative_error` ≈ 0.0039) — precisely the signature this check exists for, a
+difference invisible to drained oracles. So an FP8 chain really does disagree with a drained pair,
+and a leg that cannot reproduce its own chained result does not publish a period from it.
+
+The cause is not yet localized: FP8 is the only path that hoists staging out of the chain, and BF16
+never does, so the split follows the hoist exactly. Whether that means the transport corrupts under
+free-running FP8 pairs, or the hoist feeds those combines an input that no longer matches their
+dispatch, is open — and the two have different fixes. Until it is settled, treat FP8 chained
+periods as unvalidated. If this check is ever demoted again, demote it on a measured magnitude:
+the verdict alone justified the wrong call both times it was read without one.
 
 Check 6 also publishes `correctness.chain_last_output_error` — the worst chained-vs-drained
 relative error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before

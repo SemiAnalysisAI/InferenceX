@@ -1219,22 +1219,23 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         chain_oracle = gate[T]["oracle_chain"]
         assert chain_oracle is not None, "chained oracle missing despite a validated budget"
         chain_ok = bool(chain_oracle["passed"])
-        # The chained-OUTPUT check is REPORTED BUT NOT GATING, pending evidence that its
-        # tolerance is right. Shipped 2026-08-07, it failed 100% of fp8 cases on every SKU,
-        # backend and vendor while bf16 passed everywhere -- and run 31092783122, from before
-        # the check existed, shows those same fp8 cases passing with oracle errors identical to
-        # the last digit (0.0038490912411361933 for low-latency fp8). Nothing about the
-        # transports changed; only this comparison did. A check that new, reddening that
-        # uniformly, against that control, is not yet evidence of a defect.
-        # `chain_last_output_error` is published so the next run can settle it: a real regime
-        # corruption lands orders of magnitude past COMBINE_REL_TOL, a too-tight tolerance lands
-        # just outside. RE-ARM this (fold chain_output_ok back into local_ok) once a measured
-        # magnitude says which -- do not re-arm on the verdict alone, which is what shipped it.
+        # The chained-OUTPUT check gates again, on a measured magnitude rather than a verdict.
+        # It was briefly demoted on the theory its tolerance was too tight for FP8; probe
+        # 31180411148 (h100, deepep-v2, EP8, low-latency) falsified that:
+        #   bf16  chain_last_output_error = 0.0 at every rung -- bit-identical
+        #   fp8   chain_last_output_error = 31..93 -- 1000x to 2966x COMBINE_REL_TOL
+        # A mis-set tolerance lands JUST outside; this is three orders of magnitude past, and
+        # the bf16 control proves the comparison itself is exact. Meanwhile every oracle passes
+        # (max_relative_error ~0.0039), which is precisely the signature this check exists for:
+        # a difference invisible to drained oracles. So FP8's chained output really does
+        # disagree with a drained pair, and a leg that cannot reproduce its own chained result
+        # should not publish a period from it.
         chain_output_ok = bool(gate[T]["chain_output_local_ok"])
         gate[T].update({
             "input_unchanged": input_unchanged,
             "local_ok": int(
-                pre["passed"] and post["passed"] and chain_ok and input_unchanged
+                pre["passed"] and post["passed"] and chain_ok and chain_output_ok
+                and input_unchanged
             ),
             "chain_local_ok": int(chain_ok),
             "max_rel": max(
@@ -1361,9 +1362,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 # matched a drained pair through the identical code path, within the combine
                 # tolerance. Proves the last pair of each chain, not every interior pair --
                 # validating those would put device work inside the timed loops.
-                # REPORTED, NOT GATING: excluded from `passed` while its tolerance is under
-                # investigation (see the fold-in site). Read it beside
-                # `chain_last_output_error`, never alone.
+                # Folded into `passed`. Read it beside `chain_last_output_error`, never alone:
+                # the magnitude is what tells a regime corruption (orders of magnitude past
+                # tolerance) from a gate set too tight (just outside it).
                 "chain_last_output_passed": chain_last_output_passed,
                 # How far apart they actually were (cross-rank MAX), published whether or not
                 # the verdict passed. A bool alone cannot separate a transport corruption from

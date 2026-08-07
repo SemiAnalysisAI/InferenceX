@@ -83,12 +83,12 @@ The chained regime is checked twice over: each chain trial's own final combined 
 against a drained pair through the identical code path (`correctness.chain_last_output_passed`,
 with the size of any difference in `correctness.chain_last_output_error`), and the full oracle runs
 once per ladder point against the state the chain leaves behind
-(`correctness.post_chain_state_passed`). The second folds into `correctness.passed`, so a backend
-that corrupts the state a free-running chain leaves behind fails the case rather than publishing
-the suite's fastest period. The first is **reported but not gating** as of 2026-08-07: it shipped
-gating and reddened every FP8 case fleet-wide while BF16 passed everywhere, against a pre-check
-control run whose oracle errors were identical to the last digit — see the methodology's
-Correctness section for what re-arms it.
+(`correctness.post_chain_state_passed`). Both fold into `correctness.passed`, so a backend that
+corrupts under free-running pairs fails the case rather than publishing the suite's fastest period.
+FP8 currently fails the first check on every SKU and backend, by 1000×–2966× the combine tolerance
+while BF16 differs by exactly zero — a real disagreement, not a tight gate, and not yet localized
+to either the transport or the harness's own staging hoist. **FP8 chained periods are unvalidated
+until it is.** See the methodology's Correctness section.
 
 `roundtrip` means dispatch then combine — the transport — in every row. Expert-output staging sits
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding
