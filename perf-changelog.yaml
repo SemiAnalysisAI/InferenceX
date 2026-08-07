@@ -5515,3 +5515,9 @@
     - "Serve shape is the validated STP script unchanged outside the speculative and simulated-acceptance blocks: cookbook B300 NVFP4 low-latency arm (TP8, --kv-cache-dtype fp8_e4m3, --bf16-gemm-backend cutedsl, --max-prefill-tokens 8192, --chunked-prefill-size 8192, --mem-fraction-static 0.85, glm47 tool-call parser, glm45 reasoning parser) with HiCache host-DRAM offload at hicache-ratio 0.75 / write_back / direct / page_first_direct. mem-fraction-static stays at 0.85, which is also what the GLM-5.2 GB300 aggregated MTP recipe uses; the hicache ratio is relative to the device pool, so the nextn layer's own KV only shrinks the host pool."
     - "Search space is one arm on the AgentX MTP concurrency grid: TP8 + HiCache at conc [1, 4, 8, 12, 16]. Steps of at least 2 because single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and a hard stop at conc 16. The STP entry's DEP (attention-DP + EP8) throughput arm is not carried over: its frontier peak is conc 48, above that cap, and at conc <= 16 attention-DP leaves 2 sessions per rank and is strictly dominated by TP8, so it would spend one GPU job per point re-measuring a worse curve. The DEP branch is kept in the benchmark script -- including the --speculative-moe-a2a-backend none / --speculative-moe-runner-backend triton pair that GLM-5.2-NVFP4's unquantized bf16 nextn layer needs once expert parallelism puts an all-to-all in the MoE path -- so the throughput arm can be added later without re-deriving it."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2447
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Kimi K2.5 NVFP4 B300 vLLM: nightly image, TP/DEP/TEP sweep, TP8 conc-1 only, DEP gmu 0.85"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2442
