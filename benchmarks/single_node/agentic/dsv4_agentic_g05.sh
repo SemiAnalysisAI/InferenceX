@@ -169,13 +169,38 @@ for _v in ROCM_ROPE_KVCACHE_FUSION MAX_MODEL_LEN NUM_SPEC_TOKENS EVAL_ONLY \
           WEKA_LOADER_OVERRIDE AIPERF_EXPERIMENTAL_FAST AIPERF_WARMUP_REQUESTS_PER_LANE \
           AIPERF_FAILED_REQUEST_THRESHOLD AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES \
           VLLM_ROUTER_VERSION VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS PROFILE \
-          VLLM_ROCM_DSV4_SPARSE_GLUON MOE_BACKEND; do
+          VLLM_ROCM_DSV4_SPARSE_GLUON MOE_BACKEND MORI_SHMEM_HEAP_SIZE; do
     if [[ -n "${!_v+x}" ]]; then
         PASSTHRU+=(-e "$_v=${!_v}")
         echo " passthru   : $_v=${!_v}"
     fi
 done
 unset _v
+
+# Optional source overlays: HOST_PATH:CONTAINER_PATH pairs, comma-separated.
+# Mounted :ro over the image's vLLM tree so a one-file patch can be tested
+# without rebuilding a 42 GB image. Each host path is checked here because
+# docker would otherwise happily create a *directory* at a typo'd source path
+# and mount that over a Python module, which fails much later and less clearly.
+OVERLAY_MOUNTS=()
+if [[ -n "${SRC_OVERLAY:-}" ]]; then
+    IFS=',' read -ra _pairs <<< "$SRC_OVERLAY"
+    for _pair in "${_pairs[@]}"; do
+        _host="${_pair%%:*}"
+        _cont="${_pair#*:}"
+        if [[ -z "$_host" || -z "$_cont" || "$_host" == "$_cont" ]]; then
+            echo "Error: SRC_OVERLAY entry '$_pair' is not HOST:CONTAINER" >&2
+            exit 1
+        fi
+        if [[ ! -e "$_host" ]]; then
+            echo "Error: SRC_OVERLAY source '$_host' does not exist" >&2
+            exit 1
+        fi
+        OVERLAY_MOUNTS+=(-v "$_host:$_cont:ro")
+        echo " overlay    : $_host -> $_cont"
+    done
+    unset _pairs _pair _host _cont
+fi
 
 # --entrypoint /bin/bash is mandatory: the image declares
 # ENTRYPOINT ["/bin/bash","-c"], so a command passed without overriding it
@@ -193,6 +218,7 @@ docker run --rm --name "$CONTAINER_NAME" \
     -v "$REPO_DIR":/workspace \
     -v "$HOST_RESULT_DIR":/results \
     -v "$HF_CACHE":/hfcache \
+    "${OVERLAY_MOUNTS[@]}" \
     -e MODEL="$MODEL" \
     -e MODEL_PATH=/models/DeepSeek-V4-Pro \
     -e MODEL_PREFIX=dsv4 \
