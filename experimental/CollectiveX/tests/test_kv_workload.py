@@ -28,8 +28,9 @@ def _read8(pool: np.ndarray):
 
 class Geometry(unittest.TestCase):
     def test_mla_bf16_shapes(self):
+        # DSv4-Pro: MQA latent 512 + rope 64 + DSA indexer k 128 = 704/token/layer.
         cfg = kv_workload.plan_config("mla", "bf16", 512, 16)
-        self.assertEqual(cfg["page_bytes"], 16 * 576 * 2)
+        self.assertEqual(cfg["page_bytes"], 16 * 704 * 2)
         self.assertEqual(cfg["pages_req"], 32)
         self.assertEqual(cfg["descs"], 61 * 32)
         self.assertEqual(cfg["req_bytes"], 61 * 32 * cfg["page_bytes"])

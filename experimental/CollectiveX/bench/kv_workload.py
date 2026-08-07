@@ -4,10 +4,11 @@
 A transfer is one request's paged KV: `isl` tokens in `page_tokens`-sized
 blocks, per layer, scattered over a `[layer][page]` pool by a seed-keyed random
 block table per side (the post-fragmentation layout vLLM/SGLang address).
-Presets name production shapes: ``mla`` = DeepSeek-R1/V4 and Kimi-K2 latent
-(576 elements/token/layer, 61 layers); ``gqa`` = Qwen3-235B class (1024, 94).
-fp8 halves page bytes, which deepens the per-descriptor regime, so it is a
-measured dimension, never derived from bf16.
+Presets name production shapes: ``mla`` = DeepSeek-V4-Pro (61 layers; per token
+per layer the MQA latent 1x512 + rope 64 + the DSA indexer k cache 128 that
+vLLM's connector merges into the transfer regions = 704 elements); ``gqa`` =
+Qwen3-235B class (1024, 94). fp8 halves page bytes, which deepens the
+per-descriptor regime, so it is a measured dimension, never derived from bf16.
 
 Pattern correctness: every 256-byte chunk holds a byte derived from its own
 offset, so any page's expected contents follow from the offset alone and one
@@ -23,7 +24,7 @@ import struct
 import numpy as np
 
 PRESETS = {
-    "mla": dict(layers=61, elems_per_token_layer=576, model_class="deepseek-r1/kimi-k2"),
+    "mla": dict(layers=61, elems_per_token_layer=704, model_class="deepseek-v4-pro"),
     "gqa": dict(layers=94, elems_per_token_layer=1024, model_class="qwen3-235b"),
 }
 PRECISION_BYTES = {"bf16": 2, "fp8": 1}
