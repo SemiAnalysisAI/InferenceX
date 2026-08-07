@@ -44,7 +44,37 @@ def test_launcher_provisions_exporter_through_shared_squash_path():
     assert_exporter_provisioning(launcher)
     # No SQUASH_DIR var here; the /data/ mount avoids the /home NFS ELOOP bug.
     assert 'DCGM_EXPORTER_SQSH="/data/home/sa-shared/gharunners/squash/' in launcher
-    assert 'srun --partition=$SLURM_PARTITION --exclusive --time=30 bash -c "unsquashfs -l' in launcher
+    assert (
+        'srun --partition=$SLURM_PARTITION "${GB300_SLURM_EXCLUDE_ARGS[@]}" '
+        '--exclusive --time=30 bash -c "unsquashfs -l' in launcher
+    )
+
+
+def test_launcher_validates_cached_squash_before_taking_nfs_lock():
+    launcher = LAUNCHER_PATH.read_text()
+    import_body = launcher.split("import_squash() {", 1)[1].split("\n}", 1)[0]
+
+    cache_probe = import_body.index('bash -c "unsquashfs -l')
+    lock_open = import_body.index('exec 9>\\"$lock\\"')
+    assert cache_probe < lock_open
+    assert 'return 0' in import_body[cache_probe:lock_open]
+    # Keep the in-lock recheck so concurrent cache misses serialize safely.
+    assert import_body.count('unsquashfs -l \\"$squash\\"') == 2
+
+
+def test_launcher_applies_node_exclusions_to_all_squash_validation_sruns():
+    launcher = LAUNCHER_PATH.read_text()
+
+    assert 'GB300_SLURM_EXCLUDE_ARGS=()' in launcher
+    assert 'GB300_SLURM_EXCLUDE_ARGS+=(--exclude="$GB300_SLURM_EXCLUDED_NODELIST")' in launcher
+    squash_sruns = [
+        line
+        for line in launcher.splitlines()
+        if "srun --partition=$SLURM_PARTITION" in line
+        and ("--time=30" in line or "--time=180" in line)
+    ]
+    assert len(squash_sruns) == 3
+    assert all('"${GB300_SLURM_EXCLUDE_ARGS[@]}"' in line for line in squash_sruns)
 
 
 def test_launcher_pins_power_producer():

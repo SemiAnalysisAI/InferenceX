@@ -12,6 +12,10 @@ export ENROOT_ROOTFS_WRITABLE=1
 # overridable so operators can clear or extend the list without changing the
 # launcher.
 GB300_SLURM_EXCLUDED_NODELIST="${GB300_SLURM_EXCLUDED_NODELIST-im-gb300-r01-c002,im-gb300-r01-c003}"
+GB300_SLURM_EXCLUDE_ARGS=()
+if [[ -n "$GB300_SLURM_EXCLUDED_NODELIST" ]]; then
+    GB300_SLURM_EXCLUDE_ARGS+=(--exclude="$GB300_SLURM_EXCLUDED_NODELIST")
+fi
 
 # Host-side directory holding aiperf's content-addressed dataset mmap cache.
 # Bind-mounted into worker containers at /aiperf_mmap_cache via the
@@ -117,11 +121,18 @@ NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" 
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
-    local exclude_args=()
-    if [[ -n "$GB300_SLURM_EXCLUDED_NODELIST" ]]; then
-        exclude_args+=(--exclude="$GB300_SLURM_EXCLUDED_NODELIST")
+
+    # Most runs hit an already-valid shared cache entry. Validate that entry
+    # without opening the NFS lock file: some compute-node NFS clients support
+    # ordinary reads but reject flock(2) with EAFNOSUPPORT. A miss still takes
+    # the lock below, where the cache is rechecked before importing.
+    if srun --partition=$SLURM_PARTITION "${GB300_SLURM_EXCLUDE_ARGS[@]}" --exclusive --time=30 \
+        bash -c "unsquashfs -l \"$squash\" > /dev/null 2>&1"; then
+        echo "Squash file already exists and is valid, skipping import: $squash"
+        return 0
     fi
-    srun --partition=$SLURM_PARTITION "${exclude_args[@]}" --exclusive --time=180 bash -c "
+
+    srun --partition=$SLURM_PARTITION "${GB300_SLURM_EXCLUDE_ARGS[@]}" --exclusive --time=180 bash -c "
         exec 9>\"$lock\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
         if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
@@ -178,7 +189,7 @@ if [[ "$USES_DCGM_POWER" == "1" ]]; then
     # x86, nodes aarch64).
     import_squash "$DCGM_EXPORTER_SQSH" "$DCGM_EXPORTER_IMAGE"
     test -r "$DCGM_EXPORTER_SQSH" || { echo "Error: DCGM exporter squash not readable: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
-    srun --partition=$SLURM_PARTITION --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
+    srun --partition=$SLURM_PARTITION "${GB300_SLURM_EXCLUDE_ARGS[@]}" --exclusive --time=30 bash -c "unsquashfs -l \"$DCGM_EXPORTER_SQSH\" > /dev/null" || { echo "Error: DCGM exporter squash invalid: $DCGM_EXPORTER_SQSH" >&2; exit 1; }
     sha256sum "$DCGM_EXPORTER_SQSH" > "$GITHUB_WORKSPACE/exporter-image.sha256"
 fi
 
