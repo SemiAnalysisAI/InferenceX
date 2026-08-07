@@ -568,6 +568,32 @@ validate_container_network() {
   done
 }
 
+# FlashInfer needs no build step: the pinned SGLang images ship `flashinfer-python`, and the
+# one-sided MoE all-to-all lives in that same wheel. So this is a capability assert, not an
+# install - fail loudly and early if the image ever drops it or ships a build without the
+# trtllm_moe_alltoall module, rather than dying mid-case inside create_buffer.
+flashinfer_ep_prepare() {
+  command -v python3 >/dev/null \
+    || { collx_log "ERROR: python3 unavailable for FlashInfer EP"; return 1; }
+  python3 - <<'FICHECK'
+import sys
+try:
+    import flashinfer
+    from flashinfer.comm import Mapping  # noqa: F401
+    from flashinfer.comm.mnnvl import MnnvlConfig  # noqa: F401
+    from flashinfer.comm.trtllm_moe_alltoall import (  # noqa: F401
+        MoeAlltoAll,
+        moe_a2a_get_workspace_size_per_rank,
+    )
+except Exception as exc:  # noqa: BLE001 - the reason belongs in the leg log
+    print(f"flashinfer one-sided a2a import failed: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+print(f"FlashInfer {getattr(flashinfer, '__version__', 'unknown')} one-sided A2A available")
+FICHECK
+  local rc=$?
+  [ "$rc" -eq 0 ] || { collx_log "ERROR: FlashInfer EP one-sided A2A unavailable in this image"; return 1; }
+}
+
 main() {
   collx_apply_network_profile "${COLLX_NODES:-1}" "${COLLX_TRANSPORT:-}" || return 1
   validate_container_network || return 1
@@ -579,6 +605,7 @@ main() {
       ;;
     uccl-ep) uccl_prepare || return 1 ;;
     nccl-ep) nccl_ep_prepare || return 1 ;;
+    flashinfer-ep) flashinfer_ep_prepare || return 1 ;;
     *)
       collx_log "ERROR: unknown backend preparation request"
       return 1

@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+# Optionally inject synthetic acceptance into a recipe's speculative-config when
+# SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Call after the job-name override
+# and before `srtctl apply` so the rendered job picks it up. Returns non-zero if
+# the injector fails, so a broken opt-in never reaches srtctl with an unrewritten
+# recipe; callers should propagate that rather than continuing.
+inject_synthetic_acceptance() {
+    local config_path="$1"
+    local framework="$2"
+
+    python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" \
+        "$config_path" "$framework"
+}
+
 slurm_job_is_active() {
     local job_id="$1"
     squeue -j "$job_id" --noheader 2>/dev/null | grep -q "$job_id"
