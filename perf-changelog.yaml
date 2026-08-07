@@ -5485,6 +5485,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2438
 
 - config-keys:
+    - dsr1-fp4-b200-sglang
+    - dsr1-fp4-b200-sglang-mtp
+  description:
+    - "Update the aggregated DSR1 FP4 B200 SGLang STP and MTP configurations to v0.5.16 with CUDA 13"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2492
+
+- config-keys:
     - kimik3-fp4-b300-vllm-agentic
   scenario-type:
     - agentic-coding
@@ -5493,4 +5501,3 @@
     - "Keep server-reported completion-token counts aligned with the full HTTP response lifecycle when Kimi-K3 stops emitting parsed content at an end-of-message marker but continues raw generation."
     - "Exercise the Kimi-K3 B300 concurrency-1 GPU-resident and DRAM-offload points as the targeted regression for the previously inflated visible-content interactivity calculation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2504
-  
