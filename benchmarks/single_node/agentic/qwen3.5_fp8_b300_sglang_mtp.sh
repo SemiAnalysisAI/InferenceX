@@ -84,8 +84,13 @@ PARALLEL_ARGS=(
     --ep-size "$EP_SIZE"
 )
 
-# Parallel tokenization keeps 256k AgentX warmups below the client timeout.
-TOKENIZER_ARGS=(--tokenizer-worker-num 6)
+# TP4 needs parallel tokenization to keep 256k AgentX warmups below the client
+# request timeout. Keep TP2 on SGLang's single-worker default: multi-tokenizer
+# startup races with the TP2 HiCache shared-memory initialization path.
+TOKENIZER_ARGS=()
+if [ "$TP" -ge 4 ]; then
+    TOKENIZER_ARGS=(--tokenizer-worker-num 6)
+fi
 
 # AgentX concurrency counts live session trees rather than individual HTTP
 # requests. Leave room for subagent fan-out and avoid spending HBM on graphs
