@@ -19,7 +19,7 @@ Scenario and precision retirements:
 | Model | Deprecated | Remains |
 |---|---|---|
 | MiniMax-M3 (`minimaxm3`) | Single-turn 8k1k | Agentic coding |
-| Kimi-K2.5/2.6/2.7-Code (`kimik2.5`) | Agentic coding | Single-turn 8k1k, until August 6, 2026 (see below) |
+| Kimi-K2.5/2.6/2.7-Code (`kimik2.5`) | Agentic coding | Nothing — Single-turn 8k1k ran until August 6, 2026 and was retired on 2026-08-07 (see below) |
 | Qwen3.5-397B-A17B (`qwen3.5`) | All **bf16** recipes, in every scenario, on NVIDIA and AMD | fp8 and fp4 recipes |
 
 Speculative-decoding A/B retirements — in each pair below the spec-decode arm is the better Pareto frontier, so we stop running the non-spec-decode arm and publish only the spec-decode arm:
@@ -39,6 +39,8 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 ### Thursday, August 6, 2026
 
 **Thursday, August 6, 2026** is the last day for the **Single-turn 8k1k** scenario on **Kimi-K2.5/2.6/2.7-Code** (`kimik2.5`); the scenario is deprecated for these models after that date. Rationale: Kimi-K3 launched on July 27, 2026, so GPU cluster time shifts to the newer frontier model. Combined with the Agentic coding deprecation above, this leaves `kimik2.5` with no active scenario — the model is **fully retired after August 6, 2026**.
+
+**Enacted on 2026-08-07** in [#XXXX](https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX): 17 `kimik2.5` config keys were removed from the active master configs and archived under [`configs/deprecated/`](configs/deprecated/) as `nvidia-kimik2.5-8k1k-master.yaml` (10) and `amd-kimik2.5-8k1k-master.yaml` (7), and their 12 benchmark scripts were moved to the sibling `deprecated/` directories. `kimik2.5` now has **no active configuration in any master config** and is fully retired. The same PR archived `kimik2.5-int4-h100-vllm`, an agentic-coding key that #2493 left behind in `nvidia-master.yaml` after moving its script to `benchmarks/single_node/agentic/deprecated/`; it is now in `nvidia-kimik2.5-agentic-master.yaml` with its siblings. The SPEED-Bench acceptance-length script `benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh` is intentionally kept — speedbench is driven by `speedbench-al.yml`, not the master configs, matching how #2493 treated MiniMax-M3.
 
 ## Scenarios
 
@@ -142,7 +144,7 @@ Other offloading tiers, including NVMe KV cache offloading, are outside the init
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24 ([#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)) | Single-turn 8k1k, Agentic coding (MTP-only pending — the non-MTP arm still runs; see the Deprecation Notice) | Single-turn 1k1k |
 | GLM-5 / GLM-5.1 | `glm5`, `glm5.1` | 2026-03-06 ([#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)); GLM-5.1 added 2026-04-21 ([#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)) | — (retired 2026-07-18, [#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)) | Single-turn 1k1k, Single-turn 1k8k (GLM-5 only), Single-turn 8k1k |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18 ([#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)) | — (retired 2026-06-20, [#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
-| Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | Single-turn 8k1k (until 2026-08-06) — fully retired after 2026-08-06 | Single-turn 1k1k, Single-turn 1k8k, Agentic coding (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
+| Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17 ([#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)) | — (fully retired 2026-08-07, [#XXXX](https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX)) | Single-turn 1k1k, Single-turn 1k8k, Agentic coding (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)), Single-turn 8k1k (removed 2026-08-07, [#XXXX](https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX)) |
 | Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16 ([#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)) | Single-turn 8k1k, Agentic coding; fp8/fp4 only | Single-turn 1k1k, Single-turn 1k8k, all bf16 recipes (removed 2026-08-04, [#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)) |
 | gpt-oss-120b | `gptoss` | 2025-09-09 | — (retired 2026-07-06, [#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)) | Single-turn 1k1k, Single-turn 1k8k, Single-turn 8k1k |
 | DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | Single-turn 8k1k | Single-turn 1k1k, Single-turn 1k8k |
