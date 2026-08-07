@@ -343,6 +343,29 @@ class StageContract(unittest.TestCase):
             checked += 1
         self.assertGreater(checked, 0, "no SKU declares exclude_nodes -- test proves nothing")
 
+    # CX_FP8_CONSUME is read at class-body evaluation and fails closed on an unrecognised
+    # value, so the workflow must never hand it one. A blank dispatch input is the trap: it
+    # sets the variable to "" rather than leaving it unset, os.environ.get's default never
+    # applies, and every leg dies at import before any measurement.
+    def test_the_workflow_never_passes_an_invalid_fp8_consume(self) -> None:
+        workflow = (
+            RUNTIME.parents[2] / ".github" / "workflows" / "collectivex-sweep.yml"
+        )
+        if not workflow.exists():  # pragma: no cover - repo layout guard
+            self.skipTest("workflow not present in this checkout")
+        text = workflow.read_text()
+        if "CX_FP8_CONSUME" not in text:
+            self.skipTest("workflow does not set CX_FP8_CONSUME")
+        line = next(l for l in text.splitlines() if l.strip().startswith("CX_FP8_CONSUME:"))
+        self.assertIn(
+            "|| 'native'", line,
+            "a blank fp8_consume input must fall back to 'native'; passing it through empty "
+            "sets the variable to \"\" and the harness fails closed at import",
+        )
+        for value in re.findall(r"'([a-z]*)'", line):
+            if value:
+                self.assertIn(value, ("native", "dequant"), value)
+
     def test_contract_test_has_teeth(self) -> None:
         # A flag common.sh must never pass has to be rejected by the parser — this is the exact
         # failure (unrecognized arguments: --allow-parent-owner) the reconcile removed.
