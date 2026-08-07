@@ -7,8 +7,8 @@ configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9
 configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @InferenceX/core
 
 # PoR for Models & general direction
-MODELS.md @ankur-singh @chunfangamd @InferenceX/core
-MODELS_zh.md @ankur-singh @chunfangamd @InferenceX/core
+MODELS.md @ankur-singh @chunfangamd @InferenceX/core @InferenceX/vendor-number-3 @InferenceX/vendor-number-4
+MODELS_zh.md @ankur-singh @chunfangamd @InferenceX/core @InferenceX/vendor-number-3 @InferenceX/vendor-number-4
 
 # OperatorX experimental
 experimental/operatorx/ @hbarclay
