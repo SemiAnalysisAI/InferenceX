@@ -5533,5 +5533,6 @@
     - agentic-coding
   description:
     - "Refresh submission with up to date AgentX harness."
+    - "Require vLLM backend metrics in every AgentX artifact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2518
   

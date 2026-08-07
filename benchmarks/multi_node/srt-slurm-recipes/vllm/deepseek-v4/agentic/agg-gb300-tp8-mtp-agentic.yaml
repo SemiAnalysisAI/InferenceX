@@ -140,6 +140,7 @@ benchmark:
     INFMAX_CONTAINER_WORKSPACE: "/infmax-workspace"
     RESULT_DIR: "/logs/agentic"
     PORT: "8000"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     # Keep aggregate workers in the multinode result schema so ingestion uses
     # the zero decode-worker count instead of duplicating TP into P and D.
     IS_MULTINODE: "true"
