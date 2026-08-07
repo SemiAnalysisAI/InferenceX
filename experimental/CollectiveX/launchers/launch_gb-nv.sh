@@ -51,7 +51,12 @@ collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUN
 [ "$PRODUCT" != gb300 ] || collx_require_vars COLLX_ENROOT_CACHE_PATH
 PARTITION="$COLLX_PARTITION"; ACCOUNT="$COLLX_ACCOUNT"; SQUASH_DIR="$COLLX_SQUASH_DIR"
 [ -z "${COLLX_ENROOT_CACHE_PATH:-}" ] || export ENROOT_CACHE_PATH="$COLLX_ENROOT_CACHE_PATH"
-export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1 MC_FORCE_MNNVL=1
+export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1
+# MC_FORCE_MNNVL is mooncake's only reader here: it makes the engine install
+# ONLY its cross-node NVLink transport, which cannot open another host's
+# segments in the pinned wheel (cudaIpcOpenMemHandle: invalid resource handle,
+# kv CI run 3). The mooncake kv row declares the rdma lane, so it opts out.
+[ "$COLLX_BENCH" = mooncake ] || export MC_FORCE_MNNVL=1
 collx_apply_network_profile "$NODES" "$COLLX_TRANSPORT"
 
 collx_log "$PRODUCT nodes=$NODES x ${GPN}gpu world=$NGPUS bench=$COLLX_BENCH"
