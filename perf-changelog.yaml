@@ -5533,5 +5533,6 @@
     - agentic-coding
   description:
     - "Refresh submission with up to date AgentX harness."
+    - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2516
   
