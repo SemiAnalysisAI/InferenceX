@@ -1144,7 +1144,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # each pair overwrites its predecessor's, so interior pairs are unvalidated by
             # design (see methodology, Correctness). The drained pair is collective, issued in
             # the same (trial, T) order on every rank, so the group stays aligned.
-            drained = backend.run_roundtrip(problems[T])
+            # Staged is passed back so the ONLY difference is the regime. Without it an fp8
+            # adapter -- which hoists staging out of the chain -- would be compared against a
+            # drained pair that staged inline, and the mismatch that produces is a property of
+            # the harness, not of the transport.
+            drained = backend.run_roundtrip(problems[T], staged=chained["staged"])
             torch.cuda.synchronize()
             gate[T]["chain_output_local_ok"] &= int(
                 _chain_output_matches(chained["combined"], drained)

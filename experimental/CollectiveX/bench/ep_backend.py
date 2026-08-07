@@ -540,6 +540,13 @@ class EPBackend(abc.ABC):
             # Cloned post-sync (untimed, stream-ordered ahead of any later dispatch) so the
             # caller can compare it against a drained pair without racing the buffers.
             "combined": combined.clone(),
+            # The combine input the chain actually sent, or None where the chain staged
+            # per-pair. A comparison against a drained pair MUST pass this back to
+            # run_roundtrip: wherever staging is hoisted (every fp8 adapter, since
+            # stage_device_work is the fp8 flag), a drained call left to stage inline
+            # differs from the chain in the staging path as well as the regime, and the
+            # A/B stops isolating free-running-vs-drained.
+            "staged": staged,
         }
 
     def benchmark_component(self, component, problem, warmup, iters):
