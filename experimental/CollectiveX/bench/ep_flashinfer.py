@@ -118,7 +118,6 @@ class FlashInferEPBackend(EPBackend):
     combine_reduction = "topk-slot-tree"
     # Forced by the phase asserts described in the module docstring.
     requires_fresh_pair = True
-    combine_input_attr = "combine_input"
 
     def __init__(self, args, rank, world_size, local_rank, device):
         super().__init__(args, rank, world_size, local_rank, device)

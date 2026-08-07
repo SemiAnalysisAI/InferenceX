@@ -76,7 +76,6 @@ class NCCLEPBackend(EPBackend):
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
     stage_device_work = False
-    combine_input_attr = "combine_input_t"  # this adapter's combine reads combine_input_t
     requires_fresh_pair = False
     receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
@@ -397,7 +396,8 @@ class NCCLEPBackend(EPBackend):
         # BF16 combine input is the received buffer itself; no device work (value correctness
         # is exercised only through the oracle's combine_transformed path). LL needs the full
         # padded plane, HT only the received rows (see `_bind_ht_recv_count`).
-        h.combine_input_t = self._recv_x_t if self._ll else h.combine_in_t
+        # Still an nccl.ep tensor wrapper, not a torch tensor; shared code passes it through.
+        h.combine_input = self._recv_x_t if self._ll else h.combine_in_t
 
     def combine(self, p, h):
         stream = self._stream()
@@ -405,7 +405,7 @@ class NCCLEPBackend(EPBackend):
             # Weighted LL combine: the kernel multiplies each expert contribution by the
             # source token's gate (CombineOutputs.topk_weights) before the FP32 accumulation.
             h.handle.combine(
-                CombineInputs(tokens=h.combine_input_t),
+                CombineInputs(tokens=h.combine_input),
                 CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
                 config=self._combine_cfg,
                 stream=stream,
@@ -414,7 +414,7 @@ class NCCLEPBackend(EPBackend):
             # Unweighted HT combine (FWD forbids input weights): sums the per-token expert
             # aggregates back to each token's home rank, restored to original order.
             h.handle.combine(
-                CombineInputs(tokens=h.combine_input_t),
+                CombineInputs(tokens=h.combine_input),
                 CombineOutputs(tokens=h.out_t),
                 config=self._combine_cfg,
                 stream=stream,

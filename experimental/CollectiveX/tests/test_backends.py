@@ -223,12 +223,10 @@ class RoundtripStaging(unittest.TestCase):
         b.run_roundtrip(object())
         self.assertEqual(b.calls, ["dispatch", "stage", "combine(staged-by-stage)"])
 
-    def test_adapters_declare_where_their_combine_input_lives(self):
-        # A wrong attribute would silently leave the staged tensor unused, so the roundtrip
-        # would measure a combine over stale data. NCCL EP is the one that differs.
-        self.assertEqual(ep_backend.EPBackend.combine_input_attr, "combine_input")
+    def test_a_staged_tensor_reaches_combine_through_the_handle(self):
+        # The staged expert-output stand-in must be what combine consumes; a break here
+        # would silently measure a combine over stale data rather than fail.
         b = _StagingBackend(stage_device_work=True, fp8_consume="native")
-        b.combine_input_attr = "combine_input"
         b.run_roundtrip(object(), staged="X")
         self.assertEqual(b.calls[-1], "combine(X)")
 

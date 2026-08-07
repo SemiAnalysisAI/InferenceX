@@ -105,9 +105,9 @@ class EPBackend(abc.ABC):
     # adapter sends 1 byte/value plus (for a blockwise codec) per-block FP32 scales.
     dispatch_value_bytes = 2
     dispatch_scale_bytes_per_copy = 0
-    # Handle attribute stage() populates with the tensor combine sends. Every adapter must
-    # point this at the tensor its combine() reads (NCCL EP names it differently).
-    combine_input_attr = "combine_input"
+    # Every adapter's stage() sets handle.combine_input to the tensor its combine() reads.
+    # The value need not be a torch tensor: nccl-ep stores its own nccl.ep wrapper type, and
+    # the shared paths below only ever pass it through.
     # Which production FP8 consumption path the chained roundtrip models.
     #
     #   native  (default) - the expert consumes the dispatched fp8 + per-128-block scales
@@ -412,9 +412,9 @@ class EPBackend(abc.ABC):
             if staged is None:
                 self.stage(problem, handle)
                 if not stage_every and self.stage_excluded_from_roundtrip:
-                    staged = getattr(handle, self.combine_input_attr)
+                    staged = handle.combine_input
             else:
-                setattr(handle, self.combine_input_attr, staged)
+                handle.combine_input = staged
             self.combine(problem, handle)
             torch.cuda.synchronize()
 
@@ -430,7 +430,7 @@ class EPBackend(abc.ABC):
         if staged is None:
             self.stage(problem, handle)
         else:
-            setattr(handle, self.combine_input_attr, staged)
+            handle.combine_input = staged
         return self.combine(problem, handle)
 
     def benchmark_chain(self, problem, warmup, iters, drop):
@@ -478,7 +478,7 @@ class EPBackend(abc.ABC):
             # work between the two collectives belongs.
             handle = self.dispatch(problem)
             self.stage(problem, handle)
-            staged = getattr(handle, self.combine_input_attr)
+            staged = handle.combine_input
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
         # Events are allocated BEFORE the loops: an allocation between two record() calls is host
@@ -499,7 +499,7 @@ class EPBackend(abc.ABC):
             if staged is None:
                 self.stage(problem, handle)
             else:
-                setattr(handle, self.combine_input_attr, staged)
+                handle.combine_input = staged
             combine_start[i].record()
             self.combine(problem, handle)
             combine_end[i].record()
@@ -512,7 +512,7 @@ class EPBackend(abc.ABC):
             if staged is None:
                 self.stage(problem, handle)
             else:
-                setattr(handle, self.combine_input_attr, staged)
+                handle.combine_input = staged
             combined = self.combine(problem, handle)
             pair_end[i].record()
         torch.cuda.synchronize()
@@ -557,11 +557,11 @@ class EPBackend(abc.ABC):
             # same staged tensor is valid for every iteration -- MoRI's is the dispatch output at
             # BF16 or a `[:rows]` BF16 cast under FP8, FlashInfer's the workspace combine region,
             # which sits past the end of every dispatch receive plane. Read back through
-            # `combine_input_attr` rather than constructed, so an adapter's non-torch payload
+            # `handle.combine_input` rather than constructed, so an adapter's non-torch payload
             # (nccl-ep) would round-trip unchanged if one ever reached here.
             handle = self.dispatch(problem)
             self.stage(problem, handle)
-            staged = getattr(handle, self.combine_input_attr)
+            staged = handle.combine_input
             self.combine(problem, handle)  # drain the pair backends require
             torch.cuda.synchronize()
         return time_us(torch, lambda p=problem: self.run_roundtrip(p, staged), 0, iters)
