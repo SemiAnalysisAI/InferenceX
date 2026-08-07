@@ -5501,3 +5501,15 @@
     - "Keep server-reported completion-token counts aligned with the full HTTP response lifecycle when Kimi-K3 stops emitting parsed content at an end-of-message marker but continues raw generation."
     - "Exercise the Kimi-K3 B300 concurrency-1 GPU-resident and DRAM-offload points as the targeted regression for the previously inflated visible-content interactivity calculation."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2504
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 B200 disaggregated Dynamo vLLM MTP benchmarks for 8k/1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2390
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump SGLang image to lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233 for the 8k1k scenarios."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2099

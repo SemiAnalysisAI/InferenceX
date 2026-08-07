@@ -5969,6 +5969,107 @@ dsv4-fp4-gb300-dynamo-vllm:
           ep: 16
           dp-attn: true
 
+dsv4-fp4-b200-dynamo-vllm-mtp:
+  image: vllm/vllm-openai:vllm-x86_64-cu13-0.25.1-7a33ba9
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-nscale
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # B200 MTP disagg recipes. Each worker maps to one full 8-GPU B200 node
+      # (prefill dep8; decode tp8, except the low-latency tp8 variant).
+      # SYNTHETIC_ACCEPTANCE is a throughput-only control (injected into the
+      # recipe by runners/inject_synthetic_acceptance.py); EVAL_ONLY runs keep
+      # the checked-in real-MTP recipe so verification is measured normally.
+      - spec-decoding: "mtp"
+        conc-list: [1, 8, 16]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-1p1d-dep8-tp8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - spec-decoding: "mtp"
+        conc-list: [128, 256]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-1p2d-dep8-dep8-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 1
+          ep: 8
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-1p1d-dep8-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [1024]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.49"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-2p1d-dep8-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+      - spec-decoding: "mtp"
+        conc-list: [4096]
+        prefill:
+          num-worker: 3
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=1.79"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-b200-3p1d-dep8-dep8-mtp.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+
 dsv4-fp4-gb300-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -6381,7 +6482,7 @@ dsv4-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
+  image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300
