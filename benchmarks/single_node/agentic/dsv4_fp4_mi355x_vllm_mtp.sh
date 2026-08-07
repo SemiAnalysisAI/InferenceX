@@ -596,7 +596,12 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
     wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
 fi
 
-if [ "${EVAL_ONLY}" = "true" ]; then
+# Defaulted, matching the other read of this variable at the SPEC_CONFIG
+# branch. Under set -u the bare form aborts when EVAL_ONLY is unset -- and it
+# aborts here, after the ~10 min weight load and graph capture, with the
+# server up and the router listening. The workflow always exports it, so only
+# stand-alone runs hit this.
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
