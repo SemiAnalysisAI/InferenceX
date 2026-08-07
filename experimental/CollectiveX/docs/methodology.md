@@ -437,28 +437,33 @@ evidence. Check 6 is reported per row as `correctness.chain_last_output_passed` 
 trials) and check 7 as `correctness.post_chain_state_passed`. Check 7 is **folded into
 `correctness.passed`**, so its failure fails the leg exactly as any other oracle failure does.
 
-Check 6 is **also folded into `correctness.passed`**, and the magnitude is why. It was briefly
-demoted to reporting-only on 2026-08-07, on the theory that its tolerance was too tight for FP8;
-probe 31180411148 (h100, deepep-v2, EP8, low-latency) measured `chain_last_output_error` and
-falsified that outright:
+Check 6 gates **only where the chain stages per pair**, and is reported as `null` elsewhere. That
+boundary is measured, not assumed. Wherever `stage_excluded_from_roundtrip` holds — every FP8
+adapter by default, since `stage_device_work` *is* the FP8 flag — the chain hoists staging out of
+the timed loop, capturing one warm-up dispatch's stand-in and reusing it for all 128 pairs. Neither
+the chain's final combine nor the drained reference then consumes an input matching its own
+dispatch, so they are two differently mismatched pairs and nothing requires them to agree.
 
-| precision | `chain_last_output_error` | vs `COMBINE_REL_TOL` |
+The A/B, on h100/deepep-v2/EP8, identical in every respect but the hoist:
+
+| staging | `chain_last_output_error` | vs `COMBINE_REL_TOL` |
 |---|--:|--:|
-| BF16 | `0.0` at every rung | bit-identical |
-| FP8 | 31 – 93 | **1000× – 2966×** |
+| hoisted (`fp8_consume=native`) | 31 – 93 | **1000× – 2966×** |
+| per pair (`fp8_consume=dequant`) | `0.0` at every rung | bit-identical |
 
-A mis-set tolerance lands *just* outside; this is three orders of magnitude past it, and the BF16
-control proves the comparison itself is exact rather than merely lenient. Meanwhile every oracle
-passes (`max_relative_error` ≈ 0.0039) — precisely the signature this check exists for, a
-difference invisible to drained oracles. So an FP8 chain really does disagree with a drained pair,
-and a leg that cannot reproduce its own chained result does not publish a period from it.
+in **both** `normal` and `low-latency` mode (runs 31180411148, 31185184372, 31185233991), against a
+BF16 control that is `0.0` because BF16 never hoists. So the difference was an artifact of the
+hoist, not a transport defect: gating on it under the hoist reddened every FP8 leg fleet-wide for
+something the harness does deliberately.
 
-The cause is not yet localized: FP8 is the only path that hoists staging out of the chain, and BF16
-never does, so the split follows the hoist exactly. Whether that means the transport corrupts under
-free-running FP8 pairs, or the hoist feeds those combines an input that no longer matches their
-dispatch, is open — and the two have different fixes. Until it is settled, treat FP8 chained
-periods as unvalidated. If this check is ever demoted again, demote it on a measured magnitude:
-the verdict alone justified the wrong call both times it was read without one.
+Passing the chain's staged input to the drained pair was tried first and is *not* sufficient — it
+makes the two share an input, but a shared input that matches neither dispatch. Only per-pair
+staging makes the regimes comparable.
+
+The check keeps its teeth exactly where it has meaning: every BF16 row, and any FP8 row run under
+the `dequant` hatch. `null` there means the question was not asked, never a comparison that ran and
+failed. If this boundary is ever moved, move it on a measured magnitude: the verdict alone
+justified two wrong calls in one day, and the number settled it in one probe each time.
 
 Check 6 also publishes `correctness.chain_last_output_error` — the worst chained-vs-drained
 relative error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before

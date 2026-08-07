@@ -301,11 +301,8 @@ class ChainedPairPeriod(unittest.TestCase):
                     series = backend.benchmark_chain(new_problem(), 0, iters, drop)
                 self.assertEqual(
                     sorted(series),
-                    ["combine", "combined", "dispatch", "pair", "staged", "start_to_start"],
+                    ["combine", "combined", "dispatch", "pair", "start_to_start"],
                 )
-                # _ChainBackend stages device work, so the chain hoists and reports what it
-                # sent; the drained comparison has to combine that same input.
-                self.assertEqual(series["staged"], "staged-by-stage")
                 for key in ("pair", "dispatch", "combine"):
                     self.assertEqual(len(series[key]), iters - drop)
                 # Start-to-start is a difference series: one fewer than the kept pairs.
@@ -632,9 +629,6 @@ class _SweepBackend(ep_backend.EPBackend):
             "dispatch": [DISPATCH_FLOOR_US] * kept,
             "combine": [COMBINE_FLOOR_US] * kept,
             "combined": f"chained-{problem.T}",
-            # None = this stub stages per pair; a hoisting backend returns its staged input
-            # so the drained comparison can combine the identical one.
-            "staged": None,
         }
 
     def dispatch(self, problem):
@@ -864,42 +858,39 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                     self.assertIs(row["correctness"]["post_chain_state_passed"], True)
                     self.assertIs(row["correctness"]["chain_last_output_passed"], True)
 
-    def test_the_drained_comparison_reuses_the_chains_staged_input(self):
-        # The chain hoists staging wherever stage() does device work -- which is every fp8
-        # adapter, since stage_device_work IS the fp8 flag. If the drained pair is left to
-        # stage inline, the A/B flips the staging path as well as the regime, and any
-        # difference that produces is a property of the harness, not of the transport.
-        # This shipped: it red-lined every fp8 leg of a full sweep while every bf16 leg
-        # passed, because bf16 does not hoist, so nothing differed and it stayed invisible.
+    def test_the_output_check_is_skipped_where_staging_is_hoisted(self):
+        # Under the hoist the chain captures one warm-up dispatch's staged stand-in and reuses
+        # it for every pair, so neither the chain's final combine nor the drained reference
+        # consumes an input matching its OWN dispatch. They are two differently mismatched
+        # pairs and nothing requires them to agree, so the question is not asked.
+        # Measured, h100/deepep-v2/EP8, identical but for the hoist: hoisted gives
+        # chain_last_output_error 31..93 (1000x-2966x tolerance), per-pair staging gives 0.0 at
+        # every rung, in both normal and low-latency mode. Gating on it under the hoist
+        # reddened every FP8 leg fleet-wide for a harness artifact.
         class _Hoisting(_SweepBackend):
             def __init__(self):
                 super().__init__()
                 self.precision, self.stage_device_work = "fp8", True
-                self.staged_count = 0
-
-            def benchmark_chain(self, problem, warmup, iters, drop):
-                chained = super().benchmark_chain(problem, warmup, iters, drop)
-                chained["staged"] = f"hoisted-{problem.T}"
-                return chained
-
-            def stage(self, problem, handle):
-                # Deliberately different on every call: re-staging must NOT be what the
-                # drained pair ends up combining.
-                self.staged_count += 1
-                handle.combine_input = f"restaged-{self.staged_count}"
-
-            def combine(self, problem, handle):
-                return handle.combine_input
 
         backend = _Hoisting()
         self.assertTrue(backend.stage_excluded_from_roundtrip)
         run = drive(backend_factory=lambda: backend)
+        self.assertEqual(run.rc, 0)
+        self.assertEqual(run.output_checks, [], "the comparison must not run under the hoist")
+        for row in run.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                # null, not False: the artifact says "not asked", never something a reader
+                # could mistake for a comparison that ran and failed.
+                self.assertIsNone(row["correctness"]["chain_last_output_passed"])
+                self.assertIsNone(row["correctness"]["chain_last_output_error"])
+                self.assertIs(row["correctness"]["passed"], True)
+
+    def test_the_output_check_still_runs_when_the_chain_stages_per_pair(self):
+        # The other side of the guard: no hoist, so the check applies and gates.
+        run = drive()
         self.assertTrue(run.output_checks)
-        for _chained, drained in run.output_checks:
-            self.assertTrue(
-                str(drained).startswith("hoisted-"),
-                f"drained pair combined {drained!r}; it must reuse the chain's staged input",
-            )
+        for row in run.rows:
+            self.assertIs(row["correctness"]["chain_last_output_passed"], True)
 
     def test_the_chained_error_is_folded_into_max_relative_error(self):
         # Maxed in like the other two oracles', so a chained regime that is within tolerance
@@ -1001,9 +992,6 @@ class _DriftingBackend(_SweepBackend):
             "dispatch": [DISPATCH_FLOOR_US] * kept,
             "combine": [COMBINE_FLOOR_US] * kept,
             "combined": f"chained-{problem.T}",
-            # None = this stub stages per pair; a hoisting backend returns its staged input
-            # so the drained comparison can combine the identical one.
-            "staged": None,
         }
 
 

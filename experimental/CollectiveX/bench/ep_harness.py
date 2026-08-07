@@ -1079,6 +1079,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "pre_input_unchanged": pre_input_unchanged,
         }
 
+    # The chained-output A/B is only defined when the chain stages per pair. Under the hoist
+    # (every FP8 adapter by default, since stage_device_work IS the fp8 flag) the staged
+    # stand-in is decoupled from each pair's dispatch, so chained and drained are not
+    # comparable -- see the call site for the measurement that established this.
+    chain_output_applicable = not backend.stage_excluded_from_roundtrip
+
     # ---- Pass 2: every backend uses the same rotated point order.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
     disp_pool = {T: [] for T in ladder}     # pooled per-iteration cross-rank MAX (dispatch)
@@ -1153,15 +1159,31 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # each pair overwrites its predecessor's, so interior pairs are unvalidated by
             # design (see methodology, Correctness). The drained pair is collective, issued in
             # the same (trial, T) order on every rank, so the group stays aligned.
-            # Staged is passed back so the ONLY difference is the regime. Without it an fp8
-            # adapter -- which hoists staging out of the chain -- would be compared against a
-            # drained pair that staged inline, and the mismatch that produces is a property of
-            # the harness, not of the transport.
-            drained = backend.run_roundtrip(problems[T], staged=chained["staged"])
+            #
+            # Skipped entirely where staging is HOISTED, because there the comparison has no
+            # meaning. The hoist captures one warm-up dispatch's staged stand-in and reuses it
+            # for every pair, so neither the chain's final combine nor the drained reference
+            # consumes an input matching its OWN dispatch -- they are two differently
+            # mismatched pairs, and nothing requires them to agree. Measured, not assumed:
+            # h100/deepep-v2/EP8, identical in every other respect, native (hoisted) vs
+            # dequant (staged per pair) --
+            #     hoisted:   chain_last_output_error 31..93   (1000x-2966x tolerance)
+            #     per-pair:  chain_last_output_error 0.0      (bit-identical, every rung)
+            # in BOTH normal and low-latency mode (runs 31180411148, 31185184372, 31185233991).
+            # Passing the chain's staged input to the drained pair was tried first and is NOT
+            # enough -- it makes the two share an input, but a shared input that matches
+            # neither dispatch. Only per-pair staging makes the regimes comparable, which is
+            # exactly the case this guard admits, so the drained pair stages inline here and
+            # `benchmark_chain`'s staged value has no consumer. Gating under the hoist reddened
+            # every FP8 leg fleet-wide for a harness artifact.
+            drained = backend.run_roundtrip(problems[T])
             torch.cuda.synchronize()
-            output_ok, output_error = _chain_output_matches(chained["combined"], drained)
-            gate[T]["chain_output_local_ok"] &= int(output_ok)
-            gate[T]["chain_output_error"] = max(gate[T]["chain_output_error"], output_error)
+            if chain_output_applicable:
+                output_ok, output_error = _chain_output_matches(chained["combined"], drained)
+                gate[T]["chain_output_local_ok"] &= int(output_ok)
+                gate[T]["chain_output_error"] = max(
+                    gate[T]["chain_output_error"], output_error
+                )
             pair = chained["pair"]
             pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
             chain_pool[T] += pair_median
@@ -1234,8 +1256,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gate[T].update({
             "input_unchanged": input_unchanged,
             "local_ok": int(
-                pre["passed"] and post["passed"] and chain_ok and chain_output_ok
-                and input_unchanged
+                pre["passed"] and post["passed"] and chain_ok and input_unchanged
+                and (chain_output_ok or not chain_output_applicable)
             ),
             "chain_local_ok": int(chain_ok),
             "max_rel": max(
@@ -1270,6 +1292,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         post_chain_state_passed = bool(
             _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
         )
+        # null where the check does not apply (staging hoisted): the artifact says "not
+        # asked", never a bare False that a reader would mistake for a failed comparison.
+        # The reduce still runs on every rank so the collective stays aligned.
         chain_last_output_passed = bool(
             _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
         )
@@ -1279,6 +1304,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         chain_output_error = _reduce_vec(
             torch, dist, device, [g["chain_output_error"]], MAX
         )[0]
+        if not chain_output_applicable:
+            chain_last_output_passed, chain_output_error = None, None
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
         throughput = {
@@ -1362,9 +1389,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 # matched a drained pair through the identical code path, within the combine
                 # tolerance. Proves the last pair of each chain, not every interior pair --
                 # validating those would put device work inside the timed loops.
-                # Folded into `passed`. Read it beside `chain_last_output_error`, never alone:
-                # the magnitude is what tells a regime corruption (orders of magnitude past
-                # tolerance) from a gate set too tight (just outside it).
+                # Folded into `passed` WHERE IT APPLIES; null where it does not, which is
+                # wherever staging is hoisted out of the chain (every FP8 adapter by default).
+                # There the staged stand-in is decoupled from each pair's dispatch, so chained
+                # and drained are not comparable and the question is not asked -- see the Pass
+                # 2b call site for the A/B that established that. Read it beside
+                # `chain_last_output_error`, never alone.
                 "chain_last_output_passed": chain_last_output_passed,
                 # How far apart they actually were (cross-rank MAX), published whether or not
                 # the verdict passed. A bool alone cannot separate a transport corruption from
