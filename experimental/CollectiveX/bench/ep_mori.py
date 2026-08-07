@@ -120,15 +120,10 @@ class MoRIBackend(EPBackend):
         self._inter_node = kernel_name == "InterNodeV1"
         self.num_qps = 1
         self.block_num, self.rdma_block_num, self.dispatch_warps, self.combine_warps = blocks
-        # External input buffer everywhere, as the engines run it. It must move together with
-        # `combine_warps`: MoRI's tuned tables key combine on `zero_copy`, so 16 warps belong to
-        # this mode and 4-8 to the registered one. methodology.md has the cost of mismatching them.
-        self._external_input = True
-        # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
-        # input kernels consume the dispatch output directly, so their stage is not applicable.
-        # Under FP8, stage also dequantizes the received fp8 payload to BF16 (device work) on
-        # either path, so it is a timed component regardless of the input-buffer mode.
-        self.stage_device_work = self._fp8 or not self._external_input
+        # External-input kernels consume the dispatch output directly, so stage has no copy of
+        # its own; under FP8 it still dequantizes the received fp8 payload to BF16, so it is a
+        # timed device component in that precision only.
+        self.stage_device_work = self._fp8
         # Stash the __init__-only locals the moved create_buffer body reads back.
         self._gpus_per_node = gpus_per_node
 
@@ -186,7 +181,11 @@ class MoRIBackend(EPBackend):
             "max_num_inp_token_per_rank": self._cap,
             "num_experts_per_rank": self.experts_per_rank,
             "num_experts_per_token": args.topk,
-            "use_external_inp_buf": self._external_input,
+            # External input buffer everywhere, as the engines run it. It must move together
+            # with `combine_warps`: MoRI's tuned tables key combine on `zero_copy`, so 16 warps
+            # belong to this mode and 4-8 to the registered one. methodology.md has the cost of
+            # mismatching them.
+            "use_external_inp_buf": True,
             "quant_type": "none",
         }
         if self._kernel_type is not None:
@@ -208,14 +207,14 @@ class MoRIBackend(EPBackend):
             "data_type": torch.bfloat16,
             "scale_dim": 0,
             "scale_type_size": 1,
-            "use_external_inp_buf": self._external_input,
+            "use_external_inp_buf": True,
             "quant_type": config_kwargs["quant_type"],
         }
         if self._inter_node:
             expected_config.update({
                 "block_num": self.block_num,
                 "warp_num_per_block": self.dispatch_warps,
-                "gpu_per_node": 8,
+                "gpu_per_node": gpus_per_node,
                 "rdma_block_num": 64,
                 "num_qp_per_pe": 1,
             })
@@ -286,25 +285,13 @@ class MoRIBackend(EPBackend):
         rows = getattr(p, "recv_tokens", None)
         if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
-        if self._external_input:
-            # The kernel's staging loop is bounded by `tokenIdx < totalRecvTokenNum` over
-            # `args.inpTokenBuf`, not by the buffer, so it never reads past `rows` and only the
-            # filled rows need converting. (intranode.hpp:542's P2P loop is dead on this path.)
-            h.combine_input = (
-                h.dispatch_output[:rows].to(torch.bfloat16) if self._fp8 else h.dispatch_output
-            )
-            return None
-        # Zero-copy path: combine only reads the `rows` slots dispatch filled, so cast and copy
-        # just those. `dispatch_output` is sized to buffer cap x world regardless of T, so casting
-        # all of it made this stage flat in T -- 61-114us across the decode ladder.
-        source = h.dispatch_output[:rows]
-        if self._fp8:
-            source = source.to(torch.bfloat16)
-        buffer = self.op.get_registered_combine_input_buffer(
-            torch.bfloat16, hidden_dim=h.dispatch_output.size(1)
+        # The kernel's staging loop is bounded by `tokenIdx < totalRecvTokenNum` over
+        # `args.inpTokenBuf`, not by the buffer, so it never reads past `rows` and only the
+        # filled rows need converting. (intranode.hpp:542's P2P loop is dead on this path.)
+        h.combine_input = (
+            h.dispatch_output[:rows].to(torch.bfloat16) if self._fp8 else h.dispatch_output
         )
-        buffer[:rows, :].copy_(source)
-        h.combine_input = buffer
+        return None
 
     def combine(self, p, h):
         combined, _weights = self.op.combine(
@@ -352,12 +339,6 @@ class MoRIBackend(EPBackend):
         rows = getattr(p, "recv_tokens", None)
         if not isinstance(rows, int) or rows < 0 or rows > h.combine_input.size(0):
             raise RuntimeError("MoRI receive count was not validated before transformed combine")
-        if not self._external_input:
-            buffer = self.op.get_registered_combine_input_buffer(
-                torch.bfloat16, hidden_dim=h.combine_input.size(1)
-            )
-            buffer[:rows, :].copy_(h.combine_input[:rows, :])
-            h.combine_input = buffer
         return self.combine(p, h)
 
     def recv_tokens(self, h):

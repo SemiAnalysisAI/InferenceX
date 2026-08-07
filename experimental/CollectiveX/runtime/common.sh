@@ -521,8 +521,6 @@ collx_prepare_deepep_source() {
       && [ "$(git -C "$temporary" rev-parse HEAD)" = "$COLLX_DEEPEP_V2_COMMIT" ] \
       && GIT_TERMINAL_PROMPT=0 git -C "$temporary" submodule update -q --init --depth 1 \
         third-party/fmt >> "$log" 2>&1 \
-      && python3 "$COLLX_RUNTIME_DIR/stage.py" rewrite-deepep-v2 \
-        "$temporary/deep_ep/__init__.py" >> "$log" 2>&1 \
       && mv -- "$temporary" "$source" >> "$log" 2>&1; then
     return 0
   fi

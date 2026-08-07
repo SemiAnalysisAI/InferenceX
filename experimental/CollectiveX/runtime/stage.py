@@ -60,19 +60,6 @@ def validate_cleanup(args) -> None:
         raise SystemExit(1)
 
 
-def rewrite_deepep_v2(args) -> None:
-    # Narrows DeepEP's NCCL library scan from 'nccl' to 'libnccl'. Upstream landed the same
-    # change as #640, so a current pin already satisfies it: return rather than abort the leg.
-    path = Path(args.path)
-    old = "for so in [line.strip().split(' ')[-1] for line in f if 'nccl' in line]:"
-    new = "for so in [line.strip().split(' ')[-1] for line in f if 'libnccl' in line]:"
-    text = path.read_text()
-    if text.count(new) >= 1 and text.count(old) == 0:
-        return
-    if text.count(old) != 1: raise SystemExit(1)
-    path.write_text(text.replace(old, new))
-
-
 # The runtime/common.sh launcher shells out to these subcommands by literal name and
 # positional argv; there are no optional flags. That argv shape is a string contract with
 # common.sh — a subcommand or flag common.sh passes but this parser does not declare fails
@@ -84,7 +71,7 @@ SPECS = {
     "resolve-directory": (("path",),),
     "validate-stage-path": (("repo",), ("base",), ("child",), ("job_root", "?"), ("workspace", "?")),
     "create-stage": (("stage",),), "copy-repository": (("source",), ("target",)),
-    "validate-cleanup": (("root",),), "rewrite-deepep-v2": (("path",),),
+    "validate-cleanup": (("root",),),
 }
 
 

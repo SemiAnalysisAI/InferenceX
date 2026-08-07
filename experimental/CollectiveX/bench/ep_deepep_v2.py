@@ -21,9 +21,9 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# The source pin in runtime/common.sh is upstream main, which carries #630 and #640, so the
-# stage-time rewrite is now a no-op. This adapter does not check the wheel's commit tag, only
-# that the loaded deep_ep exposes ElasticBuffer.
+# The source pin in runtime/common.sh is upstream main, which carries #630 and #640 (the
+# 'libnccl' scan narrowing that used to be applied by a stage-time rewrite). This adapter does
+# not check the wheel's commit tag, only that the loaded deep_ep exposes ElasticBuffer.
 
 # Low-latency receive sizing, deliberately two numbers: _LL_BUFFER_CAP sizes the pre-allocated
 # receive (and so the transport footprint and fp8 dequant volume), _LL_LADDER_CAP bounds which
