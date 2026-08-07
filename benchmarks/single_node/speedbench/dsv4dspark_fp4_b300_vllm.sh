@@ -18,12 +18,13 @@
 # otherwise a copy of so the two AL curves stay directly comparable:
 #   - target model       DeepSeek-V4-Pro-DSpark (was DeepSeek-V4-Pro)
 #   - speculative-config method dspark + draft_sample_method (was method mtp)
+#   - expert parallel + deep_gemm_mega_moe, per the published B300 DSpark recipe
 #   - --max-num-seqs and --gpu-memory-utilization pinned (MTP took the defaults)
-# The third one is a memory fix rather than a recipe change. AL is a per-draft
-# accept/reject property that does not depend on batch size or graph capture, so
-# pinning those two still leaves "DSpark vs MTP on DSV4-Pro" like-for-like; every
-# flag that does affect drafting is byte-identical to the MTP collector and to
-# the published DSpark recipe.
+# The last two are about fitting in memory, not about drafting: see the TEP block
+# and MAX_NUM_SEQS below for what each one was fixing. AL is a per-draft
+# accept/reject property, independent of expert placement, batch size and graph
+# capture, so they leave "DSpark vs MTP on DSV4-Pro" like-for-like. Every flag
+# that does affect drafting is byte-identical to the MTP collector.
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=deepseek-ai/DeepSeek-V4-Pro-DSpark
@@ -51,8 +52,6 @@ MODEL="${MODEL:?MODEL env var required (e.g. deepseek-ai/DeepSeek-V4-Pro-DSpark)
 # standalone local run where MODEL is itself a path.
 SERVE_MODEL="${MODEL_PATH:-$MODEL}"
 TP="${TP:-8}"
-DP_ATTENTION="${DP_ATTENTION:-false}"
-EP_SIZE="${EP_SIZE:-1}"
 PORT="${PORT:-8888}"
 
 MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
@@ -202,18 +201,24 @@ if [[ " $THINKING_MODES " == *" on "* ]]; then
     fi
 fi
 
+# TEP8, exactly as the published B300 DSpark recipe (vllm-project/recipes: TP 8 +
+# --enable-expert-parallel + --moe-backend deep_gemm_mega_moe).
+#
+# This is hard-coded rather than driven by the EP_SIZE / DP_ATTENTION knobs the
+# MTP collector carries, because speedbench-al.yml exports EP_SIZE=1 and
+# DP_ATTENTION=false for every model in the matrix, which silently turned the
+# recipe into plain TP. That cost real memory: TP-sharding the FP4 experts loaded
+# 141.53 GiB per GPU, 8x that being 1132 GiB against an 831 GiB checkpoint, so
+# roughly 37 GiB per GPU went to sharding overhead on weights that expert
+# parallel keeps whole. With a ~100 GiB KV cache on top, 266 of the 268 GiB were
+# gone before warmup, which is what made the num_speculative_tokens=4 cell OOM.
+#
+# TP stays 8 (not the DP+EP variant the recipe also lists) to match the MTP
+# collector's parallelism. Either way AL is unaffected: expert placement changes
+# where a matmul runs, not which draft tokens the target model accepts.
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-if [ "${DP_ATTENTION}" = "true" ]; then
-    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
-fi
-EP_ARGS=()
-if [ "${EP_SIZE:-1}" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
-fi
-MOE_ARGS=()
-if [ "${DP_ATTENTION}" = "true" ]; then
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-fi
+EP_ARGS=(--enable-expert-parallel)
+MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
 
 # Optional extra speculative-config keys, rendered once so run_cell only has to
 # interpolate num_speculative_tokens.
