@@ -77,7 +77,7 @@
       "scale_up_transport": "nvlink",
       "launcher": "single-slurm",
       "backends": {"deepep-v2": [8, 16], "nccl-ep": [8]},
-      "ll_backends": {"nccl-ep": [8]},
+      "ll_backends": {"deepep-v2": [8], "nccl-ep": [8]},
       "fabric": {"nic": "ConnectX-8 2x400GbE", "switch": "NVIDIA Spectrum-X SN5600 (51.2T)"},
       "operator": {
         "partition": "batch_1",
@@ -89,6 +89,7 @@
       "network": {
         "socket_ifname": "bond0",
         "rdma_devices": "mlx5_0,mlx5_1,mlx5_2,mlx5_3,mlx5_4,mlx5_5,mlx5_8,mlx5_9,mlx5_10,mlx5_11,mlx5_16,mlx5_17,mlx5_20,mlx5_21,mlx5_22,mlx5_23",
+        "single_node_rdma_devices": "mlx5_12:1,mlx5_13:1,mlx5_14:1,mlx5_15:1",
         "ib_gid_index": "3",
         "rail_isolated": "1"
       }
