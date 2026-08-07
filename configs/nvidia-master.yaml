@@ -7886,18 +7886,22 @@ minimaxm3-fp4-b300-vllm-agentic-mtp:
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [30, 40, 50, 60, 65, 70, 75] }
 
 # B200 sibling of minimaxm3-fp4-b300-vllm-agentic-mtp: same image, same
-# EAGLE3-GQA draft at 3 speculative tokens, same golden AL 2.78, same TP2/TP4
-# topologies and the same SimpleCPU offload arm, so the two SKU curves are
-# directly comparable. This is MiniMax-M3's only active B200 configuration --
-# the 8k1k scenario that carried the previous B200 curves was removed in #2493.
+# EAGLE3-GQA draft at 3 speculative tokens, same golden AL 2.78, and the same
+# SimpleCPU offload arm, so the two SKU curves are directly comparable. This is
+# MiniMax-M3's only active B200 configuration -- the 8k1k scenario that carried
+# the previous B200 curves was removed in #2493.
 #
-# Concurrency is where B200 has to differ. The NVFP4 checkpoint is ~250 GB, so
-# at --gpu-memory-utilization 0.9 the KV budget is ~74 GB at TP2 and ~398 GB at
-# TP4, against ~268 GB and ~787 GB for the same topologies on B300's 288 GB
-# HBM3e. Each arm therefore keeps the B300 sampling grid but stops where B200's
-# smaller pool puts the HBM cliff, following the same B200/B300 asymmetry the
-# qwen3.5 AgentX MTP pair already publishes:
-#   TP2   B300 runs conc 1-5 on ~3x the KV; B200 keeps only the 1-2 corner.
+# TP4-only. The B300 sibling also runs a TP2 arm, but TP2 does not fit on B200:
+# the ~250 GB NVFP4 checkpoint leaves a 31.72 GiB KV pool at
+# --gpu-memory-utilization 0.9, and one request at the model's 1,048,576-token
+# max_model_len needs 37.62 GiB, so vLLM raises in _check_enough_kv_cache_memory
+# and the engine never reaches serving (run 31141913741 -- both TP2 cells, c1
+# and c2, died identically at init; every TP4 cell passed). This is structural,
+# not a concurrency cliff: the estimated max model length at TP2 is 883,840,
+# below the corpus context, so no conc-list would have made the arm run.
+#
+# Concurrency on the surviving arms still differs from B300, whose TP4 pool is
+# ~787 GB against B200's ~398 GB:
 #   TP4   B300 runs 1-20; B200 samples 5-15 densely because the cliff lands
 #         inside that range at roughly half the KV, and retains 20 past it.
 #   TP4 + SimpleCPU  picks up at 20 rather than B300's 30, since the host tier
@@ -7925,7 +7929,6 @@ minimaxm3-fp4-b200-vllm-agentic-mtp:
     - dram-utilization: 0.683
       search-space:
       - { tp: 4, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2, 5, 8, 10, 12, 15, 20] }
-      - { tp: 2, spec-decoding: mtp, kv-offloading: none, conc-list: [1, 2] }
       - { tp: 4, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [20, 30, 40] }
 
 dsv4-fp4-b200-sglang-agentic-hicache:

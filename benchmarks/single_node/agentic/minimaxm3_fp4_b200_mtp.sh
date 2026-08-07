@@ -142,9 +142,10 @@ export VLLM_FLOAT32_MATMUL_PRECISION=high
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 # Same 0.9 the B300 sibling and the deprecated 8k1k B200 MiniMax-M3 NVFP4 MTP
-# recipe ran. Exposed as an override because B200's 180 GB leaves the TP2 arm
-# only ~37 GB/GPU beyond weights, and CUDA-graph capture OOM is the first thing
-# to try lowering if that arm does not boot (KLAUD_DEBUG.md).
+# recipe ran. Exposed as an override because B200's 180 GB leaves little beyond
+# the ~250 GB checkpoint: TP2 could not host the 1M-context KV for even one
+# request at this value and was dropped from the search space, so TP4 is the
+# smallest topology this script is expected to serve.
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.9}"
 
 SERVER_LOG="$RESULT_DIR/server.log"
