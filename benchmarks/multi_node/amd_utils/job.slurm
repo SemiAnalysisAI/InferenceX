@@ -370,6 +370,7 @@ export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-}"
 export MC_SLICE_SIZE="${MC_SLICE_SIZE:-}"
 export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-}"
 export MOONCAKE_PREFERRED_SEGMENT="${MOONCAKE_PREFERRED_SEGMENT:-}"
+export MOONCAKE_DIAG_REPLICA_SAMPLE="${MOONCAKE_DIAG_REPLICA_SAMPLE:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -521,6 +522,9 @@ DOCKER_ENV_COMMON=(
     # MOONCAKE_PREFERRED_SEGMENT=local pins each TP rank to its own segment so KV puts
     # and gets stay in-process instead of crossing to another rank over TCP loopback.
     -e MOONCAKE_PREFERRED_SEGMENT=\${MOONCAKE_PREFERRED_SEGMENT:-}
+    # Diagnostic: sample every Nth put and log which segment actually holds the key, to
+    # tell a hard placement guarantee from a soft hint. Off unless set.
+    -e MOONCAKE_DIAG_REPLICA_SAMPLE=\${MOONCAKE_DIAG_REPLICA_SAMPLE:-}
     -e TOTAL_CPU_DRAM_GB=\${TOTAL_CPU_DRAM_GB:-}
     -e SERVER_UP_TIMEOUT=\${SERVER_UP_TIMEOUT:-}
     -e HF_HUB_CACHE=\${HF_HUB_CACHE:-/tmp/mooncake-hf-cache}
