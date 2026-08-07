@@ -130,16 +130,20 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Conditional shim: ensure --chat-template-kwargs reaches the chat template ----
+# ---- Preflight: --chat-template-kwargs must reach the chat template ----
 # speed_bench/CustomDataset pre-renders the chat template client-side and posts to
 # /v1/completions, so thinking mode cannot be enabled via --extra-body or
-# --default-chat-template-kwargs — the kwargs must reach apply_chat_template.
-# vllm-project/vllm#44244 added this natively (serve.py declares the CLI option,
-# the speed_bench dispatch forwards it, CustomDataset.sample unpacks it), and it
-# is present in the v0.25.x images this collector runs on. So: probe for native
-# support first and no-op when present; only patch the pieces an older image is
-# missing. Idempotent. Same shim as the Kimi-K3 collector.
-apply_chat_template_kwargs_shim() {
+# --default-chat-template-kwargs — the kwargs have to reach apply_chat_template.
+# vllm-project/vllm#44244 made that native and the images this collector runs on
+# carry it, so there is nothing to patch (the older collectors monkey-patched
+# site-packages here; that is what this replaces).
+#
+# It is still worth asserting rather than assuming, because the failure is silent
+# in one direction: if the CLI option exists but the speed_bench path does not
+# forward it, the flag is accepted and ignored, every thinking_on prompt renders
+# without thinking, and the cell reports a non-thinking AL under the thinking_on
+# key. A missing CLI option, by contrast, would fail loudly at argument parsing.
+assert_chat_template_kwargs_support() {
     echo "=== Checking vLLM benchmark --chat-template-kwargs support ==="
     python3 - <<'PYEOF'
 import sys
@@ -152,84 +156,31 @@ def read(mod):
 
 s_src, d_src = read(S), read(D)
 
-# Native (post-#44244) spellings, plus the ones this shim itself writes.
-have_cli = '"--chat-template-kwargs"' in s_src
-have_forward = ('chat_template_kwargs=getattr(args' in d_src
-                or 'chat_template_kwargs=args.chat_template_kwargs' in d_src)
-have_unpack = ('**(chat_template_kwargs or {})' in d_src
-               or '**_ctk' in d_src)
+missing = []
+if '"--chat-template-kwargs"' not in s_src:
+    missing.append(f"CLI option in {S.__file__}")
+if ('chat_template_kwargs=getattr(args' not in d_src
+        and 'chat_template_kwargs=args.chat_template_kwargs' not in d_src):
+    missing.append(f"speed_bench forward in {D.__file__}")
+if '**(chat_template_kwargs or {})' not in d_src:
+    missing.append(f"apply_chat_template unpack in {D.__file__}")
 
-if have_cli and have_forward and have_unpack:
-    print("native --chat-template-kwargs support present; no patching needed")
-    sys.exit(0)
+if missing:
+    print("CRITICAL: this image lacks native --chat-template-kwargs support:")
+    for item in missing:
+        print("  missing:", item)
+    print("thinking_on cells would silently measure a non-thinking AL. Use an")
+    print("image that contains vllm-project/vllm#44244.")
+    sys.exit(1)
 
-print(f"patching (cli={have_cli} forward={have_forward} unpack={have_unpack})")
-
-def apply(mod, src, edits):
-    for old, new in edits:
-        n = src.count(old)
-        assert n == 1, (
-            f"anchor matched {n} times in {mod.__file__}, aborting. This image's "
-            f"benchmark source differs from both the pre-#44244 and post-#44244 "
-            f"layouts; update the shim.\n{old[:120]}..."
-        )
-        src = src.replace(old, new, 1)
-    with open(mod.__file__, "w") as fh:
-        fh.write(src)
-    print("patched OK ->", mod.__file__)
-
-if not have_cli:
-    # serve.py -- declare the --chat-template-kwargs argument before --extra-body
-    apply(S, s_src, [('''    parser.add_argument(
-        "--extra-body",''', '''    parser.add_argument(
-        "--chat-template-kwargs",
-        type=json.loads,
-        default=None,
-        help="JSON dict forwarded to apply_chat_template during "
-        "client-side prompt rendering, e.g. to enable reasoning mode.",
-    )
-    parser.add_argument(
-        "--extra-body",''')])
-
-d_edits = []
-if not have_forward:
-    # datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
-    d_edits.append(('''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,''',
-                    '''                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''))
-if not have_unpack:
-    # datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
-    d_edits.append(('''                # apply template
-                if not skip_chat_template:
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)''',
-                    '''                # apply template
-                if not skip_chat_template:
-                    _ctk = kwargs.get("chat_template_kwargs") or {}
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                        **_ctk,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''))
-if d_edits:
-    apply(D, d_src, d_edits)
+print("native --chat-template-kwargs support confirmed")
 PYEOF
 }
 
-# Apply the shim once if any thinking-on cell is requested.
+# Only thinking-on cells pass chat_template_kwargs, so only they need the support.
 if [[ " $THINKING_MODES " == *" on "* ]]; then
-    if ! apply_chat_template_kwargs_shim; then
-        echo "CRITICAL: --chat-template-kwargs shim failed — aborting"
+    if ! assert_chat_template_kwargs_support; then
+        echo "CRITICAL: --chat-template-kwargs preflight failed — aborting"
         exit 1
     fi
 fi
