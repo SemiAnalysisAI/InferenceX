@@ -185,8 +185,8 @@ SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
-    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.22: the two features the
-    # cquil11 fork was pinned for are merged upstream (present in v1.0.22) —
+    # Qwen3.5 agentic uses NVIDIA/srt-slurm v1.0.38: the two features the
+    # cquil11 fork was pinned for are merged upstream (present in v1.0.36) —
     #   - `srtctl apply --no-preflight` (skip the in-process model FS check):
     #     model.path resolves to /scratch/models/Qwen3.5-397B-A17B-NVFP4
     #     (compute-node-only NVMe), which the GHA runner pod can't stat, so
@@ -195,9 +195,13 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     #     genuinely missing on the compute node.
     #   - benchmark_stage propagates srun_options (container-remap-root must
     #     reach the agentic_srt.sh srun).
+    # v1.0.38 additionally injects AIPERF_SERVER_METRICS_URLS for custom
+    # benchmarks using each logical SGLang worker leader. This is required for
+    # complete AgentX trace artifacts; the public frontend alone may expose no
+    # Prometheus endpoint or only Dynamo frontend metrics.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout v1.0.22
+    git checkout v1.0.38
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
         recipes/sglang/qwen3.5
