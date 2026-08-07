@@ -36,11 +36,11 @@ class KVMatrix(unittest.TestCase):
         for shard in shards:
             self.assertEqual(shard["nodes"], 2)
             self.assertEqual(shard["gpus_per_node"], 1)
-            # kv-gqa runs bf16+fp8; kv-dsv4's dtype mix is architectural (fp8 only)
-            self.assertEqual(len(shard["cases"]), 3)
+            # the suite sweeps DeepSeek-V4-Pro's shape; its dtype mix is
+            # architectural, so one workload x one precision
             self.assertEqual(
                 {(c["workload"], c["precision"]) for c in shard["cases"]},
-                {("kv-dsv4", "fp8"), ("kv-gqa", "bf16"), ("kv-gqa", "fp8")})
+                {("kv-dsv4", "fp8")})
             for case in shard["cases"]:
                 self.assertEqual(case["suite"], "kv-transfer")
                 self.assertEqual(case["ep"], 2)
@@ -63,9 +63,11 @@ class KVMatrix(unittest.TestCase):
             sweep_matrix.resolve_matrix(suites="kv-transfr")
 
     def test_precision_filter_applies_to_kv(self):
+        # dsv4 is fp8-only, so a bf16-scoped dispatch has no kv legs at all.
         matrix = sweep_matrix.resolve_matrix(suites="kv-transfer", precisions="bf16")
-        for shard in matrix["include"]:
-            self.assertEqual({c["precision"] for c in shard["cases"]}, {"bf16"})
+        self.assertEqual(matrix["include"], [])
+        matrix = sweep_matrix.resolve_matrix(suites="kv-transfer", precisions="fp8")
+        self.assertTrue(matrix["include"])
 
     def test_a_backend_scoped_dispatch_is_ep_only(self):
         matrix = sweep_matrix.resolve_matrix(backend="deepep-v2")
@@ -232,22 +234,30 @@ class BurstTiming(unittest.TestCase):
 
 class KVGrid(unittest.TestCase):
     def test_pool_budget_sheds_largest_batches_not_the_point(self):
-        # gqa-bf16 at 32k needs ~126 GB of pool for 16 disjoint in-flight
-        # requests; the point must survive with the batches that fit.
+        # A point whose largest batch cannot fit the budget must survive with
+        # the batches that do. dsv4 alone never nears the production budget,
+        # so pin it between this grid's batch-4 and batch-16 pool sizes.
         import argparse
 
+        import kv_workload
         import run_kv
 
-        args = argparse.Namespace(workload_name="kv-gqa", precision="bf16",
+        args = argparse.Namespace(workload_name="kv-dsv4", precision="fp8",
                                   isl_ladder="512 32768", page_tokens="64",
                                   batch_sizes="1 4 16", pool_slack=2.0)
-        points, isls, batches = run_kv._grid(args)
+        budget = kv_workload.plan_config("dsv4", "fp8", 32768, 64,
+                                         2.0, batch_max=4)["pool_bytes"]
+        saved, run_kv.POOL_BUDGET = run_kv.POOL_BUDGET, budget
+        try:
+            points, isls, batches = run_kv._grid(args)
+        finally:
+            run_kv.POOL_BUDGET = saved
         self.assertEqual((isls, batches), ([512, 32768], [1, 4, 16]))
         by_isl = {cfg["isl"]: allowed for cfg, allowed in points}
         self.assertEqual(by_isl[512], [1, 4, 16])
         self.assertEqual(by_isl[32768], [1, 4])
         for cfg, _ in points:
-            self.assertLessEqual(cfg["pool_bytes"], run_kv.POOL_BUDGET)
+            self.assertLessEqual(cfg["pool_bytes"], budget)
 
 
 class KVSummary(unittest.TestCase):

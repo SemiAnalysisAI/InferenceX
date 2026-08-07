@@ -38,7 +38,7 @@ POOL_BUDGET = 64 << 30
 
 
 def add_kv_args(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument("--workload-name", required=True, help="kv-dsv4 | kv-gqa")
+    ap.add_argument("--workload-name", required=True, help="kv-<preset>, e.g. kv-dsv4")
     ap.add_argument("--precision", required=True, choices=["bf16", "fp8"])
     ap.add_argument("--fabric", default="rdma", choices=["rdma", "mnnvl"],
                     help="which lane the SKU row claims; mnnvl additionally sets "

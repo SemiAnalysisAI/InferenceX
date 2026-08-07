@@ -4,10 +4,6 @@
   "workloads": {
     "kv-dsv4": [
       "fp8"
-    ],
-    "kv-gqa": [
-      "bf16",
-      "fp8"
     ]
   },
   "isl_ladder": [

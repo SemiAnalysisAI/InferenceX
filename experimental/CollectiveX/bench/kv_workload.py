@@ -9,8 +9,7 @@ are not uniform: DeepSeek-V4-Pro interleaves Compressed Sparse Attention
 cache) with Heavily Compressed Attention (31 layers, 128 tokens per entry),
 and every layer keeps a 128-entry uncompressed sliding window. Each group is a
 transfer region with its own entry granularity; the indexer and the window are
-further regions. ``gqa`` (Qwen3-235B class) is the degenerate single-group
-case: 94 layers, one token per entry, K+V packed.
+further regions.
 
 Geometry for ``dsv4`` is what vLLM allocates when serving DeepSeek-V4-Pro: the
 config's ``compress_ratios`` interleave 30 CSA layers (m=4) with 31 HCA layers
@@ -49,16 +48,7 @@ PRESETS = {
         ),
         window=dict(tokens=128, entry_bytes=576),
     ),
-    "gqa": dict(
-        model_class="qwen3-235b",
-        precisions=("bf16", "fp8"),
-        elems_per_token_layer=1024,
-        groups=(dict(name="kv", layers=94, tokens_per_entry=1, entry_bytes=None,
-                     indexer_bytes=0),),
-        window=None,
-    ),
 }
-PRECISION_BYTES = {"bf16": 2, "fp8": 1}
 
 
 def plan_config(preset: str, precision: str, isl: int, page_tokens: int,
@@ -85,8 +75,6 @@ def plan_config(preset: str, precision: str, isl: int, page_tokens: int,
 
     for group in shape["groups"]:
         entry_bytes = group["entry_bytes"]
-        if entry_bytes is None:
-            entry_bytes = shape["elems_per_token_layer"] * PRECISION_BYTES[precision]
         entries_req = math.ceil(isl / group["tokens_per_entry"])
         entries_per_page = max(1, page_tokens // group["tokens_per_entry"])
         pages_req = math.ceil(entries_req / entries_per_page)

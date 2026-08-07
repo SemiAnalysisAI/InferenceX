@@ -417,13 +417,13 @@ Attention layers (128 tokens per entry); every compressed entry is vLLM's 576 B 
 indexer cache (128 fp8 + 4 scale bytes); and all 61 layers keep a 128-token uncompressed sliding-
 window cache that is its own paged cache spec, so the connector transfers it too. Precision is
 pinned fp8 because the dtype mix is architectural, and the whole thing computes to a few percent
-of an equivalent GQA-bf16 cache — which is why the suite keeps `kv-gqa` (94 layers x 1024
-elements/token/layer, the Qwen3-235B class) at bf16 and fp8 as the dense counterpoint; fp8 halves
-page bytes, which pushes small pages deeper into the per-descriptor regime, so it is measured,
-never derived. One `bulk` row per ISL (a single descriptor of the request's total bytes) is the
-wire-speed ceiling the paged rows are read against; bulk rows are batch 1 by construction. Grid
-points whose pool cannot hold the largest batch inside the per-rank pool budget (64 GiB, sized to
-the fleet's smallest HBM) shed their largest batches and say so, rather than dropping the point.
+of an equivalent dense GQA-bf16 cache. Compression trades bytes for descriptor count: the small
+entries it produces push transfers into the per-descriptor regime, so the paged rows sit far
+below each lane's `bulk` row — one single-descriptor transfer of the request's total bytes per
+ISL, the wire-speed ceiling the paged rows are read against (bulk rows are batch 1 by
+construction). Grid points whose pool cannot hold the largest batch inside the per-rank pool
+budget (64 GiB, sized to the fleet's smallest HBM) shed their largest batches and say so, rather
+than dropping the point.
 
 Timing is host wall clock around post→completion — completion of a one-sided transfer is
 host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor

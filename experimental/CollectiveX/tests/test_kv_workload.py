@@ -65,19 +65,13 @@ class Geometry(unittest.TestCase):
         with self.assertRaises(ValueError):
             kv_workload.plan_config("dsv4", "bf16", 512, 16)
 
-    def test_gqa_fp8_halves_page_bytes(self):
-        bf16 = kv_workload.plan_config("gqa", "bf16", 4096, 64)
-        fp8 = kv_workload.plan_config("gqa", "fp8", 4096, 64)
-        self.assertEqual(fp8["page_bytes"] * 2, bf16["page_bytes"])
-        self.assertEqual(fp8["req_bytes"] * 2, bf16["req_bytes"])
-        self.assertEqual(fp8["descs"], bf16["descs"])
-
     def test_partial_last_page_rounds_up(self):
-        cfg = kv_workload.plan_config("gqa", "bf16", 100, 64)
+        # 100 tokens at 64/page: CSA holds 25 entries (16/page) -> 2 pages.
+        cfg = kv_workload.plan_config("dsv4", "fp8", 100, 64)
         self.assertEqual(cfg["regions"][0]["pages_req"], 2)
 
     def test_batch_max_grows_the_pool_for_disjoint_requests(self):
-        cfg = kv_workload.plan_config("gqa", "bf16", 512, 16, batch_max=16)
+        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 16, batch_max=16)
         for region in cfg["regions"]:
             self.assertGreaterEqual(region["pool_pages"], 16 * region["pages_req"])
 
@@ -97,7 +91,7 @@ class Tables(unittest.TestCase):
             self.assertTrue((local[name] < region["pool_pages"]).all())
 
     def test_batched_requests_slice_disjoint_pages(self):
-        cfg = kv_workload.plan_config("gqa", "bf16", 512, 16, batch_max=4)
+        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 16, batch_max=4)
         seed = kv_workload.table_seed(cfg, "local")
         tables = [kv_workload.block_table(cfg, seed, request=r) for r in range(4)]
         for region in cfg["regions"]:
@@ -106,7 +100,7 @@ class Tables(unittest.TestCase):
             self.assertEqual(len(union), 4 * region["pages_req"])
 
     def test_a_request_beyond_the_pool_fails_closed(self):
-        cfg = kv_workload.plan_config("gqa", "bf16", 512, 16)  # slack for ~2 requests
+        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 16)  # slack for ~2 requests
         with self.assertRaises(ValueError):
             kv_workload.block_table(cfg, 1, request=8)
 
@@ -178,7 +172,7 @@ class Verify(unittest.TestCase):
     def test_direction_matters(self):
         # Verifying with the tables swapped must fail: dst pages hold src
         # pattern, not their own.
-        cfg = kv_workload.plan_config("gqa", "bf16", 512, 16)
+        cfg = kv_workload.plan_config("dsv4", "fp8", 512, 16)
         dst, src = self._tables(cfg)
         pool = self._painted_destination(cfg, dst, src)
         ok, _ = kv_workload.verify_transfer(_read8(pool), cfg, src, dst)
