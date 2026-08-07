@@ -15,6 +15,7 @@ NVIDIA-only (import fails on ROCm nodes, measured on mi355x).
 from __future__ import annotations
 
 import ctypes
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -55,6 +56,12 @@ class MooncakeBackend(KVBackend):
             self.library_version = md.version("mooncake-transfer-engine")
         except Exception:
             self.library_version = None
+        # Same-fabric GB pairs: the NVLink-IPC transport claims cross-node
+        # segments inside one NVLink domain and then fails the address import
+        # (nvlink_transport "Requested address not found", first kv CI run on
+        # gb200). This row measures the rdma lane, so pin the transport off;
+        # the ROCm twin (MC_USE_HIP_IPC) misclaims the same way on mi355x.
+        os.environ.setdefault("MC_USE_NVLINK_IPC", "0")
         self._engine = TransferEngine()
         self._ip = kv_workload.iface_ipv4(args.socket_ifname)
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
@@ -104,8 +111,9 @@ class MooncakeBackend(KVBackend):
 
         def run():
             for i, j in chunks:
-                if func(session, local[i:j], remote[i:j], sizes[i:j]) != 0:
-                    raise RuntimeError("mooncake batch transfer failed")
+                rc = func(session, local[i:j], remote[i:j], sizes[i:j])
+                if rc != 0:
+                    raise RuntimeError(f"mooncake batch transfer failed rc={rc}")
 
         return self._split(run, time.perf_counter() - start)
 
@@ -116,8 +124,9 @@ class MooncakeBackend(KVBackend):
         local, remote = self._bulk.ptr, self._peer["bulk_base"]
 
         def run():
-            if func(session, local, remote, nbytes) != 0:
-                raise RuntimeError("mooncake bulk transfer failed")
+            rc = func(session, local, remote, nbytes)
+            if rc != 0:
+                raise RuntimeError(f"mooncake bulk transfer failed rc={rc}")
 
         return self._split(run, 0.0)
 
