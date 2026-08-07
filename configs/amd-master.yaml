@@ -1473,6 +1473,23 @@ minimaxm3-fp8-mi300x-vllm-agentic:
       - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
+# GLM-5.2 FP8 full-context AgentX refresh on MI325X. This preserves the TP8
+# GPU-resident-KV c1/c2/c3/c4/c5/c6/c8 curve from Actions run 29657732517
+# and enables EAGLE MTP with the committed thinking-on golden AL.
+glm5.2-fp8-mi325x-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-rocm720-mi30x
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6, 8] }
+
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
