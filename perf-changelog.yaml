@@ -5152,6 +5152,15 @@
     - "Remove VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm from the 1P1D TP1-prefill/TP8-decode recipe; retain the existing FP8 indexer KV cache configuration"
     - "Add a one-node 4P1D TP1-prefill/TEP4-decode concurrency-4096 point on the refreshed image while preserving the legacy 4P2D DEP2-prefill/TEP4-decode point unchanged"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2310
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  description:
+    - "Add an MTP variant of the DeepSeek-V4-Pro FP4 MI355X vLLM agentic recipe (new benchmarks/single_node/agentic/dsv4_fp4_mi355x_vllm_mtp.sh + amd-master.yaml entry). Adds --speculative-config method=mtp num_speculative_tokens=3; throughput runs pin synthetic acceptance to the dsv4-pro golden AL (synthetic_acceptance_length=2.49) while EVAL_ONLY runs use real target verification (synthetic acceptance zeroes the eval score)."
+    - "Carries the shared vllm-agentic fixes: EVAL_FRAMEWORK=lm-eval (never swebench); per-DP-rank --max-num-seqs=2*CONC/TP under DP-attention (2*CONC in pure-TP); DEP8 --max-num-batched-tokens=MNBT*2 (16384) to avoid the rocBLASLt/TensileLite segfault at M=65536; --gpu-memory-utilization 0.85 (MI355X ~32 GiB/GPU carveout makes 0.95 OOM at init); lmcache v0.5.2 with chunk-size 1024 and undivided CPU pool; --block-size 256, --max-model-len 1048576, cudagraph FULL_DECODE_ONLY."
+    - "Initial active arm: TP8/DPA GPU-resident (kv-offloading none) conc 48; other arms commented out for later sweeps."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2381
+
   
 
 - config-keys:
