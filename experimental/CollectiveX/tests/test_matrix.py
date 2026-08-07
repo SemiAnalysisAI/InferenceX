@@ -18,6 +18,28 @@ def matrix(**options):
     return sweep_matrix.resolve_matrix(**options)
 
 
+def cells(document, project=("sku", "ep"), **filters):
+    """Projected set of the requested cases matching `filters`.
+
+    The rollout tests all ask the same question -- which (sku, ep) pairs a backend offers, and
+    under which disposition -- so they share one query instead of restating the comprehension.
+    `project` names the fields to return ("sku" comes from the item, everything else from its
+    case); a single field projects to scalars rather than 1-tuples.
+    """
+    fields = (project,) if isinstance(project, str) else project
+    selected = set()
+    for item in document["requested_cases"]:
+        case = item["case"]
+        if any(
+            (item["disposition"] if key == "disposition" else case[key]) != value
+            for key, value in filters.items()
+        ):
+            continue
+        row = tuple(item["sku"] if f == "sku" else case[f] for f in fields)
+        selected.add(row[0] if isinstance(project, str) else row)
+    return selected
+
+
 class MatrixTests(unittest.TestCase):
     def test_shard_extraction_is_deterministic_and_preserves_cases(self):
         document = matrix(backend="deepep-v2", only_sku="h200-dgxc")
@@ -203,16 +225,8 @@ class MatrixTests(unittest.TestCase):
         # sweep, mirroring the mori EP16 re-wall). No rows at all on b300/gb200/gb300, where
         # the backend is not offered. LL (decode) on every NVIDIA supported SKU at EP8.
         document = matrix(backend="all")
-        runnable = {
-            (item["sku"], item["case"]["ep"])
-            for item in document["requested_cases"]
-            if item["case"]["backend"] == "uccl-ep" and item["disposition"] == "runnable"
-        }
-        unsupported = {
-            (item["sku"], item["case"]["ep"])
-            for item in document["requested_cases"]
-            if item["case"]["backend"] == "uccl-ep" and item["disposition"] == "unsupported"
-        }
+        runnable = cells(document, backend="uccl-ep", disposition="runnable")
+        unsupported = cells(document, backend="uccl-ep", disposition="unsupported")
         supported_skus = {
             "h100-dgxc", "h200-dgxc", "b200-nscale", "mi355x", "mi325x-tw", "mi300x-tw",
         }
@@ -229,12 +243,7 @@ class MatrixTests(unittest.TestCase):
         # LL: upstream raised kNumMaxTopK 9 -> 16 six days before our pin, and the host assert
         # kNumMaxTopK + 1 <= num_warp_groups * num_warps_per_group cannot hold on AMD, whose
         # kNumMaxWarpGroups is 16 — a dated regression, not a CU-count limit.
-        ll_skus = {
-            item["sku"]
-            for item in document["requested_cases"]
-            if item["case"]["backend"] == "uccl-ep"
-            and item["case"]["mode"] == "low-latency"
-        }
+        ll_skus = cells(document, "sku", backend="uccl-ep", mode="low-latency")
         self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-nscale"})
 
     def test_flashinfer_ep_rollout_shape(self):
@@ -290,16 +299,8 @@ class MatrixTests(unittest.TestCase):
         #     EP8 here even though normal mode runs EP16, because LL adds no EP16 row on any SKU.
         # BF16 only — no FP8 case (NCCL EP FP8 unsupported this release).
         document = matrix(backend="all")
-        runnable = {
-            (item["sku"], item["case"]["ep"])
-            for item in document["requested_cases"]
-            if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "runnable"
-        }
-        unsupported = {
-            (item["sku"], item["case"]["ep"])
-            for item in document["requested_cases"]
-            if item["case"]["backend"] == "nccl-ep" and item["disposition"] == "unsupported"
-        }
+        runnable = cells(document, backend="nccl-ep", disposition="runnable")
+        unsupported = cells(document, backend="nccl-ep", disposition="unsupported")
         rdma_skus = {"h100-dgxc", "h200-dgxc", "b200-nscale", "b300"}
         gb_skus = {"gb200", "gb300"}
         # RDMA SKUs: EP8 runnable + EP16 unsupported. GB SKUs: EP8 and EP16 both runnable.
@@ -314,23 +315,10 @@ class MatrixTests(unittest.TestCase):
         for absent in ("mi355x", "mi325x-tw", "mi300x-tw"):
             self.assertNotIn(absent, offered)
         # Every nccl-ep case is BF16 (FP8 unsupported this release).
-        self.assertEqual(
-            {
-                item["case"]["precision"]
-                for item in document["requested_cases"]
-                if item["case"]["backend"] == "nccl-ep"
-            },
-            {"bf16"},
-        )
+        self.assertEqual(cells(document, "precision", backend="nccl-ep"), {"bf16"})
         # Low-latency: EP8 on every NVIDIA SKU, and EP8 only — a stray EP16 LL row would dispatch a
         # shape the mode does not define.
-        ll = {
-            (item["sku"], item["case"]["ep"])
-            for item in document["requested_cases"]
-            if item["case"]["backend"] == "nccl-ep"
-            and item["case"]["mode"] == "low-latency"
-            and item["disposition"] == "runnable"
-        }
+        ll = cells(document, backend="nccl-ep", mode="low-latency", disposition="runnable")
         self.assertEqual(ll, {(sku, 8) for sku in rdma_skus | gb_skus})
 
     def test_invalid_filters_fail_closed(self):

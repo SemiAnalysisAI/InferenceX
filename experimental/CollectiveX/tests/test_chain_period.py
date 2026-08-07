@@ -184,9 +184,10 @@ class ChainedPairPeriod(unittest.TestCase):
         self.assertIs(warm.call_args.args[0], problem)
         self.assertEqual(warm.call_args.args[1], 4)
 
-    def test_the_loop_is_dispatch_combine_pairs_with_no_sync_between_them(self):
-        # A host sync inside the loop drains the GPU and turns the period back into a sequence
-        # of drained roundtrips.
+    def test_the_loop_is_free_running_dispatch_combine_pairs(self):
+        # A host sync inside the loop drains the GPU and turns the period back into a sequence of
+        # drained roundtrips; a cross-rank call between pairs re-aligns the ranks and buys back
+        # the very stagger the chain exists to amortise. Neither may appear.
         iters = 6
         backend = _ChainBackend()
         with fake_torch(backend.clock, backend.calls):
@@ -194,6 +195,8 @@ class ChainedPairPeriod(unittest.TestCase):
         self.assertEqual(
             timed_tail(backend.calls, iters, 2), ["dispatch", "combine"] * iters
         )
+        self.assertNotIn("all_reduce", backend.calls)
+        self.assertNotIn("dist_barrier", backend.calls)
 
     def test_a_hoisted_stage_runs_once_and_stays_out_of_every_pair_window(self):
         # The conversion is materialised once, untimed, so the pair is dispatch -> combine in
@@ -349,17 +352,6 @@ class EventPlacement(unittest.TestCase):
             floors,
             ["record", "dispatch", "record", "record", "combine", "record"] * iters,
         )
-
-
-class ChainFreeRunning(unittest.TestCase):
-    """The published period means free-running: no cross-rank call may land between pairs."""
-
-    def test_no_synchronization_is_issued_between_chained_pairs(self):
-        backend = _ChainBackend()
-        with fake_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, 5, 1)
-        self.assertNotIn("all_reduce", backend.calls)
-        self.assertNotIn("dist_barrier", backend.calls)
 
 
 class ChainBudgetGate(unittest.TestCase):
