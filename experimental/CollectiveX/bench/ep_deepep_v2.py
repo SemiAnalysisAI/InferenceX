@@ -21,8 +21,8 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
     raise
 
 
-# Source pins (PR #605 head + #630/#640 fixes) live in runtime/common.sh;
-# the launcher fetches and builds them from that checkout. This adapter no longer
+# The source pin in runtime/common.sh is PR #605 head at the #630 fix; #640 is NOT in
+# the fetched tree — runtime/stage.py applies it as a local rewrite before the build. This adapter no longer
 # verifies the wheel's commit tag against the pin — it checks only that the loaded
 # deep_ep exposes ElasticBuffer (the from-source PR #605 capability).
 
@@ -71,7 +71,7 @@ def _jit_cache_directory(
 ) -> str:
     values = (
         args.runner, world_size, args.hidden, args.topk, args.experts,
-        getattr(args, "num_logical_experts", args.experts), max_tokens,
+        args.experts, max_tokens,
         int(allow_hybrid_mode), realized["allocated_qps"], realized["num_sms"],
         int(use_fp8),
     )
@@ -85,9 +85,9 @@ def _jit_cache_directory(
 # NCCL's regular QPs land on top (identical on H200 bare-metal and B200 pods; on
 # CX-7 the budget sits between 784 and 1040 QPs — 49x16 initializes, 65x16 does
 # not). Spending a fixed ~512-QP budget keeps every EP size inside that limit
-# with headroom: EP8 resolves to 65 (the allocation CX-8 racks already run
-# successfully), EP16 to 33 and EP32 to 17 (33 and 49 verified on the failing
-# H200 pair). An explicit value also skips upstream's rank-local ibstat probe,
+# with headroom. Only EP16 reaches this: the hybrid path needs world > scale_up_domain,
+# so EP8 passes 0 and takes upstream's non-hybrid default of 17, and EP32 is not in the
+# sweep. EP16 resolves to 33 (33 and 49 verified on the failing H200 pair). An explicit value also skips upstream's rank-local ibstat probe,
 # which is not guaranteed to resolve identically across ranks.
 _GIN_QP_BUDGET = 512
 
@@ -203,7 +203,7 @@ class DeepEPV2Backend(EPBackend):
                 _hybrid_num_allocated_qps(world_size) if allow_hybrid_mode else 0
             ),
         )
-        tuning_num_experts = int(getattr(args, "num_logical_experts", args.experts))
+        tuning_num_experts = int(args.experts)
         self.num_sms = int(
             self.buffer.get_theoretical_num_sms(tuning_num_experts, args.topk)
         )

@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu-2"
-SLURM_ACCOUNT="benchmark"
+SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
+SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
 set -x
 
@@ -53,7 +53,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
+    export MODEL_PATH="${MODEL_PATH:-/lustre/fsw/models/Kimi-K2.6-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
@@ -213,7 +213,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w 600 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else
@@ -451,10 +451,6 @@ EOF
 else
 
     SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    # Point the bench script at the local MODEL_PATH resolved above instead of
-    # pulling from the HF hub cache. Bench scripts skip `hf download` when
-    # MODEL is a local path.
-    export MODEL="$MODEL_PATH"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
@@ -487,6 +483,11 @@ else
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # Point the bench script at the resolved MODEL_PATH instead of
+    # pulling from the HF hub cache. Bench scripts skip `hf download` when
+    # MODEL is a local path.
+    export MODEL="$MODEL_PATH"
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes

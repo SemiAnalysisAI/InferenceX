@@ -25,12 +25,13 @@ def test_trim_conc_supports_nested_backend_metadata():
         },
     }
     entries = [
-        {**common, "conc": 8},
-        {**common, "conc": 2},
+        {**common, "conc": 8, "exp-name": "kimi_tp8_conc8_kvdram"},
+        {**common, "conc": 2, "exp-name": "kimi_tp8_conc2_kvdram"},
         {
             **common,
             "kv-offload-backend": {"name": "lmcache"},
             "conc": 4,
+            "exp-name": "kimi_tp8_conc4_lmcache",
         },
     ]
 
@@ -619,7 +620,7 @@ def test_eval_rows_split_into_fixed_and_agentic_buckets(
 ):
     """Realistic eval rows must pass final validation and land in the bucket
     matching their dispatch job: fixed-seq-len rows in `evals`, agentic
-    (SWE-bench) rows in `agentic_evals`."""
+    GSM8K rows in `agentic_evals`."""
     added_yaml = """
 - config-keys:
     - test-config

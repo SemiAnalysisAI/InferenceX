@@ -68,8 +68,9 @@ def trim_conc(entries: list[dict]) -> list[dict]:
     ``int`` (single-node) or ``list`` (multi-node). Other fields may contain
     nested dictionaries or lists, such as KV-offload backend metadata.
 
-    - Single-node entries: group by every other field and keep only the entry
-      with the lowest ``conc`` per group.
+    - Single-node entries: group by every configuration field other than
+      ``conc`` and the generated ``exp-name``, then keep only the entry with
+      the lowest ``conc`` per group.
     - Multi-node entries: trim the ``conc`` list in place to ``[min(conc)]``.
     """
     groups: dict[tuple, list[int]] = {}
@@ -87,7 +88,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
             sorted(
                 (k, _freeze_config_value(v))
                 for k, v in entry.items()
-                if k != "conc"
+                if k not in {"conc", "exp-name"}
             )
         )
         groups.setdefault(key, []).append(len(out))
@@ -289,7 +290,7 @@ def main():
             seq_len_str = seq_len_to_str(result["isl"], result["osl"])
             final_results["single_node"][seq_len_str].append(result)
 
-    # Agentic eval rows go to their own bucket so run-sweep.yml can dispatch
+    # Agentic GSM8K eval rows go to their own bucket so run-sweep.yml can dispatch
     # them with agentic inputs (scenario-type, kv-offloading, ...) instead of
     # the fixed-seq-len inputs (isl/osl/max-model-len) they don't have.
     single_node_evals = [e for e in all_eval_results if e.get("prefill") is None]
