@@ -5527,3 +5527,8 @@
     - "Record the recipes' active HiCache host-DRAM tier and, for disaggregated points, Dynamo router commit 5a638087 in nvidia-master metadata so generated artifacts no longer report kv_offloading=none, allocated_cpu_dram_gb=0, or a null router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2477
   
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic
+  description:
+    - "Add Day-0 Kimi K3 FP4 AgentX H200 performance recipes from the official vLLM guidance, using fit-safe TP/DP/EP topologies, optional SimpleCPU KV offload, and a five-minute reconstructed trace idle-gap cap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2353
