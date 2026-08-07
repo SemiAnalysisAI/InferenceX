@@ -569,7 +569,11 @@ print(json.dumps({
     # (commit eed3a092) -- the recipe simply never switched the policy over to use it.
     # NOTE: no apostrophes anywhere in this block. It lives inside python3 -c '...',
     # so a single quote closes the shell string and the rest is parsed as shell.
-    "kv_load_failure_policy": os.environ.get("KV_LOAD_FAILURE_POLICY", "recompute"),
+    # "or", not a get() default -- see the MooncakeStoreConnector note below:
+    # job.slurm forwards this as -e VAR=${VAR:-}, so leaving it unset still binds
+    # the name to "" inside the container and get(k, "recompute") would hand vLLM
+    # an empty policy.
+    "kv_load_failure_policy": (os.environ.get("KV_LOAD_FAILURE_POLICY") or "recompute"),
     "kv_connector_extra_config": {
         "connectors": [
             {
@@ -591,8 +595,14 @@ print(json.dumps({
                     # synchronous is the cheapest way to test whether the fault is a
                     # race between an async store load and the GPU KV blocks it
                     # writes into.
-                    "load_async": os.environ.get("MOONCAKE_LOAD_ASYNC", "1") == "1",
-                    "lookup_async": os.environ.get("MOONCAKE_LOOKUP_ASYNC", "1") == "1",
+                    # "or" not a get() default: job.slurm forwards these as
+                    # -e VAR=${VAR:-}, so when the caller leaves them unset the
+                    # container still SEES the name, bound to "". get(k, "1") then
+                    # returns "" and both flags silently become False -- which the
+                    # store worker rejects at the first step with
+                    # "load_async must be True for better performance."
+                    "load_async": (os.environ.get("MOONCAKE_LOAD_ASYNC") or "1") == "1",
+                    "lookup_async": (os.environ.get("MOONCAKE_LOOKUP_ASYNC") or "1") == "1",
                 },
             },
         ],
