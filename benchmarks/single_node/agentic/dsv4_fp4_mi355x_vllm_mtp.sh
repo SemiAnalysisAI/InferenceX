@@ -77,6 +77,13 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
+# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
+# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
+# add the engine endpoint so every topology captures vLLM metrics; AIPerf
+# deduplicates it against the automatic endpoint in pure-TP runs.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
@@ -441,12 +448,6 @@ fi
 if [ "${EVAL_ONLY}" = "true" ]; then
     run_eval --port "$PORT"
 else
-    # AIPerf discovers metrics from the request URL automatically when it
-    # talks directly to vLLM. With the DP-aware router in front, explicitly
-    # add the backend endpoint so engine/KV/cache metrics are still scraped.
-    if [ "$USE_VLLM_ROUTER" = "true" ]; then
-        export AIPERF_SERVER_METRICS_URLS="http://localhost:$VLLM_BACKEND_PORT/metrics"
-    fi
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
