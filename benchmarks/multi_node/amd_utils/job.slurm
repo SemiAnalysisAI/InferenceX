@@ -528,6 +528,8 @@ DOCKER_ENV_COMMON=(
     -e ATTENTION_BACKEND=\${ATTENTION_BACKEND:-}
     # Draft-model attention backend ("attention_backend" in --speculative-config).
     -e SPEC_ATTN_BACKEND=\${SPEC_ATTN_BACKEND:-}
+    -e SPEC_DRAFT_SAMPLE_METHOD=\${SPEC_DRAFT_SAMPLE_METHOD:-}
+    -e SPEC_REJECTION_SAMPLE_METHOD=\${SPEC_REJECTION_SAMPLE_METHOD:-}
     # Let setup_deps continue when the diagnostics-only RDMA CLI tools cannot be
     # apt-installed (flaky mirror). Unset in CI -> still a hard failure there.
     -e ALLOW_MISSING_RDMA_TOOLS=\${ALLOW_MISSING_RDMA_TOOLS:-}

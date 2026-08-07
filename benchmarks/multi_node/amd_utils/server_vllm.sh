@@ -374,6 +374,41 @@ if [[ -n "${SPEC_ATTN_BACKEND:-}" ]]; then
     echo "Applied SPEC_ATTN_BACKEND=${SPEC_ATTN_BACKEND} (draft/speculative-config)"
 fi
 
+# SPEC_DRAFT_SAMPLE_METHOD / SPEC_REJECTION_SAMPLE_METHOD: override the two DSpark
+# sampling keys inside --speculative-config. models_vllm.yaml pins the non-default
+# pair "probabilistic" + "block" (PR #2403); vLLM's defaults are "greedy" +
+# "standard".
+#
+# Worth being able to move, because the block rejection sampler is where the run
+# dies. The five Triton kernels that JIT-compile immediately before the GPU queue
+# aborts with HSA_STATUS_ERROR_EXCEPTION 0x1016 all live in
+# v1/worker/gpu/spec_decode/rejection_sampler_utils.py:
+#   _compute_local_logits_stats_kernel, _compute_cumulative_log_p_kernel,
+#   _compute_local_residual_mass_kernel, _rejection_kernel, _resample_kernel
+# and the fault only appears once the Mooncake tier starts serving hits, i.e. once
+# prefill arrives with almost every token already cached -- a shape these kernels
+# were never warmed up for.
+apply_spec_sample_method() {
+    local cfg="$1" key="$2" val="$3"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q "\"${key}\""; then
+        echo "$cfg" | sed -E "s/(\"${key}\"[[:space:]]*:[[:space:]]*)\"[A-Za-z0-9_]+\"/\1\"${val}\"/g"
+    else
+        echo "$cfg" | sed -E "s/(--speculative-config[[:space:]]+'\\{)/\\1\"${key}\":\"${val}\",/"
+    fi
+}
+if [[ -n "${SPEC_DRAFT_SAMPLE_METHOD:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_sample_method "$PREFILL_SERVER_CONFIG" draft_sample_method "$SPEC_DRAFT_SAMPLE_METHOD")"
+    DECODE_SERVER_CONFIG="$(apply_spec_sample_method "$DECODE_SERVER_CONFIG" draft_sample_method "$SPEC_DRAFT_SAMPLE_METHOD")"
+    echo "Applied SPEC_DRAFT_SAMPLE_METHOD=${SPEC_DRAFT_SAMPLE_METHOD}"
+fi
+if [[ -n "${SPEC_REJECTION_SAMPLE_METHOD:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_sample_method "$PREFILL_SERVER_CONFIG" rejection_sample_method "$SPEC_REJECTION_SAMPLE_METHOD")"
+    DECODE_SERVER_CONFIG="$(apply_spec_sample_method "$DECODE_SERVER_CONFIG" rejection_sample_method "$SPEC_REJECTION_SAMPLE_METHOD")"
+    echo "Applied SPEC_REJECTION_SAMPLE_METHOD=${SPEC_REJECTION_SAMPLE_METHOD}"
+fi
+
 # ENFORCE_EAGER: disable CUDA graphs. Escape hatch, not a default -- AiterMLA
 # declares AttentionCGSupport.UNIFORM_BATCH and the K3 fork adds
 # _uniform_padded_mtp_qo_len specifically so full-CG padded MTP decode works, so
