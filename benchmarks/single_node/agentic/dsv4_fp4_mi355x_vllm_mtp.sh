@@ -21,8 +21,9 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires one of these. 
+# KV_OFFLOADING=dram requires one of these.
 #   KV_OFFLOAD_BACKEND=vllm-native.
+#   KV_OFFLOAD_BACKEND=vllm-simple.
 #   KV_OFFLOAD_BACKEND=mooncake.
 #   KV_OFFLOAD_BACKEND=lmcache.
 #   KV_OFFLOAD_BACKEND=hicache.
@@ -363,8 +364,27 @@ EOF
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":6000.0}}"
         )
     ;;
+  vllm-simple)
+    require_agentic_kv_offload_backend vllm-simple
+    # ---- SimpleCPUOffloadConnector ---------------------------------------------
+    # The backend the B200 agentic config uses for its DEP8 arm
+    # (configs/nvidia-master.yaml: kv-offload-backend: {name: vllm-simple}).
+    # Kept byte-for-byte in step with dsv4_fp4_b200_vllm_mtp.sh so a
+    # cross-vendor DEP8 comparison differs in hardware, not in offload policy.
+    # The connector is registered in the ROCm image too, so nothing extra to
+    # install -- this arm was simply never wired up on the MI355X side.
+    CPU_BYTES_PER_RANK=$(( TOTAL_CPU_DRAM_GB * 1000 * 1000 * 1000 / GPU_COUNT ))
+    # Identical prefixes must hash to identical block keys across DP ranks, or
+    # a session that lands on a different rank re-prefills instead of hitting.
+    # Python salts str hashes per process by default, so pin the seed.
+    export PYTHONHASHSEED=42
+    OFFLOAD_ARGS=(
+        --kv-transfer-config
+        "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use_per_rank\":${CPU_BYTES_PER_RANK},\"lazy_offload\":false,\"enable_cross_layers_blocks\":\"true\"}}"
+    )
+    ;;
   *)
-    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-native, mooncake, lmcache)" >&2
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: vllm-native, vllm-simple, mooncake, lmcache)" >&2
     exit 1
     ;;
 esac
@@ -488,9 +508,17 @@ fi
 # are both kv-offloading:none. 0.90 (259.2 GiB) is above the ~256 GiB hard-fail
 # ceiling the comment above documents, so keep the derived 0.86 for GPU-resident
 # runs and only raise it when a DRAM-offload arm is re-enabled.
-GPU_MEM_UTIL=0.86
-if [ "$KV_OFFLOADING" != "none" ]; then
-    GPU_MEM_UTIL=0.90
+#
+# Overridable, because the two rules above disagree for a DRAM arm on these
+# nodes: the offload branch asks for 0.90, which the paragraph above states is
+# past the ~256 GiB hard-fail ceiling. Until a DRAM arm is actually validated
+# green at 0.90 here, a run that needs the lower value can set GPU_MEM_UTIL
+# rather than edit the derivation.
+if [ -z "${GPU_MEM_UTIL:-}" ]; then
+    GPU_MEM_UTIL=0.86
+    if [ "$KV_OFFLOADING" != "none" ]; then
+        GPU_MEM_UTIL=0.90
+    fi
 fi
 
 # Long-context forward passes (~370K tokens with fp8 KV + DRAM offload) can exceed
