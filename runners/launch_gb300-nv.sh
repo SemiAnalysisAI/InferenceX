@@ -8,6 +8,11 @@ export SLURM_PARTITION="batch_1"
 export SLURM_ACCOUNT="benchmark"
 export ENROOT_ROOTFS_WRITABLE=1
 
+# Temporary compute-node exclusion for shared-filesystem failures. Keep this
+# overridable so operators can clear or extend the list without changing the
+# launcher.
+GB300_SLURM_EXCLUDED_NODELIST="${GB300_SLURM_EXCLUDED_NODELIST-im-gb300-r01-c002,im-gb300-r01-c003}"
+
 # Host-side directory holding aiperf's content-addressed dataset mmap cache.
 # Bind-mounted into worker containers at /aiperf_mmap_cache via the
 # default_mounts: block in srtslurm.yaml below; aiperf reads it via
@@ -112,7 +117,11 @@ NGINX_SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$NGINX_IMAGE" 
 import_squash() {
     local squash="$1" image="$2"
     local lock="${squash}.lock"
-    srun --partition=$SLURM_PARTITION --exclusive --time=180 bash -c "
+    local exclude_args=()
+    if [[ -n "$GB300_SLURM_EXCLUDED_NODELIST" ]]; then
+        exclude_args+=(--exclude="$GB300_SLURM_EXCLUDED_NODELIST")
+    fi
+    srun --partition=$SLURM_PARTITION "${exclude_args[@]}" --exclusive --time=180 bash -c "
         exec 9>\"$lock\"
         flock -w 600 9 || { echo 'Failed to acquire lock for $squash' >&2; exit 1; }
         if unsquashfs -l \"$squash\" > /dev/null 2>&1; then
