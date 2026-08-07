@@ -565,8 +565,10 @@ print(json.dumps({
     # because a root warmup request failed.
     # "recompute" reschedules the request and recomputes the failed blocks instead.
     # That path is _update_requests_with_invalid_blocks(), which the pinned fork
-    # already taught to handle a hybrid model's multiple KV-cache groups
+    # already taught to handle the multiple KV-cache groups of a hybrid model
     # (commit eed3a092) -- the recipe simply never switched the policy over to use it.
+    # NOTE: no apostrophes anywhere in this block. It lives inside python3 -c '...',
+    # so a single quote closes the shell string and the rest is parsed as shell.
     "kv_load_failure_policy": os.environ.get("KV_LOAD_FAILURE_POLICY", "recompute"),
     "kv_connector_extra_config": {
         "connectors": [
