@@ -143,12 +143,16 @@ benchmark's return code.
 ## KV-Cache Transfer Suite
 
 `kv-transfer` legs run 2 nodes x 1 GPU — the per-worker prefill/decode pair a
-disaggregated deployment actually forms — and move one request's paged KV as
-layer-major descriptor lists over seed-keyed random block tables (the
-post-fragmentation layout vLLM and SGLang post), plus one contiguous bulk row as
-the wire-speed ceiling. Workloads name production shapes (`kv-mla` =
-DeepSeek-V4-Pro incl. its DSA indexer cache, `kv-gqa` = Qwen3-235B class) at
-bf16 and fp8; page
+disaggregated deployment actually forms — and move bursts of 1/4/16 concurrent
+requests' paged KV as per-request layer-major descriptor lists over seed-keyed
+random block tables (the post-fragmentation layout vLLM and SGLang post; a
+burst posts every request's prepped transfer, then awaits them all), plus one
+contiguous bulk row as the wire-speed ceiling. Workloads are transcribed from
+what vLLM allocates for the model class: `kv-dsv4` = DeepSeek-V4-Pro's mixed
+cache (30 Compressed Sparse Attention layers at 4 tokens per 576 B entry plus
+their 132 B indexer entries, 31 Heavily Compressed Attention layers at 128
+tokens per entry, and the 128-token sliding-window cache on all 61 layers; fp8
+by architecture), `kv-gqa` = Qwen3-235B class at bf16 and fp8; page
 sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
 SGLang disagg) both timed from the initiator with offset-pattern verification on
 the destination pool in both directions. Backends: `nixl` (what Dynamo, vLLM,

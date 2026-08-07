@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Mooncake TransferEngine adapter for the KV-transfer suite.
 
-P2PHANDSHAKE metadata (no etcd); the peer session id is ip:rpc_port. Sync
-transfer calls block to completion, so a timed transfer is one call (bulk) or
-one capped batch loop (paged). The wheel links libcudart.so.12, which cu13
+P2PHANDSHAKE metadata (no etcd); the peer session id is ip:rpc_port. The
+binding is sync-only in the shape production uses it: SGLang's mooncake
+connector posts blocking calls from a transfer thread pool (the binding
+releases the GIL), so post() here hands the sync call to a worker thread and
+wait() joins it. The wheel links libcudart.so.12, which cu13
 images do not carry; the adapter dlopens it from the nvidia-cuda-runtime-cu12
 package before the import so no launcher-side LD_LIBRARY_PATH seam is needed.
 The wheel also links libcuda.so.1 itself, which is why this backend is
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import ctypes
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import kv_workload
 from kv_backend import KVBackend
@@ -61,6 +64,8 @@ class MooncakeBackend(KVBackend):
         self._pool = None
         self._bulk = None
         self._peer = None
+        workers = max(int(v) for v in str(getattr(args, "batch_sizes", "1")).split())
+        self._exec = ThreadPoolExecutor(max_workers=workers)
 
     def register(self, pool, bulk) -> None:
         self._pool, self._bulk = pool, bulk
@@ -75,31 +80,46 @@ class MooncakeBackend(KVBackend):
     def connect(self, peer: dict) -> None:
         self._peer = peer
 
-    def make_paged(self, cfg, op, local_table, remote_table):
-        start = time.perf_counter()
-        local = (self._pool.ptr + kv_workload.page_offsets(cfg, local_table)).tolist()
-        remote = (self._peer["pool_base"] + kv_workload.page_offsets(cfg, remote_table)).tolist()
-        sizes = [cfg["page_bytes"]] * len(local)
-        chunks = [(i, min(i + BATCH_CAP, len(local))) for i in range(0, len(local), BATCH_CAP)]
-        engine, session = self._engine, self._peer["session"]
-        func = engine.batch_transfer_sync_read if op == "pull" \
-            else engine.batch_transfer_sync_write
-        prep_s = time.perf_counter() - start
+    def _split(self, run, prep_s):
+        """(post, wait, prep_s) around a blocking call via the worker pool."""
+        pending: list = []
 
-        def transfer_once():
+        def post():
+            pending.append(self._exec.submit(run))
+
+        def wait():
+            pending.pop(0).result()
+
+        return post, wait, prep_s
+
+    def make_paged(self, cfg, op, local_tables, remote_tables):
+        start = time.perf_counter()
+        local = (self._pool.ptr + kv_workload.page_offsets(cfg, local_tables)).tolist()
+        remote = (self._peer["pool_base"] + kv_workload.page_offsets(cfg, remote_tables)).tolist()
+        sizes = kv_workload.desc_sizes(cfg).tolist()
+        chunks = [(i, min(i + BATCH_CAP, len(local))) for i in range(0, len(local), BATCH_CAP)]
+        session = self._peer["session"]
+        func = self._engine.batch_transfer_sync_read if op == "pull" \
+            else self._engine.batch_transfer_sync_write
+
+        def run():
             for i, j in chunks:
                 if func(session, local[i:j], remote[i:j], sizes[i:j]) != 0:
                     raise RuntimeError("mooncake batch transfer failed")
 
-        return transfer_once, prep_s
+        return self._split(run, time.perf_counter() - start)
 
     def make_bulk(self, nbytes, op):
-        engine, session = self._engine, self._peer["session"]
-        func = engine.transfer_sync_read if op == "pull" else engine.transfer_sync_write
+        session = self._peer["session"]
+        func = self._engine.transfer_sync_read if op == "pull" \
+            else self._engine.transfer_sync_write
         local, remote = self._bulk.ptr, self._peer["bulk_base"]
 
-        def transfer_once():
+        def run():
             if func(session, local, remote, nbytes) != 0:
                 raise RuntimeError("mooncake bulk transfer failed")
 
-        return transfer_once, 0.0
+        return self._split(run, 0.0)
+
+    def teardown(self) -> None:
+        self._exec.shutdown(wait=False)

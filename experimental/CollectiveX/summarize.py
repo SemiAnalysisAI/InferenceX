@@ -104,14 +104,18 @@ def _headline(document: dict) -> tuple:
     )
 
 
-def _kv_cell(rows: list[dict], kind: str, page_tokens, op: str):
-    """The largest-ISL row of a (kind, page, op) family — the bandwidth-bound point."""
+def _kv_cell(rows: list[dict], kind: str, page_tokens, op: str, batch: str = "min"):
+    """The largest-ISL row of a (kind, page, op) family — the bandwidth-bound
+    point — at its smallest or largest measured batch."""
     matching = [r for r in rows
                 if r.get("kind") == kind and r.get("page_tokens") == page_tokens
                 and r.get("op") == op]
     if not matching:
         return "-", "-"
-    row = max(matching, key=lambda r: r["isl"])
+    isl = max(r["isl"] for r in matching)
+    pick = min if batch == "min" else max
+    row = pick((r for r in matching if r["isl"] == isl),
+               key=lambda r: r.get("batch", 1))
     return row["gbps_p50"], row["latency_ms"]["p50"]
 
 
@@ -121,25 +125,28 @@ def render_kv(documents: list[dict]) -> list[str]:
     failures flip the outcome column (and the leg already failed in CI)."""
     lines = ["", "## CollectiveX KV-transfer results", "",
              "| ver | sku | backend | fabric | workload | precision | outcome "
-             "| pull p64 GB/s | pull p16 GB/s | bulk GB/s | pull p64 ms |",
-             "|--:|---|---|---|---|---|---|--:|--:|--:|--:|"]
+             "| pull p64 GB/s b1 | pull p64 GB/s bmax | pull p16 GB/s b1 "
+             "| bulk GB/s | pull p64 ms b1 |",
+             "|--:|---|---|---|---|---|---|--:|--:|--:|--:|--:|"]
     for document in documents:
         factors = document["identity"]["case_factors"]
         case = factors["case"]
         rows = document["measurement"]["rows"]
         p64_gbps, p64_ms = _kv_cell(rows, "paged", 64, "pull")
+        p64_bmax, _ = _kv_cell(rows, "paged", 64, "pull", batch="max")
         p16_gbps, _ = _kv_cell(rows, "paged", 16, "pull")
         bulk_gbps, _ = _kv_cell(rows, "bulk", None, "pull")
         lines.append(
             f"| {document['version']} | {factors['sku']} | `{case['backend']}` | "
             f"{case['mode']} | {case['workload']} | {case['precision']} | "
-            f"{document['outcome']['status']} | {p64_gbps} | {p16_gbps} | "
+            f"{document['outcome']['status']} | {p64_gbps} | {p64_bmax} | {p16_gbps} | "
             f"{bulk_gbps} | {p64_ms} |"
         )
     lines.append("")
-    lines.append("> Paged rows move one request's KV as layer-major descriptor lists over "
-                 "randomized block tables (p16/p64 = tokens per page); bulk is the "
-                 "single-descriptor wire ceiling. GB/s at the largest ISL (bandwidth-bound).")
+    lines.append("> Paged rows move requests' KV as layer-major descriptor lists over "
+                 "randomized block tables (p16/p64 = tokens per page); b1/bmax = requests "
+                 "posted per burst (GB/s is burst-aggregate); bulk is the single-descriptor "
+                 "wire ceiling. GB/s at the largest ISL (bandwidth-bound).")
     return lines
 
 

@@ -12,6 +12,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "bench"))
 
 import ep_harness  # noqa: E402
+import kv_workload  # noqa: E402
 
 
 TOPOLOGY_FIELDS = (
@@ -107,7 +108,12 @@ def _kv_cases(sku: str, platform: dict[str, Any], fabric: str, backend: str,
         "warmup_per_trial", "reps_per_trial", "trials_per_point"))
     cases = []
     for workload in KV_SWEEP["workloads"]:
+        # A preset's dtype mix can be architectural (dsv4's fp8 slots), so the
+        # workload model owns which sweep precisions apply to it.
+        preset_precisions = kv_workload.PRESETS[workload.removeprefix("kv-")]["precisions"]
         for precision in KV_SWEEP["precisions"]:
+            if precision not in preset_precisions:
+                continue
             if selected_precisions and precision not in selected_precisions:
                 continue
             case = {
@@ -121,6 +127,7 @@ def _kv_cases(sku: str, platform: dict[str, Any], fabric: str, backend: str,
                 "mode": fabric,
                 "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
                 "page_tokens": " ".join(map(str, KV_SWEEP["page_tokens"])),
+                "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
                 "ops": " ".join(KV_SWEEP["ops"]),
                 "pool_slack": KV_SWEEP["pool_slack"],
                 "seed": KV_SWEEP["seed"],

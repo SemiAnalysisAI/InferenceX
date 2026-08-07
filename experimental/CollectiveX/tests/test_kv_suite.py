@@ -36,7 +36,11 @@ class KVMatrix(unittest.TestCase):
         for shard in shards:
             self.assertEqual(shard["nodes"], 2)
             self.assertEqual(shard["gpus_per_node"], 1)
-            self.assertEqual(len(shard["cases"]), 4)  # 2 workloads x 2 precisions
+            # kv-gqa runs bf16+fp8; kv-dsv4's dtype mix is architectural (fp8 only)
+            self.assertEqual(len(shard["cases"]), 3)
+            self.assertEqual(
+                {(c["workload"], c["precision"]) for c in shard["cases"]},
+                {("kv-dsv4", "fp8"), ("kv-gqa", "bf16"), ("kv-gqa", "fp8")})
             for case in shard["cases"]:
                 self.assertEqual(case["suite"], "kv-transfer")
                 self.assertEqual(case["ep"], 2)
@@ -109,6 +113,7 @@ class KVArgvCodec(unittest.TestCase):
         self.assertEqual(
             (pairs["--warmup"], pairs["--reps"], pairs["--trials"]),
             tuple(case["timing"].split(":")))
+        self.assertEqual(pairs["--batch-sizes"], case["batch_sizes"])
         self.assertIn(shard["sku"], pairs["--out"])
         self.assertTrue(pairs["--out"].startswith("results/"))
 
@@ -187,9 +192,9 @@ class UCXSelectors(unittest.TestCase):
 
 
 def _kv_document(status="success", sku="b200-nscale"):
-    def row(kind, page, op, gbps, p50):
-        return {"kind": kind, "preset": "mla", "isl": 32768, "page_tokens": page,
-                "op": op, "descs": 1, "req_bytes": 1, "prep_ms": 0.1,
+    def row(kind, page, op, gbps, p50, batch=1):
+        return {"kind": kind, "preset": "dsv4", "isl": 32768, "page_tokens": page,
+                "op": op, "descs": 1, "req_bytes": 1, "batch": batch, "prep_ms": 0.1,
                 "latency_ms": {"p50": p50, "p95": p50, "min": p50, "max": p50, "n": 24},
                 "gbps_p50": gbps, "verify": {"passed": status == "success", "detail": ""}}
 
@@ -197,11 +202,12 @@ def _kv_document(status="success", sku="b200-nscale"):
         "version": 1,
         "record_type": "case-attempt",
         "identity": {"case_factors": {"sku": sku, "case": {
-            "suite": "kv-transfer", "backend": "nixl", "workload": "kv-mla",
+            "suite": "kv-transfer", "backend": "nixl", "workload": "kv-dsv4",
             "mode": "rdma", "phase": "xfer", "ep": 2, "routing": "paged",
-            "precision": "bf16"}}},
+            "precision": "fp8"}}},
         "measurement": {"rows": [
             row("paged", 64, "pull", 43.4, 53.1),
+            row("paged", 64, "pull", 96.2, 21.4, batch=16),
             row("paged", 16, "pull", 12.4, 185.2),
             row("bulk", None, "pull", 48.3, 47.7),
             row("paged", 64, "push", 48.4, 47.6),
@@ -211,11 +217,44 @@ def _kv_document(status="success", sku="b200-nscale"):
     }
 
 
+class BurstTiming(unittest.TestCase):
+    def test_a_burst_posts_every_request_before_waiting_on_any(self):
+        from kv_backend import time_bursts
+
+        order = []
+        pairs = [(lambda i=i: order.append(("post", i)),
+                  lambda i=i: order.append(("wait", i))) for i in range(3)]
+        samples = time_bursts(pairs, warmup=1, reps=2)
+        self.assertEqual(len(samples), 2)
+        self.assertEqual(order[:6], [("post", 0), ("post", 1), ("post", 2),
+                                     ("wait", 0), ("wait", 1), ("wait", 2)])
+
+
+class KVGrid(unittest.TestCase):
+    def test_pool_budget_sheds_largest_batches_not_the_point(self):
+        # gqa-bf16 at 32k needs ~126 GB of pool for 16 disjoint in-flight
+        # requests; the point must survive with the batches that fit.
+        import argparse
+
+        import run_kv
+
+        args = argparse.Namespace(workload_name="kv-gqa", precision="bf16",
+                                  isl_ladder="512 32768", page_tokens="64",
+                                  batch_sizes="1 4 16", pool_slack=2.0)
+        points, isls, batches = run_kv._grid(args)
+        self.assertEqual((isls, batches), ([512, 32768], [1, 4, 16]))
+        by_isl = {cfg["isl"]: allowed for cfg, allowed in points}
+        self.assertEqual(by_isl[512], [1, 4, 16])
+        self.assertEqual(by_isl[32768], [1, 4])
+        for cfg, _ in points:
+            self.assertLessEqual(cfg["pool_bytes"], run_kv.POOL_BUDGET)
+
+
 class KVSummary(unittest.TestCase):
     def test_kv_documents_render_their_own_table(self):
         text = summarize.render([_kv_document()])
         self.assertIn("KV-transfer results", text)
-        self.assertIn("| 43.4 | 12.4 | 48.3 | 53.1 |", text)
+        self.assertIn("| 43.4 | 96.2 | 12.4 | 48.3 | 53.1 |", text)
         self.assertNotIn("INVALID", text)
 
     def test_kv_invalid_counts_in_the_banner(self):

@@ -1,11 +1,32 @@
 {
   "version": 1,
   "suite": "kv-transfer",
-  "workloads": ["kv-mla", "kv-gqa"],
-  "precisions": ["bf16", "fp8"],
-  "isl_ladder": [512, 4096, 32768],
-  "page_tokens": [16, 64],
-  "ops": ["pull", "push"],
+  "workloads": [
+    "kv-dsv4",
+    "kv-gqa"
+  ],
+  "precisions": [
+    "bf16",
+    "fp8"
+  ],
+  "isl_ladder": [
+    512,
+    4096,
+    32768
+  ],
+  "page_tokens": [
+    16,
+    64
+  ],
+  "batch_sizes": [
+    1,
+    4,
+    16
+  ],
+  "ops": [
+    "pull",
+    "push"
+  ],
   "timing": {
     "warmup_per_trial": 2,
     "reps_per_trial": 8,

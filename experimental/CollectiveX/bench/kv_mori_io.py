@@ -81,25 +81,29 @@ class MoRIIOBackend(KVBackend):
             if not status.Succeeded():
                 raise RuntimeError(f"mori-io transfer failed: {status.Message()}")
 
-    def make_paged(self, cfg, op, local_table, remote_table):
+    def make_paged(self, cfg, op, local_tables, remote_tables):
         start = time.perf_counter()
-        local = kv_workload.page_offsets(cfg, local_table).tolist()
-        remote = kv_workload.page_offsets(cfg, remote_table).tolist()
-        sizes = [cfg["page_bytes"]] * len(local)
+        local = kv_workload.page_offsets(cfg, local_tables).tolist()
+        remote = kv_workload.page_offsets(cfg, remote_tables).tolist()
+        sizes = kv_workload.desc_sizes(cfg).tolist()
         chunks = [(i, min(i + BATCH_CAP, len(local))) for i in range(0, len(local), BATCH_CAP)]
         session = self._sessions["pool"]
         func = session.batch_read if op == "pull" else session.batch_write
         engine = self._engine
         prep_s = time.perf_counter() - start
+        statuses: list = []
 
-        def transfer_once():
-            statuses = [
+        def post():
+            statuses.clear()
+            statuses.extend(
                 func(local[i:j], remote[i:j], sizes[i:j], engine.allocate_transfer_uid())
                 for i, j in chunks
-            ]
+            )
+
+        def wait():
             self._wait(statuses)
 
-        return transfer_once, prep_s
+        return post, wait, prep_s
 
     # Verbs providers cap a single WR's message size (1 GiB on the Pollara path:
     # a 2.3 GB single-WR bulk read dies ibv_post_send EINVAL). Split client-side;
@@ -114,10 +118,16 @@ class MoRIIOBackend(KVBackend):
         spans = [(offset, min(offset + self.BULK_WR_CAP, nbytes))
                  for offset in range(0, nbytes, self.BULK_WR_CAP)]
 
-        def transfer_once():
-            self._wait([
+        statuses: list = []
+
+        def post():
+            statuses.clear()
+            statuses.extend(
                 func(start, start, end - start, engine.allocate_transfer_uid())
                 for start, end in spans
-            ])
+            )
 
-        return transfer_once, 0.0
+        def wait():
+            self._wait(statuses)
+
+        return post, wait, 0.0
