@@ -150,13 +150,12 @@ the wire-speed ceiling. Workloads name production shapes (`kv-mla` =
 DeepSeek-R1/Kimi-K2 class, `kv-gqa` = Qwen3-235B class) at bf16 and fp8; page
 sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
 SGLang disagg) both timed from the initiator with offset-pattern verification on
-the destination pool in both directions. Backends: `nixl` (what Dynamo/vLLM/
-SGLang ship — pip wheel on NVIDIA images, bundled in the ROCm image) everywhere
-the registry's `kv_backends` enables it, plus `mori-io` (AMD's native engine)
-on mi355x. Capability is registry-gated like `ll_backends`: no entry, no legs.
-See the methodology's KV-Cache Transfer section for measurement details and the
-known fabric caveats (gb200 MNNVL rows need fabric-handle allocations and are
-not yet enabled).
+the destination pool in both directions. Backends: `nixl` (what Dynamo, vLLM,
+and SGLang ship), `mooncake` (NVIDIA-only; the wheel links libcuda at import),
+and `mori-io` (AMD's native engine) where the registry's `kv_backends` map
+enables them; no entry, no legs, mirroring `ll_backends`. Fabrics: `rdma`
+(torch pools) and, on GB racks, `mnnvl` (cuMem FABRIC pools; see the
+methodology for the bulk-vs-paged lane inversion that row exists to publish).
 
 ## Workflow And Artifacts
 

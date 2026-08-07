@@ -58,8 +58,7 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--kv-mori-qp", type=int, default=1)
     ap.add_argument("--kv-mori-chunking", action="store_true")
     ap.add_argument("--kv-mori-port", type=int, default=48810)
-    ap.add_argument("--link-gbps", type=float, default=0.0,
-                    help="per-worker wire rate in Gbit/s for the %%-of-wire column; 0 = unknown")
+    ap.add_argument("--kv-mc-port", type=int, default=48830)
 
 
 def export_ucx_selectors(environ=os.environ) -> None:
@@ -77,6 +76,21 @@ def export_ucx_selectors(environ=os.environ) -> None:
     gid = environ.get("COLLX_IB_GID_INDEX", "")
     if gid and "UCX_IB_GID_INDEX" not in environ:
         environ["UCX_IB_GID_INDEX"] = str(gid)
+
+
+def exchange_verdict(dist, role, verify_side, verify):
+    """One rank verifies its destination pool; every rank returns that verdict.
+
+    Bulk rows have no verifying side (verify_side "none"): every rank gathers
+    None and the row passes by construction, without a gather-of-nothing crash.
+    """
+    verdict = None
+    if role == verify_side:
+        passed, detail = verify()
+        verdict = {"passed": passed, "detail": detail}
+    gathered = [None, None]
+    dist.all_gather_object(gathered, verdict)
+    return next((v for v in gathered if v is not None), {"passed": True, "detail": ""})
 
 
 def kv_case(args) -> dict:
@@ -104,7 +118,7 @@ def _grid(args) -> tuple[list[dict], list[int]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX KV-cache transfer sweep")
-    ap.add_argument("--backend", required=True, choices=["nixl", "mori-io"])
+    ap.add_argument("--backend", required=True, choices=["nixl", "mori-io", "mooncake"])
     add_kv_args(ap)
     args = ap.parse_args()
 
@@ -138,6 +152,8 @@ def main() -> int:
 
     if args.backend == "mori-io":
         from kv_mori_io import MoRIIOBackend as Backend
+    elif args.backend == "mooncake":
+        from kv_mooncake import MooncakeBackend as Backend
     else:
         from kv_nixl import NIXLBackend as Backend
 
@@ -162,13 +178,14 @@ def main() -> int:
               "submit with --propagate=NONE or raise the limit", file=sys.stderr)
         return 2
 
-    pool = torch.empty(pool_bytes, dtype=torch.uint8, device=device)
-    bulk = torch.empty(bulk_bytes, dtype=torch.uint8, device=device)
+    import kv_pool
+
+    pool = kv_pool.create(args.fabric, pool_bytes, local_rank)
+    bulk = kv_pool.create(args.fabric, bulk_bytes, local_rank)
 
     def repaint():
-        kv_workload.fill_pattern(pool)
-        bulk.fill_(0xAB if role == "target" else 0xCD)
-        torch.cuda.synchronize()
+        pool.fill_pattern()
+        bulk.fill_byte(0xAB if role == "target" else 0xCD)
 
     repaint()
     backend = Backend(args, role, device)
@@ -192,14 +209,9 @@ def main() -> int:
             for _ in range(args.trials):
                 samples.extend(time_transfers(transfer_once, args.warmup, args.reps))
         dist.barrier()  # transfers complete before anyone inspects pools
-        verdict = {"passed": True, "detail": ""}
-        if tables is not None and role == verify_side:
-            dst_table, src_table = tables
-            passed, detail = kv_workload.verify_transfer(pool, cfg_row["_cfg"], dst_table, src_table)
-            verdict = {"passed": passed, "detail": detail}
-        verdicts = [None, None]
-        dist.all_gather_object(verdicts, verdict if role == verify_side else None)
-        verdict = next(v for v in verdicts if v is not None)
+        verdict = exchange_verdict(
+            dist, role, verify_side,
+            lambda: kv_workload.verify_transfer(pool.read8, cfg_row["_cfg"], *tables))
         repaint()
         dist.barrier()
         if role != "initiator":
@@ -212,7 +224,6 @@ def main() -> int:
             "prep_ms": round(prep_s * 1e3, 3),
             "latency_ms": {k: round(v, 3) for k, v in stats.items()},
             "gbps_p50": round(gbps, 2),
-            "wire_pct": round(100 * gbps / (args.link_gbps / 8), 1) if args.link_gbps else None,
             "verify": verdict,
         }
 

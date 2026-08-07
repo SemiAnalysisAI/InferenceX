@@ -420,12 +420,21 @@ pattern-checked after `pull` on the initiator and after `push` on the target (an
 byte pattern makes any page's expected contents computable from its offset alone), and both pools
 are repainted between points. A failed verify flips the document `invalid` and the leg red.
 
-Known lane caveats, measured on the metal: 16-token pages are per-descriptor-bound (~1.5 µs/desc
-on x86 CX-7, ~0.9 µs on Grace) and land at 25–45% of the 64-token pages' bandwidth; single-WR
-bulk transfers above the provider's max message size must be split (the MoRI adapter caps WRs at
-1 GiB); and UCX's MNNVL cuda_ipc lane does not engage on `cudaMalloc` pools — with
-`UCX_CUDA_IPC_ENABLE_MNNVL=y` alone the transfer silently rides the IB rails, so GB-rack MNNVL
-rows stay out of the registry until the harness allocates fabric-mappable pools.
+Fabrics are a case dimension. `rdma` runs on torch (cudaMalloc) pools. `mnnvl` allocates the
+pools with cuMem FABRIC handles (kv_pool.FabricPool; needs a live nvidia-imex domain), because
+UCX's cross-node cuda_ipc only engages on fabric-mappable memory: on cudaMalloc pools the flag
+is silently inert and the transfer rides the IB rails with byte-identical numbers. Measured on
+GB200, the two lanes invert with transfer shape: mnnvl moves contiguous bulk at 636-707 GB/s
+(7.9x the 4-rail IB 89.8) but pays ~3.9 µs per descriptor copy, so paged rows drop BELOW the IB
+lane (19.5-34.3 vs 74.6-85.0 GB/s at 64-token pages). A paged-KV engine inside one rack is
+better served by the rails unless it coalesces; that comparison is exactly what the two fabric
+rows publish.
+
+Other lane facts, measured on the metal: 16-token pages are per-descriptor-bound (~1.5 µs/desc
+on x86 CX-7, ~0.9 µs on Grace, ~0.95 µs through Mooncake's batch path) and land at 25-45% of the
+64-token pages' bandwidth; single-WR bulk transfers above the provider's max message size must
+be split (the MoRI adapter caps WRs at 1 GiB); and Mooncake is NVIDIA-only at the binary level
+(the wheel links libcuda.so.1 at import; measured failing on mi355x).
 
 ## Correctness
 

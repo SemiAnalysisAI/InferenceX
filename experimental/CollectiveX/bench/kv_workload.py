@@ -1,27 +1,17 @@
 #!/usr/bin/env python3
 """Workload model for the KV-cache transfer suite.
 
-What a disaggregated-serving transfer actually moves is one request's paged KV:
-`isl` tokens split into `page_tokens`-sized blocks, per layer, scattered over a
-paged pool by a block table that is effectively random after allocator
-fragmentation. Both sides are fragmented, so local and remote tables differ.
-Descriptor lists are layer-major with the same block table applied to every
-layer — vLLM's and SGLang's pool addressing (`[layer][page]`).
+A transfer is one request's paged KV: `isl` tokens in `page_tokens`-sized
+blocks, per layer, scattered over a `[layer][page]` pool by a seed-keyed random
+block table per side (the post-fragmentation layout vLLM/SGLang address).
+Presets name production shapes: ``mla`` = DeepSeek-R1/V4 and Kimi-K2 latent
+(576 elements/token/layer, 61 layers); ``gqa`` = Qwen3-235B class (1024, 94).
+fp8 halves page bytes, which deepens the per-descriptor regime, so it is a
+measured dimension, never derived from bf16.
 
-Presets name production shapes rather than free parameters, so a row is always
-a statement about a real deployment:
-- ``mla``: DeepSeek-R1/V4 and Kimi-K2 class. Compressed latent per token per
-  layer = kv_lora_rank 512 + qk_rope 64 = 576 elements; 61 layers.
-- ``gqa``: Qwen3-235B class. 4 KV heads x 128 head_dim x (K+V) = 1024 elements
-  per token per layer; 94 layers.
-Precision scales bytes/element (bf16 = 2, fp8 = 1). An fp8 KV cache is NOT a
-free 2x win for transfer: it halves page bytes, pushing small pages deeper into
-the per-descriptor-overhead regime — measure it, don't derive it.
-
-Pattern correctness: every 256-byte chunk of a pool holds a byte derived from
-its own offset, so any page's expected contents are computable from the offset
-alone and one pool base serves every config geometry without repainting.
-Page offsets are always multiples of 256 because page_bytes are.
+Pattern correctness: every 256-byte chunk holds a byte derived from its own
+offset, so any page's expected contents follow from the offset alone and one
+pool serves every config geometry. Page offsets are always 256-multiples.
 """
 
 from __future__ import annotations
@@ -108,21 +98,20 @@ def fill_pattern(pool_u8) -> None:
     view.copy_(vals.to(torch.uint8)[:, None].expand(chunks, 256))
 
 
-def verify_transfer(pool_u8, cfg: dict, dst_table: np.ndarray, src_table: np.ndarray,
+def verify_transfer(read8, cfg: dict, dst_table: np.ndarray, src_table: np.ndarray,
                     samples: int = 16, seed: int = 7) -> tuple[bool, str]:
     """On the destination pool: page (L, dst[i]) must hold the source pool's
-    pattern at (L, src[i])'s offset. Covers both directions — after a pull the
-    initiator's pool is the destination; after a push the target's is."""
+    pattern at (L, src[i])'s offset. Covers both directions; ``read8(offset)``
+    returns 8 destination-pool bytes (see kv_pool)."""
     rng = np.random.default_rng(seed)
     pool_pages, page_bytes = cfg["pool_pages"], cfg["page_bytes"]
     for _ in range(samples):
         layer = int(rng.integers(cfg["layers"]))
         i = int(rng.integers(len(dst_table)))
         expected = _chunk_byte((layer * pool_pages + int(src_table[i])) * page_bytes)
-        dst_off = (layer * pool_pages + int(dst_table[i])) * page_bytes
-        got = pool_u8[dst_off : dst_off + 8].cpu()
-        if not bool((got == expected).all()):
-            return False, f"layer={layer} i={i} expected={expected} got={got.tolist()}"
+        got = bytes(read8((layer * pool_pages + int(dst_table[i])) * page_bytes))
+        if any(value != expected for value in got):
+            return False, f"layer={layer} i={i} expected={expected} got={list(got)}"
     return True, ""
 
 

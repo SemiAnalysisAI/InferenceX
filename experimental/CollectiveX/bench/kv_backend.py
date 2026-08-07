@@ -1,22 +1,14 @@
 #!/usr/bin/env python3
 """Backend contract for the KV-cache transfer suite.
 
-A KV backend is a point-to-point transfer library adapter. The harness owns the
-data (pool/bulk tensors, pattern fill, verification) and the protocol (which
-rank is target, lockstep barriers); the adapter owns registration, connection,
-and posting. All transfers are one-sided from the initiator, so completion is
-host-visible on the initiator and timing is wall clock around post→complete —
-no CUDA events, because no local kernel participates in an RDMA READ/WRITE.
-
-Roles: rank 0 = target (owns the remote pool), rank 1 = initiator (posts every
-transfer). `pull` (READ) models a decode worker fetching KV from prefill —
-vLLM's NixlConnector; `push` (WRITE) models prefill writing into decode —
-SGLang's disagg sender. The measured quantity is the same one-sided completion
-either way; only the payload's direction differs.
-
-Exchange of connection payloads goes through the harness-provided `exchange`
-callable (a torch.distributed object broadcast), so adapters never open their
-own side channels beyond what their library requires.
+The harness owns the data (kv_pool pools, pattern fill, verification) and the
+protocol (rank 0 = target, rank 1 = initiator, lockstep barriers); an adapter
+owns registration, connection, and posting. Transfers are one-sided from the
+initiator, so completion is host-visible and timing is wall clock around
+post-to-complete; no CUDA events, because no local kernel participates.
+`pull` (READ) is the vLLM NixlConnector shape, `push` (WRITE) the SGLang disagg
+shape; the measured quantity is the same completion either way. Connection
+payloads ride the harness object exchange, never adapter side channels.
 """
 
 from __future__ import annotations

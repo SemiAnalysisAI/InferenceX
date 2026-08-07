@@ -1,16 +1,10 @@
 #!/usr/bin/env python3
-"""MoRI-IO adapter for the KV-transfer suite (AMD's native P2P engine).
-
-MoRI-IO addresses transfers as (memory-region, offset, size) against a
-registered region, so the paged descriptor list becomes offset lists over the
-one pool registration — no per-page addressing. Its engine runs a private slow
-control plane over TCP (host/port from the SKU's socket interface); Engine and
-Memory descriptors are packed blobs exchanged through the harness.
-
+"""MoRI-IO adapter (AMD's native P2P engine). Transfers address (region,
+offset, size), so the paged list becomes offset lists over one registration.
+Engine/Memory descriptors are packed blobs exchanged through the harness; the
+engine's own control plane binds host/port from the SKU's socket interface.
 Posts are capped at ``BATCH_CAP`` offsets per batch call to bound SQ/WR usage
-(MoRI's own stress tests reproduce notify ENOMEM past that); the capped calls
-are posted back-to-back and awaited together, which is also how the SGLang
-MoRI-IO connector shapes per-layer batches.
+and awaited together, the shape the SGLang MoRI-IO connector posts.
 """
 
 from __future__ import annotations
@@ -29,8 +23,10 @@ class MoRIIOBackend(KVBackend):
 
     def __init__(self, args, role, device):
         super().__init__(args, role, device)
-        from mori.io import (BackendType, IOEngine, IOEngineConfig, PollCqMode,
-                             RdmaBackendConfig)
+        from mori.io import (BackendType, IOEngine, IOEngineConfig,
+                             MemoryLocationType, PollCqMode, RdmaBackendConfig)
+
+        self._gpu_location = MemoryLocationType.GPU
 
         try:
             import mori
@@ -57,8 +53,10 @@ class MoRIIOBackend(KVBackend):
         self._sessions = None
 
     def register(self, pool, bulk) -> None:
-        self._pool_mem = self._engine.register_torch_tensor(pool)
-        self._bulk_mem = self._engine.register_torch_tensor(bulk)
+        self._pool_mem = self._engine.register_memory(
+            pool.ptr, pool.nbytes, pool.device, self._gpu_location)
+        self._bulk_mem = self._engine.register_memory(
+            bulk.ptr, bulk.nbytes, bulk.device, self._gpu_location)
 
     def publish(self) -> dict:
         return {
