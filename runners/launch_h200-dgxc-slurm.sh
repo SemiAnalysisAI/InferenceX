@@ -65,11 +65,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
-        # c180328 includes the AgentX custom benchmark integration and passes
+        # v1.0.44 includes the AgentX custom benchmark integration and passes
         # every logical SGLang worker's Prometheus URL to AIPerf.
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
-        git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d
     elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
         git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"

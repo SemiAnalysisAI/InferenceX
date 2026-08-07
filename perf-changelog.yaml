@@ -5600,5 +5600,5 @@
   description:
     - "Refresh Actions run 30133535261 as an MTP sibling while preserving the 2P2D PCP8 prefill, TP8/DP8 HiSparse decode, Mooncake, 1M-context topology, and c8/c12/c16 search space"
     - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
-    - "Use lmsysorg/sglang:v0.5.16-cu130 and pin NVIDIA/srt-slurm c180328b98c3793ca84a1e24a030f90545eb7d5d so AIPerf receives Prometheus URLs for all logical prefill and decode workers"
+    - "Use lmsysorg/sglang:v0.5.16-cu130 and the latest NVIDIA/srt-slurm release, v1.0.44, which includes logical-worker Prometheus URL injection for AIPerf"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2529
