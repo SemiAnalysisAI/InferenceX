@@ -39,7 +39,22 @@ DURATION="${DURATION:-3600}"
 VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-round_robin}"
 
 KV_OFFLOADING="${KV_OFFLOADING:-dram}"
-KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-vllm-simple}"
+
+# KV_OFFLOAD_BACKEND and its METADATA twin must agree, and both must be empty
+# when offloading is off. process_agentic_result.py validates all three
+# together -- and it runs AFTER the replay, so a mismatch costs a full hour and
+# leaves the aggregate JSON unwritten while the aiperf artifacts look fine.
+# (That is exactly how the 2026-08-07 dram arm ended: backend set, metadata
+# unset, "KV_OFFLOAD_BACKEND is required when KV_OFFLOADING is enabled" at the
+# aggregation step.) Derive the pair from KV_OFFLOADING rather than defaulting
+# them independently.
+if [ "$KV_OFFLOADING" = "none" ]; then
+    KV_OFFLOAD_BACKEND=""
+    KV_OFFLOAD_BACKEND_METADATA=""
+else
+    KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-vllm-simple}"
+    KV_OFFLOAD_BACKEND_METADATA="${KV_OFFLOAD_BACKEND_METADATA:-{\"name\":\"$KV_OFFLOAD_BACKEND\"}}"
+fi
 
 # Matches what generate_sweep_configs.py's agentic_dram_offload_gb() would
 # compute for this arm, so the pool is the size CI would have used:
@@ -188,6 +203,7 @@ docker run --rm --name "$CONTAINER_NAME" \
     -e DURATION="$DURATION" \
     -e KV_OFFLOADING="$KV_OFFLOADING" \
     -e KV_OFFLOAD_BACKEND="$KV_OFFLOAD_BACKEND" \
+    -e KV_OFFLOAD_BACKEND_METADATA="$KV_OFFLOAD_BACKEND_METADATA" \
     -e TOTAL_CPU_DRAM_GB="$TOTAL_CPU_DRAM_GB" \
     -e GPU_MEM_UTIL="$GPU_MEM_UTIL" \
     -e VLLM_ROUTER_POLICY="$VLLM_ROUTER_POLICY" \
