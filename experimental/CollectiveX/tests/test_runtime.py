@@ -414,7 +414,7 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.version, 1)
         self.assertEqual(args.seed, self.CASE["seed"])
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
-        self.assertEqual(args.out, "results/h200-dgxc_deepep-v2_bf16_normal_decode_TS-c000.json")
+        self.assertEqual(args.out, f"results/{self.CASE['case_id']}_TS-c000.json")
 
     def test_chain_knobs_round_trip_through_the_run_ep_parser(self) -> None:
         # The chain budget is case identity like iters/trials/warmup, so it rides the same
@@ -476,7 +476,7 @@ class CaseArgvContract(unittest.TestCase):
         # Without the mode in the filename this case and its normal-mode sibling produce
         # byte-identical paths, so driving both under one timestamp overwrites one artifact.
         self.assertEqual(
-            args.out, "results/h200-dgxc_deepep-v2_bf16_low-latency_decode_TS-c000.json"
+            args.out, f"results/{ll_case['case_id']}_TS-c000.json"
         )
 
     def test_uccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
@@ -492,7 +492,7 @@ class CaseArgvContract(unittest.TestCase):
         args = self._run_ep_parser().parse_args(argv)
         self.assertEqual(args.backend, "uccl-ep")
         self.assertEqual(args.case_id, uccl_case["case_id"])
-        self.assertEqual(args.out, "results/h200-dgxc_uccl-ep_bf16_normal_decode_TS-c000.json")
+        self.assertEqual(args.out, f"results/{uccl_case['case_id']}_TS-c000.json")
 
     def test_nccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
         # A nccl-ep case flows through the same generic codec; run_ep's --backend choices must
@@ -507,7 +507,7 @@ class CaseArgvContract(unittest.TestCase):
         args = self._run_ep_parser().parse_args(argv)
         self.assertEqual(args.backend, "nccl-ep")
         self.assertEqual(args.case_id, nccl_case["case_id"])
-        self.assertEqual(args.out, "results/h200-dgxc_nccl-ep_bf16_normal_decode_TS-c000.json")
+        self.assertEqual(args.out, f"results/{nccl_case['case_id']}_TS-c000.json")
 
     def test_flashinfer_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
         # A flashinfer-ep case flows through the same generic codec; run_ep's --backend
@@ -526,7 +526,7 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual(args.backend, "flashinfer-ep")
         self.assertEqual(args.case_id, flashinfer_case["case_id"])
         self.assertEqual(
-            args.out, "results/h200-dgxc_flashinfer-ep_bf16_normal_decode_TS-c000.json"
+            args.out, f"results/{flashinfer_case['case_id']}_TS-c000.json"
         )
 
     def test_mirrored_backend_choices_match_run_ep(self) -> None:

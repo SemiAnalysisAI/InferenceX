@@ -1103,5 +1103,39 @@ class Headline(unittest.TestCase):
         self.assertIn("do not rank across them", rendered)
 
 
+class RunnerFilterIsContentBased(unittest.TestCase):
+    # --runner used to filter on `path.name.startswith(f"{runner}_")`, which coupled the
+    # summary to the result filename. Naming results by case_id broke that silently: case_id
+    # joins its factors with "-", so the underscore test can never match and the summary
+    # would have rendered an empty table instead of failing. Filtering on the SKU the row
+    # declares is immune to the filename shape.
+    def _directory(self, names):
+        directory = tempfile.mkdtemp()
+        for name, sku in names:
+            record = document(with_period=True)
+            # The shared fixture omits record_type (nothing else loads from disk);
+            # load_results discriminates on it, so a written record must carry it.
+            record["record_type"] = summarize.CASE_RECORD_TYPE
+            record["identity"]["case_factors"]["sku"] = sku
+            (Path(directory) / name).write_text(json.dumps(record))
+        return directory
+
+    def test_case_id_named_files_still_match_their_runner(self):
+        directory = self._directory([
+            ("stub-sku-stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json",
+             "stub-sku"),
+            ("other-sku-stub-deepseek-v3-low-latency-decode-ep8-uniform-bf16_TS-c000.json",
+             "other-sku"),
+        ])
+        kept = summarize.load_results(directory, "stub-sku", None)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["identity"]["case_factors"]["sku"], "stub-sku")
+
+    def test_a_foreign_sku_is_excluded_even_when_the_filename_would_match(self):
+        # The filename claims one SKU, the row declares another; the row wins.
+        directory = self._directory([("stub-sku_anything_TS-c000.json", "other-sku")])
+        self.assertEqual(summarize.load_results(directory, "stub-sku", None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

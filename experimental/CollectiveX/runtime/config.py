@@ -137,12 +137,10 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
         timing,
     ):
         argv += [flag, value]
-    # precision and mode are in the filename so a cell's legs -- shards sharing runner/backend/
-    # phase, each numbering from index 0 -- cannot collide in results/ under one shared ts.
-    out = (
-        f"results/{runner}_{case['backend']}_{case['precision']}_{case['mode']}_{case['phase']}"
-        f"_{ts}-c{index:03d}.json"
-    )
+    # case_id is the canonical identity (sku==runner, backend, workload, mode, phase, ep, routing,
+    # precision), so a new identity axis cannot be omitted from the filename the way mode once was.
+    # ts + the per-shard case index disambiguate legs that share one results/ directory.
+    out = f"results/{case['case_id']}_{ts}-c{index:03d}.json"
     argv += ["--out", out]
     sys.stdout.buffer.write(b"\0".join(part.encode() for part in argv) + b"\0")
 

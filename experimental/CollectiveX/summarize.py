@@ -15,8 +15,6 @@ CASE_RECORD_TYPE = "case-attempt"
 def load_results(directory: str, runner: str | None, timestamp: str | None) -> list[dict]:
     documents: list[dict] = []
     for path in sorted(Path(directory).glob("*.json")):
-        if runner and not path.name.startswith(f"{runner}_"):
-            continue
         if timestamp and timestamp not in path.name:
             continue
         try:
@@ -24,8 +22,15 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
                 document = json.load(handle)
         except (OSError, ValueError):
             continue
-        if isinstance(document, dict) and document.get("record_type") == CASE_RECORD_TYPE:
-            documents.append(document)
+        if not (isinstance(document, dict) and document.get("record_type") == CASE_RECORD_TYPE):
+            continue
+        # Filter on the SKU the row declares, not on the filename. Results are named
+        # `<case_id>_<ts>-cNNN.json` and case_id joins its factors with "-", so the old
+        # `startswith(f"{runner}_")` test could never match: the summary would have
+        # rendered an empty table rather than failing.
+        if runner and document.get("identity", {}).get("case_factors", {}).get("sku") != runner:
+            continue
+        documents.append(document)
     return documents
 
 
