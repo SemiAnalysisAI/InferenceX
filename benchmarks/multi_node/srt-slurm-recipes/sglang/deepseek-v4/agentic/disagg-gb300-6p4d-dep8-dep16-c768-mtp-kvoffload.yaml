@@ -128,6 +128,7 @@ backend:
     prefill:
       host: 0.0.0.0
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      enable-metrics: true
       model-path: /model/
       trust-remote-code: true
       watchdog-timeout: 86400
@@ -162,6 +163,7 @@ backend:
     decode:
       host: 0.0.0.0
       served-model-name: deepseek-ai/DeepSeek-V4-Pro
+      enable-metrics: true
       model-path: /model/
       trust-remote-code: true
       watchdog-timeout: 86400
