@@ -135,12 +135,12 @@ def resolve_matrix(
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     timing = SWEEP["timing"]
-    # Positional and append-only: chain fields go after the fresh-entry three, so an older case
-    # still decodes (runtime/config.py fills the tail from run_ep's defaults) and no case_id moves.
-    timing_profile = ":".join(str(timing[key]) for key in (
+    # Passed through as an object keyed by the sweep.json names. runtime/config.py maps each
+    # key to its run_ep flag and holds the legacy colon-string decode in one migration function.
+    timing_profile = {key: int(timing[key]) for key in (
         "iters_per_trial", "trials_per_point", "warmup_iters_per_trial",
         "chain_iters_per_trial", "chain_trials_per_point", "chain_drop",
-    ))
+    )}
     workload = SWEEP["workload"]
     targets = _selected_backends(backend)
     # Fail closed on a backend with no declared precisions. `.get(target, ("bf16",))` used to

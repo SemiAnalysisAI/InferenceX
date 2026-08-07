@@ -17,6 +17,42 @@ NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
     "rdma_traffic_class", "rail_isolated",
 }
+# Timing knobs, in the order the legacy colon-string encoded them, paired with the run_ep flag
+# each one drives. The names match configs/sweep.json so a case's timing block is readable
+# rather than positional.
+_TIMING_FLAGS = (
+    ("iters_per_trial", "--iters"),
+    ("trials_per_point", "--trials"),
+    ("warmup_iters_per_trial", "--warmup"),
+    ("chain_iters_per_trial", "--chain-iters"),
+    ("chain_trials_per_point", "--chain-trials"),
+    ("chain_drop", "--chain-drop"),
+)
+
+
+def _migrate_timing(timing: object) -> dict:
+    """The one place a legacy colon-string timing profile is decoded.
+
+    Current shards carry an object keyed by the _TIMING_FLAGS names. A replayed pre-chain
+    shard carries "iters:trials:warmup" and a replayed post-chain one all six, positionally;
+    three fields emit no --chain-* flags, so run_ep's argparse defaults supply them rather
+    than this file duplicating the values. Anything else fails closed.
+
+    Worth knowing when replaying an old shard: timing was never part of case_id, so a
+    pre-chain case re-run today lands under its original identity while measured with
+    today's chain budget.
+    """
+    names = tuple(key for key, _ in _TIMING_FLAGS)
+    if isinstance(timing, dict):
+        if set(timing) not in (set(names), set(names[:3])):
+            print(f"unrecognised timing object {timing!r}", file=sys.stderr)
+            raise SystemExit(1)
+        return timing
+    fields = str(timing).split(":")
+    if len(fields) not in (3, 6):
+        print(f"unrecognised timing profile {timing!r}", file=sys.stderr)
+        raise SystemExit(1)
+    return dict(zip(names, fields))
 
 
 def _platforms() -> dict:
@@ -125,18 +161,10 @@ def _emit_argv(case: dict, version: object, runner: str, ts: str, index: int) ->
         "--workload-name", str(case["workload"]),
         "--version", str(version),
     ]
-    # Positional and append-only (see sweep_matrix.py): three fields is the pre-chain profile, six
-    # adds the chain knobs. A three-field case emits no --chain-* flags, so those values come from
-    # run_ep's argparse defaults rather than being duplicated here; any other length fails closed.
-    timing = str(case["timing"]).split(":")
-    if len(timing) not in (3, 6):
-        print(f"unrecognised timing profile {case['timing']!r}", file=sys.stderr)
-        raise SystemExit(1)
-    for flag, value in zip(
-        ("--iters", "--trials", "--warmup", "--chain-iters", "--chain-trials", "--chain-drop"),
-        timing,
-    ):
-        argv += [flag, value]
+    timing = _migrate_timing(case["timing"])
+    for key, flag in _TIMING_FLAGS:
+        if key in timing:
+            argv += [flag, str(timing[key])]
     # case_id is the canonical identity (sku==runner, backend, workload, mode, phase, ep, routing,
     # precision), so a new identity axis cannot be omitted from the filename the way mode once was.
     # ts + the per-shard case index disambiguate legs that share one results/ directory.

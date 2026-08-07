@@ -12,7 +12,10 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+sys.path.insert(0, str(ROOT / "runtime"))
+
 import sweep_matrix  # noqa: E402
+import config  # noqa: E402
 
 
 def matrix(**options):
@@ -142,23 +145,23 @@ class MatrixTests(unittest.TestCase):
             self.assertTrue(item["case"]["case_id"].endswith(item["case"]["precision"]))
 
     def test_every_case_carries_the_chain_knobs_in_its_timing_profile(self):
-        # The producer half of the codec CaseArgvContract tests the consumer half of: a profile
-        # back at three fields passes there while every real case runs on harness defaults.
+        # The producer half of the codec CaseArgvContract tests the consumer half of: a legacy
+        # three-field profile still decodes there while every real case names all six knobs.
         document = matrix(backend="all")
-        profiles = {item["case"]["timing"] for item in document["requested_cases"]}
+        profiles = {
+            tuple(sorted(item["case"]["timing"].items()))
+            for item in document["requested_cases"]
+        }
         self.assertTrue(profiles)
+        expected = {key for key, _ in config._TIMING_FLAGS}
         for profile in sorted(profiles):
-            with self.subTest(timing=profile):
-                fields = profile.split(":")
-                self.assertEqual(
-                    len(fields), 6,
-                    "expected iters:trials:warmup:chain_iters:chain_trials:chain_drop",
-                )
-                self.assertTrue(all(field.isdigit() for field in fields), profile)
-                _, _, _, chain_iters, chain_trials, chain_drop = map(int, fields)
+            timing = dict(profile)
+            with self.subTest(timing=timing):
+                self.assertEqual(set(timing), expected)
+                self.assertTrue(all(isinstance(v, int) for v in timing.values()), timing)
                 # A chain that discards everything it measured leaves nothing to reduce.
-                self.assertGreater(chain_iters, chain_drop)
-                self.assertGreater(chain_trials, 0)
+                self.assertGreater(timing["chain_iters_per_trial"], timing["chain_drop"])
+                self.assertGreater(timing["chain_trials_per_point"], 0)
 
     def test_low_latency_is_decode_only_and_capability_gated(self):
         # Low-latency cases are additive: they appear only for (sku, backend, ep) cells

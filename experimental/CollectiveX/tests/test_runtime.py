@@ -366,7 +366,13 @@ class CaseArgvContract(unittest.TestCase):
         "scale_up_transport": "nvlink", "scale_out_transport": "rdma",
         "transport": "nvlink-rdma", "topology_class": "h200-nvlink-rdma",
         "hidden": 7168, "topk": 8, "experts": 256, "seed": 67,
-        "ladder": "1 2 4", "timing": "8:256:32",
+        "ladder": "1 2 4",
+        # The current producer shape: an object naming every knob (sweep_matrix emits this).
+        # The colon-string fixtures below are legacy shards, exercising _migrate_timing.
+        "timing": {
+            "iters_per_trial": 8, "trials_per_point": 256, "warmup_iters_per_trial": 32,
+            "chain_iters_per_trial": 128, "chain_trials_per_point": 4, "chain_drop": 16,
+        },
         "case_id": "h200-dgxc-deepep-v2-deepseek-v3-normal-decode-ep16-uniform-bf16",
         "suite": "ep-core", "workload": "deepseek-v3",
     }
@@ -418,23 +424,41 @@ class CaseArgvContract(unittest.TestCase):
 
     def test_chain_knobs_round_trip_through_the_run_ep_parser(self) -> None:
         # The chain budget is case identity like iters/trials/warmup, so it rides the same
-        # timing string; hardcoded in the harness, two chain lengths would look identical.
-        case = {**self.CASE, "timing": "8:256:32:128:4:16"}
-        argv = self._case_argv(["16", "2", "8", "8"], case=case)
+        # timing block; hardcoded in the harness, two chain lengths would look identical.
+        argv = self._case_argv(["16", "2", "8", "8"])
         args = self._run_ep_parser().parse_args(argv)
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
         self.assertEqual((args.chain_iters, args.chain_trials, args.chain_drop), (128, 4, 16))
 
-    def test_a_timing_profile_without_chain_knobs_still_round_trips(self) -> None:
-        # Sweep `version` does not bump for the chain, so a shard written before it -- or one
-        # built by hand -- must still produce a runnable argv rather than a codec crash.
-        args = self._run_ep_parser().parse_args(self._case_argv(["16", "2", "8", "8"]))
-        for flag in ("chain_iters", "chain_trials", "chain_drop"):
-            with self.subTest(flag=flag):
-                self.assertIsInstance(getattr(args, flag), int)
-        # A chain that drops everything it measured has no samples left to reduce.
-        self.assertGreater(args.chain_iters, args.chain_drop)
-        self.assertGreater(args.chain_trials, 0)
+    def test_a_legacy_colon_string_profile_still_decodes(self) -> None:
+        # Sweep `version` does not bump for the codec change, so a shard staged before it --
+        # or one built by hand -- must still produce a runnable argv. Both legacy arities:
+        # six positional fields, and the pre-chain three whose chain knobs then come from
+        # run_ep's own defaults rather than being duplicated in the codec.
+        for profile, chain in (("8:256:32:128:4:16", (128, 4, 16)), ("8:256:32", None)):
+            with self.subTest(timing=profile):
+                args = self._run_ep_parser().parse_args(self._case_argv(
+                    ["16", "2", "8", "8"], case={**self.CASE, "timing": profile},
+                ))
+                self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
+                if chain:
+                    self.assertEqual(
+                        (args.chain_iters, args.chain_trials, args.chain_drop), chain
+                    )
+                    continue
+                for flag in ("chain_iters", "chain_trials", "chain_drop"):
+                    self.assertIsInstance(getattr(args, flag), int)
+                # A chain that drops everything it measured has no samples left to reduce.
+                self.assertGreater(args.chain_iters, args.chain_drop)
+                self.assertGreater(args.chain_trials, 0)
+
+    def test_a_timing_object_with_unknown_keys_fails_closed(self) -> None:
+        # The object path must be as strict as the arity check on the string path, or a
+        # renamed knob would silently fall back to run_ep's default.
+        for timing in ({"iters_per_trial": 8}, {**self.CASE["timing"], "extra": 1}, {}):
+            with self.subTest(timing=timing):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": timing})
 
     def test_a_timing_profile_of_the_wrong_arity_fails_closed(self) -> None:
         # Three fields is the pre-chain profile and six is the chain profile; any other length
