@@ -1121,6 +1121,35 @@ else
     echo "MLA_QLEN_PAD=0: no qSeqLen padding (k must be one of 0,1,3,7)"
 fi
 
+# ---- 6/7 KDA state_indices fix (needed for eager warmup) --------------------
+# fused_recurrent_kda rejects a state_indices tensor that is not already 1-D and
+# unit-stride. Under a captured cudagraph the caller always supplies a flat
+# persistent buffer, so it never fires. On the EAGER warmup path it does:
+# warmup.py:369 warmup_kernels -> _run_decode_step builds mixed spec / non-spec
+# batches ( ([0,1],[spec,False]) and ([0,1],[False,False]) ) that no graph
+# covers, and the spec state indices arrive there as a view.
+#
+# Confirmed graph-mode-independent: runs 31155831756 and 31164069210
+# (FULL_DECODE_ONLY) and 31176010168 (FULL_AND_PIECEWISE) all died at the same
+# warmup_kernels -> _run_decode_step call site, so switching cudagraph_mode does
+# not move it.
+#
+# reshape(-1).contiguous() is a no-op on the shapes the graph path already
+# supplies, so this normalises rather than changing semantics.
+KDA_STATE_IDX_FIX="${KDA_STATE_IDX_FIX:-1}"
+if [ "$KDA_STATE_IDX_FIX" = "1" ]; then
+    KDA_PY="$(cd "$(dirname "$0")/patches" && pwd)/vllm_kda_state_indices.py"
+    [ -f "$KDA_PY" ] || { echo "ERROR: $KDA_PY missing" >&2; exit 1; }
+    python3 "$KDA_PY" --diff-out "$RESULT_DIR/vllm_kda_state_indices.diff" \
+        2>&1 | tee "$RESULT_DIR/vllm_kda_state_indices.log"
+    # tee masks python3's status; check it explicitly. A silently-unpatched run
+    # would be indistinguishable from the three runs this exists to change.
+    [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "ERROR: KDA state_indices patch failed" >&2; exit 1; }
+    echo "6/7 KDA state_indices fix (needed for eager warmup)"
+else
+    echo "KDA_STATE_IDX_FIX=0: leaving fused_recurrent_kda state_indices check at upstream"
+fi
+
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
