@@ -11,12 +11,12 @@ set -euo pipefail
 # its own launcher rather than a flag on the probe's.
 #
 # Defaults reproduce the arm under test:
-#   DEP8 (TP8 + DP-attention + EP8), round_robin routing, DRAM KV offload
+#   DEP8 (TP8 + DP-attention + EP8), consistent_hash routing, DRAM KV offload
 #   via SimpleCPUOffloadConnector, MTP on, CONC=32.
 #
 # Usage:
 #   ./dsv4_agentic_g05.sh
-#   CONC=32 VLLM_ROUTER_POLICY=consistent_hash ./dsv4_agentic_g05.sh
+#   CONC=32 VLLM_ROUTER_POLICY=round_robin ./dsv4_agentic_g05.sh
 #   DP_ATTENTION=false EP_SIZE=1 KV_OFFLOADING=none ./dsv4_agentic_g05.sh   # TP8 baseline
 
 IMAGE="${IMAGE:-jiahcao/vllm-dsv4:optimal-fse-aiter4269}"
@@ -36,7 +36,16 @@ PORT="${PORT:-8500}"
 # rather than producing a smaller-but-valid number.
 DURATION="${DURATION:-3600}"
 
-VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-round_robin}"
+# Match the recipe default (dsv4_fp4_mi355x_vllm_mtp.sh) and the B200 reference
+# recipe (dsv4_fp4_b200_vllm_mtp.sh), both of which use consistent_hash, so the
+# launcher does not silently run a different policy than the recipe it wraps.
+#
+# Note this is a consistency fix, not a performance one: single-node runs give
+# the router exactly one upstream worker (worker_urls: ["http://localhost:PORT"]),
+# and with one worker every policy behaves identically. The 8 DP ranks sit behind
+# that server's own DP load balancer, which the router does not reach. The policy
+# only starts to matter with multiple server URLs.
+VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
 
 KV_OFFLOADING="${KV_OFFLOADING:-dram}"
 
