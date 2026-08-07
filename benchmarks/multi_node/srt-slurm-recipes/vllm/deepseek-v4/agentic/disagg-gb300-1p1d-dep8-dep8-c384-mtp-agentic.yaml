@@ -65,7 +65,7 @@ backend:
   mooncake_kv_store:
     store_config:
       metadata_server: "P2PHANDSHAKE"
-      global_segment_size: "150GB"
+      global_segment_size: "180GB"
       local_buffer_size: "4GB"
       protocol: "rdma"
       device_name: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
@@ -184,6 +184,7 @@ backend:
 
 sbatch_directives:
   cpus-per-task: "72"
+  exclude: "im-gb300-r01-c002,im-gb300-r01-c003"
   mem: "0"
 
 srun_options:
@@ -199,6 +200,10 @@ benchmark:
     IS_MULTINODE: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    # Keep the 815 mandatory primers below Dynamo's prefill-route timeout.
+    AIPERF_WARMUP_CONCURRENCY_RAMP_DURATION: "60"
+    # Avoid concurrent readers observing a mismatched mmap data/index pair.
+    AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

@@ -5592,3 +5592,13 @@
   description:
     - "Kimi K2.5 NVFP4 B300 vLLM: nightly image, TP/DEP/TEP sweep, TP8 conc-1 only, DEP gmu 0.85"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2513
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Double the three GB300 Dynamo-vLLM AgentX MTP P/D test points from concurrency 128/256/384 to 256/512/768 to validate the AIPerf v1.0.1 client."
+    - "Increase the embedded Mooncake global segment from 150GB to 180GB per GPU for all three P/D recipes."
+    - "Temporarily exclude im-gb300-r01-c002 and im-gb300-r01-c003 from image staging and these P/D allocations while their shared filesystem mounts are unhealthy."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2302

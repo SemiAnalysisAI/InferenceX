@@ -1,7 +1,8 @@
-name: "svf-vllm-disagg-gb300-1p1d-dep4-dep8-c128-mtp-agentic"
+name: "svf-vllm-disagg-gb300-2p1d-dep8-dep16-c256-mtp-agentic"
 
-# Validated GB300 AgentX MTP3 low-latency topology: one DEP4 prefill worker
-# feeds one DEP8 decode worker at concurrency 128.
+# Validated GB300 AgentX MTP3 topology: two DEP8 prefill workers feed one
+# DEP16 decode worker at concurrency 256. Decode consumes P/D KV through NIXL
+# and MooncakeStore but skips Mooncake prefix lookup to avoid CPU overhead.
 
 model:
   path: "deepseek-v4-pro"
@@ -20,6 +21,10 @@ dynamo:
   version: "1.3.0.dev20260720"
   install: true
 
+environment:
+  # Mooncake prefix-block hashes must match across processes and nodes.
+  PYTHONHASHSEED: "0"
+
 setup_script: vllm-container-deps.sh
 
 slurm:
@@ -34,20 +39,16 @@ resources:
   gpus_per_node: 4
   het_jobs: false
   spread_workers: false
-  prefill_nodes: 1
-  decode_nodes: 2
-  prefill_workers: 1
+  prefill_nodes: 4
+  decode_nodes: 4
+  prefill_workers: 2
   decode_workers: 1
-  gpus_per_prefill: 4
-  gpus_per_decode: 8
+  gpus_per_prefill: 8
+  gpus_per_decode: 16
 
 infra:
   etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
-
-environment:
-  # Mooncake prefix-block hashes must match across processes and nodes.
-  PYTHONHASHSEED: "0"
 
 frontend:
   type: dynamo
@@ -78,7 +79,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 4
+      data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-cumem-allocator: true
       enable-expert-parallel: true
@@ -89,8 +90,7 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      max-cudagraph-capture-size: 256
-      gpu-memory-utilization: 0.92
+      gpu-memory-utilization: 0.90
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
@@ -99,25 +99,25 @@ backend:
       numa-bind: true
       numa-bind-nodes: [0, 0, 1, 1]
     decode:
-      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_both","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
+      kv-transfer-config: '{"kv_connector":"MultiConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"connectors":[{"kv_connector":"NixlConnector","kv_role":"kv_consumer","kv_load_failure_policy":"fail","kv_buffer_device":"cuda","kv_connector_extra_config":{"enforce_handshake_compat":false,"enable_cross_layers_blocks":false}},{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_consumer","kv_connector_extra_config":{"load_async":true,"lookup_async":false,"enable_lookup":false,"enable_cross_layers_blocks":false,"enable_offload":false}}]}}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      data-parallel-size: 8
+      data-parallel-size: 16
       data-parallel-rpc-port: 13345
       enable-cumem-allocator: true
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       max-model-len: 1048576
-      max-num-seqs: 256
-      max-num-batched-tokens: 1024
+      max-num-seqs: 64
+      max-num-batched-tokens: 256
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
-      max-cudagraph-capture-size: 1024
-      gpu-memory-utilization: 0.92
+      max-cudagraph-capture-size: 256
+      gpu-memory-utilization: 0.90
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: "deepseek_v4"
       attention-config: '{"backend":"FLASHINFER_MLA_SPARSE_DSV4","use_prefill_query_quantization":true,"use_fp4_indexer_cache":true}'
@@ -135,7 +135,8 @@ backend:
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
+    VLLM_MOONCAKE_STORE_SEND_THREADS: "8"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
     UCX_MEMTYPE_CACHE: "n"
     UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
@@ -143,13 +144,13 @@ backend:
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
     VLLM_CONNECTOR_PREFETCH_DEPTH: "8"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-c128-mtp-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-2p1d-prefill-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
@@ -164,7 +165,7 @@ backend:
     VLLM_V2_WARMUP_MAX_NUM_SEQS: "20"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    VLLM_MOONCAKE_LOAD_RECV_THREADS: "20"
+    VLLM_MOONCAKE_LOAD_RECV_THREADS: "4"
     VLLM_ALLREDUCE_USE_SYMM_MEM: "0"
     UCX_MEMTYPE_CACHE: "n"
     UCX_NET_DEVICES: "mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1"
@@ -172,11 +173,11 @@ backend:
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
-    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "1"
+    NCCL_IB_HCA: "mlx5_0,mlx5_1,mlx5_2,mlx5_3"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_DSV4_MEGA_FP8_COMBINE: "1"
-    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-1p1d-c128-mtp-{job_id}"
+    DG_JIT_CACHE_DIR: "/tmp/dg-cache-dsv4-gb300-2p1d-decode-{job_id}"
     MC_ENABLE_DEST_DEVICE_AFFINITY: "1"
     MC_STORE_CLIENT_METRIC: "1"
     MC_STORE_CLIENT_METRIC_INTERVAL: "5"
@@ -185,6 +186,7 @@ backend:
 sbatch_directives:
   cpus-per-task: "72"
   exclude: "im-gb300-r01-c002,im-gb300-r01-c003"
+  mem: "0"
 
 srun_options:
   container-remap-root: ""
@@ -199,6 +201,7 @@ benchmark:
     IS_MULTINODE: "true"
     AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_AGENTIC_CACHE_WARMUP_DURATION: "600"
     # Avoid concurrent readers observing a mismatched mmap data/index pair.
     AIPERF_DATASET_MMAP_CACHE_ENABLED: "false"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"

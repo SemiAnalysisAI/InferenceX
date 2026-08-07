@@ -1887,6 +1887,12 @@ build_replay_cmd() {
     # state. Do not pass --burst-phase-starts: AIPerf main's spread default
     # preserves each lane's recorded phase-start offset.
     REPLAY_CMD+=" --warmup-requests-per-lane $warmup_requests_per_lane"
+    # High-concurrency AgentX recipes can pace the synthesized warmup phase
+    # without changing profiling concurrency. This keeps mandatory snapshot
+    # primers from overwhelming a narrow P/D ingress before the measured run.
+    if [ -n "${AIPERF_WARMUP_CONCURRENCY_RAMP_DURATION:-}" ]; then
+        REPLAY_CMD+=" --warmup-concurrency-ramp-duration $AIPERF_WARMUP_CONCURRENCY_RAMP_DURATION"
+    fi
     # Limit observed end-to-start idle time across each complete trajectory
     # tree, including root and subagent streams. AIPerf advances that tree's
     # pending timers uniformly without bypassing spawn/join dependencies or
