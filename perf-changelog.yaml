@@ -5537,3 +5537,56 @@
     - "Require vLLM backend metrics in every AgentX artifact."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2518
   
+- config-keys:
+    - kimik3-fp4-h200-vllm-agentic
+  description:
+    - "Add Day-0 Kimi K3 FP4 AgentX H200 performance recipes from the official vLLM guidance, using fit-safe TP/DP/EP topologies, optional SimpleCPU KV offload, and a five-minute reconstructed trace idle-gap cap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2353
+
+- config-keys:
+    - kimik3-fp4-gb200-dynamo-vllm-agentic
+  description:
+    - "Add Kimi K3 MXFP4 GB200 AgentX performance points following the official vLLM recipe: TP16 (conc 1-8), TEP16 (conc 8-32), and TP4 x DP4 = EP16 (conc 32-256). https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=gb200"
+    - "Test vLLM Simple CPU KV offloading on the Kimi K3 GB200 DEP16 throughput profile at AgentX concurrency 128, 192, 256, and 384."
+    - "Correct the pure TP16 result identity to EP1 so it remains distinct from the TEP16 point at concurrency 8."
+    - "Use the upstream vllm/vllm-openai:kimi-k3 image with the pinned Kimi K3-enabled Dynamo 1.3.0 source build installed in-container, and enable Kimi K3 DSpark level 2 with the prescribed 2.51 golden acceptance length."
+    - "Use FlashInfer TRT-LLM MoE for DSpark DEP to avoid DeepGEMM grid-barrier failures under MRV2."
+    - "Load DEP weights with standard safetensors to avoid fastsafetensors transient HBM exhaustion with FlashInfer MoE."
+    - "Size DEP CUDA-graph captures to the actual per-engine frontier concurrency (64 regular, 96 offload), using even-sequence captures for the high-concurrency offload arm to preserve the full 1M context while leaving FlashInfer runtime workspace."
+    - "Pin the Qwen B200/B300 AgentX AIPerf warmup-handoff revision, cap recorded per-trace idle gaps at 300 seconds, report vLLM cached prompt tokens, and let low-concurrency TP collect a larger live error sample before applying the unchanged 10% final validity gate."
+    - "Allow high-concurrency full-context AgentX jobs to complete the canonical warmup and one-hour profile with a 12-hour Slurm limit and 13-hour workflow envelope."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2404
+  
+- config-keys:
+    - qwen3.5-fp8-b200-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 AgentX on B200 with SGLang native NEXTN MTP"
+    - "Mirror the FP4 AgentX MTP concurrency and HiCache grids, scaling TP2 to TP4 and TP4 to TP8 for the larger FP8 checkpoint"
+    - "Use golden synthetic acceptance length 3.39"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2514
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 AgentX on B300 with SGLang native NEXTN MTP"
+    - "Mirror the FP4 AgentX MTP TP4 and TP2/EP2 concurrency grids, including the TP2/EP2 HiCache arm"
+    - "Use golden synthetic acceptance length 3.39"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2515
+  
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang-agentic-mtp
+  description:
+    - "Add the MTP speculative-decoding (spec-decoding: mtp) variant of qwen3.5-fp8-h100-sglang-agentic: Qwen3.5-397B-A17B FP8 on H100 with SGLang, agentic-coding scenario only, routed via spec-decoding=mtp to benchmarks/single_node/agentic/qwen3.5_fp8_h100_mtp.sh."
+    - "Speculative config mirrors fixed_seq_len/qwen3.5_fp8_h100_mtp.sh: SGLANG_ENABLE_SPEC_V2=1 with --speculative-algorithm EAGLE, --speculative-num-steps 3, --speculative-eagle-topk 1, --speculative-num-draft-tokens 4 -- 3 speculative tokens per verification step."
+    - "Throughput runs pin SGLang simulated acceptance to the committed golden AL: SGLANG_SIMULATE_ACC_LEN=3.39 (Qwen3.5 MTP curve at K=3, thinking_on, golden_al_distribution/qwen3.5_mtp.yaml), SGLANG_SIMULATE_ACC_METHOD=match-expected, SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token -- the exact triple golden_al_distribution/README.md prescribes for SGLang and the same AL the GB300 Qwen3.5 AgentX srt-slurm recipes pin. EVAL_ONLY runs leave simulated acceptance off and keep real verification, since committing drafted tokens regardless of the target logits would score the eval at ~0."
+    - "Image moves from the non-MTP agentic sibling's lmsysorg/sglang:v0.5.12-cu130 to v0.5.16-cu130: SGLANG_SIMULATE_ACC_TOKEN_MODE is only read from v0.5.16 (SIMULATE_ACC_LEN / SIMULATE_ACC_METHOD exist further back), so an older image would silently ignore the token-mode half of the AgentX contract. v0.5.14 is already the version the fixed-seq-len H100 Qwen3.5 MTP entry runs, so this is one minor version beyond an exercised build."
+    - "Serve shape is otherwise identical to the non-MTP agentic sibling (SGLang HiCache host-DRAM offload with page-size 64 / kernel IO / page_first layout, flashinfer attention on sm_90, --quantization fp8, --kv-cache-dtype fp8_e4m3, --mamba-ssm-dtype bfloat16, --mem-fraction-static 0.75, qwen3 reasoning / qwen3_coder tool-call parsing inherited from the shared agentic replay path, the multi_tokenizer cached_tokens_details patch), so the spec-decode delta is readable at equal concurrency."
+    - "Search space now runs on the AgentX MTP concurrency grid: the GPU-resident row [1, 4, 8, 12, 16] and the HiCache row [4, 8, 12, 16]. Every step is at least 2 concurrency apart and every arm stops hard at conc 16 -- single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and past conc 16 these SKUs are into the post-HBM-cliff thrashing regime that the non-MTP sweeps already characterized, which is not worth one GPU job per point."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2427
