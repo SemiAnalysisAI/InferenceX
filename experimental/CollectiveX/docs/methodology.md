@@ -436,6 +436,16 @@ clean — a defect confined to interior pairs that heals by the final pair is ou
 evidence. Check 6 is reported per row as `correctness.chain_last_output_passed` (ANDed across
 trials) and check 7 as `correctness.post_chain_state_passed`; both are **folded into
 `correctness.passed`**, so either failure fails the leg exactly as any other oracle failure does.
+
+Check 6 also publishes `correctness.chain_last_output_error` — the worst chained-vs-drained
+relative error, cross-rank MAX, **reported whether or not the verdict passed**. Read it before
+reading the verdict. The check assumes a regime defect lands orders of magnitude past
+`COMBINE_REL_TOL` while ordinary kernel non-determinism stays well inside it, and that assumption
+is not free: FlashInfer EP accumulates its combine in the payload dtype (a BF16 slot-tree) rather
+than FP32, so its rounding over a large receive plane is far coarser than a backend reducing in
+FP32. A verdict alone cannot separate "the transport corrupted this" from "this tolerance is too
+tight for this accumulator", and the two call for opposite responses. The magnitude is the
+discriminator; a failure reported without it should not be read as evidence of corruption.
 (`post_chain_state_passed` was previously published as `chain_regime_passed`, a name that
 overclaimed — a fresh post-chain oracle proves the state, not the chain's outputs. Artifacts from
 older harnesses carry the old name, where `null` meant the chain never ran; a validated chain

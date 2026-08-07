@@ -603,15 +603,20 @@ def _chain_output_matches(chained, drained):
     invisible to the drained oracles and to the fresh post-chain check alike. Judged with the
     oracle's elementwise tolerance rather than bit equality because a combine kernel is not
     required to be order-deterministic across invocations; a regime defect produces errors
-    orders of magnitude past COMBINE_REL_TOL, never inside it.
+    orders of magnitude past COMBINE_REL_TOL, never inside it -- an assumption the returned
+    magnitude exists to CHECK rather than assert, since a verdict alone cannot distinguish a
+    corrupt result from one that merely landed just outside the tolerance.
+
+    Returns (within_tolerance, worst_relative_error).
     """
     if chained.shape != drained.shape:
-        return False
+        return False, float("inf")
     if not chained.numel():
-        return True
+        return True, 0.0
     error = (chained.float() - drained.float()).abs()
     relative = error / drained.float().abs().clamp_min(COMBINE_MAG_FLOOR)
-    return bool(float(relative.max().item()) < COMBINE_REL_TOL)
+    worst = float(relative.max().item())
+    return worst < COMBINE_REL_TOL, worst
 
 
 def _run_expert_oracle(
@@ -1067,6 +1072,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # ANDed across chain trials by Pass 2b: each trial's final chained output against
             # a drained pair through the same code path.
             "chain_output_local_ok": 1,
+            # Worst chained-vs-drained relative error seen at this point, kept even when the
+            # verdict passes: a magnitude creeping toward the tolerance is the early warning a
+            # bool cannot give, and the only way to tell a real corruption from a tight gate.
+            "chain_output_error": 0.0,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
@@ -1150,9 +1159,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # the harness, not of the transport.
             drained = backend.run_roundtrip(problems[T], staged=chained["staged"])
             torch.cuda.synchronize()
-            gate[T]["chain_output_local_ok"] &= int(
-                _chain_output_matches(chained["combined"], drained)
-            )
+            output_ok, output_error = _chain_output_matches(chained["combined"], drained)
+            gate[T]["chain_output_local_ok"] &= int(output_ok)
+            gate[T]["chain_output_error"] = max(gate[T]["chain_output_error"], output_error)
             pair = chained["pair"]
             pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
             chain_pool[T] += pair_median
@@ -1253,6 +1262,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         chain_last_output_passed = bool(
             _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
         )
+        # Published whether or not the verdict passed. Without it the artifact records THAT the
+        # chained output differed but never BY HOW MUCH, which is the difference between a
+        # transport corruption and a tolerance set too tight for a backend's accumulator.
+        chain_output_error = _reduce_vec(
+            torch, dist, device, [g["chain_output_error"]], MAX
+        )[0]
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
         throughput = {
@@ -1338,6 +1353,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 # validating those would put device work inside the timed loops. Folded
                 # into `passed`.
                 "chain_last_output_passed": chain_last_output_passed,
+                # How far apart they actually were (cross-rank MAX), published whether or not
+                # the verdict passed. A bool alone cannot separate a transport corruption from
+                # a tolerance too tight for a backend's accumulator, and reading it as the
+                # former without this number is a mistake this field exists to prevent.
+                "chain_last_output_error": chain_output_error,
                 # Whether the full oracle also passed against the state the free-running chain
                 # left behind (a FRESH dispatch+combine after the final trial). Renamed from
                 # `chain_regime_passed`, which overclaimed: older artifacts carry that name,

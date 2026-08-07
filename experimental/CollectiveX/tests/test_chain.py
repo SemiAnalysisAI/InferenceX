@@ -706,7 +706,7 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
 
     def fake_output_match(chained, drained):
         output_checks.append((chained, drained))
-        return chain_output_ok
+        return chain_output_ok, 0.0 if chain_output_ok else 1.0
 
     with tempfile.TemporaryDirectory() as directory:
         out = Path(directory) / "result.json"
@@ -1054,27 +1054,37 @@ class ChainOutputCheck(unittest.TestCase):
 
     def test_identical_outputs_match(self):
         values = [1.0, -3.5, 0.25]
-        self.assertTrue(ep_harness._chain_output_matches(_Vec(values), _Vec(values)))
+        ok, error = ep_harness._chain_output_matches(_Vec(values), _Vec(values))
+        self.assertTrue(ok)
+        self.assertEqual(error, 0.0)
 
     def test_a_shape_mismatch_never_matches(self):
-        self.assertFalse(
-            ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 2.0, 3.0]))
-        )
+        ok, error = ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 2.0, 3.0]))
+        self.assertFalse(ok)
+        # No elementwise error is defined across different shapes; infinity keeps a
+        # cross-rank MAX from reporting a small number for a structural mismatch.
+        self.assertEqual(error, float("inf"))
 
     def test_empty_outputs_match(self):
         # A rank that legitimately combined nothing under this routing.
-        self.assertTrue(ep_harness._chain_output_matches(_Vec([]), _Vec([])))
+        self.assertEqual(ep_harness._chain_output_matches(_Vec([]), _Vec([])), (True, 0.0))
 
     def test_run_to_run_jitter_within_tolerance_matches(self):
         drained = [1.0, -2.0]
         chained = [value * (1.0 + ep_harness.COMBINE_REL_TOL / 2) for value in drained]
-        self.assertTrue(ep_harness._chain_output_matches(_Vec(chained), _Vec(drained)))
+        ok, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
+        self.assertTrue(ok)
+        # Reported even on a pass: a magnitude creeping toward the tolerance is the early
+        # warning the verdict alone cannot give.
+        self.assertAlmostEqual(error, ep_harness.COMBINE_REL_TOL / 2)
 
     def test_regime_corruption_does_not_match(self):
         # The defect class this exists for lands orders of magnitude past tolerance.
-        self.assertFalse(
-            ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 4.0]))
-        )
+        ok, error = ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 4.0]))
+        self.assertFalse(ok)
+        # Orders of magnitude past tolerance, which is what separates this class from a
+        # backend whose accumulator merely rounds past the gate.
+        self.assertGreater(error, 10 * ep_harness.COMBINE_REL_TOL)
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps
@@ -1083,7 +1093,7 @@ class ChainOutputCheck(unittest.TestCase):
         self.assertGreater(
             abs(chained - drained) / abs(drained), ep_harness.COMBINE_REL_TOL
         )
-        self.assertTrue(ep_harness._chain_output_matches(_Vec([chained]), _Vec([drained])))
+        self.assertTrue(ep_harness._chain_output_matches(_Vec([chained]), _Vec([drained]))[0])
 
 
 # ---- from test_summarize_headline.py ----------------------------------------------
