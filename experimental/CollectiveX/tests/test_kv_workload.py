@@ -195,6 +195,19 @@ class Verify(unittest.TestCase):
             self.assertTrue((pattern[offset : offset + 8] == expected).all(), offset)
 
 
+class SweepConfigConsistency(unittest.TestCase):
+    def test_kv_sweep_precisions_match_the_workload_model(self):
+        # sweep_matrix schedules from the JSON map (it must stay stdlib-only);
+        # the workload model owns the truth and plan_config fail-closes on a
+        # mismatch at runtime. This pins the two together at PR time.
+        import json
+
+        sweep = json.loads((ROOT / "configs" / "kv_sweep.json").read_text())
+        for workload, precisions in sweep["workloads"].items():
+            preset = kv_workload.PRESETS[workload.removeprefix("kv-")]
+            self.assertEqual(tuple(precisions), preset["precisions"], workload)
+
+
 class Percentiles(unittest.TestCase):
     def test_pcts(self):
         stats = kv_workload.pcts([5.0, 1.0, 3.0, 2.0, 4.0])

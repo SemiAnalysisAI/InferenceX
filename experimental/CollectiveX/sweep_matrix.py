@@ -12,7 +12,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "bench"))
 
 import ep_harness  # noqa: E402
-import kv_workload  # noqa: E402
 
 
 TOPOLOGY_FIELDS = (
@@ -112,13 +111,12 @@ def _kv_cases(sku: str, platform: dict[str, Any], fabric: str, backend: str,
     timing_profile = ":".join(str(timing[key]) for key in (
         "warmup_per_trial", "reps_per_trial", "trials_per_point"))
     cases = []
-    for workload in KV_SWEEP["workloads"]:
-        # A preset's dtype mix can be architectural (dsv4's fp8 slots), so the
-        # workload model owns which sweep precisions apply to it.
-        preset_precisions = kv_workload.PRESETS[workload.removeprefix("kv-")]["precisions"]
-        for precision in KV_SWEEP["precisions"]:
-            if precision not in preset_precisions:
-                continue
+    # A workload's dtype mix can be architectural (dsv4's fp8 slots), so the
+    # sweep config maps each workload to its precisions; a test pins the map to
+    # the workload model's own PRESETS (this file stays stdlib-importable for
+    # the runner-side matrix/extract steps, so it cannot import kv_workload).
+    for workload, preset_precisions in KV_SWEEP["workloads"].items():
+        for precision in preset_precisions:
             if selected_precisions and precision not in selected_precisions:
                 continue
             case = {

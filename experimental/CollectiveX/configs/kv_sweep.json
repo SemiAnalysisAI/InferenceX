@@ -1,14 +1,15 @@
 {
   "version": 1,
   "suite": "kv-transfer",
-  "workloads": [
-    "kv-dsv4",
-    "kv-gqa"
-  ],
-  "precisions": [
-    "bf16",
-    "fp8"
-  ],
+  "workloads": {
+    "kv-dsv4": [
+      "fp8"
+    ],
+    "kv-gqa": [
+      "bf16",
+      "fp8"
+    ]
+  },
   "isl_ladder": [
     512,
     4096,
