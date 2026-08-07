@@ -130,7 +130,8 @@
         "account": "benchmark",
         "qos": "batch_1_qos",
         "squash_dir": "/data/home/sa-shared/collectivex/containers",
-        "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache"
+        "enroot_cache_path": "/data/home/sa-shared/collectivex/enroot-cache",
+        "exclude_nodes": "im-gb300-r01-c003"
       }
     },
     "mi325x-tw": {

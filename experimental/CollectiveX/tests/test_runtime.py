@@ -320,6 +320,29 @@ class StageContract(unittest.TestCase):
                 except SystemExit:
                     self.fail(f"common.sh invokes stage.py with an argv shape it rejects: {argv}")
 
+    # config.py accepts `exclude_nodes` for every SKU, but only the launcher named by that SKU's
+    # `launcher` field can turn it into salloc --exclude. When a launcher ignores it the key is
+    # accepted, exported, and silently dropped -- so a tray quarantined in the registry keeps
+    # getting scheduled and the config reads like a fix that never fired. That is exactly what
+    # launch_gb-nv.sh did: it built no allocation array at all.
+    def test_every_skus_denylist_reaches_its_launcher(self) -> None:
+        registry = json.loads(
+            (RUNTIME.parent / "configs" / "platform_config.json").read_text())["platforms"]
+        launchers = RUNTIME.parent / "launchers"
+        checked = 0
+        for sku, platform in registry.items():
+            if not platform.get("operator", {}).get("exclude_nodes"):
+                continue
+            script = launchers / f"launch_{platform['launcher']}.sh"
+            self.assertTrue(script.exists(), f"{sku} names a launcher that does not exist")
+            self.assertIn(
+                "COLLX_EXCLUDE_NODES", script.read_text(),
+                f"{sku} declares exclude_nodes but {script.name} never reads it, "
+                "so the denylist is silently discarded",
+            )
+            checked += 1
+        self.assertGreater(checked, 0, "no SKU declares exclude_nodes -- test proves nothing")
+
     def test_contract_test_has_teeth(self) -> None:
         # A flag common.sh must never pass has to be rejected by the parser — this is the exact
         # failure (unrecognized arguments: --allow-parent-owner) the reconcile removed.
