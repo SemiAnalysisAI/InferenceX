@@ -47,6 +47,11 @@ def _log(msg):
     print(f"[Synthetic AR] {msg}")
 
 
+def _enabled(name: str) -> bool:
+    """Return whether an environment flag is explicitly enabled."""
+    return os.environ.get(name, "false").strip().lower() == "true"
+
+
 def _yaml_key(model_prefix):
     return MODEL_PREFIX_TO_YAML_KEY.get(model_prefix, model_prefix)
 
@@ -120,7 +125,11 @@ def _resolve_al(config_text, injector, ref_yaml):
 
 
 def inject(config_file, framework):
-    if os.environ.get("SYNTHETIC_ACCEPTANCE", "false") != "true":
+    if _enabled("EVAL_ONLY"):
+        print("[Synthetic AL] EVAL_ONLY=true: keeping real MTP recipe")
+        return 0
+
+    if not _enabled("SYNTHETIC_ACCEPTANCE"):
         return 0
 
     injector = get_injector(framework)
@@ -144,8 +153,10 @@ def inject(config_file, framework):
     new_content, count = injector.rewrite(content, al, _log)
 
     if count == 0:
-        _log("WARNING: No speculative-config entries found to modify; leaving recipe unchanged")
-        return 0
+        sys.exit(
+            "ERROR: SYNTHETIC_ACCEPTANCE=true but no speculative-config "
+            f"entries were found in {config_file}"
+        )
 
     with open(config_file, "w") as f:
         f.write(new_content)

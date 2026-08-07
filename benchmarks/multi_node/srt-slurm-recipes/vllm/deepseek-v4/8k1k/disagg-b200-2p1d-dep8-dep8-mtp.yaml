@@ -1,0 +1,129 @@
+name: "svf-vllm-disagg-b200-2p1d-dep8-dep8-mtp"
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:vllm-x86_64-cu13-0.25.1-7a33ba9"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+sbatch_directives:
+  segment: "1"
+health_check:
+  max_attempts: 90
+  interval_seconds: 10
+resources:
+  gpu_type: "b200"
+  gpus_per_node: 8
+  prefill_nodes: 2
+  decode_nodes: 1
+  prefill_workers: 2
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+backend:
+  type: vllm
+  connector: null
+  prefill_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_10:1,mlx5_11:1
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NVSHMEM_DISABLE_CUDA_VMM: "1"
+    NVSHMEM_SYMMETRIC_SIZE: "16g"
+    NVSHMEM_INFO: "1"
+    NVSHMEM_DEBUG: "INFO"
+    NCCL_NVLS_ENABLE: "1"
+  decode_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_NET_DEVICES: mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_10:1,mlx5_11:1
+    TORCH_SYMMMEM: "NVSHMEM"
+    NVSHMEM_DISABLE_CUDA_VMM: "1"
+    NVSHMEM_SYMMETRIC_SIZE: "16g"
+    NCCL_NVLS_ENABLE: "1"
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      data-parallel-hybrid-lb: true
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      enforce-eager: true
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      attention-config: '{"use_fp4_indexer_cache":true}'
+      moe-backend: "deep_gemm_amxf4_mega_moe"
+      max-model-len: 9280
+      max-num-seqs: 16
+      max-num-batched-tokens: 16384
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      no-async-scheduling: true
+      block-size: 256
+      gpu-memory-utilization: 0.85
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+      # numa-bind: true
+      tokenizer-mode: deepseek_v4
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      data-parallel-hybrid-lb: true
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      speculative-config: '{"method":"mtp","num_speculative_tokens":3}'
+      attention-config: '{"use_fp4_indexer_cache":true}'
+      moe-backend: "deep_gemm_amxf4_mega_moe"
+      max-model-len: 9280
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
+      max-num-batched-tokens: 512
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      no-disable-hybrid-kv-cache-manager: true
+      enable-sleep-mode: true
+      tokenizer-mode: deepseek_v4
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "1024"
+  req_rate: "inf"
+  use_chat_template: true
+  custom_tokenizer: "sa_bench_tokenizers.vllm_deepseek_v4.VLLMDeepseekV4Tokenizer"
