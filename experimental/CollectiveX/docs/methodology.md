@@ -270,10 +270,23 @@ The two chains publish five statistics, and only five:
 - `chain_floor_us.dispatch` / `.combine` (origin `chained-cross-rank-min`) — each op's window from
   the floors chain, reduced across ranks by MIN: the last rank into a collective waited least, so
   its window is the op's floor, and it tracks profiler kernel time to ~10% — a free Kineto
-  substitute. The floors chain runs first and the period chain second, better-settled, so the two
-  can sit a few µs apart in level: a period single-digit-µs *below* the floor sum at small T is
-  that cross-chain settling offset, not an error (gb200/h200 fp8 LL, run 31089556516). Read
-  floor-vs-period as transport share, not an identity that must close to zero.
+  substitute. Read floor-vs-period as transport share, not an identity that must close to zero —
+  `period − Σfloors` is a real quantity with a meaning in each sign, and neither sign is an error:
+  - **Positive** is the per-pair inter-rank wait that the MIN deliberately strips. Where a backend
+    is synchronization-dominated it rivals the floor sum and sits *flat in T* — gb200
+    flashinfer-ep normal decode (run 31089556516) holds ~70µs bf16 / ~100µs fp8 at every rung,
+    vanishing by T=512 and in prefill as the floors grow into it. That is `period = max(sync
+    budget, work)`, not instrumentation. It is invisible to `pair_spread_us` (2.7–8.5µs against
+    62–107µs gaps) because the period is conserved while the wait migrates between op windows —
+    the same steady-state stagger that bans chained per-op medians below.
+  - **Negative** is the floors chain's own four-records-per-pair host cost (~10–12µs) inflating
+    *its* windows wherever the device outruns the host: the very effect the two-chain split
+    evicted from the period, still present and harmless in the floors (gb200/h200 fp8 LL, run
+    31089556516). It is not overlap, and it is not cross-chain settling.
+
+  Do not read a large positive residual as the six-events defect returning. That defect was a
+  roughly T-independent host constant appearing on *every vendor and fabric at once*, and it lands
+  in `interpair_gap_us`; a sync-dominated residual is backend-specific and leaves the gap small.
 - `chain_health.pair_spread_us` — per-iteration cross-rank max-minus-min of the pair: the *proof*
   the median means anything. Large next to `pair_period` means a paced or slow rank, and the
   point should not be read as a steady-state period at all.

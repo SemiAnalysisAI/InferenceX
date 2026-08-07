@@ -69,7 +69,10 @@ hand references were confirmed against two-pass fleet artifacts), and `summarize
 its starred columns hold either way. The floors chain publishes `chain_floor_us`, the
 cross-rank minimum of each op's window; the period chain also yields `chain_health.pair_spread_us`
 (cross-rank cadence proof), `interpair_gap_us` (the per-pair cost outside the published window — the
-regression guard for instrumentation creeping back in) and `settle_drift_us` (late-half minus
+regression guard for instrumentation creeping back in, and the discriminator that keeps a
+sync-dominated `period − Σfloors` gap from being misread as that defect returning; see the
+methodology's `chain_floor_us` bullet for what each sign of that residual means) and
+`settle_drift_us` (late-half minus
 early-half period — the convergence proof `chain_drop` otherwise merely assumes). Chained per-op
 *medians* are never published: inter-rank wait parks in whichever op window a rank blocks in, stable
 per rank, arbitrary across ranks, and conserved only in the pair total. Nothing existing was renamed
