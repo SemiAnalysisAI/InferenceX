@@ -106,6 +106,19 @@ def trace_torch(clock, log):
         yield torch
 
 
+class _Combined:
+    """Just enough combined-output tensor for the chain's final-output capture."""
+
+    def __init__(self, value):
+        self.value = value
+        self.cloned = False
+
+    def clone(self):
+        detached = _Combined(self.value)
+        detached.cloned = True
+        return detached
+
+
 class _ChainBackend(ep_backend.EPBackend):
     """Records the call order and charges each operation a fixed slice of the stub clock."""
 
@@ -143,7 +156,7 @@ class _ChainBackend(ep_backend.EPBackend):
         self.calls.append("combine")
         self.consumed.append(handle.combine_input)
         self.clock.advance(COMBINE_MS)
-        return handle.combine_input
+        return _Combined(handle.combine_input)
 
     def recv_tokens(self, handle):
         return 0
@@ -287,12 +300,24 @@ class ChainedPairPeriod(unittest.TestCase):
                 with trace_torch(backend.clock, backend.calls):
                     series = backend.benchmark_chain(new_problem(), 0, iters, drop)
                 self.assertEqual(
-                    sorted(series), ["combine", "dispatch", "pair", "start_to_start"]
+                    sorted(series),
+                    ["combine", "combined", "dispatch", "pair", "start_to_start"],
                 )
                 for key in ("pair", "dispatch", "combine"):
                     self.assertEqual(len(series[key]), iters - drop)
                 # Start-to-start is a difference series: one fewer than the kept pairs.
                 self.assertEqual(len(series["start_to_start"]), max(iters - drop - 1, 0))
+
+    def test_the_chains_final_output_is_returned_detached(self):
+        # The period chain's last combined output comes back cloned, post-sync, so the caller
+        # can compare it against a drained pair without racing double-buffered receive memory.
+        backend = _ChainBackend(
+            stage_device_work=False, fp8_consume="native", precision="bf16"
+        )
+        with trace_torch(backend.clock, backend.calls):
+            series = backend.benchmark_chain(new_problem(), 0, 4, 1)
+        self.assertEqual(series["combined"].value, "staged-by-stage")
+        self.assertTrue(series["combined"].cloned)
 
     def test_the_dropped_iterations_are_the_head_of_each_chain(self):
         # `drop` discards pipeline fill, so it must cut the head of both chains -- the period
@@ -363,8 +388,9 @@ class EventPlacement(unittest.TestCase):
 
 
 class ChainBudgetGate(unittest.TestCase):
-    """A budget that could publish nothing must stop the leg first: zero kept pairs serialises as
-    "unavailable", indistinguishable from a backend that cannot chain at all."""
+    """A budget that could publish a degenerate chain must stop the leg first: zero kept pairs
+    serialises as "unavailable", indistinguishable from a backend that cannot chain at all, and
+    a single kept pair would publish a period whose health scalars are silently unavailable."""
 
     @staticmethod
     def _args(**updates):
@@ -387,6 +413,9 @@ class ChainBudgetGate(unittest.TestCase):
             ("no trials", dict(chain_trials=0)),
             ("drop swallows every pair", dict(chain_iters=8, chain_drop=8)),
             ("drop exceeds the chain", dict(chain_iters=8, chain_drop=9)),
+            # A single kept pair has an empty start-to-start series: interpair gap and settle
+            # drift would silently publish as "unavailable" health for a measured period.
+            ("drop leaves a single pair", dict(chain_iters=8, chain_drop=7)),
             ("negative drop", dict(chain_drop=-1)),
         ):
             with self.subTest(budget=label):
@@ -599,16 +628,20 @@ class _SweepBackend(ep_backend.EPBackend):
             "start_to_start": [PAIR_US + GAP_US] * (kept - 1),
             "dispatch": [DISPATCH_FLOOR_US] * kept,
             "combine": [COMBINE_FLOOR_US] * kept,
+            "combined": f"chained-{problem.T}",
         }
 
     def dispatch(self, problem):
+        # Only the harness's drained reference pair reaches this: warm is a no-op, the
+        # components are constants, and the oracle is mocked out in `_sweep`.
+        self.events.append(("drained", problem.T))
         return SimpleNamespace(combine_input=None)
 
     def stage(self, problem, handle):
         return None
 
     def combine(self, problem, handle):
-        return None
+        return f"drained-{problem.T}"
 
     def recv_tokens(self, handle):
         return 8
@@ -645,11 +678,13 @@ def phases_by_index(oracle_count, points):
     )
 
 
-def _sweep(fail_indices, error_indices, chain_error, backend_factory=None):
+def _sweep(fail_indices, error_indices, chain_error, backend_factory=None,
+           chain_output_ok=True):
     """One full run_sweep against the stubs; failures scripted by oracle call index."""
     backend = (backend_factory or _SweepBackend)()
     events = backend.events
     oracle_calls = []
+    output_checks = []
 
     def fake_oracle(torch_, routing_, backend_, problem, *rest):
         index = len(oracle_calls)
@@ -663,12 +698,17 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None):
             checks=dict.fromkeys(ep_harness._ORACLE_CHECKS, passed),
         )
 
+    def fake_output_match(chained, drained):
+        output_checks.append((chained, drained))
+        return chain_output_ok
+
     with tempfile.TemporaryDirectory() as directory:
         out = Path(directory) / "result.json"
         stdout = io.StringIO()
         with mock.patch.dict(sys.modules, {"routing": fake_routing()}), \
                 mock.patch.dict(os.environ, {"COLLX_ATTEMPT_ID": "1"}), \
                 mock.patch.object(ep_harness, "_run_expert_oracle", fake_oracle), \
+                mock.patch.object(ep_harness, "_chain_output_matches", fake_output_match), \
                 contextlib.redirect_stdout(stdout):
             rc = ep_harness.run_sweep(
                 make_args(out), backend, value_torch(), _FakeDist(), "cuda:0", 0, 1
@@ -676,16 +716,17 @@ def _sweep(fail_indices, error_indices, chain_error, backend_factory=None):
         doc = json.loads(out.read_text())
     return SimpleNamespace(
         rc=rc, doc=doc, rows=doc["measurement"]["rows"], events=events,
-        oracle_calls=oracle_calls, stdout=stdout.getvalue(), backend=backend,
+        oracle_calls=oracle_calls, output_checks=output_checks,
+        stdout=stdout.getvalue(), backend=backend,
         phases=phases_by_index(len(oracle_calls), len(LADDER)),
     )
 
 
-def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None):
+def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None, chain_output_ok=True):
     """Run the sweep, optionally failing every oracle of a given pass; a clean probe run first
     learns the oracle call count, so failures are selected by phase rather than by hardcoded index."""
     probe = _sweep(frozenset(), frozenset(), 0.0, backend_factory)
-    if not fail_phases and not chain_error:
+    if not fail_phases and not chain_error and chain_output_ok:
         return probe
     selected = lambda wanted: frozenset(  # noqa: E731
         index for index, phase in enumerate(probe.phases) if phase in wanted
@@ -693,6 +734,7 @@ def drive(*, fail_phases=(), chain_error=0.0, backend_factory=None):
     return _sweep(
         selected(set(fail_phases)),
         selected({"chain"}) if chain_error else frozenset(), chain_error, backend_factory,
+        chain_output_ok=chain_output_ok,
     )
 
 
@@ -724,9 +766,29 @@ class ChainedRegimeOracleGate(unittest.TestCase):
             if kind != "oracle":
                 continue
             with self.subTest(tokens=T):
-                # Right after that point's own chain, and on its final trial.
-                self.assertEqual(middle[index - 1], ("chain", T))
+                # Right after that point's own chain (and the drained reference pair its
+                # output was checked against), and on its final trial.
+                self.assertEqual(middle[index - 1], ("drained", T))
+                self.assertEqual(middle[index - 2], ("chain", T))
                 self.assertNotIn(("chain", T), middle[index + 1:])
+
+    def test_every_chain_trial_checks_its_final_output_against_a_drained_pair(self):
+        # One drained reference per (trial, point), each immediately after its chain -- the
+        # comparison itself is scripted, so the pairs recorded here prove the plumbing: the
+        # chain's OWN returned output meets the roundtrip the harness just drained.
+        run = drive()
+        points = len(LADDER)
+        middle = run.events[points:-points]
+        drained = [(kind, T) for kind, T in middle if kind == "drained"]
+        self.assertEqual(len(drained), CHAIN_TRIALS * points)
+        for index, (kind, T) in enumerate(middle):
+            if kind == "chain":
+                with self.subTest(position=index, tokens=T):
+                    self.assertEqual(middle[index + 1], ("drained", T))
+        self.assertEqual(len(run.output_checks), CHAIN_TRIALS * points)
+        for chained, drained_output in run.output_checks:
+            self.assertRegex(chained, r"^chained-\d+$")
+            self.assertEqual(drained_output, chained.replace("chained-", "drained-"))
 
     def test_the_chained_oracle_is_invoked_with_pass_3s_shape(self):
         # A stale trace or a mismatched expert count would gate a different problem than the
@@ -748,7 +810,8 @@ class ChainedRegimeOracleGate(unittest.TestCase):
         self.assertEqual(run.doc["outcome"]["status"], "success")
         for row in run.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertIs(row["correctness"]["chain_regime_passed"], True)
+                self.assertIs(row["correctness"]["post_chain_state_passed"], True)
+                self.assertIs(row["correctness"]["chain_last_output_passed"], True)
                 self.assertIs(row["correctness"]["passed"], True)
 
     def test_a_chained_oracle_failure_reds_the_case(self):
@@ -758,7 +821,21 @@ class ChainedRegimeOracleGate(unittest.TestCase):
         self.assertEqual(run.doc["outcome"]["status"], "invalid")
         for row in run.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertIs(row["correctness"]["chain_regime_passed"], False)
+                self.assertIs(row["correctness"]["post_chain_state_passed"], False)
+                self.assertIs(row["correctness"]["chain_last_output_passed"], True)
+                self.assertIs(row["correctness"]["passed"], False)
+
+    def test_a_chain_output_mismatch_reds_the_case_on_its_own(self):
+        # The two chained verdicts are independent: a chain whose own final output is wrong
+        # must red the case even when the state it leaves behind still passes a fresh oracle
+        # -- exactly the shape a stale-parity/aliased-signal defect presents.
+        run = drive(chain_output_ok=False)
+        self.assertEqual(run.rc, 3)
+        self.assertEqual(run.doc["outcome"]["status"], "invalid")
+        for row in run.rows:
+            with self.subTest(tokens=row["tokens_per_rank"]):
+                self.assertIs(row["correctness"]["chain_last_output_passed"], False)
+                self.assertIs(row["correctness"]["post_chain_state_passed"], True)
                 self.assertIs(row["correctness"]["passed"], False)
 
     def test_the_drained_oracles_still_red_the_case_on_their_own(self):
@@ -770,7 +847,8 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                 self.assertEqual(run.doc["outcome"]["status"], "invalid")
                 for row in run.rows:
                     self.assertIs(row["correctness"]["passed"], False)
-                    self.assertIs(row["correctness"]["chain_regime_passed"], True)
+                    self.assertIs(row["correctness"]["post_chain_state_passed"], True)
+                    self.assertIs(row["correctness"]["chain_last_output_passed"], True)
 
     def test_the_chained_error_is_folded_into_max_relative_error(self):
         # Maxed in like the other two oracles', so a chained regime that is within tolerance
@@ -871,6 +949,7 @@ class _DriftingBackend(_SweepBackend):
             "start_to_start": [value + GAP_US for value in pair[:-1]],
             "dispatch": [DISPATCH_FLOOR_US] * kept,
             "combine": [COMBINE_FLOOR_US] * kept,
+            "combined": f"chained-{problem.T}",
         }
 
 
@@ -888,6 +967,77 @@ class SettleDrift(unittest.TestCase):
                 drift = row["chain_health"]["settle_drift_us"]
                 self.assertEqual(drift["percentiles_us"]["p50"], DRIFT_US)
                 self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
+
+
+class _Vec:
+    """Just enough elementwise tensor for `_chain_output_matches`: a flat list of floats."""
+
+    def __init__(self, values):
+        self.values = [float(value) for value in values]
+
+    @property
+    def shape(self):
+        return (len(self.values),)
+
+    def numel(self):
+        return len(self.values)
+
+    def float(self):
+        return _Vec(self.values)
+
+    def abs(self):
+        return _Vec(abs(value) for value in self.values)
+
+    def clamp_min(self, floor):
+        return _Vec(max(value, floor) for value in self.values)
+
+    def __sub__(self, other):
+        return _Vec(a - b for a, b in zip(self.values, other.values))
+
+    def __truediv__(self, other):
+        return _Vec(a / b for a, b in zip(self.values, other.values))
+
+    def max(self):
+        return SimpleNamespace(item=lambda: max(self.values))
+
+
+class ChainOutputCheck(unittest.TestCase):
+    """The regime A/B judged the way the oracle judges combines: elementwise relative error
+    under a magnitude floor, because a combine kernel is not required to be order-deterministic
+    across invocations -- bit equality would red healthy backends."""
+
+    def test_identical_outputs_match(self):
+        values = [1.0, -3.5, 0.25]
+        self.assertTrue(ep_harness._chain_output_matches(_Vec(values), _Vec(values)))
+
+    def test_a_shape_mismatch_never_matches(self):
+        self.assertFalse(
+            ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 2.0, 3.0]))
+        )
+
+    def test_empty_outputs_match(self):
+        # A rank that legitimately combined nothing under this routing.
+        self.assertTrue(ep_harness._chain_output_matches(_Vec([]), _Vec([])))
+
+    def test_run_to_run_jitter_within_tolerance_matches(self):
+        drained = [1.0, -2.0]
+        chained = [value * (1.0 + ep_harness.COMBINE_REL_TOL / 2) for value in drained]
+        self.assertTrue(ep_harness._chain_output_matches(_Vec(chained), _Vec(drained)))
+
+    def test_regime_corruption_does_not_match(self):
+        # The defect class this exists for lands orders of magnitude past tolerance.
+        self.assertFalse(
+            ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 4.0]))
+        )
+
+    def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
+        # Relative error against a denominator of 1e-6 would be huge; the floor keeps
+        # numerically-tiny elements from redding a healthy chain.
+        drained, chained = 1e-6, 1e-6 + 1e-4
+        self.assertGreater(
+            abs(chained - drained) / abs(drained), ep_harness.COMBINE_REL_TOL
+        )
+        self.assertTrue(ep_harness._chain_output_matches(_Vec([chained]), _Vec([drained])))
 
 
 # ---- from test_summarize_headline.py ----------------------------------------------

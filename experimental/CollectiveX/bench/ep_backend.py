@@ -453,9 +453,14 @@ class EPBackend(abc.ABC):
         enforces pair -> cross-rank median, per-op -> cross-rank minimum, never a chained per-op
         median or p99.
 
-        `drop` discards each chain's head (pipeline fill, not period). `run_sweep` reruns the full
-        expert oracle against the state the last chain leaves behind and folds it into the point's
-        verdict, so silent chained corruption reds the case; the method ends synchronized for it.
+        `drop` discards each chain's head (pipeline fill, not period). The chain's own final
+        combined output is returned under `combined` -- cloned after the closing synchronize, so
+        the copy is untimed and detached from any double-buffered receive the next dispatch would
+        overwrite. `run_sweep` checks it against a drained pair through this same code path and
+        separately reruns the full expert oracle against the state the chain leaves behind; both
+        fold into the point's verdict. Interior pairs stay unvalidated by design -- each pair
+        overwrites its predecessor's output, and holding or reducing every output would put
+        device work inside the timed loops (see methodology, Correctness).
         Free-running is safe fleet-wide: every backend double-buffers per dispatch or completes
         each op on a reusable handle, and deepep-v2 NORMAL probed clean with 256 un-synced pairs
         (T=128, EP8+EP16, both precisions, 2026-08-06, pin 01dc3aaa). Returns post-`drop` series
@@ -508,7 +513,7 @@ class EPBackend(abc.ABC):
                 self.stage(problem, handle)
             else:
                 setattr(handle, self.combine_input_attr, staged)
-            self.combine(problem, handle)
+            combined = self.combine(problem, handle)
             pair_end[i].record()
         torch.cuda.synchronize()
 
@@ -523,6 +528,10 @@ class EPBackend(abc.ABC):
             "start_to_start": series(pair_start[:-1], pair_start[1:]),
             "dispatch": series(dispatch_start, dispatch_end),
             "combine": series(combine_start, combine_end),
+            # The period chain's final combined output, produced IN the free-running regime.
+            # Cloned post-sync (untimed, stream-ordered ahead of any later dispatch) so the
+            # caller can compare it against a drained pair without racing the buffers.
+            "combined": combined.clone(),
         }
 
     def benchmark_component(self, component, problem, warmup, iters):

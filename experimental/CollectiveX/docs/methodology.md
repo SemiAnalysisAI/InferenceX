@@ -402,17 +402,31 @@ routing cannot pass an identity roundtrip. For every rank and point it verifies:
 2. dispatched payload and metadata before timing;
 3. combined output before timing;
 4. unchanged semantic inputs through all timed samples;
-5. dispatched payload/metadata and combined output again after timing; and
-6. the same full check once more against the state the **free-running chain** leaves behind.
+5. dispatched payload/metadata and combined output again after timing;
+6. the **free-running chain's own final combined output**, once per chain trial, against a
+   drained pair through the identical dispatch→combine path; and
+7. the same full check as 2-5 once more against the state the free-running chain leaves behind.
 
-Check 6 exists because checks 2-5 only ever see drained calls: without it the headline `pair_period`
-would come from a regime no oracle had inspected, and a backend that transports correctly when
-drained but corrupts under back-to-back pairs would present as the fastest cell in the suite. It
-runs once per ladder point, after that point's final chain trial, on the settled communicator
-(`benchmark_chain` ends synchronized). Its result is reported per row as
-`correctness.chain_regime_passed` and **folded into `correctness.passed`**, so a chained-regime
-failure fails the leg exactly as any other oracle failure does. It is `null`, scored as neither pass
-nor fail, only when the chain never ran.
+Checks 6 and 7 exist because checks 2-5 only ever see drained calls: without them the headline
+`pair_period` would come from a regime no oracle had inspected, and a backend that transports
+correctly when drained but corrupts under back-to-back pairs would present as the fastest cell in
+the suite. They answer different questions. Check 6 is a regime A/B, not an oracle: after each
+chain trial's closing synchronize — outside every timed window — the chain's last combined output
+is compared elementwise (the oracle's tolerance, not bit equality, since combine kernels are not
+required to be order-deterministic) against a freshly drained pair through the same code path, so
+it catches corruption the chain wrote into its own results. Check 7 reruns the full expert oracle
+after the final trial, on the settled communicator (`benchmark_chain` ends synchronized), so it
+catches state the chain corrupted for whatever runs next. Interior chain pairs stay unvalidated by
+design: each pair overwrites its predecessor's output, and holding or reducing every output would
+put device work (or ~O(iters × T × hidden) memory) inside the timed loops the chain exists to keep
+clean — a defect confined to interior pairs that heals by the final pair is outside this suite's
+evidence. Check 6 is reported per row as `correctness.chain_last_output_passed` (ANDed across
+trials) and check 7 as `correctness.post_chain_state_passed`; both are **folded into
+`correctness.passed`**, so either failure fails the leg exactly as any other oracle failure does.
+(`post_chain_state_passed` was previously published as `chain_regime_passed`, a name that
+overclaimed — a fresh post-chain oracle proves the state, not the chain's outputs. Artifacts from
+older harnesses carry the old name, where `null` meant the chain never ran; a validated chain
+budget is now required up front, so both fields are always booleans in new artifacts.)
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values

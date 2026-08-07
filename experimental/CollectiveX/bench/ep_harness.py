@@ -594,6 +594,26 @@ def _oracle_report(**fields):
     return report
 
 
+def _chain_output_matches(chained, drained):
+    """Whether the chain's final combined output matches a drained pair, same code path.
+
+    A regime A/B, not an oracle: both tensors come from the backend's own dispatch->combine,
+    differing only in whether the pair ran free-running or drained, so a mismatch is corruption
+    that only manifests under back-to-back pairs (the stale-parity / aliased-signal class) --
+    invisible to the drained oracles and to the fresh post-chain check alike. Judged with the
+    oracle's elementwise tolerance rather than bit equality because a combine kernel is not
+    required to be order-deterministic across invocations; a regime defect produces errors
+    orders of magnitude past COMBINE_REL_TOL, never inside it.
+    """
+    if chained.shape != drained.shape:
+        return False
+    if not chained.numel():
+        return True
+    error = (chained.float() - drained.float()).abs()
+    relative = error / drained.float().abs().clamp_min(COMBINE_MAG_FLOOR)
+    return bool(float(relative.max().item()) < COMBINE_REL_TOL)
+
+
 def _run_expert_oracle(
     torch,
     routing,
@@ -919,11 +939,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: iters/trials/warmup must be positive; got "
                   f"{args.iters}:{args.trials}:{args.warmup}")
         return 2
-    # Fail closed: a drop at or past the iteration count discards every pair and would publish
-    # `pair_period` as "unavailable", indistinguishable from a backend that cannot be chained.
-    if min(args.chain_iters, args.chain_trials) <= 0 or not 0 <= args.chain_drop < args.chain_iters:
+    # Fail closed: a drop within one pair of the iteration count leaves nothing (or a single
+    # pair, whose start-to-start series is empty) and would publish `pair_period` degenerate and
+    # `chain_health` as "unavailable", indistinguishable from a backend that cannot be chained.
+    # Requiring two kept pairs here is what lets Pass 2b compute the health scalars
+    # unconditionally and Pass 3 assert the chained oracle ran.
+    if (min(args.chain_iters, args.chain_trials) <= 0
+            or not 0 <= args.chain_drop <= args.chain_iters - 2):
         if rank == 0:
-            print(f"ERROR: chain iters/trials must be positive and 0 <= drop < iters; got "
+            print(f"ERROR: chain iters/trials must be positive and 0 <= drop <= iters - 2; got "
                   f"{args.chain_iters}:{args.chain_trials}:{args.chain_drop}")
         return 2
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
@@ -1037,8 +1061,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "max_rel": oracle["max_elementwise_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
-            # Filled by Pass 2b after that point's last chain trial.
+            # Filled by Pass 2b after that point's last chain trial; the budget gate above
+            # guarantees at least one trial, so Pass 3 asserts this is no longer None.
             "oracle_chain": None,
+            # ANDed across chain trials by Pass 2b: each trial's final chained output against
+            # a drained pair through the same code path.
+            "chain_output_local_ok": 1,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
@@ -1110,6 +1138,17 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             chained = backend.benchmark_chain(
                 problems[T], args.warmup, args.chain_iters, args.chain_drop
             )
+            # The chain's OWN final output against a drained pair through the identical
+            # dispatch->combine path, outside every timed region. This is the only chained
+            # output the run can inspect without putting device work inside the timed loops:
+            # each pair overwrites its predecessor's, so interior pairs are unvalidated by
+            # design (see methodology, Correctness). The drained pair is collective, issued in
+            # the same (trial, T) order on every rank, so the group stays aligned.
+            drained = backend.run_roundtrip(problems[T])
+            torch.cuda.synchronize()
+            gate[T]["chain_output_local_ok"] &= int(
+                _chain_output_matches(chained["combined"], drained)
+            )
             pair = chained["pair"]
             pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
             chain_pool[T] += pair_median
@@ -1122,19 +1161,19 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Chain-health scalars, one per trial. `interpair_gap_us` = start-to-start minus pair
             # window: the per-pair cost outside the published window, the in-artifact guard against
             # instrumentation self-charging. `settle_drift_us` = late-half minus early-half period.
-            # Median across ranks for the gap; signed max-magnitude for the drift.
-            if len(pair) >= 2 and chained["start_to_start"]:
-                s2s_p50 = _pcts(chained["start_to_start"])["p50"]
-                gaps = _gather_scalar(
-                    torch, dist, device, s2s_p50 - _pcts(pair)["p50"]
-                )
-                gap_pool[T].append(_pcts(gaps)["p50"])
-                half = len(pair) // 2
-                drifts = _gather_scalar(
-                    torch, dist, device,
-                    _pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"],
-                )
-                settle_pool[T].append(max(drifts, key=abs))
+            # Median across ranks for the gap; signed max-magnitude for the drift. Unconditional:
+            # the budget gate guarantees two kept pairs, so both series are non-degenerate.
+            s2s_p50 = _pcts(chained["start_to_start"])["p50"]
+            gaps = _gather_scalar(
+                torch, dist, device, s2s_p50 - _pcts(pair)["p50"]
+            )
+            gap_pool[T].append(_pcts(gaps)["p50"])
+            half = len(pair) // 2
+            drifts = _gather_scalar(
+                torch, dist, device,
+                _pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"],
+            )
+            settle_pool[T].append(max(drifts, key=abs))
             if final_chain_trial:
                 # Gate the regime we publish: Passes 1 and 3 only check drained calls, so without
                 # this a backend that corrupts under free-running pairs would present as the
@@ -1161,19 +1200,24 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             scale_up_domain, args.seed,
         )
         pre = gate[T]["oracle_pre"]
-        # ANDed in like the other two, so a chained-regime failure reds the leg. None means the
-        # chain never ran (chain_trials=0), which is not a failure.
+        # Both chained gates are ANDed in like the other two, so a chained-regime failure reds
+        # the leg. The budget gate rejects chain_trials=0 up front, so a missing chained oracle
+        # is a harness bug, not a configuration.
         chain_oracle = gate[T]["oracle_chain"]
-        chain_ok = chain_oracle is None or bool(chain_oracle["passed"])
+        assert chain_oracle is not None, "chained oracle missing despite a validated budget"
+        chain_ok = bool(chain_oracle["passed"])
+        chain_output_ok = bool(gate[T]["chain_output_local_ok"])
         gate[T].update({
             "input_unchanged": input_unchanged,
-            "local_ok": int(pre["passed"] and post["passed"] and chain_ok and input_unchanged),
+            "local_ok": int(
+                pre["passed"] and post["passed"] and chain_ok and chain_output_ok
+                and input_unchanged
+            ),
             "chain_local_ok": int(chain_ok),
             "max_rel": max(
                 pre["max_elementwise_relative_error"] or 0.0,
                 post["max_elementwise_relative_error"] or 0.0,
-                (chain_oracle["max_elementwise_relative_error"] or 0.0)
-                if chain_oracle is not None else 0.0,
+                chain_oracle["max_elementwise_relative_error"] or 0.0,
             ),
             "oracle_post": post,
         })
@@ -1198,11 +1242,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
-        # Agreed across ranks like `passed`, not rank 0's local view. The branch is collectively
-        # safe: `oracle_chain` is None on every rank or on none (it keys on a class attribute).
-        chain_regime_passed = (
-            bool(_reduce_int(torch, dist, device, g["chain_local_ok"], MIN))
-            if g["oracle_chain"] is not None else None
+        # Agreed across ranks like `passed`, not rank 0's local view.
+        post_chain_state_passed = bool(
+            _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
+        )
+        chain_last_output_passed = bool(
+            _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
         )
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
@@ -1283,10 +1328,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Large relative to the roundtrip => the point is skew-inflated; read it with care.
             "cross_rank_spread_us": _component(_pcts(spread), len(spread)),
             "correctness": {
-                # Whether the oracle also passed against the state the free-running chain left
-                # behind. Folded into `passed`, so false means the point failed; `null` means the
-                # chain never ran and is not a failure.
-                "chain_regime_passed": chain_regime_passed,
+                # Whether the free-running chain's OWN final combined output (per trial)
+                # matched a drained pair through the identical code path, within the combine
+                # tolerance. Proves the last pair of each chain, not every interior pair --
+                # validating those would put device work inside the timed loops. Folded
+                # into `passed`.
+                "chain_last_output_passed": chain_last_output_passed,
+                # Whether the full oracle also passed against the state the free-running chain
+                # left behind (a FRESH dispatch+combine after the final trial). Renamed from
+                # `chain_regime_passed`, which overclaimed: older artifacts carry that name,
+                # and `null` there meant the chain never ran (a state the budget gate has since
+                # made impossible). Folded into `passed`.
+                "post_chain_state_passed": post_chain_state_passed,
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,

@@ -76,10 +76,12 @@ per rank, arbitrary across ranks, and conserved only in the pair total. Nothing 
 or re-meant and the sweep `version` stays 1, so consumers key on the presence of
 `components.pair_period`.
 
-The chained regime is correctness-gated like every other: the full oracle runs once per ladder point
-against the state the chain leaves behind, reports as `correctness.chain_regime_passed`, and is
-folded into `correctness.passed`, so a backend that corrupts under free-running pairs fails the case
-rather than publishing the suite's fastest period.
+The chained regime is correctness-gated like every other, twice over: each chain trial's own final
+combined output is checked against a drained pair through the identical code path
+(`correctness.chain_last_output_passed`), and the full oracle runs once per ladder point against
+the state the chain leaves behind (`correctness.post_chain_state_passed`). Both fold into
+`correctness.passed`, so a backend that corrupts under free-running pairs fails the case rather
+than publishing the suite's fastest period.
 
 `roundtrip` means dispatch then combine — the transport — in every row. Expert-output staging sits
 outside it and is reported separately as `stage`; under FP8 that component is harness scaffolding
