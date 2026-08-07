@@ -19,7 +19,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 | 模型 | 弃用内容 | 保留内容 |
 |---|---|---|
 | MiniMax-M3（`minimaxm3`） | 单轮 8k1k | 智能体编码 |
-| Kimi-K2.5/2.6/2.7-Code（`kimik2.5`） | 智能体编码 | 单轮 8k1k，保留至 2026 年 8 月 6 日（见下文） |
+| Kimi-K2.5/2.6/2.7-Code（`kimik2.5`） | 智能体编码 | 无 —— 单轮 8k1k 运行至 2026 年 8 月 6 日，已于 2026-08-07 退役（见下文） |
 | Qwen3.5-397B-A17B（`qwen3.5`） | 全部 **bf16** 配方，涵盖所有场景，NVIDIA 与 AMD 平台均在内 | fp8 与 fp4 配方 |
 
 投机解码（speculative decoding）A/B 对照下线 —— 下列每一组对照中，启用投机解码的分支都处于更优的帕累托前沿，因此我们停止运行非投机解码分支，仅发布投机解码分支：
@@ -39,6 +39,8 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 ### 2026 年 8 月 6 日（星期四）
 
 **2026 年 8 月 6 日（星期四）**为 **Kimi-K2.5/2.6/2.7-Code**（`kimik2.5`）**单轮 8k1k** 场景的最后运行日，此后该场景对这些模型弃用。原因：Kimi-K3 已于 2026 年 7 月 27 日发布，GPU 集群时间将转向更新的前沿模型。叠加上文的智能体编码弃用，`kimik2.5` 将不再有任何启用场景 —— 该模型将于 **2026 年 8 月 6 日后完全退役**。
+
+**已于 2026-08-07 执行**（[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)）：从启用的主配置中移除 17 个 `kimik2.5` 配置项，归档至 [`configs/deprecated/`](configs/deprecated/)，分别为 `nvidia-kimik2.5-8k1k-master.yaml`（10 个）与 `amd-kimik2.5-8k1k-master.yaml`（7 个）；对应的 12 个基准测试脚本移入同级 `deprecated/` 目录。此后 `kimik2.5` 在所有主配置中**均无启用配置**，正式完全退役。同一 PR 还归档了 `kimik2.5-int4-h100-vllm`：#2493 将其脚本移入 `benchmarks/single_node/agentic/deprecated/` 时，该智能体编码配置项被遗留在 `nvidia-master.yaml` 中，现已与同类项一并归入 `nvidia-kimik2.5-agentic-master.yaml`。SPEED-Bench 接受长度脚本 `benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh` 予以保留 —— speedbench 由 `speedbench-al.yml` 驱动，不经过主配置，与 #2493 处理 MiniMax-M3 的方式一致。
 
 ## 场景
 
@@ -142,7 +144,7 @@ InferenceX 支持 SGLang 和 vLLM 双方的维护者，并响应 AI 实验室和
 | DeepSeek-V4-Pro | `dsv4` | 2026-04-24（[#1130](https://github.com/SemiAnalysisAI/InferenceX/pull/1130)） | 单轮 8k1k、智能体编码（「仅 MTP」待执行 —— 非 MTP 分支仍在运行，见弃用公告） | 单轮 1k1k |
 | GLM-5 / GLM-5.1 | `glm5`、`glm5.1` | 2026-03-06（[#762](https://github.com/SemiAnalysisAI/InferenceX/pull/762)）；GLM-5.1 于 2026-04-21 加入（[#1098](https://github.com/SemiAnalysisAI/InferenceX/pull/1098)） | —（2026-07-18 退役，[#2276](https://github.com/SemiAnalysisAI/InferenceX/pull/2276)） | 单轮 1k1k、单轮 1k8k（仅 GLM-5）、单轮 8k1k |
 | MiniMax-M2.5/2.7 | `minimaxm2.5` | 2026-02-18（[#755](https://github.com/SemiAnalysisAI/InferenceX/pull/755)） | —（2026-06-20 退役，[#1874](https://github.com/SemiAnalysisAI/InferenceX/pull/1874)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |
-| Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17（[#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)） | 单轮 8k1k（至 2026-08-06）—— 2026-08-06 后完全退役 | 单轮 1k1k、单轮 1k8k、智能体编码（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |
+| Kimi-K2.5/2.6/2.7-Code | `kimik2.5` | 2026-02-17（[#734](https://github.com/SemiAnalysisAI/InferenceX/pull/734)） | —（2026-08-07 完全退役，[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)） | 单轮 1k1k、单轮 1k8k、智能体编码（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)）、单轮 8k1k（2026-08-07 移除，[#2527](https://github.com/SemiAnalysisAI/InferenceX/pull/2527)） |
 | Qwen3.5-397B-A17B | `qwen3.5` | 2026-02-16（[#704](https://github.com/SemiAnalysisAI/InferenceX/pull/704)） | 单轮 8k1k、智能体编码；仅 fp8/fp4 | 单轮 1k1k、单轮 1k8k、全部 bf16 配方（2026-08-04 移除，[#2493](https://github.com/SemiAnalysisAI/InferenceX/pull/2493)） |
 | gpt-oss-120b | `gptoss` | 2025-09-09 | —（2026-07-06 退役，[#2101](https://github.com/SemiAnalysisAI/InferenceX/pull/2101)） | 单轮 1k1k、单轮 1k8k、单轮 8k1k |
 | DeepSeek-R1-0528 | `dsr1` | 2025-08-13 | 单轮 8k1k | 单轮 1k1k、单轮 1k8k |
