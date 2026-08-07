@@ -962,5 +962,66 @@ class LowLatencyCapDecoupling(unittest.TestCase):
             self.assertIn(required, keys, f"the emitted record must include {required}")
 
 
+class ContainerImportRetry(unittest.TestCase):
+    """A failed container import is retried, because the failure is usually the storage blinking.
+
+    The import writes tens of GB to operator-supplied squash storage, which on some clusters is a
+    SOFT-mounted network filesystem -- one that returns an error instead of blocking when its
+    transport drops. gb300's /data is NFSv3 over RDMA, and a transport gap there surfaces from
+    `mkdir` as "Protocol family not supported", which reads like a missing mount but is not: the
+    same node writes it fine minutes later. Run 31089556516 lost its gb300 shards that way, ~25
+    minutes into each leg, so the import must not treat one such failure as terminal.
+    """
+
+    SOURCE = (RUNTIME / "common.sh").read_text()
+
+    def _function(self) -> str:
+        body = self.SOURCE.split("collx_ensure_squash_on_job() {", 1)
+        self.assertEqual(len(body), 2, "collx_ensure_squash_on_job moved or was renamed")
+        return body[1].split("\n}\n", 1)[0]
+
+    def test_the_import_is_attempted_more_than_once(self):
+        fn = self._function()
+        self.assertIn("for attempt in", fn, "the import must loop rather than run once")
+        self.assertIn("COLLX_IMPORT_ATTEMPTS", fn, "attempt count must be overridable")
+
+    def test_an_architecture_mismatch_is_not_retried(self):
+        # The remote block exits 13 when the image platform does not match the allocated
+        # machine. That is a property of the case, not the moment: retrying only delays the
+        # real message by two backoffs.
+        fn = self._function()
+        self.assertRegex(fn, r'"\$rc"\s*=\s*13', "rc 13 must be handled explicitly")
+        thirteen = fn.split('= 13', 1)[1]
+        self.assertIn("return 1", thirteen.split("fi", 1)[0],
+                      "the architecture guard must return, not fall through to another attempt")
+
+    def test_each_attempt_gets_its_own_log(self):
+        # collx_private_log_path truncates, so reusing one path across attempts would erase the
+        # evidence of the failure that caused the retry.
+        fn = self._function()
+        self.assertIn("-r${attempt}", fn, "retries must not clobber the first attempt's log")
+
+    def test_success_still_prints_only_the_squash_path(self):
+        # Callers capture stdout: SQUASH_FILE="$(collx_ensure_squash_on_job ...)". Any extra
+        # stdout from the retry bookkeeping would corrupt the path. The heredoc body is excluded
+        # because it executes on the compute node under srun, whose own stdout is redirected to
+        # the attempt log -- what it echoes never reaches this function's caller.
+        fn = self._function()
+        local, inside = [], False
+        for line in fn.splitlines():
+            if "<<'BASH'" in line:
+                inside = True
+                continue
+            if inside:
+                inside = line.strip() != "BASH"
+                continue
+            local.append(line.strip())
+        emits = [line for line in local
+                 if ("printf" in line or "echo" in line) and ">&2" not in line]
+        self.assertTrue(emits, "the function must still emit the squash path")
+        for line in emits:
+            self.assertIn("$sq", line, f"unexpected stdout from the import helper: {line!r}")
+
+
 if __name__ == "__main__":
     unittest.main()

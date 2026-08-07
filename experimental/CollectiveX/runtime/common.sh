@@ -719,7 +719,18 @@ collx_ensure_squash() {
 # architecture. The squash directory must be shared with the submit host.
 collx_ensure_squash_on_job() {
   local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
-  local log_label=container-import log
+  local log_label=container-import log attempt rc
+  # The import writes tens of GB to whatever the operator gave as squash storage, and on some
+  # clusters that storage is a SOFT-mounted network filesystem, i.e. one that returns an error
+  # rather than blocking when its transport is briefly unavailable. gb300's /data is NFSv3 over
+  # RDMA (proto=rdma, soft), and a transport gap there surfaces as `mkdir: cannot create
+  # directory '/data': Protocol family not supported` -- an address-family errno from mkdir,
+  # which reads like a missing mount but is not one: the same node mounts and writes it fine
+  # minutes later. Run 31089556516 lost its gb300 shards to that, ~25 minutes into each leg.
+  # So a failed import is retried rather than being terminal. Retrying is safe because the
+  # remote block re-takes the lock and re-checks the squash each time, removing a partial file
+  # before re-importing.
+  local max_attempts="${COLLX_IMPORT_ATTEMPTS:-3}"
   [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
@@ -731,13 +742,21 @@ collx_ensure_squash_on_job() {
   key="${key%.sqsh}"
   [ -n "$lock_dir" ] || lock_dir="$squash_dir/.locks"
   lock="$lock_dir/${key}.lock"
-  log="$(collx_private_log_path "$log_label")"
-  # Run once per node because some clusters use node-local squash storage.
-  if ! srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
+  for attempt in $(seq 1 "$max_attempts"); do
+    # A per-attempt log: collx_private_log_path truncates, so reusing one path would erase the
+    # evidence of the failure that caused the retry.
+    if [ "$attempt" -eq 1 ]; then
+      log="$(collx_private_log_path "$log_label")"
+    else
+      log="$(collx_private_log_path "${log_label}-r${attempt}")"
+    fi
+    rc=0
+    # Run once per node because some clusters use node-local squash storage.
+    srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
       --ntasks-per-node=1 --chdir=/tmp \
       --export="$(collx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" \
-      > "$log" 2>&1 <<'BASH'
+      > "$log" 2>&1 <<'BASH' || rc=$?
 set -euo pipefail
 sq="$1"; lock="$2"; image="$3"; platform="$4"
 machine="$(uname -m)"
@@ -765,12 +784,24 @@ else
   unsquashfs -l "$sq" >/dev/null 2>&1
 fi
 BASH
-  then
-    collx_log "ERROR: container import failed"
-    collx_log_tail "$log"
-    return 1
-  fi
-  printf '%s' "$sq"
+    [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }
+    # 13 is the remote block's architecture guard: the image platform does not match the
+    # allocated machine. That is a property of the case, not of the moment, so it never
+    # improves on a retry and burning two more attempts on it only delays the real message.
+    if [ "$rc" = 13 ]; then
+      collx_log "ERROR: container image platform does not match the allocated architecture"
+      collx_log_tail "$log"
+      return 1
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      collx_log "container import attempt $attempt/$max_attempts failed (rc=$rc); retrying"
+      collx_log_tail "$log"
+      sleep "$((attempt * 30))"
+    fi
+  done
+  collx_log "ERROR: container import failed after $max_attempts attempts"
+  collx_log_tail "$log"
+  return 1
 }
 
 # Reject an allocation whose GPUs are throttled: collectives are barriers, so one clamped device
