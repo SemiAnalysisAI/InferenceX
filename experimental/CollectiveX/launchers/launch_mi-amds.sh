@@ -35,7 +35,8 @@ MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   mori | uccl-ep) ;;
-  *) collx_die "unsupported AMD EP backend: $COLLX_BENCH" ;;
+  mori-io) ;;  # kv-transfer suite
+  *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 
 export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
