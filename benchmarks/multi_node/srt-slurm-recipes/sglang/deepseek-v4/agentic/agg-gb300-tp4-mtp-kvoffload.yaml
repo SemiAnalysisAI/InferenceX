@@ -87,6 +87,7 @@ backend:
   sglang_config:
     aggregated:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      enable-metrics: true
       trust-remote-code: true
       stream-interval: 50
       watchdog-timeout: 1000000
