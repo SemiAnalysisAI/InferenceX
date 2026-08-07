@@ -5527,3 +5527,13 @@
     - "Record the recipes' active HiCache host-DRAM tier and, for disaggregated points, Dynamo router commit 5a638087 in nvidia-master metadata so generated artifacts no longer report kv_offloading=none, allocated_cpu_dram_gb=0, or a null router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2477
   
+
+- config-keys:
+    - qwen3.5-fp8-b300-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Qwen3.5-397B-A17B FP8 AgentX on B300 with SGLang native NEXTN MTP"
+    - "Use the existing FP8 AgentX TP4 no-offload and HiCache concurrency grids with the 256k trace dataset and golden synthetic acceptance length 3.39"
+    - "Image: lmsysorg/sglang:v0.5.16-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2515
