@@ -5534,5 +5534,6 @@
   description:
     - "Add a DeepSeek-V4-Pro FP4 MI355X vLLM AgentX MTP submission with three speculative tokens."
     - "Pin throughput to the committed DeepSeek-V4-Pro golden synthetic acceptance length of 2.49; eval-only runs retain real target verification."
+    - "Use the immutable vllm/vllm-openai-rocm:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c image because the base submission's retired nightly tag is no longer published; rely on its upstream scheduler instead of replacing scheduler.py out of tree."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2522
   
