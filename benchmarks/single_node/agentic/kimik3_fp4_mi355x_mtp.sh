@@ -851,7 +851,7 @@ KV_CACHE_DTYPE_ARGS=(--kv-cache-dtype "$KV_CACHE_DTYPE")
 # k=3 is a fine place to be independently: the k=7 per-position acceptance
 # measurements (0.306 / 0.191 / 0.096 / 0.034 / 0.019 / 0.010 / 0.004) say the
 # first three positions carry 90% of the total gain.
-SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-3}"
+SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 # The DRAFTER stays bf16 on purpose. It runs TRITON_MLA, which sets
 # supports_quant_query_input=False, so giving it fp8 KV would trip the same
 # kimi_k3 assert the target now clears -- the drafter has no asm route. vLLM
