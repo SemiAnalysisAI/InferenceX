@@ -130,37 +130,58 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Temporary shim: add a real --chat-template-kwargs CLI option ----
-# Upstream gap (until vllm-project/vllm#44244 lands): speed_bench/CustomDataset
-# pre-renders the chat template client-side WITHOUT chat_template_kwargs and
-# posts to /v1/completions, so thinking mode cannot be enabled via --extra-body
-# or --default-chat-template-kwargs. This wires a proper --chat-template-kwargs
-# option through get_samples into CustomDataset.sample's apply_chat_template.
-# TODO: delete this whole block once #44244 is released in the benchmark image;
-# the patch is idempotent (marker check) so it is safe to leave until then.
+# ---- Conditional shim: ensure --chat-template-kwargs reaches the chat template ----
+# speed_bench/CustomDataset pre-renders the chat template client-side and posts to
+# /v1/completions, so thinking mode cannot be enabled via --extra-body or
+# --default-chat-template-kwargs — the kwargs must reach apply_chat_template.
+# vllm-project/vllm#44244 added this natively (serve.py declares the CLI option,
+# the speed_bench dispatch forwards it, CustomDataset.sample unpacks it), and it
+# is present in the v0.25.x images this collector runs on. So: probe for native
+# support first and no-op when present; only patch the pieces an older image is
+# missing. Idempotent. Same shim as the Kimi-K3 collector.
 apply_chat_template_kwargs_shim() {
-    echo "=== Patching vLLM benchmark to add --chat-template-kwargs (temporary shim) ==="
+    echo "=== Checking vLLM benchmark --chat-template-kwargs support ==="
     python3 - <<'PYEOF'
+import sys
 import vllm.benchmarks.serve as S
 import vllm.benchmarks.datasets.datasets as D
 
-def patch(mod, edits, marker):
-    f = mod.__file__
-    src = open(f).read()
-    if marker in src:
-        print("already patched:", f)
-        return
+def read(mod):
+    with open(mod.__file__) as fh:
+        return fh.read()
+
+s_src, d_src = read(S), read(D)
+
+# Native (post-#44244) spellings, plus the ones this shim itself writes.
+have_cli = '"--chat-template-kwargs"' in s_src
+have_forward = ('chat_template_kwargs=getattr(args' in d_src
+                or 'chat_template_kwargs=args.chat_template_kwargs' in d_src)
+have_unpack = ('**(chat_template_kwargs or {})' in d_src
+               or '**_ctk' in d_src)
+
+if have_cli and have_forward and have_unpack:
+    print("native --chat-template-kwargs support present; no patching needed")
+    sys.exit(0)
+
+print(f"patching (cli={have_cli} forward={have_forward} unpack={have_unpack})")
+
+def apply(mod, src, edits):
     for old, new in edits:
         n = src.count(old)
-        assert n == 1, f"anchor matched {n} times in {f}, aborting:\n{old[:80]}..."
+        assert n == 1, (
+            f"anchor matched {n} times in {mod.__file__}, aborting. This image's "
+            f"benchmark source differs from both the pre-#44244 and post-#44244 "
+            f"layouts; update the shim.\n{old[:120]}..."
+        )
         src = src.replace(old, new, 1)
-    open(f, "w").write(src)
-    print("patched OK ->", f)
+    with open(mod.__file__, "w") as fh:
+        fh.write(src)
+    print("patched OK ->", mod.__file__)
 
-# Edit 1: serve.py -- declare the --chat-template-kwargs argument before --extra-body
-serve_old = '''    parser.add_argument(
-        "--extra-body",'''
-serve_new = '''    parser.add_argument(
+if not have_cli:
+    # serve.py -- declare the --chat-template-kwargs argument before --extra-body
+    apply(S, s_src, [('''    parser.add_argument(
+        "--extra-body",''', '''    parser.add_argument(
         "--chat-template-kwargs",
         type=json.loads,
         default=None,
@@ -168,18 +189,19 @@ serve_new = '''    parser.add_argument(
         "client-side prompt rendering, e.g. to enable reasoning mode.",
     )
     parser.add_argument(
-        "--extra-body",'''
-patch(S, [(serve_old, serve_new)], marker='"--chat-template-kwargs"')
+        "--extra-body",''')])
 
-# Edit 2: datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
-disp_old = '''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-disp_new = '''                output_len=args.speed_bench_output_len,
+d_edits = []
+if not have_forward:
+    # datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
+    d_edits.append(('''                output_len=args.speed_bench_output_len,
+                enable_multimodal_chat=args.enable_multimodal_chat,''',
+                    '''                output_len=args.speed_bench_output_len,
                 chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-
-# Edit 3: datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
-samp_old = '''                # apply template
+                enable_multimodal_chat=args.enable_multimodal_chat,'''))
+if not have_unpack:
+    # datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
+    d_edits.append(('''                # apply template
                 if not skip_chat_template:
                     prompt = tokenizer.apply_chat_template(
                         [{"role": "user", "content": prompt}],
@@ -187,8 +209,8 @@ samp_old = '''                # apply template
                         tokenize=False,
                     )
 
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-samp_new = '''                # apply template
+                prompt_len = len(tokenizer(prompt).input_ids)''',
+                    '''                # apply template
                 if not skip_chat_template:
                     _ctk = kwargs.get("chat_template_kwargs") or {}
                     prompt = tokenizer.apply_chat_template(
@@ -198,9 +220,9 @@ samp_new = '''                # apply template
                         **_ctk,
                     )
 
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
-      marker="chat_template_kwargs=args.chat_template_kwargs")
+                prompt_len = len(tokenizer(prompt).input_ids)'''))
+if d_edits:
+    apply(D, d_src, d_edits)
 PYEOF
 }
 
