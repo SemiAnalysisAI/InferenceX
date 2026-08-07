@@ -5497,3 +5497,9 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 B200 disaggregated Dynamo vLLM MTP benchmarks for 8k/1k"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2390
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump SGLang image to lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233 for the 8k1k scenarios."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2099
