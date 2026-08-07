@@ -8,8 +8,8 @@
 # them would force every dgxc path to become an override hook and would let a
 # dgxc-only change silently alter nscale runs.
 #
-# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro FP4 (the b200-nscale runner
-# label). Anything else exits non-zero rather than guessing.
+# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs on
+# the b200-nscale/b200-new runner labels. Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -39,6 +39,9 @@ fi
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/DeepSeek-V4-Pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH="${MODEL_PATH:-$NSCALE_MODEL_ROOT/Kimi-K2.6-NVFP4}"
+    export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 else
     echo "Unsupported model prefix/precision for b200-nscale: $MODEL_PREFIX/$PRECISION" >&2
     echo "Models staged under $NSCALE_MODEL_ROOT:" >&2
@@ -56,11 +59,19 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-cd "$SRT_REPO_DIR" || exit 1
-git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
-mkdir -p recipes/vllm/deepseek-v4
-cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+if [[ $MODEL_PREFIX == "dsv4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
+    mkdir -p recipes/vllm/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+else
+    git clone --branch main --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout c180328b98c3793ca84a1e24a030f90545eb7d5d || exit 1
+    mkdir -p recipes/vllm/kimi-k2.6
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.6" recipes/vllm/kimi-k2.6
+fi
 
 echo "Installing srtctl..."
 export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -189,7 +200,13 @@ sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_PREFLIGHT_ARGS=()
+# Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
+if [[ $MODEL_PREFIX == "kimik2.6" ]]; then
+    SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
+fi
+
+SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" "${SRTCTL_PREFLIGHT_ARGS[@]}" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

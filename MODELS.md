@@ -49,7 +49,47 @@ Speculative-decoding A/B retirements — in each pair below the spec-decode arm 
 | Single-turn 1k1k | 1024 / 1024 | **Deprecated for all models** since 2026-07-17 ([#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Archived configs live in [`configs/deprecated/`](configs/deprecated/). |
 | Single-turn 1k8k | 1024 / 8192 | **Deprecated for all models** since 2026-03-27 ([#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)), to save GPU cluster time for higher-priority real-world agentic-coding benchmarks and new frontier models. Configs were removed, not archived. |
 
-## Engine submission policy
+## AgentX Guidelines
+
+### E2E normalized interactivity and Pareto-frontier policy
+
+E2E normalized interactivity is the primary user-side latency metric and default x-axis for AgentX trace-replay results. For every valid profiling request `i`, let `OSL_i` be its positive output sequence length and `E2EL_i` be its positive end-to-end latency, including both time to first token (TTFT) and generation time. First compute the per-request time per delivered output token:
+
+`r_i = E2EL_i / OSL_i` (seconds per output token)
+
+For percentile `q`, E2E normalized interactivity is:
+
+`E2E normalized interactivity_q = 1 / percentile_q({r_i})` (output tokens/s/user)
+
+The dashboard defaults to P90. Taking the percentile in seconds per output token before inverting preserves the slow-tail interpretation while presenting a higher-is-better rate. This is not the ratio of separately aggregated OSL and E2EL percentiles. At the request level, the metric can be understood approximately as:
+
+`OSL / E2EL ≈ 1 / (TPOT + TTFT / OSL)`
+
+Intuitively, it can be thought of as decode interactivity with a penalty for the queueing and prefill time during which the user receives no output tokens.
+
+### Advantages
+
+- It reduces the direct effect of variable AgentX output lengths on raw E2E latency: a request is not treated as slower merely because it correctly generated more output.
+- It captures both TTFT and decode cadence in one user-facing delivery rate, discouraging configurations that improve decode-only interactivity while allowing TTFT or total task completion time to regress.
+- It provides a higher-is-better optimization target in familiar tokens/s/user units while retaining the complete request path.
+
+### Tradeoffs and limitations
+
+- It is not conventional decode interactivity (`1 / TPOT`), so the absolute values are not directly comparable; E2E normalized interactivity is typically lower because it includes TTFT.
+- TTFT is amortized over OSL, so short outputs receive a larger TTFT penalty than long outputs. The metric remains workload-dependent and comparisons require the same trace distribution and benchmark methodology.
+- A single combined metric cannot show whether a regression came from TTFT or decode. The separate E2E latency, interactivity, and TTFT views remain diagnostic views.
+- The metric requires persisted per-request traces with valid E2EL and OSL values. Runs without those traces cannot participate in the canonical frontier.
+
+### North-star Pareto policy
+
+For every supported y-axis metric and comparison group, the Pareto frontier computed against E2E normalized interactivity is the canonical AgentX **North Star** frontier. All other AgentX x-axis views are gated by that canonical winner set:
+
+- The E2E normalized interactivity view displays the canonical frontier.
+- The E2E latency, conventional interactivity, and TTFT views display the intersection of the canonical North Star frontier and the true Pareto frontier in the currently displayed coordinates.
+
+Therefore, a point cannot appear on any AgentX Pareto frontier unless it is both a North Star winner and non-dominated on the selected chart. This prevents a configuration from entering a published frontier by optimizing one secondary latency metric at the expense of end-to-end user experience. Dominated points remain available in the unfiltered scatter view for diagnosis.
+
+### Engine submission policy
 
 Based on feedback from Tier 1 AI labs and the broader ML community about what they want to see in InferenceX AgentX, InferenceX uses an explicit model-to-framework mapping. Labs have reported that proprietary or hardware-specific engines such as TensorRT-LLM and ATOM do not always provide every feature their AgentX workloads require.
 
@@ -72,7 +112,7 @@ The table also records both the agreed plan-of-record (PoR) draft-model mapping 
 | GLM-5.2 (`glm5.2`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 | Qwen3.5-397B-A17B (`qwen3.5`) | native/upstream SGLang engine | native MTP | — | Additional non-vLLM/SGLang engines under the ordering guideline and exceptions above |
 
-## KV cache offloading policy
+### KV cache offloading policy
 
 To align with the design principle of shipping quickly by limiting scope, the initial AgentX policy permits only CPU DRAM KV cache offloading, and its use is optional. Supported approaches include the vLLM Connector, LMCache, SGLang HiCache, Mooncake CPU DRAM Connector, Dynamo KVBM, CPU DRAM P2P pooling, and similar CPU-memory mechanisms. Vendors may enable or disable CPU KV cache offloading for each submission at their discretion, including disabling it when that produces better Pareto points.
 
