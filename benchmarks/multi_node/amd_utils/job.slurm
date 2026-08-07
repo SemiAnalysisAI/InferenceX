@@ -530,6 +530,14 @@ DOCKER_ENV_COMMON=(
     -e SPEC_ATTN_BACKEND=\${SPEC_ATTN_BACKEND:-}
     -e SPEC_DRAFT_SAMPLE_METHOD=\${SPEC_DRAFT_SAMPLE_METHOD:-}
     -e SPEC_REJECTION_SAMPLE_METHOD=\${SPEC_REJECTION_SAMPLE_METHOD:-}
+    # ROCm kernel-fault localisation. AMD_SERIALIZE_KERNEL=3 makes HIP wait after
+    # every kernel, so an HSA_STATUS_ERROR_EXCEPTION is attributed to the kernel
+    # that caused it instead of surfacing as an async queue abort with no Python
+    # frame anywhere. Slow, so it is opt-in and unset by default.
+    -e AMD_SERIALIZE_KERNEL=\${AMD_SERIALIZE_KERNEL:-}
+    -e AMD_LOG_LEVEL=\${AMD_LOG_LEVEL:-}
+    -e HIP_LAUNCH_BLOCKING=\${HIP_LAUNCH_BLOCKING:-}
+    -e TORCH_USE_HIP_DSA=\${TORCH_USE_HIP_DSA:-}
     # Let setup_deps continue when the diagnostics-only RDMA CLI tools cannot be
     # apt-installed (flaky mirror). Unset in CI -> still a hard failure there.
     -e ALLOW_MISSING_RDMA_TOOLS=\${ALLOW_MISSING_RDMA_TOOLS:-}
