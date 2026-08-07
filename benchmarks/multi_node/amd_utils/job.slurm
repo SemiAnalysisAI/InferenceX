@@ -325,6 +325,14 @@ export BENCH_NUM_PROMPTS_MULTIPLIER=$BENCH_NUM_PROMPTS_MULTIPLIER
 export BENCH_MAX_CONCURRENCY=$BENCH_MAX_CONCURRENCY
 export BENCH_REQUEST_RATE=$BENCH_REQUEST_RATE
 export DRY_RUN="${DRY_RUN:-0}"
+# The ROCm runtime already tries to write a GPU core dump to /coredumps when a
+# kernel faults, and gives up with
+#   GPU coredump: Directory "/coredumps not writable or does not exist
+# which is exactly the evidence missing when a worker dies on
+# HSA_STATUS_ERROR_EXCEPTION: the process is signalled, so there is no Python
+# traceback either. Give it a writable node-local directory to land in.
+COREDUMP_DIR="${COREDUMP_DIR:-/tmp/gpu_coredumps-${SLURM_JOB_ID}}"
+export COREDUMP_DIR
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
 export ENGINE=$ENGINE
@@ -746,6 +754,10 @@ else
 fi
 fi  # end: if ENGINE needs host RDMA bind-mounts
 
+# Node-local landing spot for GPU core dumps (see COREDUMP_DIR above).
+mkdir -p ${COREDUMP_DIR} 2>/dev/null || true
+chmod 1777 ${COREDUMP_DIR} 2>/dev/null || true
+
 # Pre-clean (idempotent): stop then force-remove so GPU VRAM is released before
 # the sanity gate. stop-only left containers in Created/Exited state on some nodes.
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
@@ -823,6 +835,7 @@ fi
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
     -v /tmp:/run_logs \
+    -v ${COREDUMP_DIR}:/coredumps \
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     -v ${HICACHE_MC_CONFIG}:/config/hicache_mc.env:ro \
