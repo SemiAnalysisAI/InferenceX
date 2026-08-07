@@ -84,8 +84,10 @@ fi
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
-# DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
+# DeepSeek-V4-Pro is an 805 GiB checkpoint. Cold Weka loads on MI355X take
+# roughly two hours for the 64 shards, so allow the engine core to finish
+# loading instead of timing out halfway through a healthy startup.
+export VLLM_ENGINE_READY_TIMEOUT_S=10800
 
 # vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
 # vllm-project/vllm#44774 applies the same reachability policy to Mooncake's
