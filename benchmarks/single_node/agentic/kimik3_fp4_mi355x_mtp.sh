@@ -882,7 +882,7 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 # so 2.45 sits ~38% above the current default-methodology result.
 #
 # Set SPEC_REJECTION_METHOD=block to restore real verification.
-SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-synthetic}"
+SPEC_REJECTION_METHOD="${SPEC_REJECTION_METHOD:-block}"
 SPEC_SYNTHETIC_ACCEPTANCE_LENGTH="${SPEC_SYNTHETIC_ACCEPTANCE_LENGTH:-2.51}"
 
 SPEC_CFG="{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_MLA\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"$SPEC_REJECTION_METHOD\""
@@ -1081,6 +1081,40 @@ if [ "$MLA_TRITON_CG" = "1" ]; then
     echo "MLA_TRITON_CG=1: drafter no longer downgrades the engine off FULL cudagraphs"
 else
     echo "MLA_TRITON_CG=0: leaving the drafter's cudagraph support at upstream default"
+fi
+
+# ---- qSeqLen padding for k=2 -------------------------------------------------
+# The gfx950 asm registry has kernels at qSeqLen 1, 2, 4, 8 -- no 3. For K3's
+# bf16-query/fp8-KV combination there is exactly ONE row, qSeqLen=4, so k=2
+# (verify qlen = k+1 = 3) has nothing to route to under MLA_FORCE_PS=1.
+#
+# This pads the verify block 3 -> 4, runs the qSeqLen=4 kernel, and trims the
+# pad rows off the output. Padding is PREPENDED, not appended: the kernel
+# derives row t's causal window from seq_len and max_qo_len, and seq_len does
+# not change when the query tensor is padded, so raising max_qo_len shifts every
+# window down by one. Prepending puts the real rows at t = 1..3 and restores
+# their original offsets. Verified arithmetically:
+#
+#   real qlen 3    real-row windows = [ctx+1, ctx+2, ctx+3]
+#   append         real-row windows = [ctx+0, ctx+1, ctx+2]   <- WRONG
+#   prepend        real-row windows = [ctx+1, ctx+2, ctx+3]   <- correct
+#
+# THIS RESTS ON AN UNVERIFIED ASSUMPTION about how the asm kernel derives its
+# causal window -- it is arithmetic, not a reading of the kernel source. A wrong
+# window yields fluent, plausible output with subtly wrong attention, which no
+# throughput number will catch. The gsm8k eval is the gate, not the perf run.
+# That is also why this branch runs SPEC_REJECTION_METHOD=block: under synthetic
+# the eval fails by construction and could not validate anything.
+MLA_QLEN_PAD="${MLA_QLEN_PAD:-1}"
+if [ "$MLA_QLEN_PAD" = "1" ]; then
+    QLEN_PAD_PY="$(cd "$(dirname "$0")/patches" && pwd)/vllm_qlen_pad.py"
+    [ -f "$QLEN_PAD_PY" ] || { echo "ERROR: $QLEN_PAD_PY missing" >&2; exit 1; }
+    python3 "$QLEN_PAD_PY" --diff-out "$RESULT_DIR/vllm_qlen_pad.diff" \
+        2>&1 | tee "$RESULT_DIR/vllm_qlen_pad.log"
+    export VLLM_ROCM_MLA_QLEN_PAD=1
+    echo "MLA_QLEN_PAD=1: verify qlen padded to the next supported asm qSeqLen"
+else
+    echo "MLA_QLEN_PAD=0: no qSeqLen padding (k must be one of 0,1,3,7)"
 fi
 
 echo "Starting vllm server..."
