@@ -22,31 +22,8 @@ sys.path[:0] = [str(ROOT), str(ROOT / "bench")]
 import kv_workload  # noqa: E402
 
 
-class _U8:
-    """The slice of tensor surface verify_transfer touches, over numpy."""
-
-    def __init__(self, arr):
-        self.arr = np.asarray(arr, dtype=np.uint8)
-
-    def __getitem__(self, item):
-        return _U8(self.arr[item])
-
-    def cpu(self):
-        return self
-
-    def __eq__(self, other):  # noqa: D105
-        return _Bool(self.arr == other)
-
-    def tolist(self):
-        return self.arr.tolist()
-
-
-class _Bool:
-    def __init__(self, arr):
-        self.arr = arr
-
-    def all(self):
-        return bool(self.arr.all())
+def _read8(pool: np.ndarray):
+    return lambda offset: pool[offset : offset + 8].tobytes()
 
 
 class Geometry(unittest.TestCase):
@@ -119,7 +96,7 @@ class Verify(unittest.TestCase):
         dst = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local"))
         src = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote"))
         pool = self._painted_destination(cfg, dst, src)
-        ok, detail = kv_workload.verify_transfer(_U8(pool), cfg, dst, src)
+        ok, detail = kv_workload.verify_transfer(_read8(pool), cfg, dst, src)
         self.assertTrue(ok, detail)
 
     def test_one_corrupted_page_fails_with_its_coordinates(self):
@@ -128,7 +105,7 @@ class Verify(unittest.TestCase):
         src = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote"))
         pool = self._painted_destination(cfg, dst, src)
         pool[:] = 0  # a transfer that never happened
-        ok, detail = kv_workload.verify_transfer(_U8(pool), cfg, dst, src)
+        ok, detail = kv_workload.verify_transfer(_read8(pool), cfg, dst, src)
         self.assertFalse(ok)
         self.assertIn("expected", detail)
 
@@ -139,8 +116,18 @@ class Verify(unittest.TestCase):
         dst = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "local"))
         src = kv_workload.block_table(cfg, kv_workload.table_seed(cfg, "remote"))
         pool = self._painted_destination(cfg, dst, src)
-        ok, _ = kv_workload.verify_transfer(_U8(pool), cfg, src, dst)
+        ok, _ = kv_workload.verify_transfer(_read8(pool), cfg, src, dst)
         self.assertFalse(ok)
+
+    def test_fabric_pool_pattern_matches_the_verify_model(self):
+        # kv_pool's host-built pattern (the mnnvl fill path) and the verify
+        # model must agree byte for byte, or every mnnvl row fails verify.
+        import kv_pool
+
+        pattern = kv_pool._pattern(1024)
+        for offset in (0, 8, 256, 512, 1016):
+            expected = kv_workload._chunk_byte(offset)
+            self.assertTrue((pattern[offset : offset + 8] == expected).all(), offset)
 
 
 class Percentiles(unittest.TestCase):

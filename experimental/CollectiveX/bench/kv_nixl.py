@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
-"""NIXL (UCX) adapter for the KV-transfer suite.
-
-NIXL is what Dynamo, vLLM's NixlConnector, and SGLang disagg ship; on NVIDIA
-SKUs it installs from the pip wheel inside the benchmark image, on mi355x the
-sglang-rocm image already bundles it (nixl-cu12 with a ROCm-built UCX). Agent
-metadata rides the harness exchange (`add_remote_agent`), not NIXL's own TCP
-listener, so the adapter needs no port of its own. Remote descriptors are built
-locally from the peer's published pool base — the initiator knows both block
-tables by construction (seed-keyed), which is exactly the information a decode
-worker gets from the prefill side's block table message.
+"""NIXL (UCX) adapter: the library Dynamo, vLLM NixlConnector, and SGLang
+disagg ship. Agent metadata rides the harness exchange (`add_remote_agent`),
+not NIXL's TCP listener, so the adapter needs no port and no listener race.
+Remote descriptors are built locally from the peer's published pool base; both
+block tables are seed-keyed, the same information a decode worker gets from the
+prefill side's block table message.
 """
 
 from __future__ import annotations
@@ -49,15 +45,18 @@ class NIXLBackend(KVBackend):
 
     def register(self, pool, bulk) -> None:
         self._pool, self._bulk = pool, bulk
-        if not self._agent.register_memory(pool) or not self._agent.register_memory(bulk):
+        reg = self._agent.get_reg_descs(
+            [(pool.ptr, pool.nbytes, pool.device, "pool"),
+             (bulk.ptr, bulk.nbytes, bulk.device, "bulk")], mem_type="cuda")
+        if self._agent.register_memory(reg) is None:
             raise RuntimeError("nixl memory registration failed")
 
     def publish(self) -> dict:
         return {
             "agent": bytes(self._agent.get_agent_metadata()),
-            "pool_base": self._pool.data_ptr(),
-            "bulk_base": self._bulk.data_ptr(),
-            "dev": self.device.index or 0,
+            "pool_base": self._pool.ptr,
+            "bulk_base": self._bulk.ptr,
+            "dev": self._pool.device,
         }
 
     def connect(self, peer: dict) -> None:
@@ -90,15 +89,13 @@ class NIXLBackend(KVBackend):
         return transfer_once, prep_s
 
     def make_paged(self, cfg, op, local_table, remote_table):
-        device_index = self.device.index or 0
-        local_np = kv_workload.desc_array(self._pool.data_ptr(), cfg, local_table, device_index)
+        local_np = kv_workload.desc_array(self._pool.ptr, cfg, local_table, self._pool.device)
         remote_np = kv_workload.desc_array(self._peer["pool_base"], cfg, remote_table,
                                            self._peer["dev"])
         return self._make(local_np, remote_np, op)
 
     def make_bulk(self, nbytes, op):
-        device_index = self.device.index or 0
-        local_np = np.array([[self._bulk.data_ptr(), nbytes, device_index]], dtype=np.uint64)
+        local_np = np.array([[self._bulk.ptr, nbytes, self._bulk.device]], dtype=np.uint64)
         remote_np = np.array([[self._peer["bulk_base"], nbytes, self._peer["dev"]]],
                              dtype=np.uint64)
         return self._make(local_np, remote_np, op)

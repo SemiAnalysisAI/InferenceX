@@ -626,6 +626,13 @@ main() {
     nccl-ep) nccl_ep_prepare || return 1 ;;
     flashinfer-ep) flashinfer_ep_prepare || return 1 ;;
     nixl) nixl_prepare || return 1 ;;
+    mooncake)
+      # The wheel links libcudart.so.12; the adapter dlopens it from the
+      # runtime package at import, so no LD_LIBRARY_PATH seam is needed.
+      python3 -m pip install -q --disable-pip-version-check --no-input \
+        'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+        || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
+      ;;
     mori-io)
       python3 -c "import mori.io" \
         || { collx_log "ERROR: MoRI-IO import failed"; return 1; }
