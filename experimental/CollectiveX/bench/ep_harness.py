@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+from dataclasses import dataclass, field
 import json
 import math
 import os
@@ -594,6 +595,34 @@ def _oracle_report(**fields):
     return report
 
 
+@dataclass
+class PointSamples:
+    """Every sample series for one ladder point.
+
+    Fresh-entry components carry one value per timed iteration, pooled across trials;
+    `spread` is the per-iteration cross-rank max-minus-min of the roundtrip; the `_min`
+    fields are the same iterations reduced by cross-rank MIN (the last rank into a
+    collective waited least, so its duration is the operation with entry skew excluded).
+    The chained family runs on its own much smaller trial count: `chain` and `chain_spread`
+    are per-iteration, while `gap` and `settle` are one scalar per trial.
+    """
+
+    dispatch: list = field(default_factory=list)
+    stage: list = field(default_factory=list)
+    combine: list = field(default_factory=list)
+    roundtrip: list = field(default_factory=list)
+    spread: list = field(default_factory=list)
+    dispatch_min: list = field(default_factory=list)
+    combine_min: list = field(default_factory=list)
+    roundtrip_min: list = field(default_factory=list)
+    chain: list = field(default_factory=list)
+    chain_spread: list = field(default_factory=list)
+    dispatch_floor: list = field(default_factory=list)
+    combine_floor: list = field(default_factory=list)
+    gap: list = field(default_factory=list)
+    settle: list = field(default_factory=list)
+
+
 def _chain_output_matches(chained, drained):
     """Whether the chain's final combined output matches a drained pair, same code path.
 
@@ -1087,26 +1116,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     # ---- Pass 2: every backend uses the same rotated point order.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
-    disp_pool = {T: [] for T in ladder}     # pooled per-iteration cross-rank MAX (dispatch)
-    stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
-    comb_pool = {T: [] for T in ladder}     # ... combine
-    rt_pool = {T: [] for T in ladder}       # independently measured round trip
-    spread_pool = {T: [] for T in ladder}   # cross-rank (max-min) of the round trip, per iter
-    # Cross-rank MIN per component. The LAST rank to enter a collective is the one that waited
-    # least -- it started when its peers were already there -- so its duration is the closest
-    # estimate of the operation's cost with entry skew excluded. MAX (reported as the latency)
-    # is that cost PLUS the skew, i.e. what the earliest-entering rank observed.
-    dmin_pool = {T: [] for T in ladder}
-    cmin_pool = {T: [] for T in ladder}
-    rtmin_pool = {T: [] for T in ladder}
-    # The chained family, on its own (much smaller) trial count -- see backend.benchmark_chain for
-    # what its two sibling chains measure and why only these reductions are publishable.
-    chain_pool = {T: [] for T in ladder}         # pair period, cross-rank MEDIAN per iteration
-    chain_spread_pool = {T: [] for T in ladder}  # ... and its cross-rank (max-min), as the proof
-    dfloor_pool = {T: [] for T in ladder}        # chained dispatch window, cross-rank MIN
-    cfloor_pool = {T: [] for T in ladder}        # ... combine
-    gap_pool = {T: [] for T in ladder}           # start-to-start minus pair window, one per trial
-    settle_pool = {T: [] for T in ladder}        # late-half minus early-half period, one per trial
+    # One object per ladder point, so a point's sample series travel together instead of as
+    # fourteen parallel dicts that must be kept in step by hand. Every list is per-iteration
+    # cross-rank reduced and pooled across trials; the reduction differs per field and is what
+    # the field name records (MAX for the published latencies, MIN for the skew-excluded floors,
+    # MEDIAN for the chained period -- see the reduction sites below).
+    samples = {T: PointSamples() for T in ladder}
+
     for trial_index in range(args.trials):
         order = trial_order(list(ladder), trial_index)
         for T in order:
@@ -1124,12 +1140,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 )
             # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
             if measured["dispatch"]:
-                disp_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MAX)
-                comb_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MAX)
+                samples[T].dispatch += _reduce_vec(torch, dist, device, measured["dispatch"], MAX)
+                samples[T].combine += _reduce_vec(torch, dist, device, measured["combine"], MAX)
             if measured["stage"]:
-                stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
+                samples[T].stage += _reduce_vec(torch, dist, device, measured["stage"], MAX)
             rt_max = _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
-            rt_pool[T] += rt_max
+            samples[T].roundtrip += rt_max
             # Cross-rank SPREAD (max-min) of the same iterations. A collective cannot finish
             # before its slowest participant, so when ranks enter together every rank measures
             # nearly the same duration and the spread is small; a large spread means the ranks
@@ -1137,11 +1153,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Emitted as a diagnostic so a skew-inflated point is visible in the artifact
             # instead of being mistaken for the operation getting slower.
             rt_min = _reduce_vec(torch, dist, device, measured["roundtrip"], MIN)
-            spread_pool[T] += [hi - lo for hi, lo in zip(rt_max, rt_min)]
-            rtmin_pool[T] += rt_min
+            samples[T].spread += [hi - lo for hi, lo in zip(rt_max, rt_min)]
+            samples[T].roundtrip_min += rt_min
             if measured["dispatch"]:
-                dmin_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
-                cmin_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MIN)
+                samples[T].dispatch_min += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
+                samples[T].combine_min += _reduce_vec(torch, dist, device, measured["combine"], MIN)
 
     # ---- Pass 2b: the chained family, on its own trial count. A separate loop because one call
     # already yields chain_iters free-running pairs, so a handful of trials out-samples the
@@ -1186,13 +1202,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 )
             pair = chained["pair"]
             pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
-            chain_pool[T] += pair_median
-            chain_spread_pool[T] += pair_spread
+            samples[T].chain += pair_median
+            samples[T].chain_spread += pair_spread
             # Per-op: cross-rank MIN only, from the FLOORS sibling chain (the period chain carries
             # no per-op events). The chained windows park each rank's inter-rank wait, so only the
             # minimum -- the last-entering rank's -- is the operation with the wait excluded.
-            dfloor_pool[T] += _reduce_vec(torch, dist, device, chained["dispatch"], MIN)
-            cfloor_pool[T] += _reduce_vec(torch, dist, device, chained["combine"], MIN)
+            samples[T].dispatch_floor += _reduce_vec(torch, dist, device, chained["dispatch"], MIN)
+            samples[T].combine_floor += _reduce_vec(torch, dist, device, chained["combine"], MIN)
             # Chain-health scalars, one per trial. `interpair_gap_us` = start-to-start minus pair
             # window: the per-pair cost outside the published window, the in-artifact guard against
             # instrumentation self-charging. `settle_drift_us` = late-half minus early-half period.
@@ -1202,13 +1218,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             gaps = _gather_scalar(
                 torch, dist, device, s2s_p50 - _pcts(pair)["p50"]
             )
-            gap_pool[T].append(_pcts(gaps)["p50"])
+            samples[T].gap.append(_pcts(gaps)["p50"])
             half = len(pair) // 2
             drifts = _gather_scalar(
                 torch, dist, device,
                 _pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"],
             )
-            settle_pool[T].append(max(drifts, key=abs))
+            samples[T].settle.append(max(drifts, key=abs))
             if final_chain_trial:
                 # Gate the regime we publish: Passes 1 and 3 only check drained calls, so without
                 # this a backend that corrupts under free-running pairs would present as the
@@ -1274,7 +1290,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gt = gts[T]
         g = gate[T]
         rstats = g["rstats"]
-        d, s, c, rt = disp_pool[T], stage_pool[T], comb_pool[T], rt_pool[T]
+        d, s, c, rt = samples[T].dispatch, samples[T].stage, samples[T].combine, samples[T].roundtrip
         dp, sp, cp, rtp = _pcts(d), _pcts(s), _pcts(c), _pcts(rt)
         # isolated_sum = SUM of the isolated dispatch+stage+combine percentiles. Stage contributes
         # zero when it is explicitly not applicable. This is NOT a measured chained operation
@@ -1335,13 +1351,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
-        spread = spread_pool[T]
-        chain = chain_pool[T]
-        chain_spread = chain_spread_pool[T]
-        dfloor = dfloor_pool[T]
-        cfloor = cfloor_pool[T]
-        chain_gap = gap_pool[T]
-        chain_settle = settle_pool[T]
+        spread = samples[T].spread
+        chain = samples[T].chain
+        chain_spread = samples[T].chain_spread
+        dfloor = samples[T].dispatch_floor
+        cfloor = samples[T].combine_floor
+        chain_gap = samples[T].gap
+        chain_settle = samples[T].settle
         chainp = _pcts(chain)
         rows.append({
             "components": {
@@ -1376,9 +1392,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # operation and how much is rank stagger; a curve that dips in MAX but not in MIN was
             # never the operation getting faster.
             "cross_rank_min_us": {
-                "combine": _component(_pcts(cmin_pool[T]), len(cmin_pool[T])),
-                "dispatch": _component(_pcts(dmin_pool[T]), len(dmin_pool[T])),
-                "roundtrip": _component(_pcts(rtmin_pool[T]), len(rtmin_pool[T])),
+                "combine": _component(_pcts(samples[T].combine_min), len(samples[T].combine_min)),
+                "dispatch": _component(_pcts(samples[T].dispatch_min), len(samples[T].dispatch_min)),
+                "roundtrip": _component(_pcts(samples[T].roundtrip_min), len(samples[T].roundtrip_min)),
             },
             # Diagnostic, NOT a latency: per-iteration cross-rank (max-min) of the round trip.
             # Small => ranks entered together and the reported MAX is the operation's cost.
