@@ -21,6 +21,7 @@ python -m pip install tabulate 2>&1 | tail -1
 say "2/7 fetch PR diffs"
 cd "$WS"
 curl -sL https://github.com/ROCm/aiter/pull/4474.diff       -o pr4474.diff
+curl -sL https://github.com/ROCm/aiter/pull/4494.diff       -o pr4494.diff
 curl -sL https://github.com/vllm-project/vllm/pull/50578.diff -o pr50578.diff
 curl -sL https://github.com/vllm-project/vllm/pull/51171.diff -o pr51171.diff
 curl -sL https://github.com/vllm-project/vllm/pull/50619.diff -o pr50619.diff
@@ -52,6 +53,13 @@ if old in p: p=p.replace(old,new)
 open("/workspace/pr51171.fixed.diff","w").write(strip_tests(p))
 open("/workspace/pr50578.notest.diff","w").write(strip_tests(open("/workspace/pr50578.diff").read()))
 open("/workspace/pr4474.notest.diff","w").write(strip_tests(open("/workspace/pr4474.diff").read()))
+# 4494: keep ONLY aiter/ops/gemm_op_a16w16.py (drop the new op_tests/ regression test,
+# which is not present under dist-packages). CUDA-graph split-K semaphore fix: under
+# graph capture return a fresh zeroed workspace so the counter==0 invariant holds on
+# every replay -> enables FULL/FULL_DECODE_ONLY fp8 cudagraph without corrupt reductions.
+keep4494=[pt for pt in re.split(r"(?m)^(?=diff --git )", open("/workspace/pr4494.diff").read())
+          if pt.startswith("diff --git a/aiter/ops/gemm_op_a16w16.py")]
+open("/workspace/pr4494.src.diff","w").write("".join(keep4494))
 # 50619: keep nvidia/mla.py (fallback) + rocm_aiter_mla hunks1&2; drop hunk3(superseded by 51171), wiring, tests
 out=[]
 for pt in re.split(r"(?m)^(?=diff --git )", open("/workspace/pr50619.diff").read()):
@@ -77,7 +85,7 @@ print("diffs built")
 PY
 
 say "4/7 apply patches to live dist-packages"
-for f in pr4474.notest.diff pr50578.notest.diff pr51171.fixed.diff pr50619.fp8gluon.diff; do
+for f in pr4474.notest.diff pr4494.src.diff pr50578.notest.diff pr51171.fixed.diff pr50619.fp8gluon.diff; do
   echo "--- applying $f ---"
   patch -p1 -d "$D" --fuzz=2 --no-backup-if-mismatch < "$WS/$f" || echo "WARN: $f had issues"
 done
@@ -130,6 +138,7 @@ PY
 
 say "7/7 verify"
 echo "4474_int64      = $(grep -c 'to(gl.int64)' $D/aiter/ops/triton/gluon/mla_gluon.py)  (expect 2)"
+echo "4494_graphsem   = $(grep -c 'is_current_stream_capturing' $D/aiter/ops/gemm_op_a16w16.py)  (expect 1)"
 echo "gluon_batch256  = $(grep -c '1 <= batch_size <= 256' $D/aiter/ops/triton/gluon/mla_gluon.py)  (expect 2)"
 echo "gluon_dequant   = $(grep -c 'q_nope = q_nope.to(torch.bfloat16)' $D/aiter/ops/triton/gluon/mla_gluon.py)  (expect 1)"
 echo "50578_env       = $(grep -c VLLM_ROCM_AITER_MLA_ASM_PADDING $D/vllm/envs.py)  (expect 3)"
@@ -146,12 +155,17 @@ cat <<'ENVMSG'
 ============================================================
 DONE. Launch the fp8 server with these ENV + args:
   export VLLM_ROCM_AITER_MLA_ASM_PADDING=gluon
-  export AITER_DISABLE_FMHA_OPUS=1        # fixes fmha int32 overflow -> FULL cudagraph works
   vllm serve <MODEL_PATH> ... \
     --kv-cache-dtype fp8 \
     --max-model-len 1048576 \
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":48, ...}' \
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":48,"custom_ops":["+fused_rms_norm_gated"]}' \
     --speculative-config '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"method":"dspark","attention_backend":"TRITON_MLA","kv_cache_dtype":"auto"}'
-  (server_gluon_piecewise_nomode3.sh already encodes this; add AITER_DISABLE_FMHA_OPUS=1 for FULL cudagraph.)
+
+  VALIDATED 2026-08-08 (image cb8104839c, this patch set incl. aiter #4494):
+  server_final.sh (fp8 KV + gluon + FULL_DECODE_ONLY capture-48 + full 1M pool)
+  boots clean, cudagraph capture completes with NO memory fault, gsm8k 1.0.
+  #4494 (graph split-K semaphore) is what makes FULL-family fp8 cudagraph safe
+  here; AITER_DISABLE_FMHA_OPUS=1 is NO LONGER required for this config.
+  (For the older FULL_AND_PIECEWISE recipe you may still add AITER_DISABLE_FMHA_OPUS=1.)
 ============================================================
 ENVMSG
