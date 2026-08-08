@@ -239,7 +239,7 @@ class KVGrid(unittest.TestCase):
 
         base = dict(workload_name="kv-dsv4", precision="fp8",
                     isl_ladder="32768 524288", page_tokens="16 64",
-                    batch_sizes="1 2 4 8 16", pool_slack=2.0)
+                    batch_sizes="1 2 4 8 16 32", pool_slack=2.0)
         base.update(overrides)
         return argparse.Namespace(**base)
 
@@ -250,10 +250,10 @@ class KVGrid(unittest.TestCase):
         import run_kv
 
         points, isls, batches = run_kv._grid(self._args())
-        self.assertEqual((isls, batches), ([32768, 524288], [1, 2, 4, 8, 16]))
+        self.assertEqual((isls, batches), ([32768, 524288], [1, 2, 4, 8, 16, 32]))
         allowed = {(cfg["isl"], cfg["page_tokens"]): allowed for cfg, allowed in points}
         self.assertEqual(allowed[32768, 16], [1, 2, 4, 8, 16])
-        self.assertEqual(allowed[32768, 64], [1, 2, 4, 8, 16])
+        self.assertEqual(allowed[32768, 64], [1, 2, 4, 8, 16, 32])
         self.assertEqual(allowed[524288, 16], [1])
         self.assertEqual(allowed[524288, 64], [1, 2])
         for cfg, batch_list in points:

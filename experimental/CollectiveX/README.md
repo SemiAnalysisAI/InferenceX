@@ -143,7 +143,7 @@ benchmark's return code.
 ## KV-Cache Transfer Suite
 
 `kv-transfer` legs run 2 nodes x 1 GPU — the per-worker prefill/decode pair a
-disaggregated deployment actually forms — and move bursts of 1/4/16 concurrent
+disaggregated deployment actually forms — and move bursts of 1 to 32 concurrent
 requests' paged KV as per-request layer-major descriptor lists over seed-keyed
 random block tables (the post-fragmentation layout vLLM and SGLang post; a
 burst posts every request's prepped transfer, then awaits them all), plus one
