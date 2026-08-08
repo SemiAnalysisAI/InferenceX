@@ -550,6 +550,10 @@ DOCKER_ENV_COMMON=(
     # Kimi-K3: online-install the vLLM DSpark/MoRIIO-KDA fork over the base image
     # (setup_deps.sh install_kimi_k3_vllm_fork). REF empty -> skipped.
     -e VLLM_K3_FORK_REF=\${VLLM_K3_FORK_REF:-}
+    # Mooncake store: 1 puts the DSpark draft's KV back into the store alongside the target's,
+    # which is what the merged MLA KV-cache group used to do implicitly. Only useful for A/B'ing
+    # that against the default, which withholds it.
+    -e VLLM_MOONCAKE_OFFLOAD_DRAFT_KV=\${VLLM_MOONCAKE_OFFLOAD_DRAFT_KV:-}
     -e VLLM_K3_FORK_REPO=\${VLLM_K3_FORK_REPO:-}
     -e VLLM_K3_FORK_TOKEN=\${VLLM_K3_FORK_TOKEN:-}
     # Debug: dummy-weight / no-draft plumbing smoke (server_vllm.sh honors these).
