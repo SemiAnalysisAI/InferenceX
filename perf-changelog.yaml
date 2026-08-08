@@ -5656,3 +5656,12 @@
     - "Search space now runs on the AgentX MTP concurrency grid: the GPU-resident row [4, 8, 12, 16] and the HiCache row [4, 8, 12, 16]. Every step is at least 2 concurrency apart and every arm stops hard at conc 16 -- single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and past conc 16 these SKUs are into the post-HBM-cliff thrashing regime that the non-MTP sweeps already characterized, which is not worth one GPU job per point."
     - "Drops conc 1 from the GPU-resident arm. The TP8/EP8 c1 cell was the one job that never returned on this recipe while the other 18 completed, so it gated the PR without adding a point: at conc 1 a single session cannot exercise the EP8 all-to-all this arm exists to measure, and the low-interactivity corner is already covered by conc 4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2428
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2516
