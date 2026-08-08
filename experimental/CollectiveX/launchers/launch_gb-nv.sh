@@ -44,7 +44,11 @@ export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$S
 export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
   deepep-v2 | nccl-ep | flashinfer-ep) ;;
-  nixl | mooncake) ;;  # kv-transfer suite
+  nixl | mooncake)
+    # A dense kv grid on the mnnvl descriptor floor is ~90 minutes of honest
+    # work; keep the per-case hang guard above it without touching EP legs.
+    export COLLX_RUN_TIMEOUT="${COLLX_RUN_TIMEOUT:-7200}"
+    ;;  # kv-transfer suite
   *) collx_die "unsupported $PRODUCT backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
