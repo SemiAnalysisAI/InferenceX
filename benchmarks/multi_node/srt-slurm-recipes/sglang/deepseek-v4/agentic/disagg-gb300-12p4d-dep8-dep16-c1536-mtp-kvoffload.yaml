@@ -1,7 +1,7 @@
-name: "disagg-gb300-12p4d-dep8-dep16-c2048-mtp-kvoffload"
+name: "disagg-gb300-12p4d-dep8-dep16-c1536-mtp-kvoffload"
 
 # Agentic-coding SGLang disaggregated Pareto recipe for DeepSeek-V4-Pro on GB300
-# (12P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 2048.
+# (12P x DEP8 / 4D x DEP16, MTP + hierarchical-cache KV offload), tuned for concurrency 1536.
 #
 # Uses the flat single-variant srtctl schema the agentic CI flow expects;
 # resources + backend (prefill/decode env + sglang_config) are normalized
