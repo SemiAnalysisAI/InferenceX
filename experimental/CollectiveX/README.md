@@ -162,8 +162,8 @@ what vLLM allocates for the model it serves: `kv-dsv4` = DeepSeek-V4-Pro's mixed
 cache (30 Compressed Sparse Attention layers at 4 tokens per 576 B entry plus
 their 132 B indexer entries, 31 Heavily Compressed Attention layers at 128
 tokens per entry, and the 128-token sliding-window cache on all 61 layers; fp8
-by architecture); page
-sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
+by architecture); ISL
+8k to 512k at page sizes 16 and 64 tokens; `pull` (READ, vLLM NixlConnector) and `push` (WRITE,
 SGLang disagg) both timed from the initiator with offset-pattern verification on
 the destination pool in both directions. Backends: `nixl` (what Dynamo, vLLM,
 and SGLang ship), `mooncake` (NVIDIA-only; the wheel links libcuda at import),
