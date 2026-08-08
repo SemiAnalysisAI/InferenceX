@@ -5528,6 +5528,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2477
 
 - config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Require vLLM backend metrics in every AgentX artifact."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2518
+
+- config-keys:
     - dsv4-fp4-b300-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
