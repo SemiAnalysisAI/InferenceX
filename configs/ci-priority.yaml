@@ -6,6 +6,9 @@ version: 1
 base-score: 1.0
 
 adjustments:
+  # Preserve business priority as the primary key, then prefer smaller Slurm
+  # allocations within an otherwise identical class.
+  additional-node: -0.001
   event:
     push: 2.0
   multi-node: 1.25
