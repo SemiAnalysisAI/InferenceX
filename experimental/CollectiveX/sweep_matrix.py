@@ -43,9 +43,17 @@ BACKEND_PRECISIONS = {
     "nccl-ep": ("bf16",),
     # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
     # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
-    # comparable. No engine selects that precision on this transport -- see path_status.
+    # comparable. Realizable, but off every deployed path -- see OFF_PATH_PRECISIONS.
     "flashinfer-ep": ("bf16", "fp8"),
 }
+# Precisions a backend REALIZES but that no serving engine can select on that transport. Kept
+# out of the default matrix so a production sweep measures deployable configurations, and still
+# reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
+# vLLM accepts only nvfp4/mxfp8/bf16 on FlashInfer's one-sided all-to-all, so its FP8 row
+# measures the collective off any path an engine selects. Declared here rather than read from
+# the adapter's `path_status` because this generator must resolve the matrix with no vendor
+# imports; tests/test_matrix.py holds the two in step.
+OFF_PATH_PRECISIONS = {"flashinfer-ep": ("fp8",)}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
 _MODE_SLUG = {"low-latency": "ll"}
@@ -170,9 +178,13 @@ def resolve_matrix(
                         continue
                     runnable = ep in runnable_eps
                     backend_precisions = BACKEND_PRECISIONS[target]
+                    # Off-path precisions are dropped unless the caller named the precision
+                    # explicitly, so the default matrix carries only deployable configurations.
+                    off_path = OFF_PATH_PRECISIONS.get(target, ())
                     supported = [
                         precision for precision in SWEEP["precisions"]
                         if precision in backend_precisions
+                        and (precision not in off_path or precision in selected_precisions)
                     ]
                     if runnable:
                         # A runnable cell fans out over the modes it realizes at this

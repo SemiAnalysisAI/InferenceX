@@ -561,9 +561,12 @@ One raw case document carries `record_type: "case-attempt"` and the single `vers
   at one precision and transport-only at another, so each case declares whether its own
   (backend, precision) pair is something a served engine selects (`deployed`, the default) or not
   (`offpath`). FlashInfer EP is the case in hand: a production transport whose FP8 dispatch no
-  engine can choose, kept in the matrix because it makes the FP8 wire comparable against
-  deepep-v2/uccl-ep at matching bytes and block size. `summarize.py` marks such rows in the
-  precision column. It also carries `chained_period` (whether this document's rows carry the
+  engine can choose. Such precisions are listed in `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` and
+  **excluded from the default matrix**, so a production sweep measures only deployable
+  configurations; naming the precision explicitly (`--precisions fp8`) opts them back in for
+  transport comparison against deepep-v2/uccl-ep at matching bytes and block size. That is the one
+  place a precision filter ADDS rows rather than only removing them. `summarize.py` marks any that
+  do run in the precision column. It also carries `chained_period` (whether this document's rows carry the
   chained family at all);
 - `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
 - `provenance`: the mounted image tag and source SHA; and

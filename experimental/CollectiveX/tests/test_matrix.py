@@ -62,8 +62,12 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual(outputs[0]["cases"], cell["cases"])
 
     def test_sku_and_ep_filters_only_remove_cases(self):
+        # Subtractive with ONE deliberate exception: naming an off-path precision explicitly
+        # opts its rows back in (see OFF_PATH_PRECISIONS), so the fp8 subset is compared
+        # against a baseline that also names fp8 rather than against the default matrix.
         full = matrix(backend="all")
-        for options, keep in (
+        full_with_off_path = matrix(backend="all", precisions="bf16,fp8")
+        for case in (
             ({"exclude_skus": "b300"}, lambda item: item["sku"] != "b300"),
             ({"ep_sizes": "8"}, lambda item: item["case"]["ep"] == 8),
             # A precision subset removes only the runnable cases of the other
@@ -71,7 +75,7 @@ class MatrixTests(unittest.TestCase):
             ({"precisions": "bf16"}, lambda item: item["case"]["precision"] == "bf16"),
             ({"precisions": "fp8"},
              lambda item: item["case"]["precision"] == "fp8"
-             or item["disposition"] == "unsupported"),
+             or item["disposition"] == "unsupported", "off_path"),
             # A mode subset removes only the runnable cases of the other mode; the
             # ep-unsupported placeholder is normal-mode and mode-filter-independent, so it
             # survives both selections (mirrors the precision rows above).
@@ -80,9 +84,12 @@ class MatrixTests(unittest.TestCase):
              lambda item: item["case"]["mode"] == "low-latency"
              or item["disposition"] == "unsupported"),
         ):
+            options, keep = case[0], case[1]
             partial = matrix(backend="all", **options)
+            baseline = full_with_off_path if len(case) > 2 else full
             expected = {
-                item["case"]["case_id"]: item for item in full["requested_cases"] if keep(item)
+                item["case"]["case_id"]: item
+                for item in baseline["requested_cases"] if keep(item)
             }
             actual = {item["case"]["case_id"]: item for item in partial["requested_cases"]}
             self.assertEqual(actual, expected)
@@ -121,13 +128,15 @@ class MatrixTests(unittest.TestCase):
             cell = (item["sku"], case["backend"], case["ep"], case["phase"])
             by_cell.setdefault(cell, set()).add(case["precision"])
         for cell, precisions in by_cell.items():
+            off_path = sweep_matrix.OFF_PATH_PRECISIONS.get(cell[1], ())
             expected = {
                 precision for precision in sweep_matrix.SWEEP["precisions"]
                 if precision in sweep_matrix.BACKEND_PRECISIONS[cell[1]]
+                and precision not in off_path
             }
             self.assertEqual(precisions, expected, cell)
-        # Every backend that lists FP8 (deepep-v2, mori, uccl-ep) realizes BF16 and FP8;
-        # nccl-ep is BF16-only, so the cross-cell union of realized precisions stays {bf16, fp8}.
+        # deepep-v2, mori and uccl-ep realize BF16 and FP8; nccl-ep is BF16-only and
+        # flashinfer-ep's FP8 is off-path, so the union across cells stays {bf16, fp8}.
         self.assertEqual(
             {precision for precisions in by_cell.values() for precision in precisions},
             {"bf16", "fp8"},
@@ -263,7 +272,9 @@ class MatrixTests(unittest.TestCase):
         #     a separate decode kernel, so an ll_backends cell would re-measure the same kernel
         #     under a mode that promises a different one. Decode is still covered by the decode
         #     phase of normal mode.
-        # BF16 only this pass (FP8 dispatch needs the scale payload plumbed and oracle-validated).
+        # BF16 only in the DEFAULT matrix: the FP8 dispatch is implemented and oracle-validated,
+        # but no engine can select it on this transport, so OFF_PATH_PRECISIONS keeps it out
+        # unless `--precisions` names fp8 explicitly.
         document = matrix(backend="all")
         cases = [
             item for item in document["requested_cases"]
@@ -275,8 +286,15 @@ class MatrixTests(unittest.TestCase):
         }
         self.assertEqual(runnable, {(sku, ep) for sku in ("gb200", "gb300") for ep in (8, 16)})
         # FP8 is dispatch-side only: scales ride as a fourth payload (kMaxPayloads is exactly 4)
-        # and combine stays BF16, so none of the 0.6.16+ combine-quant API is needed.
-        self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16", "fp8"})
+        # and combine stays BF16, so none of the 0.6.16+ combine-quant API is needed. It is
+        # realizable but off-path, so the DEFAULT matrix carries BF16 alone and naming the
+        # precision brings it back for transport comparison.
+        self.assertEqual({item["case"]["precision"] for item in cases}, {"bf16"})
+        opted_in = cells(
+            matrix(backend="flashinfer-ep", precisions="fp8"), "precision",
+            disposition="runnable",
+        )
+        self.assertEqual(opted_in, {"fp8"})
         # Normal mode only — no low-latency cell on any SKU.
         self.assertEqual({item["case"]["mode"] for item in cases}, {"normal"})
         for platform in sweep_matrix.PLATFORMS.values():
