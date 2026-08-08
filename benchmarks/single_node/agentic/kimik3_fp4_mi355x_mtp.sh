@@ -100,7 +100,7 @@ resolve_trace_source
 install_agentic_deps
 
 # ---- Reference env block ----------------------------------------------------
-export VLLM_ROCM_AITER_MLA_ASM_PADDING=gluon
+export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
 #export AITER_DISABLE_FMHA_OPUS=1   
 export VLLM_ROCM_USE_AITER=1
 export SAFETENSORS_FAST_GPU=1
@@ -795,7 +795,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 # expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
 # (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( 2 * CONC * (1 + SPEC_NUM_TOKENS) ))
-COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
+COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 GPU_MEM_UTIL="0.9"
 
 echo "Starting vllm server..."
@@ -822,7 +822,6 @@ VLLM_CMD=(
     --reasoning-parser kimi_k3
     --max-model-len 1048576
     --enable-prefix-caching
-    --disable-custom-all-reduce
     "${COMPILATION_CONFIG_ARGS[@]}"
     "${LMCACHE_MAMBA_CACHE_MODE_ARGS[@]}"
     "${KV_CACHE_DTYPE_ARGS[@]}"
