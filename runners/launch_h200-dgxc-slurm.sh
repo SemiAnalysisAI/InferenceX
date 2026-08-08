@@ -7,6 +7,8 @@ SLURM_ACCOUNT="sa-shared"
 
 set -x
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
@@ -29,8 +31,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
+    elif [[ $FRAMEWORK == "vllm" ]]; then
+        if [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
+            export MODEL_PATH="/models/gharunners/hf-hub-cache/Kimi-K3"
+            export SRT_SLURM_MODEL_PREFIX="kimik3"
+        else
+            echo "Unsupported model prefix/precision for vllm: $MODEL_PREFIX/$PRECISION"
+            exit 1
+        fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, vllm"
         exit 1
     fi
 
@@ -41,8 +51,14 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
+    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
+        git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
+        mkdir -p recipes/vllm/kimi-k3/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k3/agentic" \
+            recipes/vllm/kimi-k3/agentic
+    elif [[ "$IS_AGENTIC" == "1" ]]; then
         git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
     else
@@ -77,6 +93,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+    elif [[ $FRAMEWORK == "vllm" ]]; then
+        CONTAINER_KEY="$IMAGE"
+        SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     fi
 
     export ISL="$ISL"
@@ -85,6 +104,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Create srtslurm.yaml for srtctl (used by both frameworks)
     SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
+    DEFAULT_MOUNTS_BLOCK=""
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
+        HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
+        mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
+        DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+    fi
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for H200
@@ -105,6 +133,7 @@ model_paths:
 containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
+  dynamo-vllm: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
@@ -112,6 +141,7 @@ containers:
 use_gpus_per_node_directive: true
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
     echo "Generated srtslurm.yaml:"
@@ -154,32 +184,9 @@ EOF
     # srtctl creates logs in outputs/JOB_ID/logs/
     LOGS_DIR="outputs/$JOB_ID/logs"
     LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
+    trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
-    # Wait for log file to appear (also check job is still alive)
-    while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
-            exit 1
-        fi
-        echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-        sleep 5
-    done
-
-    # Poll for job completion in background
-    (
-        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
-    POLL_PID=$!
-
-    echo "Tailing LOG_FILE: $LOG_FILE"
-
-    # Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-    wait $POLL_PID
+    stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
 
     set -x
 
@@ -194,7 +201,7 @@ EOF
     echo "Found logs directory: $LOGS_DIR"
 
     cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"
 
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         # Find all result subdirectories

@@ -2,14 +2,21 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for GLM-5.2 NVFP4 on B300 using SGLang.
+# Agentic trace replay benchmark for GLM-5.2 NVFP4 on B300 using SGLang with
+# EAGLE/MTP speculative decoding.
+#
+# MTP-only recipe following the AgentX policy that agentic recipes are run and
+# published with speculative decoding enabled rather than as an STP/MTP A/B
+# (MODELS.md: GLM-5.2 agentic non-MTP is deprecated after 2026-08-03).
 #
 # Server flags follow the SGLang cookbook B300 NVFP4 single-node recipes
-# (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2), STP only:
-# the cookbook's EAGLE MTP variants are intentionally not wired up yet.
+# (https://docs.sglang.io/cookbook/autoregressive/GLM/GLM-5.2):
 #   DP_ATTENTION=false -> low-latency arm (TP8, fp8 KV, cutedsl bf16 GEMM)
 #   DP_ATTENTION=true  -> high-throughput DEP arm (TP8 + DP8 attention-DP +
 #                         EP_SIZE expert-parallel MoE via --ep-size)
+# Only the low-latency arm is wired into the master config for this MTP recipe
+# (see the entry comment on glm5.2-fp4-b300-sglang-agentic-mtp); the DEP branch
+# is kept intact so the throughput arm can be added without re-deriving it.
 #
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
@@ -64,6 +71,8 @@ if require_agentic_kv_offload_backend hicache; then
     # = ~128 GB/rank = ~1.0 TB total, matching the cluster's proven ~1 TB
     # host-pool envelope; validated on-node 2026-07-19 (boot + 4.2M-token
     # overflow bench forcing eviction through the DSA KV+INDEXER pools).
+    # The ratio is relative to the device pool, so MTP's slightly smaller
+    # device pool (the nextn layer takes its own KV) only shrinks it.
     DEFAULT_HICACHE_RATIO=0.75
     HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
     if awk -v r="$HICACHE_RATIO" -v cap="$DEFAULT_HICACHE_RATIO" 'BEGIN { exit !(r > cap) }'; then
@@ -96,6 +105,18 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
 fi
 
+# MTP: GLM-5.2 ships its own nextn head, so EAGLE runs off the checkpoint with
+# no external draft model. num-steps 3 / eagle-topk 1 / num-draft-tokens 4 is
+# 3 speculative tokens per verification step -- the same shape the GLM-5.2
+# GB300 dynamo-sglang agentic recipes use, and the draft length whose golden AL
+# is pinned below.
+SPEC_ARGS=(
+    --speculative-algorithm EAGLE
+    --speculative-num-steps 3
+    --speculative-eagle-topk 1
+    --speculative-num-draft-tokens 4
+)
+
 PARALLEL_ARGS=(--tp "$TP" --ep-size "$EP_SIZE")
 CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -111,6 +132,20 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention
         --tokenizer-worker-num "$TP"
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
+    )
+    # GLM-5.2-NVFP4 leaves the MTP/nextn layer unquantized (hf_quant_config
+    # excludes model.layers.78*), so the EAGLE draft MoE is bf16 and
+    # UnquantizedFusedMoEMethod pins it to the triton runner core. Inheriting
+    # the target model's FlashInfer all-to-all then has no (flashinfer, triton)
+    # pre-permute and the engine dies at init with "Pre-permute function for
+    # flashinfer to triton is not registered". SGLang handles this in
+    # _deepseek_spec_moe_resolution but gates the hook on is_hip(), so on CUDA
+    # the draft silently inherits; set upstream's own ROCm values explicitly.
+    # Only needed once expert parallelism puts an a2a in the MoE path -- the
+    # plain-TP arm below has none.
+    SPEC_ARGS+=(
+        --speculative-moe-a2a-backend none
+        --speculative-moe-runner-backend triton
     )
 else
     # Cookbook low-latency levers; the DP-attention cell omits them.
@@ -128,6 +163,9 @@ GRAPH_ARGS=()
 if [ "$DP_ATTENTION" != "true" ]; then
     # Cookbook low-latency captures graphs up to its request cap; the
     # DP-attention cell leaves the CUDA-graph batch list at SGLang defaults.
+    # --cuda-graph-max-bs counts requests, not verification tokens: SGLang's
+    # spec-decode graph runner scales each captured batch by
+    # --speculative-num-draft-tokens itself.
     CUDA_GRAPH_MAX_BS=$MAX_RUNNING_REQUESTS
     [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
     GRAPH_ARGS=(--cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS")
@@ -144,6 +182,28 @@ export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 # server closes it -> ECONNRESET -> terminal warmup failure. Outlast the
 # client pool so the race cannot occur.
 export SGLANG_TIMEOUT_KEEP_ALIVE=900
+
+# AgentX pins acceptance to the committed golden AL so submissions are compared
+# on system performance at a fixed acceptance target rather than on draft-head
+# quality (golden_al_distribution/README.md). 2.99 is the GLM-5.2 curve at
+# num_speculative_tokens=3, thinking_on
+# (golden_al_distribution/glm5.2_mtp.yaml, SPEED-Bench coding, run 28058352479).
+# One curve per model: it was collected on the FP8 checkpoint, and the NVFP4
+# checkpoint ships the same nextn head.
+#
+# SGLANG_SIMULATE_ACC_TOKEN_MODE only exists from SGLang v0.5.16, which is why
+# this recipe pins v0.5.16-cu130 rather than the STP sibling's v0.5.15.post1 --
+# an older image would silently honor ACC_LEN/ACC_METHOD and ignore the
+# token-mode half of the contract.
+#
+# EVAL_ONLY leaves simulated acceptance off: it commits drafted tokens
+# regardless of the target logits, so generated text is wrong and the eval
+# would score ~0.
+if [ "${EVAL_ONLY:-false}" != "true" ]; then
+    export SGLANG_SIMULATE_ACC_LEN=2.99
+    export SGLANG_SIMULATE_ACC_METHOD=match-expected
+    export SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token
+fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
@@ -167,6 +227,7 @@ SGLANG_CMD=(
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --mem-fraction-static 0.85
     --max-running-requests "$MAX_RUNNING_REQUESTS"
+    "${SPEC_ARGS[@]}"
     "${GRAPH_ARGS[@]}"
     "${CACHE_ARGS[@]}"
     --watchdog-timeout 1800
@@ -176,8 +237,14 @@ SGLANG_CMD=(
 printf '%q ' "${SGLANG_CMD[@]}" | tee "$RESULT_DIR/sglang_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/sglang_command.txt"
 
+{
+    echo "=== SGLANG_SIMULATE_ACC_* env vars at launch (empty => real verification) ==="
+    env | grep -E '^SGLANG_SIMULATE_ACC_' | sort || true
+    echo "============================================================================"
+} | tee "$SERVER_LOG"
+
 echo "Starting SGLang server for B300..."
-"${SGLANG_CMD[@]}" > "$SERVER_LOG" 2>&1 &
+"${SGLANG_CMD[@]}" >> "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
