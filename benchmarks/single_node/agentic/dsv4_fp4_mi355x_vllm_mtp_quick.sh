@@ -140,6 +140,17 @@ case "$VARIANT" in
         ;;
 esac
 
+# aiter is the default everywhere; flydsl_mega_moe is the fused alternative
+# (EP dispatch + both expert GEMMs + EP combine in one launch chain). It hard-
+# requires TP=1 + expert parallel + fp4 experts, so it is only selectable on the
+# dep8 variant -- the check below rejects it on the TP8 arms rather than letting
+# vLLM raise NotImplementedError nine minutes into weight load.
+MOE_BACKEND="${MOE_BACKEND:-aiter}"
+if [ "$MOE_BACKEND" = "flydsl_mega_moe" ] && { [ "$DP_ATTENTION" != "true" ] || [ "$EP_SIZE" -le 1 ]; }; then
+    echo "Error: MOE_BACKEND=flydsl_mega_moe requires DP_ATTENTION=true and EP_SIZE>1 (use VARIANT=dep8)." >&2
+    exit 1
+fi
+
 TP="${TP:-8}"
 CONC="${CONC:-16}"
 ISL="${ISL:-10}"
@@ -305,6 +316,34 @@ else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 fi
 
+# ---- EPLB --------------------------------------------------------------------
+# Off by default: it only does anything under expert parallelism, and it needs
+# a patched DSv4 amd/model.py (the stock one does not implement the
+# MixtureOfExperts protocol, so the runner never registers the model and EPLB
+# is a silent no-op -- not an error).
+#
+# Both MoE backends are supported: aiter via FusedMoE's own EPLB hooks,
+# flydsl_mega_moe via the ones the patch adds to DeepseekV4MegaMoEExperts.
+#
+# NUM_REDUNDANT_EXPERTS must keep (n_routed_experts + N) % ep_size == 0, i.e. a
+# multiple of 8 for this 384-expert checkpoint on 8 ranks. The patched model
+# raises on a bad value before the ~9min weight load rather than letting it
+# assert inside rebalance_execute much later.
+EPLB_ARGS=()
+if [ "${ENABLE_EPLB:-0}" = "1" ]; then
+    if [ "$EP_SIZE" -le 1 ]; then
+        echo "Error: ENABLE_EPLB=1 needs expert parallelism (use VARIANT=dep8)." >&2
+        exit 1
+    fi
+    NUM_REDUNDANT_EXPERTS="${NUM_REDUNDANT_EXPERTS:-8}"
+    EPLB_STEP_INTERVAL="${EPLB_STEP_INTERVAL:-3000}"
+    EPLB_WINDOW_SIZE="${EPLB_WINDOW_SIZE:-1000}"
+    EPLB_ARGS=(
+        --enable-eplb
+        --eplb-config "{\"num_redundant_experts\": $NUM_REDUNDANT_EXPERTS, \"step_interval\": $EPLB_STEP_INTERVAL, \"window_size\": $EPLB_WINDOW_SIZE, \"log_balancedness\": true, \"log_balancedness_interval\": ${EPLB_LOG_INTERVAL:-100}}"
+    )
+fi
+
 # ---- Prefix caching ----------------------------------------------------------
 # Off by default, matching the fixed_seq_len siblings. With --dsv4 every prompt
 # shares a chat preamble, so leaving it on would let run 2 of an A/B start from
@@ -350,7 +389,7 @@ VLLM_CMD=(
     "${PARALLEL_ARGS[@]}"
     "${MODE_ARGS[@]}"
     --gpu-memory-utilization "$GPU_MEM_UTIL"
-    --moe-backend aiter
+    --moe-backend "$MOE_BACKEND"
     --compilation-config "$COMPILATION_CONFIG"
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
@@ -358,6 +397,7 @@ VLLM_CMD=(
     "${PREFIX_CACHE_ARGS[@]}"
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
+    "${EPLB_ARGS[@]}"
 )
 
 {
@@ -365,7 +405,9 @@ VLLM_CMD=(
     echo "GPU_MEM_UTIL=$GPU_MEM_UTIL ROCM_ROPE_KVCACHE_FUSION=${ROCM_ROPE_KVCACHE_FUSION} DP_ATTENTION=$DP_ATTENTION EP_SIZE=$EP_SIZE"
     echo "VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=$VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS"
     echo "MTP_SYNTHETIC=${MTP_SYNTHETIC:-1} NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS"
+    echo "MOE_BACKEND=$MOE_BACKEND"
     echo "MAX_NUM_SEQS=$MAX_NUM_SEQS"
+    echo "ENABLE_EPLB=${ENABLE_EPLB:-0}${ENABLE_EPLB:+ NUM_REDUNDANT_EXPERTS=${NUM_REDUNDANT_EXPERTS:-} EPLB_STEP_INTERVAL=${EPLB_STEP_INTERVAL:-}}"
     # Router policy decides how requests spread over the DP ranks, and DP runs
     # the MoE layers in lockstep -- every rank pads to the busiest one's token
     # count each step. An uneven spread is therefore a throughput cost, not just

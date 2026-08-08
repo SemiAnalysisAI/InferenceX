@@ -391,6 +391,18 @@ esac
 fi
 
 # ---- LLM server config ----------------------------------------------------------
+# aiter is the default and the only backend this recipe has reported numbers on;
+# flydsl_mega_moe is the fused alternative (EP dispatch + both expert GEMMs + EP
+# combine in one launch chain). It hard-requires TP=1 + expert parallel + fp4
+# experts, so reject it up front on the pure-TP arms rather than letting vLLM
+# raise NotImplementedError minutes into weight load. Mirrors the guard in
+# dsv4_fp4_mi355x_vllm_mtp_quick.sh.
+MOE_BACKEND="${MOE_BACKEND:-aiter}"
+if [ "$MOE_BACKEND" = "flydsl_mega_moe" ] && { [ "$DP_ATTENTION" != "true" ] || [ "$EP_SIZE" -le 1 ]; }; then
+    echo "Error: MOE_BACKEND=flydsl_mega_moe requires DP_ATTENTION=true and EP_SIZE>1." >&2
+    exit 1
+fi
+
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
@@ -556,6 +568,33 @@ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 # script did not, so the two were not running the same configuration.
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
+# ---- EPLB --------------------------------------------------------------------
+# Off by default. It only does anything under expert parallelism, and it needs a
+# DSv4 amd/model.py that implements the MixtureOfExperts protocol -- with the
+# stock one the runner never registers the model and EPLB is a silent no-op
+# rather than an error, so an arm could "run with EPLB" and measure nothing.
+#
+# Both MoE backends are supported: --moe-backend aiter goes through FusedMoE's
+# EPLB hooks, and flydsl_mega_moe carries its own (physical-slot weight loader,
+# get_expert_weights over the shuffled kernel-layout weights, and the
+# logical->physical remap in DeepseekV4MegaMoEExperts.forward).
+#
+# NUM_REDUNDANT_EXPERTS must keep (n_routed_experts + N) % ep_size == 0, i.e. a
+# multiple of 8 for this 384-expert checkpoint on 8 ranks. The patched model
+# raises on a bad value up front rather than asserting inside rebalance_execute
+# thousands of steps later.
+EPLB_ARGS=()
+if [ "${ENABLE_EPLB:-0}" = "1" ]; then
+    if [ "$EP_SIZE" -le 1 ]; then
+        echo "Error: ENABLE_EPLB=1 needs expert parallelism (EP_SIZE>1)." >&2
+        exit 1
+    fi
+    EPLB_ARGS=(
+        --enable-eplb
+        --eplb-config "{\"num_redundant_experts\": ${NUM_REDUNDANT_EXPERTS:-8}, \"step_interval\": ${EPLB_STEP_INTERVAL:-3000}, \"window_size\": ${EPLB_WINDOW_SIZE:-1000}, \"log_balancedness\": true, \"log_balancedness_interval\": ${EPLB_LOG_INTERVAL:-100}}"
+    )
+fi
+
 sleep 180
 
 { set +x; } 2>/dev/null
@@ -583,6 +622,7 @@ VLLM_CMD=(
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
+    "${EPLB_ARGS[@]}"
 )
 
 # (srok), not yet

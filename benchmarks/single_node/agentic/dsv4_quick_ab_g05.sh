@@ -91,11 +91,13 @@ trap cleanup_container EXIT
 # the host but not forwarded is worse than one that errors: the run succeeds
 # with the default silently in place. That already cost one round_robin A/B.
 PASSTHRU=()
-for _v in VLLM_ROUTER_POLICY VLLM_ROUTER_VERSION MAX_NUM_SEQS GPU_MEM_UTIL \
+for _v in MOE_BACKEND VLLM_ROUTER_POLICY VLLM_ROUTER_VERSION MAX_NUM_SEQS GPU_MEM_UTIL \
           ROCM_ROPE_KVCACHE_FUSION DP_ATTENTION EP_SIZE TP MAX_MODEL_LEN \
           NUM_PROMPTS RANDOM_RANGE_RATIO RESULT_FILENAME NUM_SPEC_TOKENS \
           MTP_SYNTHETIC VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS \
-          VLLM_ROCM_USE_AITER_MOE KV_OFFLOADING PROFILE RUN_EVAL; do
+          VLLM_ROCM_USE_AITER_MOE KV_OFFLOADING PROFILE RUN_EVAL \
+          VLLM_ROCM_DSV4_SPARSE_GLUON ENABLE_EPLB NUM_REDUNDANT_EXPERTS \
+          EPLB_STEP_INTERVAL EPLB_WINDOW_SIZE EPLB_LOG_INTERVAL; do
     if [[ -n "${!_v+x}" ]]; then
         PASSTHRU+=(-e "$_v=${!_v}")
         echo " passthru  : $_v=${!_v}"
