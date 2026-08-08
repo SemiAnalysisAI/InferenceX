@@ -1017,6 +1017,33 @@ dsv4-fp4-b200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
+# DeepSeek-V4-Flash-0731: first Flash-on-B200 key. Both arms validated on
+# Nebius 8x B200 SXM with vllm/vllm-openai:v0.25.0 (vllm-project/vllm#51454).
+# Model snapshot 7872f01b1d1fe23eabc4c98b48bffcef5a386062 is pinned inside
+# benchmarks/single_node/fixed_seq_len/dsv4f_fp8_b200_vllm.sh (MODEL_REVISION).
+# TP8+EP8 is the single-stream/latency arm (break-even vs DP8 at c=3 in the
+# report's 1M ladder); DP8 (attention DP + EP8) is the concurrency arm. Both
+# arms carry ep: 8 because vLLM v0.25.0's MegaMoE backend refuses engine init
+# without expert parallel (NotImplementedError before weight load).
+dsv4f-fp8-b200-vllm:
+  image: vllm/vllm-openai:v0.25.0
+  model: deepseek-ai/DeepSeek-V4-Flash-0731
+  model-prefix: dsv4f
+  runner: cluster:b200-nb
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # TP8 + EP8, single-stream to mid concurrency
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 64 }
+      # DP8 (attention DP) + EP8, concurrency/throughput arm; capped by
+      # --max-num-seqs 256 in the script
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256 }
+
 # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
 # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
 # B200 SGLang recipe as-is until B300-specific tuning is available.
