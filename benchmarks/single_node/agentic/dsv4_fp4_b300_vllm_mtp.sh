@@ -50,8 +50,8 @@ if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
 fi
 
 # DEP8 (TP8 + DP-attention) is a GPU-resident, high-concurrency arm that is
-# tuned separately from the smaller DEP4 arm (larger prefill token budget,
-# long-prefill chunking, and a lower GPU-memory-utilization headroom).
+# tuned separately from the smaller DEP4 arm with a larger prefill token budget
+# and lower GPU-memory-utilization headroom. Both DEP arms chunk long prefills.
 IS_DEP8=false
 if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
     IS_DEP8=true
@@ -119,8 +119,8 @@ ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
 # The generated TOTAL_CPU_DRAM_GB budget is proportional to allocated GPUs.
-# On cluster:b300-nv, dram-utilization=0.80 and DEP4 resolve to roughly the
-# source recipe's 280 GiB per DP rank. TP4 remains GPU-resident.
+# On cluster:b300-nv, dram-utilization=0.95 and DEP4 resolve to 1,424 GB total,
+# or 356 GB per DP rank. TP4 remains GPU-resident.
 OFFLOAD_ARGS=()
 case "$KV_OFFLOAD_BACKEND" in
     "")
@@ -238,14 +238,14 @@ if [ "$EP_SIZE" -gt 1 ]; then
     )
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
-    MODE_ARGS+=(--prefill-schedule-interval 8)
+    MODE_ARGS+=(
+        --prefill-schedule-interval 8
+        --long-prefill-token-threshold 512
+    )
     if [ "$IS_DEP8" = "true" ]; then
-        # GPU-resident DEP8 gets a larger prefill token budget and chunks long
-        # prefills so decode latency stays bounded at high concurrency.
-        MODE_ARGS+=(
-            --max-num-batched-tokens 16384
-            --long-prefill-token-threshold 4096
-        )
+        # GPU-resident DEP8 gets a larger prefill token budget; the shared
+        # long-prefill threshold keeps decode latency bounded under load.
+        MODE_ARGS+=(--max-num-batched-tokens 16384)
     else
         MODE_ARGS+=(--max-num-batched-tokens 8192)
     fi

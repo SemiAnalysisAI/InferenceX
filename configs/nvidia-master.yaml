@@ -1725,7 +1725,7 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
 
 dsv4-fp4-b300-vllm-agentic-mtp:
-  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-904e4ec
+  image: vllm/vllm-openai:nightly-dev-x86_64-cu13.0.1-426e59f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:b300-nv
@@ -1734,18 +1734,16 @@ dsv4-fp4-b300-vllm-agentic-mtp:
   multinode: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.80
+    - dram-utilization: 0.95
       search-space:
       # TP8 GPU-resident + MTP (num_speculative_tokens=3)
-      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8] }
+      - { tp: 8, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4] }
       # TP4 GPU-resident + MTP (num_speculative_tokens=3)
-      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12, 16, 20] }
-      # TP4 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [20, 24, 28, 32, 36, 40] }
+      - { tp: 4, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 12, 16] }
       # DEP4 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [32, 40, 48, 56], router: { name: vllm-router, version: "0.1.14" } }
-      # DEP8 SimpleCPU + MTP (num_speculative_tokens=3)
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 96, 112, 128, 144, 160, 176, 192, 224], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, spec-decoding: mtp, conc-list: [40, 48, 64], router: { name: vllm-router, version: "0.1.14" } }
+      # DEP8 GPU-resident + MTP (num_speculative_tokens=3)
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [64, 128, 192, 256, 320, 384], router: { name: vllm-router, version: "0.1.14" } }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
