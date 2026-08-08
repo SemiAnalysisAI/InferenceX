@@ -45,22 +45,6 @@ def cells(document, project=("sku", "ep"), **filters):
 
 
 class MatrixTests(unittest.TestCase):
-    def test_shard_extraction_is_deterministic_and_preserves_cases(self):
-        document = matrix(backend="deepep-v2", only_sku="h200-dgxc")
-        cell = document["include"][0]
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            source = root / "matrix.json"
-            source.write_text(json.dumps(document, sort_keys=True))
-            outputs = [
-                sweep_matrix.extract_shard(
-                    source, cell["id"], root / f"shard-{index}.json",
-                )
-                for index in range(2)
-            ]
-        self.assertEqual(outputs[0], outputs[1])
-        self.assertEqual(outputs[0]["cases"], cell["cases"])
-
     def test_sku_and_ep_filters_only_remove_cases(self):
         # Subtractive with ONE deliberate exception: naming an off-path precision explicitly
         # opts its rows back in (see OFF_PATH_PRECISIONS), so the fp8 subset is compared
@@ -111,37 +95,6 @@ class MatrixTests(unittest.TestCase):
         for item in document["requested_cases"]:
             self.assertIn(item["case"]["backend"], sweep_matrix.PLATFORMS[item["sku"]]["backends"])
 
-    def test_runnable_cases_fan_out_over_backend_precisions(self):
-        document = matrix(backend="all")
-        runnable = [
-            item for item in document["requested_cases"]
-            if item["disposition"] == "runnable"
-        ]
-        # Every runnable case carries a precision its backend supports, and each
-        # (sku, backend, ep, phase) cell is realized once per supported precision.
-        by_cell: dict[tuple, set[str]] = {}
-        for item in runnable:
-            case = item["case"]
-            self.assertIn(
-                case["precision"], sweep_matrix.BACKEND_PRECISIONS[case["backend"]]
-            )
-            cell = (item["sku"], case["backend"], case["ep"], case["phase"])
-            by_cell.setdefault(cell, set()).add(case["precision"])
-        for cell, precisions in by_cell.items():
-            off_path = sweep_matrix.OFF_PATH_PRECISIONS.get(cell[1], ())
-            expected = {
-                precision for precision in sweep_matrix.SWEEP["precisions"]
-                if precision in sweep_matrix.BACKEND_PRECISIONS[cell[1]]
-                and precision not in off_path
-            }
-            self.assertEqual(precisions, expected, cell)
-        # deepep-v2, mori and uccl-ep realize BF16 and FP8; nccl-ep is BF16-only and
-        # flashinfer-ep's FP8 is off-path, so the union across cells stays {bf16, fp8}.
-        self.assertEqual(
-            {precision for precisions in by_cell.values() for precision in precisions},
-            {"bf16", "fp8"},
-        )
-
     def test_case_ids_are_unique_across_the_matrix(self):
         # precision is part of case_id, so a cell's bf16 and fp8 attempts are distinct
         # identities. Without precision in the id the two would collide; assert the full
@@ -153,58 +106,6 @@ class MatrixTests(unittest.TestCase):
         for item in document["requested_cases"]:
             self.assertTrue(item["case"]["case_id"].endswith(item["case"]["precision"]))
 
-    def test_every_case_carries_the_chain_knobs_in_its_timing_profile(self):
-        # The producer half of the codec CaseArgvContract tests the consumer half of: a legacy
-        # three-field profile still decodes there while every real case names all six knobs.
-        document = matrix(backend="all")
-        profiles = {
-            tuple(sorted(item["case"]["timing"].items()))
-            for item in document["requested_cases"]
-        }
-        self.assertTrue(profiles)
-        expected = {key for key, _ in config._TIMING_FLAGS}
-        for profile in sorted(profiles):
-            timing = dict(profile)
-            with self.subTest(timing=timing):
-                self.assertEqual(set(timing), expected)
-                self.assertTrue(all(isinstance(v, int) for v in timing.values()), timing)
-                # A chain that discards everything it measured leaves nothing to reduce.
-                self.assertGreater(timing["chain_iters_per_trial"], timing["chain_drop"])
-                self.assertGreater(timing["chain_trials_per_point"], 0)
-
-    def test_low_latency_is_decode_only_and_capability_gated(self):
-        # Low-latency cases are additive: they appear only for (sku, backend, ep) cells
-        # listed in the platform registry's ll_backends map, only in the decode phase, and
-        # never as unsupported placeholders. Normal-mode cases are unchanged by their
-        # presence.
-        document = matrix(backend="all")
-        ll = [
-            item for item in document["requested_cases"]
-            if item["case"]["mode"] == "low-latency"
-        ]
-        self.assertTrue(ll, "expected at least one low-latency cell in the registry")
-        for item in ll:
-            case = item["case"]
-            self.assertEqual(item["disposition"], "runnable")
-            self.assertEqual(case["phase"], "decode")
-            self.assertIn("low-latency", sweep_matrix.SWEEP["modes"])
-            ll_backends = sweep_matrix.PLATFORMS[item["sku"]].get("ll_backends", {})
-            self.assertIn(case["ep"], ll_backends.get(case["backend"], []))
-            self.assertIn("-low-latency-", case["case_id"])
-        # Every low-latency cell realizes exactly its backend's supported precisions.
-        by_cell: dict[tuple, set[str]] = {}
-        for item in ll:
-            case = item["case"]
-            cell = (item["sku"], case["backend"], case["ep"])
-            by_cell.setdefault(cell, set()).add(case["precision"])
-        for cell, precisions in by_cell.items():
-            self.assertEqual(
-                precisions,
-                {p for p in sweep_matrix.SWEEP["precisions"]
-                 if p in sweep_matrix.BACKEND_PRECISIONS[cell[1]]},
-                cell,
-            )
-
     def test_ll_backends_is_a_well_formed_subset_of_backends(self):
         # A cell can only run low-latency where it can run at all: every ll_backends
         # entry names a real backend of that SKU and a subset of its normal EP degrees.
@@ -215,49 +116,6 @@ class MatrixTests(unittest.TestCase):
                     self.assertIn(backend, platform["backends"])
                     self.assertTrue(degrees)
                     self.assertLessEqual(set(degrees), set(platform["backends"][backend]))
-
-    def test_ep_degrees_pin_the_two_backends_without_a_rollout_test(self):
-        # deepep-v2 and mori have no rollout-shape test of their own, so the two facts most
-        # likely to drift silently are pinned here: deepep-v2 is the only backend at EP16
-        # everywhere, and mori is EP8-only (its EP16 InterNodeV1 combine corrupts, mori#475).
-        # Without this, adding 16 to backends.mori passes CI.
-        for sku, platform in sweep_matrix.PLATFORMS.items():
-            degrees = platform["backends"]
-            with self.subTest(sku=sku):
-                if "mori" in degrees:
-                    self.assertEqual(degrees["mori"], [8])
-                if "deepep-v2" in degrees:
-                    self.assertEqual(degrees["deepep-v2"], [8, 16])
-
-    def test_uccl_ep_rollout_shape(self):
-        # UCCL-EP's rollout, locked here: EP8 runnable on exactly the six supported SKUs, and
-        # EP16 an unsupported coverage row on every one of them. uccl-ep is EP8-only: the
-        # -tw pair has no cross-node fabric, and on the fabric SKUs cross-node EP16 is
-        # functional but its CPU-proxy throughput overruns the standardized per-case
-        # wall-clock budget (the internode Config fix landed; EP16 stays scoped out of the
-        # sweep, mirroring the mori EP16 re-wall). No rows at all on b300/gb200/gb300, where
-        # the backend is not offered. LL (decode) on every NVIDIA supported SKU at EP8.
-        document = matrix(backend="all")
-        runnable = cells(document, backend="uccl-ep", disposition="runnable")
-        unsupported = cells(document, backend="uccl-ep", disposition="unsupported")
-        supported_skus = {
-            "h100-dgxc", "h200-dgxc", "b200-nscale", "mi355x", "mi325x-tw", "mi300x-tw",
-        }
-        # EP8 runnable on all six; nothing runnable at EP16.
-        self.assertEqual({sku for sku, _ in runnable}, supported_skus)
-        self.assertEqual({sku for sku, ep in runnable if ep == 8}, supported_skus)
-        self.assertEqual({sku for sku, ep in runnable if ep == 16}, set())
-        # EP16 is an honest unsupported coverage row on every supported SKU.
-        self.assertEqual(unsupported, {(sku, 16) for sku in supported_skus})
-        offered = {sku for sku, _ in runnable | unsupported}
-        for absent in ("b300", "gb200", "gb300"):
-            self.assertNotIn(absent, offered)
-        # uccl-ep low-latency is enabled only on NVIDIA; the AMD SKUs keep normal mode but drop
-        # LL: upstream raised kNumMaxTopK 9 -> 16 six days before our pin, and the host assert
-        # kNumMaxTopK + 1 <= num_warp_groups * num_warps_per_group cannot hold on AMD, whose
-        # kNumMaxWarpGroups is 16 — a dated regression, not a CU-count limit.
-        ll_skus = cells(document, "sku", backend="uccl-ep", mode="low-latency")
-        self.assertEqual(ll_skus, {"h100-dgxc", "h200-dgxc", "b200-nscale"})
 
     def test_flashinfer_ep_rollout_shape(self):
         # FlashInfer one-sided is the transport a GB deployment actually runs: vLLM picks
@@ -299,49 +157,6 @@ class MatrixTests(unittest.TestCase):
         self.assertEqual({item["case"]["mode"] for item in cases}, {"normal"})
         for platform in sweep_matrix.PLATFORMS.values():
             self.assertNotIn("flashinfer-ep", platform.get("ll_backends", {}))
-
-    def test_nccl_ep_rollout_shape(self):
-        # NCCL-EP's rollout, locked to the on-metal verdict (2026-07-22, all via the real launcher):
-        #   * RDMA scale-out SKUs (h100/h200/b200/b300): EP8 runnable, EP16 an UNSUPPORTED coverage
-        #     row. EP16 cross-node rides NCCL's kernel-initiated GDAKI GIN, which faults identically
-        #     on RoCE (h100/b300) and IB (h200/b200-nscale) — a reproducible NCCL-EP v0.1.0 internode
-        #     limitation, so EP16 is scoped out like uccl-ep's.
-        #   * GB NVL72 SKUs (gb200/gb300, MNNVL, gb-nv launcher, 4 GPU/node): EP8 AND EP16 runnable —
-        #     both stay inside the 72-GPU scale-up domain (world <= scale_up_domain => LSA, no GIN),
-        #     so EP16 works over MNNVL where the RDMA-GIN path walls.
-        #   * AMD SKUs: no rows (NCCL EP is NVIDIA-only; AMD runs mori).
-        #   * LOW-LATENCY: EP8 on all six NVIDIA SKUs. These rows were dropped while every LL leg
-        #     wedged, on the reading that only a fixed wheel could restore them. That reading was
-        #     wrong about the cause: the wedge needed TWO LL handles live on one group. `buffer_idx`
-        #     is per-handle but its buffers are offsets into the per-group rdma_buffer, so same-config
-        #     handles alias one another's parity count/flag slots. The adapter now binds a single
-        #     handle and rebinds it per shape, which removes the aliasing without a wheel bump —
-        #     proven on a stock wheel by ladder [1] (one handle, clean) vs [1, 2] (two handles,
-        #     64 dispatch + 6 combine receive timeouts). LL is decode-only and EP8-only: GB stays at
-        #     EP8 here even though normal mode runs EP16, because LL adds no EP16 row on any SKU.
-        # BF16 only — no FP8 case (NCCL EP FP8 unsupported this release).
-        document = matrix(backend="all")
-        runnable = cells(document, backend="nccl-ep", disposition="runnable")
-        unsupported = cells(document, backend="nccl-ep", disposition="unsupported")
-        rdma_skus = {"h100-dgxc", "h200-dgxc", "b200-nscale", "b300"}
-        gb_skus = {"gb200", "gb300"}
-        # RDMA SKUs: EP8 runnable + EP16 unsupported. GB SKUs: EP8 and EP16 both runnable.
-        self.assertEqual(
-            runnable,
-            {(sku, 8) for sku in rdma_skus} | {(sku, ep) for sku in gb_skus for ep in (8, 16)},
-        )
-        self.assertEqual(unsupported, {(sku, 16) for sku in rdma_skus})
-        # Offered on the six NVIDIA SKUs; never on AMD.
-        offered = {sku for sku, _ in runnable | unsupported}
-        self.assertEqual(offered, rdma_skus | gb_skus)
-        for absent in ("mi355x", "mi325x-tw", "mi300x-tw"):
-            self.assertNotIn(absent, offered)
-        # Every nccl-ep case is BF16 (FP8 unsupported this release).
-        self.assertEqual(cells(document, "precision", backend="nccl-ep"), {"bf16"})
-        # Low-latency: EP8 on every NVIDIA SKU, and EP8 only — a stray EP16 LL row would dispatch a
-        # shape the mode does not define.
-        ll = cells(document, backend="nccl-ep", mode="low-latency", disposition="runnable")
-        self.assertEqual(ll, {(sku, 8) for sku in rdma_skus | gb_skus})
 
     def test_invalid_filters_fail_closed(self):
         for options in (

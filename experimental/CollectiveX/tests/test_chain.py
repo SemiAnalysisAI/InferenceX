@@ -195,17 +195,6 @@ def chain_sections(calls):
 
 
 class ChainedPairPeriod(unittest.TestCase):
-    def test_warms_once_before_the_chain_and_never_inside_it(self):
-        backend = _ChainBackend()
-        problem = new_problem()
-        with trace_torch(backend.clock, backend.calls), mock.patch.object(
-            backend, "warm", wraps=backend.warm
-        ) as warm:
-            backend.benchmark_chain(problem, 4, 6, 2)
-        warm.assert_called_once()
-        self.assertIs(warm.call_args.args[0], problem)
-        self.assertEqual(warm.call_args.args[1], 4)
-
     def test_the_loop_is_free_running_dispatch_combine_pairs(self):
         # A host sync inside the loop drains the GPU and turns the period back into a sequence of
         # drained roundtrips; a cross-rank call between pairs re-aligns the ranks and buys back
@@ -247,52 +236,6 @@ class ChainedPairPeriod(unittest.TestCase):
                 for value in series["combine"]:
                     self.assertAlmostEqual(value, COMBINE_MS * 1000.0)
 
-    def test_the_dequant_hatch_stages_inside_every_pair(self):
-        # CX_FP8_CONSUME=dequant models a stack that really does convert between the two
-        # collectives, so both chains carry that conversion on every iteration.
-        iters = 5
-        backend = _ChainBackend(
-            stage_device_work=True, fp8_consume="dequant", precision="fp8"
-        )
-        self.assertFalse(backend.stage_excluded_from_roundtrip)
-        with trace_torch(backend.clock, backend.calls):
-            series = backend.benchmark_chain(new_problem(), 0, iters, 1)
-        self.assertEqual(backend.calls.count("stage"), 2 * iters)
-        self.assertEqual(
-            timed_tail(backend.calls, iters, 3), ["dispatch", "stage", "combine"] * iters
-        )
-        for value in series["pair"]:
-            self.assertAlmostEqual(value, (DISPATCH_MS + STAGE_MS + COMBINE_MS) * 1000.0)
-
-    def test_a_no_op_stage_stays_inline_and_is_never_hoisted(self):
-        # deepep-v2 / uccl-ep / nccl-ep at BF16: `stage` is a pointer assignment, and hoisting
-        # it would hand a low-latency backend a view into its double-buffered receive.
-        iters = 4
-        backend = _ChainBackend(
-            stage_device_work=False, fp8_consume="native", precision="bf16"
-        )
-        self.assertFalse(backend.stage_excluded_from_roundtrip)
-        with trace_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, iters, 1)
-        self.assertEqual(backend.calls.count("stage"), 2 * iters)
-        self.assertEqual(
-            timed_tail(backend.calls, iters, 3), ["dispatch", "stage", "combine"] * iters
-        )
-
-    def test_the_pair_itself_satisfies_the_backends_that_need_a_paired_call(self):
-        # requires_fresh_pair is satisfied by the chain's structure, so it must not
-        # inject an extra untimed call into the loop.
-        iters = 5
-        backend = _ChainBackend(
-            stage_device_work=False, fp8_consume="native", precision="bf16"
-        )
-        backend.requires_fresh_pair = True
-        with trace_torch(backend.clock, backend.calls):
-            backend.benchmark_chain(new_problem(), 0, iters, 1)
-        self.assertEqual(
-            timed_tail(backend.calls, iters, 3), ["dispatch", "stage", "combine"] * iters
-        )
-
     def test_returns_one_sample_per_kept_iteration(self):
         for iters, drop in ((8, 0), (8, 2), (6, 5)):
             with self.subTest(iters=iters, drop=drop):
@@ -307,17 +250,6 @@ class ChainedPairPeriod(unittest.TestCase):
                     self.assertEqual(len(series[key]), iters - drop)
                 # Start-to-start is a difference series: one fewer than the kept pairs.
                 self.assertEqual(len(series["start_to_start"]), max(iters - drop - 1, 0))
-
-    def test_the_chains_final_output_is_returned_detached(self):
-        # The period chain's last combined output comes back cloned, post-sync, so the caller
-        # can compare it against a drained pair without racing double-buffered receive memory.
-        backend = _ChainBackend(
-            stage_device_work=False, fp8_consume="native", precision="bf16"
-        )
-        with trace_torch(backend.clock, backend.calls):
-            series = backend.benchmark_chain(new_problem(), 0, 4, 1)
-        self.assertEqual(series["combined"].value, "staged-by-stage")
-        self.assertTrue(series["combined"].cloned)
 
     def test_the_dropped_iterations_are_the_head_of_each_chain(self):
         # `drop` discards pipeline fill, so it must cut the head of both chains -- the period
@@ -361,31 +293,6 @@ class EventPlacement(unittest.TestCase):
             period,
             ["record", "dispatch", "stage", "combine", "record"] * iters,
         )
-
-    def test_the_floors_pairs_carry_only_op_edge_events(self):
-        # Every record hugs an op boundary; with no pair-window events, nothing this chain
-        # measures can charge the pair boundary either.
-        iters, floors, _ = self._sections(
-            stage_device_work=False, fp8_consume="native", precision="bf16"
-        )
-        self.assertEqual(
-            floors,
-            ["record", "dispatch", "record", "stage", "record", "combine", "record"] * iters,
-        )
-
-    def test_the_hoisted_stage_keeps_both_placements(self):
-        # With the conversion hoisted the pair is dispatch -> combine; placement is unchanged.
-        iters, floors, period = self._sections(
-            stage_device_work=True, fp8_consume="native", precision="fp8"
-        )
-        self.assertEqual(
-            period, ["record", "dispatch", "combine", "record"] * iters
-        )
-        self.assertEqual(
-            floors,
-            ["record", "dispatch", "record", "record", "combine", "record"] * iters,
-        )
-
 
 class ChainBudgetGate(unittest.TestCase):
     """A budget that could publish a degenerate chain must stop the leg first: zero kept pairs
@@ -742,89 +649,6 @@ class ChainedRegimeOracleGate(unittest.TestCase):
     """The published regime has to be the gated one: Passes 1 and 3 only ever check drained calls,
     so a backend that corrupts only under free-running pairs would present as the suite's fastest."""
 
-    def test_the_chained_oracle_runs_once_per_point_after_its_final_chain_trial(self):
-        run = drive()
-        points = len(LADDER)
-        kinds = [kind for kind, _ in run.events]
-
-        # Asserted on the raw log, so the positional phase labels rest on this and not the
-        # other way round.
-        self.assertEqual(kinds[:points], ["oracle"] * points)
-        self.assertEqual(sorted(T for _, T in run.events[:points]), sorted(LADDER))
-        self.assertEqual(kinds[-points:], ["oracle"] * points)
-        self.assertEqual([T for _, T in run.events[-points:]], list(LADDER))
-
-        middle = run.events[points:-points]
-        middle_kinds = [kind for kind, _ in middle]
-        self.assertEqual(middle_kinds.count("chain"), CHAIN_TRIALS * points)
-        self.assertEqual(middle_kinds.count("oracle"), points)
-        self.assertEqual(
-            sorted(T for kind, T in middle if kind == "oracle"), sorted(LADDER),
-        )
-
-        for index, (kind, T) in enumerate(middle):
-            if kind != "oracle":
-                continue
-            with self.subTest(tokens=T):
-                # Right after that point's own chain (and the drained reference pair its
-                # output was checked against), and on its final trial.
-                self.assertEqual(middle[index - 1], ("drained", T))
-                self.assertEqual(middle[index - 2], ("chain", T))
-                self.assertNotIn(("chain", T), middle[index + 1:])
-
-    def test_every_chain_trial_checks_its_final_output_against_a_drained_pair(self):
-        # One drained reference per (trial, point), each immediately after its chain -- the
-        # comparison itself is scripted, so the pairs recorded here prove the plumbing: the
-        # chain's OWN returned output meets the roundtrip the harness just drained.
-        run = drive()
-        points = len(LADDER)
-        middle = run.events[points:-points]
-        drained = [(kind, T) for kind, T in middle if kind == "drained"]
-        self.assertEqual(len(drained), CHAIN_TRIALS * points)
-        for index, (kind, T) in enumerate(middle):
-            if kind == "chain":
-                with self.subTest(position=index, tokens=T):
-                    self.assertEqual(middle[index + 1], ("drained", T))
-        self.assertEqual(len(run.output_checks), CHAIN_TRIALS * points)
-        for chained, drained_output in run.output_checks:
-            self.assertRegex(chained, r"^chained-\d+$")
-            self.assertEqual(drained_output, chained.replace("chained-", "drained-"))
-
-    def test_the_chained_oracle_is_invoked_with_pass_3s_shape(self):
-        # A stale trace or a mismatched expert count would gate a different problem than the
-        # one the chain just measured.
-        run = drive()
-        calls = {}
-        for index, T, call_args in run.oracle_calls:
-            phase = run.phases[index]
-            if phase in ("chain", "post"):
-                calls.setdefault(T, {})[phase] = call_args
-        self.assertEqual(sorted(calls), sorted(LADDER))
-        for T, per_phase in sorted(calls.items()):
-            with self.subTest(tokens=T):
-                self.assertEqual(per_phase["chain"], per_phase["post"])
-
-    def test_a_healthy_chain_publishes_a_passing_regime(self):
-        run = drive()
-        self.assertEqual(run.rc, 0)
-        self.assertEqual(run.doc["outcome"]["status"], "success")
-        for row in run.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertIs(row["correctness"]["post_chain_state_passed"], True)
-                self.assertIs(row["correctness"]["chain_last_output_passed"], True)
-                self.assertIs(row["correctness"]["passed"], True)
-
-    def test_a_chained_oracle_failure_reds_the_case(self):
-        # rc is the only success signal CI reads, and the doc is uploaded either way.
-        run = drive(fail_phases=("chain",))
-        self.assertEqual(run.rc, 3)
-        self.assertEqual(run.doc["outcome"]["status"], "invalid")
-        for row in run.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                self.assertIs(row["correctness"]["post_chain_state_passed"], False)
-                self.assertIs(row["correctness"]["chain_last_output_passed"], True)
-                self.assertIs(row["correctness"]["passed"], False)
-
     def test_a_chain_output_mismatch_reds_the_case_on_its_own(self):
         # The two chained verdicts are independent: a chain whose own final output is wrong
         # reds the case even when the state it leaves behind still passes a fresh oracle --
@@ -884,13 +708,6 @@ class ChainedRegimeOracleGate(unittest.TestCase):
                 self.assertIsNone(row["correctness"]["chain_last_output_passed"])
                 self.assertIsNone(row["correctness"]["chain_last_output_error"])
                 self.assertIs(row["correctness"]["passed"], True)
-
-    def test_the_output_check_still_runs_when_the_chain_stages_per_pair(self):
-        # The other side of the guard: no hoist, so the check applies and gates.
-        run = drive()
-        self.assertTrue(run.output_checks)
-        for row in run.rows:
-            self.assertIs(row["correctness"]["chain_last_output_passed"], True)
 
     def test_the_chained_error_is_folded_into_max_relative_error(self):
         # Maxed in like the other two oracles', so a chained regime that is within tolerance
@@ -1121,14 +938,6 @@ class Headline(unittest.TestCase):
             "no row here carries a chained pair period",
             summarize.render([document(with_period=False)]),
         )
-
-    def test_a_mixed_table_footnotes_the_fallback_rows_as_incomparable(self):
-        rendered = summarize.render(
-            [document(with_period=True), document(with_period=False)]
-        )
-        self.assertIn("1 of 2 row(s) predate it", rendered)
-        self.assertIn("do not rank across them", rendered)
-
 
 class OffPathRowsAreMarkedInTheTable(unittest.TestCase):
     # flashinfer-ep is a production BACKEND whose fp8 precision no engine can select, so

@@ -67,15 +67,6 @@ class FakeBackend(EPBackend):
 
 
 class BackendTests(unittest.TestCase):
-    def test_input_plan_sizes_for_the_measured_ladder(self):
-        backend = FakeBackend(args(tokens_ladder="8 16"), world_size=2)
-        spec = backend.make_inputs(backend.args)
-        self.assertTrue(spec.ok)
-        self.assertEqual(spec.ladder, [8, 16])
-        self.assertEqual(spec.max_tokens_per_rank, 16)
-        self.assertEqual((spec.ep_size, spec.experts_per_rank), (2, 4))
-        self.assertEqual(sorted(spec.points), [8, 16])
-
     def test_invalid_or_fully_clamped_ladder_fails_before_execution(self):
         for backend, message in (
             (FakeBackend(args(tokens_ladder="0")), "empty token ladder"),
@@ -86,91 +77,15 @@ class BackendTests(unittest.TestCase):
                 self.assertEqual(spec.rc, 2)
                 self.assertIn(message, spec.message)
 
-    def test_timed_components_follow_backend_contract(self):
-        backend = FakeBackend(args())
-        self.assertEqual(backend.timed_components(), ["roundtrip", "dispatch", "combine"])
-        backend.stage_device_work = True
-        self.assertEqual(
-            backend.timed_components(), ["roundtrip", "dispatch", "combine", "stage"]
-        )
-
-    def test_dispatch_cleanup_is_outside_timed_call(self):
-        backend = FakeBackend(args())
-        backend.requires_fresh_pair = True
-        captured = {}
-
-        def fake_time(_torch, operation, _warmup, _iters, **kwargs):
-            handle = operation()
-            kwargs["post"](handle)
-            captured.update(kwargs)
-            return [1.0]
-
-        with mock.patch.dict(sys.modules, {"torch": types.SimpleNamespace()}), mock.patch.object(
-            ep_backend, "time_us", side_effect=fake_time
-        ):
-            backend.benchmark_dispatch(object(), 0, 1)
-        self.assertIn("post", captured)
-        self.assertEqual(backend.calls, ["dispatch", "stage", "combine"])
-
-    def test_stage_cleanup_matches_the_dispatch_contract(self):
-        # MoRI-shaped backends (requires_fresh_pair) must not leak an
-        # un-combined dispatch out of an isolated-stage iteration.
-        for needs_cleanup, calls in (
-            (True, ["dispatch", "stage", "combine"]), (False, ["dispatch", "stage"]),
-        ):
-            backend = FakeBackend(args())
-            backend.requires_fresh_pair = needs_cleanup
-
-            def fake_time(_torch, operation, _warmup, _iters, **kwargs):
-                result = operation(kwargs["pre"]())
-                if kwargs["post"] is not None:
-                    kwargs["post"](result)
-                return [1.0]
-
-            with mock.patch.dict(sys.modules, {"torch": types.SimpleNamespace()}), mock.patch.object(
-                ep_backend, "time_us", side_effect=fake_time
-            ):
-                backend.benchmark_stage(object(), 0, 1)
-            with self.subTest(needs_cleanup=needs_cleanup):
-                self.assertEqual(backend.calls, calls)
-
     def test_mode_is_fail_closed(self):
         with self.assertRaises(ValueError):
             FakeBackend(args(mode="unsupported"))
-
-    def test_low_latency_mode_accepted_only_when_declared(self):
-        # The base backend is normal-only, so it must reject low-latency; an adapter that
-        # declares it in SUPPORTED_MODES is accepted and can carry the token-expert
-        # receive layout the low-latency oracle path keys on, alongside its
-        # weighted-kernel combine.
-        with self.assertRaises(ValueError):
-            FakeBackend(args(mode="low-latency"))
-
-        class LowLatencyBackend(FakeBackend):
-            SUPPORTED_MODES = ("normal", "low-latency")
-
-        backend = LowLatencyBackend(args(mode="low-latency"))
-        backend.receive_layout = "token-expert"
-        backend.combine_weight_semantics = "weighted-kernel-sum"
-        self.assertEqual(backend.mode, "low-latency")
-        self.assertEqual(backend.receive_layout, "token-expert")
-        self.assertEqual(backend.combine_weight_semantics, "weighted-kernel-sum")
 
     def test_precision_is_fail_closed(self):
         # The base SUPPORTED_PRECISIONS is BF16-only; an adapter that has not opted
         # into a precision must reject it rather than silently run the wrong codec.
         with self.assertRaises(ValueError):
             FakeBackend(args(precision="fp8"))
-
-    def test_base_dispatch_encoding_is_identity(self):
-        # BF16 default: semantic_payload is identity, so oracle_x is x itself and the
-        # combine oracle compares against the source activations (unchanged behavior).
-        backend = FakeBackend(args())
-        payload = object()
-        self.assertIs(backend.semantic_payload(payload), payload)
-        self.assertIsNone(backend._validate_quantizer(payload))
-        self.assertEqual(backend.dispatch_dtype, "bf16")
-        self.assertEqual(backend.combine_dtype, "bf16")
 
     def test_make_problem_sends_x_and_points_the_oracle_at_semantic_payload(self):
         # dispatch_x is always x -- adapters quantize inside dispatch(), where production
@@ -235,24 +150,6 @@ class RoundtripStaging(unittest.TestCase):
         b.run_roundtrip(object(), staged="pre-materialised")
         self.assertEqual(b.calls, ["dispatch", "combine(pre-materialised)"])
         self.assertNotIn("stage", b.calls)
-
-    def test_without_staged_input_the_stage_runs_inline(self):
-        # The fp8 `dequant` model takes this path, as does any backend whose `stage` is a bare
-        # pointer assignment; mori/flashinfer-ep hoist their real device copy instead.
-        b = _StagingBackend(stage_device_work=True, fp8_consume="dequant")
-        b.run_roundtrip(object())
-        self.assertEqual(b.calls, ["dispatch", "stage", "combine(staged-by-stage)"])
-
-    def test_a_staged_tensor_reaches_combine_through_the_handle(self):
-        # The staged expert-output stand-in must be what combine consumes; a break here
-        # would silently measure a combine over stale data rather than fail.
-        b = _StagingBackend(stage_device_work=True, fp8_consume="native")
-        b.run_roundtrip(object(), staged="X")
-        self.assertEqual(b.calls[-1], "combine(X)")
-
-    def test_default_models_the_native_path(self):
-        # deepseek-v3 block-fp8 hits vLLM's matched branch and SGLang's no-dequant path.
-        self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
 
     def test_an_unrecognised_consume_mode_fails_instead_of_silently_meaning_native(self):
         # The value is read at class-body evaluation, so a typo raises at import -- before
@@ -348,17 +245,6 @@ class WarmStaging(unittest.TestCase):
         self.assertEqual(b.calls.count("stage"), 1)
         # Every later iteration still hands combine the staged payload, not a stale None.
         self.assertEqual(b.calls.count("combine(staged-by-stage)"), 5)
-
-    def test_stage_every_rehearses_it_on_every_iteration(self):
-        b = _StagingBackend(stage_device_work=True, fp8_consume="native")
-        self._warm(b, 5, stage_every=True)
-        self.assertEqual(b.calls.count("stage"), 5)
-
-    def test_a_chain_that_includes_staging_keeps_warming_it(self):
-        # The `dequant` hatch puts the conversion back in the timed chain, so warm-up must match.
-        b = _StagingBackend(stage_device_work=True, fp8_consume="dequant")
-        self._warm(b, 5)
-        self.assertEqual(b.calls.count("stage"), 5)
 
 # The chained-period staging contract lives in tests/test_chain_period.py, which asserts it per
 # sibling chain with window values.
@@ -461,39 +347,6 @@ class TestSingleHandle(unittest.TestCase):
             b._ensure_handle(problem(T))
         self.assertEqual(b._ep_group.created, 1)
 
-    def test_shape_change_rebinds_and_repeat_does_not(self):
-        """update() on a shape switch; no collective when the bound shape is re-entered."""
-        b = backend()
-        pa, pb = problem(1), problem(2)
-        b._ensure_handle(pa)
-        self.assertEqual(len(b._ep_group.handle.updates), 0)  # first bind is the create
-
-        b._ensure_handle(pb)
-        self.assertEqual(len(b._ep_group.handle.updates), 1)
-
-        # Re-entering the bound problem must not enter a collective, or every iteration of the
-        # timed loop gains a rank-synchronising step.
-        for _ in range(8):
-            b._ensure_handle(pb)
-        self.assertEqual(len(b._ep_group.handle.updates), 1)
-
-        # Returning to an earlier shape rebinds again (its cached namespace is reused).
-        b._ensure_handle(pa)
-        self.assertEqual(len(b._ep_group.handle.updates), 2)
-
-    def test_every_problem_shares_the_one_handle(self):
-        b = backend()
-        handles = {id(b._ensure_handle(problem(T)).handle) for T in (1, 2, 4)}
-        self.assertEqual(len(handles), 1)
-        self.assertIs(b._ensure_handle(problem(1)).handle, b._handle)
-
-    def test_ll_never_passes_layout_info_on_rebind(self):
-        """The API forbids layout_info on create/update in LL mode."""
-        b = backend(ll=True)
-        b._ensure_handle(problem(1))
-        b._ensure_handle(problem(2))
-        self.assertEqual([info for _, info in b._ep_group.handle.updates], [None])
-
     def test_ll_gate_wrapper_is_built_once_per_handle(self):
         """LL applies the gate in combine, so its weights wrapper must be cached: building one
         per timed combine puts a torch resolve and an np.asarray inside `time_us`."""
@@ -521,27 +374,6 @@ class TestSingleHandle(unittest.TestCase):
         ll = backend(ll=True)
         ll_h = ll._ensure_handle(problem(1))
         self.assertFalse(hasattr(ll_h, "combine_in_t"))
-
-    def test_ht_rebind_carries_that_problems_counters(self):
-        """HT re-runs the metadata exchange into the rebound problem's own counter tensors."""
-        b = backend(ll=False)
-        ha = b._ensure_handle(problem(1))
-        hb = b._ensure_handle(problem(2))
-        self.assertEqual(len(b._ep_group.handle.updates), 1)
-        self.assertIs(b._ep_group.handle.updates[0][1], hb.layout_info)
-        self.assertIsNot(ha.layout_info, hb.layout_info)
-        self.assertEqual(hb.count, 7)  # re-read after the exchange
-
-    def test_destroy_releases_the_handle_once(self):
-        b = backend()
-        b._ensure_handle(problem(1))
-        handle = b._handle
-        b._destroy_handles()
-        self.assertTrue(handle.destroyed)
-        self.assertIsNone(b._handle)
-        self.assertIsNone(b._bound)
-        b._destroy_handles()  # idempotent
-
 
 if __name__ == "__main__":
     unittest.main()

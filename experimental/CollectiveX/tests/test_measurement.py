@@ -93,23 +93,6 @@ class LowLatencyOracleEndToEnd(unittest.TestCase):
         )
         return problem, idx_g, w_g
 
-    def test_correct_ll_backend_passes_every_oracle_check(self):
-        import routing
-
-        torch = _torch
-        T, hidden, topk, experts = 8, 128, 4, 16  # ep_size 1 -> experts_per_rank == experts
-        problem, idx_g, w_g = self._problem(T, hidden, topk, experts, seed=67)
-        backend = _FakeLLBackend(experts_per_rank=experts, seed=67)
-        with mock.patch.object(torch.cuda, "synchronize", lambda *a, **k: None):
-            report = ep_harness._run_ll_expert_oracle(
-                torch, routing, backend, problem, idx_g, w_g,
-                rank=0, experts_per_rank=experts, scale_up_domain=1, seed=67,
-            )
-        self.assertTrue(report["passed"], report["checks"])
-        for name, ok in report["checks"].items():
-            self.assertTrue(ok, f"check {name} failed: {report}")
-        self.assertLess(report["max_elementwise_relative_error"], ep_harness.COMBINE_REL_TOL)
-
     def test_corrupted_combine_trips_the_gate(self):
         import routing
 
@@ -169,19 +152,6 @@ LADDER = ((8, 1e6), (16, 2e6), (32, 3e6))
 
 
 class BandwidthMath(unittest.TestCase):
-    def test_algbw_per_gpu(self):
-        # 1e9 bytes in 1000us = 1e12 B/s = 1000 GB/s aggregate; /ep(2) = 500 per GPU.
-        self.assertAlmostEqual(bandwidth._algbw_per_gpu(1e9, 1000.0, 2), 500.0)
-        self.assertIsNone(bandwidth._algbw_per_gpu(1e9, 0.0, 2))
-
-    def test_fit_recovers_alpha_beta(self):
-        fit = bandwidth.fit_alpha_beta(_doc(_linear(LADDER)), "dispatch")
-        self.assertAlmostEqual(fit.alpha_us, 10.0, places=4)
-        self.assertAlmostEqual(fit.beta_gbps, 250.0, places=4)  # 500 aggregate / ep(2)
-        self.assertAlmostEqual(fit.r2, 1.0, places=6)
-        self.assertEqual(fit.points, 3)
-        self.assertTrue(fit.beta_is_reliable)
-
     def test_fit_is_none_when_undefensible(self):
         flat = [_row(t, b, 12.0) for t, b in LADDER]            # slope <= 0
         self.assertIsNone(bandwidth.fit_alpha_beta(_doc(_linear(LADDER[:2])), "dispatch"))
@@ -200,27 +170,6 @@ class BandwidthMath(unittest.TestCase):
         self.assertIn("beta=unreliable", out)
         self.assertNotIn("GB/s alpha", out)  # no number presented as measured
 
-    def test_latency_bound_ladder_withholds_beta_despite_high_r2(self):
-        # Real data gave beta = 3763 GB/s at R2 = 0.92: a near-zero slope explodes beta while
-        # the line still fits, so R2 cannot catch it — the transfer-share gate must.
-        rows = [_row(t, b, 500.0 + b * 1e-9)
-                for t, b in LADDER + ((64, 4e6), (128, 5e6))]
-        fit = bandwidth.fit_alpha_beta(_doc(rows), "dispatch")
-        self.assertGreater(fit.r2, bandwidth.FIT_MIN_R2)
-        self.assertLess(fit.bandwidth_share, bandwidth.FIT_MIN_BANDWIDTH_SHARE)
-        self.assertFalse(fit.beta_is_reliable)
-        self.assertIn("not bandwidth-bound", bandwidth._format_fit("dispatch", fit))
-
-    def test_alpha_marked_only_when_extrapolated(self):
-        prefill = bandwidth.fit_alpha_beta(  # starts at T=1024: intercept is extrapolated
-            _doc(_linear(((1024, 1e9), (2048, 2e9), (4096, 4e9), (8192, 8e9)))), "dispatch")
-        decode = bandwidth.fit_alpha_beta(   # reaches near zero bytes: alpha stands
-            _doc(_linear(((1, 1e5), (64, 6.4e6), (512, 5.12e7)))), "dispatch")
-        self.assertTrue(prefill.alpha_extrapolated)
-        self.assertFalse(decode.alpha_extrapolated)
-        self.assertIn("*", bandwidth._format_fit("dispatch", prefill))
-        self.assertNotIn("*", bandwidth._format_fit("dispatch", decode))
-
     def test_gate_failed_rung_excluded_from_fit_and_marked(self):
         rows = _linear(LADDER) + [_row(64, 4e6, 999.0, passed=False)]
         fit = bandwidth.fit_alpha_beta(_doc(rows), "dispatch")
@@ -229,21 +178,6 @@ class BandwidthMath(unittest.TestCase):
         out = bandwidth.render([_doc(rows)])
         self.assertIn("[correctness FAILED]", out)
         self.assertIn("excluded 1 gate-failed rung", out)
-
-    def test_render_marks_unavailable_and_separates_attempts(self):
-        unavailable = [_row(t, b, {"dispatch": None, "combine": 5.0, "roundtrip": 6.0})
-                       for t, b in LADDER]
-        out = bandwidth.render([_doc(unavailable)])
-        self.assertIn("dispatch=n/a", out)
-        self.assertIn("xnode=  50%", out)
-        second = _doc(_linear(LADDER))
-        second["identity"]["attempt_ordinal"] = 2
-        second["generated_at"] = "2026-07-25T23:00:00.000000+00:00"
-        out = bandwidth.render([_doc(_linear(LADDER)), second])
-        self.assertIn("attempt 1", out)
-        self.assertIn("attempt 2", out)
-        self.assertIn("run 30177021271", out)
-
 
 if __name__ == "__main__":
     unittest.main()

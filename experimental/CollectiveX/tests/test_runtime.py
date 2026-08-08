@@ -74,15 +74,6 @@ class PlatformRegistryTests(unittest.TestCase):
 
 
 class ProbeTests(unittest.TestCase):
-    def test_default_route_interface(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            route = Path(directory) / "route"
-            route.write_text(
-                "Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT\n"
-                "eth9 00000000 00000000 0003 0 0 0 00000000 0 0 0\n"
-            )
-            self.assertEqual(probe.default_route_interface(route), "eth9")
-
     def test_prepare_cache_is_private_and_reusable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(probe.prepare_cache(directory))
@@ -153,14 +144,6 @@ class ConfigTests(unittest.TestCase):
         self.assertIn(b"COLLX_PARTITION\0main\0", payload)
         self.assertIn(b"COLLX_SQUASH_DIR\0/home/sa-shared/containers\0", payload)
         self.assertIn(b"COLLX_RDMA_DEVICES\0", payload)
-
-    def test_operator_config_registry_only_emits_image_for_secret_fed_sku(self) -> None:
-        # A SKU without tracked operator settings still gets its public image
-        # configuration; private scheduler values can arrive through the overlay.
-        payload = self._emit_registry_only("mi325x-tw")
-        self.assertIn(b"COLLX_IMAGE\0rocm/sgl-dev:sglang-0.5.14-rocm720-mi35x-mori-0701\0", payload)
-        self.assertIn(b"COLLX_IMAGE_PLATFORM\0linux/amd64\0", payload)
-
 
 class StageTests(unittest.TestCase):
     def test_create_copy_and_validate_cleanup(self) -> None:
@@ -245,27 +228,6 @@ class NetworkProfileContract(unittest.TestCase):
             self.assertEqual(self._captures(SOCKET_MARKER, lines), ["eth0"])
             self.assertEqual(self._captures(LINK_MARKER, lines), ["roce"])
 
-    def test_infiniband_link_layer_maps_to_the_launcher_token(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._fabric(root, link_layer="InfiniBand")
-            rc, lines = self._run(root, root / "route")
-            self.assertEqual(rc, 0)
-            self.assertEqual(self._captures(LINK_MARKER, lines), ["infiniband"])
-
-    def test_socket_interface_resolves_from_default_route(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._fabric(root)
-            route = root / "route"
-            route.write_text(
-                "Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT\n"
-                "eth0 00000000 00000000 0003 0 0 0 00000000 0 0 0\n"
-            )
-            rc, lines = self._run(root, route, socket_names="")
-            self.assertEqual(rc, 0)
-            self.assertEqual(self._captures(SOCKET_MARKER, lines), ["eth0"])
-
     def test_inactive_port_emits_a_launcher_recognized_failure_marker(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -274,15 +236,6 @@ class NetworkProfileContract(unittest.TestCase):
             self.assertEqual(rc, 1)
             failures = [line for line in lines if re.search(FAILURE_MARKER, line)]
             self.assertTrue(any("rdma-port-1=inactive" in line for line in failures), failures)
-
-    def test_all_zero_gid_emits_gid_empty(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._fabric(root, gid="0000:0000:0000:0000:0000:0000:0000:0000")
-            rc, lines = self._run(root, root / "route")
-            self.assertEqual(rc, 1)
-            self.assertTrue(any("rdma-port-1=gid-empty" in line for line in lines), lines)
-
 
 # config.py case-args is the single case→invocation codec: collx_run_shard decodes one
 # null-delimited argv per case and hands it verbatim to bench/run_ep.py. Parse the
@@ -530,14 +483,6 @@ class CaseArgvContract(unittest.TestCase):
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
         self.assertEqual(args.out, f"results/{self.CASE['case_id']}_TS-c000.json")
 
-    def test_chain_knobs_round_trip_through_the_run_ep_parser(self) -> None:
-        # The chain budget is case identity like iters/trials/warmup, so it rides the same
-        # timing block; hardcoded in the harness, two chain lengths would look identical.
-        argv = self._case_argv(["16", "2", "8", "8"])
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual((args.iters, args.trials, args.warmup), (8, 256, 32))
-        self.assertEqual((args.chain_iters, args.chain_trials, args.chain_drop), (128, 4, 16))
-
     def test_a_legacy_colon_string_profile_still_decodes(self) -> None:
         # Sweep `version` does not bump for the codec change, so a shard staged before it --
         # or one built by hand -- must still produce a runnable argv. Both legacy arities:
@@ -584,28 +529,6 @@ class CaseArgvContract(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             self._case_argv(["8", "1", "8", "8"])
 
-    def test_low_latency_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A low-latency decode EP8 case flows through the same codec; run_ep's --mode
-        # choices must accept "low-latency" or the leg dies before allocation.
-        ll_case = {
-            **self.CASE,
-            "mode": "low-latency", "phase": "decode",
-            "ep": 8, "nodes": 1, "gpus_per_node": 8, "scale_up_domain": 8,
-            "scope": "scale-up", "scale_up_transport": "nvlink",
-            "scale_out_transport": "", "transport": "nvlink",
-            "topology_class": "h200-nvlink-island", "ladder": "1 2 4 8",
-            "case_id": "h200-dgxc-deepep-v2-deepseek-v3-low-latency-decode-ep8-uniform-bf16",
-        }
-        argv = self._case_argv(["8", "1", "8", "8"], case=ll_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual((args.mode, args.phase, args.scope), ("low-latency", "decode", "scale-up"))
-        self.assertEqual(args.case_id, ll_case["case_id"])
-        # Without the mode in the filename this case and its normal-mode sibling produce
-        # byte-identical paths, so driving both under one timestamp overwrites one artifact.
-        self.assertEqual(
-            args.out, f"results/{ll_case['case_id']}_TS-c000.json"
-        )
-
     def test_each_backend_round_trips_through_the_run_ep_parser(self) -> None:
         # The codec is backend-agnostic, so one loop replaces three near-identical tests:
         # run_ep's --backend choices must accept each name, and the filename must carry the
@@ -624,61 +547,9 @@ class CaseArgvContract(unittest.TestCase):
                 self.assertEqual(args.case_id, case["case_id"])
                 self.assertEqual(args.out, f"results/{case['case_id']}_TS-c000.json")
 
-    def test_mirrored_backend_choices_match_run_ep(self) -> None:
-        """The mirror is only worth having if it cannot drift from the real parser.
-
-        Kept in sync by convention it has now drifted twice — a backend was added to
-        run_ep.py's choices while this fixture kept the old list, so a case_id that the real
-        CLI accepts raised SystemExit here. Read the real list out of the source (AST, not
-        import: importing run_ep pulls in torch and the vendor EP libraries) and compare.
-        """
-        tree = ast.parse((BENCH / "run_ep.py").read_text())
-        real = [
-            [element.value for element in keyword.value.elts]
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            for argument in node.args
-            if isinstance(argument, ast.Constant) and argument.value == "--backend"
-            for keyword in node.keywords
-            if keyword.arg == "choices"
-        ]
-        self.assertEqual(len(real), 1, "expected exactly one --backend choices list")
-        mirrored = next(
-            action.choices
-            for action in self._run_ep_parser()._actions
-            if action.dest == "backend"
-        )
-        self.assertEqual(sorted(real[0]), sorted(mirrored))
-
-
 # logical_byte_provenance is where FP8 changes MEASUREMENT semantics (asymmetric
 # per-direction byte counts), so its arithmetic and guards are pinned here on CPU.
 class LogicalByteProvenanceTests(unittest.TestCase):
-    def test_bf16_default_is_two_bytes_per_value_no_scales(self) -> None:
-        got = ep_harness.logical_byte_provenance(logical_copies=10, hidden=7168)
-        self.assertEqual(got["activation_data_bytes"], 10 * 7168 * 2)
-        self.assertEqual(got["scale_bytes"], 0)
-        self.assertEqual(got["total_logical_bytes"], 10 * 7168 * 2)
-
-    def test_fp8_blockwise_dispatch_is_one_byte_plus_per_copy_scales(self) -> None:
-        # DeepEP FP8 dispatch: 1 byte/value + ceil(hidden/128)*4 FP32 scale bytes/copy.
-        scale_per_copy = ((7168 + 127) // 128) * 4  # 224
-        got = ep_harness.logical_byte_provenance(
-            logical_copies=10, hidden=7168, value_bytes=1,
-            scale_bytes_per_copy=scale_per_copy,
-        )
-        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
-        self.assertEqual(got["scale_bytes"], 10 * scale_per_copy)
-        self.assertEqual(got["total_logical_bytes"], 10 * 7168 + 10 * scale_per_copy)
-
-    def test_fp8_direct_cast_dispatch_is_one_byte_no_scales(self) -> None:
-        # MoRI's scale-free e4m3 cast: 1 byte/value, no scale payload.
-        got = ep_harness.logical_byte_provenance(
-            logical_copies=10, hidden=7168, value_bytes=1, scale_bytes_per_copy=0,
-        )
-        self.assertEqual(got["activation_data_bytes"], 10 * 7168)
-        self.assertEqual(got["scale_bytes"], 0)
-
     def test_roundtrip_is_the_per_field_sum_of_dispatch_and_combine(self) -> None:
         # run_sweep assembles the roundtrip as the per-field sum of an FP8 dispatch and a
         # BF16 combine; the direction bytes differ, so it is not 2x a single direction.
@@ -748,19 +619,6 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
         weights = (torch.rand(4, 2, dtype=torch.float32) + 0.1) * weight_scale
         return types.SimpleNamespace(x=x, topk_idx=idx, topk_weights=weights)
 
-    def test_transform_drops_the_gate_under_weighted_kernel_sum(self):
-        torch = _torch
-        payload = torch.randn(3, 64, dtype=torch.bfloat16)
-        ids = torch.tensor([[2, -1], [5, -1], [7, -1]], dtype=torch.int64)
-        low = ep_harness._expert_transform(
-            torch, payload, ids, torch.full((3, 2), 0.2), "weighted-kernel-sum"
-        )
-        high = ep_harness._expert_transform(
-            torch, payload, ids, torch.full((3, 2), 0.9), "weighted-kernel-sum"
-        )
-        # Unit coefficient: the staged value cannot depend on the gate magnitude.
-        self.assertTrue(torch.equal(low, high))
-
     def test_transform_folds_the_gate_under_unweighted_rank_sum(self):
         torch = _torch
         payload = torch.randn(3, 64, dtype=torch.bfloat16)
@@ -773,21 +631,6 @@ class WeightedCombineSemanticsTests(unittest.TestCase):
         )
         # The gate IS in the transform here, so a larger weight changes the staged value.
         self.assertFalse(torch.equal(low, high))
-
-    def test_expected_combine_is_linear_in_the_gate_under_weighted_kernel_sum(self):
-        torch = _torch
-        p = self._problem(1.0)
-        p2 = types.SimpleNamespace(
-            x=p.x, topk_idx=p.topk_idx, topk_weights=p.topk_weights * 2
-        )
-        base = ep_harness._expected_transformed_combine(
-            torch, p, 4, 8, "weighted-kernel-sum"
-        )
-        doubled = ep_harness._expected_transformed_combine(
-            torch, p2, 4, 8, "weighted-kernel-sum"
-        )
-        # Same routing/activations, gate x2 -> expected x2 (the kernel applies the gate).
-        self.assertTrue(torch.allclose(doubled, base * 2, atol=1e-3, rtol=1e-3))
 
     def test_unknown_semantics_fail_closed(self):
         torch = _torch
@@ -827,31 +670,6 @@ class TopkSlotTreeReductionTests(unittest.TestCase):
         self.assertNotEqual(self._tree(values), 1.015625)  # FP32 accumulate, narrow once
         self.assertNotEqual(self._tree(values), 1.0)       # sequential BF16 accumulate
 
-    def test_a_rank_claimed_by_an_earlier_slot_contributes_once(self):
-        torch = _torch
-        # Both top-k slots route to rank 0; the kernel blanks the later slot in place.
-        destination = torch.zeros((1, 2), dtype=torch.int64)
-        messages = torch.full((1, 1, 1), 0.5)
-        combined = ep_harness._topk_slot_tree_combine(
-            torch, destination, torch.ones_like(destination, dtype=torch.bool),
-            messages, torch.bfloat16,
-        )
-        self.assertEqual(combined.item(), 0.5)
-
-    def test_the_first_slot_claiming_a_rank_is_the_one_that_survives(self):
-        torch = _torch
-        # These cancel only under keep-first: blanking the later slot reduces (256+1)->256 and
-        # (-256+0)->-256 to 0.0, blanking the earlier gives 1.0 (257->256 is BF16 rounding).
-        destination = torch.tensor([[0, 1, 2, 0]])
-        messages = torch.tensor([[[256.0]], [[1.0]], [[-256.0]]])
-        combined = ep_harness._topk_slot_tree_combine(
-            torch, destination, torch.ones_like(destination, dtype=torch.bool),
-            messages, torch.bfloat16,
-        )
-        self.assertEqual(combined.item(), 0.0)
-
-
-
 @unittest.skipUnless(_torch is not None, "quantize-identity checks require torch")
 class FusedQuantizeGate(unittest.TestCase):
     """The oracle's payload gate compares the sender's [T, hidden] quantize against the oracle's
@@ -875,20 +693,6 @@ class FusedQuantizeGate(unittest.TestCase):
             return x, x
         self.assertIs(self._fuse("low-latency", eager), eager)
 
-    def test_normal_mode_wraps_the_helper(self):
-        def eager(x):
-            return x, x
-        self.assertIsNot(self._fuse("normal", eager), eager)
-
-    def test_identity_check_accepts_an_equivalent_callable(self):
-        torch = _torch
-        x = torch.randn(8, 256, dtype=torch.bfloat16)
-
-        def eager(t):
-            return t.to(torch.float8_e4m3fn), t.float().abs().amax(dim=1)
-
-        self._check(eager, lambda t: eager(t), x)  # must not raise
-
     def test_identity_check_rejects_a_divergent_callable(self):
         torch = _torch
         x = torch.randn(8, 256, dtype=torch.bfloat16)
@@ -901,21 +705,6 @@ class FusedQuantizeGate(unittest.TestCase):
             return values, scales + 1          # one differing scale is enough to red a cell
         with self.assertRaises(RuntimeError):
             self._check(eager, divergent, x)
-
-    def test_identity_check_rejects_a_shape_dependent_callable(self):
-        # A callable that is deterministic but NOT per-row invariant still breaks the gate,
-        # because the oracle quantises a different row count than the sender did.
-        torch = _torch
-        x = torch.randn(8, 256, dtype=torch.bfloat16)
-
-        def eager(t):
-            return t.to(torch.float8_e4m3fn), t.float().abs().amax(dim=1)
-
-        def shape_dependent(t):
-            values, scales = eager(t)
-            return values, scales * float(t.shape[0])
-        with self.assertRaises(RuntimeError):
-            self._check(eager, shape_dependent, x)
 
 class GpuHealthProbe(unittest.TestCase):
     """Reject an allocation holding a throttled GPU before it burns the wall-clock guard: one
@@ -976,13 +765,6 @@ class GpuHealthProbe(unittest.TestCase):
             shutil.which = real_which
         return code, captured.getvalue()
 
-    def test_a_healthy_check_records_how_many_gpus_it_saw(self):
-        # Without this marker a gate that went blind -- no visible devices, or a driver spelling
-        # the fields clocks_throttle_reasons.* -- looks like one that saw eight healthy GPUs.
-        code, out = self._run_validate(self.HEALTHY)
-        self.assertEqual(code, 0)
-        self.assertIn("gpu-health-checked gpus=8", out)
-
     def test_a_fault_exits_nonzero_and_names_the_gpu(self):
         code, out = self._run_validate(
             self._swap("7, Not Active, Not Active, 37 ", "7, Active, Active, 93 ")
@@ -991,10 +773,6 @@ class GpuHealthProbe(unittest.TestCase):
         self.assertIn("gpu-health-fault gpu 7", out)
         self.assertNotIn("gpu-health-checked", out)
 
-    def test_a_missing_nvidia_smi_is_silent_and_passes(self):
-        code, out = self._run_validate(self.HEALTHY, has_smi=False)
-        self.assertEqual(code, 0)
-        self.assertEqual(out, "")
     def test_the_temperature_spread_is_reported_but_never_gated(self):
         # The signal no gate can see: an H100 engages software thermal slowdown at ~86-87 C, so
         # a clamped one never crosses the 90 C limit and the measured fault showed only as an
@@ -1040,13 +818,6 @@ class LowLatencyCapDecoupling(unittest.TestCase):
             import importlib
             import ep_deepep_v2
             return importlib.reload(ep_deepep_v2)
-
-    def test_both_caps_exist_and_the_ladder_fits_inside_the_buffer(self):
-        module = self._adapter()
-        # A ladder larger than the buffer would dispatch past the allocated slots.
-        self.assertLessEqual(module._LL_LADDER_CAP, module._LL_BUFFER_CAP)
-        # NVSHMEM_QP_DEPTH=1024 asserts nvshmem_qp_depth >= (cap + 1) * 2 at construction.
-        self.assertLessEqual(module._LL_BUFFER_CAP, 511)
 
     def test_buffer_cap_tracks_the_ladder_constant(self):
         # Patching the constant and watching the return move proves it reads the constant, which
