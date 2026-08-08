@@ -5635,6 +5635,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2448
 
 - config-keys:
+    - qwen3.5-fp8-h200-sglang-agentic-mtp
+  description:
+    - "Add the first Qwen3.5 AgentX (agentic-coding) recipe on H200: Qwen3.5-397B-A17B FP8 with SGLang, spec-decoding=mtp only, routed to benchmarks/single_node/agentic/qwen3.5_fp8_h200_mtp.sh. Shipped spec-decode-only per the AgentX policy in MODELS.md -- agentic recipes are run and published with speculative decoding enabled rather than as an STP/MTP A/B, because synthetic acceptance already makes spec-decode results comparable across submissions."
+    - "Speculative config mirrors fixed_seq_len/qwen3.5_fp8_h200_mtp.sh: SGLANG_ENABLE_SPEC_V2=1 with --speculative-algorithm EAGLE, --speculative-num-steps 3, --speculative-eagle-topk 1, --speculative-num-draft-tokens 4 -- 3 speculative tokens per verification step."
+    - "Throughput runs pin SGLang simulated acceptance to the committed golden AL: SGLANG_SIMULATE_ACC_LEN=3.39 (Qwen3.5 MTP curve at K=3, thinking_on, golden_al_distribution/qwen3.5_mtp.yaml), SGLANG_SIMULATE_ACC_METHOD=match-expected, SGLANG_SIMULATE_ACC_TOKEN_MODE=real-draft-token -- the triple golden_al_distribution/README.md prescribes for SGLang, and the same AL the GB300 Qwen3.5 AgentX srt-slurm recipes pin. EVAL_ONLY runs leave simulated acceptance off and keep real verification."
+    - "Image lmsysorg/sglang:v0.5.16-cu130. SGLANG_SIMULATE_ACC_TOKEN_MODE is only read from v0.5.16 (SIMULATE_ACC_LEN / SIMULATE_ACC_METHOD exist further back), so an older image would silently ignore the token-mode half of the AgentX contract; v0.5.14 is what the fixed-seq-len H200 Qwen3.5 entries already run."
+    - "Serve shape follows the proven H100 Qwen3.5 AgentX replay path (SGLang HiCache host-DRAM offload with page-size 64 / kernel IO / page_first layout, flashinfer attention, --quantization fp8, --kv-cache-dtype fp8_e4m3, --mamba-ssm-dtype bfloat16, the multi_tokenizer cached_tokens_details patch, the 256k-capped with-subagents trace corpus) with --mem-fraction-static 0.8 instead of 0.75, matching the fixed-seq-len H200 recipe's use of H200's 141 GB HBM3e."
+    - "Search space now runs on the AgentX MTP concurrency grid: the GPU-resident row [4, 8, 12, 16] and the HiCache row [4, 8, 12, 16]. Every step is at least 2 concurrency apart and every arm stops hard at conc 16 -- single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and past conc 16 these SKUs are into the post-HBM-cliff thrashing regime that the non-MTP sweeps already characterized, which is not worth one GPU job per point."
+    - "Drops conc 1 from the GPU-resident arm. The TP8/EP8 c1 cell was the one job that never returned on this recipe while the other 18 completed, so it gated the PR without adding a point: at conc 1 a single session cannot exercise the EP8 all-to-all this arm exists to measure, and the low-interactivity corner is already covered by conc 4."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2428
+
+- config-keys:
     - dsv4-fp4-b200-vllm
   description:
     - "B200 DSv4 FP4 vLLM: bump to nightly-700d39b, DEP arm gets prefill-schedule-interval 16, FULL_DECODE_ONLY cudagraph, max-num-seqs and capture-size 2x CONC, gmu 0.94"
