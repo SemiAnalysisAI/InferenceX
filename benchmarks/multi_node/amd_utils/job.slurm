@@ -563,6 +563,9 @@ DOCKER_ENV_COMMON=(
     -e SPEC_ATTN_BACKEND=\${SPEC_ATTN_BACKEND:-}
     -e SPEC_DRAFT_SAMPLE_METHOD=\${SPEC_DRAFT_SAMPLE_METHOD:-}
     -e SPEC_REJECTION_SAMPLE_METHOD=\${SPEC_REJECTION_SAMPLE_METHOD:-}
+    -e SPEC_NUM_TOKENS=\${SPEC_NUM_TOKENS:-}
+    -e SPEC_MODEL=\${SPEC_MODEL:-}
+    -e MAX_NUM_SEQS=\${MAX_NUM_SEQS:-}
     # ROCm kernel-fault localisation. AMD_SERIALIZE_KERNEL=3 makes HIP wait after
     # every kernel, so an HSA_STATUS_ERROR_EXCEPTION is attributed to the kernel
     # that caused it instead of surfacing as an async queue abort with no Python

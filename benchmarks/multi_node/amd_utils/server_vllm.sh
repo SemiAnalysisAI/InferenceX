@@ -409,6 +409,61 @@ if [[ -n "${SPEC_REJECTION_SAMPLE_METHOD:-}" ]]; then
     echo "Applied SPEC_REJECTION_SAMPLE_METHOD=${SPEC_REJECTION_SAMPLE_METHOD}"
 fi
 
+# SPEC_NUM_TOKENS: override "num_speculative_tokens" (DSpark's n). The recipe pins 7 and
+# every fault so far was measured at 7, so n has never been varied -- yet it sets the
+# verify-step qo_len, the draft-loop trip count and the sampler's per-request logit count
+# all at once, which makes it the cheapest axis for bounding the fault.
+apply_spec_num_tokens() {
+    local cfg="$1"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q '"num_speculative_tokens"'; then
+        echo "$cfg" | sed -E "s/(\"num_speculative_tokens\"[[:space:]]*:[[:space:]]*)[0-9]+/\1${SPEC_NUM_TOKENS}/g"
+    else
+        echo "$cfg" | sed -E "s/(--speculative-config[[:space:]]+'\\{)/\\1\"num_speculative_tokens\":${SPEC_NUM_TOKENS},/"
+    fi
+}
+if [[ -n "${SPEC_NUM_TOKENS:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_num_tokens "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_spec_num_tokens "$DECODE_SERVER_CONFIG")"
+    echo "Applied SPEC_NUM_TOKENS=${SPEC_NUM_TOKENS} (DSpark n on P and D)"
+fi
+
+# SPEC_MODEL: override the draft checkpoint. The recipe names the hub id
+# "Inferact/Kimi-K3-DSpark", which vLLM resolves over the network; a toy draft has to be
+# pointed at a path inside the container instead. The value may contain '/', so substitute
+# with a delimiter that cannot appear in a path.
+apply_spec_model() {
+    local cfg="$1"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    else
+        echo "$cfg" | sed -E "s|(\"model\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"|\1\"${SPEC_MODEL}\"|g"
+    fi
+}
+if [[ -n "${SPEC_MODEL:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_model "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_spec_model "$DECODE_SERVER_CONFIG")"
+    echo "Applied SPEC_MODEL=${SPEC_MODEL} (draft checkpoint on P and D)"
+fi
+
+# MAX_NUM_SEQS: override --max-num-seqs. models_vllm.yaml pins 16 and warns not to raise it
+# without re-checking the aiter MLA decode path; lowering it is the safe direction and it
+# bounds how ragged a decode batch can get.
+apply_max_num_seqs() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--max-num-seqs'; then
+        echo "$cfg" | sed -E "s/(--max-num-seqs[[:space:]]+)[0-9]+/\1${MAX_NUM_SEQS}/g"
+    else
+        echo "$cfg --max-num-seqs ${MAX_NUM_SEQS}"
+    fi
+}
+if [[ -n "${MAX_NUM_SEQS:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_max_num_seqs "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_max_num_seqs "$DECODE_SERVER_CONFIG")"
+    echo "Applied MAX_NUM_SEQS=${MAX_NUM_SEQS} (P and D)"
+fi
+
 # ENFORCE_EAGER: disable CUDA graphs. Escape hatch, not a default -- AiterMLA
 # declares AttentionCGSupport.UNIFORM_BATCH and the K3 fork adds
 # _uniform_padded_mtp_qo_len specifically so full-CG padded MTP decode works, so
