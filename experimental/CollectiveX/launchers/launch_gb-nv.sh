@@ -30,6 +30,13 @@ SCALE_UP_DOMAIN="${COLLX_SCALE_UP_DOMAIN:-72}"
 NGPUS="${COLLX_NGPUS:-$((NODES * GPN))}"
 if [ "$PRODUCT" = gb200 ]; then default_time=30; else default_time=90; fi
 TIME_MIN="${COLLX_TIME:-$default_time}"
+case "$COLLX_BENCH" in
+  nixl | mooncake)
+    # kv cases run up to ~90 minutes on the mnnvl descriptor floor; keep the
+    # allocation ask small enough to backfill on a contended pool.
+    TIME_MIN=180
+    ;;
+esac
 IMAGE="$COLLX_IMAGE"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 # EP on a GB rack always stays inside the NVL72 domain, but a kv-transfer
