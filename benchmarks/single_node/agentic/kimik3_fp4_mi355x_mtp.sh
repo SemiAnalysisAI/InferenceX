@@ -796,7 +796,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 # (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( 2 * CONC * (1 + SPEC_NUM_TOKENS) ))
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
-GPU_MEM_UTIL="0.8"
+GPU_MEM_UTIL="0.9"
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
