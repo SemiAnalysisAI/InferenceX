@@ -54,6 +54,20 @@ branch's development left stored documents tagged `version: 2` that are currentl
 because the frontend reader accepts `[1]`. Publishing support for 2 would silently resurface that
 mid-development churn as valid data.
 
+The `fp8_consume` derivation, in full, since the code now points here for it. `dequant` is a
+verification hatch rather than a second metric — never a sweep axis, never a default — because the
+mismatched-config cost is derivable from what every run already emits:
+
+    dequant roundtrip  ~=  roundtrip + stage        (+2.4% .. -0.1%, b200 LL fp8 ladder)
+
+slightly high because chaining amortises launch overhead (median `rt/(d+s+c)` = 0.93 across the
+corpus). The reverse does **not** hold: reconstructing native as `dequant - stage` errs by -11.6% at
+T=1, -5% at T=64, and converges only by T=256 — worst precisely in the decode regime the headline
+reports. So measure native and derive dequant, never the other way round. The hatch reproduces
+historical deepep-v2/uccl-ep numbers for regression checks (302.0µs against 302.5µs in run
+30177021271 at T=1); it does not reproduce MoRI fp8, whose stage now casts only the rows dispatch
+filled, nor any pre-hoist BF16 roundtrip.
+
 Read that charge as a **fixed per-call cost, not a payload-proportional one**. On DeepEP V2 decode,
 FP8 dispatch p50 minus its BF16 control is 65us on h100, 59us on b200, 27us on b300 and 57us on
 gb300 at T=1, flat within a microsecond or two through T=64, then decaying; by T=512 it is slightly
@@ -104,6 +118,16 @@ case count.
 | H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
 | MI300X/MI325X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
+
+**A virtualized pool can make a scale-out row measure the hypervisor rather than the fabric.**
+h200-dgxc EP16 pays roughly three times the cross-node cost of b300 or h100 on identical topology
+and identical traffic, while its EP8 rows are correct — the deficit is confined to the hop. It
+sustains ~34 GB/s per node against a nominal 8x400G (~4.2 GB/s per GPU-NIC pair) where bare-metal
+h100 reaches wire rate. Reordering the NIC-PE mapping to pair each rank with its socket-local NIC
+changed nothing (478µs against a 480µs baseline), which rules the selector out and points at the
+GDR path being degraded wholesale inside the guest. The retired b200-dgxc pool showed the same
+shape. Treat EP16 rows from a virtualized pool as a lower bound on the hardware until the host's
+ACS/IOMMU configuration is confirmed.
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
 domain.

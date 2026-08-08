@@ -134,22 +134,16 @@ class EPBackend(abc.ABC):
     # (that stage now casts only the rows dispatch filled) or any pre-hoist BF16 roundtrip (the
     # hatch is fp8-only by design).
     #
-    # A second measured mode is unnecessary because the mismatched-config cost is DERIVABLE
-    # from what every run already emits:
+    # A second measured mode is unnecessary: `dequant roundtrip ~= roundtrip + stage` holds to
+    # within a few percent, so the mismatched-config cost is derivable from what every run
+    # already emits. Measure native and derive dequant, NEVER the reverse -- reconstructing
+    # native as `dequant - stage` is worst exactly in the decode regime the headline reports.
+    # The derivation-accuracy ladder is in docs/methodology.md (search "fp8_consume").
     #
-    #     dequant roundtrip  ~=  roundtrip + stage        (+2.4% .. -0.1%, b200 LL fp8 ladder)
-    #
-    # slightly high because chaining amortises launch overhead (median rt/(d+s+c) = 0.93
-    # across the corpus). The reverse does NOT hold -- reconstructing native as
-    # `dequant - stage` errs by -11.6% at T=1, -5% at T=64, and only converges by T=256,
-    # i.e. it is worst exactly in the decode regime the headline reports. So measure native
-    # and derive dequant, never the other way round.
-    #
-    # It matters because for deepep-v2 and uccl `stage` is precisely the fp8 conversion
-    # (both set stage_device_work = self._fp8), so charging it to the chained roundtrip
-    # compares fp8 and bf16 through structurally different pipelines. On run 30177021271
-    # that inverted the fp8-vs-bf16 verdict in 39 of 51 comparisons. dispatch and combine
-    # were always measured stage-free; only the chained roundtrip mixed it in.
+    # It matters because for deepep-v2 and uccl `stage` IS the fp8 conversion (both set
+    # stage_device_work = self._fp8), so charging it to the chained roundtrip compares fp8 and
+    # bf16 through structurally different pipelines: on run 30177021271 that inverted the
+    # fp8-vs-bf16 verdict in 39 of 51 comparisons.
     fp8_consume = os.environ.get("CX_FP8_CONSUME", "native")
     if fp8_consume not in ("native", "dequant"):
         # A typo used to fall through to "native", so the run silently measured the

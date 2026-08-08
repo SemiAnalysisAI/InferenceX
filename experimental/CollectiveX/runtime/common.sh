@@ -969,8 +969,10 @@ collx_run_shard() {
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
     # A hang guard, not a work budget: at 900 it killed FP8 prefill cases that had already written
     # complete artifacts, and at 1800 it killed b200 and h200 multi-node EP16 prefill (run
-    # 31020463440). Why those legs slowed is open -- h100-dgxc has the same 2-node RDMA+GIN topology
-    # and did not move. Truncating a real measurement is worse than a late one, and 5400 stays
+    # 31020463440). Those two slowed because both pools were virtualized and their GPU-NIC p2p is
+    # degraded -- h200 sustains ~34 GB/s per node against a nominal 8x400G where bare-metal h100
+    # reaches wire rate on the same 2-node RDMA+GIN topology, which is why h100 never moved. See
+    # docs/methodology.md. Truncating a real measurement is worse than a late one, and 5400 stays
     # inside the 300-minute allocation.
     if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
