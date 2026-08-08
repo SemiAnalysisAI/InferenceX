@@ -5665,3 +5665,15 @@
     - "Refresh submission with up to date AgentX harness."
     - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2516
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Retain the 2P2D PCP8 prefill, TP8/DP8 decode, Mooncake, 1M-context topology, and c8/c12/c16 search space; use GPU-resident decode KV cache because released SGLang does not support combining HiSparse with MTP"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use lmsysorg/sglang:v0.5.16-cu130 and the latest NVIDIA/srt-slurm release, v1.0.44, which includes logical-worker Prometheus URL injection for AIPerf"
+    - "Enable SGLang cache reporting on both prefill and decode workers so AIPerf records prompt-cache read-token usage alongside all logical-worker Prometheus metrics"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2529
