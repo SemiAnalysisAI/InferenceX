@@ -5714,4 +5714,4 @@
     - dsv4-fp4-b300-vllm-agentic-mtp
   description:
     - "Update the B300 DSV4 AgentX MTP image, TP/DEP sweep, and DEP prefill tuning."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
