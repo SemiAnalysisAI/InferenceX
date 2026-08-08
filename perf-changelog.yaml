@@ -5535,6 +5535,17 @@
     - "Refresh submission with up to date AgentX harness."
     - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2517
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 MI355X vLLM AgentX MTP submission with three speculative tokens."
+    - "Pin throughput to the committed DeepSeek-V4-Pro golden synthetic acceptance length of 2.49; eval-only runs retain real target verification."
+    - "Use the immutable vllm/vllm-openai-rocm:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c image because the base submission's retired nightly tag is no longer published; rely on its upstream scheduler instead of replacing scheduler.py out of tree."
+    - "Explicitly pass the vLLM backend metrics endpoint to AIPerf for every topology and require vllm: metrics before publishing AgentX results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2522
   
 - config-keys:
     - kimik3-fp4-h200-vllm-agentic
@@ -5647,7 +5658,39 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2428
 
 - config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2516
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Retain the 2P2D PCP8 prefill, TP8/DP8 decode, Mooncake, 1M-context topology, and c8/c12/c16 search space; use GPU-resident decode KV cache because released SGLang does not support combining HiSparse with MTP"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use lmsysorg/sglang:v0.5.16-cu130 and the latest NVIDIA/srt-slurm release, v1.0.44, which includes logical-worker Prometheus URL injection for AIPerf"
+    - "Enable SGLang cache reporting on both prefill and decode workers so AIPerf records prompt-cache read-token usage alongside all logical-worker Prometheus metrics"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2529
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh Actions run 29657732517 as an MTP sibling while preserving the single-node TP8/EP1, GPU-resident BF16 KV, TileLang DSA, 1M-context topology, and c1/c2/c3/c4/c5/c6/c8 search space"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
+    - "Allow up to 30 minutes for healthy AgentX responses admitted near the end of the measurement window to drain before AIPerf finalizes profile metric coverage"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528
+
+- config-keys:
     - dsv4-fp4-b200-vllm
   description:
-    - "B200 DSv4 FP4 vLLM: bump to nightly-700d39b, DEP arm gets prefill-schedule-interval 16, FULL_DECODE_ONLY cudagraph, max-num-seqs and capture-size 2x CONC, gmu 0.94"
+    - "B200 DSv4 FP4 vLLM: bump to nightly-700d39b, DEP arm gets prefill-schedule-interval 16, FULL_DECODE_ONLY cudagraph, max-num-seqs and capture-size = CONC, gmu 0.94"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
