@@ -5526,6 +5526,15 @@
     - "Enable SGLang backend metrics on every aggregate, prefill, and decode engine, and fail before publishing a partial trace artifact if required sglang: metrics are absent."
     - "Record the recipes' active HiCache host-DRAM tier and, for disaggregated points, Dynamo router commit 5a638087 in nvidia-master metadata so generated artifacts no longer report kv_offloading=none, allocated_cpu_dram_gb=0, or a null router."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2477
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2517
   
 - config-keys:
     - kimik3-fp4-h200-vllm-agentic
@@ -5580,6 +5589,18 @@
     - "Serve shape is otherwise identical to the non-MTP agentic sibling (SGLang HiCache host-DRAM offload with page-size 64 / kernel IO / page_first layout, flashinfer attention on sm_90, --quantization fp8, --kv-cache-dtype fp8_e4m3, --mamba-ssm-dtype bfloat16, --mem-fraction-static 0.75, qwen3 reasoning / qwen3_coder tool-call parsing inherited from the shared agentic replay path, the multi_tokenizer cached_tokens_details patch), so the spec-decode delta is readable at equal concurrency."
     - "Search space now runs on the AgentX MTP concurrency grid: the GPU-resident row [1, 4, 8, 12, 16] and the HiCache row [4, 8, 12, 16]. Every step is at least 2 concurrency apart and every arm stops hard at conc 16 -- single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and past conc 16 these SKUs are into the post-HBM-cliff thrashing regime that the non-MTP sweeps already characterized, which is not worth one GPU job per point."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2427
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Kimi K2.5 NVFP4 B200 vLLM: nightly image, TP/DEP/TEP sweep, DEP gmu 0.80"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2512
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Kimi K2.5 NVFP4 B300 vLLM: nightly image, TP/DEP/TEP sweep, TP8 conc-1 only, DEP gmu 0.85"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2513
 
 - config-keys:
     - minimaxm3-fp4-b200-vllm-agentic-mtp

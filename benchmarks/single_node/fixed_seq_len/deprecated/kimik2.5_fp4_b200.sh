@@ -12,6 +12,20 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+GMU=0.90
+PREFILL_SCHEDULE_ARGS=()
+if [ "${DP_ATTENTION:-false}" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+    GMU=0.80
+    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
+fi
+
+EP_ARGS=()
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
@@ -22,6 +36,8 @@ nvidia-smi
 
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
+export VLLM_USE_V2_MODEL_RUNNER=0
+export VLLM_FLASHINFER_AUTOTUNE_SKIP_OPS=""
 
 SERVER_LOG=/workspace/server.log
 
@@ -41,17 +57,21 @@ export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 set -x
 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
---tensor-parallel-size=$TP \
---gpu-memory-utilization 0.90 \
+"${PARALLEL_ARGS[@]}" \
+"${EP_ARGS[@]}" \
+"${PREFILL_SCHEDULE_ARGS[@]}" \
+--gpu-memory-utilization "$GMU" \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
 --kv-cache-dtype fp8 \
---max-cudagraph-capture-size 2048 \
---max-num-batched-tokens "$((ISL * 2 ))" \
---stream-interval 20 --no-enable-prefix-caching \
+--max-cudagraph-capture-size "$((CONC * 2))" \
+--stream-interval 32 \
+--attention-config '{"mla_prefill_backend":"FLASHINFER","use_prefill_query_quantization":true}' \
+--linear-backend flashinfer_cutlass \
+--no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
