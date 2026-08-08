@@ -47,11 +47,50 @@ copy_to_workspace() {
     local source_file="$1"
     local destination_file="$2"
 
+    # A compute-visible runner workspace may be mounted directly into the
+    # benchmark container. In that case the staged result already is the
+    # workflow artifact, so copying it onto itself would fail with cp's
+    # "same file" error even though the benchmark succeeded.
+    if [[ -e "$destination_file" && "$source_file" -ef "$destination_file" ]]; then
+        echo "Result already present at $destination_file"
+        return 0
+    fi
+
     if ! cp "$source_file" "$destination_file"; then
         echo "ERROR: failed to copy $source_file to $destination_file" >&2
         return 1
     fi
     echo "Copied $(basename "$source_file") to $destination_file"
+}
+
+copy_agentic_results() {
+    local source_dir="$1"
+    local workspace="$2"
+    local result_filename="$3"
+    local result_file
+    local copied=0
+
+    if [[ ! -d "$source_dir" ]]; then
+        echo "ERROR: agentic result directory not found at $source_dir" >&2
+        return 1
+    fi
+
+    while IFS= read -r -d '' result_file; do
+        copy_to_workspace \
+            "$result_file" \
+            "$workspace/$(basename "$result_file")" || return 1
+        copied=$((copied + 1))
+    done < <(
+        find "$source_dir" -maxdepth 1 -type f \
+            -name "${result_filename}_conc*.json" -print0
+    )
+
+    if [[ "$copied" -eq 0 ]]; then
+        echo "ERROR: no ${result_filename}_conc*.json results found in $source_dir" >&2
+        return 1
+    fi
+
+    echo "Copied $copied agentic result file(s)"
 }
 
 copy_eval_artifacts() {
