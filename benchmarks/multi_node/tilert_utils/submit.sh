@@ -43,6 +43,13 @@ mkdir -p "$TILERT_WEIGHTS_DIR"
 
 run_role() {
     local role="$1" host="$2" squash_file="$3"
+    # The tilert image bakes no NVIDIA_VISIBLE_DEVICES (unlike vllm-openai), and
+    # enroot's nvidia hook only injects the driver when it is set — without it the
+    # decode container has no libcuda and torch dies with "Found no NVIDIA driver".
+    # docker --gpus sets this implicitly, which is why the image works elsewhere.
+    # Exported here (not in --export) because the capabilities value contains a
+    # comma, which srun's --export parsing would split on.
+    export NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility
     srun --jobid="$JOB_ID" --nodelist="$host" --ntasks=1 \
         --container-image="$squash_file" \
         --container-mounts="$GITHUB_WORKSPACE:/workspace,$MODEL_PATH:$MODEL_PATH,$TILERT_WEIGHTS_DIR:$TILERT_WEIGHTS_DIR" \
