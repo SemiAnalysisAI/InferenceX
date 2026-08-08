@@ -566,6 +566,16 @@ DOCKER_ENV_COMMON=(
     -e SPEC_NUM_TOKENS=\${SPEC_NUM_TOKENS:-}
     -e SPEC_MODEL=\${SPEC_MODEL:-}
     -e MAX_NUM_SEQS=\${MAX_NUM_SEQS:-}
+    # Iteration cost. Both of these default to container-local paths, so every run rebuilds the
+    # aiperf venv (132 packages plus a wheel build) and redoes dataset setup, which logs
+    # "Dataset configured in 111.09 seconds": 38 s scanning the HF trace list over the network,
+    # 55 s building the mmap backing store, 12 s finalising -- and then caches it under
+    # /root/.cache/aiperf, which the next container recreate throws away. Pointing them at
+    # /run_logs (the host's /tmp, already mounted) makes both survive.
+    -e AIPERF_RUNTIME_DIR=\${AIPERF_RUNTIME_DIR:-}
+    -e XDG_CACHE_HOME=\${XDG_CACHE_HOME:-}
+    -e HF_HOME=\${HF_HOME:-}
+    -e HF_DATASETS_CACHE=\${HF_DATASETS_CACHE:-}
     # ROCm kernel-fault localisation. AMD_SERIALIZE_KERNEL=3 makes HIP wait after
     # every kernel, so an HSA_STATUS_ERROR_EXCEPTION is attributed to the kernel
     # that caused it instead of surfacing as an async queue abort with no Python
