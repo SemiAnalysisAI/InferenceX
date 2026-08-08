@@ -5677,3 +5677,14 @@
     - "Use lmsysorg/sglang:v0.5.16-cu130 and the latest NVIDIA/srt-slurm release, v1.0.44, which includes logical-worker Prometheus URL injection for AIPerf"
     - "Enable SGLang cache reporting on both prefill and decode workers so AIPerf records prompt-cache read-token usage alongside all logical-worker Prometheus metrics"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2529
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh Actions run 29657732517 as an MTP sibling while preserving the single-node TP8/EP1, GPU-resident BF16 KV, TileLang DSA, 1M-context topology, and c1/c2/c3/c4/c5/c6/c8 search space"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
+    - "Allow up to 30 minutes for healthy AgentX responses admitted near the end of the measurement window to drain before AIPerf finalizes profile metric coverage"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528
