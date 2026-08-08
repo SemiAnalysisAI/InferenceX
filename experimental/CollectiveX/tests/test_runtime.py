@@ -560,25 +560,20 @@ class CaseArgvContract(unittest.TestCase):
                 self.assertGreater(args.chain_iters, args.chain_drop)
                 self.assertGreater(args.chain_trials, 0)
 
-    def test_a_timing_object_with_unknown_keys_fails_closed(self) -> None:
-        # The object path must be as strict as the arity check on the string path, or a
-        # renamed knob would silently fall back to run_ep's default.
-        for timing in ({"iters_per_trial": 8}, {**self.CASE["timing"], "extra": 1}, {}):
+    def test_a_malformed_timing_profile_cannot_reach_a_run(self) -> None:
+        # Every rejection path in one place. Objects: an unknown, renamed or missing key must be
+        # as fatal as a bad string arity, or a renamed knob silently falls back to run_ep's
+        # default. Strings: three fields is the pre-chain profile and six the chain profile; any
+        # other length is a shard built against a codec that no longer exists.
+        for timing in (
+            {"iters_per_trial": 8}, {**self.CASE["timing"], "extra": 1}, {},
+            "8:256", "8:256:32:128", "8:256:32:128:4:16:2", "",
+        ):
             with self.subTest(timing=timing):
                 with self.assertRaises(subprocess.CalledProcessError):
                     self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": timing})
-
-    def test_a_timing_profile_of_the_wrong_arity_fails_closed(self) -> None:
-        # Three fields is the pre-chain profile and six is the chain profile; any other length
-        # is a shard built against a codec that no longer exists, so the codec refuses.
-        for profile in ("8:256", "8:256:32:128", "8:256:32:128:4:16:2", ""):
-            with self.subTest(timing=profile):
-                with self.assertRaises(subprocess.CalledProcessError):
-                    self._case_argv(["16", "2", "8", "8"], case={**self.CASE, "timing": profile})
-
-    def test_a_non_numeric_timing_field_cannot_reach_a_run(self) -> None:
-        # The codec checks arity, not types -- as it always has for iters/trials/warmup -- so
-        # the property held here is that the argv it emits still cannot parse into a run.
+        # Types are NOT checked by the codec -- as has always been true for iters/trials/warmup
+        # -- so the property is that the argv it emits still cannot parse into a run.
         argv = self._case_argv(
             ["16", "2", "8", "8"], case={**self.CASE, "timing": "8:256:32:128:4:x"},
         )
@@ -611,55 +606,23 @@ class CaseArgvContract(unittest.TestCase):
             args.out, f"results/{ll_case['case_id']}_TS-c000.json"
         )
 
-    def test_uccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A uccl-ep case flows through the same generic codec; run_ep's --backend choices
-        # must accept "uccl-ep" and the result filename must carry the backend token so a
-        # uccl-ep leg never collides with the deepep-v2/mori legs of the same cell.
-        uccl_case = {
-            **self.CASE,
-            "backend": "uccl-ep",
-            "case_id": "h200-dgxc-uccl-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
-        }
-        argv = self._case_argv(["16", "2", "8", "8"], case=uccl_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual(args.backend, "uccl-ep")
-        self.assertEqual(args.case_id, uccl_case["case_id"])
-        self.assertEqual(args.out, f"results/{uccl_case['case_id']}_TS-c000.json")
-
-    def test_nccl_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A nccl-ep case flows through the same generic codec; run_ep's --backend choices must
-        # accept "nccl-ep" and the result filename must carry the backend token so a nccl-ep leg
-        # never collides with the deepep-v2/uccl-ep legs of the same cell. BF16 only.
-        nccl_case = {
-            **self.CASE,
-            "backend": "nccl-ep",
-            "case_id": "h200-dgxc-nccl-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
-        }
-        argv = self._case_argv(["16", "2", "8", "8"], case=nccl_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual(args.backend, "nccl-ep")
-        self.assertEqual(args.case_id, nccl_case["case_id"])
-        self.assertEqual(args.out, f"results/{nccl_case['case_id']}_TS-c000.json")
-
-    def test_flashinfer_ep_case_round_trips_through_the_run_ep_parser(self) -> None:
-        # A flashinfer-ep case flows through the same generic codec; run_ep's --backend
-        # choices must accept "flashinfer-ep" and the result filename must carry the backend
-        # token so it never collides with the deepep-v2/nccl-ep legs of the same cell.
-        # The codec is SKU-agnostic, so this reuses the shared h200 fixture like its
-        # siblings; that flashinfer-ep is GB-only is a registry fact, pinned separately by
-        # test_matrix.test_flashinfer_ep_rollout_shape.
-        flashinfer_case = {
-            **self.CASE,
-            "backend": "flashinfer-ep",
-            "case_id": "h200-dgxc-flashinfer-ep-deepseek-v3-normal-decode-ep16-uniform-bf16",
-        }
-        argv = self._case_argv(["16", "2", "8", "8"], case=flashinfer_case)
-        args = self._run_ep_parser().parse_args(argv)
-        self.assertEqual(args.backend, "flashinfer-ep")
-        self.assertEqual(args.case_id, flashinfer_case["case_id"])
-        self.assertEqual(
-            args.out, f"results/{flashinfer_case['case_id']}_TS-c000.json"
-        )
+    def test_each_backend_round_trips_through_the_run_ep_parser(self) -> None:
+        # The codec is backend-agnostic, so one loop replaces three near-identical tests:
+        # run_ep's --backend choices must accept each name, and the filename must carry the
+        # backend token or two legs of one cell collide in results/. That flashinfer-ep is
+        # GB-only is a registry fact, pinned in test_matrix.
+        for backend in ("uccl-ep", "nccl-ep", "flashinfer-ep"):
+            with self.subTest(backend=backend):
+                case = {
+                    **self.CASE, "backend": backend,
+                    "case_id": f"h200-dgxc-{backend}-deepseek-v3-normal-decode-ep16-uniform-bf16",
+                }
+                args = self._run_ep_parser().parse_args(
+                    self._case_argv(["16", "2", "8", "8"], case=case)
+                )
+                self.assertEqual(args.backend, backend)
+                self.assertEqual(args.case_id, case["case_id"])
+                self.assertEqual(args.out, f"results/{case['case_id']}_TS-c000.json")
 
     def test_mirrored_backend_choices_match_run_ep(self) -> None:
         """The mirror is only worth having if it cannot drift from the real parser.
@@ -964,34 +927,25 @@ class GpuHealthProbe(unittest.TestCase):
         self.assertIn(line_in, self.HEALTHY)  # guard the fixture against silent drift
         return self.HEALTHY.replace(line_in, line_out)
 
-    def test_healthy_allocation_passes(self):
+    def test_a_clamped_gpu_is_rejected_by_either_signal(self):
+        # Throttle flags and temperature are INDEPENDENT signals: the flag can clear between
+        # samples while the fault persists, so heat alone must reject, and either flag alone is
+        # enough. The healthy fixture is the negative control -- a substring search for "Active"
+        # also matches "Not Active", which is the bug this shape guards.
         self.assertEqual(probe.gpu_health_faults(self.HEALTHY), [])
-
-    def test_a_thermally_throttled_gpu_is_rejected(self):
-        output = self._swap("7, Not Active, Not Active, 37 ", "7, Active, Active, 93 ")
-        faults = probe.gpu_health_faults(output)
-        self.assertEqual(len(faults), 1)
-        self.assertIn("gpu 7", faults[0])
-
-    def test_either_throttle_flag_alone_is_enough(self):
-        for cells in ("7, Active, Not Active, 88 ", "7, Not Active, Active, 88 "):
+        for gpu, cells in (
+            (7, "7, Active, Active, 93 "), (7, "7, Active, Not Active, 88 "),
+            (7, "7, Not Active, Active, 88 "), (3, "3, Not Active, Not Active, 95 "),
+        ):
             with self.subTest(cells=cells):
-                output = self._swap("7, Not Active, Not Active, 37 ", cells)
-                self.assertEqual(len(probe.gpu_health_faults(output)), 1)
-
-    def test_not_active_is_not_read_as_active(self):
-        # A substring search for "Active" also matches "Not Active".
-        self.assertEqual(probe.gpu_health_faults(self.HEALTHY), [])
-
-    def test_temperature_is_an_independent_signal(self):
-        # The flag can clear between samples while the fault persists, so heat alone rejects.
-        output = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 95 ")
-        faults = probe.gpu_health_faults(output)
-        self.assertEqual(len(faults), 1)
-        self.assertIn("gpu 3", faults[0])
+                faults = probe.gpu_health_faults(
+                    self._swap(f"{gpu}, Not Active, Not Active, 3{gpu} ", cells)
+                )
+                self.assertEqual(len(faults), 1)
+                self.assertIn(f"gpu {gpu}", faults[0])
 
     def test_unreadable_output_fails_open(self):
-        # Blocking legs when the hardware cannot be read is worse than the fault being looked for.
+        # Blocking legs when the hardware cannot be read is worse than the fault being sought.
         for output in ("", "nonsense\n", "1, Not Active\n", self.HEALTHY.replace("32 ", "[N/A] ")):
             with self.subTest(output=output[:20]):
                 self.assertEqual(probe.gpu_health_faults(output), [])
@@ -1041,22 +995,19 @@ class GpuHealthProbe(unittest.TestCase):
         code, out = self._run_validate(self.HEALTHY, has_smi=False)
         self.assertEqual(code, 0)
         self.assertEqual(out, "")
-    def test_the_temperature_spread_is_reported_for_the_signal_no_gate_can_see(self):
-        # An H100 engages software thermal slowdown at ~86-87 C, so a clamped one never crosses
-        # the 90 C limit; the measured fault showed only as an idle outlier (55 C vs ~30 C).
+    def test_the_temperature_spread_is_reported_but_never_gated(self):
+        # The signal no gate can see: an H100 engages software thermal slowdown at ~86-87 C, so
+        # a clamped one never crosses the 90 C limit and the measured fault showed only as an
+        # idle outlier (55 C against ~30 C). Reported so a human can act, deliberately not gated,
+        # and absent rather than wrong when the output cannot be read.
         sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
         self.assertEqual(probe.gpu_temperature_spread(sick), (55, 35, 20))
         hottest, median, spread = probe.gpu_temperature_spread(self.HEALTHY)
         self.assertEqual((hottest, median), (37, 34))  # 8 temps -> median is index 4
         self.assertLess(spread, 10)
-
-    def test_the_spread_appears_in_the_healthy_marker(self):
-        sick = self._swap("3, Not Active, Not Active, 33 ", "3, Not Active, Not Active, 55 ")
         code, out = self._run_validate(sick)
-        self.assertEqual(code, 0)  # reported, deliberately not gated on
+        self.assertEqual(code, 0)
         self.assertIn("spread=20C", out)
-
-    def test_the_spread_is_none_when_unreadable(self):
         for output in ("", "nonsense\n", self.HEALTHY.replace("33 ", "[N/A] ")):
             with self.subTest(output=output[:16]):
                 result = probe.gpu_temperature_spread(output)

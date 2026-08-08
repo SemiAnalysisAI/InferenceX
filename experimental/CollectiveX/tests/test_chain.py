@@ -909,7 +909,12 @@ class ChainedPublication(unittest.TestCase):
     def setUpClass(cls):
         cls.swept = drive()
 
-    def test_the_pair_period_is_published_as_a_chained_median(self):
+    def test_every_published_chained_field(self):
+        # One walk over the emitted rows covering the whole chained family: the period and its
+        # origin, the per-op floors, and the three health scalars. Each carries its OWN origin
+        # and sample count because they are reduced differently -- median for the period, MIN
+        # for the floors, per-trial for the gap and drift -- and mixing those up is the defect
+        # this pins.
         for row in self.swept.rows:
             with self.subTest(tokens=row["tokens_per_rank"]):
                 period = row["components"]["pair_period"]
@@ -917,63 +922,37 @@ class ChainedPublication(unittest.TestCase):
                 self.assertEqual(period["origin"], "chained-median")
                 self.assertEqual(period["availability"], "measured")
                 self.assertEqual(period["sample_count"], KEPT_PER_TRIAL * CHAIN_TRIALS)
-
-    def test_the_per_op_floors_are_published_as_cross_rank_minima(self):
-        for row in self.swept.rows:
-            for op, expected in (
-                ("dispatch", DISPATCH_FLOOR_US), ("combine", COMBINE_FLOOR_US),
-            ):
-                with self.subTest(tokens=row["tokens_per_rank"], op=op):
+                for op, expected in (
+                    ("dispatch", DISPATCH_FLOOR_US), ("combine", COMBINE_FLOOR_US),
+                ):
                     floor = row["chain_floor_us"][op]
                     self.assertEqual(floor["percentiles_us"]["p50"], expected)
                     self.assertEqual(floor["origin"], "chained-cross-rank-min")
-
-    def test_the_pair_spread_is_published_as_the_health_proof(self):
-        for row in self.swept.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                spread = row["chain_health"]["pair_spread_us"]
-                # One rank, so the ranks trivially agree; what matters is that it is emitted
-                # and component-shaped, since a wide spread is what disqualifies a period.
-                self.assertEqual(spread["percentiles_us"]["p50"], 0.0)
-                self.assertEqual(set(spread), set(UNAVAILABLE))
-
-    def test_the_interpair_gap_is_published_from_the_start_to_start_series(self):
-        # start-to-start median minus pair-window median: the per-pair cost outside the published
-        # window, so instrumentation creeping back into the loop shows up here.
-        for row in self.swept.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                gap = row["chain_health"]["interpair_gap_us"]
+                health = row["chain_health"]
+                # One rank, so the ranks trivially agree; what matters is that the spread is
+                # emitted and component-shaped, since a wide spread disqualifies a period.
+                self.assertEqual(health["pair_spread_us"]["percentiles_us"]["p50"], 0.0)
+                self.assertEqual(set(health["pair_spread_us"]), set(UNAVAILABLE))
+                # start-to-start median minus pair-window median: the per-pair cost OUTSIDE the
+                # published window, so instrumentation creeping back into the loop shows here.
+                gap = health["interpair_gap_us"]
                 self.assertEqual(gap["percentiles_us"]["p50"], GAP_US)
                 self.assertEqual(gap["availability"], "measured")
                 self.assertEqual(gap["sample_count"], CHAIN_TRIALS)
-
-    def test_a_steady_chain_publishes_zero_settle_drift(self):
-        for row in self.swept.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
-                drift = row["chain_health"]["settle_drift_us"]
+                drift = health["settle_drift_us"]
                 self.assertEqual(drift["percentiles_us"]["p50"], 0.0)
                 self.assertEqual(drift["sample_count"], CHAIN_TRIALS)
-
-    def test_the_period_does_not_displace_the_fresh_entry_family(self):
-        # The chained family is additive: roundtrip and the isolated components keep their
-        # fresh-entry meaning.
-        for row in self.swept.rows:
-            with self.subTest(tokens=row["tokens_per_rank"]):
+                # Additive: the fresh-entry family keeps its meaning alongside the chain.
                 self.assertEqual(row["components"]["roundtrip"]["origin"], "measured")
                 self.assertEqual(row["components"]["roundtrip"]["percentiles_us"]["p50"], 10.0)
                 self.assertEqual(row["components"]["dispatch"]["percentiles_us"]["p50"], 10.0)
 
-    def test_the_doc_stamps_the_chain_as_free_running(self):
-        implementation = self.swept.doc["implementation"]
-        self.assertIs(implementation["chained_period"], True)
-
-    def test_the_sampling_block_records_the_chain_budget(self):
+    def test_the_doc_and_the_per_point_line_record_the_chain(self):
+        self.assertIs(self.swept.doc["implementation"]["chained_period"], True)
         sampling = self.swept.doc["measurement"]["sampling"]
         self.assertEqual(sampling["chain_iterations_per_trial"], CHAIN_ITERS)
         self.assertEqual(sampling["chain_trials"], CHAIN_TRIALS)
         self.assertEqual(sampling["chain_drop"], CHAIN_DROP)
-
-    def test_the_per_point_line_reports_the_period(self):
         self.assertIn("period=", self.swept.stdout)
         self.assertNotIn("period=n/a", self.swept.stdout)
 
@@ -1048,39 +1027,33 @@ class ChainOutputCheck(unittest.TestCase):
     under a magnitude floor, because a combine kernel is not required to be order-deterministic
     across invocations -- bit equality would red healthy backends."""
 
-    def test_identical_outputs_match(self):
-        values = [1.0, -3.5, 0.25]
-        ok, error = ep_harness._chain_output_matches(_Vec(values), _Vec(values))
-        self.assertTrue(ok)
-        self.assertEqual(error, 0.0)
-
-    def test_a_shape_mismatch_never_matches(self):
-        ok, error = ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 2.0, 3.0]))
-        self.assertFalse(ok)
-        # No elementwise error is defined across different shapes; infinity keeps a
-        # cross-rank MAX from reporting a small number for a structural mismatch.
-        self.assertEqual(error, float("inf"))
-
-    def test_empty_outputs_match(self):
-        # A rank that legitimately combined nothing under this routing.
-        self.assertEqual(ep_harness._chain_output_matches(_Vec([]), _Vec([])), (True, 0.0))
-
-    def test_run_to_run_jitter_within_tolerance_matches(self):
-        drained = [1.0, -2.0]
-        chained = [value * (1.0 + ep_harness.COMBINE_REL_TOL / 2) for value in drained]
-        ok, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
-        self.assertTrue(ok)
-        # Reported even on a pass: a magnitude creeping toward the tolerance is the early
-        # warning the verdict alone cannot give.
-        self.assertAlmostEqual(error, ep_harness.COMBINE_REL_TOL / 2)
-
-    def test_regime_corruption_does_not_match(self):
-        # The defect class this exists for lands orders of magnitude past tolerance.
-        ok, error = ep_harness._chain_output_matches(_Vec([1.0, 2.0]), _Vec([1.0, 4.0]))
-        self.assertFalse(ok)
-        # Orders of magnitude past tolerance, which is what separates this class from a
-        # backend whose accumulator merely rounds past the gate.
-        self.assertGreater(error, 10 * ep_harness.COMBINE_REL_TOL)
+    def test_the_verdict_and_the_magnitude_together(self):
+        # One table over the whole contract. The magnitude matters as much as the verdict: a
+        # bare bool cost two wrong diagnoses of the same FP8 failures, because it cannot
+        # separate a transport corruption from a tolerance too tight for an accumulator.
+        tol = ep_harness.COMBINE_REL_TOL
+        jitter = [value * (1.0 + tol / 2) for value in (1.0, -2.0)]
+        for label, chained, drained, ok, check in (
+            ("identical", [1.0, -3.5, 0.25], [1.0, -3.5, 0.25], True,
+             lambda e: self.assertEqual(e, 0.0)),
+            # A rank that legitimately combined nothing under this routing.
+            ("empty", [], [], True, lambda e: self.assertEqual(e, 0.0)),
+            # Run-to-run jitter inside tolerance passes, and still reports its size -- a
+            # magnitude creeping toward the gate is the early warning a bool cannot give.
+            ("jitter", jitter, [1.0, -2.0], True,
+             lambda e: self.assertAlmostEqual(e, tol / 2)),
+            # The defect class this exists for lands orders of magnitude past tolerance.
+            ("corruption", [1.0, 2.0], [1.0, 4.0], False,
+             lambda e: self.assertGreater(e, 10 * tol)),
+            # No elementwise error is defined across shapes; infinity stops a cross-rank MAX
+            # reporting a small number for a structural mismatch.
+            ("shape", [1.0, 2.0], [1.0, 2.0, 3.0], False,
+             lambda e: self.assertEqual(e, float("inf"))),
+        ):
+            with self.subTest(label):
+                got, error = ep_harness._chain_output_matches(_Vec(chained), _Vec(drained))
+                self.assertIs(got, ok)
+                check(error)
 
     def test_near_zero_elements_are_judged_against_the_magnitude_floor(self):
         # Relative error against a denominator of 1e-6 would be huge; the floor keeps
@@ -1089,7 +1062,9 @@ class ChainOutputCheck(unittest.TestCase):
         self.assertGreater(
             abs(chained - drained) / abs(drained), ep_harness.COMBINE_REL_TOL
         )
-        self.assertTrue(ep_harness._chain_output_matches(_Vec([chained]), _Vec([drained]))[0])
+        self.assertTrue(
+            ep_harness._chain_output_matches(_Vec([chained]), _Vec([drained]))[0]
+        )
 
 
 # ---- from test_summarize_headline.py ----------------------------------------------
