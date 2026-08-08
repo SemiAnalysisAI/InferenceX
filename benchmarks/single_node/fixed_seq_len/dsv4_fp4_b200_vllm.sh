@@ -50,6 +50,9 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
 fi
+if [ "${CONC}" -ge 256 ]; then
+    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 16)
+fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
     MAX_NUM_BATCHED_TOKENS=${ISL}
