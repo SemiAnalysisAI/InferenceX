@@ -841,9 +841,9 @@ class LowLatencyCapDecoupling(unittest.TestCase):
         self.assertNotEqual(module._LL_BUFFER_CAP, None)
 
     def test_a_clamped_ladder_is_recorded_in_the_artifact_not_only_on_stdout(self):
-        # A clamped ladder was previously visible only as a rank-0 stdout NOTE, so an artifact
-        # from a backend that measured 8 rungs looked identical to one that measured 9. Asserted
-        # on a real emitted document rather than on the presence of key literals in the source.
+        # The clamp must reach the artifact: a rank-0 stdout NOTE alone leaves a document that
+        # measured 8 rungs indistinguishable from one that measured 9. Asserted on a real
+        # emitted document rather than on the presence of key literals in the source.
         sys.path.insert(0, str(RUNTIME.parent / "tests"))
         import test_chain
         workload = test_chain.drive().doc["workload"]

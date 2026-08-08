@@ -50,9 +50,8 @@ BACKEND_PRECISIONS = {
 # out of the default matrix so a production sweep measures deployable configurations, and still
 # reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
 # vLLM accepts only nvfp4/mxfp8/bf16 on FlashInfer's one-sided all-to-all, so its FP8 row
-# measures the collective off any path an engine selects. Declared here rather than read from
-# the adapter's `path_status` because this generator must resolve the matrix with no vendor
-# imports; tests/test_matrix.py holds the two in step.
+# measures the collective off any path an engine selects. Declared here rather than on the
+# adapter because this generator must resolve the matrix with no vendor imports.
 OFF_PATH_PRECISIONS = {"flashinfer-ep": ("fp8",)}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
@@ -151,9 +150,9 @@ def resolve_matrix(
     )}
     workload = SWEEP["workload"]
     targets = _selected_backends(backend)
-    # Fail closed on a backend with no declared precisions. `.get(target, ("bf16",))` used to
-    # emit a silently BF16-only matrix for it: not a mislabelled case (run_sweep's
-    # non-bf16-dispatch guard catches those) but a missing one, which no gate can see.
+    # Fail closed on a backend with no declared precisions: defaulting to BF16 would drop its
+    # fp8 cases from the matrix entirely, and a case that never ran is invisible to every
+    # downstream gate (run_sweep's non-bf16-dispatch guard only sees cases that did run).
     undeclared = [target for target in targets if target not in BACKEND_PRECISIONS]
     if undeclared:
         raise SystemExit(

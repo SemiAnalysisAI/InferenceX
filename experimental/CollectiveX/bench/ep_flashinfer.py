@@ -108,7 +108,7 @@ class FlashInferEPBackend(EPBackend):
     # transport, so an fp8 row measures the transport off-path; `dispatch_dtype` records that.
     SUPPORTED_PRECISIONS = ("bf16", "fp8")
     kernel_generation = "flashinfer-mnnvl-one-sided"
-    # stage() now copies the received payload into the workspace combine region.
+    # stage() copies the received payload into the workspace combine region.
     stage_device_work = True
     # The kernel scatters expert outputs back to the supplying rank; it does not multiply by
     # the routing weights (those ride along as a caller payload, and vLLM applies them in the
@@ -125,10 +125,6 @@ class FlashInferEPBackend(EPBackend):
         if self._fp8:
             # "-offpath" per SUPPORTED_PRECISIONS; bytes and block size match deepep-v2/uccl-ep.
             self.dispatch_dtype = "fp8-e4m3fn-blockwise-offpath"
-            # vLLM accepts only nvfp4/mxfp8/bf16 on this transport, so the FP8 row measures
-            # the collective off any path an engine can select -- even though the BACKEND is
-            # "production". Kept in the matrix for cross-backend FP8 transport comparison.
-            self.path_status = "offpath"
             self.dispatch_value_bytes = 1
             self.dispatch_scale_bytes_per_copy = (
                 (args.hidden + _FP8_BLOCK - 1) // _FP8_BLOCK

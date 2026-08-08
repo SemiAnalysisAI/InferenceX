@@ -99,10 +99,6 @@ class EPBackend(abc.ABC):
     # Realized wire formats recorded in the artifact. Combine is always BF16;
     # dispatch_dtype is overridden per-run by an FP8 adapter (e.g. "fp8-e4m3fn").
     dispatch_dtype = "bf16"
-    # Whether THIS case's (backend, precision) pair is a configuration a served engine
-    # actually selects. Distinct from `maturity`, which is per-backend and therefore too
-    # coarse when a backend is deployed at BF16 but its FP8 path is transport-only.
-    path_status = "deployed"
     combine_dtype = "bf16"
     # Logical byte model for one dispatched copy: bytes per activation value and
     # per-copy scale bytes. BF16 moves 2 bytes/value with no scale payload; an FP8
@@ -146,8 +142,6 @@ class EPBackend(abc.ABC):
     # fp8-vs-bf16 verdict in 39 of 51 comparisons.
     fp8_consume = os.environ.get("CX_FP8_CONSUME", "native")
     if fp8_consume not in ("native", "dequant"):
-        # A typo used to fall through to "native", so the run silently measured the
-        # opposite model from the one asked for and tagged the artifact accordingly.
         raise ValueError(f"CX_FP8_CONSUME must be 'native' or 'dequant', got {fp8_consume!r}")
 
     @property

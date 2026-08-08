@@ -171,10 +171,12 @@ result artifacts carry only the fields listed in the methodology.
 
 Each SKU's Slurm and storage values come from its tracked baseline in the registry. An optional
 runner-local JSON document at `$XDG_CONFIG_HOME/inferencex/collectivex.json` or
-`COLLECTIVEX_OPERATOR_CONFIG` overlays that baseline per field; unknown runners, fields, duplicate
-keys, and non-JSON input fail closed, and configuration is never evaluated as shell. GHA passes no
-operator secret, so a SKU runs entirely from its tracked baseline unless a runner-local document is
-present.
+`COLLECTIVEX_OPERATOR_CONFIG` overlays that baseline per field; a runner with no registry entry, an
+unknown field, and non-JSON input all fail closed, and configuration is never evaluated as shell.
+Duplicate JSON keys are NOT rejected — `json.load` keeps the last silently — and runner keys other
+than the one being resolved are not validated, so a typo'd SKU name is ignored rather than
+reported. GHA passes no operator secret, so a SKU runs entirely from its tracked baseline unless a
+runner-local document is present.
 
 All public per-SKU platform data lives in the tracked `configs/platform_config.json` registry:
 architecture/product, container image and platform, fixed placement, launcher, runnable backend/EP

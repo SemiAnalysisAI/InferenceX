@@ -46,6 +46,12 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 # residual is the accumulation-order ambiguity the model cannot pin down: at most
 # topk (8) BF16 stores at one ulp (2^-8) each. Below the magnitude floor the gate
 # is effectively absolute (cancellation makes relative error meaningless there).
+#
+# The same bound covers the topk-slot-tree model (FlashInfer below 0.6.16, which rounds at
+# every level of the reduction tree) without widening: a pairwise tree over topk=8 leaves is
+# depth 3, so it compounds at most 3 roundings against the 8 this budget was sized for --
+# treewise summation is provably no worse than sequential. Both models are gated against this
+# one constant, so a future model must be checked against it rather than assumed to fit.
 COMBINE_REL_TOL = 8 * 2.0 ** -8
 COMBINE_MAG_FLOOR = 2e-2
 
@@ -269,13 +275,13 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[flo
 
     There is deliberately NO host sync between `pre()` and the start event. Stream ordering
     already keeps pre()'s work out of the s->e window: `s` is enqueued behind pre()'s kernels,
-    so the event timestamps when the stream REACHES it, not when the host recorded it. The sync
-    that used to sit here did not add that guarantee -- it drained the GPU, which put the host's
-    launch of `fn` inside the measured window and, because `fn` is a collective, let per-rank
-    launch jitter desynchronise ranks that pre() had just aligned. Each rank then blocked on the
-    slowest peer and run_sweep's cross-rank MAX reported that stagger as latency. Measured on
-    b200 uccl-ep low-latency combine: 113.4us -> 87.4us at T=1 with the ranks aligned, and no
-    change at T=32, which is what produced a *falling* latency curve as tokens grew.
+    so the event timestamps when the stream REACHES it, not when the host recorded it. A sync
+    here adds no guarantee and costs correctness: it drains the GPU, which puts the host's launch
+    of `fn` inside the measured window and, because `fn` is a collective, lets per-rank launch
+    jitter desynchronise ranks that pre() had just aligned. Each rank then blocks on the slowest
+    peer and run_sweep's cross-rank MAX reports that stagger as latency. Measured on b200 uccl-ep
+    low-latency combine: 113.4us with a sync against 87.4us without, at T=1, and no difference at
+    T=32 -- which is what produces a *falling* latency curve as tokens grow.
 
     The end-of-iteration sync stays: the warmup note below documents why iterations must not
     overlap (iter N+1's dispatch races iter N's combine on the persistent comm buffer), so only
@@ -1567,10 +1573,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Whether this document's rows carry the chained family. Consumers key the headline on
             # presence, as for `stage_excluded_from_roundtrip`; the sweep `version` does not move.
             "chained_period": True,
-            # Whether this case's precision is a path a served engine selects on this
-            # transport. An "offpath" row measures the collective, not a deployment, even
-            # where backend maturity is "production" (flashinfer-ep fp8).
-            "path_status": getattr(backend, "path_status", "deployed"),
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,

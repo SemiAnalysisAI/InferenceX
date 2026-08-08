@@ -173,10 +173,9 @@ class MatrixTests(unittest.TestCase):
 
 
 class UndeclaredPrecisionsFailClosed(unittest.TestCase):
-    # A backend added to platform_config but missing from BACKEND_PRECISIONS used to default
-    # to bf16-only. That is a MISSING case, not a mislabelled one: run_sweep's
-    # non-bf16-dispatch guard can only catch a case that ran, so the fp8 coverage would just
-    # be absent from the matrix with nothing anywhere reporting it.
+    # A backend in platform_config but missing from BACKEND_PRECISIONS must stop the matrix
+    # rather than resolve to bf16-only: that yields a MISSING case, not a mislabelled one, and
+    # run_sweep's non-bf16-dispatch guard can only catch cases that ran.
     def test_a_backend_without_declared_precisions_stops_the_matrix(self):
         pruned = {
             name: value for name, value in sweep_matrix.BACKEND_PRECISIONS.items()

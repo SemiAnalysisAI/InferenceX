@@ -164,10 +164,35 @@ class RoundtripStaging(unittest.TestCase):
         importlib.reload(ep_backend)
         self.assertEqual(ep_backend.EPBackend.fp8_consume, "native")
 
-    def test_a_backend_is_deployed_unless_it_says_otherwise(self):
-        # path_status is per-CASE: flashinfer-ep is a production BACKEND whose fp8 precision
-        # no engine can select, which per-backend maturity cannot express.
-        self.assertEqual(ep_backend.EPBackend.path_status, "deployed")
+
+class FlashInferCombineModelSwitch(unittest.TestCase):
+    """Which arithmetic the oracle holds FlashInfer's combine to, selected by wheel version.
+
+    An inverted comparison or a typo'd `_COMBINE_FP32_SINCE` silently swaps the expected
+    combine for every FlashInfer row -- a wrong-model failure runs 30-90x COMBINE_REL_TOL,
+    so it reds correct runs rather than passing bad ones, but nothing else in CI sees it.
+    """
+
+    def _module(self):
+        with mock.patch.dict(sys.modules, _stub_modules()):
+            import importlib
+            import ep_flashinfer
+            return importlib.reload(ep_flashinfer)
+
+    def test_the_fp32_boundary_is_exact_and_ordered_by_version_not_by_text(self):
+        gate = self._module()._wheel_has_fp32_combine
+        self.assertFalse(gate("0.6.15"), "the wheel below the boundary rounds per level")
+        self.assertTrue(gate("0.6.16"), "the boundary wheel itself accumulates in FP32")
+        self.assertTrue(gate("0.6.17"))
+        # Real version ordering, not a digit scrape: 0.10.0 sorts BELOW 0.6.16 as text.
+        self.assertTrue(gate("0.10.0"))
+
+    def test_an_unreadable_version_falls_back_to_the_rounding_model(self):
+        # Asymmetric costs: modelling FP32 against a per-level-rounding kernel can exceed
+        # COMBINE_REL_TOL and red a correct run, while the opposite error costs a few ulps.
+        gate = self._module()._wheel_has_fp32_combine
+        for version in ("0.6.16rc1", "not-a-version", ""):
+            self.assertFalse(gate(version), f"{version!r} must fall back to the safe model")
 
 
 class NcclLowLatencyLadderClamp(unittest.TestCase):
@@ -186,13 +211,47 @@ class NcclLowLatencyLadderClamp(unittest.TestCase):
         self.assertLess(m._LL_LADDER_CAP, m._LL_BUFFER_CAP)
         self.assertLessEqual(m._LL_BUFFER_CAP, 511)
 
-    def test_buffer_cap_bounds_the_ladder_not_the_allocation(self):
-        # buffer_cap() is what the harness clamps the ladder against, so it must report the
-        # LADDER cap; the allocation reads _LL_BUFFER_CAP directly.
-        m = self._module()
-        source = (ROOT / "bench" / "ep_nccl.py").read_text()
-        self.assertIn("return _LL_LADDER_CAP", source)
-        self.assertIn("_LL_BUFFER_CAP if self._ll else", source)
+    def _backend(self, module, low_latency):
+        """A backend far enough along to run create_buffer against the stubs."""
+        backend = module.NCCLEPBackend.__new__(module.NCCLEPBackend)
+        backend._ll = low_latency
+        backend.world_size, backend.num_local_experts, backend.device = 8, 4, "cuda:0"
+        backend.args = types.SimpleNamespace(hidden=7168, experts=256, topk=8)
+        backend._algorithm = "LL" if low_latency else "HT"
+        backend._bootstrap_comm = lambda: None
+        backend._comm = object()
+        module.nccl_ep.Group = types.SimpleNamespace(create=lambda *a, **k: object())
+        return backend
+
+    def test_buffer_cap_reports_the_ladder_cap(self):
+        # Patching the constant and watching the return move proves buffer_cap() reads it,
+        # which a literal that merely happens to equal it today would not.
+        module = self._module()
+        backend = self._backend(module, low_latency=True)
+        self.assertEqual(backend.buffer_cap(None), module._LL_LADDER_CAP)
+        with mock.patch.object(module, "_LL_LADDER_CAP", 64):
+            self.assertEqual(backend.buffer_cap(None), 64)
+        self.assertIsNone(self._backend(module, low_latency=False).buffer_cap(None))
+
+    def test_the_receive_is_sized_from_the_buffer_cap_not_the_ladder(self):
+        # The regression this guards would silently re-baseline every low-latency row: clamping
+        # the MEASURED ladder must not shrink the receive the remaining rungs are measured
+        # against. Driven through create_buffer, so it fails on the allocation the kernel gets
+        # rather than on the shape of the source line that computes it.
+        module = self._module()
+        spec = types.SimpleNamespace(max_tokens_per_rank=99)
+        backend = self._backend(module, low_latency=True)
+        backend.create_buffer(spec)
+        self.assertEqual(backend.max_dispatch, module._LL_BUFFER_CAP)
+        self.assertNotEqual(backend.max_dispatch, module._LL_LADDER_CAP)
+        with mock.patch.object(module, "_LL_BUFFER_CAP", 512):
+            sized = self._backend(module, low_latency=True)
+            sized.create_buffer(spec)
+            self.assertEqual(sized.max_dispatch, 512)
+        # Throughput mode is unclamped and keeps taking its size from the ladder spec.
+        throughput = self._backend(module, low_latency=False)
+        throughput.create_buffer(spec)
+        self.assertEqual(throughput.max_dispatch, 99)
 
 
 class RoundtripStagingGate(unittest.TestCase):
@@ -201,8 +260,8 @@ class RoundtripStagingGate(unittest.TestCase):
 
     def test_the_gate_truth_table(self):
         table = (
-            # A real device copy hoists regardless of precision (MoRI BF16 scale-up and
-            # FlashInfer BF16 were previously charged here and to no other roundtrip)...
+            # A real device copy hoists regardless of precision, so MoRI BF16 scale-up and
+            # FlashInfer BF16 are excluded on the same terms as every fp8 stage...
             (True, "native", "bf16", True),
             (True, "native", "fp8", True),
             # ...a pointer-assignment stage never does: hoisting would hand a low-latency
@@ -256,7 +315,10 @@ def _stub_modules():
     torch = types.ModuleType("torch")
     torch.bfloat16 = "bfloat16"
     torch.int32 = "int32"
+    torch.float32 = "float32"
+    torch.int64 = "int64"
     torch.empty = lambda *a, **k: types.SimpleNamespace(shape=a[0] if a else ())
+    torch.empty_like = lambda *a, **k: types.SimpleNamespace()
     torch.zeros = lambda *a, **k: types.SimpleNamespace(item=lambda: 7)
     torch.cuda = types.SimpleNamespace(synchronize=lambda: None)
     dist = types.ModuleType("torch.distributed")

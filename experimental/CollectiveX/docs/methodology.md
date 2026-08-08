@@ -41,7 +41,7 @@ external input buffer with 16 warps moved FP8 combine +33% to +65% on gfx950; si
 HT combine to its receive count moved combine −10% to −41%; and the two-pass chain moved
 `pair_period` −5% to −42% everywhere. Of those, only the first two are keyed by the fields above.
 
-Two more keys, for the rest. **`chain_health.interpair_gap_us` present** marks the two-pass chain:
+One more key, for the rest. **`chain_health.interpair_gap_us` present** marks the two-pass chain:
 rows from the single six-events chain carry `chain_health` with `pair_spread_us` alone, and their
 `pair_period` is inflated by a host constant rather than being a different-but-valid quantity — so
 treat those rows as defective, not merely older. For the MoRI buffer-mode change and the NCCL EP
@@ -178,7 +178,7 @@ unweighted rank-sum combine match `layout-and-dispatch-v1` exactly, so the same 
 NVIDIA-only and CUDA 13 only, and runs EP8 scale-up on H100/H200/B200/B300 plus EP8 and EP16 on
 GB200/GB300, where EP16 stays inside the MNNVL scale-up domain; x86 EP16 scale-out is an unsupported
 coverage row, its cross-node GIN path faulting inside `nccl_ep.cc` identically on RoCE and IB across
-four SKUs — a GDAKI limit, not a fabric-selection one. FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM; it is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32; the adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode.
+four SKUs — a GDAKI limit, not a fabric-selection one. FlashInfer EP is TensorRT-LLM's one-sided MNNVL `MoeAlltoAll`, in which each rank writes tokens directly into its peers' workspace windows and combine reads them back, so there is no send/recv pairing and no NVSHMEM; it is GB200/GB300-only for that reason, and runs EP8 and EP16 inside the MNNVL scale-up domain. Its combine is the one place a backend's accumulator precision changes the expectation rather than the tolerance: through 0.6.15 the kernel holds its top-k accumulators in the payload dtype and reduces them with a hand-unrolled pairwise tree, so every level rounds to BF16, and the oracle reproduces that tree exactly rather than loosening the gate to absorb it (0.6.16 rewrote the accumulator to FP32; the adapter reads the installed version and picks the matching model). Those throughput kernels run across the full token ladder in the `normal` mode. Its FP8 dispatch is the one (backend, precision) pair here that is realizable but off every deployed path — vLLM accepts only nvfp4/mxfp8/bf16 on this transport — so `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` keeps it out of the default matrix and a production sweep measures only configurations an engine can select. Naming the precision explicitly (`--precisions fp8`) opts it back in for transport comparison against DeepEP V2/UCCL-EP at matching bytes and block size: the one place a precision filter ADDS rows rather than only removing them.
 
 A second `low-latency` mode adds each backend's decode-optimized kernel family. On DeepEP it drives
 the legacy `deep_ep.Buffer` low-latency decode kernels (`low_latency_dispatch`/`low_latency_combine`),
@@ -538,7 +538,9 @@ discriminator; a failure reported without it should not be read as evidence of c
 (`post_chain_state_passed` was previously published as `chain_regime_passed`, a name that
 overclaimed — a fresh post-chain oracle proves the state, not the chain's outputs. Artifacts from
 older harnesses carry the old name, where `null` meant the chain never ran; a validated chain
-budget is now required up front, so both fields are always booleans in new artifacts.)
+budget is now required up front, so `post_chain_state_passed` is always a boolean in new
+artifacts. `chain_last_output_passed` is the separate case described above — legitimately `null`
+wherever the chain hoists staging, which is every FP8 row outside the `dequant` hatch.)
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
 gate-weighted expert aggregate before combine and derives the expected combine from the values
@@ -568,31 +570,33 @@ as a correctness property.
 
 ## Result Artifact
 
-One raw case document carries `record_type: "case-attempt"` and the single `version`, and contains:
+One raw case document carries `record_type: "case-attempt"`, the single `version`, and a
+`generated_at` timestamp, and contains:
 
 - `identity`: `case_id`, `attempt_ordinal`, `case_factors` (SKU and the scheduled case — backend,
   EP size, mode, precision, phase, suite, workload, and the topology coordinate), and
   `allocation_factors` (run id, run attempt, source SHA);
 - `workload`: `cross_rank_consistent`, whether the routing trace was proven identical across ranks;
 - `measurement`: dispatch/combine dtype (the realized wire formats — combine always BF16, dispatch
-  BF16 or the SKU's FP8 format) and semantics, `sampling`, and the per-point `rows`;
+  BF16 or the SKU's FP8 format) and semantics, `payload_unit` (`token-rank`), `sampling`, and the
+  per-point `rows`;
 - `implementation`: backend name, kernel generation, and `maturity` — whether a production
   inference engine can select this transport today (`production` = exposed by vLLM's
   `--all2all-backend` or SGLang's `--moe-a2a-backend`; `candidate` = a real transport we
   benchmark that no engine ships a selector for, so its numbers describe the library rather
   than a deployable configuration). The same map is in the registry's `backend_maturity`. It also
-  carries `path_status` — `maturity` is per-BACKEND and cannot express a backend that is deployed
-  at one precision and transport-only at another, so each case declares whether its own
-  (backend, precision) pair is something a served engine selects (`deployed`, the default) or not
-  (`offpath`). FlashInfer EP is the case in hand: a production transport whose FP8 dispatch no
-  engine can choose. Such precisions are listed in `sweep_matrix.py`'s `OFF_PATH_PRECISIONS` and
-  **excluded from the default matrix**, so a production sweep measures only deployable
-  configurations; naming the precision explicitly (`--precisions fp8`) opts them back in for
-  transport comparison against deepep-v2/uccl-ep at matching bytes and block size. That is the one
-  place a precision filter ADDS rows rather than only removing them. `summarize.py` marks any that
-  do run in the precision column. It also carries `chained_period` (whether this document's rows carry the
-  chained family at all);
-- `topology`: requested SKU/product, placement, nodes, scale-up domain, transport, and world size;
+  carries `fp8_consume` (which FP8 consumption path the chained roundtrip modelled — see above),
+  `combine_reduction` and `library_version` (which reduction the oracle held the kernel to, and
+  the installed library that selected it), and two generation discriminators:
+  `stage_excluded_from_roundtrip` (whether `roundtrip` excludes expert-output staging, discussed
+  above) and `chained_period` (whether this document's rows carry the chained family at all);
+- `topology`: requested SKU/product, placement, `gpus_per_node`, nodes, scale-up domain, `scope`,
+  `topology_class`, world size, and three distinct transport fields — `scale_up_transport` and
+  `scale_out_transport` (the components), plus `transport`, the derived summary that folds them
+  into one string (`nvlink` scale-up-only, `nvlink-rdma` once a case scales out);
+- `runtime`: the realized software stack — `vendor`, `framework` (the torch version),
+  `accelerator_runtime` (the CUDA or HIP version torch was built against), and
+  `collective_library` (`nccl`/`rccl` and the version actually loaded into the process);
 - `provenance`: the mounted image tag and source SHA; and
 - `outcome`: `status` (`success` or `invalid`) and `reasons`.
 
