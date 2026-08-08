@@ -5637,5 +5637,5 @@
 - config-keys:
     - dsv4-fp4-b200-vllm
   description:
-    - "B200 DSv4 FP4 vLLM: bump to nightly-700d39b, add prefill-schedule-interval 16 for CONC >= 256"
+    - "B200 DSv4 FP4 vLLM: bump to nightly-700d39b, DEP arm gets prefill-schedule-interval 16, FULL_DECODE_ONLY cudagraph, max-num-seqs and capture-size 2x CONC, gmu 0.94"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534

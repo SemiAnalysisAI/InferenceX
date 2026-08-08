@@ -45,13 +45,17 @@ GMU_ARGS=()
 MOE_ARGS=()
 EPLB_ARGS=()
 PREFILL_SCHEDULE_ARGS=()
+DEP_COMPILE_ARGS=()
+DEP_MAX_NUM_SEQS=$CONC
+DEP_CUDAGRAPH_CAPTURE_SIZE=$CONC
 if [ "${DP_ATTENTION}" = "true" ]; then
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
     EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
-    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
-fi
-if [ "${CONC}" -ge 256 ]; then
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 16)
+    GMU_ARGS=(--gpu-memory-utilization 0.94)
+    DEP_COMPILE_ARGS=(--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","custom_ops":["all"]}')
+    DEP_MAX_NUM_SEQS=$((CONC * 2))
+    DEP_CUDAGRAPH_CAPTURE_SIZE=$((CONC * 2))
 fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
@@ -87,13 +91,14 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${MOE_ARGS[@]}" \
     "${EPLB_ARGS[@]}" \
     "${PREFILL_SCHEDULE_ARGS[@]}" \
-    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
+    "${DEP_COMPILE_ARGS[@]}" \
     --attention_config.use_fp4_indexer_cache=True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE" \
+    --max-num-seqs "$DEP_MAX_NUM_SEQS" \
+    --max-cudagraph-capture-size "$DEP_CUDAGRAPH_CAPTURE_SIZE" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
