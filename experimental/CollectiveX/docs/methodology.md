@@ -403,10 +403,10 @@ timing every transfer. Control is a gloo group (payload exchange + lockstep barr
 rides it.
 
 The transferred object is a burst of `batch` concurrent requests' paged KV: per request, `isl`
-tokens paged at 16 or 64 tokens per block, per layer, addressed layer-major over a `[layer][page]`
-pool through seed-keyed random block tables on BOTH sides (batched requests slice disjoint ranges
-of one permutation, as live requests never alias pages) — the post-fragmentation layout a
-connector actually posts, not a contiguous buffer. Each request is its own prepped transfer; a
+tokens (8k / 32k / 128k / 512k) paged at 16 or 64 tokens per block, per layer, addressed
+layer-major over a `[layer][page]` pool through seed-keyed random block tables on BOTH sides
+(batched requests slice disjoint ranges of one permutation, as live requests never alias pages) —
+the post-fragmentation layout a connector actually posts, not a contiguous buffer. Each request is its own prepped transfer; a
 burst posts all of them, then awaits all, the way a decode step admits several requests at once.
 Workload presets are transcribed from what vLLM actually allocates for the model class, region by
 region. `kv-dsv4` is DeepSeek-V4-Pro as vLLM serves it (MXFP4 checkpoints included — quantization
@@ -421,9 +421,11 @@ of an equivalent dense GQA-bf16 cache. Compression trades bytes for descriptor c
 entries it produces push transfers into the per-descriptor regime, so the paged rows sit far
 below each lane's `bulk` row — one single-descriptor transfer of the request's total bytes per
 ISL, the wire-speed ceiling the paged rows are read against (bulk rows are batch 1 by
-construction). Grid points whose pool cannot hold the largest batch inside the per-rank pool
-budget (64 GiB, sized to the fleet's smallest HBM) shed their largest batches and say so, rather
-than dropping the point.
+construction). Two budgets shed a point's largest batches rather than dropping the point, and the
+smallest batch always survives so a single request stays measurable everywhere: a per-rank pool
+budget (64 GiB, sized to the fleet's smallest HBM), and a per-burst descriptor budget (a 512k-ISL
+page-16 request alone is ~2.1M descriptors, and posting time is linear in batch x descriptors on
+the per-descriptor floor, so unbounded bursts would trip the per-case time guard).
 
 Timing is host wall clock around post→completion — completion of a one-sided transfer is
 host-visible and no local kernel participates, so CUDA events have nothing to bracket. Descriptor
