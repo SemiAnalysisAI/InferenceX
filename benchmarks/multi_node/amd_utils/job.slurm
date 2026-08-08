@@ -554,6 +554,10 @@ DOCKER_ENV_COMMON=(
     # which is what the merged MLA KV-cache group used to do implicitly. Only useful for A/B'ing
     # that against the default, which withholds it.
     -e VLLM_MOONCAKE_OFFLOAD_DRAFT_KV=\${VLLM_MOONCAKE_OFFLOAD_DRAFT_KV:-}
+    # 0 stops MLA layers on different backends sharing a KV-cache group, so a DSpark draft on
+    # TRITON_MLA gets its own group instead of the aiter target's. Costs 1.65x KV capacity, so
+    # MAX_MODEL_LEN_OVERRIDE has to come down with it. For bisecting that merge.
+    -e VLLM_K3_MLA_MERGE_ACROSS_BACKENDS=\${VLLM_K3_MLA_MERGE_ACROSS_BACKENDS:-}
     -e VLLM_K3_FORK_REPO=\${VLLM_K3_FORK_REPO:-}
     -e VLLM_K3_FORK_TOKEN=\${VLLM_K3_FORK_TOKEN:-}
     # Debug: dummy-weight / no-draft plumbing smoke (server_vllm.sh honors these).
