@@ -54,8 +54,8 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 16)
     GMU_ARGS=(--gpu-memory-utilization 0.94)
     DEP_COMPILE_ARGS=(--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY","custom_ops":["all"]}')
-    DEP_MAX_NUM_SEQS=$((CONC * 2))
-    DEP_CUDAGRAPH_CAPTURE_SIZE=$((CONC * 2))
+    DEP_MAX_NUM_SEQS=$CONC
+    DEP_CUDAGRAPH_CAPTURE_SIZE=$CONC
 fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
