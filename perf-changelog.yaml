@@ -5638,4 +5638,4 @@
     - dsv4-fp4-b200-vllm
   description:
     - "B200 DSv4 FP4 vLLM: bump to nightly-700d39b, add prefill-schedule-interval 16 for CONC >= 256"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2534
