@@ -5633,3 +5633,15 @@
     - "Staging fix after run 30729467646, in which all five cells failed identically. /lustre/fsw/gharunners/models/GLM-5.2-NVFP4 already existed on b200-dgxc holding config.json, generation_config.json, hf_quant_config.json, chat_template.jinja, README.md and .quant_summary.txt and no weights or tokenizer at all -- an aborted or metadata-only pull. The `ls -A` emptiness guard accepted it, every cell skipped the download, SGLang read config.json fine and then died in AutoTokenizer.from_pretrained with \"Couldn't instantiate the backend tokenizer\". The B300 sibling ran 5/5 green on the same image and the same MTP + simulated-acceptance config in run 30729399405, so this was staging only, not the recipe or the image."
     - "Replaces the emptiness guard with a completeness check -- tokenizer_config.json, a tokenizer.json or tokenizer.model, model.safetensors.index.json, and every shard the index names -- and serializes the ~433 GB download behind an flock on <MODEL_PATH>.download.lock so one cell stages the checkpoint and the other four wait instead of five allocations racing the same Lustre path. hf download resumes into a partially-populated --local-dir, so it downloads on top of the stub. The launcher probe now also requires a candidate to hold at least one weight shard rather than merely exist, so a stub in one staged tree cannot be preferred over a real copy in another."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2448
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Retain the 2P2D PCP8 prefill, TP8/DP8 decode, Mooncake, 1M-context topology, and c8/c12/c16 search space; use GPU-resident decode KV cache because released SGLang does not support combining HiSparse with MTP"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use lmsysorg/sglang:v0.5.16-cu130 and the latest NVIDIA/srt-slurm release, v1.0.44, which includes logical-worker Prometheus URL injection for AIPerf"
+    - "Enable SGLang cache reporting on both prefill and decode workers so AIPerf records prompt-cache read-token usage alongside all logical-worker Prometheus metrics"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2529
