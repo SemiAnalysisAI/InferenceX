@@ -6,5 +6,9 @@ configs/amd-master.yaml @billishyahao @chunfangamd @seungrokj @yctseng0211 @1am9
 # NVIDIA master config
 configs/nvidia-master.yaml @ankur-singh @kedarpotdar-nv @InferenceX/core
 
+# PoR for Models & general direction
+MODELS.md @ankur-singh @chunfangamd @InferenceX/core
+MODELS_zh.md @ankur-singh @chunfangamd @InferenceX/core
+
 # OperatorX experimental
 experimental/operatorx/ @hbarclay
