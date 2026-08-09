@@ -18,8 +18,8 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# TP4 and TP8 are GPU-resident (KV_OFFLOADING=none). DEP4 and DEP8 use
-# KV_OFFLOADING=dram with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
+# TP8 and TP4 c8 are GPU-resident. TP4 c16, DEP4, and DEP8 use DRAM offload
+# with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
