@@ -46,6 +46,9 @@ frontend:
   num_additional_frontends: 4
   env:
     DYN_ROUTER_TEMPERATURE: "10000000"
+    # AgentX warmup can legitimately keep the single wide decode worker busy
+    # for longer than Dynamo's 10-second TCP request-plane default.
+    DYN_TCP_REQUEST_TIMEOUT: "60"
     PIP_BREAK_SYSTEM_PACKAGES: "1"
   args:
     router-mode: "kv"
