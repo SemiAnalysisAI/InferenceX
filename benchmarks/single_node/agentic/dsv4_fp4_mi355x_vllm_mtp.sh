@@ -393,8 +393,6 @@ export VLLM_ROCM_USE_AITER=1
 #export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
 
-sleep 180
-
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
@@ -406,9 +404,11 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.8
+    --gpu-memory-utilization 0.9
+    --block-size 256
+    --max-num-batched-tokens 8192
     --moe-backend aiter
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
