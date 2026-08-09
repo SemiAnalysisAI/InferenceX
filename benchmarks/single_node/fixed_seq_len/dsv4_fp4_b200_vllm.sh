@@ -46,13 +46,14 @@ MOE_ARGS=()
 EPLB_ARGS=()
 PREFILL_SCHEDULE_ARGS=()
 DEP_COMPILE_ARGS=()
-DEP_MAX_NUM_SEQS=$CONC
+DEP_SEQS_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
     EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 16)
     GMU_ARGS=(--gpu-memory-utilization 0.94)
     DEP_MAX_NUM_SEQS=$(( 2 * CONC / TP ))
+    DEP_SEQS_ARGS=(--max-num-seqs "$DEP_MAX_NUM_SEQS")
     # Build cudagraph capture sizes: 1, 2, 3, ..., DEP_MAX_NUM_SEQS
     CUDA_GRAPH_CAPTURE_SIZES=""
     s=1
@@ -104,7 +105,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    --max-num-seqs "$DEP_MAX_NUM_SEQS" \
+    "${DEP_SEQS_ARGS[@]}" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
