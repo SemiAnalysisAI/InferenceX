@@ -15,7 +15,7 @@ OPERATOR_FIELDS = {
 }
 NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
-    "rdma_traffic_class", "rail_isolated",
+    "rdma_traffic_class", "rail_isolated", "single_node_rdma_devices",
 }
 
 
