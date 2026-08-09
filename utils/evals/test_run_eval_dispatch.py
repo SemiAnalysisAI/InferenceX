@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
+GPQA_RECIPE = Path(__file__).with_name("gpqa_diamond.yaml")
 
 _SCRIPT = r'''
 source "$BENCHMARK_LIB"
@@ -175,6 +176,14 @@ def test_eval_limit_absent_when_unset():
 def test_lm_eval_defaults_to_gsm8k():
     out = _run_lm_eval_cmdline()
     assert "utils/evals/gsm8k.yaml" in out
+
+
+def test_gpqa_recipe_does_not_stop_at_reasoning_paragraph_breaks():
+    recipe = GPQA_RECIPE.read_text(encoding="utf-8")
+    generation = recipe.split("generation_kwargs:", 1)[1].split("filter_list:", 1)[0]
+    assert "</s>" in generation
+    assert "<|im_end|>" in generation
+    assert "\\n\\n" not in generation
 
 
 

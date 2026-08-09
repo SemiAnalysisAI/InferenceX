@@ -21,6 +21,16 @@ doc_to_text: |
   Express your final answer as the corresponding option 'A', 'B', 'C', or 'D'.
 doc_to_target: answer
 
+# lm-eval defaults generate_until tasks without explicit kwargs to stopping at
+# a blank line. Reasoning models commonly use blank lines before their final
+# answer, so that default truncates the response before the A-D choice.
+generation_kwargs:
+  until:
+    - "</s>"
+    - "<|im_end|>"
+  do_sample: false
+  temperature: 0.0
+
 filter_list:
   - name: extract_abcd
     filter:
