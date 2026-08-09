@@ -526,6 +526,7 @@ DOCKER_ENV_COMMON=(
     -e KV_LOAD_FAILURE_POLICY=\${KV_LOAD_FAILURE_POLICY:-}
     -e MOONCAKE_LOAD_ASYNC=\${MOONCAKE_LOAD_ASYNC:-}
     -e MOONCAKE_LOOKUP_ASYNC=\${MOONCAKE_LOOKUP_ASYNC:-}
+    -e MOONCAKE_DECODE_STORE=\${MOONCAKE_DECODE_STORE:-}
     # MOONCAKE_PREFERRED_SEGMENT=local pins each TP rank to its own segment so KV puts
     # and gets stay in-process instead of crossing to another rank over TCP loopback.
     -e MOONCAKE_PREFERRED_SEGMENT=\${MOONCAKE_PREFERRED_SEGMENT:-}

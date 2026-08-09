@@ -639,7 +639,7 @@ build_kv_transfer_config_json() {
     if [[ "${KV_OFFLOADING:-none}" == "dram" && "${KV_OFFLOAD_BACKEND:-}" == "mooncake" ]]; then
         NODE0_ADDR="$NODE0_ADDR" PROXY_PING_PORT="$PROXY_PING_PORT" SERVER_PORT="$SERVER_PORT" \
             MORI_KV_ROLE="$mori_role" python3 -c '
-import json, os
+import json, os, sys
 
 mori_extra = {
     "proxy_ip": os.environ["NODE0_ADDR"],
@@ -650,6 +650,33 @@ mori_extra = {
     "backend": os.environ.get("MORIIO_BACKEND", "rdma"),
     "read_mode": True,
 }
+# [mc-role] MOONCAKE_DECODE_STORE=0 drops the Mooncake store from the decode side only.
+# Decode never loads from the tier -- measured load_get count 0 with saves only, and the external
+# hit rate it reports comes from the MoRIIO transfer -- so its store is writes and RDMA traffic
+# without reuse.
+_mooncake_entry = {
+    "kv_connector": "MooncakeStoreConnector",
+    "kv_role": "kv_both",
+    "kv_connector_extra_config": {
+        "load_async": (os.environ.get("MOONCAKE_LOAD_ASYNC") or "1") == "1",
+        "lookup_async": (os.environ.get("MOONCAKE_LOOKUP_ASYNC") or "1") == "1",
+    },
+}
+_connectors = [
+    {
+        "kv_connector": "MoRIIOConnector",
+        "kv_role": os.environ["MORI_KV_ROLE"],
+        "kv_connector_extra_config": mori_extra,
+    }
+]
+if os.environ["MORI_KV_ROLE"] != "kv_consumer" or (
+    os.environ.get("MOONCAKE_DECODE_STORE") or "1"
+) == "1":
+    _connectors.append(_mooncake_entry)
+sys.stderr.write(
+    "[mc-role] role=%s mooncake_store=%s\n"
+    % (os.environ["MORI_KV_ROLE"], len(_connectors) > 1)
+)
 print(json.dumps({
     "kv_connector": "MultiConnector",
     "kv_role": "kv_both",
@@ -674,37 +701,7 @@ print(json.dumps({
     # an empty policy.
     "kv_load_failure_policy": (os.environ.get("KV_LOAD_FAILURE_POLICY") or "recompute"),
     "kv_connector_extra_config": {
-        "connectors": [
-            {
-                "kv_connector": "MoRIIOConnector",
-                "kv_role": os.environ["MORI_KV_ROLE"],
-                "kv_connector_extra_config": mori_extra,
-            },
-            {
-                "kv_connector": "MooncakeStoreConnector",
-                "kv_role": "kv_both",
-                "kv_connector_extra_config": {
-                    # Async load/lookup is the default and what the validated run
-                    # used. They are switchable because the Mooncake path is the
-                    # one variable that decides whether conc >= 8 survives: with the
-                    # tier on, a decode worker dies with
-                    #   HSA_STATUS_ERROR_EXCEPTION code: 0x1016
-                    # a few minutes into the replay, on either MLA backend; with the
-                    # tier off the same run completes clean. Making the loads
-                    # synchronous is the cheapest way to test whether the fault is a
-                    # race between an async store load and the GPU KV blocks it
-                    # writes into.
-                    # "or" not a get() default: job.slurm forwards these as
-                    # -e VAR=${VAR:-}, so when the caller leaves them unset the
-                    # container still SEES the name, bound to "". get(k, "1") then
-                    # returns "" and both flags silently become False -- which the
-                    # store worker rejects at the first step with
-                    # "load_async must be True for better performance."
-                    "load_async": (os.environ.get("MOONCAKE_LOAD_ASYNC") or "1") == "1",
-                    "lookup_async": (os.environ.get("MOONCAKE_LOOKUP_ASYNC") or "1") == "1",
-                },
-            },
-        ],
+        "connectors": _connectors,
     },
 }))
 '
