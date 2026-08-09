@@ -5547,6 +5547,17 @@
     - "Refresh submission with up to date AgentX harness."
     - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2517
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 MI355X vLLM AgentX MTP submission with three speculative tokens."
+    - "Pin throughput to the committed DeepSeek-V4-Pro golden synthetic acceptance length of 2.49; eval-only runs retain real target verification."
+    - "Use the immutable vllm/vllm-openai-rocm:nightly-821717118fc26667dd474b9b0ab81d29259dfc5c image because the base submission's retired nightly tag is no longer published; rely on its upstream scheduler instead of replacing scheduler.py out of tree."
+    - "Explicitly pass the vLLM backend metrics endpoint to AIPerf for every topology and require vllm: metrics before publishing AgentX results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2522
   
 - config-keys:
     - kimik3-fp4-h200-vllm-agentic
@@ -5657,3 +5668,35 @@
     - "Search space now runs on the AgentX MTP concurrency grid: the GPU-resident row [4, 8, 12, 16] and the HiCache row [4, 8, 12, 16]. Every step is at least 2 concurrency apart and every arm stops hard at conc 16 -- single-step sampling cannot separate configurations by more than run-to-run noise on the agentic corpus, and past conc 16 these SKUs are into the post-HBM-cliff thrashing regime that the non-MTP sweeps already characterized, which is not worth one GPU job per point."
     - "Drops conc 1 from the GPU-resident arm. The TP8/EP8 c1 cell was the one job that never returned on this recipe while the other 18 completed, so it gated the PR without adding a point: at conc 1 a single session cannot exercise the EP8 all-to-all this arm exists to measure, and the low-interactivity corner is already covered by conc 4."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2428
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Capture the vLLM backend Prometheus endpoint for every topology and require vllm: metrics before publishing AgentX results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2516
+
+- config-keys:
+    - glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh submission with up to date AgentX harness."
+    - "Retain the 2P2D PCP8 prefill, TP8/DP8 decode, Mooncake, 1M-context topology, and c8/c12/c16 search space; use GPU-resident decode KV cache because released SGLang does not support combining HiSparse with MTP"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use lmsysorg/sglang:v0.5.16-cu130 and the latest NVIDIA/srt-slurm release, v1.0.44, which includes logical-worker Prometheus URL injection for AIPerf"
+    - "Enable SGLang cache reporting on both prefill and decode workers so AIPerf records prompt-cache read-token usage alongside all logical-worker Prometheus metrics"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2529
+
+- config-keys:
+    - glm5.2-fp8-mi325x-sglang-agentic-mtp
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Refresh Actions run 29657732517 as an MTP sibling while preserving the single-node TP8/EP1, GPU-resident BF16 KV, TileLang DSA, 1M-context topology, and c1/c2/c3/c4/c5/c6/c8 search space"
+    - "Use EAGLE with three speculative steps, top-k 1, four draft tokens, and the committed GLM-5.2 thinking-on golden synthetic acceptance length of 2.99; evals retain real verification"
+    - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
+    - "Allow up to 30 minutes for healthy AgentX responses admitted near the end of the measurement window to drain before AIPerf finalizes profile metric coverage"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528
