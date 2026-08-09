@@ -6906,6 +6906,33 @@ qwen3.5-fp8-h100-sglang-agentic:
 # lmsysorg/sglang:v0.5.16-cu130 because SGLANG_SIMULATE_ACC_TOKEN_MODE only
 # exists from v0.5.16; v0.5.14 is the version the fixed-seq-len H100 MTP entry
 # already runs. Conc lists are trimmed at the top end for the draft head's KV.
+
+# First Qwen3.5 AgentX recipe on H200, shipped spec-decode-only per the AgentX
+# policy that new agentic arms enable speculative decoding rather than running a
+# separate STP baseline (MODELS.md). SGLang EAGLE MTP (num-steps 3, eagle-topk 1,
+# 4 draft tokens = 3 speculative tokens) with simulated acceptance pinned to the
+# golden AL 3.39 (golden_al_distribution/qwen3.5_mtp.yaml, thinking_on, K=3).
+# Image is lmsysorg/sglang:v0.5.16-cu130: SGLANG_SIMULATE_ACC_TOKEN_MODE only
+# exists from v0.5.16, and v0.5.14 is what the fixed-seq-len H200 MTP entry runs.
+# Search space is the H100 AgentX shape widened for H200's 141 GB: the
+# fixed-seq-len H200 MTP entry already runs conc 4-128 at TP8/EP8 versus H100's
+# 4-32, so the GPU-resident arm extends to 24 and HiCache to 48.
+qwen3.5-fp8-h200-sglang-agentic-mtp:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: Qwen/Qwen3.5-397B-A17B-FP8
+  model-prefix: qwen3.5
+  runner: cluster:h200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: none, conc-list: [4, 8, 12, 16] }
+      - { tp: 8, ep: 8, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [4, 8, 12, 16] }
+
+
 qwen3.5-fp8-h100-sglang-agentic-mtp:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -7582,6 +7609,73 @@ qwen3.5-fp8-gb300-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+# GLM-5.2 FP8 full-context AgentX refresh on H200. This preserves the 2P2D
+# PCP8/TP8-DP8 topology and c8/c12/c16 curve from Actions run 30133535261 while
+# enabling native EAGLE MTP with golden AL and GPU-resident decode KV cache.
+glm5.2-fp8-h200-dynamo-sglang-agentic-mtp-2p2d:
+  image: lmsysorg/sglang:v0.5.16-cu130
+  model: zai-org/GLM-5.2-FP8
+  model-prefix: glm5.2
+  runner: cluster:h200-dgxc
+  precision: fp8
+  framework: dynamo-sglang
+  router: { name: dynamo-router, version: "1.3.0.dev1" }
+  kv-p2p-transfer: mooncake
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - spec-decoding: mtp
+        conc-list: [8]
+        kv-offloading: none
+        prefill:
+          num-worker: 2
+          tp: 1
+          pcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [12]
+        kv-offloading: none
+        prefill:
+          num-worker: 2
+          tp: 1
+          pcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+      - spec-decoding: mtp
+        conc-list: [16]
+        kv-offloading: none
+        prefill:
+          num-worker: 2
+          tp: 1
+          pcp-size: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5.2/agentic/disagg-h200-2p2d-pcp8-tp8-dp8-mtp.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+
 # GLM-5.2 B300 NVFP4 AgentX with EAGLE/MTP speculative decoding, following the
 # AgentX speculative-decoding policy in MODELS.md. SGLang EAGLE runs off
 # GLM-5.2's built-in nextn head (num-steps 3,
@@ -7931,3 +8025,58 @@ qwen3.5-fp8-gb300-dynamo-sglang-mtp:
           tp: 16
           ep: 16
           dp-attn: true
+
+# tileRT (github.com/tile-ai/TileRT) -- vLLM prefill + TileRT decode PD disaggregation; single point at bs=1.
+glm5.1-fp8-b200-tilert:
+  image: ghcr.io/tile-ai/tilert:0.1.5
+  model: zai-org/GLM-5.1-FP8
+  model-prefix: glm5.1
+  runner: b200-multinode
+  precision: fp8
+  framework: tilert
+  router: { name: tilert-pd-router, version: "0.1.5.post2" }
+  multinode: true
+  disagg: true
+  kv-p2p-transfer: nixl
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_IMAGE=vllm/vllm-openai:v0.26.0"
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"

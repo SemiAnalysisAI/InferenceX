@@ -11,6 +11,13 @@ source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
+    if [[ -z "${CONFIG_FILE:-}" ]]; then
+        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
+        exit 1
+    fi
+    CONFIG_PATH="${CONFIG_FILE%%:*}"
+    LOCAL_CONFIG_FILE="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
+
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
@@ -18,6 +25,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
+        elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="${GLM52_FP8_MODEL_PATH:-/models/GLM-5.2-FP8}"
+            if [[ ! -d "$MODEL_PATH" ]]; then
+                export MODEL_PATH="hf:zai-org/GLM-5.2-FP8"
+            fi
+            export SRT_SLURM_MODEL_PREFIX="glm5.2-fp8"
         else
             echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
             exit 1
@@ -51,7 +64,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
+    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
+        # v1.0.44 includes the AgentX custom benchmark integration and passes
+        # every logical SGLang worker's Prometheus URL to AIPerf.
+        git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "vllm" && $MODEL_PREFIX == "kimik3" ]]; then
         git clone https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
         git checkout df5baa93f4caf5169dea2a4236ad2cc742fe40e7
@@ -87,7 +105,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # SGLang container mapping
-        SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        if [[ $MODEL_PREFIX == "glm5.2" ]]; then
+            SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+        else
+            SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/+/g').sqsh"
+        fi
         CONTAINER_KEY="$IMAGE"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
@@ -96,6 +118,26 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     elif [[ $FRAMEWORK == "vllm" ]]; then
         CONTAINER_KEY="$IMAGE"
         SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    fi
+
+    if [[ $MODEL_PREFIX == "glm5.2" ]] && ! unsquashfs -l "$SQUASH_FILE" >/dev/null 2>&1; then
+        DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
+        LOCK_FILE="${SQUASH_FILE}.lock"
+        mkdir -p "$(dirname "$SQUASH_FILE")"
+        srun --partition="$SLURM_PARTITION" --account="$SLURM_ACCOUNT" \
+            --nodes=1 --ntasks=1 --time=30 --job-name="$RUNNER_NAME" \
+            bash -c "
+                set -euo pipefail
+                exec 9>\"$LOCK_FILE\"
+                flock -w 1800 9
+                if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
+                    exit 0
+                fi
+                rm -f \"$SQUASH_FILE\"
+                export ENROOT_CACHE_PATH=\${HOME}/.cache/enroot
+                mkdir -p \"\$ENROOT_CACHE_PATH\"
+                enroot import -o \"$SQUASH_FILE\" docker://$DOCKER_IMAGE
+            "
     fi
 
     export ISL="$ISL"
@@ -150,22 +192,25 @@ EOF
     echo "Running make setup..."
     make setup ARCH=x86_64
 
+    if [[ -f "$LOCAL_CONFIG_FILE" ]]; then
+        mkdir -p "$(dirname "$CONFIG_PATH")"
+        cp "$LOCAL_CONFIG_FILE" "$CONFIG_PATH"
+    fi
+
     # Export eval-related env vars for srt-slurm post-benchmark eval
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
 
-    if [[ -z "$CONFIG_FILE" ]]; then
-        echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
-        echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
-        exit 1
-    fi
-
     # Override the job name in the config file with the runner name
-    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-    sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "${CONFIG_FILE%%:*}"
-    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "${CONFIG_FILE%%:*}"
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+    sed -i '/^health_check:/,/^[^ ]/{ /^health_check:/d; /^  /d; }' "$CONFIG_PATH"
+    printf '\nhealth_check:\n  max_attempts: 720\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
+    WORKLOAD_TAG="${ISL}x${OSL}"
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        WORKLOAD_TAG="agentic"
+    fi
+    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "h200,${MODEL_PREFIX},${PRECISION},${WORKLOAD_TAG},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
     # Extract JOB_ID from srtctl output
