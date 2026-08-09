@@ -102,6 +102,7 @@ VLLM_CMD=(
     --max-cudagraph-capture-size 512
     --max-num-batched-tokens 16384
     --stream-interval 20
+    --long-prefill-token-threshold 512 \
     --trust-remote-code
     --speculative-config "$SPEC_CONFIG"
     "${OFFLOAD_ARGS[@]}"
