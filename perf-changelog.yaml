@@ -5688,3 +5688,9 @@
     - "Use the official lmsysorg/sglang:v0.5.16-rocm720-mi30x image, enable SGLang prompt-cache reporting, and pass the backend Prometheus metrics endpoint explicitly to AIPerf"
     - "Allow up to 30 minutes for healthy AgentX responses admitted near the end of the measurement window to drain before AIPerf finalizes profile metric coverage"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2528
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-agentic-mtp
+  description:
+    - "Set --long-prefill-token-threshold 512 for MiniMax M3 NVFP4 b200 AgentX MTP"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2538
