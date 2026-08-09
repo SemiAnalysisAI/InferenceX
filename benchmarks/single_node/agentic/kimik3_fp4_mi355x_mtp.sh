@@ -814,7 +814,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 # expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
 # (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
 MAX_CUDAGRAPH_CAPTURE_SIZE=$(( 2 * CONC * (1 + SPEC_NUM_TOKENS) ))
-CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
+CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 2 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 #COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 GPU_MEM_UTIL="0.9"
