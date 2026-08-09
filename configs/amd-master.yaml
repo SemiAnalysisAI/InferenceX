@@ -1227,11 +1227,11 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
-# DeepSeek-V4-Pro FP4 MTP refresh for MI355X. Pure TP points densely sample the
-# latency/throughput knee; TP8+EP8 tests expert-sharded MoE without changing the
-# attention topology; DP8+EP8 is the intended high-throughput layout and avoids
-# the old c64 row's full-model replication on every GPU. GPU-resident KV remains
-# the only supported MTP path until vLLM's multi-KV-group recovery fix lands.
+# DeepSeek-V4-Pro FP4 MTP refresh for MI355X. The low-concurrency TP8 cells and
+# the DP8+EP8 band mirror the B200/B300 MTP grids, with extra intermediate cells
+# to resolve the MI355X knee. TP8+EP8 isolates expert-sharding without changing
+# the attention topology. GPU-resident KV remains the only supported MTP path
+# until vLLM's multi-KV-group recovery fix lands.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.26.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1244,9 +1244,9 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32, 36, 40] }
       - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 24, 32, 40, 48, 56] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64, 80, 96, 112, 128], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224], router: { name: vllm-router, version: "0.1.14" } }
       # LMCache invalid-block recovery currently assumes one KV-cache group,
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
