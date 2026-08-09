@@ -5718,5 +5718,5 @@
     - "Refresh the MI355X DeepSeek-V4-Pro FP4 vLLM AgentX MTP frontier after the prior eight-point run peaked near 66k total tok/s and its only DP-attention point used EP1/full-model replication."
     - "Use the latest stable ROCm vLLM v0.26.0 release, raise GPU-memory utilization from 0.8 to 0.9, make the official 256-token block and 8192-token scheduler budget explicit, and use FULL_DECODE_ONLY graph capture. Baseline logs showed roughly 44 GiB/GPU of unused fit-safe KV headroom at 0.8."
     - "Replace the isolated DP8/EP1 c64 point with dense TP8, TP8+EP8 and DP8+EP8 bands through concurrency 128. DP8+EP8 is the intended throughput topology: attention remains data parallel while the FP4 experts are sharded across all eight GPUs."
-    - "Keep MTP and its committed three-token golden synthetic acceptance length of 2.49 on every throughput point; eval-only runs retain real target verification, and AIPerf continues to require a nonempty vllm: server-metrics export."
+    - "Keep MTP and its committed three-token golden synthetic acceptance length of 2.49 on every throughput point; eval-only runs retain real target verification. Enable prompt-token details for request-level cache accounting, and require a nonempty vllm: server-metrics export from AIPerf."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2540
