@@ -1722,6 +1722,7 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
+AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
 AIPERF_TRACE_IDLE_GAP_CAP_SECONDS="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-300}"
 
 agentic_pip_install() {
@@ -1933,11 +1934,11 @@ build_replay_cmd() {
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
-    # Fail runs once more than 10% of requests error. This keeps known
-    # transient low-rate failures from killing long sweeps while still
-    # catching malformed payloads or server crashes before they get aggregated
-    # as benchmarkable data.
-    REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
+    # Fail runs early once the live error ratio crosses the configured limit.
+    # Recipes with correlated low-concurrency trajectories may allow a larger
+    # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
+    # post-run validity gate below.
+    REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
     # least one profile turn after warmup.
@@ -2069,6 +2070,36 @@ write_agentic_result_json() {
     "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }
 
+validate_required_agentic_server_metrics() {
+    local result_dir="$1"
+    local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
+    local metrics_dir="$result_dir/aiperf_artifacts"
+    local metrics_json="$metrics_dir/server_metrics_export.json"
+    local metrics_csv="$metrics_dir/server_metrics_export.csv"
+
+    # Opt-in so existing AgentX configurations retain their current contract.
+    # Recipes that require trace charts set a metric prefix (for example
+    # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
+    if [ -z "$required_prefix" ]; then
+        return 0
+    fi
+
+    if [ ! -s "$metrics_json" ] || [ ! -s "$metrics_csv" ]; then
+        echo "ERROR: required AIPerf server metrics artifacts are missing or empty in $metrics_dir" >&2
+        return 1
+    fi
+
+    # Avoid parsing the potentially multi-GiB JSON into memory. AIPerf writes
+    # metric names as JSON object keys, so a fixed-string scan establishes that
+    # backend engine metrics—not only frontend/router metrics—were captured.
+    if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
+        echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
+        return 1
+    fi
+
+    echo "Validated required AIPerf server metrics prefix '$required_prefix'"
+}
+
 run_agentic_replay_and_write_outputs() {
     local result_dir="$1"
     local replay_rc
@@ -2107,4 +2138,6 @@ run_agentic_replay_and_write_outputs() {
         echo "ERROR: agentic trace replay produced invalid results after writing available artifacts" >&2
         return "$validation_rc"
     fi
+
+    validate_required_agentic_server_metrics "$result_dir"
 }
