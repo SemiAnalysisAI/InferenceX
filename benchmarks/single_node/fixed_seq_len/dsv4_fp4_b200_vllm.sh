@@ -53,13 +53,13 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 16)
     GMU_ARGS=(--gpu-memory-utilization 0.94)
     DEP_MAX_NUM_SEQS=$(( 2 * CONC / TP ))
-    # Build cudagraph capture sizes: powers of 2 from 1 to DEP_MAX_NUM_SEQS
+    # Build cudagraph capture sizes: 1, 2, 3, ..., DEP_MAX_NUM_SEQS
     CUDA_GRAPH_CAPTURE_SIZES=""
     s=1
     while [ "$s" -le "$DEP_MAX_NUM_SEQS" ]; do
         [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ] && CUDA_GRAPH_CAPTURE_SIZES="${CUDA_GRAPH_CAPTURE_SIZES},"
         CUDA_GRAPH_CAPTURE_SIZES="${CUDA_GRAPH_CAPTURE_SIZES}${s}"
-        s=$(( s * 2 ))
+        s=$(( s + 1 ))
     done
     COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
     DEP_COMPILE_ARGS=(--compilation-config "${COMPILATION_CONFIG}")
