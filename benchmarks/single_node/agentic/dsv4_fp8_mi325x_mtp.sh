@@ -116,6 +116,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4
     --enable-auto-tool-choice
     --enable-prefix-caching
+    --enable-prompt-tokens-details
     --no-disable-hybrid-kv-cache-manager
 )
 
