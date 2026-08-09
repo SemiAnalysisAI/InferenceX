@@ -595,7 +595,7 @@ kimik3-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, kv-offloading: none, conc-list: [4, 8, 10, 12, 14, 16] , spec-decoding: mtp}
+      - { tp: 8, kv-offloading: none, conc-list: [8, 14] , spec-decoding: mtp}
       #- { tp: 8, kv-offloading: none, conc-list: [8] , spec-decoding: mtp}
 
 dsr1-fp4-mi355x-sglang-disagg:
