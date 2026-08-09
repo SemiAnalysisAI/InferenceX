@@ -18,8 +18,8 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# TP4, TP8, and DEP8 (TP8 + DP-attention) are GPU-resident (KV_OFFLOADING=none).
-# DEP4 uses KV_OFFLOADING=dram with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
+# TP4 and TP8 are GPU-resident (KV_OFFLOADING=none). DEP4 and DEP8 use
+# KV_OFFLOADING=dram with KV_OFFLOAD_BACKEND=vllm-simple or mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -49,9 +49,9 @@ if [ "$DP_ATTENTION" = "true" ] && [ $((2 * CONC % TP)) -ne 0 ]; then
     exit 1
 fi
 
-# DEP8 (TP8 + DP-attention) is a GPU-resident, high-concurrency arm that is
-# tuned separately from the smaller DEP4 arm with a larger prefill token budget
-# and lower GPU-memory-utilization headroom. Both DEP arms chunk long prefills.
+# DEP8 (TP8 + DP-attention) is a high-concurrency SimpleCPU arm tuned separately
+# from DEP4 with a larger prefill token budget and lower GPU-memory-utilization
+# headroom. Both DEP arms chunk long prefills.
 IS_DEP8=false
 if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 8 ]; then
     IS_DEP8=true
@@ -119,8 +119,8 @@ ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
 # The generated TOTAL_CPU_DRAM_GB budget is proportional to allocated GPUs.
-# On cluster:b300-nv, dram-utilization=0.95 and DEP4 resolve to 1,424 GB total,
-# or 356 GB per DP rank. TP4 remains GPU-resident.
+# On cluster:b300-nv, dram-utilization=0.95 gives both DEP4 and DEP8 356 GB per
+# DP rank (1,424 GB and 2,849 GB total, respectively). TP arms remain GPU-resident.
 OFFLOAD_ARGS=()
 case "$KV_OFFLOAD_BACKEND" in
     "")
@@ -243,8 +243,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --long-prefill-token-threshold 512
     )
     if [ "$IS_DEP8" = "true" ]; then
-        # GPU-resident DEP8 gets a larger prefill token budget; the shared
-        # long-prefill threshold keeps decode latency bounded under load.
+        # DEP8 gets a larger prefill token budget; the shared long-prefill
+        # threshold keeps decode latency bounded under load.
         MODE_ARGS+=(--max-num-batched-tokens 16384)
     else
         MODE_ARGS+=(--max-num-batched-tokens 8192)
