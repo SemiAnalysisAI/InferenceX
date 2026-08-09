@@ -1859,6 +1859,16 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
     REPLAY_CMD+=" --model $MODEL"
+    # aiperf loads the tokenizer from --model (an HF id) unless --tokenizer is given.
+    # For vllm-disagg MODEL is the served-model-name (bare, e.g. "Kimi-K3"), which is
+    # NOT a valid HF id -> 404. Allow an explicit tokenizer (full HF id or local path);
+    # default to the resolved MODEL_PATH which is a valid HF id / local dir.
+    # NB: override var must NOT start with AIPERF_ (aiperf reads AIPERF_*-prefixed
+    # env as its own pydantic settings and chokes on a plain string TOKENIZER).
+    _aiperf_tok="${IX_AIPERF_TOKENIZER:-${MODEL_PATH:-}}"
+    if [[ -n "$_aiperf_tok" && "$_aiperf_tok" != "$MODEL" ]]; then
+        REPLAY_CMD+=" --tokenizer $_aiperf_tok"
+    fi
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --stats-interval 30"

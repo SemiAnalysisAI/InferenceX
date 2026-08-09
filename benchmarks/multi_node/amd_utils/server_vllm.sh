@@ -225,6 +225,20 @@ fi
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 
+# MAX_MODEL_LEN_OVERRIDE: bring-up-only escape hatch, deliberately separate from
+# MAX_MODEL_LEN. The agentic entrypoints unset MAX_MODEL_LEN before applying the
+# model's native window, so a recipe cannot quietly shrink the context and
+# flatter its numbers -- that guard must stay. But a plumbing smoke sometimes has
+# to fit a smaller window to reach the code under test at all (ROCM_AITER_MLA
+# wants 54.56 GiB for a 1M request against a 52.59 GiB pool, so engine init dies
+# before graph capture). This knob is loud, separately named, and never set by
+# any recipe or by CI, so it cannot be mistaken for a scoring configuration.
+if [[ -n "${MAX_MODEL_LEN_OVERRIDE:-}" ]]; then
+    echo "WARNING: MAX_MODEL_LEN_OVERRIDE=${MAX_MODEL_LEN_OVERRIDE} replaces MAX_MODEL_LEN=${MAX_MODEL_LEN:-<unset>}."
+    echo "WARNING: bring-up only -- results from this run are NOT comparable to a native-context run."
+    MAX_MODEL_LEN="${MAX_MODEL_LEN_OVERRIDE}"
+fi
+
 apply_max_model_len() {
     local cfg="$1"
     if [[ -n "${MAX_MODEL_LEN:-}" && "${MAX_MODEL_LEN}" != "0" ]]; then
@@ -259,12 +273,230 @@ if [[ "$enable_prefix_caching" == "true" || -n "${MAX_MODEL_LEN:-}" ]]; then
     echo "DECODE_SERVER_CONFIG (overrides): $DECODE_SERVER_CONFIG"
 fi
 
+# Debug: LOAD_FORMAT override (e.g. dummy) — model-less launcher/plumbing smoke
+# on clusters without the checkpoint staged. Rewrites --load-format <x> or appends.
+apply_load_format() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--load-format'; then
+        echo "$cfg" | sed -E "s/--load-format[[:space:]]+[A-Za-z0-9_.-]+/--load-format ${LOAD_FORMAT}/g"
+    else
+        echo "$cfg --load-format ${LOAD_FORMAT}"
+    fi
+}
+if [[ -n "${LOAD_FORMAT:-}" && "${LOAD_FORMAT}" != "auto" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_load_format "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_load_format "$DECODE_SERVER_CONFIG")"
+    echo "Applied LOAD_FORMAT=${LOAD_FORMAT}"
+fi
+
+# Debug: DISABLE_SPECULATIVE strips the single-quoted --speculative-config block.
+# Optional escape hatch only; dummy-weight smokes keep DSpark on (symmetric P+D)
+# and only skip the main checkpoint via LOAD_FORMAT=dummy.
+if [[ "${DISABLE_SPECULATIVE:-0}" == "1" || "${DISABLE_SPECULATIVE:-}" == "true" ]]; then
+    PREFILL_SERVER_CONFIG="$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/[[:space:]]*--speculative-config[[:space:]]+'[^']*'//g")"
+    DECODE_SERVER_CONFIG="$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/[[:space:]]*--speculative-config[[:space:]]+'[^']*'//g")"
+    echo "Applied DISABLE_SPECULATIVE=1 (stripped --speculative-config)"
+fi
+
+# KV_CACHE_DTYPE: recipe-level --kv-cache-dtype (e.g. fp8). Halves MLA KV
+# bytes/token, which is what buys context length on a checkpoint whose weights
+# already take ~195 GB/GPU at TP8. AiterMLABackend.supported_kv_cache_dtypes
+# accepts auto/float16/bfloat16/fp8/fp8_e4m3/fp8_e5m2, so ROCM_AITER_MLA honors
+# this; the separate FP8 *ASM prefill* fast path additionally needs
+# num_heads % 16 == 0 per rank and stays off for K3 at TP8 (96/8 = 12 heads).
+apply_kv_cache_dtype() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--kv-cache-dtype'; then
+        echo "$cfg" | sed -E "s/--kv-cache-dtype[[:space:]]+[A-Za-z0-9_]+/--kv-cache-dtype ${KV_CACHE_DTYPE}/g"
+    else
+        echo "$cfg --kv-cache-dtype ${KV_CACHE_DTYPE}"
+    fi
+}
+if [[ -n "${KV_CACHE_DTYPE:-}" && "${KV_CACHE_DTYPE}" != "auto" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_kv_cache_dtype "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_kv_cache_dtype "$DECODE_SERVER_CONFIG")"
+    echo "Applied KV_CACHE_DTYPE=${KV_CACHE_DTYPE}"
+fi
+
+# ATTENTION_BACKEND: override the target model's --attention-backend.
+# Default (unset) keeps models_vllm.yaml's ROCM_AITER_MLA, which is correct for
+# K3 at TP8 -- see the KV-dtype note below before changing it.
+#
+# K3 TP8 gives 96/8 = 12 MLA heads/rank, i.e. nhead <= 16, so aiter serves decode
+# from mla_gluon. That kernel has three regimes and picks by KV dtype:
+#   bh16bn64  : bf16 Q + bf16 KV, nhead <= 16, batch_size >= 1   <-- what we use
+#   bh16bn128 : bf16 Q + fp8  KV, nhead <= 16, batch_size == 1
+#   bh64      : nhead in {64,128}, batch_size in {64,128,256}
+# So batched decode on 12 heads is fine on bf16 KV; it is *fp8 KV* that pins the
+# batch to 1 and aborts with
+#   AssertionError: mla_gluon[bh16bn128] requires batch_size=1, got <N>
+# This is why the validated real-weight run (GSM8K 44/50) served fine on
+# ROCM_AITER_MLA: it never set --kv-cache-dtype, so it landed on bh16bn64.
+apply_attention_backend() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--attention-backend'; then
+        echo "$cfg" | sed -E "s/--attention-backend[[:space:]]+[A-Za-z0-9_]+/--attention-backend ${ATTENTION_BACKEND}/g"
+    else
+        echo "$cfg --attention-backend ${ATTENTION_BACKEND}"
+    fi
+}
+if [[ -n "${ATTENTION_BACKEND:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_attention_backend "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_attention_backend "$DECODE_SERVER_CONFIG")"
+    echo "Applied ATTENTION_BACKEND=${ATTENTION_BACKEND}"
+fi
+
+# SPEC_ATTN_BACKEND: override the DRAFT model's attention backend, i.e. the
+# "attention_backend" key inside --speculative-config's JSON. Independent axis
+# from ATTENTION_BACKEND above, which only moves the target model.
+#
+# The draft runs its own MLA over the same KV pages, one token per step
+# (qo_len == 1), so it never hits the qo_len > 4 persistent-mode gate that the
+# target's MTP verify step does -- which makes it safe to A/B on its own.
+# models_vllm.yaml pins TRITON_MLA there (PR #2403); ROCM_AITER_MLA is the arm
+# worth measuring, since 7 of every 8 forward passes in a DSpark n=7 step are
+# draft passes.
+# "attention_backend" is unique to the speculative-config JSON (the target uses
+# the --attention-backend CLI flag), so a global substitution is unambiguous.
+apply_spec_attn_backend() {
+    local cfg="$1"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q '"attention_backend"'; then
+        echo "$cfg" | sed -E "s/(\"attention_backend\"[[:space:]]*:[[:space:]]*)\"[A-Za-z0-9_]+\"/\1\"${SPEC_ATTN_BACKEND}\"/g"
+    else
+        echo "$cfg" | sed -E "s/(--speculative-config[[:space:]]+'\\{)/\\1\"attention_backend\":\"${SPEC_ATTN_BACKEND}\",/"
+    fi
+}
+if [[ -n "${SPEC_ATTN_BACKEND:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_attn_backend "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_spec_attn_backend "$DECODE_SERVER_CONFIG")"
+    echo "Applied SPEC_ATTN_BACKEND=${SPEC_ATTN_BACKEND} (draft/speculative-config)"
+fi
+
+# SPEC_DRAFT_SAMPLE_METHOD / SPEC_REJECTION_SAMPLE_METHOD: override the two DSpark
+# sampling keys inside --speculative-config. models_vllm.yaml pins the non-default
+# pair "probabilistic" + "block" (PR #2403); vLLM's defaults are "greedy" +
+# "standard".
+#
+# Worth being able to move, because the block rejection sampler is where the run
+# dies. The five Triton kernels that JIT-compile immediately before the GPU queue
+# aborts with HSA_STATUS_ERROR_EXCEPTION 0x1016 all live in
+# v1/worker/gpu/spec_decode/rejection_sampler_utils.py:
+#   _compute_local_logits_stats_kernel, _compute_cumulative_log_p_kernel,
+#   _compute_local_residual_mass_kernel, _rejection_kernel, _resample_kernel
+# and the fault only appears once the Mooncake tier starts serving hits, i.e. once
+# prefill arrives with almost every token already cached -- a shape these kernels
+# were never warmed up for.
+apply_spec_sample_method() {
+    local cfg="$1" key="$2" val="$3"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q "\"${key}\""; then
+        echo "$cfg" | sed -E "s/(\"${key}\"[[:space:]]*:[[:space:]]*)\"[A-Za-z0-9_]+\"/\1\"${val}\"/g"
+    else
+        echo "$cfg" | sed -E "s/(--speculative-config[[:space:]]+'\\{)/\\1\"${key}\":\"${val}\",/"
+    fi
+}
+if [[ -n "${SPEC_DRAFT_SAMPLE_METHOD:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_sample_method "$PREFILL_SERVER_CONFIG" draft_sample_method "$SPEC_DRAFT_SAMPLE_METHOD")"
+    DECODE_SERVER_CONFIG="$(apply_spec_sample_method "$DECODE_SERVER_CONFIG" draft_sample_method "$SPEC_DRAFT_SAMPLE_METHOD")"
+    echo "Applied SPEC_DRAFT_SAMPLE_METHOD=${SPEC_DRAFT_SAMPLE_METHOD}"
+fi
+if [[ -n "${SPEC_REJECTION_SAMPLE_METHOD:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_sample_method "$PREFILL_SERVER_CONFIG" rejection_sample_method "$SPEC_REJECTION_SAMPLE_METHOD")"
+    DECODE_SERVER_CONFIG="$(apply_spec_sample_method "$DECODE_SERVER_CONFIG" rejection_sample_method "$SPEC_REJECTION_SAMPLE_METHOD")"
+    echo "Applied SPEC_REJECTION_SAMPLE_METHOD=${SPEC_REJECTION_SAMPLE_METHOD}"
+fi
+
+# SPEC_NUM_TOKENS: override "num_speculative_tokens" (DSpark's n). The recipe pins 7 and
+# every fault so far was measured at 7, so n has never been varied -- yet it sets the
+# verify-step qo_len, the draft-loop trip count and the sampler's per-request logit count
+# all at once, which makes it the cheapest axis for bounding the fault.
+apply_spec_num_tokens() {
+    local cfg="$1"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    elif echo "$cfg" | grep -q '"num_speculative_tokens"'; then
+        echo "$cfg" | sed -E "s/(\"num_speculative_tokens\"[[:space:]]*:[[:space:]]*)[0-9]+/\1${SPEC_NUM_TOKENS}/g"
+    else
+        echo "$cfg" | sed -E "s/(--speculative-config[[:space:]]+'\\{)/\\1\"num_speculative_tokens\":${SPEC_NUM_TOKENS},/"
+    fi
+}
+if [[ -n "${SPEC_NUM_TOKENS:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_num_tokens "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_spec_num_tokens "$DECODE_SERVER_CONFIG")"
+    echo "Applied SPEC_NUM_TOKENS=${SPEC_NUM_TOKENS} (DSpark n on P and D)"
+fi
+
+# SPEC_MODEL: override the draft checkpoint. The recipe names the hub id
+# "Inferact/Kimi-K3-DSpark", which vLLM resolves over the network; a toy draft has to be
+# pointed at a path inside the container instead. The value may contain '/', so substitute
+# with a delimiter that cannot appear in a path.
+apply_spec_model() {
+    local cfg="$1"
+    if ! echo "$cfg" | grep -q -- '--speculative-config'; then
+        echo "$cfg"
+    else
+        echo "$cfg" | sed -E "s|(\"model\"[[:space:]]*:[[:space:]]*)\"[^\"]*\"|\1\"${SPEC_MODEL}\"|g"
+    fi
+}
+if [[ -n "${SPEC_MODEL:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_spec_model "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_spec_model "$DECODE_SERVER_CONFIG")"
+    echo "Applied SPEC_MODEL=${SPEC_MODEL} (draft checkpoint on P and D)"
+fi
+
+# MAX_NUM_SEQS: override --max-num-seqs. models_vllm.yaml pins 16 and warns not to raise it
+# without re-checking the aiter MLA decode path; lowering it is the safe direction and it
+# bounds how ragged a decode batch can get.
+apply_max_num_seqs() {
+    local cfg="$1"
+    if echo "$cfg" | grep -q -- '--max-num-seqs'; then
+        echo "$cfg" | sed -E "s/(--max-num-seqs[[:space:]]+)[0-9]+/\1${MAX_NUM_SEQS}/g"
+    else
+        echo "$cfg --max-num-seqs ${MAX_NUM_SEQS}"
+    fi
+}
+if [[ -n "${MAX_NUM_SEQS:-}" ]]; then
+    PREFILL_SERVER_CONFIG="$(apply_max_num_seqs "$PREFILL_SERVER_CONFIG")"
+    DECODE_SERVER_CONFIG="$(apply_max_num_seqs "$DECODE_SERVER_CONFIG")"
+    echo "Applied MAX_NUM_SEQS=${MAX_NUM_SEQS} (P and D)"
+fi
+
+# ENFORCE_EAGER: disable CUDA graphs. Escape hatch, not a default -- AiterMLA
+# declares AttentionCGSupport.UNIFORM_BATCH and the K3 fork adds
+# _uniform_padded_mtp_qo_len specifically so full-CG padded MTP decode works, so
+# graphs are the intended mode. Idempotent: never appended twice.
+if [[ "${ENFORCE_EAGER:-0}" == "1" || "${ENFORCE_EAGER:-}" == "true" ]]; then
+    echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enforce-eager' \
+        || PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enforce-eager"
+    echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enforce-eager' \
+        || DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enforce-eager"
+    echo "Applied ENFORCE_EAGER=1 (--enforce-eager on P and D)"
+fi
+
 install_mooncake_rocm() {
     local mooncake_tag="v0.3.11.post1"
     local mooncake_src="/tmp/Mooncake-$mooncake_tag"
     local mooncake_stage="/tmp/mooncake-stage-$mooncake_tag"
     local build_jobs cache_root cache_key cache_archive cache_tmp engine_path
     local os_version python_abi rocm_version
+
+    # Already-installed fast path. Everything below (apt-get update + ~20 build
+    # deps, then a source build or a cache untar) is pure setup cost, so skip it
+    # when the image already ships a HIP-linked mooncake plus the master binary
+    # -- e.g. vllm-openai-rocm:kimi-k3-mc. Matches the idempotency contract the
+    # other installers in setup_deps.sh follow, and removes the only
+    # unconditional apt-get in the vllm-disagg path (which stalls whenever
+    # repo.radeon.com is slow, killing the container mid-setup).
+    if command -v mooncake_master >/dev/null 2>&1 \
+       && engine_path=$(python3 -c 'import mooncake.engine; print(mooncake.engine.__file__)' 2>/dev/null) \
+       && [[ -n "$engine_path" ]] \
+       && ldd "$engine_path" 2>/dev/null | grep -q 'libamdhip64.so'; then
+        echo "[Mooncake] Already present and HIP-linked ($engine_path); skipping build"
+        return 0
+    fi
 
     build_jobs=$(nproc)
     if ((build_jobs > 32)); then
@@ -360,7 +592,16 @@ ensure_mooncake_kv_offload() {
   "enable_offload": false
 }
 EOF
-    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576
+    # MC_SLICE_SIZE only governs the RDMA transport. The TCP transport -- which is what
+    # "protocol": "tcp" above actually selects -- has its own knob, MC_TCP_SLICE_SIZE,
+    # defaulting to 65536. Setting only MC_SLICE_SIZE therefore left every Mooncake
+    # transfer sliced at 64KB, so a single ~650MB BatchPut needed thousands of queue
+    # entries and the session queue overflowed ("SQ full ... requested=4672 max=16384"),
+    # after which the completion path segfaulted in getTransferStatus and killed the
+    # decode worker. Keep both in step, and make them tunable.
+    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0
+    export MC_SLICE_SIZE="${MC_SLICE_SIZE:-1048576}"
+    export MC_TCP_SLICE_SIZE="${MC_TCP_SLICE_SIZE:-1048576}"
     export MC_TCP_ENABLE_CONNECTION_POOL=1
 
     local transfer_batch_keys_log="off"
@@ -404,25 +645,63 @@ mori_extra = {
     "proxy_ip": os.environ["NODE0_ADDR"],
     "proxy_ping_port": os.environ["PROXY_PING_PORT"],
     "http_port": os.environ["SERVER_PORT"],
+    # Kimi-K3 MI355X validated run pins the MoRIIO backend to rdma explicitly
+    # (k3-agentx/gen_k3_mc.sh); IBDEVICES/MORI_RDMA_TC come from the harness env.
+    "backend": os.environ.get("MORIIO_BACKEND", "rdma"),
     "read_mode": True,
 }
 print(json.dumps({
     "kv_connector": "MultiConnector",
     "kv_role": "kv_both",
+    # KVTransferConfig.kv_load_failure_policy is read by the SCHEDULER from the
+    # TOP level (v1/core/sched/scheduler.py: kv_transfer_config.kv_load_failure_policy).
+    # It was previously set inside the MoRIIOConnector entry, where nothing reads it,
+    # so the effective policy was the "fail" default: any KV load that did not land
+    # killed the request outright. On the agentic corpus that shows up as
+    #   scheduler.py: Failing 1 request(s) due to KV load failure
+    #     (failure_policy=fail, 394752 tokens affected)
+    # on the largest traces, and aiperf then aborts the whole concurrency point
+    # because a root warmup request failed.
+    # "recompute" reschedules the request and recomputes the failed blocks instead.
+    # That path is _update_requests_with_invalid_blocks(), which the pinned fork
+    # already taught to handle the multiple KV-cache groups of a hybrid model
+    # (commit eed3a092) -- the recipe simply never switched the policy over to use it.
+    # NOTE: no apostrophes anywhere in this block. It lives inside python3 -c '...',
+    # so a single quote closes the shell string and the rest is parsed as shell.
+    # "or", not a get() default -- see the MooncakeStoreConnector note below:
+    # job.slurm forwards this as -e VAR=${VAR:-}, so leaving it unset still binds
+    # the name to "" inside the container and get(k, "recompute") would hand vLLM
+    # an empty policy.
+    "kv_load_failure_policy": (os.environ.get("KV_LOAD_FAILURE_POLICY") or "recompute"),
     "kv_connector_extra_config": {
         "connectors": [
             {
                 "kv_connector": "MoRIIOConnector",
                 "kv_role": os.environ["MORI_KV_ROLE"],
-                "kv_load_failure_policy": "fail",
                 "kv_connector_extra_config": mori_extra,
             },
             {
                 "kv_connector": "MooncakeStoreConnector",
                 "kv_role": "kv_both",
                 "kv_connector_extra_config": {
-                    "load_async": True,
-                    "lookup_async": True,
+                    # Async load/lookup is the default and what the validated run
+                    # used. They are switchable because the Mooncake path is the
+                    # one variable that decides whether conc >= 8 survives: with the
+                    # tier on, a decode worker dies with
+                    #   HSA_STATUS_ERROR_EXCEPTION code: 0x1016
+                    # a few minutes into the replay, on either MLA backend; with the
+                    # tier off the same run completes clean. Making the loads
+                    # synchronous is the cheapest way to test whether the fault is a
+                    # race between an async store load and the GPU KV blocks it
+                    # writes into.
+                    # "or" not a get() default: job.slurm forwards these as
+                    # -e VAR=${VAR:-}, so when the caller leaves them unset the
+                    # container still SEES the name, bound to "". get(k, "1") then
+                    # returns "" and both flags silently become False -- which the
+                    # store worker rejects at the first step with
+                    # "load_async must be True for better performance."
+                    "load_async": (os.environ.get("MOONCAKE_LOAD_ASYNC") or "1") == "1",
+                    "lookup_async": (os.environ.get("MOONCAKE_LOOKUP_ASYNC") or "1") == "1",
                 },
             },
         ],
@@ -433,7 +712,7 @@ print(json.dumps({
     fi
 
     cat <<EOF
-{"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "read_mode": true}}
+{"kv_connector": "MoRIIOConnector", "kv_role": "${mori_role}", "kv_load_failure_policy": "${KV_LOAD_FAILURE_POLICY:-recompute}", "kv_connector_extra_config": {"proxy_ip": "${NODE0_ADDR}", "proxy_ping_port": "${PROXY_PING_PORT}", "http_port": "${SERVER_PORT}", "read_mode": true}}
 EOF
 }
 
@@ -451,6 +730,68 @@ if [[ "${VLLM_PATCH_46240:-${KV_OFFLOADING:-none}}" == "dram" || "${VLLM_PATCH_4
         exit 1
     fi
     python3 "$PATCH_SCRIPT"
+fi
+
+# Two more hybrid-KV bugs found during the K3 1P1D bring-up are NOT patched here
+# any more -- they are fixed in the pinned vLLM fork
+# (VLLM_K3_FORK_REF=yichaozhu/moriio-k3-dspark), which is where they belong:
+#   eed3a092  scheduler._update_requests_with_invalid_blocks unpacked
+#             get_block_ids() as one KV-cache group, so a failed Mooncake load
+#             ValueError'd and killed EngineCore instead of recomputing.
+#   1755c10c  MLAAttentionSpec.merge required indexes_kv_by_block_stride to
+#             match, which split the DSpark draft's 5 MLA layers into their own
+#             KV group padded to 24 -- the whole 1.65x KV bytes/token penalty
+#             ROCM_AITER_MLA paid over TRITON_MLA, and what put the native 1M
+#             context out of reach on aiter.
+
+# Log-only: dump the KV-cache layer bucketing. Explains "Add N padding layers"
+# warnings, and specifically which bucket the DSpark draft's MLA layers land in.
+if [[ "${VLLM_PATCH_KV_GROUP_DEBUG:-0}" == "1" || "${VLLM_PATCH_KV_GROUP_DEBUG:-}" == "true" ]]; then
+    KV_GROUP_DEBUG_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_kv_group_debug.py"
+    if [[ ! -f "$KV_GROUP_DEBUG_PATCH_SCRIPT" ]]; then
+        echo "ERROR: missing $KV_GROUP_DEBUG_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$KV_GROUP_DEBUG_PATCH_SCRIPT"
+fi
+
+# aiter MLA head padding: lets the ASM decode kernel serve head counts that do
+# not divide 16 (Kimi-K3 TP8 -> 12 heads/rank). Without it those decodes are
+# routed to mla_gluon, whose fp8 regime (bh16bn128) is batch_size=1 only, so
+# fp8 KV and concurrency > 1 become mutually exclusive. Opt-in.
+if [[ "${VLLM_PATCH_MLA_HEAD_PAD:-0}" == "1" || "${VLLM_PATCH_MLA_HEAD_PAD:-}" == "true" ]]; then
+    MLA_PAD_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_aiter_mla_head_pad.py"
+    if [[ ! -f "$MLA_PAD_PATCH_SCRIPT" ]]; then
+        echo "ERROR: VLLM_PATCH_MLA_HEAD_PAD enabled but missing $MLA_PAD_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$MLA_PAD_PATCH_SCRIPT"
+
+    # Reaching the ASM path exposes aiter's fp8 split-heuristic table, which is
+    # keyed on nhead*max_seqlen_q and KeyErrors on untabulated products (16*15
+    # = 240 during spec-decode warmup). Ship the fallback with the pad patch.
+    MLA_BLOCKN_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_aiter_mla_block_n_fallback.py"
+    if [[ ! -f "$MLA_BLOCKN_PATCH_SCRIPT" ]]; then
+        echo "ERROR: missing $MLA_BLOCKN_PATCH_SCRIPT" >&2
+        exit 1
+    fi
+    python3 "$MLA_BLOCKN_PATCH_SCRIPT"
+
+    # gfx950 fp8 ASM decode needs persistent mode once qo_len > 4 (DSpark n=7
+    # verifies 8), but vLLM only builds persistent metadata for qo_len == 1.
+    # Off by default: setting work_meta_data on the metadata object is not enough
+    # for the kernel to accept qo_len=8 -- the flag is not reaching the launch
+    # site -- so the patch changes metadata construction without lifting the gate,
+    # which only muddies any other experiment sharing the run. Set
+    # VLLM_PATCH_MLA_PERSISTENT_MTP=1 to resume work on it.
+    if [[ "${VLLM_PATCH_MLA_PERSISTENT_MTP:-0}" == "1" || "${VLLM_PATCH_MLA_PERSISTENT_MTP:-}" == "true" ]]; then
+        MLA_PERSIST_PATCH_SCRIPT="$(dirname "${BASH_SOURCE[0]}")/patches/apply_vllm_aiter_mla_persistent_mtp.py"
+        if [[ ! -f "$MLA_PERSIST_PATCH_SCRIPT" ]]; then
+            echo "ERROR: missing $MLA_PERSIST_PATCH_SCRIPT" >&2
+            exit 1
+        fi
+        python3 "$MLA_PERSIST_PATCH_SCRIPT"
+    fi
 fi
 
 # =============================================================================
@@ -565,6 +906,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
         prefill_pid=$!
     fi
 
+    # SERVER_UP_TIMEOUT: how long to wait for every worker to bind its port, i.e.
+    # essentially how long weight loading may take. 1800 s is fine for a 300-600 GB
+    # checkpoint but not for Kimi-K3: 1.7 TB over 96 shards off wekafs, read by both
+    # nodes at once, measured ~23 s/shard = ~37 min, so the old fixed 30 min expired
+    # ~10 min before the servers were ready. server_vllm.sh has no `set -e`, so the
+    # failure was survivable (the router /health barrier that follows granted another
+    # 1800 s) -- but it logged a spurious "Timeout ... waiting for ports to open"
+    # followed by "Congratulations!!! All prefill and decode servers are up", which
+    # is a confusing pair to debug from.
     echo "Waiting for all prefill and decode servers to be up . . ."
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
@@ -573,7 +923,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout "${SERVER_UP_TIMEOUT:-1800}"
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -714,6 +1064,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then
         cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
+    fi
+
+    # KEEP_SERVER_ALIVE=1 holds the whole stack (router + prefill + decode) up after
+    # the benchmark instead of tearing it down, so a second load run costs only the
+    # load itself. Bringing 1P1D up is ~10 min even with --load-format dummy (weights,
+    # KV alloc, Mooncake DRAM registration, graph capture), which dominated every
+    # crash-repro iteration. Debug-only; the sentinel is deleted to release the job.
+    if [[ "${KEEP_SERVER_ALIVE:-0}" == "1" && "$DRY_RUN" -eq 0 ]]; then
+        KEEP_ALIVE_SENTINEL="/run_logs/slurm_job-${SLURM_JOB_ID}/KEEP_SERVER_ALIVE"
+        : > "$KEEP_ALIVE_SENTINEL"
+        echo "KEEP_SERVER_ALIVE=1: stack stays up; 'rm ${KEEP_ALIVE_SENTINEL}' to let it exit"
+        while [[ -f "$KEEP_ALIVE_SENTINEL" ]]; do sleep 15; done
+        echo "KEEP_SERVER_ALIVE: sentinel removed, proceeding to shutdown"
     fi
 
     echo "Killing the prefill server"
