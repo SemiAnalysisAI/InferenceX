@@ -838,7 +838,6 @@ VLLM_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     "${MM_ARGS[@]}"
     --max-num-seqs "$MAX_NUM_SEQS"
-    --max-num-batched-tokens 2048
     --enable-auto-tool-choice
     --tool-call-parser kimi_k3
     --reasoning-parser kimi_k3

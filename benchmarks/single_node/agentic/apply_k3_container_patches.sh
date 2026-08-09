@@ -184,7 +184,9 @@ ng='''        if (
             # HYBRID: verify always gluon, independent of ASM_PADDING.
             and _gluon_mla_decode_supported()
         ):'''
-if ng in s: print("hybrid gate: already applied")
+asm_term = 'and _aiter_mla_small_head_mode() != "asm"'
+if asm_term not in s: print("hybrid gate: already gluon-only (asm-term absent, e.g. #51171 base) -- OK")
+elif ng in s: print("hybrid gate: already applied")
 elif og in s: s=s.replace(og,ng); print("hybrid gate: applied")
 else: print("hybrid gate: ANCHOR NOT FOUND")
 
@@ -200,11 +202,11 @@ echo "50578_env       = $(grep -c VLLM_ROCM_AITER_MLA_ASM_PADDING $D/vllm/envs.p
 echo "51171_flat      = $(grep -c flat_kv_indices $D/vllm/v1/attention/backends/mla/rocm_aiter_mla.py)  (expect ~14)"
 echo "51171_gpuworker = $(grep -c get_kv_cache_capacity $D/vllm/v1/worker/gpu_worker.py)  (expect 1)"
 echo "50619_nvfb      = $(grep -c 'if not self.impl.supports_quant_query_input' $D/vllm/models/kimi_k3/nvidia/mla.py)  (expect 1)"
-echo "50619_cgex_attn = $(grep -c cg_support_exclude_layers $D/vllm/v1/worker/gpu/attn_utils.py)  (expect 2)"
+echo "50619_cgex_attn = $(grep -c cg_support_exclude_layers $D/vllm/v1/worker/gpu/attn_utils.py)  (expect 3)"
 echo "50619_cgex_mr   = $(grep -c cg_support_exclude_layers $D/vllm/v1/worker/gpu/model_runner.py)  (expect 1)"
 echo "hybrid_qfp8     = $(grep -c 'self.supports_quant_query_input = True' $D/vllm/v1/attention/backends/mla/rocm_aiter_mla.py)  (expect 1)"
 echo "hybrid_qfp8_off = $(grep -c 'self.supports_quant_query_input = False' $D/vllm/v1/attention/backends/mla/rocm_aiter_mla.py)  (expect 0)"
-echo "hybrid_gate     = $(grep -c 'HYBRID: verify always gluon' $D/vllm/v1/attention/backends/mla/rocm_aiter_mla.py)  (expect 1)"
+echo "hybrid_gate     = $(grep -c '_aiter_mla_small_head_mode() != \"asm\"' $D/vllm/v1/attention/backends/mla/rocm_aiter_mla.py)  (expect 0: asm-term dropped -> verify always gluon)"
 echo "kda_fix         = $(grep -c 'state_indices = state_indices.reshape' $D/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py)  (expect 1)"
 echo "triton          = $(python -c 'import triton;print(triton.__version__)')"
 python -c "import vllm.envs, vllm.v1.attention.backends.mla.rocm_aiter_mla; print('IMPORT_OK')"
@@ -217,6 +219,14 @@ only difference is VLLM_ROCM_AITER_MLA_ASM_PADDING. Common args:
     --kv-cache-dtype fp8  --max-model-len 1048576 \
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY","max_cudagraph_capture_size":48,"custom_ops":["+fused_rms_norm_gated"]}' \
     --speculative-config '{"model":"Inferact/Kimi-K3-DSpark","num_speculative_tokens":2,"method":"dspark","attention_backend":"TRITON_MLA","kv_cache_dtype":"auto"}'
+
+  RadixArk/Kimi-K3-DSpark (Qwen3 DENSE draft) alternative -- FIRST relabel its config
+  architectures ["DSparkDraftModel"] -> ["Qwen3DSparkModel"] (else vLLM routes it to the
+  DeepseekV4-MoE DSpark class -> hc_mult AttributeError). Note the LOCAL path, the NON-MLA
+  draft backend TRITON_ATTN (TRITON_MLA is rejected: 'non-MLA not supported'), and
+  FULL_AND_PIECEWISE with explicit capture sizes 1..48:
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE","max_cudagraph_capture_size":48,"cudagraph_capture_sizes":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48],"custom_ops":["+fused_rms_norm_gated"]}' \
+    --speculative-config '{"model":"/data/Kimi-K3-DSpark-RadixArk","num_speculative_tokens":2,"method":"dspark","attention_backend":"TRITON_ATTN","kv_cache_dtype":"auto"}'
 
   The env only controls the Kimi-K3 plain decode (qo_len==1); the DSpark verify
   (qo_len>1) is hard-routed to gluon by the step-7 hybrid gate, and the query is
