@@ -100,6 +100,7 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${PREFILL_SCHEDULE_ARGS[@]}" \
     "${DEP_COMPILE_ARGS[@]}" \
     --attention_config.use_fp4_indexer_cache=True \
+    --attention-backend FLASHMLA_SPARSE_DSV4 \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
