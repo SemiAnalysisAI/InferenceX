@@ -32,7 +32,7 @@ resources:
   gpus_per_agg: 32
 
 frontend:
-  type: vllm
+  type: vllm-direct
   enable_multiple_frontends: false
 
 backend:

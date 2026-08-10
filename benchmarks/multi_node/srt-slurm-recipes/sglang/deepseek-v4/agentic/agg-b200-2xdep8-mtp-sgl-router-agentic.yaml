@@ -25,7 +25,7 @@ infra:
   etcd_nats_dedicated_node: false
 
 frontend:
-  type: sgl-router
+  type: sglang
   enable_multiple_frontends: false
   env:
     PIP_BREAK_SYSTEM_PACKAGES: "1"

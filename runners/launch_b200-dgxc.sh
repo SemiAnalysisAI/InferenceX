@@ -180,7 +180,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # TODO(CJQ): make first class upon srt-slurm upstream refactor
     elif [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
         # Direct-vLLM agentic experiment (Variant D): srt-slurm PR #278
-        # (kylliang/direct-aggregate-vllm) adds frontend.type: vllm — `vllm
+        # (kylliang/direct-aggregate-vllm; now frontend.type: vllm-direct) adds direct `vllm
         # serve` owns the OpenAI port itself, no Dynamo layer. The fork branch
         # carries PR #278 plus the multi-node extension (vLLM-native
         # --master-addr/--nnodes/--node-rank serve + headless non-leader

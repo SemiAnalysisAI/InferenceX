@@ -20,7 +20,7 @@ identity:
   container:
     image: "vllm/vllm-openai:kimi-k3"
 
-# Direct vLLM serving (frontend.type: vllm, srt-slurm PR #278 + the
+# Direct vLLM serving (frontend.type: vllm-direct, srt-slurm PR #278 + the
 # multinode extension on functionstackx/srt-slurm-nv branch
 # klaud/direct-vllm-multinode): `vllm serve` owns the OpenAI port itself, so
 # no Dynamo frontend/worker is involved and no dynamo install is needed.
@@ -50,7 +50,7 @@ frontend:
   # the public port; rank-1 runs a headless engine worker (vLLM-native
   # multi-node TP8xPP2 via --master-addr/--nnodes/--node-rank, carried by the
   # functionstackx/srt-slurm-nv klaud/direct-vllm-multinode branch).
-  type: vllm
+  type: vllm-direct
   enable_multiple_frontends: false
 
 backend:
@@ -100,7 +100,7 @@ backend:
       no-enable-flashinfer-autotune: true
       # kimi_k3 parsers via the native vllm serve OpenAI-frontend flags —
       # legitimate here because this recipe serves directly with vllm serve
-      # (frontend.type: vllm), not through the dynamo worker entrypoint that
+      # (frontend.type: vllm-direct), not through the dynamo worker entrypoint that
       # rejects them.
       enable-auto-tool-choice: true
       tool-call-parser: kimi_k3

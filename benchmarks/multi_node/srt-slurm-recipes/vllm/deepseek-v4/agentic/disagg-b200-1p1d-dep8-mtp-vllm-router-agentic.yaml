@@ -28,7 +28,7 @@ infra:
   etcd_nats_dedicated_node: false
 
 frontend:
-  type: vllm-router
+  type: vllm
   enable_multiple_frontends: false
 
 backend:
