@@ -5744,4 +5744,4 @@
     - "Run on b200-new with the checkpoint at /scratch/models/DeepSeek-V4-Pro and batch_1/benchmark Slurm settings."
     - "Stage the TensorRT-LLM recipes and load-balancer configs through launch_b200-nscale-slurm.sh."
     - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc23"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2552
