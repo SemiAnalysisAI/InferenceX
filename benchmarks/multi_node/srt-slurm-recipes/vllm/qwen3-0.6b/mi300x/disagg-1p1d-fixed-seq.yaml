@@ -49,6 +49,7 @@ backend:
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
     TRANSFORMERS_CACHE: "/hf_hub_cache"
     PYTHONUNBUFFERED: "1"
+    VLLM_ROCM_USE_AITER: "1"
     MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
   decode_environment:
     HF_HOME: "/hf_hub_cache"
@@ -56,6 +57,7 @@ backend:
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
     TRANSFORMERS_CACHE: "/hf_hub_cache"
     PYTHONUNBUFFERED: "1"
+    VLLM_ROCM_USE_AITER: "1"
     MORI_IO_SQ_BACKOFF_TIMEOUT_US: "50000"
   vllm_config:
     prefill:
@@ -65,6 +67,7 @@ backend:
       max-model-len: 2048
       max-num-seqs: 8
       enforce-eager: true
+      attention-backend: "ROCM_AITER_FA"
     decode:
       served-model-name: "Qwen/Qwen3-0.6B"
       tensor-parallel-size: 1
@@ -72,6 +75,7 @@ backend:
       max-model-len: 2048
       max-num-seqs: 8
       enforce-eager: true
+      attention-backend: "ROCM_AITER_FA"
 
 srun_options:
   container-writable: ""

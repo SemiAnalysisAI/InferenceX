@@ -59,6 +59,13 @@ def test_disaggregated_recipe_uses_native_router_and_moriio():
         },
     }
     assert recipe["backend"]["connector"] == "moriio"
+    for role in ("prefill", "decode"):
+        assert recipe["backend"][f"{role}_environment"][
+            "VLLM_ROCM_USE_AITER"
+        ] == "1"
+        assert recipe["backend"]["vllm_config"][role][
+            "attention-backend"
+        ] == "ROCM_AITER_FA"
     assert "dynamo" not in recipe
     serialized = DISAGG_RECIPE_PATH.read_text().lower()
     assert "nixl" not in serialized

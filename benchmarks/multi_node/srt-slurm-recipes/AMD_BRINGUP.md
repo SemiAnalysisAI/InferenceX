@@ -88,3 +88,10 @@ private NIC names vary across MI300X node generations. The earlier
 Dynamo/NIXL experiment reached KV-cache initialization but failed ROCm memory
 registration; that NVIDIA-oriented data plane is now explicitly out of scope
 rather than patched into the AMD implementation.
+
+The aggregate recipe has completed end to end on MI300X with both fixed-length
+concurrency points. The disaggregated recipe pins ROCm's supported AITER Flash
+Attention backend for both roles. This is required by the released MoRI-IO
+connector's registered-memory contract: AITER exposes a contiguous logical KV
+cache tensor, whereas the default Triton NHD view is strided and cannot be
+registered by `mori.io` without copying or patching vLLM.
