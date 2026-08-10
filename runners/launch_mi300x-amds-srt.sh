@@ -4,7 +4,7 @@ set -euo pipefail
 # MI300X srt-slurm validation path. The existing launcher remains the default;
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="411ec5971bac368725f59b0fda419353a6c603aa"
+SRT_SLURM_COMMIT="105824810a67d52b58761077ad3b94d4a05eb3ac"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
@@ -91,14 +91,22 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$SRT_REPO_DIR"
 uv venv --python 3.12
 uv pip install -e .
+make setup-compute ARCH=x86_64
 source .venv/bin/activate
 export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
 export INFMAX_WORKSPACE="$REMOTE_RUNTIME"
 
 echo "Submitting ${CONFIG_PATH} with srt-slurm ${SRT_SLURM_COMMIT}"
+set +e
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" \
     --tags "mi300x,inferencex,github-actions,${RUN_KEY}" 2>&1)
+SRTCTL_RC=$?
+set -e
 echo "$SRTCTL_OUTPUT"
+if [[ $SRTCTL_RC -ne 0 ]]; then
+    echo "srtctl apply failed with exit code ${SRTCTL_RC}" >&2
+    exit "$SRTCTL_RC"
+fi
 JOB_ID=$(grep -oE 'Job [0-9]+' <<< "$SRTCTL_OUTPUT" | awk '{print $2}' | tail -1)
 [[ -n "$JOB_ID" ]] || { echo "Unable to parse srt-slurm job ID" >&2; exit 1; }
 echo "SRT_SLURM_JOB_ID=$JOB_ID"

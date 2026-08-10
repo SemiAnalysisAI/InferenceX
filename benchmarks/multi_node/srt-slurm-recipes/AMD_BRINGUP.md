@@ -9,7 +9,7 @@ Current development pin:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `411ec5971bac368725f59b0fda419353a6c603aa`
+- commit: `105824810a67d52b58761077ad3b94d4a05eb3ac`
 
 ## Scope
 
