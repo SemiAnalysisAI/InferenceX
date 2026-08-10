@@ -42,6 +42,7 @@ export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 export VLLM_ENGINE_READY_TIMEOUT_S=10800
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export PYTHONNOUSERSITE=1
 
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -73,8 +74,9 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-# The 16K prefill budget and 4*CONC sequence-cap probes were both neutral.
-# Restore the official 8K/2*CONC baseline before isolating graph capture mode.
+# The 16K prefill budget and 4*CONC sequence-cap probes were neutral, while
+# piecewise graphs regressed. Restore the official 8K/2*CONC/FULL_DECODE_ONLY
+# baseline before isolating INT4 Quick Reduce.
 MAX_NUM_SEQS=$((2 * CONC))
 # The existing MI300X/MI325X fixed-sequence recipes use K=2. Keep that MTP
 # depth and its measured golden acceptance length for every AgentX point.
@@ -113,7 +115,7 @@ VLLM_CMD=(
     --block-size 256
     --max-num-batched-tokens 8192
     --max-num-seqs "$MAX_NUM_SEQS"
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4

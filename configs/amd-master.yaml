@@ -1491,7 +1491,7 @@ dsv4-fp8-mi325x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      # Isolated agentx-fast scheduler-slot probe at the retained upper point.
+      # Isolated agentx-fast INT4 Quick Reduce probe at the retained upper point.
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
