@@ -5755,3 +5755,10 @@
     - "8k1k: 9 STP configs spanning 1P13D DEP2+13D TP4 (conc 78), 1P4D DEP2+4D TEP16 (conc 24), 1P8D DEP2+8D TEP8 (conc 48), 2P15D DEP2+15D TP4 (conc 180/216), 3P1D DEP2+1D DEP4 (conc 1536), 7P12D DEP2+12D TEP4 (conc 1152), 8P9D DEP2+9D TEP4 (conc 1728), 10P3D DEP2+3D DEP8 (conc 4608)."
     - "Runner: launch_gb300-nv.sh updated to clone NVIDIA/srt-slurm@v1.0.29 and overlay local recipes from benchmarks/multi_node/srt-slurm-recipes/trtllm/qwen3.5/gb300-fp4/disagg/ for the dynamo-trt+qwen3.5+fp4 path, and to skip srtctl preflight for this path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2206
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Bump SGLang image to v0.5.14-cu130 for the Qwen3.5 FP4 GB300 disaggregated dynamo-sglang config"
+    - "Switch to the nvidia/Qwen3.5-397B-A17B-NVFP4-V2 checkpoint (model pre-staged on cluster as Qwen3.5-397B-A17B-NVFP4-V2)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2238
