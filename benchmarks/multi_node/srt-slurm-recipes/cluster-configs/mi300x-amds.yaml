@@ -15,6 +15,11 @@ gpu_sbatch_directive: gres
 use_segment_sbatch_directive: false
 use_exclusive_sbatch_directive: false
 
+# The login node and compute nodes do not share this output path. Carry the
+# exact resolved recipe in the batch script and materialize it on the allocated
+# head node instead of depending on a submitter-side copy.
+runtime_config_transport: embedded
+
 default_sbatch_directives:
   cpus-per-task: "32"
   mem: "128G"
