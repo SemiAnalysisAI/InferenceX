@@ -36,7 +36,7 @@ export COLLX_TRANSPORT=mnnvl
 export COLLX_NODES="$NODES" COLLX_GPUS_PER_NODE="$GPN" COLLX_SCALE_UP_DOMAIN="$SCALE_UP_DOMAIN"
 export COLLX_NGPUS="$NGPUS"
 case "$COLLX_BENCH" in
-  deepep-v2 | nccl-ep) ;;
+  deepep-v2 | nccl-ep | flashinfer-ep) ;;
   *) collx_die "unsupported $PRODUCT EP backend: $COLLX_BENCH" ;;
 esac
 collx_require_vars COLLX_IMAGE COLLX_IMAGE_PLATFORM COLLX_PARTITION COLLX_ACCOUNT COLLX_SQUASH_DIR COLLX_STAGE_DIR
@@ -67,9 +67,13 @@ export COLLX_BACKEND_CACHE_ROOT=/cx-cache
 
 # ---- scheduler-allocation: salloc the trays ---------------------------------
 command -v salloc >/dev/null || collx_die "salloc not found"
-collx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES" \
-  --gres=gpu:"$GPN" --ntasks-per-node="$GPN" --exclusive --mem=0 --cpus-per-task=35 \
-  --time="$TIME_MIN"
+allocation=(--partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES"
+  --gres=gpu:"$GPN" --ntasks-per-node="$GPN" --exclusive --mem=0 --cpus-per-task=35
+  --time="$TIME_MIN")
+# Honour the registry's node denylist. Without this the key is accepted by
+# config.py and silently dropped here, so a quarantined tray keeps getting picked.
+[ -z "${COLLX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$COLLX_EXCLUDE_NODES")
+collx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || collx_die "no JOB_ID from salloc"
 
 # ---- container-import: squash file resolved on the allocation ---------------

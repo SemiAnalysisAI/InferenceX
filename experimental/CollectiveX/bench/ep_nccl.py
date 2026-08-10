@@ -13,8 +13,10 @@ GIN (GPU-Initiated Networking) inter-node — with two algorithms selected per c
 Because both map exactly onto the two combine contracts CollectiveX already models, the
 scale_up_domain two-level combine oracle in ep_harness applies unchanged.
 
-BF16 only. NCCL EP's FP8 machinery exists but RELEASE.md lists it unsupported/untested this
-release, so this adapter does not override the FP8 encode hooks (SUPPORTED_PRECISIONS=("bf16",)).
+BF16 only: `contrib/nccl_ep/RELEASE.md` says "No FP8 support", so this adapter does not
+override the FP8 encode hooks (SUPPORTED_PRECISIONS=("bf16",)). Re-test before trusting that
+note — the C library at our pinned commit reads `inputs->scales` and switches on e4m3/e5m2,
+and the two documented FP8 exclusions are expert-major layouts we do not use.
 
 Communicator bootstrap: NCCL EP forms its OWN NCCL communicator (separate from PyTorch's
 process group) via ``Communicator.init(nranks, rank, unique_id)``. Upstream broadcasts the
@@ -62,9 +64,33 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 # change can't silently truncate the id on the non-root ranks.
 _UNIQUE_ID_MAX_BYTES = 256
 
+# Low-latency receive sizing, deliberately two numbers, mirroring ep_deepep_v2: _LL_BUFFER_CAP
+# sizes the pre-allocated receive (and so the transport footprint), _LL_LADDER_CAP bounds which
+# token counts are measured. Separating them lets the ladder be clamped around a kernel defect
+# without moving the footprint and silently re-basing the rungs that remain.
+#
+# The ladder sits below the buffer because nccl_ep's low_latency.cu is a port of DeepEP's
+# PRE-FIX low-latency combine: in the combine recv pipeline the reduction warps read shared
+# memory and then mbarrier_arrive(emptyBarriers[stageIdx]) with no fence.proxy.async.shared::cta
+# between, so the producer's next TMA load can overwrite a stage while consumer reads are still
+# in flight. DeepEP closed exactly this with a one-line fence in PR #642; the fence is absent
+# both at our pin and at NVIDIA/nccl master, so it is unfixed upstream.
+#
+# Observed on gb300 EP8 BF16 at T=256: 1 failure in 5 executions, bimodal -- healthy rows give
+# max relative error 0.0039, the failure gave 0.4704, with nothing between, which is a discrete
+# corrupted write rather than tolerance noise.
+#
+# THIS CLAMP IS NOT A SAFETY BOUNDARY. The fence is missing on every combine recv; T=256 is only
+# the rung with the most pipeline iterations, and the receive plane is not even full there. Lower
+# rungs are LESS LIKELY to hit the race, not immune. Restore _LL_LADDER_CAP to _LL_BUFFER_CAP
+# once a fixed wheel ships.
+_LL_BUFFER_CAP = 256
+_LL_LADDER_CAP = 128
+
 
 class NCCLEPBackend(EPBackend):
     name = "nccl-ep"
+    maturity = "candidate"  # NVIDIA's library, but no engine exposes an NCCL-EP selector
     # One library, two algorithms selected by args.mode. kernel_generation and the combine
     # semantics are switched to their LL values in __init__ (mirrors ep_deepep_v2).
     #   normal      -> HT / FLAT layout / unweighted-rank-sum combine.
@@ -73,9 +99,8 @@ class NCCLEPBackend(EPBackend):
     SUPPORTED_MODES = ("normal", "low-latency")
     SUPPORTED_PRECISIONS = ("bf16",)
     stage_device_work = False
-    combine_input_attr = "combine_input_t"  # this adapter's combine reads combine_input_t
-    combine_needs_redispatch = False
-    dispatch_needs_combine_cleanup = False
+    requires_fresh_pair = False
+    receive_layout = "token-rank"
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
@@ -97,12 +122,12 @@ class NCCLEPBackend(EPBackend):
             # unweighted rank sum — the benchmark stages the UNWEIGHTED per-expert transform
             # and the kernel multiplies by the gate. Same contract as deepep-v2 low-latency.
             self.kernel_generation = "nccl-ep-ll"
+            self.receive_layout = "token-expert"
             self.combine_weight_semantics = "weighted-kernel-sum"
         # NCCL EP's handle is explicitly reusable across dispatch/combine cycles (ep_test.py
         # cached mode redispatches and recombines on one handle), so — unlike DeepEP's legacy
         # low-latency Buffer — no timed component needs a fresh dispatch or a draining combine;
-        # both modes keep combine_needs_redispatch / dispatch_needs_combine_cleanup False. If
-        # on-metal bring-up ever shows LL result-tensor aliasing, flip both to True for LL.
+        # both modes keep requires_fresh_pair False.
         self._algorithm = Algorithm.LOW_LATENCY if self._ll else Algorithm.HIGH_THROUGHPUT
         self._layout = Layout.EXPERT_MAJOR if self._ll else Layout.FLAT
         # send_only=0 on every dispatch/combine (no staged execution). Handle.complete() is
@@ -120,10 +145,10 @@ class NCCLEPBackend(EPBackend):
 
     def buffer_cap(self, args):
         if self._ll:
-            # LL pre-allocates the fixed [num_local_experts, cap*num_ranks, hidden] receive
-            # buffer, so cap is a hard per-rank dispatch-slot bound (same 256 as ep_deepep_v2 /
-            # ep_uccl low-latency; the harness clamps the decode ladder and reports drops).
-            return 256
+            # Bounds which token counts are MEASURED. Below _LL_BUFFER_CAP today because the
+            # combine recv pipeline races (see the constants above); the harness reports every
+            # dropped rung rather than silently truncating.
+            return _LL_LADDER_CAP
         return None
 
     # ---- helpers -----------------------------------------------------------------------------
@@ -159,7 +184,7 @@ class NCCLEPBackend(EPBackend):
         # the internode DevComm with ginForceEnable + a RAIL connection type, so we do NOT force
         # NCCL_GIN_TYPE here — forcing GDAKI(3) can prevent NCCL from selecting a fabric-supported
         # GIN transport and trips an illegal-memory-access in the GIN dispatch kernel (on-metal
-        # checkpoint; still under cross-node bring-up). Set NCCL_GIN_TYPE in the launcher env if a
+        # checkpoint). Set NCCL_GIN_TYPE in the launcher env if a
         # specific transport must be pinned.
         length = torch.zeros(1, dtype=torch.int64, device=self.device)
         payload = torch.zeros(_UNIQUE_ID_MAX_BYTES, dtype=torch.uint8, device=self.device)
@@ -185,7 +210,10 @@ class NCCLEPBackend(EPBackend):
     def create_buffer(self, spec):
         """Bootstrap the communicator, create the EP group sized from the ladder maximum, and
         allocate the persistent receive/combine buffers reused across every ladder shape."""
-        self.max_dispatch = spec.max_tokens_per_rank
+        # Sized from the BUFFER cap, not from the measured ladder, so clamping the ladder
+        # around the combine race does not also shrink the transport footprint -- which drives
+        # recv-slot memory traffic and would change what the remaining rungs measure.
+        self.max_dispatch = _LL_BUFFER_CAP if self._ll else spec.max_tokens_per_rank
         hidden = self.args.hidden
         self._bootstrap_comm()
         # max_recv_tokens_per_rank: HT requires >0 and >= max_dispatch; LL auto-derives when 0.
@@ -278,6 +306,11 @@ class NCCLEPBackend(EPBackend):
         )
         if not self._ll:
             h.in_weights_t = self._t(p.topk_weights)
+        else:
+            # LL applies the gate in its combine kernel, not on dispatch. Wrap the weights once
+            # per handle rather than per timed combine: the wrapper costs a torch resolve, an
+            # np.asarray and a cybind allocation, and `time_us` charges host work to the window.
+            h.combine_weights_t = self._t(p.topk_weights)
         # combined output is restored to original token order: [num_tokens, hidden].
         h.out = torch.empty((p.T, self.args.hidden), dtype=torch.bfloat16, device=self.device)
         h.out_t = self._t(h.out)
@@ -307,13 +340,27 @@ class NCCLEPBackend(EPBackend):
             h.handle = self._handle
             torch.cuda.synchronize()
             if not self._ll:
-                h.count = int(h.recv_total.item())
+                self._bind_ht_recv_count(h)
             self._bound = h
         else:
             h.handle = self._handle
             self._rebind(h)
         p._nccl = h
         return h
+
+    def _bind_ht_recv_count(self, h):
+        """Read HT's received-token count and pre-wrap the combine input at that size.
+
+        Upstream sizes the combine staging copy from the tensor it is handed (`num_tokens =
+        x->sizes[0]`), not from the group's buffer, so handing it the whole ladder-max plane put a
+        rung-independent floor under HT combine -- ~470-1295us on a prefill leg (ladder max 8192).
+        Slicing is a free leading-dim view and matches upstream's own ep_test. Both callers are
+        untimed (handle creation and rebind), so the `.item()` read never lands in a window.
+        """
+        h.count = int(h.recv_total.item())
+        # A rank that received nothing still needs a non-empty tensor for the shape checks; the
+        # routing map decides what combine reads, so the extra row cannot reach the output.
+        h.combine_in_t = self._t(self._recv_x[: max(h.count, 1)])
 
     def _rebind(self, h):
         """Point the single handle at h's routing (collective; untimed callers only).
@@ -330,7 +377,7 @@ class NCCLEPBackend(EPBackend):
         )
         torch.cuda.synchronize()
         if not self._ll:
-            h.count = int(h.recv_total.item())
+            self._bind_ht_recv_count(h)
         self._bound = h
 
     # ---- transport contract ------------------------------------------------------------------
@@ -373,8 +420,10 @@ class NCCLEPBackend(EPBackend):
 
     def stage(self, p, h):
         # BF16 combine input is the received buffer itself; no device work (value correctness
-        # is exercised only through the oracle's combine_transformed path).
-        h.combine_input_t = self._recv_x_t
+        # is exercised only through the oracle's combine_transformed path). LL needs the full
+        # padded plane, HT only the received rows (see `_bind_ht_recv_count`).
+        # Still an nccl.ep tensor wrapper, not a torch tensor; shared code passes it through.
+        h.combine_input = self._recv_x_t if self._ll else h.combine_in_t
 
     def combine(self, p, h):
         stream = self._stream()
@@ -382,8 +431,8 @@ class NCCLEPBackend(EPBackend):
             # Weighted LL combine: the kernel multiplies each expert contribution by the
             # source token's gate (CombineOutputs.topk_weights) before the FP32 accumulation.
             h.handle.combine(
-                CombineInputs(tokens=h.combine_input_t),
-                CombineOutputs(tokens=h.out_t, topk_weights=self._t(p.topk_weights)),
+                CombineInputs(tokens=h.combine_input),
+                CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
                 config=self._combine_cfg,
                 stream=stream,
             )
@@ -391,7 +440,7 @@ class NCCLEPBackend(EPBackend):
             # Unweighted HT combine (FWD forbids input weights): sums the per-token expert
             # aggregates back to each token's home rank, restored to original order.
             h.handle.combine(
-                CombineInputs(tokens=h.combine_input_t),
+                CombineInputs(tokens=h.combine_input),
                 CombineOutputs(tokens=h.out_t),
                 config=self._combine_cfg,
                 stream=stream,
@@ -467,7 +516,7 @@ class NCCLEPBackend(EPBackend):
         stream = self._stream()
         h.handle.combine(
             CombineInputs(tokens=self._t(combine_buf)),
-            CombineOutputs(tokens=h.out_t, topk_weights=self._t(p.topk_weights)),
+            CombineOutputs(tokens=h.out_t, topk_weights=h.combine_weights_t),
             config=self._combine_cfg,
             stream=stream,
         )
@@ -487,7 +536,8 @@ class NCCLEPBackend(EPBackend):
         self._recv_x[: transformed.shape[0]].copy_(transformed.to(self._recv_x.dtype))
         stream = self._stream()
         h.handle.combine(
-            CombineInputs(tokens=self._recv_x_t),
+            # Same sliced input the timed path uses, so the two cannot diverge in shape.
+            CombineInputs(tokens=h.combine_in_t),
             CombineOutputs(tokens=h.out_t),
             config=self._combine_cfg,
             stream=stream,
