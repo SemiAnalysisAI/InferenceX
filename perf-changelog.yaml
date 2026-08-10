@@ -5709,3 +5709,16 @@
     - "Enable SGLang metrics on every aggregate, prefill, and decode engine."
     - "Use supported header-based Dynamo session routing with the in-repo AIPerf build."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2520
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-router-agentic-agg
+    - dsv4-fp4-b200-vllm-router-agentic-disagg
+    - dsv4-fp4-b200-sgl-router-agentic-agg
+    - dsv4-fp4-b200-sgl-router-agentic-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Validate first-class vLLM Router 0.1.15 and SGLang Router 0.3.2 frontends through srt-slurm on B200 without a Dynamo request plane."
+    - "Exercise both two-worker aggregate DEP8 routing and one-prefill/one-decode DEP8 disaggregation for each router using DeepSeek V4 FP4, MTP, and the AgentX trace workload."
+    - "Pin the test deployment to an exact SemiAnalysisAI/srt-slurm commit, preserve each logical backend Prometheus endpoint for AIPerf, and require the matching vllm: or sglang: metric family before accepting results."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2543
