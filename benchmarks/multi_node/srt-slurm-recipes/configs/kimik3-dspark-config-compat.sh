@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # The pinned vLLM nightly unconditionally enables Kimi K3's SM100 latent-MoE
-# tail fusion. That kernel uses torch symmetric memory, whose file-descriptor
-# rendezvous is node-local and fails for TP16 across two B200 nodes. Patch the
-# pinned implementation to honor the explicit portable-path opt-out below.
+# tail and fused all-reduce/RMSNorm collectives. They require symmetric-memory
+# transport unavailable to TP16 across two B200 nodes. Patch the pinned
+# implementation to honor the explicit portable-path opt-out below.
 python3 - <<'PY'
 import importlib.util
 import os
@@ -38,6 +38,17 @@ if flag not in source:
     if source.count(condition_needle) != 1:
         raise RuntimeError(f"Unexpected latent-MoE fusion condition in {runner}")
     source = source.replace(condition_needle, condition_replacement, 1)
+
+    fused_norm_needle = (
+        "        if flashinfer_trtllm_fused_allreduce_norm is not None:"
+    )
+    fused_norm_replacement = f"""        if (
+            flashinfer_trtllm_fused_allreduce_norm is not None
+            and os.getenv("{flag}", "0") != "1"
+        ):"""
+    if source.count(fused_norm_needle) != 1:
+        raise RuntimeError(f"Unexpected fused all-reduce condition in {runner}")
+    source = source.replace(fused_norm_needle, fused_norm_replacement, 1)
 
     temporary = runner.with_suffix(".py.tmp")
     temporary.write_text(source)
