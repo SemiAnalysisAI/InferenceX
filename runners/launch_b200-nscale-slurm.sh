@@ -8,8 +8,9 @@
 # them would force every dgxc path to become an override hook and would let a
 # dgxc-only change silently alter nscale runs.
 #
-# Scope: multi-node Dynamo-vLLM DeepSeek-V4-Pro and Kimi K2.6 FP4 runs on
-# the b200-nscale/b200-new runner labels. Anything else exits non-zero.
+# Scope: multi-node DeepSeek-V4-Pro FP4 runs with Dynamo-vLLM or Dynamo
+# TensorRT-LLM, plus Kimi K2.6 FP4 runs with Dynamo-vLLM, on the
+# b200-nscale/b200-new runner labels. Anything else exits non-zero.
 
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -49,8 +50,13 @@ else
     exit 1
 fi
 
-if [[ $FRAMEWORK != "dynamo-vllm" ]]; then
-    echo "Unsupported framework for b200-nscale: $FRAMEWORK (only dynamo-vllm)" >&2
+if [[ $FRAMEWORK != "dynamo-vllm" && $FRAMEWORK != "dynamo-trt" ]]; then
+    echo "Unsupported framework for b200-nscale: $FRAMEWORK (supported: dynamo-vllm, dynamo-trt)" >&2
+    exit 1
+fi
+
+if [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX != "dsv4" ]]; then
+    echo "Unsupported model for b200-nscale Dynamo TensorRT-LLM: $MODEL_PREFIX" >&2
     exit 1
 fi
 
@@ -59,7 +65,22 @@ export SERVED_MODEL_NAME=$MODEL
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 rm -rf "$SRT_REPO_DIR"
-if [[ $MODEL_PREFIX == "dsv4" ]]; then
+if [[ $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    mkdir -p "$SRT_REPO_DIR"
+    git -C "$SRT_REPO_DIR" init --quiet || exit 1
+    git -C "$SRT_REPO_DIR" fetch --quiet --depth 1 \
+        https://github.com/NVIDIA/srt-slurm.git refs/pull/274/head || exit 1
+    git -C "$SRT_REPO_DIR" checkout --quiet 22132f7449769315a441b1061dbe1d67435887bb || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    mkdir -p recipes/trtllm/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/trtllm/deepseek-v4" \
+        recipes/trtllm/deepseek-v4 || exit 1
+    cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/moe_load_balancer_ctx_ep4_384.yaml" \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/moe_load_balancer_gen_ep8_slots384.yaml" \
+        configs/ || exit 1
+    sed -i 's/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "yes"}/CONTAINER_REMAP_ROOT_EXPORT = {"ENROOT_REMAP_ROOT": "no"}/' \
+        src/srtctl/core/slurm.py
+elif [[ $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout aflowers/vllm-gb200-v0.20.0 || exit 1
@@ -201,8 +222,8 @@ sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "$CONFIG_PATH"
 inject_synthetic_acceptance "$CONFIG_PATH" "$FRAMEWORK" || exit 1
 
 SRTCTL_PREFLIGHT_ARGS=()
-# Kimi K2.6 weights are staged on the Slurm compute nodes, not the login node.
-if [[ $MODEL_PREFIX == "kimik2.6" ]]; then
+# These checkpoints are staged on Slurm compute nodes, not the login node.
+if [[ $MODEL_PREFIX == "kimik2.6" || ( $MODEL_PREFIX == "dsv4" && $FRAMEWORK == "dynamo-trt" ) ]]; then
     SRTCTL_PREFLIGHT_ARGS+=(--no-preflight)
 fi
 
