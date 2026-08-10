@@ -5709,3 +5709,17 @@
     - "Enable SGLang metrics on every aggregate, prefill, and decode engine."
     - "Use supported header-based Dynamo session routing with the in-repo AIPerf build."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2520
+
+- config-keys:
+    - qwen3-0.6b-fp16-mi300x-vllm-srt-agg
+    - qwen3-0.6b-fp16-mi300x-vllm-srt-disagg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-agg
+    - qwen3-0.6b-fp16-mi355x-sglang-srt-disagg
+    - qwen3.5-fp8-mi355x-sglang-srt-disagg
+  description:
+    - "Add native AMD orchestration to srt-slurm and validate aggregate plus disaggregated serving on MI300X and MI355X without Dynamo, NIXL, NATS, or etcd."
+    - "Use the native vLLM Router with MoRIIO for MI300X disaggregation and the native SGLang Router with AMD MoRI for MI355X disaggregation; aggregate paths use the corresponding direct backend."
+    - "Run the repository's unchanged utils/bench_serving/benchmark_serving.py through srt-slurm's custom benchmark contract for fixed-sequence validation."
+    - "Port the production Qwen3.5-397B-A17B-FP8 MI355X topology as two full TP8 nodes, one prefill and one decode, using lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728, SGLang Router 0.3.2, MoRI, AITer attention, FP8 KV cache, and an 8192-input/1024-output concurrency-8 workload."
+    - "Pin the InferenceX launcher to the exact srt-slurm AMD runtime commit and validate model, container, backend, router, and MoRI package identity before serving."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2542

@@ -5,7 +5,7 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="105824810a67d52b58761077ad3b94d4a05eb3ac"
+SRT_SLURM_COMMIT="25e1e4e71dc8e7383b1857041decff1a9ae0339e"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
@@ -16,6 +16,7 @@ SHARED_RESULTS="${SHARED_BASE}/results"
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
+: "${MODEL_PATH:?MODEL_PATH must identify the Hugging Face model}"
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -62,8 +63,8 @@ srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
     --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache" \
     --container-writable --container-remap-root --no-container-entrypoint \
-    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache,HUGGINGFACE_HUB_CACHE=/hf_hub_cache \
-    python3 -c 'from huggingface_hub import snapshot_download; snapshot_download("Qwen/Qwen3-0.6B")'
+    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache,HUGGINGFACE_HUB_CACHE=/hf_hub_cache,MODEL_REPO=${MODEL_PATH} \
+    python3 -c 'import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ["MODEL_REPO"])'
 EOF
 STAGE_JOB_ID=$(sbatch --wait --parsable "$STAGE_SCRIPT")
 STAGE_JOB_ID="${STAGE_JOB_ID%%;*}"
