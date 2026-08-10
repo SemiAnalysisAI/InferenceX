@@ -5902,3 +5902,12 @@
     - "Use NIXL for KV transfer with EAGLE speculative decoding and chat-formatted benchmark inputs."
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260710-cfc66e05"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2554
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-agg
+    - dsv4-fp4-gb300-dynamo-vllm-agentic-mtp-disagg
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Run all GB300 DeepSeek-V4-Pro AgentX MTP configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2571
