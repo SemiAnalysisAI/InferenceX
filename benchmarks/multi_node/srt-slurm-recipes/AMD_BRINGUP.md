@@ -9,7 +9,7 @@ Current development pin:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `9fdb303e3564ede93c192b28a62397bbaeaad09d`
+- commit: `90ffbda0cb0887af8e6060475d051a8e35e6d546`
 
 ## Scope
 
@@ -81,5 +81,7 @@ small-model aggregate recipe are checked in alongside this document. A two-node
 1-prefill/1-decode recipe uses stable Dynamo 1.3.1 and vLLM's NIXL connector as
 the first disaggregated validation target. Stable Dynamo releases install into
 a writable job-local overlay instead of the immutable container root, and the
-control-plane endpoints use the cluster-selected private interface
-(`ens61f1np1`) rather than Slurm hostnames or the public default route.
+control-plane endpoints use automatic RFC1918-preferring discovery because the
+private NIC name varies across MI300X node generations. Slurm validation 11718
+reached vLLM KV-cache initialization on both nodes; its next isolated blocker
+is ROCm KV-memory registration in the NIXL/UCX data plane.

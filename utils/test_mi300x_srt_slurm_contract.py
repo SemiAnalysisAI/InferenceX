@@ -23,7 +23,7 @@ def test_mi300x_cluster_uses_the_rocm_slurm_contract():
     cluster = yaml.safe_load(CLUSTER_PATH.read_text())
 
     assert cluster["accelerator_vendor"] == "amd"
-    assert cluster["network_interface"] == "ens61f1np1"
+    assert cluster["network_interface"] is None
     assert cluster["gpu_sbatch_directive"] == "gres"
     assert cluster["use_segment_sbatch_directive"] is False
     assert cluster["runtime_config_transport"] == "embedded"
