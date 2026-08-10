@@ -24,5 +24,4 @@ default_mounts:
   /dev/dri: /dev/dri
   /raid/hf-hub-cache: /hf_hub_cache
 
-default_bash_preamble: "ulimit -n 1048576"
 nginx_raise_ulimit: false

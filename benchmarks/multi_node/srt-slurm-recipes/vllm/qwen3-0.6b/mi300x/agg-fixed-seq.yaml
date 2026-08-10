@@ -34,6 +34,7 @@ frontend:
 backend:
   type: vllm
   connector: null
+  set_visible_devices: true
   aggregated_environment:
     HF_HUB_CACHE: "/hf_hub_cache"
     HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
