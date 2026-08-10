@@ -27,6 +27,11 @@ on:
         description: "Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
         type: string
         default: ''
+      fp8_consume:
+        description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Blank = native (the production model)."
+        type: choice
+        default: ''
+        options: ['', dequant]
 concurrency:
   group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
@@ -132,6 +137,12 @@ jobs:
       COLLX_SHARD_SKU: ${{ matrix.sku }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      # Diagnostic hatch, "native" on every normal run. Reaches the ranks because the container
+      # srun exports the submitting environment; EPBackend reads it at class-body evaluation.
+      # Defaulted here rather than passed through empty: the harness fails closed on an
+      # unrecognised value, and a blank input would set the variable to "" -- which is not
+      # "unset", so os.environ.get's default never applies and every leg would die at import.
+      CX_FP8_CONSUME: ${{ inputs.fp8_consume || 'native' }}
       # Consolidated shards run one bounded build-group in one Slurm allocation;
       # every production pool accepts 300 minutes. Allocations release as soon as
       # the shard finishes.
