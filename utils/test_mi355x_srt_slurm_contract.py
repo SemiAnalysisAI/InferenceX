@@ -176,6 +176,10 @@ def test_production_disagg_recipe_uses_two_full_nodes_and_the_existing_workload(
         "gpus_per_prefill": 8,
         "gpus_per_decode": 8,
     }
+    assert recipe["sbatch_directives"] == {
+        "cpus-per-task": "128",
+        "mem": "0",
+    }
     assert recipe["frontend"]["type"] == "sgl-router"
     for role in ("prefill", "decode"):
         config = recipe["backend"]["sglang_config"][role]
