@@ -18,7 +18,7 @@ identity:
   frameworks:
     sglang: "0.5.16"
 
-setup_script: native-sgl-router-deps.sh
+setup_script: native-sgl-router-pd-fix-deps.sh
 
 slurm:
   time_limit: "8:00:00"

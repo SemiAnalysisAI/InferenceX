@@ -164,10 +164,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$IS_AGENTIC" == "1" ]]; then
         AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
         HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
+        ROUTER_WHEEL_CACHE_HOST_PATH="/home/sa-shared/gharunners/router-wheels"
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
+        mkdir -p "$ROUTER_WHEEL_CACHE_HOST_PATH"
         DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache
+  ${ROUTER_WHEEL_CACHE_HOST_PATH}: /router_wheels"
     fi
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
