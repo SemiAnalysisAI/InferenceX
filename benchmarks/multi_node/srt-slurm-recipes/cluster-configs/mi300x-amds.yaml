@@ -37,5 +37,6 @@ default_mounts:
 # node before submitting a sweep.
 containers:
   vllm-rocm-v0.26.0: /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh
+  vllm-router-20260716: /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260716-1fbcde7.sqsh
 
 nginx_raise_ulimit: false

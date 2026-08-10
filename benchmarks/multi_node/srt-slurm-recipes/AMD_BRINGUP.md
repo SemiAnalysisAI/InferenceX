@@ -9,12 +9,13 @@ Current development pin:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `90ffbda0cb0887af8e6060475d051a8e35e6d546`
+- commit: `7f53c35015e12ef3581f474018b5349ce454e977`
 
 ## Scope
 
 1. Prove a single-node aggregate vLLM deployment on MI300X.
-2. Prove a multi-node Dynamo-vLLM prefill/decode deployment on MI300X.
+2. Prove a multi-node vLLM Router prefill/decode deployment on MI300X using
+   AMD's supported MoRI-IO KV connector.
 3. Exercise both paths with fixed input/output sequence lengths and lightweight
    models before introducing production-size models.
 4. Validate the same paths through the upstream InferenceX GitHub Actions
@@ -57,8 +58,8 @@ alter unrelated shared software.
 
 - one allocation places distinct prefill and decode roles across multiple
   MI300X nodes;
-- NATS, etcd, Dynamo, and vLLM workers become healthy without bespoke
-  per-recipe orchestration;
+- vLLM Router and direct vLLM workers become healthy without Dynamo, NATS,
+  etcd, or bespoke per-recipe orchestration;
 - role endpoints use routable node addresses and unique ports;
 - KV transfer completes across AMD nodes and a fixed-sequence request succeeds;
 - teardown removes only processes owned by the allocation.
@@ -77,11 +78,13 @@ cluster configuration accepts `accelerator_vendor: amd`, partial-GPU workers
 use Linux ROCm's `ROCR_VISIBLE_DEVICES`, and legacy NVIDIA/CUDA behavior remains
 the default. It also supports `gpu_sbatch_directive: gres` without changing the
 legacy NVIDIA `--gpus-per-node` default. The initial MI300X cluster profile and
-small-model aggregate recipe are checked in alongside this document. A two-node
-1-prefill/1-decode recipe uses stable Dynamo 1.3.1 and vLLM's NIXL connector as
-the first disaggregated validation target. Stable Dynamo releases install into
-a writable job-local overlay instead of the immutable container root, and the
-control-plane endpoints use automatic RFC1918-preferring discovery because the
-private NIC name varies across MI300X node generations. Slurm validation 11718
-reached vLLM KV-cache initialization on both nodes; its next isolated blocker
-is ROCm KV-memory registration in the NIXL/UCX data plane.
+small-model aggregate recipe are checked in alongside this document. The first
+aggregate path uses a direct private `vllm serve` endpoint. The two-node
+1-prefill/1-decode path uses the official vLLM Router and vLLM's ROCm-only
+`MoRIIOConnector`: srt-slurm owns the router discovery port and generates
+role-aware worker registration config from the realized Slurm topology. The
+control-plane endpoints use automatic RFC1918-preferring discovery because
+private NIC names vary across MI300X node generations. The earlier
+Dynamo/NIXL experiment reached KV-cache initialization but failed ROCm memory
+registration; that NVIDIA-oriented data plane is now explicitly out of scope
+rather than patched into the AMD implementation.

@@ -34,6 +34,8 @@ def test_mi300x_cluster_uses_the_rocm_slurm_contract():
     assert cluster["default_mounts"]["/dev/dri"] == "/dev/dri"
     image_path = cluster["containers"]["vllm-rocm-v0.26.0"]
     assert image_path.endswith("/vllm-openai-rocm-v0.26.0.sqsh")
+    router_path = cluster["containers"]["vllm-router-20260716"]
+    assert router_path.endswith("/vllm-router-nightly-20260716-1fbcde7.sqsh")
 
     for recipe_path in (RECIPE_PATH, DISAGG_RECIPE_PATH):
         recipe = yaml.safe_load(recipe_path.read_text())
@@ -41,6 +43,27 @@ def test_mi300x_cluster_uses_the_rocm_slurm_contract():
         assert recipe["identity"]["container"]["image"] == (
             "vllm/vllm-openai-rocm:v0.26.0"
         )
+
+
+def test_disaggregated_recipe_uses_native_router_and_moriio():
+    recipe = yaml.safe_load(DISAGG_RECIPE_PATH.read_text())
+
+    assert recipe["frontend"] == {
+        "type": "vllm-router",
+        "enable_multiple_frontends": False,
+        "container_image": "vllm-router-20260716",
+        "args": {
+            "policy": "consistent_hash",
+            "prefill-policy": "consistent_hash",
+            "decode-policy": "consistent_hash",
+        },
+    }
+    assert recipe["backend"]["connector"] == "moriio"
+    assert "dynamo" not in recipe
+    serialized = DISAGG_RECIPE_PATH.read_text().lower()
+    assert "nixl" not in serialized
+    assert "nats" not in serialized
+    assert "etcd" not in serialized
 
 
 def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
