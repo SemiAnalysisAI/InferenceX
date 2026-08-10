@@ -1086,6 +1086,39 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-pr51011-51040-sweep:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-pr51011-51040-c1c4:
+  # Retry of the two cells that failed in run 31355411054, on the same
+  # #51011 + #51040 stack, with max_num_seqs pinned unconditionally.
+  #
+  # c1 failed for a config reason and is fixed here: under the old `2*CONC >= 4`
+  # guard it ran mns 2, and aiter moe_sorting took an illegal address during the
+  # DSpark speculator capture -- after the target model captured PIECEWISE 4/4
+  # and FULL 2/2 clean. Pinning to 16 removes the mns-2 drafter shape and also
+  # makes c1 comparable to the rest of the curve for the first time.
+  #
+  # c4 is NOT fixed by anything here, because nothing was wrong with its config.
+  # It ran mns 16 correctly for 37 minutes and then took an illegal address that
+  # surfaced at pin_memory() in prepare_inputs -- a host-side call reporting an
+  # earlier async kernel fault, so the traceback names the reporter, not the
+  # culprit. That is the ambient probabilistic K3 fault, the same class that
+  # killed c8 arm A (31350794392) while its sibling arm C completed. It is being
+  # re-run, not repaired. If it dies again in a different place, that is the
+  # fault's signature, not a regression.
+  #
+  # c10 from 31355411054 succeeded and is not repeated.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
   # bf16 + asm + DSpark: route the multi-token VERIFY step to the PS ASM kernel.
   #

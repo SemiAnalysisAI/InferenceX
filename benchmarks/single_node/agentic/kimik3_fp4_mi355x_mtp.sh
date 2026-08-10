@@ -965,7 +965,17 @@ SPEC_ARGS=(
 # currently works.
 MNS_PIN="${MNS_PIN:-16}"
 MNS_BASE="${MAX_NUM_SEQS:-$(( 2 * CONC ))}"
-if [ "$MNS_BASE" -ge 4 ]; then MAX_NUM_SEQS="$MNS_PIN"; else MAX_NUM_SEQS="$MNS_BASE"; fi
+# Pin unconditionally. The old `>= 4` guard left c1 (2*CONC = 2) on mns 2, the
+# only cell in any sweep that runs a mns-2 drafter capture, and that is where
+# run 31355411054's c1 cell died: aiter moe_sorting took an illegal address
+# while capturing the DSpark speculator, after the target model had already
+# captured PIECEWISE 4/4 and FULL 2/2 clean. A tiny-M expert sort is a shape no
+# other cell produces.
+#
+# Pinning also makes c1 a real point on the curve. Under the guard it ran a
+# different capture ladder (ceiling mns*(k+1) = 8 vs 64) and a different
+# scheduler width from every other cell, so it was never comparable anyway.
+MAX_NUM_SEQS="$MNS_PIN"
 # Capture ceiling is mns * (k+1), NOT mns. A spec-decode graph is only usable at
 # sizes divisible by k+1, and the decode step is running*(k+1) tokens wide, so a
 # ceiling of mns only covers mns/(k+1) concurrent requests -- 4 of 16 at k=3.
