@@ -133,7 +133,12 @@ def _compatibility_result(
                 "filter_list": [{"name": "strict-match"}],
             }
         },
-        "n-samples": {TASK_NAME: {"original": n_samples, "effective": n_samples}},
+        "n-samples": {
+            TASK_NAME: {
+                "original": len(EXPECTED_MODES),
+                "effective": n_samples,
+            }
+        },
     }
     if integration_error is not None:
         result["integration_error"] = {
