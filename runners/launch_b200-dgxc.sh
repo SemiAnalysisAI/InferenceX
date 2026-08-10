@@ -156,8 +156,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     # Kimi K3 aggregate profiles use the srt-slurm fork that supports direct
-    # multi-node vLLM for TP/TEP and topology-derived per-node DP ranks for
-    # Dynamo DEP. Pin the tested renderer so branch movement cannot change
+    # multi-node vLLM. Pin the tested renderer so branch movement cannot change
     # generated rank commands between sweep points.
     if [[ "$IS_AGENTIC" == "1" && $MODEL_PREFIX == "kimik3" ]]; then
         git clone --branch klaud/direct-vllm-multinode --single-branch https://github.com/functionstackx/srt-slurm-nv.git "$SRT_REPO_DIR" || exit 1
