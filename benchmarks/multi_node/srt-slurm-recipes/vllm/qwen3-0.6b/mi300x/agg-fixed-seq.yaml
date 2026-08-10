@@ -1,0 +1,69 @@
+# Minimal MI300X aggregate validation. This recipe deliberately uses one GPU,
+# a small public model, and a short fixed-sequence workload. It validates
+# srt-slurm orchestration rather than performance.
+
+name: "mi300x-vllm-qwen3-0.6b-agg-fixed-seq"
+
+model:
+  path: "hf:Qwen/Qwen3-0.6B"
+  container: "vllm/vllm-openai-rocm:v0.26.0"
+  precision: "fp16"
+
+identity:
+  model:
+    repo: "Qwen/Qwen3-0.6B"
+  container:
+    image: "vllm/vllm-openai-rocm:v0.26.0"
+  frameworks:
+    vllm: "0.26.0"
+
+slurm:
+  time_limit: "00:30:00"
+
+resources:
+  gpu_type: "mi300x"
+  gpus_per_node: 1
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 1
+
+frontend:
+  type: vllm
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  aggregated_environment:
+    HF_HUB_CACHE: "/hf_hub_cache"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    TRANSFORMERS_CACHE: "/hf_hub_cache"
+    PYTHONUNBUFFERED: "1"
+  vllm_config:
+    aggregated:
+      served-model-name: "Qwen/Qwen3-0.6B"
+      tensor-parallel-size: 1
+      gpu-memory-utilization: 0.50
+      max-model-len: 2048
+      max-num-seqs: 8
+      disable-log-requests: true
+
+srun_options:
+  container-mount-home: ""
+  container-writable: ""
+  container-remap-root: ""
+  mem: "0"
+
+health_check:
+  max_attempts: 180
+  interval_seconds: 5
+
+benchmark:
+  type: sa-bench
+  isl: 128
+  osl: 32
+  concurrencies: [1, 4]
+  req_rate: inf
+  random_range_ratio: 0.0
+  num_warmup_mult: 1
+  num_prompts_mult: 2

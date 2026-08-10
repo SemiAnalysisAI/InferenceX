@@ -1,0 +1,28 @@
+# srt-slurm cluster profile for the MI300X AMD Slurm cluster.
+# Runtime-specific source/output paths are supplied by the launcher.
+
+cluster: mi300x-amds
+default_partition: compute
+default_time_limit: "01:00:00"
+
+gpus_per_node: 8
+accelerator_vendor: amd
+network_interface: ens51f1np1
+
+# This cluster allocates accelerators through GRES and does not implement the
+# NVIDIA cluster's topology-segment directive.
+gpu_sbatch_directive: gres
+use_segment_sbatch_directive: false
+use_exclusive_sbatch_directive: false
+
+default_sbatch_directives:
+  cpus-per-task: "32"
+  mem: "128G"
+
+default_mounts:
+  /dev/kfd: /dev/kfd
+  /dev/dri: /dev/dri
+  /raid/hf-hub-cache: /hf_hub_cache
+
+default_bash_preamble: "ulimit -n 1048576"
+nginx_raise_ulimit: false

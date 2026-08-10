@@ -9,7 +9,7 @@ Current development pin:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `3be6482cb879f3de0315bf28bc9d3c4904d23972`
+- commit: `1edbcfc011a48a7637f9d4407b4ce4e2a656e062`
 
 ## Scope
 
@@ -71,4 +71,6 @@ alter unrelated shared software.
 The srt-slurm branch now contains the first accelerator-aware runtime slice:
 cluster configuration accepts `accelerator_vendor: amd`, partial-GPU workers
 use Linux ROCm's `ROCR_VISIBLE_DEVICES`, and legacy NVIDIA/CUDA behavior remains
-the default. MI300X runtime-profile and recipe implementation follows next.
+the default. It also supports `gpu_sbatch_directive: gres` without changing the
+legacy NVIDIA `--gpus-per-node` default. The initial MI300X cluster profile and
+small-model aggregate recipe are checked in alongside this document.
