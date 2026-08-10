@@ -1,5 +1,7 @@
 """High-signal contract checks for the MI300X srt-slurm bring-up lane."""
 
+import os
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -10,6 +12,7 @@ RECIPE_PATH = (
     REPO_ROOT
     / "benchmarks/multi_node/srt-slurm-recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"
 )
+DISAGG_RECIPE_PATH = RECIPE_PATH.with_name("disagg-1p1d-fixed-seq.yaml")
 CLUSTER_PATH = (
     REPO_ROOT
     / "benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi300x-amds.yaml"
@@ -43,3 +46,37 @@ def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
     assert "--random-range-ratio 1.0" in command
     assert "best-of" not in command
     assert "sa-bench" not in command
+
+
+def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python3"
+    fake_python.write_text(
+        "#!/bin/bash\n"
+        'printf "%s\\n" "$@" >> "$FAKE_ARGS_LOG"\n'
+        'printf "%s\\n" --CALL-END-- >> "$FAKE_ARGS_LOG"\n'
+    )
+    fake_python.chmod(0o755)
+
+    for recipe_path in (RECIPE_PATH, DISAGG_RECIPE_PATH):
+        command = yaml.safe_load(recipe_path.read_text())["benchmark"]["command"]
+        result_dir = tmp_path / recipe_path.stem
+        command = command.replace("/logs/fixed-seq", str(result_dir))
+        args_log = tmp_path / f"{recipe_path.stem}.args"
+        env = {
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "FAKE_ARGS_LOG": str(args_log),
+            "SRT_FRONTEND_HOST": "127.0.0.1",
+            "SRT_FRONTEND_PORT": "8000",
+        }
+
+        subprocess.run(["bash", "-n"], input=command, text=True, check=True)
+        subprocess.run(["bash", "-c", command], env=env, check=True)
+
+        calls = args_log.read_text().split("--CALL-END--\n")
+        calls = [[arg for arg in call.splitlines() if arg] for call in calls if call]
+        assert len(calls) == 2
+        assert all("--model" in call and "Qwen/Qwen3-0.6B" in call for call in calls)
+        assert [call[call.index("--num-prompts") + 1] for call in calls] == ["4", "16"]
