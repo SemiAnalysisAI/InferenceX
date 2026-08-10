@@ -7,8 +7,11 @@ import stat
 import subprocess
 from pathlib import Path
 
+import yaml
 
-BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BENCHMARK_LIB = REPO_ROOT / "benchmarks" / "benchmark_lib.sh"
+E2E_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "e2e-tests.yml"
 
 _SCRIPT = r'''
 source "$BENCHMARK_LIB"
@@ -1001,3 +1004,12 @@ def test_eval_limit_full_and_zero_accepted(tmp_path):
         assert "GEN_RC=0" in res.stdout, f"EVAL_LIMIT={sentinel!r}: {res.stdout}{res.stderr}"
     argv = (shim / "argv.log").read_text()
     assert "--slice" not in argv
+
+
+def test_agentic_eval_workflow_forwards_runner_contract() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    forwarded = workflow["jobs"]["test-sweep-agentic-evals"]["with"]
+
+    assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
+    assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
+    assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"

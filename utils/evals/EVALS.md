@@ -58,6 +58,8 @@ selects a case set understood by that adapter. Each adapter owns its endpoint
 format, dependencies, native report, metrics, and pass policy. Future MiniMax
 or BFCL support should add explicit `run_eval` cases rather than a shared
 request or report abstraction.
+Agentic eval jobs forward the matrix `spec-decoding` value, so MTP entries
+launch their existing `*_mtp.sh` server instead of silently falling back to STP.
 
 ### Stock Kimi tool-call schema smoke
 
