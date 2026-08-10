@@ -1063,7 +1063,7 @@ fi
 #
 # Default OFF. Each arm of the c8 A/B flips exactly one of these, so a branch
 # diff is one line and the cell it produces is attributable.
-PR51011="${PR51011:-0}"
+PR51011="${PR51011:-1}"
 PR51040="${PR51040:-0}"
 PATCH_DIR="${PATCH_DIR:-$(cd "$(dirname "$0")/patches" && pwd)}"
 VLLM_ROOT="${VLLM_ROOT:-$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')}"
