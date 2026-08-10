@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-set -eo pipefail
+set -euo pipefail
 set -x
 
 # Agentic trace replay benchmark for Kimi-K3 (MXFP4) on MI355X (gfx950) using
-# vLLM with DSpark speculative decoding at level 2. AMD sister of
-# benchmarks/single_node/agentic/kimik3_fp4_b300_vllm_mtp.sh; the target-server
-# deltas are all ROCm/AITER:
+# vLLM with DSpark speculative decoding at level 2 (num_speculative_tokens=2).
+# AMD sister of benchmarks/single_node/agentic/kimik3_fp4_b300_vllm_mtp.sh; the
+# harness scaffolding follows the AMD convention in dsv4_fp4_mi355x_vllm_mtp.sh
+# (env-var contract, HF-id model resolution, ROCR->HIP mapping, server metrics,
+# replay invocation). The target-server deltas are all ROCm/AITER:
 #   - AITER MLA on the asm-padded persistent route
 #     (VLLM_ROCM_AITER_MLA_ASM_PADDING=asm) instead of FLASHINFER_MLA, so the
 #     speculative-config carries no attention_backend override.
@@ -20,30 +22,31 @@ set -x
 # KV only -- no DRAM offload arm is wired for this recipe.
 #
 # Model resolution is by HF id: MODEL (moonshotai/Kimi-K3) and DRAFT_MODEL
-# (Inferact/Kimi-K3-DSpark) are passed straight through, and the server resolves
-# / downloads them (the launcher leaves MODEL_PATH unset on single-node runs).
+# (Inferact/Kimi-K3-DSpark) are passed straight through and the server resolves
+# them (the launcher leaves MODEL_PATH unset on single-node runs).
 #
 # Required env vars:
-#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR, DURATION,
+#   EP_SIZE, DP_ATTENTION
 #
 # TP8 is the only single-node layout: the MXFP4 checkpoint does not fit below 8
-# GPUs. Do not add TP4/TP2 arms.
+# GPUs. This recipe ships the pure-TP8 profile (EP_SIZE=1, DP_ATTENTION=false).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [ "$TP" -ne 8 ]; then
     echo "Error: Kimi-K3 on MI355X requires TP=8 (the MXFP4 checkpoint does not fit at TP<8), got TP='$TP'" >&2
     exit 1
 fi
 
-if [[ -n "${EP_SIZE:-}" && "${EP_SIZE}" -gt 1 ]]; then
+if [ "$EP_SIZE" -gt 1 ]; then
     echo "Error: this recipe ships the pure-TP8 profile; EP_SIZE='$EP_SIZE' is not wired yet" >&2
     exit 1
 fi
 
-if [[ "${DP_ATTENTION:-false}" == "true" ]]; then
+if [ "$DP_ATTENTION" = "true" ]; then
     echo "Error: this recipe ships the pure-TP8 profile; DP_ATTENTION=true is not wired yet" >&2
     exit 1
 fi
@@ -83,27 +86,17 @@ install_agentic_deps
 # Nightly ROCm image may be missing runtime deps; ensure they are present.
 agentic_pip_install --quiet Pillow fastapi uvicorn
 
-# ---- Kimi-K3 ROCm serving environment ---------------------------------------
-# AITER MLA + MoE, asm-padded persistent MLA route (the config validated at 1M).
-export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_MOE=1
-export VLLM_ROCM_USE_AITER_MLA=1
-export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
-export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
-export SAFETENSORS_FAST_GPU=1
+export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+# AIPerf scrapes the vLLM engine's own /metrics for the server-side throughput
+# columns (pure TP: engine == public endpoint).
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 # Loading the MXFP4 shards past the default readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S="${VLLM_ENGINE_READY_TIMEOUT_S:-7200}"
 # AIPerf pins one pooled keep-alive connection per agentic session and reuses it
 # across turns; outlast the client pool so an inter-turn idle gap cannot race the
 # server closing the socket (aiohttp ServerDisconnectedError -> warmup failure).
 export VLLM_HTTP_TIMEOUT_KEEP_ALIVE="${VLLM_HTTP_TIMEOUT_KEEP_ALIVE:-900}"
-# Agentic warmup dispatches large prompts at once; allow up to 15 minutes of TCP
-# progress before AIPerf declares a connection dead.
-export AIPERF_HTTP_TCP_USER_TIMEOUT="${AIPERF_HTTP_TCP_USER_TIMEOUT:-900000}"
-# Capture the vLLM engine's own /metrics for the server-side throughput columns.
-export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
-export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -122,14 +115,14 @@ case "${KV_OFFLOAD_BACKEND:-}" in
 esac
 
 # ---- DSpark speculative decoding --------------------------------------------
-# DSpark level 2 (num_speculative_tokens 2) on the Inferact/Kimi-K3-DSpark draft
-# head, probabilistic drafting with synthetic acceptance pinned to the committed
-# golden AL, per the AgentX policy in golden_al_distribution/README.md (a
-# submission chooses the draft length, not the acceptance target). Mirrors the
-# B300 sibling; the only delta is the ROCm image serves MLA via AITER, so no
-# attention_backend override is set. EVAL_ONLY switches to real block
-# verification (synthetic acceptance commits drafts regardless of target logits
-# and would zero the SWE-bench score).
+# DSpark level 2 (num_speculative_tokens=2, the value adopted for this recipe)
+# on the Inferact/Kimi-K3-DSpark draft head, probabilistic drafting with
+# synthetic acceptance pinned to the committed golden AL, per the AgentX policy
+# in golden_al_distribution/README.md (a submission chooses the draft length,
+# not the acceptance target). Mirrors the B300 sibling; the only delta is the
+# ROCm image serves MLA via AITER, so no attention_backend override is set.
+# EVAL_ONLY switches to real block verification (synthetic acceptance commits
+# drafts regardless of target logits and would zero the SWE-bench score).
 NUM_SPEC_TOKENS=2
 # Committed golden AL at K=2 on the probabilistic/block curve
 # (golden_al_distribution/kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml:
@@ -151,27 +144,38 @@ if [ "$MAX_NUM_SEQS" -gt 8 ]; then
     MAX_NUM_SEQS=8
 fi
 
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+
 echo "Starting vllm server..."
+set -x
+# AITER MLA + MoE, asm-padded persistent MLA route (the config validated at 1M).
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_MLA=1
+export VLLM_ROCM_AITER_MLA_ASM_PADDING=asm
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1
+export SAFETENSORS_FAST_GPU=1
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
-    --tensor-parallel-size "$TP"
+    --trust-remote-code
     --distributed-executor-backend mp
+    --kv-cache-dtype fp8
+    "${PARALLEL_ARGS[@]}"
     --gpu-memory-utilization 0.95
-    --max-num-seqs "$MAX_NUM_SEQS"
     --max-model-len 1048576
     --max-num-batched-tokens 4096
-    --trust-remote-code
+    --max-num-seqs "$MAX_NUM_SEQS"
     --moe-backend aiter
     --enable-prefix-caching
-    --kv-cache-dtype fp8
+    --speculative-config "$SPEC_CONFIG"
     --reasoning-parser kimi_k3
     --tool-call-parser kimi_k3
     --enable-auto-tool-choice
-    --speculative-config "$SPEC_CONFIG"
     --disable-uvicorn-access-log
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
@@ -182,7 +186,7 @@ echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
-if [ "${EVAL_ONLY}" = "true" ]; then
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
