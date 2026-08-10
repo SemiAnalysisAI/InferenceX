@@ -5721,5 +5721,6 @@
     - "Validate first-class vLLM Router 0.1.15 and SGLang Router 0.3.2 frontends through srt-slurm on B200 without a Dynamo request plane."
     - "Exercise vLLM Router with two-worker aggregate DEP8 and one-prefill/one-decode DEP8 DeepSeek V4 FP4 deployments on B200; exercise SGL Router with two-worker aggregate DeepSeek V4 on B200 and the established 2P2D GLM-5.2 FP8 Mooncake topology on H200. Every validation uses MTP and the AgentX trace workload."
     - "Move SGL Router P/D validation from B200 NIXL to H200 Mooncake after live B200 traffic proved those hosts lack GPU memory registration: UCX reported mlx5 memory domains as host-only and rejected KV-buffer ibv_reg_mr calls, while H200 exposes the required nvidia_peermem module. This changes the test platform/data plane rather than masking a host prerequisite failure in router code."
+    - "Teach the H200 launcher to accept native router frameworks, honor exact srt-slurm repository/ref pairs, stage their setup scripts, and map router containers through the same engine image paths as direct SGLang/vLLM."
     - "Pin the test deployment to an exact SemiAnalysisAI/srt-slurm commit, preserve each logical backend Prometheus endpoint for AIPerf, and require the matching vllm: or sglang: metric family before accepting results."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2543
