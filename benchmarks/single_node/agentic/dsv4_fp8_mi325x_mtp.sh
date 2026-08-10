@@ -31,6 +31,25 @@ resolve_trace_source
 install_agentic_deps
 agentic_pip_install --quiet Pillow fastapi uvicorn
 
+# Validate vLLM's upstream hybrid-KV invalid-block recovery on the released
+# v0.27.0 ROCm binaries. This source revision changes Python scheduler logic
+# only, so use vLLM's supported precompiled editable-install path and retain
+# the release's ROCm 7.2.3 native extensions.
+VLLM_HYBRID_RECOVERY_COMMIT="cb1917efe34f16423de2ceb7f210fd015d53459a"
+VLLM_HYBRID_RECOVERY_SRC="/tmp/vllm-hybrid-kv-recovery"
+rm -rf "$VLLM_HYBRID_RECOVERY_SRC"
+git clone --depth 1 --branch test/v027-hybrid-kv-recovery \
+    https://github.com/cquil11/vllm.git "$VLLM_HYBRID_RECOVERY_SRC"
+if [[ "$(git -C "$VLLM_HYBRID_RECOVERY_SRC" rev-parse HEAD)" != "$VLLM_HYBRID_RECOVERY_COMMIT" ]]; then
+    echo "Unexpected vLLM hybrid-KV recovery revision" >&2
+    exit 1
+fi
+VLLM_USE_PRECOMPILED=1 \
+VLLM_ROCM_WHEEL_INDEX=https://wheels.vllm.ai/rocm/0.27.0/rocm723 \
+    uv pip install --system --no-deps --no-build-isolation --editable \
+    "$VLLM_HYBRID_RECOVERY_SRC"
+python3 -c 'import vllm; print("vLLM source:", vllm.__file__)'
+
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export AIPERF_SERVER_METRICS_URLS="http://localhost:${PORT}/metrics"
 export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
