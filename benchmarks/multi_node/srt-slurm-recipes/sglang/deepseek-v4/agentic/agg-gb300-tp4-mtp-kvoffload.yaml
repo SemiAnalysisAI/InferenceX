@@ -87,6 +87,7 @@ backend:
   sglang_config:
     aggregated:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      enable-metrics: true
       trust-remote-code: true
       stream-interval: 50
       watchdog-timeout: 1000000
@@ -139,11 +140,10 @@ benchmark:
     # in process_agentic_result.py instead. TP must match sglang_config tp-size.
     IS_MULTINODE: "false"
     TP: "4"
-    # Enable dynamo conv-aware routing (per-session affinity so multi-turn
-    # KV cache is reused across turns). Previously opted out because the
-    # frontend 400'd on aiperf's nvext.session_control actions; re-enabled
-    # to test with the current build.
-    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "1"
+    # Bind each conversation through the supported Dynamo session header.
+    AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     # Container-side path of the aiperf mmap dataset cache; host-side mount
     # wired via launch_gb300-*.sh srtslurm.yaml default_mounts. Without it,
     # aiperf re-tokenizes + re-writes the dataset mmap on every run.
@@ -151,4 +151,3 @@ benchmark:
     # Persistent HF hub cache (also via default_mounts) so the trace dataset
     # isn't re-downloaded each run; overrides the workflow-level HF_HUB_CACHE.
     HF_HUB_CACHE: "/hf_hub_cache"
-

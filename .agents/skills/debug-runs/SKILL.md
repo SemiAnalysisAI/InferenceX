@@ -1,16 +1,16 @@
 ---
 name: debug-runs
-description: Drive a full-sweep benchmark config to green with a tight feedback loop — trigger/monitor the sweep, root-cause failures, and (for fast iteration) SSH onto the runner's cluster to reproduce a single config directly on the node instead of waiting for full CI. Use when bringing up a new model/precision/SKU recipe, debugging a failing or flaky sweep, debugging node-level issues, or gathering context on a cluster before a run. Cluster access details are NOT in this repo — read them from the shared InferenceX Clusters canvas.
+description: Drive a full-sweep benchmark config to green with a tight feedback loop by triggering and monitoring the sweep, finding the root causes of failures, and, for fast iteration, using SSH to reproduce a single config directly on the runner's cluster instead of waiting for full CI. Use when bringing up a new model, precision, or SKU recipe, debugging a failing or flaky sweep, debugging node-level issues, or gathering context on a cluster before a run. Cluster access details are not in this repo and must be read from the shared InferenceX Clusters canvas.
 ---
 
 # Debug runs (tight feedback loop)
 
-Use this when the goal is to get a **full-sweep config passing** — and you want to verify
-on the actual nodes first (tighter loop than the full CI dispatch cycle), or to debug
-node/infra issues, or just to gather context on a cluster.
+Use this when the goal is to get a **full-sweep config passing** and you want to verify it
+on the actual nodes first for a tighter loop than the full CI dispatch cycle, debug
+node or infrastructure issues, or gather context on a cluster.
 
-This composes with the other skills: use **`/nuke`** (or `/add-model-hardware`) to create
-the PR(s) with the image bump + perf-changelog entry + `full-sweep-fail-fast` label; this
+This composes with the other skills. Use **`/nuke`** (or `/add-model-hardware`) to create
+the PR(s) with the image bump, perf-changelog entry, and `full-sweep-fail-fast` label. This
 skill is the **monitor → root-cause → fix → re-verify → merge-gate** loop that follows.
 
 ## Cluster access — read it from the canvas, never hardcode it
@@ -33,7 +33,7 @@ and the benchmark command.
   If this is a **fork** (i.e. not the SemiAnalysis upstream, where the canvas won't apply),
   ask the user to replace this skill with their own fork's runner/cluster access
   information.
-- A SemiAnalysis operator may also have these as `~/.ssh/config` aliases — prefer those if
+- A SemiAnalysis operator may also have these as `~/.ssh/config` aliases. Prefer those if
   present.
 
 ## Inputs
@@ -46,10 +46,10 @@ and the benchmark command.
 
 ### 1. Trigger (or reuse) the sweep
 
-A PR's sweep is kicked by labels (the `/sweep` comment trigger was removed — use the label):
+A PR's sweep is kicked by labels. The `/sweep` comment trigger was removed, so use the label:
 
-- **`full-sweep-fail-fast`** — full sweep that bails on first failure per matrix (faster signal while debugging; **strongly recommended default**, and what `/nuke` attaches).
-- **`full-sweep-enabled`** — full GPU sweep that runs every job to completion despite failures; use only when a flaky job killing its matrix's in-flight results is unacceptable.
+- **`full-sweep-fail-fast`** runs the full sweep and bails on the first failure per matrix for faster feedback while debugging. It is the **strongly recommended default** and the label that `/nuke` attaches.
+- **`full-sweep-enabled`** runs the full GPU sweep and lets every job complete despite failures. Use it only when a flaky job killing its matrix's in-flight results is unacceptable.
 - To re-trigger a sweep without a new commit, remove and re-add the sweep label.
 
 For a **single config** (tightest CI loop, skips the rest of the matrix), dispatch e2e directly:
@@ -58,11 +58,11 @@ For a **single config** (tightest CI loop, skips the rest of the matrix), dispat
 gh workflow run e2e-tests.yml -f generate-cli-command="test-config --config-key <KEY> --config-file <PATH/to/master.yaml>" -f test-name="debug <KEY>"
 ```
 
-(`generate-cli-command` is the required input; `--target` is NOT a real arg.)
+(`generate-cli-command` is the required input. `--target` is NOT a real arg.)
 
 ### 2. Monitor continuously
 
-Find the run, then watch it — don't poll by hand. Prefer the **Monitor** tool with a
+Find the run, then watch it instead of polling by hand. Prefer the **Monitor** tool with a
 filter that catches both progress and failure signatures so silence never reads as success.
 
 ```bash
@@ -73,7 +73,7 @@ gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --interval 30
 ```
 
 When monitoring several runs at once (e.g. 4 SKUs), track them by `databaseId` and report
-each as it lands — never declare success from absence of output.
+each as it lands. Never declare success from absence of output.
 
 ### 3. Root-cause a failure
 
@@ -90,25 +90,25 @@ in one or two sentences before changing anything.
 
 ### 4. Tight loop: reproduce on the node directly
 
-This is the point of the skill — instead of re-dispatching CI for every hypothesis, get on
+This is the point of the skill. Instead of re-dispatching CI for every hypothesis, get on
 the box and reproduce the **single** failing config.
 
-Why this is tighter: under e2e / the matrix, **each concurrency / config runs against its
-own freshly-spun engine** (a new server per matrix job). On the node you can spin up a
-**single** server once and fire many requests / sweep multiple concurrencies against it —
-far faster iteration when you're probing behavior or tuning, since you skip a fresh model
-load per data point.
+Why this is tighter: in e2e or full-matrix runs, **each matrix point runs against its own
+freshly spun engine** (a new server per matrix job). On the node you can spin up a
+**single** server once and fire many requests or sweep multiple concurrencies against it.
+This makes iteration much faster when you're probing behavior or tuning because you skip a
+fresh model load per data point.
 
 Steps:
 
-1. Look up the cluster's access + which node ran the failing job (from the job name / runner
-   name) in the canvas; SSH in (use `ssh -A` when a jumpbox/agent-forwarding is involved).
-2. Reproduce the exact benchmark the launcher runs — read `runners/launch_<cluster>.sh` for
-   the image, container mounts, and the `benchmarks/single_node/<...>.sh` command + env
-   (`IMAGE`, `TP`, `PRECISION`, `EXP_NAME`, `SPEC_DECODING`, …). On Slurm clusters that's a
-   `salloc`/`srun` with the squash image; on the **bare-metal `-tw` pools it's `docker run`**
-   on the node directly (no `srun`).
-3. **Always diff against a working node / working SKU** for reference — most node failures
+1. Use the job or runner name to identify the node. Look up that cluster's access details in
+   the canvas, then SSH in with `ssh -A` when a jumpbox or agent forwarding is involved.
+2. Reproduce the exact benchmark the launcher runs. Read `runners/launch_<cluster>.sh` for
+   the image, container mounts, and the `benchmarks/single_node/<...>.sh` command and env
+   (`IMAGE`, `TP`, `PRECISION`, `EXP_NAME`, `SPEC_DECODING`, …). On Slurm clusters, use
+   `salloc` or `srun` with the squash image. On the **bare-metal `-tw` pools, use `docker run`**
+   on the node directly without `srun`.
+3. **Always diff against a working node or working SKU** for reference. Most node failures
    are environment drift (driver, ROCm/CUDA, missing mount, stale squash image), not code.
 4. Iterate on the node until the single config passes, then push the fix and re-run CI.
 
@@ -123,30 +123,30 @@ enroot list -f                              # find the running container's PID
 enroot exec <pid> bash                      # drop into the container
 ```
 
-(On the bare-metal `-tw` pools there's no Slurm/enroot — use `docker ps` + `docker exec -it <id> bash`.)
+(On the bare-metal `-tw` pools, there is no Slurm/enroot. Use `docker ps` and `docker exec -it <id> bash`.)
 
-**Node-level fixes are in scope** when you have operator access (e.g. AMD nodes where you
-have sudo) — but **ask the user before executing any of them** (see guardrail below). The
-kinds of fixes that are on the table: bringing a node's environment in line with the
-working reference, and — if one or two nodes are unrecoverable — **draining them** or
+**Node-level fixes are in scope** when you have operator access, such as on AMD nodes where
+you have sudo, but **ask the user before executing any of them** (see guardrail below). The
+kinds of fixes that are on the table include bringing a node's environment in line with the
+working reference and, if one or two nodes are unrecoverable, **draining them** or
 explicitly **ignoring them in the run script** rather than blocking the whole sweep. Note
 any such change in the report.
 
-> Guardrail — ask before changing infra. SSHing in to **read/investigate** (logs,
+> Guardrail. Ask before changing infra. SSHing in to **read/investigate** (logs,
 > `rocm-smi`/`nvidia-smi`, `sinfo`/`squeue`, `df`, env, config inspection) is fine. But
-> before making **any actual change on the cluster** — installing/updating anything,
-> editing configs or files, restarting/killing processes, draining or ignoring nodes,
-> changing the run script, or anything else that mutates node/shared state — **stop and ask
-> the user for permission first**, describing exactly what you intend to run. Don't assume
-> standing authorization just because you have sudo or operator access.
+> before making **any actual change on the cluster**, including installing or updating
+> anything, editing configs or files, restarting or killing processes, draining or ignoring
+> nodes, changing the run script, or anything else that mutates node or shared state,
+> **stop and ask the user for permission first**, describing exactly what you intend to run.
+> Do not assume standing authorization just because you have sudo or operator access.
 >
-> Also do **not** apply hacky engine-side (e.g. vLLM) workarounds to force a pass — prefer
-> recipe fixes and (once approved) node-environment fixes that match a working reference.
+> Also do **not** apply hacky engine-side (e.g. vLLM) workarounds to force a pass. Prefer
+> recipe fixes and, once approved, node-environment fixes that match a working reference.
 
 ### 5. Flakes: rerun, don't relaunch
 
 If a job flaked (infra, transient network, runner pickup) rather than a real failure, rerun
-just the failed jobs on the existing run — don't dispatch a fresh sweep:
+just the failed jobs on the existing run. Don't dispatch a fresh sweep:
 
 ```bash
 gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX --failed
@@ -154,22 +154,22 @@ gh run rerun "$RUN_ID" --repo SemiAnalysisAI/InferenceX --failed
 
 ### 6. Report results — do NOT merge
 
-**Never merge.** Merging is the user's call — only merge if the user **explicitly** tells
-you to in this session. Even when everything looks perfect, stop and report; do not
+**Never merge.** Merging is the user's call. Only merge if the user **explicitly** tells
+you to in this session. Even when everything looks perfect, stop and report. Do not
 admin-merge on your own judgment.
 
 Report the two things the user will decide on:
 
-1. **Sweep status** — is it 100% of full-sweep jobs passing (green), or fail-fast-truncated / partial?
+1. **Sweep status.** Is it 100% of full-sweep jobs passing (green), or fail-fast-truncated or partial?
 2. **Perf delta** vs the most recent official `main` run for that SKU. Compare against the
-   latest main results — e.g. on inferencex.semianalysis.com
+   latest main results, e.g. on inferencex.semianalysis.com
    (`https://inferencex.semianalysis.com/inference?...&i_active=<sku>_<engine>`) or the
    stored results for that SKU's last main `run-id`.
 
-Present green-ness + the perf comparison, then **wait for the user** to decide whether to merge.
+Present green-ness and the perf comparison, then **wait for the user** to decide whether to merge.
 
 ## Final report
 
-Per config-key: final state (green / failing / flaky), root cause(s) found, node-level
-changes made (and any nodes drained/ignored), and the perf delta vs main. Link the run(s)
-and PR(s). End by asking the user whether to merge — do not merge yourself.
+Per config-key, give the final state (green, failing, or flaky), the root cause(s) found,
+node-level changes made (and any nodes drained or ignored), and the perf delta vs main. Link
+the run(s) and PR(s). End by asking the user whether to merge. Do not merge yourself.

@@ -8,7 +8,7 @@ The dashboard lives at `/tmp/klaud_pr_status.html` and is opened with `open` (ma
 
 ## Step 1 — list candidate PRs (`claude/*` OR title containing `[Klaud Cold]`)
 
-The title check uses `contains` (not `startswith`) so it picks up PRs whose titles embed `[Klaud Cold]` after a prefix like `[Handoff to @Oseltamivir Claude /loop]` — handoff-style PRs from a /loop run still belong on the dashboard.
+The title check uses `contains` (not `startswith`) so it picks up PRs whose titles embed `[Klaud Cold]` after a prefix like `[Handoff to @Oseltamivir Claude /loop]`. Handoff-style PRs from a /loop run still belong on the dashboard.
 
 ```bash
 gh pr list --repo SemiAnalysisAI/InferenceX --state open --limit 200 \
@@ -22,15 +22,15 @@ wc -l /tmp/klaud_pr_candidates.tsv
 
 `gh pr list --json statusCheckRollup` truncates rollups, so enumerate candidates first then re-query each PR individually.
 
-Each check's effective state is `if (.conclusion // "") != "" then .conclusion else .status end` — `gh` returns `conclusion: ""` (not `null`) for in-flight checks, so jq's `//` does not fall through to `.status`.
+Each check's effective state is `if (.conclusion // "") != "" then .conclusion else .status end`. `gh` returns `conclusion: ""` (not `null`) for in-flight checks, so jq's `//` does not fall through to `.status`.
 
 State buckets:
-- **FAILED** — at least one check is `FAILURE` / `CANCELLED` / `TIMED_OUT`, AND no checks are still pending.
-- **FAILED+RUNNING** — at least one failed check AND at least one pending check (sweep partially failed; some matrix jobs still running).
-- **RUNNING** — no failed checks; at least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
-- **READY** — no failed, no pending, and at least one `Run Sweep` check is `SUCCESS`.
-- **NO_SUCCESS** — sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
-- **NO_SWEEP** — no `Run Sweep` check exists for this head SHA at all (sweep never triggered — usually missing a sweep label such as `full-sweep-enabled` or `non-canary-full-sweep-enabled`).
+- **FAILED.** At least one check is `FAILURE` / `CANCELLED` / `TIMED_OUT`, and no checks are still pending.
+- **FAILED+RUNNING.** At least one check has failed and at least one is pending (the sweep partially failed while some matrix jobs are still running).
+- **RUNNING.** No checks have failed. At least one is `QUEUED` / `IN_PROGRESS` / `PENDING`.
+- **READY.** No checks have failed or remain pending, and at least one `Run Sweep` check is `SUCCESS`.
+- **NO_SUCCESS.** The sweep ran but never produced a `SUCCESS` (e.g. all matrix jobs got SKIPPED).
+- **NO_SWEEP.** No `Run Sweep` check exists for this head SHA at all. This usually means the sweep never triggered because the PR is missing a label such as `full-sweep-enabled` or `non-canary-full-sweep-enabled`.
 
 ```bash
 : > /tmp/klaud_pr_status.tsv
@@ -75,7 +75,7 @@ done < /tmp/klaud_pr_candidates.tsv
 
 State render order (action items first): `FAILED` → `FAILED+RUNNING` → `NO_SWEEP` → `NO_SUCCESS` → `RUNNING` → `READY`. Within each bucket, descending PR number.
 
-If you have per-PR diagnoses to inject (e.g. after running `/fix-klaud-cron-prs`), write them as a JSON map `{ "1461": {"reason": "...", "fix": "..."}, ... }` to `/tmp/klaud_pr_diag.json` BEFORE running this step — the generator will pick them up. HTML may contain inline `<code>` tags.
+If you have per-PR diagnoses to inject (e.g. after running `/fix-klaud-cron-prs`), write them as a JSON map `{ "1461": {"reason": "...", "fix": "..."}, ... }` to `/tmp/klaud_pr_diag.json` BEFORE running this step. The generator will pick them up. HTML may contain inline `<code>` tags.
 
 ```bash
 cat > /tmp/gen_klaud_pr_status_html.py <<'PYEOF'
@@ -272,7 +272,7 @@ python3 /tmp/gen_klaud_pr_status_html.py
 open /tmp/klaud_pr_status.html 2>/dev/null || true
 ```
 
-Output the path (`/tmp/klaud_pr_status.html`) and the per-state counts to the user. The command is informational only — it does **not** modify any PR.
+Output the path (`/tmp/klaud_pr_status.html`) and the per-state counts to the user. The command is informational only. It does **not** modify any PR.
 
 ### Adding diagnoses to the dashboard
 

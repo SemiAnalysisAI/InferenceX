@@ -4,7 +4,7 @@ Derive `operatorx/testlists/*.json` from the InferenceX matrix configs.
 
 ## Approach
 
-Pure static enumeration — no GPU time, no tracing.
+This is a purely static enumeration with no GPU time or tracing.
 
 For each `(model, framework, precision, runner, TP, EP, dp-attn, ISL, OSL,
 conc, spec-decoding)` tuple in the InferenceX matrix, we:
@@ -16,7 +16,7 @@ conc, spec-decoding)` tuple in the InferenceX matrix, we:
    - **GEMM**: attention projections, MLP gate/up/down (for dense layers),
      sharded by TP.
    - **Attention**: MHA or MLA, parameterised by TP head-shard and DP-attn
-     batch-shard. Prefill at full ISL; decode at `mtp_factor` query tokens
+     batch-shard. Prefill uses the full ISL. Decode uses `mtp_factor` query tokens
      and `ISL + OSL/2` KV length.
    - **MoE**: `moe_forward` + `topk_routing` at prefill (`conc*ISL` tokens)
      and decode (`conc*mtp_factor` tokens) regimes.
@@ -36,9 +36,9 @@ Static enumeration captures canonical shapes, not engine-specific transformation
 
 - Fused QKV / fused gate-up GEMMs are emitted as separate canonical projections.
 - MLA "absorbed" decode form (one big GEMM instead of separate Q/KV ups) is not
-  modeled — we emit the naive MLA decomposition.
+  modeled. We emit the naive MLA decomposition.
 - Speculative-decoding draft-model GEMMs (EAGLE-style drafters) are not
-  enumerated separately; MTP is modeled by inflating the decode token count.
+  enumerated separately. MTP is modeled by inflating the decode token count.
 - Qwen3.5's hybrid linear/full attention layers are modeled as full-attention
   only (linear-attention layers TODO).
 - Engine-version drift is not detected.
@@ -62,7 +62,7 @@ python -m scripts.inferencex_testlist enumerate \
     --out testlists/
 ```
 
-`--models-dir` is repeatable; each is searched for a `<model-short-name>/config.json`.
+Each `--models-dir` option adds another location to search for `<model-short-name>/config.json`.
 HuggingFace cache (`~/.cache/huggingface/hub/models--<org>--<name>/snapshots/`)
 is searched automatically.
 
@@ -78,5 +78,5 @@ The rest of the enumerator picks up from there.
 
 ## Adding a new parameterisation
 
-Nothing to do — new `(TP, EP, ISL, OSL, conc, spec-decoding)` tuples added to
-`.github/configs/*.yaml` are picked up automatically on next run.
+No action is needed. New `(TP, EP, ISL, OSL, conc, spec-decoding)` tuples added to
+`.github/configs/*.yaml` are picked up automatically on the next run.

@@ -1,5 +1,5 @@
 ---
-description: Debug enroot/pyxis container-start failures on the MI300X Vultr cluster (chi-mi300x-*) — userns sysctl drift survey via the slurm controller, approved fix, and sweep reruns
+description: Debug enroot/pyxis container-start failures on the MI300X Vultr cluster (chi-mi300x-*), including a userns sysctl drift survey via the slurm controller, an approved fix, and sweep reruns
 argument-hint: [failed-run-or-job-url ...]
 ---
 
@@ -13,19 +13,19 @@ error: spank: required plugin spank_pyxis.so: task_init() failed with rc=-1
 srun: error: chi-mi300x-0XX: task 0: Exited with exit code 1
 ```
 
-Known root cause (July 2026): **provisioning drift** — nodes run Ubuntu 24.04,
+Known root cause (July 2026): **provisioning drift**. Nodes run Ubuntu 24.04,
 and freshly (re)provisioned nodes carry the distro default
 `kernel.apparmor_restrict_unprivileged_userns=1`, which blocks pyxis's
 `enroot-nsenter` from creating user namespaces. Nodes with the flag at `0`
-work; jobs pass or fail by node lottery. Plain `unshare -U` still works even
+work. Jobs pass or fail by node lottery. Plain `unshare -U` still works even
 on broken nodes (Ubuntu ships an AppArmor profile for `unshare`), so don't let
-that mislead you — test the actual enroot path or check the sysctl directly.
+that mislead you. Test the actual enroot path or check the sysctl directly.
 
 ## Access
 
 `ssh amd-vultr-mi300` lands as **root on the slurm controller**
 (`slurm-sa-mi300-controller-01...`). Compute nodes do NOT accept direct root
-SSH — reach them with `srun`:
+SSH. Reach them with `srun`:
 
 ```bash
 ssh amd-vultr-mi300 'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<cmd>"'
@@ -48,12 +48,12 @@ ssh amd-vultr-mi300 'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<cmd>"'
    ```
 
    Expect a split: failing nodes at `1`, working nodes at `0`. If ALL nodes are
-   at `0` and failures persist, this is a different bug — check the enroot
+   at `0` and failures persist, this is a different bug. Check the enroot
    AppArmor profile coverage of `/usr/local/bin/enroot-nsenter`, enroot
    versions, and pyxis plugin state instead.
 
-3. **Fix only with explicit user approval** (this disables a kernel security
-   mitigation — AskUserQuestion first, always). On each drifted node, set the
+3. **Fix only with explicit user approval.** This disables a kernel security
+   mitigation, so always use AskUserQuestion first. On each drifted node, set the
    flag to the cluster's working baseline and persist it:
 
    ```bash
@@ -68,10 +68,9 @@ ssh amd-vultr-mi300 'srun -w chi-mi300x-043 -N1 --immediate=30 bash -c "<cmd>"'
    reboot).
 
 4. **Rerun the affected sweeps**: `gh run rerun <id> --failed` for each failed
-   run; full `gh run rerun` if a cancelled run refuses partial rerun.
+   run. Use a full `gh run rerun` if a cancelled run refuses partial rerun.
 
-5. **Flag the durable fix**: the sysctl belongs in the node provisioning image
-   — any node that gets (re)provisioned without it will regress (watch nodes
-   listed as down with "provisioning incomplete" in `sinfo`; they'll likely
-   come up drifted). Ping the cluster owners rather than treating step 3 as
-   permanent.
+5. **Flag the durable fix**: the sysctl belongs in the node provisioning image.
+   Any node that gets (re)provisioned without it will regress. Nodes listed as
+   down with "provisioning incomplete" in `sinfo` will likely come up drifted.
+   Ping the cluster owners rather than treating step 3 as permanent.

@@ -12,7 +12,14 @@ collx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 collx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
 COLLX_DEEPEP_V2_REPO="https://github.com/deepseek-ai/DeepEP"
-COLLX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6"
+# Upstream main, replacing the pre-merge head of PR #605 (fa8a9b16). #605 merged 2026-04-29 and
+# main carries its one unique commit, the #630 single-node V2 init fix, as 56169594e -- plus fixes
+# the branch never received: #642 fence.proxy.async.shared::cta in LOW_LATENCY_COMBINE_RECV, which
+# fixes the Blackwell low-latency combine corruption at the top ladder rung (DeepEP issue #700);
+# #715 system-scope release before the GIN barrier when scale-up spans NVLink and RDMA; #688 NCCL
+# Device API compat; #178 SM90; #641 internode dispatch args; #640/#627 NVSHMEM/NCCL SO-name
+# resolution for pip wheels. The backend cache is keyed on this value, so a change forces a rebuild.
+COLLX_DEEPEP_V2_COMMIT="01dc3aaac82068020353dce2c302e38153c0bfaa"
 
 COLLX_UCCL_REPO="https://github.com/uccl-project/uccl"
 COLLX_UCCL_COMMIT="fc1b582031221645ea9fce58aeb57187713145e3"
@@ -514,8 +521,6 @@ collx_prepare_deepep_source() {
       && [ "$(git -C "$temporary" rev-parse HEAD)" = "$COLLX_DEEPEP_V2_COMMIT" ] \
       && GIT_TERMINAL_PROMPT=0 git -C "$temporary" submodule update -q --init --depth 1 \
         third-party/fmt >> "$log" 2>&1 \
-      && python3 "$COLLX_RUNTIME_DIR/stage.py" rewrite-deepep-v2 \
-        "$temporary/deep_ep/__init__.py" >> "$log" 2>&1 \
       && mv -- "$temporary" "$source" >> "$log" 2>&1; then
     return 0
   fi
@@ -603,8 +608,14 @@ collx_prepare_stage_dir() {
           "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
-      h200-dgxc|b200-dgxc)
+      h200-dgxc)
         COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base)" \
+          || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
+        ;;
+      b200-nscale)
+        # Anchor at the squash dir's parent (/data/home/sa-shared): the passwd home is not
+        # compute-visible.
+        COLLX_STAGE_DIR="$(collx_prepare_implicit_stage_base "${COLLX_SQUASH_DIR%/*}")" \
           || collx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       mi300x|mi325x|mi355x)
@@ -706,7 +717,18 @@ collx_ensure_squash() {
 # architecture. The squash directory must be shared with the submit host.
 collx_ensure_squash_on_job() {
   local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
-  local log_label=container-import log
+  local log_label=container-import log attempt rc
+  # The import writes tens of GB to whatever the operator gave as squash storage, and on some
+  # clusters that storage is a SOFT-mounted network filesystem, i.e. one that returns an error
+  # rather than blocking when its transport is briefly unavailable. gb300's /data is NFSv3 over
+  # RDMA (proto=rdma, soft), and a transport gap there surfaces as `mkdir: cannot create
+  # directory '/data': Protocol family not supported` -- an address-family errno from mkdir,
+  # which reads like a missing mount but is not one: the same node mounts and writes it fine
+  # minutes later. Run 31089556516 lost its gb300 shards to that, ~25 minutes into each leg.
+  # So a failed import is retried rather than being terminal. Retrying is safe because the
+  # remote block re-takes the lock and re-checks the squash each time, removing a partial file
+  # before re-importing.
+  local max_attempts="${COLLX_IMPORT_ATTEMPTS:-3}"
   [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
   case "${COLLX_SALLOC_ATTEMPT:-1}" in
     1) ;;
@@ -718,13 +740,21 @@ collx_ensure_squash_on_job() {
   key="${key%.sqsh}"
   [ -n "$lock_dir" ] || lock_dir="$squash_dir/.locks"
   lock="$lock_dir/${key}.lock"
-  log="$(collx_private_log_path "$log_label")"
-  # Run once per node because some clusters use node-local squash storage.
-  if ! srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
+  for attempt in $(seq 1 "$max_attempts"); do
+    # A per-attempt log: collx_private_log_path truncates, so reusing one path would erase the
+    # evidence of the failure that caused the retry.
+    if [ "$attempt" -eq 1 ]; then
+      log="$(collx_private_log_path "$log_label")"
+    else
+      log="$(collx_private_log_path "${log_label}-r${attempt}")"
+    fi
+    rc=0
+    # Run once per node because some clusters use node-local squash storage.
+    srun --jobid="$job_id" --nodes="${COLLX_NODES:-1}" --ntasks="${COLLX_NODES:-1}" \
       --ntasks-per-node=1 --chdir=/tmp \
       --export="$(collx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$COLLX_IMAGE_PLATFORM" \
-      > "$log" 2>&1 <<'BASH'
+      > "$log" 2>&1 <<'BASH' || rc=$?
 set -euo pipefail
 sq="$1"; lock="$2"; image="$3"; platform="$4"
 machine="$(uname -m)"
@@ -752,12 +782,43 @@ else
   unsquashfs -l "$sq" >/dev/null 2>&1
 fi
 BASH
-  then
-    collx_log "ERROR: container import failed"
-    collx_log_tail "$log"
-    return 1
-  fi
-  printf '%s' "$sq"
+    [ "$rc" = 0 ] && { printf '%s' "$sq"; return 0; }
+    # 13 is the remote block's architecture guard: the image platform does not match the
+    # allocated machine. That is a property of the case, not of the moment, so it never
+    # improves on a retry and burning two more attempts on it only delays the real message.
+    if [ "$rc" = 13 ]; then
+      collx_log "ERROR: container image platform does not match the allocated architecture"
+      collx_log_tail "$log"
+      return 1
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      collx_log "container import attempt $attempt/$max_attempts failed (rc=$rc); retrying"
+      collx_log_tail "$log"
+      sleep "$((attempt * 30))"
+    fi
+  done
+  collx_log "ERROR: container import failed after $max_attempts attempts"
+  collx_log_tail "$log"
+  return 1
+}
+
+# Reject an allocation whose GPUs are throttled: collectives are barriers, so one clamped device
+# paces every rank. `--gres` mirrors the cuda-context probe below so the step provably sees the
+# devices it judges; `--time` bounds nvidia-smi wedging in D-state on the sick hardware itself,
+# which Python's own timeout cannot reap.
+collx_validate_gpu_health_on_job() {
+  local job_id="$1" nodes="$2" gpus_per_node="$3" log_label=gpu-health log
+  case "${COLLX_SALLOC_ATTEMPT:-1}" in
+    1) ;;
+    2|3) log_label+="-a${COLLX_SALLOC_ATTEMPT}" ;;
+    *) return 1 ;;
+  esac
+  log="$(collx_private_log_path "$log_label")"
+  export COLLX_GPU_HEALTH_LOG="$log"
+  srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
+    --gres=gpu:"$gpus_per_node" --time=5 --chdir=/tmp --input=all \
+    --export="$(collx_host_exports)" python3 /dev/stdin gpu-health \
+    < "$COLLX_RUNTIME_DIR/probe.py" >"$log" 2>&1
 }
 
 # A clean nvidia-smi inventory does not prove that a prior cancelled workload
@@ -906,7 +967,14 @@ collx_run_shard() {
       || { rm -f "$argv_file"; collx_die "case $ci produced no benchmark arguments"; }
     collx_log "EP${NGPUS}[$((ci + 1))/$expected_cases] $COLLX_BENCH"
     runtime_log="$(collx_private_log_path "runtime-c$(printf '%03d' "$ci")")"
-    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-900}" \
+    # A hang guard, not a work budget: at 900 it killed FP8 prefill cases that had already written
+    # complete artifacts, and at 1800 it killed b200 and h200 multi-node EP16 prefill (run
+    # 31020463440). Those two slowed because both pools were virtualized and their GPU-NIC p2p is
+    # degraded -- h200 sustains ~34 GB/s per node against a nominal 8x400G where bare-metal h100
+    # reaches wire rate on the same 2-node RDMA+GIN topology, which is why h100 never moved. See
+    # docs/methodology.md. Truncating a real measurement is worse than a late one, and 5400 stays
+    # inside the 300-minute allocation.
+    if ! timeout -k 30 "${COLLX_RUN_TIMEOUT:-5400}" \
       srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
       --container-name="$container_name" --container-image="$SQUASH_FILE" \

@@ -6,7 +6,7 @@ This directory contains the golden acceptance-length (AL) curves used to standar
 
 ## Why SPEED-Bench
 
-[SPEED-Bench](https://arxiv.org/abs/2604.09557) is a unified benchmark for speculative decoding across diverse semantic domains and realistic serving regimes. Its Qualitative split contains 880 semantically diverse prompts—80 prompts in each of 11 categories—and is designed to measure acceptance rate (AR) and acceptance length (AL). Its Throughput splits cover fixed 1K–32K input lengths and multiple entropy regimes for system-level evaluation. The benchmark uses real prompts because random-token inputs can distort acceptance behavior, expert routing, and measured throughput.
+[SPEED-Bench](https://arxiv.org/abs/2604.09557) is a unified benchmark for speculative decoding across diverse semantic domains and realistic serving regimes. Its Qualitative split contains 880 semantically diverse prompts, with 80 prompts in each of 11 categories. It is designed to measure acceptance rate (AR) and acceptance length (AL). Its Throughput splits cover fixed 1K–32K input lengths and multiple entropy regimes for system-level evaluation. The benchmark uses real prompts because random-token inputs can distort acceptance behavior, expert routing, and measured throughput.
 
 SPEED-Bench is a practical cross-engine standard rather than an InferenceX-only workload:
 
@@ -22,7 +22,7 @@ AL is workload-dependent: a draft model's predictions are easier to accept in so
 
 ## Fairness Guidelines for AgentX
 
-Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves; all submissions evaluating the same model and mode use the same curve.
+Under the AgentX Guidelines, each model, thinking mode, and draft length has one committed golden AL. Once synthetic acceptance is enabled for a benchmark scenario, a submission may choose any supported draft length, but it may not substitute a different acceptance target. Different models keep their own SPEED-Bench-derived curves. All submissions evaluating the same model and mode use the same curve.
 
 vLLM supports this through synthetic rejection sampling. For example, an EAGLE3 run can inject the selected YAML value through `synthetic_acceptance_length`:
 
@@ -47,7 +47,7 @@ SGLANG_SIMULATE_ACC_METHOD: match-expected
 SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
 ```
 
-TensorRT-LLM supports it through [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078). **Note the off-by-one:** this variable counts accepted *draft* tokens only and excludes the bonus/verification token, so set it to the golden AL **minus 1**. Fractional values are supported — the integer part is accepted every iteration and the fractional part is the probability of accepting one additional draft token. For example, a golden AL of `3.5` becomes:
+TensorRT-LLM supports it through [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078). **Note the off-by-one:** this variable counts accepted *draft* tokens only and excludes the bonus/verification token, so set it to the golden AL **minus 1**. Fractional values are supported. The integer part is accepted every iteration, and the fractional part is the probability of accepting one additional draft token. For example, a golden AL of `3.5` becomes:
 
 ```bash
 TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
@@ -97,12 +97,12 @@ gh workflow run speedbench-al.yml \
 
 Before accepting an updated curve, reviewers should verify:
 
-- every requested draft length and thinking mode completed;
-- detailed outputs are coherent and use the intended thinking mode;
-- server logs contain no fallback, draft-disable, or chat-template errors;
-- the YAML metadata matches the dispatched image, sampling settings, model, and speculative method;
-- the source Actions run is linked at the first line of the YAML; and
-- the committed values exactly match the workflow artifact.
+- Every requested draft length and thinking mode completed.
+- Detailed outputs are coherent and use the intended thinking mode.
+- Server logs contain no fallback, draft-disable, or chat-template errors.
+- The YAML metadata matches the dispatched image, sampling settings, model, and speculative method.
+- The source Actions run is linked at the first line of the YAML.
+- The committed values exactly match the workflow artifact.
 
 ## Current golden curves
 
