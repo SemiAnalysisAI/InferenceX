@@ -77,4 +77,6 @@ cluster configuration accepts `accelerator_vendor: amd`, partial-GPU workers
 use Linux ROCm's `ROCR_VISIBLE_DEVICES`, and legacy NVIDIA/CUDA behavior remains
 the default. It also supports `gpu_sbatch_directive: gres` without changing the
 legacy NVIDIA `--gpus-per-node` default. The initial MI300X cluster profile and
-small-model aggregate recipe are checked in alongside this document.
+small-model aggregate recipe are checked in alongside this document. A two-node
+1-prefill/1-decode recipe uses stable Dynamo 1.2.1 and vLLM's NIXL connector as
+the first disaggregated validation target.
