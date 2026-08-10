@@ -1,4 +1,4 @@
-# AGENT.md
+# AGENTS.md
 
 Guidance for AI agents working with InferenceX.
 
@@ -6,44 +6,39 @@ Guidance for AI agents working with InferenceX.
 
 > **PR and GitHub-issue titles & descriptions must be bilingual — include a Simplified Chinese version in addition to English.** Title format: `<English title> / <中文标题>`. In the PR/issue body, follow the English content with its Chinese translation (e.g. a `## 中文说明` section mirroring the summary; don't translate code blocks, logs, or stack traces — summarize around them). **PR comments must include a Chinese translation too** — conversation comments, review summaries, and inline review comments alike: short comments as a single `<English> / <中文>` line, longer ones with the Chinese translation as a trailing paragraph (`中文：...`). Exception: the CODEOWNER sign-off template stays English-verbatim (the sign-off verifier triggers on its exact phrase); bot-generated comments follow their own workflow templates. This applies to every PR and every issue, matching the bilingual docs rule in Code Conventions.
 
-> **Translation quality bar:** write natural technical Chinese as used by ML infra engineers, not word-for-word machine translation. Follow the style of [`vllm-project/vllm-ascend` `README.zh.md`](https://github.com/vllm-project/vllm-ascend/blob/main/README.zh.md): translate concepts into idiomatic Chinese while preserving model names, hardware SKUs (MI355X, B300, GB200 ...), framework names (vLLM, SGLang, ATOM ...), flags, and CLI/env-var identifiers in English. Use parenthetical English clarification for acronyms on first use, e.g. 混合专家(MOE), 专家并行(EP). Preferred term mappings:
->
-> | English | Chinese |
-> |---|---|
-> | benchmark | 基准测试 |
-> | image (Docker) | 镜像 |
-> | config / configuration | 配置 |
-> | single-node / multi-node | 单节点 / 多节点 |
-> | speculative decoding | 投机解码 |
-> | inference | 推理 |
-> | throughput | 吞吐量 |
-> | latency | 延迟 |
-> | prefill / decode | 预填充 / 解码 |
-> | disaggregated (serving) | 分离式（推理） |
-> | expert parallelism | 专家并行 |
-> | sweep | 扫描 |
-> | launcher | 启动器 |
-> | artifact | 产物 |
-> | evaluation / eval | 评估 |
+> **Translation quality bar:** write natural technical Chinese as used by ML infra engineers, not word-for-word machine translation. Follow the style of [`vllm-project/vllm-ascend` `README.zh.md`](https://github.com/vllm-project/vllm-ascend/blob/main/README.zh.md): translate concepts into idiomatic Chinese while preserving model names, hardware SKUs (MI355X, B300, GB200 ...), framework names (vLLM, SGLang, ATOM ...), flags, and CLI/env-var identifiers in English. Use parenthetical English clarification for acronyms on first use, e.g. 混合专家(MOE), 专家并行(EP). Preferred term mappings are in [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#translation-terminology).
 
-> **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
+> **Before debugging a Klaud-Cold / `claude/*` image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).**
 
 ## Project Overview
 
-InferenceX is an open-source automated benchmarking system that tracks LLM inference performance across hardware (NVIDIA B200/H100/H200/GB200, AMD MI300X/MI325X/MI355X) and software stacks (vLLM, SGLang, TensorRT-LLM, ATOM). Results published to https://inferencex.com/.
+InferenceX is an open-source automated benchmarking system that tracks LLM inference performance across hardware (NVIDIA B200/H100/H200/GB200, AMD MI300X/MI325X/MI355X) and software stacks (vLLM, SGLang, TensorRT-LLM, ATOM). Results are published at https://inferencex.com/, which will route to https://inferencex.semianalysis.com.
 
-## Directory Structure
+## Frontend Results API
 
-Run `ls` for details. Key paths:
+Use the public API for published dashboard results; use GitHub Actions artifacts for un-ingested runs, raw output, logs, or debugging evidence.
 
-- `perf-changelog.yaml` - benchmark trigger log; append-only; preserve whitespace.
-- `benchmarks/` - `benchmark_lib.sh` (shared helpers); `single_node/` and `multi_node/` entrypoints; `*_mtp.sh` for MTP/spec-decoding; `multi_node/srt-slurm-recipes/` checked-in external recipe YAMLs.
-- `runners/` - hardware launcher scripts.
-- `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
-- `utils/bench_serving/` - `benchmark_serving.py` and backends.
-- `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `aggregate_power.py` (single-node GPU energy validation + aggregation), `aggregate_power_multinode.py` (multinode srt-slurm `dcgm-power` artifact validation), `collect_*.py`, `compare_results.py`.
-- `experimental/` - non-core experiments.
+```bash
+INFERENCEX_API=https://inferencex.semianalysis.com/api/v1
+curl --fail --compressed \
+  "$INFERENCEX_API/benchmarks?model=DeepSeek-V4-Pro" \
+  | jq '.[] | select(.benchmark_type == "single_turn" and .isl == 8192 and .osl == 1024)'
+```
+
+`model=` takes the frontend display name; `InferenceX-app/packages/constants/src/models.ts` is authoritative. Fixed-sequence rows use numeric `isl`/`osl`; `agentic_traces` rows use null lengths, so do not filter them out accidentally. Use `view=calculator&sequence=8k/1k` for compact interpolation data, and `date`, `runId`, `exact`, or `exactRun` for historical/run-scoped reads. Discovery endpoints are `/availability`, `/workflow-info`, `/evaluations`, and `/reliability`.
+
+Always use `--compressed` and `jq`; never dump raw benchmark JSON into logs or agent context. Do not cache-bust or repeatedly poll CDN-cached results.
+
+## Repository Map
+
+- `perf-changelog.yaml`: append-only benchmark trigger log; preserve every existing byte and append new entries at the end.
+- `configs/`: master benchmark definitions and runner inventory.
+- `benchmarks/`: shared `benchmark_lib.sh` plus single-node, multi-node, and srt-slurm recipe entrypoints.
+- `runners/`: hardware launchers.
+- `utils/matrix_logic/`: config generation, Pydantic validation, and tests.
+- `utils/bench_serving/`: benchmark client and backends.
+- `utils/evals/`: evaluation configs, thresholds, validation, and [`EVALS.md`](utils/evals/EVALS.md).
+- `utils/`: result, changelog, power, collection, and comparison tooling.
 
 ## Terminology
 
@@ -69,7 +64,7 @@ Process results: `python utils/process_result.py`.
 ## Supported Configuration Values
 
 Frameworks: `sglang`, `trt`, `vllm`, `atom`, `dynamo-trt`, `dynamo-sglang`, `sglang-disagg`.
-Sequence lengths (ISL/OSL): `1k1k` (1024/1024), `8k1k` (8192/1024).
+Active fixed-sequence workload: `8k1k` (8192/1024). `1k1k` (1024/1024) remains accepted by tooling for archived or targeted runs but was deprecated from the regular benchmark matrix on 2026-07-17; see [`MODELS.md`](MODELS.md).
 
 ## Code Conventions
 
@@ -81,59 +76,29 @@ Bash: source shared utilities via `source benchmark_lib.sh` (`check_env_vars`, `
 
 Git: conventional commit messages. **Commit messages must include a Simplified Chinese translation in addition to English** — keep the subject line in English (conventional-commit style), then include the Chinese translation of the subject and key body points in the commit body (e.g. a trailing `中文：<translation>` paragraph), following the same translation quality bar as PRs/issues. Squash-merge commits inherit the bilingual PR title, which satisfies the subject requirement automatically. `[skip-sweep]` in the latest PR head commit skips that PR's benchmark setup after changelog validation. It is ignored on pushes to `main`. Changes to `perf-changelog.yaml` trigger benchmark runs.
 
-Docs: all contributor-facing docs are bilingual — **every such Markdown doc MUST have a Simplified Chinese version** named `<name>_zh.md` alongside it, with an `English | 中文` switcher at the top. Current pairs: `README.md`/`README_zh.md`, `CONTRIBUTING.md`/`CONTRIBUTING_zh.md`, `MODELS.md`/`MODELS_zh.md`, `docs/PR_REVIEW_CHECKLIST.md`/`docs/PR_REVIEW_CHECKLIST_zh.md`. **Any edit to an English doc MUST be mirrored in its `_zh` counterpart (and vice versa) in the same PR** — same sections, links, badges, images — and a new doc must ship with its `_zh` version in the same PR. Exceptions: agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`) and internal references under `.github/`/`utils/` are English-only; the sign-off template inside `docs/PR_REVIEW_CHECKLIST*.md` stays in English verbatim in BOTH versions, because `codeowner-signoff-verify.yml` triggers on its exact English opening phrase.
+Docs: all contributor-facing docs are bilingual — **every such Markdown doc MUST have a Simplified Chinese version** named `<name>_zh.md` alongside it, with an `English | 中文` switcher at the top. Current pairs: `README.md`/`README_zh.md`, `CONTRIBUTING.md`/`CONTRIBUTING_zh.md`, `MODELS.md`/`MODELS_zh.md`, `docs/PR_REVIEW_CHECKLIST.md`/`docs/PR_REVIEW_CHECKLIST_zh.md`, and `golden_al_distribution/README.md`/`golden_al_distribution/README_zh.md`. **Any edit to an English doc MUST be mirrored in its `_zh` counterpart (and vice versa) in the same PR** — same sections, links, badges, images — and a new doc must ship with its `_zh` version in the same PR. Exceptions: agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`), internal references under `.github/`/`utils/`, and implementation-local references such as `configs/CONFIGS.md` and `experimental/README.md` are English-only; the sign-off template inside `docs/PR_REVIEW_CHECKLIST*.md` stays in English verbatim in BOTH versions, because `codeowner-signoff-verify.yml` triggers on its exact English opening phrase.
 
 Checklist ↔ sign-off verifier sync: `docs/PR_REVIEW_CHECKLIST.md` is the source of truth for the merge standard, and the verifier prompt in `.github/codeowner-signoff-verify-prompt.md` encodes it as independently-verified checks (the prompt lives in that standalone template — rendered by `.github/workflows/codeowner-signoff-verify.yml` via envsubst — because GitHub caps inline workflow expressions at 21000 chars; do NOT move it back inline). **Whenever `docs/PR_REVIEW_CHECKLIST.md` is updated — an item added, removed, or materially reworded — agents are allowed and expected to update the verifier prompt to match, ideally in the same PR.** Cosmetic edits (formatting, typos, `_zh` translation sync) need no verifier change. The verifier's Check 5 already compares sign-offs against the live checklist file, so stale sign-off templates are caught automatically — but a new or removed policy item needs its own check logic added to / removed from the workflow prompt. To validate a verifier change: merge it, open a throwaway `[DO NOT MERGE]` test PR, post a sign-off comment (it must contain the exact phrase `As a PR reviewer and CODEOWNER` or the workflow won't trigger), read the posted verdict comment, then close the test PR.
 
 ### Pull Request Sweep Labels
 
-PRs do not run the sweep automatically - `run-sweep.yml` is gated on a primary sweep label. Pick exactly one of the five primary labels below; setting multiple primary labels is rejected by the workflow. **For full sweeps, `full-sweep-fail-fast` is the strongly recommended default** - a broken change burns one canary job plus at most one job per matrix instead of the whole fan-out. Reach for `full-sweep-enabled` only when you specifically need every matrix job to run to completion despite failures (e.g. a flaky config where one flake would kill a matrix's in-flight results).
+A PR sweep requires exactly one primary label:
 
-- `sweep-enabled` - runs the sweep with `--trim-conc` (each parallelism config reduced to its single lowest concurrency). Default for most PRs.
-- `full-sweep-enabled` - runs the full intermediate concurrency sweep behind a sequential single-node canary gate, with every matrix job running to completion regardless of failures. **Not the recommended default** - prefer `full-sweep-fail-fast`; use this only when a single flaky job killing its matrix's in-flight results is worse than burning GPU time on a broken change.
-- `non-canary-full-sweep-enabled` - runs the full intermediate concurrency sweep without the canary gate. Use when the canary is flaky or not representative of the affected configuration.
-- `full-sweep-fail-fast` - runs the full intermediate concurrency sweep behind the same sequential single-node canary gate as `full-sweep-enabled` (so a globally broken change burns one job, not the whole fan-out), and with `strategy.fail-fast` enabled on every matrix: the first failure in a matrix cancels that matrix's remaining jobs. Fail-fast is matrix-scoped, so the other matrices (1k1k vs 8k1k vs agentic vs evals) keep running and self-terminate on their own first failure; their completed results remain valid. The failing job keeps its red *failure* conclusion and the run concludes failed. **This is the strongly recommended default for full sweeps** (image bumps, recipe changes, bring-up) - a failure means the rest of that matrix is wasted GPU time. Caveat: one flaky job kills its matrix's in-flight results; if that repeatedly bites a specific config, fall back to `full-sweep-enabled` for that PR.
-- `full-sweep-fail-fast-no-canary` - same as `full-sweep-fail-fast` but without the canary gate: all matrices fan out immediately. Use when the canary is flaky or not representative of the affected configuration but you still want per-matrix fail-fast.
+| Use case | Label |
+|---|---|
+| Lightweight, minimum-concurrency validation | `sweep-enabled` |
+| Full sweep; recommended default | `full-sweep-fail-fast` |
+| Full sweep where flakes must not cancel a matrix | `full-sweep-enabled` |
+| Full sweep with fail-fast but no canary | `full-sweep-fail-fast-no-canary` |
+| Full sweep without fail-fast or canary | `non-canary-full-sweep-enabled` |
 
-`all-evals`, `evals-only`, and `agentx-fast` are optional modifier labels. Combine them with one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset; combining both eval modifiers runs every eval and no throughput. `agentx-fast` reduces deterministic warmup to one request per lane and profiling to 20 minutes for single- and multi-node AgentX throughput jobs; fixed-sequence and eval jobs are unchanged. `all-evals` remains eligible for artifact reuse when paired with an eligible full-sweep label. Runs with `evals-only` or `agentx-fast` are not eligible for artifact reuse.
-
-**The sweep does not trigger while the PR has merge conflicts.** Even with a sweep label applied, the `run-sweep.yml` workflow will not start until the PR cleanly merges into main — a stale claude/* or update-* branch with a `perf-changelog.yaml` conflict (the common case) will sit in NO_SWEEP / NO_SUCCESS until rebased. Resolution recipe is documented in `KLAUD_DEBUG.md §1.1`: `git merge origin/main`, then `git checkout origin/main -- perf-changelog.yaml`, then re-append the PR's own changelog entry at the tail. Don't 3-way merge `perf-changelog.yaml`; whitespace edits silently re-trigger the deletion check.
-
-Push-to-main always enters sweep setup: it either reuses approved full-sweep artifacts or runs the full untrimmed sweep. `[skip-sweep]` never suppresses a main-branch sweep. For PR runs, the marker in the latest head commit skips benchmark setup while still allowing changelog validation and reuse authorization checks. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the lowest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[min(conc)]`.
+Modifiers are `all-evals`, `evals-only`, and `agentx-fast`. Runs using `evals-only` or `agentx-fast` cannot be reused. Sweeps do not start while a PR has merge conflicts. `[skip-sweep]` affects PR setup only and never suppresses a `main` sweep. See [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#sweep-labels-and-reuse) for exact semantics and conflict recovery.
 
 ## Common Tasks
 
-### Dispatching jobs
+### Dispatching and monitoring jobs
 
-Sweeps and one-offs dispatch against `.github/workflows/e2e-tests.yml` (`workflow_dispatch`). `run-sweep.yml` is push/PR-triggered, not dispatchable.
-
-```bash
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='main' \
-  -f 'inputs[ref]=my-feature-branch' \
-  -f 'inputs[test-name]=DSR1 fp8 H200 sglang smoke' \
-  -f 'inputs[generate-cli-command]=full-sweep --config-files configs/nvidia-master.yaml --model-prefix dsr1 --framework sglang --runner-type h200 --min-conc 4 --max-conc 4 --seq-lens 1k1k' \
-  -f 'inputs[duration-override]='
-```
-
-Inputs: top-level `ref` (required) is the workflow ref to dispatch from, almost always `main`. `inputs[ref]` is the repo ref under test (defaults to the dispatch ref's `github.sha`). `inputs[generate-cli-command]` (required) is passed verbatim to `generate_sweep_configs.py` - test locally first. `inputs[test-name]` is the display name in the Actions UI. `inputs[duration-override]` overrides per-config duration (seconds); empty = use matrix value. `inputs[require-power]` fails single-node fixed-sequence jobs when GPU power telemetry is invalid (default: power is best-effort and never fails a run).
-
-For an AgentX preflight, add `-F 'inputs[agentx-fast]=true'` to the dispatch command. This reduces deterministic warmup to one request per lane and profiling to 20 minutes for every AgentX job. Use it to get faster feedback while debugging, then run the official sweep without `agentx-fast`; canonical AgentX warmup remains 10 requests per lane with a 1-hour profile.
-
-The POST returns no body and no run ID - find the run with `gh run list` below.
-
-### Monitoring jobs
-
-```bash
-RUN_ID=$(gh run list --repo SemiAnalysisAI/InferenceX --workflow e2e-tests.yml \
-  --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
-gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --exit-status   # block, non-zero on failure
-gh run view "$RUN_ID" --repo SemiAnalysisAI/InferenceX --log-failed     # inspect failures
-gh run cancel "$RUN_ID" --repo SemiAnalysisAI/InferenceX                # cancel
-```
-
-Artifacts: see "Fetching GitHub Actions Benchmark Results" below.
+One-offs use `.github/workflows/e2e-tests.yml`; `run-sweep.yml` is not dispatchable. The top-level dispatch `ref` selects the workflow definition (normally `main`), while `inputs[ref]` selects the revision under test. See [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#workflow-dispatch-and-monitoring) for commands and input semantics.
 
 ### Adding a benchmark configuration
 
@@ -149,7 +114,7 @@ For `dynamo-sglang` / `dynamo-trt` disaggregated multi-node configs, see `benchm
 
 Multi-node srt-slurm changes must edit the recipe yaml AND `nvidia-master.yaml` together. `srtctl` reads only the recipe (`model.container`, resources, prefill/decode workers); the sweep generator (`utils/matrix_logic/generate_sweep_configs.py`) reads `nvidia-master.yaml` for frontend labels - its prefill/decode numbers never reach `srtctl`. Recipe-only edits mislabel results, master-only edits don't take effect. For image bumps, `model.container` must equal `image:`, since the launcher uses the latter as the container-alias key.
 
-Power lanes: a recipe `telemetry:` block with `provider: dcgm-power` enables official energy collection for that config. The launcher (`runners/launch_gb200-nv.sh`, `launch_gb300-nv.sh`) is the single source of truth for the producer pin (`POWER_SRT_SLURM_PIN`); CI derives `POWER_PRODUCER_SHA` from the launcher's stamp file, and `utils/test_gb200_power_official_contract.py` / `test_gb300_power_official_contract.py` lock the recipe↔launcher contract. dcgm-power lanes are validated for `PRECISION=fp8` only.
+Power lanes have a recipe/launcher pinning contract; read [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#power-telemetry) before changing telemetry or official energy collection.
 
 ### Updating Docker images
 
@@ -166,13 +131,7 @@ Update the image tag in the relevant `configs/*-master.yaml` and/or `benchmarks/
 
 ## Evals (Accuracy Validation)
 
-Optional accuracy checks ensuring inference optimizations do not degrade outputs. See `utils/evals/EVALS.md` for the full reference.
-
-Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`; evals run by default on the 8k1k subset. Workflow jobs run separately from throughput jobs in `EVAL_ONLY=true` mode. Flags on `generate_sweep_configs.py`: `--no-evals` to skip, `--evals-only` for the selected eval subset only, and `--all-evals` to expand eval-only selection across every generated fixed-sequence config. For multi-node configs, `--all-evals` creates one eval job per engine topology and runs every distinct value in its `conc-list` sequentially against that same engine. `--all-evals` composes with `--evals-only` and remains a standalone shorthand. Changelog `all-evals: true` suppresses throughput for that entry. The PR modifier label `all-evals` only expands selection, while the PR modifier label `evals-only` suppresses throughput across appended entries. Aggregated output produced by `utils/collect_eval_results.py`.
-
-## Key Files
-
-`utils/matrix_logic/validation.py` (config schemas), `generate_sweep_configs.py` (config generation), `utils/bench_serving/benchmark_serving.py` (benchmark client), `configs/nvidia-master.yaml` / `configs/amd-master.yaml` (benchmark definitions, with agentic sections at the bottom), `.github/workflows/run-sweep.yml` (main CI/CD), `.github/workflows/collect-evals.yml` (eval collection), `benchmarks/benchmark_lib.sh` (shared utilities), `utils/evals/` (eval task definitions), `utils/collect_eval_results.py` (aggregator).
+Evals default to the 8k1k subset and run separately from throughput. The generator supports `--no-evals`, `--evals-only`, and `--all-evals`; the last two compose. Read [`utils/evals/EVALS.md`](utils/evals/EVALS.md) for task behavior and [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#evaluation-selection) for matrix and label semantics.
 
 ## Important Notes
 
@@ -198,14 +157,17 @@ cat ./results/agg_bmk.json | jq -r '
 cat ./results/agg_bmk.json | jq '[.[] | select(.infmax_model_prefix == "gptoss")]'
 ```
 
-### Key metrics
+### Metrics, power, and artifact schema
 
-`tput_per_gpu` (total throughput per GPU, tok/s), `output_tput_per_gpu` (output token throughput), `mean_ttft` / `p99_ttft` (time to first token), `mean_tpot` (time per output token), `mean_e2el` (end-to-end latency).
+Core metrics:
 
-Single-node fixed-sequence results also carry GPU power metrics when telemetry is valid: `power_valid` (1/0), `avg_power_w` (average board power per GPU), `avg_total_gpu_power_w` (all observed GPUs), `total_gpu_energy_j` (integrated over the formal benchmark window), and `joules_per_successful_query` / `joules_per_input_token` / `joules_per_output_token` / `joules_per_total_token`. Invalid telemetry records `power_valid: 0` and no energy metrics; it fails the job only under `REQUIRE_POWER=1` (see the `require-power` dispatch input).
+| Metric | Meaning |
+|---|---|
+| `tput_per_gpu` | Total input plus output tokens per second per GPU |
+| `output_tput_per_gpu` | Output tokens per second per GPU |
+| `mean_ttft` | Mean time to first token |
+| `p99_ttft` | 99th-percentile time to first token |
+| `mean_tpot` | Mean time per output token after the first |
+| `mean_e2el` | Mean end-to-end request latency |
 
-Multinode disaggregated results add role energy metrics: `prefill_gpu_energy_j` / `decode_gpu_energy_j` (board energy of that role's GPUs integrated over the FULL formal window — not kernel-level phase energies) and `prefill_joules_per_input_token` / `decode_joules_per_output_token`.
-
-### Artifacts
-
-`results_bmk` → `agg_bmk.json` (aggregated). `results_all` → all results aggregated (may not exist). `eval_results_all` → `agg_eval_all.json` (may not exist). `run-stats` → `run_stats.json` (which nodes ran and succeeded). `power_audit_<result>` → `power_validation_<result>.json` single-node, `power_validation_<result>_*.json` multinode (canonical power validity verdict + reason codes; uploaded even when invalid).
+Power fields and artifact schemas are documented in [`.github/AGENT_OPERATIONS.md`](.github/AGENT_OPERATIONS.md#power-telemetry). Never dump raw result JSON.
