@@ -11,7 +11,10 @@
   "timing": {
     "iters_per_trial": 8,
     "trials_per_point": 256,
-    "warmup_iters_per_trial": 32
+    "warmup_iters_per_trial": 32,
+    "chain_iters_per_trial": 128,
+    "chain_trials_per_point": 4,
+    "chain_drop": 16
   },
   "workload": {
     "name": "deepseek-v3",

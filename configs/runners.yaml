@@ -80,6 +80,26 @@ labels:
     - b200-dgxc-slurm_7
     - b200-dgxc-slurm_8
     - b200-dgxc-slurm_9
+  b200-new:
+    - b200-nscale-slurm_0
+    - b200-nscale-slurm_1
+    - b200-nscale-slurm_2
+    - b200-nscale-slurm_3
+    - b200-nscale-slurm_4
+    - b200-nscale-slurm_5
+    - b200-nscale-slurm_6
+    - b200-nscale-slurm_7
+    - b200-nscale-slurm_8
+  b200-nscale:
+    - b200-nscale-slurm_0
+    - b200-nscale-slurm_1
+    - b200-nscale-slurm_2
+    - b200-nscale-slurm_3
+    - b200-nscale-slurm_4
+    - b200-nscale-slurm_5
+    - b200-nscale-slurm_6
+    - b200-nscale-slurm_7
+    - b200-nscale-slurm_8
   mi300x:
     - mi300x-amds_00
     - mi300x-amds_01
@@ -251,6 +271,7 @@ labels:
     - gb200-nv_0
     - gb200-nv_1
     - gb200-nv_2
+    - gb200-nv_3
   cluster:gb300-nv:
     - gb300-nv_0
     - gb300-nv_1
@@ -281,11 +302,6 @@ labels:
     - mi325x-amds_07
     - mi325x-amds_08
     - mi325x-amds_09
-  cluster:mi325x-tw:
-    - mi325x-tw_00
-    - mi325x-tw_01
-    - mi325x-tw_02
-    - mi325x-tw_03
   cluster:mi355x-amds:
     - mi355x-amds_00
     - mi355x-amds_01
@@ -315,6 +331,9 @@ hardware:
   cluster:b200-dgxc:
     available-cpu-dram-mib: 3_095_781
     gpus-per-node: 8
+  b200-nscale:
+    available-cpu-dram-mib: 2_063_920
+    gpus-per-node: 8
   cluster:b300-nv:
     available-cpu-dram-mib: 2_964_436
     gpus-per-node: 8
@@ -335,9 +354,6 @@ hardware:
     gpus-per-node: 8
   cluster:mi325x-amds:
     available-cpu-dram-mib: 3_091_589
-    gpus-per-node: 8
-  cluster:mi325x-tw:
-    available-cpu-dram-mib: 3_095_792
     gpus-per-node: 8
   cluster:mi355x-amds:
     available-cpu-dram-mib: 3_095_781

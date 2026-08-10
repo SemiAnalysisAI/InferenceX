@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Dynamo serializes the draft config without Kimi K3's config-class alias.
-# Prepare a local metadata view that exposes the equivalent parallel-draft token
-# without changing the downloaded checkpoint or vLLM source.
+# The Kimi K3 DSpark checkpoint publishes its parallel-drafting token as
+# `mask_token_id`. Dynamo's serialized draft config reaches vLLM without the
+# K3 config-class alias, while vLLM's parallel drafter accepts `pard_token`.
+# Build a thin local view of the upstream checkpoint and add that equivalent
+# metadata alias without changing vLLM or the checkpoint weights.
 python3 - <<'PY'
 import json
 import os

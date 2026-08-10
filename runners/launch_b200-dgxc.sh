@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
 # System-specific configuration for B200 DGXC Slurm cluster
-SLURM_PARTITION="gpu-2"
-SLURM_ACCOUNT="benchmark"
+SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
+SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
 set -x
 
@@ -43,9 +43,42 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
+elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+    # GLM-5.1 retired in July and its weights were cleaned out of the
+    # SRE-owned (root-only) /lustre/fsw/models tree, so this checkpoint is
+    # staged on the sa-shared-writable home Lustre mount instead. That mount
+    # is compute-visible at the same path, and the launcher bind-mounts
+    # $MODEL_PATH by name into the container.
+    export MODEL_PATH="/home/sa-shared/models/GLM-5.1-FP8"
+    export SRT_SLURM_MODEL_PREFIX="glm5.1-fp8"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
+elif [[ $MODEL_PREFIX == "glm5.2" && $PRECISION == "fp4" ]]; then
+    # Day-zero on b200-dgxc: GLM-5.2-NVFP4 may not be in the SRE-staged trees
+    # yet. Probe them first (same shape as the dsv4 branch above), then fall
+    # back to the sa-shared-writable gharunners tree, which the bench script's
+    # `hf download` guard populates on first use. The fallback dir is created
+    # here because --container-mounts needs the host path to exist.
+    #
+    # A candidate must hold at least one weight shard, not merely exist. The
+    # gharunners path was already there in run 30729467646 holding config.json
+    # and five other metadata files and no weights at all, and a bare -d test
+    # would pick such a stub over a real copy in another tree.
+    SELECTED_MODEL_PATH=""
+    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
+        SELECTED_MODEL_PATH="$MODEL_PATH"
+    else
+        for candidate in /lustre/fsw/models/GLM-5.2-NVFP4 /scratch/fsw/models/GLM-5.2-NVFP4 /lustre/fsw/gharunners/models/GLM-5.2-NVFP4; do
+            if [[ -d "$candidate" ]] && ls "$candidate"/*.safetensors >/dev/null 2>&1; then
+                SELECTED_MODEL_PATH="$candidate"
+                break
+            fi
+        done
+    fi
+    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/gharunners/models/GLM-5.2-NVFP4}"
+    mkdir -p "$MODEL_PATH"
+    export SRT_SLURM_MODEL_PREFIX="glm5.2-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5"
@@ -53,7 +86,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
+    export MODEL_PATH="${MODEL_PATH:-/lustre/fsw/models/Kimi-K2.6-NVFP4}"
     export SRT_SLURM_MODEL_PREFIX="kimi-k2.6-nvfp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
@@ -86,6 +119,21 @@ fi
 export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
+    if [[ "$FRAMEWORK" == "tilert" ]]; then
+        export SLURM_PARTITION SLURM_ACCOUNT
+        export TILERT_WEIGHTS_DIR="${TILERT_WEIGHTS_DIR:-/lustre/fsw/gharunners/models/${MODEL_PREFIX}-${PRECISION}-tilert-8shard}"
+        # These nodes expose eight RoCE HCAs, mlx5_0..mlx5_7 (all PORT_ACTIVE,
+        # link_layer Ethernet); there is no mlx5_10/mlx5_11 here. Verified
+        # with ibv_devinfo inside a pyxis container on an allocated gpu-2 node.
+        export UCX_NET_DEVICES="${UCX_NET_DEVICES:-mlx5_0:1,mlx5_1:1,mlx5_2:1,mlx5_3:1,mlx5_4:1,mlx5_5:1,mlx5_6:1,mlx5_7:1}"
+        export UCX_MEMTYPE_CACHE="${UCX_MEMTYPE_CACHE:-n}"
+        export UCX_MEMTYPE_REG_WHOLE="${UCX_MEMTYPE_REG_WHOLE:-n}"
+        TILERT_DISAGG="$GITHUB_WORKSPACE/benchmarks/multi_node/${EXP_NAME%%_*}_${PRECISION}_b200_${FRAMEWORK}-disagg.sh"
+        [[ -f "$TILERT_DISAGG" ]] || { echo "tilert disagg script not found: $TILERT_DISAGG"; exit 1; }
+        exec bash "$TILERT_DISAGG"
+        exit 1
+    fi
+
     # Validate framework
     if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
         echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
@@ -211,7 +259,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         local lock_file="${lock_dir}/${image_key}.lock"
 
         (
-            flock -w 600 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            flock -w "${B200_SQUASH_LOCK_TIMEOUT:-600}" 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
             if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
                 echo "Squash file already exists and is valid, skipping import: $squash_file"
             else
