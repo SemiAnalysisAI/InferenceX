@@ -793,11 +793,11 @@ MAX_NUM_SEQS=$((2 * CONC))
 # MAX_NUM_SEQS (1*CONC), but capture is sized off 2*CONC decode slots, each
 # expanding to (1 + SPEC_NUM_TOKENS) rows during verify -> 2*CONC*(1+SPEC_NUM_TOKENS)
 # (6*CONC at spec=2). Decoupled from MAX_NUM_SEQS so the capture range matches the
-# Fixed stride-2 capture list covering all concurrencies up to the largest
+# Fixed contiguous capture list covering all concurrencies up to the largest
 # verify batch (conc=16 -> 2*16*(1+2)=96). Pinned so every config shares one
 # capture set; max_cudagraph_capture_size must equal max(cudagraph_capture_sizes).
-CUDAGRAPH_CAPTURE_SIZES="1, 2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44"
 MAX_CUDAGRAPH_CAPTURE_SIZE=44
+CUDAGRAPH_CAPTURE_SIZES="$(seq -s, 1 "$MAX_CUDAGRAPH_CAPTURE_SIZE")"
 #COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"]}")
 COMPILATION_CONFIG_ARGS=(--compilation-config "{\"mode\":3,\"cudagraph_mode\":\"FULL_AND_PIECEWISE\",\"max_cudagraph_capture_size\":$MAX_CUDAGRAPH_CAPTURE_SIZE,\"custom_ops\":[\"+fused_rms_norm_gated\"],\"cudagraph_capture_sizes\":[$CUDAGRAPH_CAPTURE_SIZES]}")
 GPU_MEM_UTIL="0.9"

@@ -43,6 +43,14 @@ say "1/3 triton 3.7.0 + tabulate"
 python -m pip install --extra-index-url https://pypi.amd.com/triton/release/rocm-7.2.0/simple/ triton==3.7.0 2>&1 | tail -2
 python -m pip install tabulate 2>&1 | tail -1
 
+# Optional: the lm-eval-harness + its deps. The reference container had these
+# because lm_eval.sh (which pip-installs "lm_eval[api]" on first run) was run in
+# it; they are CLIENT eval tooling, not part of the serving stack. Included so a
+# replay matches the reference container's package set. Set WITH_LM_EVAL=0 to skip.
+if [ "${WITH_LM_EVAL:-1}" = "1" ]; then
+  python -m pip install "lm_eval[api]==0.4.12" 2>&1 | tail -2
+fi
+
 # Marker-gated apply: skip if already present (idempotent); git apply (exact)
 # with a patch --fuzz fallback.
 apply_one(){ # $1=relpath  $2=marker  $3=difffile
