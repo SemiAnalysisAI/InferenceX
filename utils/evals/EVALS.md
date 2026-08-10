@@ -156,7 +156,7 @@ For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it conta
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
 - `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
 - Both use their respective benchmark templates with `eval-only: true`, `run-eval: true`
-- `collect-evals` depends on the eval jobs. `run-sweep.yml` collects throughput results only when benchmark jobs ran; `e2e-tests.yml` also completes the throughput collector dependency after an eval-only dispatch so the workflow can finish successfully.
+- `collect-evals` depends on both eval jobs, while `collect-results` only runs when benchmark jobs ran
 - `process_changelog.py` splits eval results into `evals` (single-node) and `multinode_evals`
 
 ### Result collection
