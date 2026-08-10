@@ -65,17 +65,30 @@ fi
 # use 2 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=2
 
+# MOE_BACKEND / GPU_MEM_UTIL are overridable so the MegaMoE arm measured on the
+# agentic side (moe-backend flydsl_mega_moe at GMU 0.86, see
+# benchmarks/single_node/agentic/dsv4_agentic_mi355x_dep8_megamoe_gluon.sh) can
+# be reproduced on the fixed-seq-len harness without forking this recipe. The
+# defaults are the previously hardcoded values, so CI behaviour is unchanged.
+MOE_BACKEND="${MOE_BACKEND:-aiter}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.8}"
+
+# Arms the torch profiler when PROFILE=1. Expands to nothing otherwise.
+PROFILER_ARGS=()
+mapfile -t PROFILER_ARGS < <(vllm_profiler_serve_args)
+
 set -x
 vllm serve $MODEL --port $PORT \
+    "${PROFILER_ARGS[@]}" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     --async-scheduling \
     --no-enable-prefix-caching \
     --distributed-executor-backend mp \
-    --gpu-memory-utilization 0.8 \
+    --gpu-memory-utilization "$GPU_MEM_UTIL" \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --moe-backend aiter \
+    --moe-backend "$MOE_BACKEND" \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
