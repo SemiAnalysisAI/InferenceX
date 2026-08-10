@@ -92,11 +92,27 @@
 #   * Ports 8700, 8701, 18700 free -- DP-attention needs PORT, PORT+1 and
 #     PORT+10000 (--network host).
 #
-# Expect this in the server log during the run, repeatedly:
-#   [aiter] [fused_moe] no tuned FlyDSL config for ('gfx950', 256, 1024, 7168,
-#   ...), using heuristic FlyDSL fallback
-# The MoE GEMM shapes are untuned on gfx950. It is not an error, and it is a
-# concrete open lead for further DEP8 gains.
+# ---------------------------------------------------------------------------
+# Closed leads -- do not re-open without new evidence
+# ---------------------------------------------------------------------------
+# This header used to say to expect "[aiter] [fused_moe] no tuned FlyDSL config
+# for ('gfx950', 256, 1024, 7168, ...), using heuristic FlyDSL fallback" in the
+# server log, and called it an open tuning lead. Both halves were wrong. The
+# line does not appear at all under this arm (grep -c = 0 across all four arms
+# of the 2026-08-08 DEP8 run set).
+#
+# The related "dispatch=0 rules, combine=6 rules" line at startup IS emitted,
+# and is likewise not a lead. MegaMoE never calls
+# FlyDSLDispatchCombineIntraNodeOp.dispatch() -- traced on hardware across all
+# 8 DP ranks: 20,000 combine_no_stage1 calls, zero dispatch calls. The dispatch
+# array in flydsl_gfx950_mi355x_IntraNode_ep8.json is unreachable under this
+# backend, so adding the missing fp8_ocp rows for DSv4-Pro's shape (hidden=7168,
+# topk=6, local_expert_num=48) would change nothing. MegaMoE fuses dispatch into
+# its stage-1 kernel, whose geometry comes from the static per-(token bucket,
+# mtpr) num_dispatch_cu table in aiter/ops/flydsl/kernels/mega_moe/
+# mega_moe_config.py -- already tuned, and bucket-varying at the mtpr=16384 this
+# arm runs at. Combine does consume the JSON: 100% of those 20,000 calls
+# resolved src=config.
 #
 # Usage:
 #   MODEL_DIR=/path/to/DeepSeek-V4-Pro HF_CACHE=/path/to/hf \
