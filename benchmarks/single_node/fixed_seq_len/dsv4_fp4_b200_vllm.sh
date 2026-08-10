@@ -37,33 +37,18 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 fi
 
 EP_ARGS=()
+MOE_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
+    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
 fi
 
 GMU_ARGS=()
-MOE_ARGS=()
 EPLB_ARGS=()
 PREFILL_SCHEDULE_ARGS=()
-DEP_COMPILE_ARGS=()
-DEP_SEQS_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-    # EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
-    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 16)
-    GMU_ARGS=(--gpu-memory-utilization 0.94)
-    DEP_MAX_NUM_SEQS=$(( 2 * CONC / TP ))
-    DEP_SEQS_ARGS=(--max-num-seqs "$DEP_MAX_NUM_SEQS")
-    # Build cudagraph capture sizes: 1, 2, 3, ..., DEP_MAX_NUM_SEQS
-    CUDA_GRAPH_CAPTURE_SIZES=""
-    s=1
-    while [ "$s" -le "$DEP_MAX_NUM_SEQS" ]; do
-        [ -n "$CUDA_GRAPH_CAPTURE_SIZES" ] && CUDA_GRAPH_CAPTURE_SIZES="${CUDA_GRAPH_CAPTURE_SIZES},"
-        CUDA_GRAPH_CAPTURE_SIZES="${CUDA_GRAPH_CAPTURE_SIZES}${s}"
-        s=$(( s + 1 ))
-    done
-    COMPILATION_CONFIG="{\"cudagraph_mode\":\"FULL_DECODE_ONLY\",\"cudagraph_capture_sizes\":[${CUDA_GRAPH_CAPTURE_SIZES}],\"mode\":0}"
-    DEP_COMPILE_ARGS=(--compilation-config "${COMPILATION_CONFIG}")
+    EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
+    PREFILL_SCHEDULE_ARGS=(--prefill-schedule-interval 4)
 fi
 
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
@@ -99,13 +84,13 @@ vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${MOE_ARGS[@]}" \
     "${EPLB_ARGS[@]}" \
     "${PREFILL_SCHEDULE_ARGS[@]}" \
-    "${DEP_COMPILE_ARGS[@]}" \
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}' \
     --attention_config.use_fp4_indexer_cache=True \
     --tokenizer-mode deepseek_v4 \
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
-    "${DEP_SEQS_ARGS[@]}" \
+    --max-cudagraph-capture-size "$MAX_CUDAGRAPH_CAPTURE_SIZE" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
 
