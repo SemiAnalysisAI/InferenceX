@@ -5,7 +5,7 @@ name: "mi300x-vllm-qwen3-0.6b-disagg-1p1d-fixed-seq"
 
 model:
   path: "hf:Qwen/Qwen3-0.6B"
-  container: "vllm/vllm-openai-rocm:v0.26.0"
+  container: "vllm-rocm-v0.26.0"
   precision: "fp16"
 
 identity:

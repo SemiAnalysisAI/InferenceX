@@ -31,6 +31,15 @@ def test_mi300x_cluster_uses_the_rocm_slurm_contract():
     )
     assert cluster["default_mounts"]["/dev/kfd"] == "/dev/kfd"
     assert cluster["default_mounts"]["/dev/dri"] == "/dev/dri"
+    image_path = cluster["containers"]["vllm-rocm-v0.26.0"]
+    assert image_path.endswith("/vllm-openai-rocm-v0.26.0.sqsh")
+
+    for recipe_path in (RECIPE_PATH, DISAGG_RECIPE_PATH):
+        recipe = yaml.safe_load(recipe_path.read_text())
+        assert recipe["model"]["container"] == "vllm-rocm-v0.26.0"
+        assert recipe["identity"]["container"]["image"] == (
+            "vllm/vllm-openai-rocm:v0.26.0"
+        )
 
 
 def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():

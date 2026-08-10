@@ -30,4 +30,10 @@ default_mounts:
   /dev/dri: /dev/dri
   /raid/hf-hub-cache: /hf_hub_cache
 
+# Pyxis otherwise re-imports the large ROCm image for every srun step. The
+# validation launcher materializes this immutable squashfs on each healthy
+# node before submitting a sweep.
+containers:
+  vllm-rocm-v0.26.0: /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh
+
 nginx_raise_ulimit: false
