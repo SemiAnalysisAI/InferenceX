@@ -108,7 +108,7 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     launcher = LAUNCHER.read_text()
     legacy = LEGACY_LAUNCHER.read_text()
 
-    assert "25e1e4e71dc8e7383b1857041decff1a9ae0339e" in launcher
+    assert "42b91455f9db13cd2cdb8822baaa834d05c40909" in launcher
     assert "v0.5.16-rocm720-mi35x-20260728" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "SRTCTL_RUNTIME_SOURCE_DIR" in launcher
