@@ -1,0 +1,152 @@
+name: "glm5.2-h200-sgl-router-disagg-2p2d-mtp-agentic"
+
+# Native SGL Router validation of the established GLM-5.2 H200 Mooncake
+# topology. This deliberately changes only the request plane: model, worker
+# layout, KV transport, MTP, and AgentX behavior match the Dynamo baseline.
+
+model:
+  path: "hf:zai-org/GLM-5.2-FP8"
+  container: "lmsysorg/sglang:v0.5.16-cu130"
+  precision: "fp8"
+
+identity:
+  model:
+    repo: "zai-org/GLM-5.2-FP8"
+    revision: "ba978f7d347eaf65d22f1a86833408afdb953541"
+  container:
+    image: "lmsysorg/sglang:v0.5.16-cu130"
+  frameworks:
+    sglang: "0.5.16"
+
+setup_script: native-sgl-router-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+resources:
+  gpu_type: h200
+  gpus_per_node: 8
+  prefill_nodes: 2
+  decode_nodes: 2
+  prefill_workers: 2
+  decode_workers: 2
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+
+frontend:
+  type: sgl-router
+  enable_multiple_frontends: false
+  env:
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+
+backend:
+  type: sglang
+  prefill_environment:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+    PYTHONUNBUFFERED: "1"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+  decode_environment:
+    HF_HOME: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    PIP_BREAK_SYSTEM_PACKAGES: "1"
+    PYTHONUNBUFFERED: "1"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "900"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_OPT_USE_TOPK_V2: "1"
+    SGLANG_TIMEOUT_KEEP_ALIVE: "900"
+    SGLANG_SIMULATE_ACC_LEN: "2.99"
+    SGLANG_SIMULATE_ACC_METHOD: "match-expected"
+    SGLANG_SIMULATE_ACC_TOKEN_MODE: "real-draft-token"
+
+  sglang_config:
+    prefill:
+      host: 0.0.0.0
+      model-path: /model/
+      served-model-name: zai-org/GLM-5.2-FP8
+      trust-remote-code: true
+      tool-call-parser: glm47
+      reasoning-parser: glm45
+      tp-size: 8
+      ep-size: 1
+      attn-cp-size: 8
+      enable-prefill-cp: true
+      cp-strategy: interleave
+      enable-dsa-cache-layer-split: true
+      disaggregation-transfer-backend: mooncake
+      disaggregation-mode: prefill
+      kv-cache-dtype: fp8_e4m3
+      context-length: 1048576
+      max-total-tokens: 1048576
+      chunked-prefill-size: 32768
+      mem-fraction-static: 0.85
+      max-running-requests: 32
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      watchdog-timeout: 86400
+      stream-interval: 60
+      enable-metrics: true
+      enable-cache-report: true
+
+    decode:
+      host: 0.0.0.0
+      model-path: /model/
+      served-model-name: zai-org/GLM-5.2-FP8
+      trust-remote-code: true
+      tool-call-parser: glm47
+      reasoning-parser: glm45
+      tp-size: 8
+      dp-size: 8
+      ep-size: 1
+      enable-dp-attention: true
+      disaggregation-transfer-backend: mooncake
+      disaggregation-mode: decode
+      kv-cache-dtype: fp8_e4m3
+      dsa-decode-backend: flashmla_kv
+      context-length: 1048576
+      max-total-tokens: 1048576
+      mem-fraction-static: 0.85
+      max-running-requests: 200
+      page-size: 64
+      disable-radix-cache: true
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 3
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 4
+      watchdog-timeout: 86400
+      stream-interval: 60
+      enable-metrics: true
+      enable-cache-report: true
+
+sbatch_directives:
+  mem: "0"
+
+srun_options:
+  mem: "0"
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
