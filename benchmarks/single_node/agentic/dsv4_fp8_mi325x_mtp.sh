@@ -148,5 +148,10 @@ if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
     run_eval --port "$PORT"
 else
     build_replay_cmd "$RESULT_DIR"
+    # Full-context AgentX responses can remain healthy for several minutes
+    # after the admission window closes. Let already-admitted requests drain
+    # so their observed TTFT/ITL enters the strict coverage calculation. This
+    # does not extend admissions, change the workload, or lower the 98% gate.
+    REPLAY_CMD+=" --benchmark-grace-period 1800"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
 fi
