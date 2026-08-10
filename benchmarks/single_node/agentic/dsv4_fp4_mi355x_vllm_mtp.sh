@@ -376,14 +376,13 @@ fi
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS=$((2 * CONC))
 
-# DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins each tested
-# draft depth to its committed thinking-on golden acceptance length; eval-only
-# runs use real target verification so accuracy remains meaningful.
-# The isolated 16K scheduler-budget probe regressed the matched c48 control, so
-# restore 8K and isolate the K=2 golden MTP operating point. Draft depth and its
-# measured golden acceptance length are one coupled speculative configuration.
-NUM_SPEC_TOKENS=2
-SYNTHETIC_ACCEPT_LEN=2.27
+# DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins its
+# three-token draft to the committed thinking-on golden acceptance length;
+# eval-only runs use real target verification so accuracy remains meaningful.
+# The isolated 16K scheduler-budget and K=2 probes both regressed their matched
+# c48 controls. Restore the K=3/8K baseline before isolating graph capture mode.
+NUM_SPEC_TOKENS=3
+SYNTHETIC_ACCEPT_LEN=2.49
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
@@ -411,7 +410,7 @@ VLLM_CMD=(
     --block-size 256
     --max-num-batched-tokens 8192
     --moe-backend aiter
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
