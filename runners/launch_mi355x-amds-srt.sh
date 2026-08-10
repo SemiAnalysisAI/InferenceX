@@ -5,7 +5,7 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="7beb0a1b86bee281ac36affb6f2c9cbb23a3a616"
+SRT_SLURM_COMMIT="315e4b06a7e0806194a646ea21832e750e896a46"
 SLURM_PARTITION="compute"
 SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
@@ -63,7 +63,7 @@ srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
     --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache" \
     --container-writable --container-remap-root --no-container-entrypoint \
-    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache,HUGGINGFACE_HUB_CACHE=/hf_hub_cache,MODEL_REPO=${MODEL} \
+    --export=ALL,HF_HOME=/hf_hub_cache,MODEL_REPO=${MODEL} \
     python3 -c 'import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ["MODEL_REPO"])'
 EOF
 STAGE_JOB_ID=$(sbatch --wait --parsable "$STAGE_SCRIPT")

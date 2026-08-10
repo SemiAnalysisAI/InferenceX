@@ -5,17 +5,19 @@ This document tracks the work-in-progress integration of
 InferenceX AMD Slurm clusters. The project is a functional orchestration
 bring-up, not a performance-tuning exercise.
 
-Current development pin:
+Current development pin for both AMD launchers:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `105824810a67d52b58761077ad3b94d4a05eb3ac`
+- commit: `315e4b06a7e0806194a646ea21832e750e896a46`
 
 The MI300X launcher uses srt-slurm's supported `--no-preflight` submission mode
 because the immutable squashfs files live on compute-node-local RAID rather
 than the login node. Before submission, the launcher stages the benchmark
-runtime across the same eligible node pool; missing container files still fail
-loudly when Pyxis starts the allocation.
+runtime across the same eligible node pool. Missing engine and router images
+are imported atomically under per-image locks from the pinned public
+`vllm/vllm-openai-rocm:v0.26.0` and
+`vllm/vllm-router:nightly-20260809-d2ba586` images.
 
 The MI300X login and compute nodes also do not share the Actions checkout. The
 staging allocation checks out the exact pinned srt-slurm commit on every

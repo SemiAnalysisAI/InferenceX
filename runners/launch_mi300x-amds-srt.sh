@@ -4,10 +4,14 @@ set -euo pipefail
 # MI300X srt-slurm validation path. The existing launcher remains the default;
 # matrix rows opt in by exporting CONFIG_FILE through additional-settings.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="105824810a67d52b58761077ad3b94d4a05eb3ac"
+SRT_SLURM_COMMIT="315e4b06a7e0806194a646ea21832e750e896a46"
 SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
+VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"
+VLLM_ROUTER_IMAGE="vllm/vllm-router:nightly-20260809-d2ba586"
+VLLM_SQSH="${REMOTE_BASE}/containers/vllm-openai-rocm-v0.26.0.sqsh"
+VLLM_ROUTER_SQSH="${REMOTE_BASE}/containers/vllm-router-nightly-20260809-d2ba586.sqsh"
 
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
@@ -29,8 +33,9 @@ SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
 mkdir -p "$WORK_DIR"
 
 # The login and compute nodes do not share a filesystem. Stage only the
-# unchanged InferenceX benchmark client onto every eligible node. The batch job
-# exits normally; it does not cancel or preempt any allocation.
+# unchanged InferenceX benchmark client and immutable public container images
+# onto every eligible node. The batch job exits normally; it does not cancel or
+# preempt any allocation.
 RUNTIME_ARCHIVE="${WORK_DIR}/inferencex-benchmark.tar.gz"
 tar -C "$GITHUB_WORKSPACE" -czf "$RUNTIME_ARCHIVE" utils/bench_serving
 RUNTIME_PAYLOAD=$(base64 -w0 "$RUNTIME_ARCHIVE")
@@ -41,7 +46,7 @@ cat > "$STAGE_SCRIPT" <<EOF
 #SBATCH --nodes=5
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
-#SBATCH --time=00:05:00
+#SBATCH --time=00:45:00
 #SBATCH --exclude=${EXCLUDED_NODES}
 #SBATCH --job-name=${RUNNER_NAME:-mi300x-srt}-stage
 set -euo pipefail
@@ -53,9 +58,29 @@ srun --ntasks-per-node=1 bash -c '
   set -euo pipefail
   runtime="${REMOTE_RUNTIME}"
   srt_runtime="${REMOTE_SRT_RUNTIME}"
-  mkdir -p "\$runtime" "${REMOTE_RESULTS}"
-  test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh
-  test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh
+  mkdir -p "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
+  ensure_container_image() {
+    local target="\$1"
+    local image="\$2"
+    local lock_fd
+    local tmp
+    if unsquashfs -s "\$target" >/dev/null 2>&1; then
+      return
+    fi
+    exec {lock_fd}>"\${target}.lock"
+    flock -w 2400 "\$lock_fd"
+    if ! unsquashfs -s "\$target" >/dev/null 2>&1; then
+      tmp="\${target}.tmp.\${SLURM_JOB_ID}"
+      rm -f "\$tmp"
+      enroot import -o "\$tmp" "docker://\${image}"
+      unsquashfs -s "\$tmp" >/dev/null
+      mv "\$tmp" "\$target"
+    fi
+    flock -u "\$lock_fd"
+    exec {lock_fd}>&-
+  }
+  ensure_container_image "${VLLM_SQSH}" "${VLLM_IMAGE}"
+  ensure_container_image "${VLLM_ROUTER_SQSH}" "${VLLM_ROUTER_IMAGE}"
   if [[ ! -d "\$srt_runtime/.git" ]]; then
     git clone --quiet "${SRT_SLURM_REPOSITORY}" "\$srt_runtime"
   fi

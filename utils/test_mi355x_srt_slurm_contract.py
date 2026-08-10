@@ -123,7 +123,7 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     launcher = LAUNCHER.read_text()
     legacy = LEGACY_LAUNCHER.read_text()
 
-    assert "7beb0a1b86bee281ac36affb6f2c9cbb23a3a616" in launcher
+    assert "315e4b06a7e0806194a646ea21832e750e896a46" in launcher
     assert "v0.5.17-rocm720-mi35x-20260809" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "SRTCTL_RUNTIME_SOURCE_DIR" in launcher
@@ -132,9 +132,27 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     assert "scancel" not in launcher
     assert ': "${MODEL:?MODEL must identify the Hugging Face model}"' in launcher
     assert "MODEL_REPO=${MODEL}" in launcher
+    assert "HF_HOME=/hf_hub_cache,MODEL_REPO=${MODEL}" in launcher
+    assert "HF_HUB_CACHE=/hf_hub_cache,MODEL_REPO" not in launcher
     assert 'snapshot_download(os.environ["MODEL_REPO"])' in launcher
     assert 'if [[ -n "${CONFIG_FILE:-}" ]]; then' in legacy
     assert "launch_mi355x-amds-srt.sh" in legacy
+
+
+def test_all_mi355x_roles_use_the_staged_hugging_face_hub_cache():
+    for recipe_path in (AGG_RECIPE, DISAGG_RECIPE, PRODUCTION_DISAGG_RECIPE):
+        recipe = yaml.safe_load(recipe_path.read_text())
+        environments = [recipe["benchmark"]["env"]]
+        backend = recipe["backend"]
+        environments.extend(
+            value
+            for key, value in backend.items()
+            if key.endswith("_environment")
+        )
+        for environment in environments:
+            assert environment["HF_HOME"] == "/hf_hub_cache"
+            assert environment["HF_HUB_CACHE"] == "/hf_hub_cache/hub"
+            assert environment["HUGGINGFACE_HUB_CACHE"] == "/hf_hub_cache/hub"
 
 
 def test_fixed_sequence_commands_execute_with_attached_arguments(tmp_path):

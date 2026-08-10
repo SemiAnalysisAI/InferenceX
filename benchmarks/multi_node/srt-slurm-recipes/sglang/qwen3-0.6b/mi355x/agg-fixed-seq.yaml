@@ -37,8 +37,8 @@ backend:
   type: sglang
   aggregated_environment:
     HF_HOME: "/hf_hub_cache"
-    HF_HUB_CACHE: "/hf_hub_cache"
-    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache"
+    HF_HUB_CACHE: "/hf_hub_cache/hub"
+    HUGGINGFACE_HUB_CACHE: "/hf_hub_cache/hub"
     PYTHONUNBUFFERED: "1"
   sglang_config:
     aggregated:
@@ -90,5 +90,5 @@ benchmark:
     done
   env:
     HF_HOME: /hf_hub_cache
-    HF_HUB_CACHE: /hf_hub_cache
-    HUGGINGFACE_HUB_CACHE: /hf_hub_cache
+    HF_HUB_CACHE: /hf_hub_cache/hub
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache/hub

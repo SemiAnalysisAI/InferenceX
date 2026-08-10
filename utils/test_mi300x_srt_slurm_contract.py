@@ -92,11 +92,19 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
         "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
         "disagg-1p1d-fixed-seq.yaml"
     ]
-    assert "105824810a67d52b58761077ad3b94d4a05eb3ac" in launcher
+    assert "315e4b06a7e0806194a646ea21832e750e896a46" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "--no-preflight" in launcher
-    assert "test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh" in launcher
-    assert "test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh" in launcher
+    assert 'VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"' in launcher
+    assert (
+        'VLLM_ROUTER_IMAGE="vllm/vllm-router:nightly-20260809-d2ba586"'
+        in launcher
+    )
+    assert 'enroot import -o "\\$tmp" "docker://\\${image}"' in launcher
+    assert 'exec {lock_fd}>"\\${target}.lock"' in launcher
+    assert 'flock -w 2400 "\\$lock_fd"' in launcher
+    assert 'unsquashfs -s "\\$tmp"' in launcher
+    assert 'mv "\\$tmp" "\\$target"' in launcher
     assert 'REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"' in launcher
     assert 'git -C "\\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"' in launcher
     assert 'make -C "\\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64' in launcher
