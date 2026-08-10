@@ -6,7 +6,7 @@ set -euo pipefail
 # happen once even though srt-slurm runs the recipe setup on every role.
 SGLANG_REPOSITORY="https://github.com/cquil11/sglang.git"
 SGLANG_REF="fix/pd-one-token-prefill-response"
-SGLANG_COMMIT="443ce829fe0e8facdae3687c997d3c23571c7edf"
+SGLANG_COMMIT="9072e0dc5aaf1962b4e2c6f1a51094356b5d3324"
 WHEEL_CACHE_ROOT="/router_wheels/sglang-router-${SGLANG_COMMIT}"
 LOCK_FILE="${WHEEL_CACHE_ROOT}.lock"
 

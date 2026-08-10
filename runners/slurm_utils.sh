@@ -20,7 +20,7 @@ slurm_job_is_active() {
 
 wait_for_slurm_job_success() {
     local job_id="$1"
-    local attempts="${SLURM_ACCOUNTING_ATTEMPTS:-12}"
+    local attempts="${SLURM_ACCOUNTING_ATTEMPTS:-24}"
     local interval="${SLURM_ACCOUNTING_INTERVAL_SECONDS:-5}"
     local attempt record state exit_code
 
@@ -84,7 +84,6 @@ stream_slurm_job_log() {
     echo "Tailing $log_file"
     tail -F -s 2 -n+1 "$log_file" --pid="$poll_pid" 2>/dev/null
     wait "$poll_pid"
-    wait_for_slurm_job_success "$job_id"
 }
 
 copy_to_workspace() {

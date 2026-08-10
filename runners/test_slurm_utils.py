@@ -29,7 +29,7 @@ def write_executable(path: Path, body: str) -> None:
         ("4242|FAILED|1:0", 1, "ended in FAILED with exit 1:0"),
     ],
 )
-def test_stream_slurm_job_log_propagates_accounting_status(
+def test_wait_for_slurm_job_success_reports_accounting_status(
     tmp_path: Path,
     accounting_record: str,
     expected_returncode: int,
@@ -37,18 +37,13 @@ def test_stream_slurm_job_log_propagates_accounting_status(
 ) -> None:
     mock_bin = tmp_path / "bin"
     mock_bin.mkdir()
-    write_executable(mock_bin / "squeue", "exit 0")
-    write_executable(mock_bin / "tail", "exit 0")
     write_executable(mock_bin / "sacct", 'printf \'%s\\n\' "$MOCK_SACCT_RECORD"')
-    log_file = tmp_path / "sweep.log"
-    log_file.write_text("benchmark output\n")
 
     result = run_bash(
-        'export PATH="$4:$PATH" MOCK_SACCT_RECORD="$5" '
+        'export PATH="$3:$PATH" MOCK_SACCT_RECORD="$4" '
         "SLURM_ACCOUNTING_ATTEMPTS=1 SLURM_ACCOUNTING_INTERVAL_SECONDS=0; "
-        'source "$1"; stream_slurm_job_log 4242 "$2"',
+        'source "$1"; wait_for_slurm_job_success 4242',
         SLURM_UTILS,
-        log_file,
         tmp_path,
         mock_bin,
         accounting_record,

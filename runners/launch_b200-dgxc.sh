@@ -4,6 +4,8 @@
 SLURM_PARTITION="${SLURM_PARTITION:-gpu-2}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
+source "$(dirname "${BASH_SOURCE[0]}")/slurm_utils.sh"
+
 set -x
 
 # MODEL_PATH: Override with pre-downloaded paths on cluster-accessible storage.
@@ -428,6 +430,12 @@ EOF
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
+
+    # Native router validation is all-or-nothing. Other B200 workflows retain
+    # the launcher's historical result-collection behavior.
+    if [[ "$FRAMEWORK" == "sgl-router" || "$FRAMEWORK" == "vllm-router" ]]; then
+        wait_for_slurm_job_success "$JOB_ID" || exit 1
+    fi
 
     set -x
 

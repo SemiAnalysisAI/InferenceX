@@ -251,6 +251,12 @@ EOF
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    # Native router validation is all-or-nothing. Keep the shared log helper's
+    # legacy behavior for unrelated launchers that intentionally retain
+    # partial results from timed-out allocations.
+    if [[ "$FRAMEWORK" == "sgl-router" || "$FRAMEWORK" == "vllm-router" ]]; then
+        wait_for_slurm_job_success "$JOB_ID" || exit 1
+    fi
 
     set -x
 
