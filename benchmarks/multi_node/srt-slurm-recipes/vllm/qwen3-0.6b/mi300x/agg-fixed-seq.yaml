@@ -46,7 +46,6 @@ backend:
       gpu-memory-utilization: 0.50
       max-model-len: 2048
       max-num-seqs: 8
-      disable-log-requests: true
 
 srun_options:
   container-mount-home: ""
