@@ -9,7 +9,7 @@ Current development pin:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `8dd98d5d550b4cc4714b800aed1ae6d5b902822c`
+- commit: `d66b3aea91e3ab9a3d88f22d82fdb20c34abb745`
 
 ## Scope
 
@@ -78,5 +78,5 @@ use Linux ROCm's `ROCR_VISIBLE_DEVICES`, and legacy NVIDIA/CUDA behavior remains
 the default. It also supports `gpu_sbatch_directive: gres` without changing the
 legacy NVIDIA `--gpus-per-node` default. The initial MI300X cluster profile and
 small-model aggregate recipe are checked in alongside this document. A two-node
-1-prefill/1-decode recipe uses stable Dynamo 1.2.1 and vLLM's NIXL connector as
+1-prefill/1-decode recipe uses stable Dynamo 1.3.1 and vLLM's NIXL connector as
 the first disaggregated validation target.
