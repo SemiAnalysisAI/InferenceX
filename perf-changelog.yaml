@@ -5461,6 +5461,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
   
 - config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
+    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
+    - "EPP: switch from max-score-picker to weighted-random-picker for better load distribution under high concurrency"
+    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
+    - "Sweep: drop low-middle point (c256/512, 1P×4D) from llmd-vllm key; low-latency recipe runs at c1 only"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   description:
@@ -5623,6 +5633,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2513
 
 - config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Sweep: drop 2P×1D DEP8 conc=4096; j-llm-d characterized 2P at c512/1024/2048 with Pareto at c1024, and c4096 hit DeepGEMM NVLink barrier timeouts under sustained load"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
+
+- config-keys:
     - minimaxm3-fp4-b200-vllm-agentic-mtp
   scenario-type:
     - agentic-coding
@@ -5737,3 +5753,14 @@
     - "Keep TEP c4-c6 running long enough to collect a representative sample when a few early correlated metadata-only turns return no content: raise only the live fail-fast threshold to 50%, while retaining the unchanged strict 10% completed-run request-error validator."
     - "Set Mooncake's independent client-heartbeat TTL to 120 seconds for the full-context offload points. The first c4-c6 run kept the 120-second object lease but used Mooncake's 10-second client default; a healthy rank was unmounted after missing that heartbeat window. A full-primer c4 isolation then kept all eight clients registered but exposed a second issue: the 0.3.11 TCP connection pool retained about 7,000 simultaneous sockets and 60-second batch transfers timed out. Match the proven MI355X convention by disabling that pool, enabling destination affinity, and using eight transfer workers."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2541
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-agg
+    - dsv4-fp4-gb300-dynamo-sglang-agentic-disagg
+  description:
+    - "Upgrade Dynamo from 1.3.0.dev1 to 1.3.0.dev20260718 so router queueing is disabled by default at high concurrency"
+    - "Migrate AgentX session affinity from nvext.session_control to X-Dynamo-Session-ID headers with a 3600-second router TTL"
+    - "Remove the DYN_ROUTER_TEMPERATURE=10000000 override and restore Dynamo's deterministic 0.0 default"
+    - "Upgrade SGLang from nightly-dev-cu13-20260711-7de33ce8 to nightly-dev-cu13-20260719-99f5a6f4, the latest nightly before the scheduler WAR-barrier regression in SGLang #31687"
+    - "Restore the pre-watchdog AgentX concurrency grid and use AIPerf's default 300-second per-trajectory idle-gap cap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2319
