@@ -73,7 +73,7 @@ backend:
       cuda-graph-max-bs: 256
       scheduler-recv-interval: 30
       dp-size: 8
-      tp-size: 1
+      tp-size: 8
       ep-size: 8
       enable-dp-attention: true
       enable-dp-lm-head: true
