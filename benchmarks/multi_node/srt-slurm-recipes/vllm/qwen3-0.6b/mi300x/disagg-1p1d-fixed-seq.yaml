@@ -90,7 +90,9 @@ benchmark:
   type: custom
   command: |
     set -euo pipefail
-    mkdir -p /logs/fixed-seq
+    result_root="/results/${SLURM_JOB_ID}"
+    mkdir -p "${result_root}/fixed-seq"
+    trap 'tar -C /logs -czf "'"${result_root}"'/runtime-logs.tar.gz" . 2>/dev/null || true' EXIT
     for concurrency in 1 4; do
       python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py \
       --backend openai-chat \
@@ -110,7 +112,7 @@ benchmark:
       --ignore-eos \
       --disable-tqdm \
       --save-result \
-      --result-dir /logs/fixed-seq \
+      --result-dir "${result_root}/fixed-seq" \
       --result-filename "qwen3-0.6b-disagg-isl128-osl32-c${concurrency}.json";
     done
   env:

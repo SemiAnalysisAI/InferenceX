@@ -31,6 +31,7 @@ default_mounts:
   /dev/kfd: /dev/kfd
   /dev/dri: /dev/dri
   /raid/hf-hub-cache: /hf_hub_cache
+  # The launcher appends per-run /infmax-workspace and /results mounts here.
 
 # Pyxis otherwise re-imports the large ROCm image for every srun step. The
 # validation launcher materializes this immutable squashfs on each healthy

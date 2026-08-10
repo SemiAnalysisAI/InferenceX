@@ -17,6 +17,8 @@ CLUSTER_PATH = (
     REPO_ROOT
     / "benchmarks/multi_node/srt-slurm-recipes/cluster-configs/mi300x-amds.yaml"
 )
+MASTER_CONFIG_PATH = REPO_ROOT / "configs/amd-master.yaml"
+SRT_LAUNCHER_PATH = REPO_ROOT / "runners/launch_mi300x-amds-srt.sh"
 
 
 def test_mi300x_cluster_uses_the_rocm_slurm_contract():
@@ -73,6 +75,27 @@ def test_disaggregated_recipe_uses_native_router_and_moriio():
     assert "etcd" not in serialized
 
 
+def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
+    config = yaml.safe_load(MASTER_CONFIG_PATH.read_text())[
+        "qwen3-0.6b-fp16-mi300x-vllm-srt-disagg"
+    ]
+    search = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+    launcher = SRT_LAUNCHER_PATH.read_text()
+
+    assert config["runner"] == "mi300x-disagg"
+    assert config["router"] == {
+        "name": "vllm-router",
+        "version": "nightly-20260809-d2ba586",
+    }
+    assert config["kv-p2p-transfer"] == "moriio"
+    assert search["prefill"]["additional-settings"] == [
+        "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
+        "disagg-1p1d-fixed-seq.yaml"
+    ]
+    assert "411ec5971bac368725f59b0fda419353a6c603aa" in launcher
+    assert "scancel" not in launcher
+
+
 def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
     recipe = yaml.safe_load(RECIPE_PATH.read_text())
     benchmark = recipe["benchmark"]
@@ -80,6 +103,7 @@ def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
 
     assert benchmark["type"] == "custom"
     assert "/infmax-workspace/utils/bench_serving/benchmark_serving.py" in command
+    assert 'result_root="/results/${SLURM_JOB_ID}"' in command
     assert "--backend openai-chat" in command
     assert "--endpoint /v1/chat/completions" in command
     assert "--random-input-len 128" in command
@@ -103,7 +127,10 @@ def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
     for recipe_path in (RECIPE_PATH, DISAGG_RECIPE_PATH):
         command = yaml.safe_load(recipe_path.read_text())["benchmark"]["command"]
         result_dir = tmp_path / recipe_path.stem
-        command = command.replace("/logs/fixed-seq", str(result_dir))
+        command = command.replace(
+            'result_root="/results/${SLURM_JOB_ID}"',
+            f'result_root="{result_dir}"',
+        )
         args_log = tmp_path / f"{recipe_path.stem}.args"
         env = {
             **os.environ,
@@ -111,6 +138,7 @@ def test_fixed_sequence_commands_keep_all_arguments_attached(tmp_path):
             "FAKE_ARGS_LOG": str(args_log),
             "SRT_FRONTEND_HOST": "127.0.0.1",
             "SRT_FRONTEND_PORT": "8000",
+            "SLURM_JOB_ID": "123",
         }
 
         subprocess.run(["bash", "-n"], input=command, text=True, check=True)
