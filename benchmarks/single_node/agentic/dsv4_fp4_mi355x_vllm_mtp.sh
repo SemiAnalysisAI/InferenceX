@@ -379,8 +379,9 @@ MAX_NUM_SEQS=$((2 * CONC))
 # DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins its
 # three-token draft to the committed thinking-on golden acceptance length;
 # eval-only runs use real target verification so accuracy remains meaningful.
-# The isolated 16K scheduler-budget and K=2 probes both regressed their matched
-# c48 controls. Restore the K=3/8K baseline before isolating graph capture mode.
+# The isolated 16K scheduler-budget, K=2, and piecewise-graph probes all
+# regressed their matched c48 controls. Restore the K=3/8K/FULL_DECODE_ONLY
+# baseline before isolating INT4 Quick Reduce.
 NUM_SPEC_TOKENS=3
 SYNTHETIC_ACCEPT_LEN=2.49
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
@@ -392,7 +393,7 @@ fi
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
-#export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
 
 { set +x; } 2>/dev/null
@@ -410,7 +411,7 @@ VLLM_CMD=(
     --block-size 256
     --max-num-batched-tokens 8192
     --moe-backend aiter
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4

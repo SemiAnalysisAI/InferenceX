@@ -1232,9 +1232,9 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # TP4 at low concurrency, TP8+EP8 dominates DP8+EP8, and native DRAM offload at
 # c64 regresses the GPU-only point without producing an external-cache hit. The
 # reusable sweep followed the measured GPU-resident frontier from TP8 c1-c12
-# into TP8+EP8 c16-c64. The current fast follow-up isolates only c48 while
-# testing a larger prefill token budget; the all-green full grid remains the
-# rollback baseline in run 31357800541.
+# into TP8+EP8 c16-c64. The current fast follow-up isolates INT4 Quick Reduce
+# at c48; the all-green full grid remains the rollback baseline in run
+# 31357800541.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.26.0
   model: deepseek-ai/DeepSeek-V4-Pro
