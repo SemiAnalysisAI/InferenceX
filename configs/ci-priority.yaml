@@ -22,6 +22,8 @@ adjustments:
     vllm: 0.5
     dynamo-sglang: 0.5
     dynamo-vllm: 0.5
+    sgl-router: 0.5
+    vllm-router: 0.5
   model-prefix:
     kimik3: 1.5
     glm5: 0.75

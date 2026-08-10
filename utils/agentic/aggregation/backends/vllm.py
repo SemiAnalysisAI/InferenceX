@@ -27,7 +27,7 @@ class VllmBackend(ServerMetricsBackend):
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
         return any(name.startswith("vllm:") for name in metric_names) or (
-            not metrics and framework.lower() == "vllm"
+            not metrics and framework.lower() in {"vllm", "vllm-router"}
         )
 
     def populate(
