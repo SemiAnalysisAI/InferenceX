@@ -1049,6 +1049,43 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-cgcap-syn-piecewise-sweep:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [4, 10, 14, 16], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-pr51011-51040-sweep:
+  # Concurrency curve on the vllm#51011 + #51040 stack (branch
+  # kimik3-pr51011-51040-c8, both patchers default ON). c8 on this same stack is
+  # run 31350810827; the no-patch c8 control is 31176203674. At c8 both patches
+  # measured inside run-to-run noise on throughput, TTFT, ITL and interactivity,
+  # so this curve asks whether either does anything away from c8 rather than
+  # expecting a lift.
+  #
+  # c1 IS NOT THE SAME SERVER AS THE REST. The recipe sets mns = 2*CONC and pins
+  # it to MNS_PIN=16 only when 2*CONC >= 4, so c1 keeps mns 2 with a cudagraph
+  # ceiling of mns*(k+1) = 8, while c4, c10 and c16 all pin to mns 16 with a
+  # ceiling of 64. c1 is therefore a different capture ladder and a different
+  # scheduler width, not the low end of one curve -- say so when comparing.
+  # Scheduler headroom across the rest runs 4x at c4, 1.6x at c10, 1x at c16.
+  #
+  # Throughput stays simulated: rejection_sample_method=synthetic accepts a
+  # fixed 2.51 tokens per step instead of verifying, so these cells are
+  # comparable to each other and to the runs named above and to nothing
+  # measured. Acceptance and any eval on this arm are void by construction.
+  #
+  # c1 and c16 also carry the KDA hipErrorIllegalAddress history. That fault is
+  # probabilistic rather than a threshold -- c8 arm A (31350794392) died of it
+  # 20s into profiling on a config whose sibling arm C completed -- so a single
+  # cell failure here is not evidence about the patches.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 4, 10, 16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
   # bf16 + asm + DSpark: route the multi-token VERIFY step to the PS ASM kernel.
   #
