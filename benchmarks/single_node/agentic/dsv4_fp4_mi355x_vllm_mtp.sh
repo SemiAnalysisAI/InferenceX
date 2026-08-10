@@ -426,6 +426,16 @@ else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
 fi
 
+# DEP4 replicates the attention weights across four DP ranks. At the common
+# 0.90 setting vLLM leaves only 12.06--12.50 GiB for KV on MI355X, below the
+# 14.88 GiB required to admit one native 1,048,576-token request. Give only
+# this topology the extra headroom it needs; established TP/TEP/DEP8 results
+# retain their original memory fraction.
+GPU_MEM_UTIL=0.9
+if [ "$DP_ATTENTION" = "true" ] && [ "$TP" -eq 4 ]; then
+    GPU_MEM_UTIL=0.92
+fi
+
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
@@ -442,7 +452,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.9
+    --gpu-memory-utilization "$GPU_MEM_UTIL"
     --block-size 256
     --max-num-batched-tokens 8192
     --moe-backend aiter
