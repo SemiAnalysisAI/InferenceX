@@ -107,6 +107,87 @@ mkdir -p "$RESULT_DIR"
 SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
+LMCACHE_PID=""
+
+cleanup_agentic_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$ROUTER_PID" "vLLM router"
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
+    stop_background_process_tree "$LMCACHE_PID" "LMCache server"
+    exit "$exit_code"
+}
+trap cleanup_agentic_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Mooncake does not publish a ROCm wheel. Build the pinned release once for
+# each immutable OS/Python/ROCm tuple and reuse the shared cache on later jobs.
+install_mooncake_rocm() {
+    local mooncake_tag="v0.3.11.post1"
+    local mooncake_src="/tmp/Mooncake-$mooncake_tag"
+    local mooncake_stage="/tmp/mooncake-stage-$mooncake_tag"
+    local build_jobs cache_root cache_key cache_archive cache_tmp
+    local engine_path os_version python_abi rocm_version
+
+    build_jobs=$(nproc)
+    if ((build_jobs > 32)); then
+        build_jobs=32
+    fi
+    os_version=$(. /etc/os-release && printf '%s-%s' "$ID" "$VERSION_ID")
+    python_abi=$(python3 -c 'import sys; print(f"cp{sys.version_info.major}{sys.version_info.minor}")')
+    rocm_version=$(sed -n '1p' /opt/rocm/.info/version 2>/dev/null || true)
+    if [[ -z "$rocm_version" ]]; then
+        rocm_version=$(hipconfig --version)
+    fi
+    rocm_version=${rocm_version//[^[:alnum:]._-]/_}
+    cache_root="${HF_HUB_CACHE:?HF_HUB_CACHE must be set}/inferencex/mooncake"
+    cache_key="${mooncake_tag}-${os_version}-${python_abi}-${rocm_version}-$(uname -m)-hip"
+    cache_archive="$cache_root/$cache_key.tar.gz"
+    mkdir -p "$cache_root"
+
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential cmake git libasio-dev libboost-dev libcurl4-openssl-dev \
+        libgflags-dev libgoogle-glog-dev libibverbs-dev libjsoncpp-dev \
+        libnuma-dev libpython3-dev libssl-dev libunwind-dev liburing-dev \
+        libxxhash-dev libyaml-cpp-dev libzstd-dev ninja-build pybind11-dev
+
+    exec 9>"$cache_archive.lock"
+    flock -w 1800 9
+    if [[ -f "$cache_archive" ]] && ! tar -tzf "$cache_archive" >/dev/null 2>&1; then
+        rm -f "$cache_archive"
+    fi
+    if [[ ! -f "$cache_archive" ]]; then
+        echo "Building HIP Mooncake cache artifact: $cache_archive"
+        rm -rf "$mooncake_src" "$mooncake_stage"
+        git clone --depth 1 --branch "$mooncake_tag" --recurse-submodules \
+            --shallow-submodules https://github.com/kvcache-ai/Mooncake.git "$mooncake_src"
+        cmake -S "$mooncake_src/extern/yalantinglibs" \
+            -B "$mooncake_src/extern/yalantinglibs/build" \
+            -DBUILD_EXAMPLES=OFF -DBUILD_BENCHMARK=OFF -DBUILD_UNIT_TESTS=OFF
+        cmake --build "$mooncake_src/extern/yalantinglibs/build" -j "$build_jobs"
+        cmake --install "$mooncake_src/extern/yalantinglibs/build"
+        cmake -S "$mooncake_src" -B "$mooncake_src/build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=OFF -DUSE_HIP=ON \
+            -DWITH_EP=OFF -DWITH_STORE=ON -DWITH_STORE_RUST=OFF \
+            -DWITH_RUST_EXAMPLE=OFF -DBUILD_EXAMPLES=OFF -DBUILD_UNIT_TESTS=OFF
+        cmake --build "$mooncake_src/build" -j "$build_jobs"
+        mkdir -p "$mooncake_stage"
+        DESTDIR="$mooncake_stage" cmake --install "$mooncake_src/build"
+        cache_tmp=$(mktemp "$cache_root/$cache_key.tmp.XXXXXX")
+        tar -C "$mooncake_stage" -czf "$cache_tmp" .
+        mv -f "$cache_tmp" "$cache_archive"
+    else
+        echo "Using HIP Mooncake cache artifact: $cache_archive"
+    fi
+    tar -C / -xzf "$cache_archive"
+    engine_path=$(python3 -c 'import mooncake.engine; print(mooncake.engine.__file__)')
+    ldd "$engine_path" | grep -q 'libamdhip64.so'
+    exec 9>&-
+}
 
 OFFLOAD_ARGS=()
 
@@ -139,30 +220,13 @@ case "${KV_OFFLOAD_BACKEND:-}" in
     ;;
   mooncake)
     require_agentic_kv_offload_backend mooncake
-    # ---- Mooncake config ----------------------------------------------------------
         # Embedded mode contributes one segment per GPU rank to a shared
-        # distributed store, so pre-divide the aggregate host-memory budget.
+        # distributed store, so pre-divide the generated aggregate budget.
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
-
-        #MOONCAKE_VERSION=0.3.11.post1
-        #apt-get update && apt-get install -y libcurl4 libibverbs1 rdma-core librdmacm1 libnuma1 liburing2
-        #agentic_pip_install --quiet --no-cache-dir --no-deps \
-        #    --force-reinstall "mooncake-transfer-engine-non-cuda==$MOONCAKE_VERSION"
-
-        git clone https://github.com/kvcache-ai/Mooncake.git
-        cd Mooncake
-        bash dependencies.sh
-        mkdir build
-        cd build
-        cmake ..
-        make -j
-        sudo make install # optional, make it ready to be used by vLLM/SGLang
-        cd ..
-        cd ..
-
+        if ! python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null 2>&1; then
+            install_mooncake_rocm
+        fi
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -178,22 +242,15 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   "enable_offload": false
 }
 EOF
-# (srok)
-  #"protocol": "rdma",
-  #"device_name": "mlx5_0",
-  #"local_buffer_size": "4GB",
         export MOONCAKE_CONFIG_PATH
         export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
-        # (srok)
-        #export MC_WORKERS_PER_CTX=4
         export MC_WORKERS_PER_CTX=8
 
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
         MOONCAKE_KV_LEASE_TTL=60s
-        #MOONCAKE_KV_LEASE_TTL=3600s
 
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
@@ -219,30 +276,6 @@ EOF
   lmcache)
     require_agentic_kv_offload_backend lmcache
     # ---- Lmcache config ----------------------------------------------------------
-    LMCACHE_PID=""
-
-    cleanup_lmcache_server() {
-        if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            kill "$LMCACHE_PID" 2>/dev/null || true
-            wait "$LMCACHE_PID" 2>/dev/null || true
-        fi
-    }
-
-    trap cleanup_lmcache_server EXIT
-
-    cleanup_agentic_services() {
-        local exit_code=$?
-        trap - EXIT INT TERM
-        set +e
-        stop_background_process_tree "$ROUTER_PID" "vLLM router"
-        stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-        stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
-        exit "$exit_code"
-    }
-    trap cleanup_agentic_services EXIT
-    trap 'exit 130' INT
-    trap 'exit 143' TERM
-
     wait_for_lmcache_ready() {
         { set +x; } 2>/dev/null
         local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
@@ -379,9 +412,9 @@ MAX_NUM_SEQS=$((2 * CONC))
 # DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins its
 # three-token draft to the committed thinking-on golden acceptance length;
 # eval-only runs use real target verification so accuracy remains meaningful.
-# The isolated 16K scheduler-budget, K=2, piecewise-graph, and INT4 Quick
-# Reduce probes did not improve their matched c48 controls. Restore the
-# K=3/8K/FULL_DECODE_ONLY baseline before isolating breakable CUDA graphs.
+# The isolated scheduler, MTP-depth, graph-mode, collective, and breakable-
+# graph probes did not produce a clean improvement. Keep the verified
+# K=3/8K/FULL_DECODE_ONLY baseline while expanding topology coverage.
 NUM_SPEC_TOKENS=3
 SYNTHETIC_ACCEPT_LEN=2.49
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
@@ -393,7 +426,6 @@ fi
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
-export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER_MOE=1
 
 { set +x; } 2>/dev/null
