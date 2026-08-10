@@ -1480,7 +1480,7 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
 # points. Mooncake uses the standard generated aggregate host-DRAM cap and the
 # pinned ROCm build convention already exercised by MI325X AgentX recipes.
 dsv4-fp8-mi325x-vllm-agentic-mtp:
-  image: vllm/vllm-openai-rocm:nightly-f8d03e77416bf90c49acbe50e233275722f02c4b
+  image: vllm/vllm-openai-rocm:v0.27.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi325x-amds
