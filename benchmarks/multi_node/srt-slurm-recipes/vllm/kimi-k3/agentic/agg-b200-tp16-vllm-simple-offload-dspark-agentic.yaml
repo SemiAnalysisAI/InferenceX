@@ -17,6 +17,8 @@ identity:
 dynamo:
   install: false
 
+setup_script: kimik3-dspark-config-compat.sh
+
 slurm:
   time_limit: "8:00:00"
 
