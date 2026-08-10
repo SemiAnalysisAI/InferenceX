@@ -1227,10 +1227,12 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
-# DeepSeek-V4-Pro FP4 MTP refresh for MI355X. GPU-only discovery places the
-# throughput knee at TP8+EP8 c56 and shows a monotonic collapse from c64 onward.
-# Isolate host KV as the next variable: compare native DRAM offload at c64
-# against the preserved GPU-only c64 result before expanding or publishing it.
+# DeepSeek-V4-Pro FP4 MTP refresh for MI355X. Fast discovery measured the full
+# B200/B300-shaped topology space one variable at a time: TP8 weakly dominates
+# TP4 at low concurrency, TP8+EP8 dominates DP8+EP8, and native DRAM offload at
+# c64 regresses the GPU-only point without producing an external-cache hit. The
+# reusable sweep therefore follows the measured GPU-resident frontier from TP8
+# c1-c12 into TP8+EP8 c16-c56, with c64 retained as the post-knee guard.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.26.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1243,7 +1245,8 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: vllm-native }, spec-decoding: mtp, conc-list: [64] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12] }
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 24, 32, 40, 48, 56, 64] }
       # DP4+EP4 is not fit-safe at the required 1,048,576-token model length:
       # a direct c56 probe left 12.09 GiB KV memory versus 14.88 GiB required.
       # LMCache invalid-block recovery currently assumes one KV-cache group,
