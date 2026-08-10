@@ -37,6 +37,10 @@ def test_cluster_profile_matches_the_mi355x_rocm_slurm_contract():
     assert cluster["containers"]["sglang-rocm-v0.5.16-mi35x"].endswith(
         "/sglang-rocm-v0.5.16-mi35x-20260728.sqsh"
     )
+    assert cluster["output_dir"].startswith("/it-share/gharunners2/srt-slurm/")
+    assert cluster["containers"]["sglang-rocm-v0.5.16-mi35x"].startswith(
+        "/it-share/gharunners2/srt-slurm/"
+    )
 
 
 def test_recipes_use_native_sglang_router_and_only_disagg_uses_mori():
@@ -100,6 +104,8 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     assert "v0.5.16-rocm720-mi35x-20260728" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "SRTCTL_RUNTIME_SOURCE_DIR" in launcher
+    assert 'SHARED_BASE="/it-share/gharunners2/srt-slurm"' in launcher
+    assert "/it-share/inferencex" not in launcher
     assert "scancel" not in launcher
     assert 'if [[ -n "${CONFIG_FILE:-}" ]]; then' in legacy
     assert "launch_mi355x-amds-srt.sh" in legacy
