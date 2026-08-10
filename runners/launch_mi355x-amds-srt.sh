@@ -5,11 +5,11 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="42b91455f9db13cd2cdb8822baaa834d05c40909"
+SRT_SLURM_COMMIT="7beb0a1b86bee281ac36affb6f2c9cbb23a3a616"
 SLURM_PARTITION="compute"
-SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+SGLANG_IMAGE="lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
 SHARED_BASE="/it-share/gharunners2/srt-slurm"
-SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.16-mi35x-20260728.sqsh"
+SHARED_IMAGE="${SHARED_BASE}/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
 SHARED_HF_CACHE="/it-share/hf-hub-cache"
 SHARED_RESULTS="${SHARED_BASE}/results"
 
@@ -49,7 +49,7 @@ flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
     tmp="${SHARED_IMAGE}.tmp.\${SLURM_JOB_ID}"
     rm -f "\$tmp"
-    local_image="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.16-rocm720-mi35x-20260728.sqsh"
+    local_image="/var/lib/squash/lmsysorg_sglang-rocm_v0.5.17-rocm720-mi35x-20260809.sqsh"
     if unsquashfs -s "\$local_image" >/dev/null 2>&1; then
         cp --sparse=always "\$local_image" "\$tmp"
     else

@@ -38,11 +38,11 @@ def test_cluster_profile_matches_the_mi355x_rocm_slurm_contract():
     assert cluster["runtime_config_transport"] == "shared-filesystem"
     assert cluster["default_mounts"]["/dev/kfd"] == "/dev/kfd"
     assert cluster["default_mounts"]["/dev/dri"] == "/dev/dri"
-    assert cluster["containers"]["sglang-rocm-v0.5.16-mi35x"].endswith(
-        "/sglang-rocm-v0.5.16-mi35x-20260728.sqsh"
+    assert cluster["containers"]["sglang-rocm-v0.5.17-mi35x"].endswith(
+        "/sglang-rocm-v0.5.17-mi35x-20260809.sqsh"
     )
     assert cluster["output_dir"].startswith("/it-share/gharunners2/srt-slurm/")
-    assert cluster["containers"]["sglang-rocm-v0.5.16-mi35x"].startswith(
+    assert cluster["containers"]["sglang-rocm-v0.5.17-mi35x"].startswith(
         "/it-share/gharunners2/srt-slurm/"
     )
 
@@ -50,6 +50,7 @@ def test_cluster_profile_matches_the_mi355x_rocm_slurm_contract():
 def test_recipes_use_native_sglang_router_and_only_disagg_uses_mori():
     agg = yaml.safe_load(AGG_RECIPE.read_text())
     disagg = yaml.safe_load(DISAGG_RECIPE.read_text())
+    production_disagg = yaml.safe_load(PRODUCTION_DISAGG_RECIPE.read_text())
 
     assert agg["resources"] == {
         "gpu_type": "mi355x",
@@ -69,12 +70,23 @@ def test_recipes_use_native_sglang_router_and_only_disagg_uses_mori():
         assert "rdma0" in disagg["backend"][f"{role}_environment"]["IBDEVICES"]
 
     assert "mori" not in AGG_RECIPE.read_text().lower()
-    for recipe in (AGG_RECIPE, DISAGG_RECIPE, PRODUCTION_DISAGG_RECIPE):
-        text = recipe.read_text().lower()
+    expected_image = "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
+    expected_version = "0.5.17.dev20260809+g7120f3ee13"
+    for recipe_path, recipe in (
+        (AGG_RECIPE, agg),
+        (DISAGG_RECIPE, disagg),
+        (PRODUCTION_DISAGG_RECIPE, production_disagg),
+    ):
+        text = recipe_path.read_text().lower()
         assert "dynamo" not in text
         assert "nixl" not in text
         assert "nats" not in text
         assert "etcd" not in text
+        assert recipe["model"]["container"] == "sglang-rocm-v0.5.17-mi35x"
+        assert recipe["identity"]["container"]["image"] == expected_image
+        assert recipe["identity"]["frameworks"]["sglang"] == expected_version
+    for recipe in (disagg, production_disagg):
+        assert recipe["identity"]["frameworks"]["amd-mori"] == expected_version
 
 
 def test_matrix_rows_explicitly_select_the_srt_recipes():
@@ -97,6 +109,9 @@ def test_matrix_rows_explicitly_select_the_srt_recipes():
         config = master[name]
         search = config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
         assert config["runner"] == "cluster:mi355x-amds"
+        assert config["image"] == (
+            "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
+        )
         assert config["multinode"] is True
         assert config["disagg"] is is_disagg
         assert search["prefill"]["additional-settings"] == [
@@ -108,8 +123,8 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     launcher = LAUNCHER.read_text()
     legacy = LEGACY_LAUNCHER.read_text()
 
-    assert "42b91455f9db13cd2cdb8822baaa834d05c40909" in launcher
-    assert "v0.5.16-rocm720-mi35x-20260728" in launcher
+    assert "7beb0a1b86bee281ac36affb6f2c9cbb23a3a616" in launcher
+    assert "v0.5.17-rocm720-mi35x-20260809" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "SRTCTL_RUNTIME_SOURCE_DIR" in launcher
     assert 'SHARED_BASE="/it-share/gharunners2/srt-slurm"' in launcher

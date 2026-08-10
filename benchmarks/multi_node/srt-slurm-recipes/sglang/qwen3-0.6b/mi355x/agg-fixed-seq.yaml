@@ -5,16 +5,16 @@ name: "mi355x-sglang-qwen3-0.6b-agg-fixed-seq"
 
 model:
   path: "hf:Qwen/Qwen3-0.6B"
-  container: "sglang-rocm-v0.5.16-mi35x"
+  container: "sglang-rocm-v0.5.17-mi35x"
   precision: "fp16"
 
 identity:
   model:
     repo: "Qwen/Qwen3-0.6B"
   container:
-    image: "lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+    image: "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
   frameworks:
-    sglang: "0.5.16.dev20260728+g32c30c0f96"
+    sglang: "0.5.17.dev20260809+g7120f3ee13"
     sglang-router: "0.3.2"
 
 slurm:

@@ -27,6 +27,6 @@ default_mounts:
   # The launcher appends the exact shared workspace and result roots.
 
 containers:
-  sglang-rocm-v0.5.16-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.16-mi35x-20260728.sqsh
+  sglang-rocm-v0.5.17-mi35x: /it-share/gharunners2/srt-slurm/containers/sglang-rocm-v0.5.17-mi35x-20260809.sqsh
 
 nginx_raise_ulimit: false

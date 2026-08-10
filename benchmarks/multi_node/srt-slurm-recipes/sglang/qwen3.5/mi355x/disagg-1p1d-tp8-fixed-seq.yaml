@@ -6,18 +6,18 @@ name: "mi355x-sglang-qwen3.5-fp8-disagg-1p1d-tp8-fixed-seq"
 
 model:
   path: "hf:Qwen/Qwen3.5-397B-A17B-FP8"
-  container: "sglang-rocm-v0.5.16-mi35x"
+  container: "sglang-rocm-v0.5.17-mi35x"
   precision: "fp8"
 
 identity:
   model:
     repo: "Qwen/Qwen3.5-397B-A17B-FP8"
   container:
-    image: "lmsysorg/sglang-rocm:v0.5.16-rocm720-mi35x-20260728"
+    image: "lmsysorg/sglang-rocm:v0.5.17-rocm720-mi35x-20260809"
   frameworks:
-    sglang: "0.5.16.dev20260728+g32c30c0f96"
+    sglang: "0.5.17.dev20260809+g7120f3ee13"
     sglang-router: "0.3.2"
-    amd-mori: "0.5.16.dev20260728+g32c30c0f96"
+    amd-mori: "0.5.17.dev20260809+g7120f3ee13"
 
 slurm:
   time_limit: "02:00:00"
