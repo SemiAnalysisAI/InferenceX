@@ -119,6 +119,7 @@ install_mooncake_rocm() {
 }
 
 OFFLOAD_ARGS=()
+HYBRID_KV_CACHE_ARGS=(--no-disable-hybrid-kv-cache-manager)
 if agentic_kv_offload_enabled; then
     require_agentic_kv_offload_backend mooncake
     # TOTAL_CPU_DRAM_GB is the generator-capped aggregate node budget.
@@ -170,6 +171,12 @@ EOF
         --kv-transfer-config
         '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
     )
+    # vLLM's external-KV invalid-block recovery currently unpacks exactly one
+    # cache group. DeepSeek V4's hybrid manager exposes multiple groups, so a
+    # Mooncake transfer failure crashes the scheduler before it can recompute.
+    # Use the supported uniform-cache mode for Mooncake until vLLM implements
+    # hybrid-memory-allocator recovery; GPU-resident runs retain hybrid KV.
+    HYBRID_KV_CACHE_ARGS=(--disable-hybrid-kv-cache-manager)
 else
     require_agentic_kv_offload_none
 fi
@@ -256,7 +263,7 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --enable-prefix-caching
     --enable-prompt-tokens-details
-    --no-disable-hybrid-kv-cache-manager
+    "${HYBRID_KV_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 
