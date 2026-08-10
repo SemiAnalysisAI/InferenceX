@@ -16,7 +16,7 @@ SHARED_RESULTS="${SHARED_BASE}/results"
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
-: "${MODEL_PATH:?MODEL_PATH must identify the Hugging Face model}"
+: "${MODEL:?MODEL must identify the Hugging Face model}"
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -63,7 +63,7 @@ srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
     --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache" \
     --container-writable --container-remap-root --no-container-entrypoint \
-    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache,HUGGINGFACE_HUB_CACHE=/hf_hub_cache,MODEL_REPO=${MODEL_PATH} \
+    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache,HUGGINGFACE_HUB_CACHE=/hf_hub_cache,MODEL_REPO=${MODEL} \
     python3 -c 'import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ["MODEL_REPO"])'
 EOF
 STAGE_JOB_ID=$(sbatch --wait --parsable "$STAGE_SCRIPT")

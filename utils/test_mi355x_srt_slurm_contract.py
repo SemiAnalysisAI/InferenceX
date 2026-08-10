@@ -115,6 +115,8 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     assert 'SHARED_BASE="/it-share/gharunners2/srt-slurm"' in launcher
     assert "/it-share/inferencex" not in launcher
     assert "scancel" not in launcher
+    assert ': "${MODEL:?MODEL must identify the Hugging Face model}"' in launcher
+    assert "MODEL_REPO=${MODEL}" in launcher
     assert 'snapshot_download(os.environ["MODEL_REPO"])' in launcher
     assert 'if [[ -n "${CONFIG_FILE:-}" ]]; then' in legacy
     assert "launch_mi355x-amds-srt.sh" in legacy
