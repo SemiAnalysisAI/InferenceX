@@ -142,6 +142,9 @@ if agentic_kv_offload_enabled; then
   "enable_offload": false
 }
 EOF
+    # Mooncake v0.3.11.post1 emits its transfer polling loop at VLOG(1).
+    # Keep normal INFO diagnostics while suppressing that unbounded hot-loop output.
+    export GLOG_v=0
     export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
     export MC_TCP_ENABLE_CONNECTION_POOL=1
     mooncake_master --port "$MOONCAKE_MASTER_PORT" \
