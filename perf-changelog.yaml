@@ -5716,4 +5716,5 @@
   description:
     - "Refresh B300 Kimi K3 DSpark submission with corrected AgentX harness"
     - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
+    - "Cap the GPU-resident search at concurrency 8 after concurrency 16 failed to complete deterministic warmup; retain concurrency 16 for the DRAM-offload capacity tier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2476
