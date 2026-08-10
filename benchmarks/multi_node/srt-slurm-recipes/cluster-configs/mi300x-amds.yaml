@@ -18,6 +18,7 @@ use_exclusive_sbatch_directive: false
 default_sbatch_directives:
   cpus-per-task: "32"
   mem: "128G"
+  exclude: "chi-mi300x-049,chi-mi300x-121"
 
 default_mounts:
   /dev/kfd: /dev/kfd

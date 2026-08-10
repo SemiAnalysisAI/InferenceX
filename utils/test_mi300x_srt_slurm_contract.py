@@ -22,6 +22,9 @@ def test_mi300x_cluster_uses_the_rocm_slurm_contract():
     assert cluster["accelerator_vendor"] == "amd"
     assert cluster["gpu_sbatch_directive"] == "gres"
     assert cluster["use_segment_sbatch_directive"] is False
+    assert cluster["default_sbatch_directives"]["exclude"] == (
+        "chi-mi300x-049,chi-mi300x-121"
+    )
     assert cluster["default_mounts"]["/dev/kfd"] == "/dev/kfd"
     assert cluster["default_mounts"]["/dev/dri"] == "/dev/dri"
 
