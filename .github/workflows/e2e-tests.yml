@@ -46,10 +46,15 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Agentic eval runner (lm-eval, swebench, or tool-use)"
+                description: "Agentic eval runner (lm-eval, swebench, or kimi-vendor)"
                 required: false
                 type: string
                 default: "lm-eval"
+            eval-suite:
+                description: "Agentic eval suite interpreted by the selected runner"
+                required: false
+                type: string
+                default: ""
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -131,10 +136,15 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Agentic eval runner (lm-eval, swebench, or tool-use)"
+                description: "Agentic eval runner (lm-eval, swebench, or kimi-vendor)"
                 required: false
                 type: string
                 default: "lm-eval"
+            eval-suite:
+                description: "Agentic eval suite interpreted by the selected runner"
+                required: false
+                type: string
+                default: ""
             swebench-gen-mode:
                 description: "SWE-bench generation mode (single-shot | agentic). Empty = agentic (single-shot is an explicit debugging escape hatch)."
                 required: false
@@ -470,6 +480,7 @@ jobs:
             eval-limit: ${{ inputs.eval-limit }}
             swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             eval-framework: ${{ inputs.eval-framework }}
+            eval-suite: ${{ inputs.eval-suite }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 

@@ -14,8 +14,11 @@ from typing import Any
 
 TASK_NAME = "kimi_tool_call_schema"
 NATIVE_REPORT_FILENAME = "kimi_vendor_report.json"
-COMPATIBILITY_GLOB = "results_*.json"
+COMPATIBILITY_GLOB = "results_kimi_vendor_*.json"
 EXPECTED_MODES = {"non-stream", "stream"}
+DEFAULT_TIMEOUT_SECONDS = 900
+RESULT_FORMAT = "inferencex-eval-v1"
+ADAPTER_NAME = "kimi-vendor-verifier"
 
 
 def prepare_compatibility_path(output_dir: Path) -> Path:
@@ -23,7 +26,7 @@ def prepare_compatibility_path(output_dir: Path) -> Path:
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    return output_dir / f"results_{timestamp}.json"
+    return output_dir / f"results_kimi_vendor_{timestamp}.json"
 
 
 def build_pytest_command(
@@ -111,7 +114,8 @@ def _compatibility_result(
     model: str, score: float, integration_error: BaseException | None = None
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
-        "lm_eval_version": "kimi-vendor-verifier",
+        "result_format": RESULT_FORMAT,
+        "eval_adapter": ADAPTER_NAME,
         "model_name": model,
         "results": {
             TASK_NAME: {
@@ -146,6 +150,7 @@ def run_evaluation(
     api_key: str,
     model: str,
     output_dir: Path,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> bool:
     """Run upstream pytest and always attempt to publish a compatibility result."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -167,11 +172,18 @@ def run_evaluation(
             ),
             cwd=verifier_dir,
             check=False,
+            timeout=timeout_seconds,
         )
         subprocess_rc = completed.returncode
         report = json.loads(native_report.read_text(encoding="utf-8"))
         compatibility, complete_pass = _project_report(model, report)
-    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        if subprocess_rc != 0 and complete_pass:
+            integration_error = RuntimeError(
+                f"upstream verifier exited with code {subprocess_rc}"
+            )
+            compatibility = _compatibility_result(model, 0.0, integration_error)
+            complete_pass = False
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         integration_error = exc
         compatibility = _compatibility_result(model, 0.0, exc)
     finally:
@@ -185,6 +197,13 @@ def run_evaluation(
     return subprocess_rc == 0 and complete_pass and integration_error is None
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the pinned stock Kimi Vendor Verifier tool-schema smoke test."
@@ -194,6 +213,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--api-key", default="EMPTY")
     parser.add_argument("--model", required=True)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument(
+        "--timeout-seconds", type=_positive_int, default=DEFAULT_TIMEOUT_SECONDS
+    )
     parser.add_argument("--integration-error")
     args = parser.parse_args(argv)
     if args.integration_error is None:
@@ -230,6 +252,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         api_key=args.api_key,
         model=args.model,
         output_dir=args.output_dir,
+        timeout_seconds=args.timeout_seconds,
     )
     return 0 if passed else 1
 

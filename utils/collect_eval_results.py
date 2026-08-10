@@ -32,6 +32,7 @@ N_EFF = "N (eff)"
 SPEC_DECODING = "Spec Decode"
 
 CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
+EVAL_RESULT_FORMAT = "inferencex-eval-v1"
 
 
 def load_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -71,10 +72,10 @@ def result_concurrency(path: Path) -> Optional[int]:
 
 
 def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
-    """Return lm-eval result JSONs from one artifact directory.
+    """Return collector-compatible eval result JSONs from one artifact directory.
 
-    Legacy artifacts contribute their latest result file. Batched artifacts
-    contribute the latest result file for each `_concN` suffix.
+    Legacy lm-eval artifacts contribute their latest result file. Batched
+    artifacts contribute the latest result file for each `_concN` suffix.
     """
     immediate_jsons = set(d.glob('results*.json'))
     immediate_jsons.update(
@@ -86,7 +87,7 @@ def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
         data = load_json(p)
         if not isinstance(data, dict):
             continue
-        if 'lm_eval_version' in data:
+        if data.get('result_format') == EVAL_RESULT_FORMAT or 'lm_eval_version' in data:
             lm_paths.append(p)
 
     if not lm_paths:

@@ -14,7 +14,7 @@ _SCRIPT = r'''
 source "$BENCHMARK_LIB"
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
 run_swebench_eval() { echo "DISPATCH=swebench"; }
-run_tool_use_eval() { echo "DISPATCH=tool-use"; }
+run_kimi_vendor_eval() { echo "DISPATCH=kimi-vendor"; }
 append_lm_eval_summary() { echo "STAGED=summary"; }
 export EVAL_MAX_MODEL_LEN=16384
 export EVAL_CONCURRENT_REQUESTS=""
@@ -82,21 +82,21 @@ def test_env_can_force_swebench_on_fixed_seqlen():
 
 
 
-def test_env_can_force_tool_use_on_agentic_eval() -> None:
-    assert "DISPATCH=tool-use" in _dispatch(
+def test_env_can_force_kimi_vendor_on_agentic_eval() -> None:
+    assert "DISPATCH=kimi-vendor" in _dispatch(
         is_agentic="1",
         eval_only="true",
-        env_fw="tool-use",
+        env_fw="kimi-vendor",
     )
 
 
-def test_tool_use_skips_unused_model_context_loading() -> None:
+def test_kimi_vendor_skips_unused_model_context_loading() -> None:
     script = r'''
 source "$BENCHMARK_LIB"
 unset EVAL_MAX_MODEL_LEN
 compute_eval_context_length() { echo "UNEXPECTED_CONTEXT_LOAD"; return 99; }
-run_tool_use_eval() { echo "DISPATCH=tool-use"; }
-export EVAL_FRAMEWORK=tool-use
+run_kimi_vendor_eval() { echo "DISPATCH=kimi-vendor"; }
+export EVAL_FRAMEWORK=kimi-vendor
 export EVAL_CONCURRENT_REQUESTS=""
 export EVAL_ONLY=false
 export IS_AGENTIC=0
@@ -111,7 +111,7 @@ run_eval --port 8888
     )
 
     assert result.returncode == 0, result.stderr
-    assert "DISPATCH=tool-use" in result.stdout
+    assert "DISPATCH=kimi-vendor" in result.stdout
     assert "UNEXPECTED_CONTEXT_LOAD" not in result.stdout
 
 
@@ -143,43 +143,43 @@ def test_run_eval_rejects_missing_framework_value():
     assert "--framework requires a value" in result.stderr
 
 
-def test_tool_use_rejects_batched_concurrency() -> None:
+def test_kimi_vendor_rejects_batched_concurrency() -> None:
     result = _run_invalid_call(
         "EVAL_MAX_MODEL_LEN=16384 "
         "EVAL_CONCURRENT_REQUESTS='1 4' "
-        "run_eval --framework tool-use"
+        "run_eval --framework kimi-vendor"
     )
     assert result.returncode == 1
     assert "batched eval concurrency is only supported for lm-eval" in result.stderr
 
 
-def test_tool_use_rejects_unsupported_suite() -> None:
+def test_kimi_vendor_rejects_unsupported_suite() -> None:
     result = _run_invalid_call(
-        "EVAL_SUITE=gsm8k run_tool_use_eval"
+        "EVAL_SUITE=gsm8k run_kimi_vendor_eval"
     )
     assert result.returncode == 2
-    assert "supports only EVAL_SUITE=kimi_tool_call_schema" in result.stderr
+    assert "unsupported Kimi Vendor Verifier suite 'gsm8k'" in result.stderr
 
 
-def test_tool_use_rejects_multinode() -> None:
+def test_kimi_vendor_rejects_multinode() -> None:
     for value in ("true", "1"):
         result = _run_invalid_call(
             f"EVAL_SUITE=kimi_tool_call_schema IS_MULTINODE={value} "
-            "run_tool_use_eval"
+            "run_kimi_vendor_eval"
         )
         assert result.returncode == 2
-        assert "supports single-node evals only" in result.stderr
+        assert "supports single-node only" in result.stderr
 
 
-def test_tool_use_setup_failure_writes_compatibility_result(
+def test_kimi_vendor_setup_failure_writes_compatibility_result(
     tmp_path: Path,
 ) -> None:
     results_dir = tmp_path / "results"
     script = r'''
 source "$BENCHMARK_LIB"
-_require_tool_use_python() { :; }
-_install_tool_use_eval_deps() { return 12; }
-run_tool_use_eval --results-dir "$RESULTS_DIR"
+_require_kimi_vendor_python() { :; }
+_prepare_kimi_vendor_runtime() { return 12; }
+run_kimi_vendor_eval --results-dir "$RESULTS_DIR"
 printf 'SETUP_RC=%s\n' "$?"
 '''
     env = {
@@ -193,7 +193,6 @@ printf 'SETUP_RC=%s\n' "$?"
     for key in (
         "EVAL_SUITE",
         "EVAL_RESULT_DIR",
-        "INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY",
         "MODEL_NAME",
     ):
         env.pop(key, None)
@@ -205,7 +204,7 @@ printf 'SETUP_RC=%s\n' "$?"
         capture_output=True,
         check=True,
     )
-    message = "tool-use dependency installation failed with exit code 12"
+    message = "Kimi Vendor Verifier dependency installation failed with exit code 12"
     score_files = list(results_dir.glob("results*.json"))
 
     assert "SETUP_RC=12" in result.stdout
@@ -222,24 +221,79 @@ printf 'SETUP_RC=%s\n' "$?"
     assert not (results_dir / "kimi_vendor_report.json").exists()
 
 
-
-
-def test_tool_use_runner_uses_fixed_upstream_contract(tmp_path: Path) -> None:
-    results_dir = tmp_path / "results"
-    verifier_dir = tmp_path / "verifier"
+def test_kimi_vendor_dependency_install_is_isolated(tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
     script = r'''
 source "$BENCHMARK_LIB"
-_require_tool_use_python() { :; }
-_install_tool_use_eval_deps() { echo "INSTALL=UPSTREAM_MINIMAL"; }
-_prepare_kimi_vendor_verifier() {
-    printf 'CHECKOUT=%s@%s\n' "$1" "$2"
-    KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$VERIFIER_DIR"
-}
 python3() { printf 'PYTHON_ARG=<%s>\n' "$@"; }
-run_tool_use_eval --port 9999 --results-dir "$RESULTS_DIR"
+_install_kimi_vendor_eval_deps "$RUNTIME_DIR"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RUNTIME_DIR": str(runtime_dir),
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "PYTHON_ARG=<--target>" in result.stdout
+    assert f"PYTHON_ARG=<{runtime_dir}>" in result.stdout
+    assert "--break-system-packages" not in result.stdout
+
+
+def test_kimi_vendor_surfaces_failure_artifact_error(tmp_path: Path) -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+_require_kimi_vendor_python() { return 12; }
+_write_kimi_vendor_integration_error() { return 23; }
+run_kimi_vendor_eval --results-dir "$RESULTS_DIR"
+printf 'EVAL_RC=%s\n' "$?"
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "BENCHMARK_LIB": str(BENCHMARK_LIB),
+            "RESULTS_DIR": str(tmp_path / "results"),
+            "MODEL": "test-model",
+            "IS_MULTINODE": "false",
+        },
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "EVAL_RC=12" in result.stdout
+    assert "failed to write Kimi verifier failure artifact" in result.stderr
+
+
+
+
+def test_kimi_vendor_runner_uses_fixed_upstream_contract(tmp_path: Path) -> None:
+    results_dir = tmp_path / "results"
+    verifier_dir = tmp_path / "verifier"
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir()
+    verifier_dir.mkdir()
+    script = r'''
+source "$BENCHMARK_LIB"
+_require_kimi_vendor_python() { :; }
+_prepare_kimi_vendor_runtime() { printf '%s\n' "$RUNTIME_DIR"; }
+_prepare_kimi_vendor_verifier() {
+    printf 'CHECKOUT=%s@%s\n' "$1" "$2" >&2
+    printf '%s\n' "$VERIFIER_DIR"
+}
+python3() {
+    printf 'PYTHONPATH=<%s>\n' "$PYTHONPATH"
+    printf 'PYTHON_ARG=<%s>\n' "$@"
+}
+run_kimi_vendor_eval --port 9999 --results-dir "$RESULTS_DIR"
 printf 'EVAL_SUITE=%s\n' "$EVAL_SUITE"
 printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
-printf 'RUNTIME_READY=%s\n' "$INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY"
 '''
     env = {
         **os.environ,
@@ -247,6 +301,7 @@ printf 'RUNTIME_READY=%s\n' "$INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY"
         "RESULTS_DIR": str(results_dir),
         "VERIFIER_DIR": str(verifier_dir),
         "MODEL": "test-model",
+        "RUNTIME_DIR": str(runtime_dir),
         "OPENAI_API_KEY": "must-not-be-forwarded",
         "KV_OFFLOADING": "none",
         "IS_MULTINODE": "false",
@@ -254,8 +309,6 @@ printf 'RUNTIME_READY=%s\n' "$INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY"
     for key in (
         "EVAL_SUITE",
         "EVAL_RESULT_DIR",
-        "INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY",
-        "KIMI_VENDOR_VERIFIER_CHECKOUT_DIR",
         "MODEL_NAME",
     ):
         env.pop(key, None)
@@ -267,10 +320,10 @@ printf 'RUNTIME_READY=%s\n' "$INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY"
         capture_output=True,
         check=True,
     )
-    output = result.stdout
+    output = result.stdout + result.stderr
     adapter = BENCHMARK_LIB.parents[1] / "utils/evals/kimi_vendor_eval.py"
 
-    assert output.count("INSTALL=UPSTREAM_MINIMAL") == 1
+    assert f"PYTHONPATH=<{tmp_path / 'runtime'}" in output
     assert (
         "CHECKOUT=https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
         "@b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
@@ -287,7 +340,8 @@ printf 'RUNTIME_READY=%s\n' "$INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY"
     assert "must-not-be-forwarded" not in output
     assert "EVAL_SUITE=kimi_tool_call_schema" in output
     assert f"EVAL_RESULT_DIR={results_dir}" in output
-    assert "RUNTIME_READY=true" in output
+    assert not (tmp_path / "runtime").exists()
+    assert not verifier_dir.exists()
 
 
 def test_run_lm_eval_rejects_missing_option_value():

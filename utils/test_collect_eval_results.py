@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from collect_eval_results import build_row, collect_eval_rows
+from collect_eval_results import EVAL_RESULT_FORMAT, build_row, collect_eval_rows
 
 
 def test_build_row_preserves_sequence_lengths() -> None:
@@ -119,3 +119,24 @@ def test_collect_eval_rows_ignores_failed_batch_points(
     rows = collect_eval_rows(tmp_path)
 
     assert [row["conc"] for row in rows] == [4]
+
+
+
+def test_collect_eval_rows_accepts_neutral_result_format(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "eval_provider"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(
+        json.dumps({"eval_suite": "provider_smoke"})
+    )
+    result_path = artifact_dir / "results_provider.json"
+    _write_lm_eval_result(result_path, 1.0)
+    result = json.loads(result_path.read_text())
+    result.pop("lm_eval_version")
+    result["result_format"] = EVAL_RESULT_FORMAT
+    result_path.write_text(json.dumps(result))
+
+    rows = collect_eval_rows(tmp_path)
+
+    assert len(rows) == 1
+    assert rows[0]["score"] == 1.0
+    assert rows[0]["eval_suite"] == "provider_smoke"

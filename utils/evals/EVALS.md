@@ -44,13 +44,20 @@ runner. Existing jobs continue to use lm-eval with GSM8K by default.
 
 The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k. Explicit agentic runs can still select SWE-bench.
 
-The Phase 1 tool-use smoke is opt-in and single-node only. Select it with the
-`eval-framework: tool-use` input on `e2e-tests.yml`, or invoke it after a server
-is ready:
+The Phase 1 Kimi smoke is opt-in and single-node only. Select
+`eval-framework: kimi-vendor` and `eval-suite: kimi_tool_call_schema` on
+`e2e-tests.yml`, or invoke it after a server is ready:
 
 ```bash
-EVAL_FRAMEWORK=tool-use run_eval --port "$PORT"
+EVAL_FRAMEWORK=kimi-vendor EVAL_SUITE=kimi_tool_call_schema \
+  run_eval --port "$PORT"
 ```
+
+The framework selects a provider-specific subprocess adapter, while the suite
+selects a case set understood by that adapter. Each adapter owns its endpoint
+format, dependencies, native report, metrics, and pass policy. Future MiniMax
+or BFCL support should add explicit `run_eval` cases rather than a shared
+request or report abstraction.
 
 ### Stock Kimi tool-call schema smoke
 
@@ -62,7 +69,8 @@ tests, and bundled Walle cases. InferenceX does not install the verifier package
 or reimplement its request, streaming, retry, or validation logic.
 
 Python 3.12 or newer is required. The runner installs the minimal pinned runtime
-(`httpx[http2]`, `openai`, `jsonschema`, and `pytest`), then runs upstream
+(`httpx[http2]`, `openai`, `jsonschema`, and `pytest`) into a temporary isolated
+package directory, then runs upstream
 `tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
 
 - the local OpenAI-compatible endpoint, `EMPTY` API key, and served model name;
@@ -73,8 +81,9 @@ The selection is `TestAdditionalProperties:1`, parametrized upstream in
 non-streaming and streaming modes. The unchanged native report is uploaded as
 `kimi_vendor_report.json`. `utils/evals/kimi_vendor_eval.py` only projects its
 two outcomes into the existing eval result shape. Both must pass, so the
-`kimi_tool_call_schema` threshold is `1.0`. Setup and collection failures emit a
-zero-score result with error metadata.
+`kimi_tool_call_schema` threshold is `1.0`. Setup, timeout, and collection
+failures emit a zero-score result with error metadata. The adapter bounds the
+upstream pytest process to 900 seconds.
 
 This smoke validates one object-schema tool call. It does not cover tool choice,
 parallel calls, multi-turn execution, or general agent quality. Multi-value
@@ -109,10 +118,10 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 |----------|-------------|
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
-| `run_tool_use_eval` | Runs the pinned stock verifier in non-stream and stream modes |
+| `run_kimi_vendor_eval` | Selects and runs a pinned Kimi Vendor Verifier suite |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
-| `_install_tool_use_eval_deps` | Installs the minimal pinned stock-verifier runtime |
+| `_prepare_kimi_vendor_runtime` | Installs the minimal pinned runtime in an isolated temp path |
 | `_prepare_kimi_vendor_verifier` | Fetches a fresh pinned sparse checkout |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
@@ -189,8 +198,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 |----------|---------|-------------|
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
-| `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
-| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Eval suite metadata; explicit values take precedence |
+| `EVAL_FRAMEWORK` | `lm-eval` | Eval runner (`lm-eval`, `swebench`, or `kimi-vendor`) |
+| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Runner-specific suite selector and artifact identity; the workflow `eval-suite` input sets it explicitly |
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
@@ -205,6 +214,15 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 1. Create a task YAML in `utils/evals/` following the lm-eval task format.
 2. Set `EVAL_TASKS_DIR=utils/evals/<your_task>.yaml` when running benchmarks.
 3. Update `utils/collect_eval_results.py` if new metrics need extraction.
+
+### Adding a provider verifier
+
+1. Add a provider-specific adapter under `utils/evals/`.
+2. Add an explicit framework case in `run_eval`; keep suite-specific policy in
+   that adapter's shell runner.
+3. Install dependencies in a provider-specific isolated runtime.
+4. Emit `result_format: inferencex-eval-v1`, preserve the native report as
+   `*_vendor_report.json`, set `EVAL_SUITE`, and add a threshold.
 
 ### Runtime patches (`utils/evals/patches/`)
 

@@ -29,16 +29,14 @@ def _result(output_dir: Path) -> dict[str, Any]:
     paths = list(output_dir.glob(kve.COMPATIBILITY_GLOB))
     assert len(paths) == 1
     assert re.fullmatch(
-        r"results_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{6}\.json",
+        r"results_kimi_vendor_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{6}\.json",
         paths[0].name,
     )
     return json.loads(paths[0].read_text())
 
 
 def _score(output_dir: Path) -> float:
-    return _result(output_dir)["results"][kve.TASK_NAME][
-        "exact_match,strict-match"
-    ]
+    return _result(output_dir)["results"][kve.TASK_NAME]["exact_match,strict-match"]
 
 
 def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
@@ -77,7 +75,11 @@ def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("stream_status", "return_code", "expected_pass", "expected_score"),
-    (("passed", 0, True, 1.0), ("failed", 1, False, 0.5)),
+    (
+        ("passed", 0, True, 1.0),
+        ("passed", 1, False, 0.0),
+        ("failed", 1, False, 0.5),
+    ),
 )
 def test_projects_upstream_outcomes(
     tmp_path: Path,
@@ -91,11 +93,11 @@ def test_projects_upstream_outcomes(
     native_bytes = json.dumps(_report(stream_status)).encode()
     invocation: dict[str, Any] = {}
 
-    def fake_run(command: list[str], *, cwd: Path, check: bool) -> SimpleNamespace:
-        invocation.update(command=command, cwd=cwd, check=check)
-        Path(command[command.index("--tool-json-report") + 1]).write_bytes(
-            native_bytes
-        )
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool, timeout: int
+    ) -> SimpleNamespace:
+        invocation.update(command=command, cwd=cwd, check=check, timeout=timeout)
+        Path(command[command.index("--tool-json-report") + 1]).write_bytes(native_bytes)
         return SimpleNamespace(returncode=return_code)
 
     monkeypatch.setattr(kve.subprocess, "run", fake_run)
@@ -112,7 +114,12 @@ def test_projects_upstream_outcomes(
     )
     assert invocation["cwd"] == tmp_path
     assert invocation["check"] is False
+    assert invocation["timeout"] == kve.DEFAULT_TIMEOUT_SECONDS
     assert _score(output_dir) == expected_score
+    projected = _result(output_dir)
+    assert projected["result_format"] == kve.RESULT_FORMAT
+    assert projected["eval_adapter"] == kve.ADAPTER_NAME
+    assert "lm_eval_version" not in projected
     assert (output_dir / kve.NATIVE_REPORT_FILENAME).read_bytes() == native_bytes
 
 
@@ -122,21 +129,25 @@ def test_projects_upstream_outcomes(
         (None, "FileNotFoundError"),
         ("{bad-json", "JSONDecodeError"),
         (OSError("boom"), "OSError"),
+        (
+            subprocess.TimeoutExpired("pytest", kve.DEFAULT_TIMEOUT_SECONDS),
+            "TimeoutExpired",
+        ),
     ),
 )
 def test_collection_failures_write_zero_score(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    failure: str | OSError | None,
+    failure: str | BaseException | None,
     error_type: str,
 ) -> None:
-    def fake_run(command: list[str], *, cwd: Path, check: bool) -> SimpleNamespace:
-        if isinstance(failure, OSError):
+    def fake_run(
+        command: list[str], *, cwd: Path, check: bool, timeout: int
+    ) -> SimpleNamespace:
+        if isinstance(failure, BaseException):
             raise failure
         if failure is not None:
-            Path(command[command.index("--tool-json-report") + 1]).write_text(
-                failure
-            )
+            Path(command[command.index("--tool-json-report") + 1]).write_text(failure)
         return SimpleNamespace(returncode=1)
 
     monkeypatch.setattr(kve.subprocess, "run", fake_run)
@@ -161,7 +172,11 @@ def test_failure_cannot_reuse_stale_outputs(
     output_dir.mkdir()
     native_report = output_dir / kve.NATIVE_REPORT_FILENAME
     native_report.write_text(json.dumps(_report()))
-    (output_dir / "results_2000-01-01T00-00-00.000000.json").write_text("{}")
+    (output_dir / "results_kimi_vendor_2000-01-01T00-00-00.000000.json").write_text(
+        "{}"
+    )
+    foreign_result = output_dir / "results_other_eval.json"
+    foreign_result.write_text("{}")
 
     def fail_collection(*args: Any, **kwargs: Any) -> SimpleNamespace:
         assert not native_report.exists()
@@ -178,24 +193,30 @@ def test_failure_cannot_reuse_stale_outputs(
     )
     assert _score(output_dir) == 0.0
     assert not native_report.exists()
+    assert foreign_result.exists()
 
 
 def test_cli_setup_failure_clears_stale_outputs(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     output_dir.mkdir()
     (output_dir / kve.NATIVE_REPORT_FILENAME).write_text(json.dumps(_report()))
-    (output_dir / "results_2000-01-01T00-00-00.000000.json").write_text("{}")
+    (output_dir / "results_kimi_vendor_2000-01-01T00-00-00.000000.json").write_text(
+        "{}"
+    )
 
-    assert kve.main(
-        [
-            "--model",
-            "model-a",
-            "--output-dir",
-            str(output_dir),
-            "--integration-error",
-            "checkout failed",
-        ]
-    ) == 1
+    assert (
+        kve.main(
+            [
+                "--model",
+                "model-a",
+                "--output-dir",
+                str(output_dir),
+                "--integration-error",
+                "checkout failed",
+            ]
+        )
+        == 1
+    )
     projected = _result(output_dir)
     assert not (output_dir / kve.NATIVE_REPORT_FILENAME).exists()
     assert _score(output_dir) == 0.0

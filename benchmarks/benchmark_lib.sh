@@ -819,23 +819,35 @@ _install_lm_eval_deps() {
     fi
 }
 
-_require_tool_use_python() {
+_require_kimi_vendor_python() {
     if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
         return 0
     fi
 
     local python_version
     python_version="$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null || printf 'unavailable')"
-    echo "ERROR: tool-use requires Python >=3.12 (python3 is ${python_version})" >&2
+    echo "ERROR: Kimi Vendor Verifier requires Python >=3.12 (python3 is ${python_version})" >&2
     return 2
 }
 
-_install_tool_use_eval_deps() {
-    python3 -m pip install -q --no-cache-dir --break-system-packages \
+_install_kimi_vendor_eval_deps() {
+    local target_dir="$1"
+    python3 -m pip install -q --no-cache-dir --target "$target_dir" \
         "httpx[http2]==0.28.1" \
         "openai==2.14.0" \
         "jsonschema==4.25.1" \
         "pytest==8.4.2"
+}
+
+_prepare_kimi_vendor_runtime() {
+    local runtime_dir install_rc=0
+    runtime_dir="$(mktemp -d /tmp/kimi-vendor-runtime-XXXXXX)" || return $?
+    _install_kimi_vendor_eval_deps "$runtime_dir" >&2 || install_rc=$?
+    if [ "$install_rc" -ne 0 ]; then
+        rm -rf "$runtime_dir"
+        return "$install_rc"
+    fi
+    printf '%s\n' "$runtime_dir"
 }
 
 _prepare_kimi_vendor_verifier() {
@@ -866,10 +878,17 @@ _prepare_kimi_vendor_verifier() {
         echo "ERROR: failed to fetch Kimi-Vendor-Verifier at ${verifier_ref}" >&2
         return 1
     fi
-    KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
+    printf '%s\n' "$checkout_dir"
 }
 
-_write_tool_use_integration_error() {
+_cleanup_kimi_vendor_eval() {
+    local path
+    for path in "$@"; do
+        [ -z "$path" ] || rm -rf "$path" || true
+    done
+}
+
+_write_kimi_vendor_integration_error() {
     local adapter_path="$1"
     local model_name="$2"
     local results_dir="$3"
@@ -878,11 +897,10 @@ _write_tool_use_integration_error() {
     python3 "$adapter_path" \
         --model "$model_name" \
         --output-dir "$results_dir" \
-        --integration-error "$message" \
-        || true
+        --integration-error "$message"
 }
 
-run_tool_use_eval() {
+_run_kimi_tool_call_schema_eval() {
     local port="${PORT:-8888}"
     local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
@@ -908,66 +926,83 @@ run_tool_use_eval() {
         esac
     done
 
-    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
-    if [ "$eval_suite" != "kimi_tool_call_schema" ]; then
-        echo "ERROR: tool-use supports only EVAL_SUITE=kimi_tool_call_schema" >&2
-        export EVAL_RESULT_DIR=""
-        return 2
-    fi
     case "${IS_MULTINODE:-false}" in
         true|1)
-            echo "ERROR: tool-use Phase 1 supports single-node evals only" >&2
+            echo "ERROR: Kimi tool-call schema eval supports single-node only" >&2
             export EVAL_RESULT_DIR=""
             return 2
             ;;
     esac
-    export EVAL_SUITE="$eval_suite"
 
-    local _repo_root
-    _repo_root="$(cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd)"
+    local repo_root
+    repo_root="$(cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd)"
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${_repo_root}/utils/evals/kimi_vendor_eval.py"
+    local adapter_path="${repo_root}/utils/evals/kimi_vendor_eval.py"
+    local runtime_dir=""
+    local checkout_dir=""
 
     mkdir -p "$results_dir" || return $?
     export EVAL_RESULT_DIR="$results_dir"
 
     local setup_rc=0 integration_error=""
-    _require_tool_use_python || {
+    _require_kimi_vendor_python || {
         setup_rc=$?
-        integration_error="tool-use Python version check failed with exit code ${setup_rc}"
+        integration_error="Kimi Vendor Verifier Python version check failed with exit code ${setup_rc}"
     }
-    if [ "$setup_rc" -eq 0 ] \
-        && [ "${INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY:-false}" != "true" ]; then
-        if _install_tool_use_eval_deps; then
-            export INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY=true
-        else
+    if [ "$setup_rc" -eq 0 ]; then
+        runtime_dir=$(_prepare_kimi_vendor_runtime) || {
             setup_rc=$?
-            integration_error="tool-use dependency installation failed with exit code ${setup_rc}"
-        fi
+            integration_error="Kimi Vendor Verifier dependency installation failed with exit code ${setup_rc}"
+        }
     fi
     if [ "$setup_rc" -eq 0 ]; then
-        _prepare_kimi_vendor_verifier "$verifier_repo" "$verifier_ref" || {
+        checkout_dir=$(
+            _prepare_kimi_vendor_verifier "$verifier_repo" "$verifier_ref"
+        ) || {
             setup_rc=$?
-            integration_error="tool-use verifier checkout failed with exit code ${setup_rc}"
+            integration_error="Kimi Vendor Verifier checkout failed with exit code ${setup_rc}"
         }
     fi
     if [ "$setup_rc" -ne 0 ]; then
+        _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
         echo "ERROR: ${integration_error}" >&2
-        _write_tool_use_integration_error \
-            "$adapter_path" "$model_name" "$results_dir" "$integration_error"
+        local artifact_rc=0
+        _write_kimi_vendor_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error" \
+            || artifact_rc=$?
+        if [ "$artifact_rc" -ne 0 ]; then
+            echo "ERROR: failed to write Kimi verifier failure artifact (exit code ${artifact_rc})" >&2
+        fi
         return "$setup_rc"
     fi
 
     local eval_rc=0
-    python3 "$adapter_path" \
-        --verifier-dir "$KIMI_VENDOR_VERIFIER_CHECKOUT_DIR" \
-        --base-url "http://127.0.0.1:${port}/v1" \
-        --api-key EMPTY \
-        --model "$model_name" \
-        --output-dir "$results_dir" \
-        || eval_rc=$?
-    rm -rf "$KIMI_VENDOR_VERIFIER_CHECKOUT_DIR" || true
+    PYTHONPATH="${runtime_dir}${PYTHONPATH:+:${PYTHONPATH}}" \
+        python3 "$adapter_path" \
+            --verifier-dir "$checkout_dir" \
+            --base-url "http://127.0.0.1:${port}/v1" \
+            --api-key EMPTY \
+            --model "$model_name" \
+            --output-dir "$results_dir" \
+            || eval_rc=$?
+    _cleanup_kimi_vendor_eval "$runtime_dir" "$checkout_dir"
     return "$eval_rc"
+}
+
+run_kimi_vendor_eval() {
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    export EVAL_SUITE="$eval_suite"
+
+    case "$eval_suite" in
+        kimi_tool_call_schema)
+            _run_kimi_tool_call_schema_eval "$@"
+            ;;
+        *)
+            echo "ERROR: unsupported Kimi Vendor Verifier suite '${eval_suite}'" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
 }
 
 _eval_patches_dir() {
@@ -1728,9 +1763,9 @@ run_eval() {
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
 
-    # Tool-use uses the verifier's fixed request budget and does not consume
+    # Kimi Vendor Verifier uses a fixed request budget and does not consume
     # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for that path.
-    if [ "$framework" != "tool-use" ] && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+    if [ "$framework" != "kimi-vendor" ] && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
 
@@ -1801,7 +1836,7 @@ run_eval() {
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
-        tool-use)        run_tool_use_eval "${forwarded[@]}" || eval_rc=$? ;;
+        kimi-vendor)     run_kimi_vendor_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
