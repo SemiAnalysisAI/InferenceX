@@ -63,7 +63,7 @@ srun --nodes=1 --ntasks=1 \
     --container-image="$SHARED_IMAGE" \
     --container-mounts="$SHARED_HF_CACHE:/hf_hub_cache" \
     --container-writable --container-remap-root --no-container-entrypoint \
-    --export=ALL,HF_HOME=/hf_hub_cache,MODEL_REPO=${MODEL} \
+    --export=ALL,HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache/hub,HUGGINGFACE_HUB_CACHE=/hf_hub_cache/hub,MODEL_REPO=${MODEL} \
     python3 -c 'import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ["MODEL_REPO"])'
 EOF
 STAGE_JOB_ID=$(sbatch --wait --parsable "$STAGE_SCRIPT")

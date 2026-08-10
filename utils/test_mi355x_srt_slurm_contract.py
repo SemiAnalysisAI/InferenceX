@@ -132,8 +132,11 @@ def test_launcher_pins_runtime_and_preserves_legacy_default():
     assert "scancel" not in launcher
     assert ': "${MODEL:?MODEL must identify the Hugging Face model}"' in launcher
     assert "MODEL_REPO=${MODEL}" in launcher
-    assert "HF_HOME=/hf_hub_cache,MODEL_REPO=${MODEL}" in launcher
-    assert "HF_HUB_CACHE=/hf_hub_cache,MODEL_REPO" not in launcher
+    assert (
+        "HF_HOME=/hf_hub_cache,HF_HUB_CACHE=/hf_hub_cache/hub,"
+        "HUGGINGFACE_HUB_CACHE=/hf_hub_cache/hub,MODEL_REPO=${MODEL}"
+        in launcher
+    )
     assert 'snapshot_download(os.environ["MODEL_REPO"])' in launcher
     assert 'if [[ -n "${CONFIG_FILE:-}" ]]; then' in legacy
     assert "launch_mi355x-amds-srt.sh" in legacy
