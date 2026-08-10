@@ -73,11 +73,9 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-# The preceding fast run showed the 16K prefill budget is exactly neutral at
-# c1. Restore the official 8K budget and isolate scheduler slot capacity at c3,
-# where the baseline reached its 2*CONC running-request ceiling with queued
-# branch work despite low KV utilization.
-MAX_NUM_SEQS=$((4 * CONC))
+# The 16K prefill budget and 4*CONC sequence-cap probes were both neutral.
+# Restore the official 8K/2*CONC baseline before isolating graph capture mode.
+MAX_NUM_SEQS=$((2 * CONC))
 # The existing MI300X/MI325X fixed-sequence recipes use K=2. Keep that MTP
 # depth and its measured golden acceptance length for every AgentX point.
 NUM_SPEC_TOKENS=2
@@ -115,7 +113,7 @@ VLLM_CMD=(
     --block-size 256
     --max-num-batched-tokens 8192
     --max-num-seqs "$MAX_NUM_SEQS"
-    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
