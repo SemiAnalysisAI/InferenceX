@@ -82,21 +82,13 @@ def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
 
 
-def _parallel_gpu_count(config: dict) -> int:
-    """Return the GPU footprint encoded by one parallelism configuration."""
-    tensor_gpu_count = (
-        config[Fields.TP.value]
-        * config.get(Fields.PP.value, 1)
-        * config.get(Fields.PCP_SIZE.value, 1)
-    )
-    if config.get(Fields.DP_ATTN.value, False):
-        return max(tensor_gpu_count, config.get(Fields.EP.value, 1))
-    return tensor_gpu_count
-
-
 def effective_gpu_count(benchmark: dict) -> int:
-    """Return GPUs used by a single-node parallel topology."""
-    return _parallel_gpu_count(benchmark)
+    """Return GPUs used by a single-node TP/PP/PCP topology."""
+    return (
+        benchmark[Fields.TP.value]
+        * benchmark.get(Fields.PP.value, 1)
+        * benchmark.get(Fields.PCP_SIZE.value, 1)
+    )
 
 def with_worker_parallelism_defaults(worker: dict) -> dict:
     """Return a worker config with explicit parallelism defaults."""
@@ -117,24 +109,29 @@ def worker_gpus_per_node(worker: dict, gpus_per_node: int) -> int:
     are rejected rather than silently truncated, keeping parity with the
     single-node "must fit the node" rule:
 
-    * A replica larger than one node must fill whole nodes, i.e. be an exact
-      multiple of gpus-per-node; each of its nodes is then fully occupied.
+    * A replica larger than one node (tp*pp*pcp > gpus-per-node) must fill whole
+      nodes, i.e. be an exact multiple of gpus-per-node; each of its nodes is
+      then fully occupied (fraction 1).
     * A replica within one node must divide it evenly so co-located replicas of
       the same role tile the node without overlap.
-    * Attention-DP topologies include the EP-sized independent rank pool.
     """
-    gpus_per_replica = _parallel_gpu_count(worker)
+    gpus_per_replica = (
+        worker[Fields.TP.value]
+        * worker.get(Fields.PP.value, 1)
+        * worker.get(Fields.PCP_SIZE.value, 1)
+    )
     if gpus_per_replica > gpus_per_node:
         if gpus_per_replica % gpus_per_node != 0:
             raise ValueError(
-                f"worker GPU footprint={gpus_per_replica} spans multiple nodes "
-                "but is not a multiple "
+                f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+                f"={gpus_per_replica} spans multiple nodes but is not a multiple "
                 f"of {Fields.GPUS_PER_NODE.value}={gpus_per_node}"
             )
         return gpus_per_node
     if gpus_per_node % gpus_per_replica != 0:
         raise ValueError(
-            f"worker GPU footprint={gpus_per_replica} does not divide "
+            f"worker {Fields.TP.value}*{Fields.PP.value}*{Fields.PCP_SIZE.value}"
+            f"={gpus_per_replica} does not divide "
             f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} evenly"
         )
     return gpus_per_replica
