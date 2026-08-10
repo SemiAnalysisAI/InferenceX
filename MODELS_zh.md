@@ -46,7 +46,7 @@ InferenceX-e2e 运行在数量固定且有限的 GPU 资源池上，并由一支
 
 | 场景 | ISL/OSL | 状态 |
 |---|---|---|
-| 智能体编码（agentic coding） | 长上下文、多轮真实流量的轨迹回放，含子智能体（sub agents） | 启用 — 基于轨迹回放的智能体编码基准测试（见 [`benchmarks/agentic/`](benchmarks/agentic/)）。今后新模型预计将仅以智能体编码场景接入，且**仅在启用投机解码的条件下**运行 —— 非投机解码分支不运行也不发布（见[弃用公告](#弃用公告)）。 |
+| 智能体编码（agentic coding） | 长上下文、多轮真实流量的轨迹回放，含子智能体（sub agents） | 启用 — 基于轨迹回放的智能体编码基准测试（见 [`benchmarks/single_node/agentic/`](benchmarks/single_node/agentic/)）。今后新模型预计将仅以智能体编码场景接入，且**仅在启用投机解码的条件下**运行 —— 非投机解码分支不运行也不发布（见[弃用公告](#弃用公告)）。 |
 | 单轮 8k1k | 8192 / 1024 | 启用 — 当前主要的固定序列长度（fixed-seq-len）场景。 |
 | 单轮 1k1k | 1024 / 1024 | **对所有模型均已弃用**，自 2026-07-17 起（[#2263](https://github.com/SemiAnalysisAI/InferenceX/pull/2263)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。归档配置位于 [`configs/deprecated/`](configs/deprecated/)。 |
 | 单轮 1k8k | 1024 / 8192 | **对所有模型均已弃用**，自 2026-03-27 起（[#911](https://github.com/SemiAnalysisAI/InferenceX/pull/911)），以便将 GPU 集群时间留给优先级更高的真实场景智能体编码基准测试与新的前沿模型。相关配置已删除，未归档。 |
