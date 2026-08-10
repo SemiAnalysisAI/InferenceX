@@ -15,7 +15,7 @@ identity:
     image: "vllm/vllm-openai-rocm:v0.26.0"
   frameworks:
     vllm: "0.26.0+rocm723"
-    vllm-router: "nightly-20260716-1fbcde7"
+    vllm-router: "nightly-20260809-d2ba586"
 
 slurm:
   time_limit: "00:45:00"
@@ -33,7 +33,7 @@ resources:
 frontend:
   type: vllm-router
   enable_multiple_frontends: false
-  container_image: "vllm-router-20260716"
+  container_image: "vllm-router-20260809"
   args:
     policy: consistent_hash
     prefill-policy: consistent_hash
