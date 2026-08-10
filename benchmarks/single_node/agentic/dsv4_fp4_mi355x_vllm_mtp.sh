@@ -409,7 +409,11 @@ fi
 
 MODE_ARGS=()
 MNBT=8192
-if [ "$EP_SIZE" -gt 1 ]; then
+# Overridable for bisection only. The DEP8 EVAL_ONLY run scores 0.0053 on
+# gsm8k with token-level garbage output while TP8 scores 0.9598 on the same
+# harness, so the EP-only flags have to be separable from the topology to tell
+# which one corrupts the output. Default is unchanged.
+if [ "$EP_SIZE" -gt 1 ] && [ "${ENABLE_EP_WEIGHT_FILTER:-true}" = "true" ]; then
     MODE_ARGS+=(--enable-ep-weight-filter)
 fi
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -478,7 +482,10 @@ fi
 # multiples of (1+N) and dedups (adjust_cudagraph_sizes_for_spec_decode), so a
 # plain 1..MAX_NUM_SEQS list would collapse to coverage of only
 # MAX_NUM_SEQS/(1+N) seqs and drop the largest decode batches to eager.
-NUM_SPEC_TOKENS=3
+# Overridable for bisection: NUM_SPEC_TOKENS=0 drops --speculative-config
+# entirely, which is how the MTP drafter gets ruled in or out as the source of
+# the DEP8 accuracy failure. Default is unchanged.
+NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-3}"
 TOKENS_PER_SEQ=$((1 + NUM_SPEC_TOKENS))
 # Throughput pins synthetic MTP acceptance to the dsv4-pro golden AL (thinking_on,
 # num_speculative_tokens=3, golden_al_distribution/dsv4_mtp.yaml). The EVAL_ONLY
@@ -488,6 +495,13 @@ if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
 else
     SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": 2.49}"
+fi
+# NUM_SPEC_TOKENS=0 means "no speculation at all", which is not the same as
+# num_speculative_tokens=0 -- vLLM rejects that. Drop the flag instead.
+SPEC_ARGS=(--speculative-config "$SPEC_CONFIG")
+if [ "$NUM_SPEC_TOKENS" -eq 0 ]; then
+    SPEC_ARGS=()
+    TOKENS_PER_SEQ=1
 fi
 
 # These MI355X nodes have a stable ~32 GiB/GPU carveout: only ~256/288 GiB is
@@ -574,7 +588,7 @@ VLLM_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --moe-backend "$MOE_BACKEND"
     --compilation-config "$COMPILATION_CONFIG"
-    --speculative-config "$SPEC_CONFIG"
+    "${SPEC_ARGS[@]}"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --reasoning-parser deepseek_v4
