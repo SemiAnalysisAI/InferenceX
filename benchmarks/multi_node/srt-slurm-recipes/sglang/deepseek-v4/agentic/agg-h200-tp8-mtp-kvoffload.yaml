@@ -70,6 +70,7 @@ backend:
   sglang_config:
     aggregated:
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      enable-metrics: true
       trust-remote-code: true
       stream-interval: 50
       watchdog-timeout: 1000000
@@ -111,5 +112,10 @@ benchmark:
     IS_MULTINODE: "false"
     TP: "8"
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    # Fail the run loudly if the aggregate engine's sglang: metrics never reach
+    # the AIPerf export, instead of publishing a trace artifact with no backend
+    # series behind it.
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     AIPERF_DATASET_MMAP_CACHE_DIR: /aiperf_mmap_cache
     HF_HUB_CACHE: /hf_hub_cache
