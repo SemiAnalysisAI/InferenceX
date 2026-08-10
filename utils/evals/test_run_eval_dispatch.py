@@ -1,10 +1,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import subprocess
 from pathlib import Path
+
+import pytest
 
 BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
 
@@ -12,14 +15,22 @@ _SCRIPT = r'''
 source "$BENCHMARK_LIB"
 run_lm_eval()       { echo "DISPATCH=lm-eval"; }
 run_swebench_eval() { echo "DISPATCH=swebench"; }
-append_lm_eval_summary() { echo "STAGED=summary"; }
+run_tool_use_eval() { echo "DISPATCH=tool-use"; }
+append_lm_eval_summary() { echo "STAGED=summary FRAMEWORK=$EVAL_FRAMEWORK"; }
 export EVAL_MAX_MODEL_LEN=16384
-unset EVAL_CONCURRENT_REQUESTS
+export EVAL_CONCURRENT_REQUESTS="${REQUESTED_CONC:-}"
 run_eval ${CLI_FW:+--framework "$CLI_FW"} --port 8888
 '''
 
 
-def _dispatch(*, is_agentic: str = "0", eval_only: str = "false", cli_fw=None, env_fw=None) -> str:
+def _dispatch(
+    *,
+    is_agentic: str = "0",
+    eval_only: str = "false",
+    cli_fw=None,
+    env_fw=None,
+    requested_conc=None,
+) -> str:
     env = {
         **os.environ,
         "BENCHMARK_LIB": str(BENCHMARK_LIB),
@@ -29,11 +40,14 @@ def _dispatch(*, is_agentic: str = "0", eval_only: str = "false", cli_fw=None, e
     }
     env.pop("EVAL_FRAMEWORK", None)
     env.pop("CLI_FW", None)
+    env.pop("REQUESTED_CONC", None)
     env.pop("KV_OFFLOAD_BACKEND", None)
     if cli_fw is not None:
         env["CLI_FW"] = cli_fw
     if env_fw is not None:
         env["EVAL_FRAMEWORK"] = env_fw
+    if requested_conc is not None:
+        env["REQUESTED_CONC"] = str(requested_conc)
     res = subprocess.run(
         ["bash", "-c", _SCRIPT], env=env, text=True, capture_output=True, check=True
     )
@@ -52,6 +66,7 @@ def test_agentic_eval_only_stages_summary():
     output = _dispatch(is_agentic="1", eval_only="true")
     assert "DISPATCH=lm-eval" in output
     assert "STAGED=summary" in output
+    assert "FRAMEWORK=lm-eval" in output
 
 
 def test_fixed_seqlen_eval_only_leaves_staging_to_recipe():
@@ -71,8 +86,71 @@ def test_env_can_force_swebench_on_fixed_seqlen():
     assert "DISPATCH=swebench" in _dispatch(is_agentic="0", env_fw="swebench")
 
 
+def test_cli_swebench_framework_is_canonical_in_metadata() -> None:
+    output = _dispatch(
+        is_agentic="1",
+        eval_only="true",
+        cli_fw="swebench",
+    )
+    assert "DISPATCH=swebench" in output
+    assert "FRAMEWORK=swebench" in output
+
+
+def test_env_can_force_tool_use_on_agentic_eval() -> None:
+    output = _dispatch(
+        is_agentic="1",
+        eval_only="true",
+        env_fw="tool-use",
+    )
+    assert "DISPATCH=tool-use" in output
+    assert "FRAMEWORK=tool-use" in output
+
+
+def test_tool_use_skips_unused_model_context_loading() -> None:
+    script = r'''
+source "$BENCHMARK_LIB"
+unset EVAL_MAX_MODEL_LEN
+compute_eval_context_length() { echo "UNEXPECTED_CONTEXT_LOAD"; return 99; }
+run_tool_use_eval() { echo "DISPATCH=tool-use"; }
+export EVAL_FRAMEWORK=tool-use
+export EVAL_CONCURRENT_REQUESTS=""
+export EVAL_ONLY=false
+export IS_AGENTIC=0
+run_eval --port 8888
+'''
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env={**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "DISPATCH=tool-use" in result.stdout
+    assert "UNEXPECTED_CONTEXT_LOAD" not in result.stdout
+
+
+def test_tool_use_accepts_single_matrix_concurrency_identity() -> None:
+    assert "DISPATCH=tool-use" in _dispatch(
+        is_agentic="1",
+        env_fw="tool-use",
+        requested_conc=64,
+    )
+
+
 def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0", cli_fw="lm-eval")
+
+
+def test_lm_eval_alias_is_canonicalized_in_metadata() -> None:
+    output = _dispatch(
+        is_agentic="1",
+        eval_only="true",
+        cli_fw="lm_eval",
+    )
+    assert "DISPATCH=lm-eval" in output
+    assert "FRAMEWORK=lm-eval" in output
 
 
 def _run_invalid_call(call: str) -> subprocess.CompletedProcess:
@@ -93,6 +171,298 @@ def test_run_eval_rejects_missing_framework_value():
     result = _run_invalid_call("run_eval --framework")
     assert result.returncode == 2
     assert "--framework requires a value" in result.stderr
+
+
+def test_tool_use_rejects_batched_concurrency() -> None:
+    result = _run_invalid_call(
+        "EVAL_MAX_MODEL_LEN=16384 "
+        "EVAL_CONCURRENT_REQUESTS='1 4' "
+        "run_eval --framework tool-use"
+    )
+    assert result.returncode == 1
+    assert "batched eval concurrency is only supported for lm-eval" in result.stderr
+
+
+def test_tool_use_rejects_unsupported_suite() -> None:
+    result = _run_invalid_call(
+        "EVAL_SUITE=gsm8k run_tool_use_eval"
+    )
+    assert result.returncode == 2
+    assert "supports only EVAL_SUITE=kimi_tool_call_schema" in result.stderr
+
+
+def test_tool_use_rejects_multinode() -> None:
+    for value in ("true", "1"):
+        result = _run_invalid_call(
+            f"EVAL_SUITE=kimi_tool_call_schema IS_MULTINODE={value} "
+            "run_tool_use_eval"
+        )
+        assert result.returncode == 2
+        assert "supports single-node evals only" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("failure_stage", "failure_rc", "message"),
+    (
+        ("python", 11, "tool-use Python version check failed"),
+        ("dependencies", 12, "tool-use dependency installation failed"),
+        ("checkout", 13, "tool-use verifier checkout failed"),
+    ),
+)
+def test_tool_use_setup_failure_writes_compatibility_result(
+    tmp_path: Path,
+    failure_stage: str,
+    failure_rc: int,
+    message: str,
+) -> None:
+    results_dir = tmp_path / "results"
+    script = r'''
+source "$BENCHMARK_LIB"
+_require_tool_use_python() {
+    [ "$FAILURE_STAGE" = python ] && return "$FAILURE_RC"
+    return 0
+}
+_install_tool_use_eval_deps() {
+    [ "$FAILURE_STAGE" = dependencies ] && return "$FAILURE_RC"
+    return 0
+}
+_prepare_kimi_vendor_verifier() {
+    [ "$FAILURE_STAGE" = checkout ] && return "$FAILURE_RC"
+    KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$FAKE_VERIFIER_DIR"
+    return 0
+}
+run_tool_use_eval --results-dir "$RESULTS_DIR"
+printf 'SETUP_RC=%s\n' "$?"
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "RESULTS_DIR": str(results_dir),
+        "FAKE_VERIFIER_DIR": str(tmp_path / "verifier"),
+        "FAILURE_STAGE": failure_stage,
+        "FAILURE_RC": str(failure_rc),
+        "MODEL": "test-model",
+        "IS_MULTINODE": "false",
+        "KV_OFFLOADING": "none",
+    }
+    for key in (
+        "EVAL_FRAMEWORK",
+        "EVAL_SUITE",
+        "EVAL_RESULT_DIR",
+        "INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY",
+        "KIMI_VENDOR_VERIFIER_DIR",
+        "KIMI_VENDOR_VERIFIER_CHECKOUT_DIR",
+        "MODEL_NAME",
+    ):
+        env.pop(key, None)
+
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    expected_message = f"{message} with exit code {failure_rc}"
+
+    assert f"SETUP_RC={failure_rc}" in result.stdout
+    assert expected_message in result.stderr
+    score_files = list(results_dir.glob("results*.json"))
+    assert len(score_files) == 1
+    score_result = json.loads(score_files[0].read_text())
+    assert (
+        score_result["results"]["kimi_tool_call_schema"][
+            "exact_match,strict-match"
+        ]
+        == 0.0
+    )
+    assert score_result["integration_error"]["message"] == expected_message
+    assert not (results_dir / "kimi_vendor_report.json").exists()
+
+
+def test_kimi_vendor_checkout_rejects_source_changes(tmp_path: Path) -> None:
+    checkout = tmp_path / "verifier"
+    required_files = (
+        "LICENSE",
+        "pyproject.toml",
+        "tests/conftest.py",
+        "tests/__init__.py",
+        "tests/tool_call_json_schema/conftest.py",
+        "tests/tool_call_json_schema/validator.py",
+        "tests/tool_call_json_schema/test_tool_call_json_schema.py",
+        "testdata/walle_validator_cases/validator_cases/case.jsonl",
+    )
+    for relative_path in required_files:
+        path = checkout / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{relative_path}\n")
+
+    subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+    subprocess.run(["git", "-C", str(checkout), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(checkout),
+            "-c",
+            "user.name=InferenceX Tests",
+            "-c",
+            "user.email=tests@inferencex.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        check=True,
+    )
+    verifier_ref = subprocess.run(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    def checkout_is_valid() -> bool:
+        result = subprocess.run(
+            [
+                "bash",
+                "-c",
+                'source "$BENCHMARK_LIB"; '
+                '_kimi_vendor_checkout_is_valid "$CHECKOUT" "$VERIFIER_REF"',
+            ],
+            env={
+                **os.environ,
+                "BENCHMARK_LIB": str(BENCHMARK_LIB),
+                "CHECKOUT": str(checkout),
+                "VERIFIER_REF": verifier_ref,
+                "KV_OFFLOADING": "none",
+            },
+        )
+        return result.returncode == 0
+
+    assert checkout_is_valid()
+    pytest_cache = checkout / ".pytest_cache" / "v" / "cache" / "nodeids"
+    pytest_cache.parent.mkdir(parents=True)
+    pytest_cache.write_text("[]\n")
+    assert checkout_is_valid()
+
+    with (checkout / ".git/info/exclude").open("a") as exclude_file:
+        exclude_file.write("\n/conftest.py\n")
+    root_override = checkout / "conftest.py"
+    root_override.write_text("# ignored root override\n")
+    assert not checkout_is_valid()
+    root_override.unlink()
+
+    root_override.write_text("# staged root override\n")
+    subprocess.run(
+        ["git", "-C", str(checkout), "add", "-f", "conftest.py"],
+        check=True,
+    )
+    assert not checkout_is_valid()
+    subprocess.run(
+        ["git", "-C", str(checkout), "reset", "-q", "HEAD", "--", "conftest.py"],
+        check=True,
+    )
+    root_override.unlink()
+
+    override = checkout / "tests/tool_call_json_schema/local_override.py"
+    override.write_text("# untracked override\n")
+    assert not checkout_is_valid()
+    override.unlink()
+
+    validator = checkout / "tests/tool_call_json_schema/validator.py"
+    validator.write_text("# modified verifier\n")
+    assert not checkout_is_valid()
+
+
+def test_tool_use_runner_uses_fixed_upstream_contract(tmp_path: Path) -> None:
+    shim_dir = tmp_path / "bin"
+    shim_dir.mkdir()
+    python_shim = shim_dir / "python3"
+    python_shim.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf 'PYTHON_ARG=<%s>\\n' \"$@\"\n"
+    )
+    python_shim.chmod(
+        python_shim.stat().st_mode | stat.S_IXUSR
+    )
+    results_dir = tmp_path / "results"
+    verifier_dir = tmp_path / "verifier"
+    script = r'''
+source "$BENCHMARK_LIB"
+_require_tool_use_python() { echo "PYTHON_VERSION=OK"; }
+_install_tool_use_eval_deps() { echo "INSTALL=UPSTREAM_MINIMAL"; }
+_prepare_kimi_vendor_verifier() {
+    printf 'CHECKOUT_REPO=%s\n' "$1"
+    printf 'CHECKOUT_REF=%s\n' "$2"
+    KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$VERIFIER_DIR"
+}
+run_tool_use_eval --port 9999 --results-dir "$RESULTS_DIR"
+printf 'EVAL_FRAMEWORK=%s\n' "$EVAL_FRAMEWORK"
+printf 'EVAL_SUITE=%s\n' "$EVAL_SUITE"
+printf 'EVAL_RESULT_DIR=%s\n' "$EVAL_RESULT_DIR"
+printf 'RUNTIME_READY=%s\n' "$INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY"
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "RESULTS_DIR": str(results_dir),
+        "VERIFIER_DIR": str(verifier_dir),
+        "MODEL": "test-model",
+        "OPENAI_API_KEY": "must-not-be-forwarded",
+        "PATH": f"{shim_dir}:{os.environ['PATH']}",
+        "KV_OFFLOADING": "none",
+        "IS_MULTINODE": "false",
+    }
+    for key in (
+        "EVAL_FRAMEWORK",
+        "EVAL_SUITE",
+        "EVAL_RESULT_DIR",
+        "INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY",
+        "KIMI_VENDOR_VERIFIER_DIR",
+        "KIMI_VENDOR_VERIFIER_CHECKOUT_DIR",
+        "MODEL_NAME",
+    ):
+        env.pop(key, None)
+    result = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    output = result.stdout
+    expected_adapter = (
+        BENCHMARK_LIB.parents[1] / "utils/evals/kimi_vendor_eval.py"
+    )
+
+    assert "PYTHON_VERSION=OK" in output
+    assert output.count("INSTALL=UPSTREAM_MINIMAL") == 1
+    assert (
+        "CHECKOUT_REPO=https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
+        in output
+    )
+    assert (
+        "CHECKOUT_REF=b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
+        in output
+    )
+    assert f"PYTHON_ARG=<{expected_adapter}>" in output
+    for flag in (
+        "--verifier-dir",
+        "--base-url",
+        "--api-key",
+        "--model",
+        "--output-dir",
+    ):
+        assert f"PYTHON_ARG=<{flag}>" in output
+    assert f"PYTHON_ARG=<{verifier_dir}>" in output
+    assert "PYTHON_ARG=<http://127.0.0.1:9999/v1>" in output
+    assert "PYTHON_ARG=<EMPTY>" in output
+    assert "PYTHON_ARG=<test-model>" in output
+    assert f"PYTHON_ARG=<{results_dir}>" in output
+    assert "EVAL_FRAMEWORK=tool-use" in output
+    assert "EVAL_SUITE=kimi_tool_call_schema" in output
+    assert f"EVAL_RESULT_DIR={results_dir}" in output
+    assert "RUNTIME_READY=true" in output
 
 
 def test_run_lm_eval_rejects_missing_option_value():
@@ -175,6 +545,94 @@ def test_eval_limit_absent_when_unset():
 def test_lm_eval_defaults_to_gsm8k():
     out = _run_lm_eval_cmdline()
     assert "utils/evals/gsm8k.yaml" in out
+
+
+def _summary_metadata(tmp_path: Path, **overrides: str) -> dict:
+    work_dir = tmp_path / "work"
+    results_dir = tmp_path / "results"
+    work_dir.mkdir(parents=True)
+    results_dir.mkdir()
+    script = r'''
+source "$BENCHMARK_LIB"
+cd "$WORK_DIR"
+append_lm_eval_summary >/dev/null
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "WORK_DIR": str(work_dir),
+        "EVAL_RESULT_DIR": str(results_dir),
+        "MODEL": "test-model",
+        "CONC": "7",
+        "KV_OFFLOADING": "none",
+    }
+    for key in ("EVAL_FRAMEWORK", "EVAL_SUITE", "EVAL_TASKS_DIR"):
+        env.pop(key, None)
+    env.update(overrides)
+    subprocess.run(["bash", "-c", script], env=env, check=True)
+    return json.loads((work_dir / "meta_env.json").read_text())
+
+
+def test_summary_metadata_preserves_lm_eval_gsm8k_defaults(tmp_path: Path) -> None:
+    meta = _summary_metadata(tmp_path)
+
+    assert meta["eval_framework"] == "lm-eval"
+    assert meta["eval_suite"] == "gsm8k"
+    assert meta["conc"] == 7
+
+
+def test_run_lm_eval_exports_cli_task_suite_to_metadata(tmp_path: Path) -> None:
+    work_dir = tmp_path / "work"
+    results_dir = tmp_path / "results"
+    work_dir.mkdir()
+    results_dir.mkdir()
+    script = r'''
+set -e
+source "$BENCHMARK_LIB"
+cd "$WORK_DIR"
+python3() { :; }
+export EVAL_MAX_MODEL_LEN=16384
+export INFERENCEX_LM_EVAL_RUNTIME_READY=true
+run_lm_eval --task custom.yaml --results-dir "$RESULTS_DIR"
+append_lm_eval_summary >/dev/null
+'''
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "WORK_DIR": str(work_dir),
+        "RESULTS_DIR": str(results_dir),
+        "MODEL": "test-model",
+        "MODEL_NAME": "test-model",
+        "OPENAI_API_KEY": "EMPTY",
+        "KV_OFFLOADING": "none",
+    }
+    for key in ("EVAL_FRAMEWORK", "EVAL_SUITE", "EVAL_TASKS_DIR"):
+        env.pop(key, None)
+
+    subprocess.run(["bash", "-c", script], env=env, check=True)
+    meta = json.loads((work_dir / "meta_env.json").read_text())
+
+    assert meta["eval_framework"] == "lm-eval"
+    assert meta["eval_suite"] == "custom"
+
+
+def test_summary_metadata_prefers_explicit_suite_then_task_basename(
+    tmp_path: Path,
+) -> None:
+    from_task = _summary_metadata(
+        tmp_path / "task",
+        EVAL_TASKS_DIR="/tmp/custom_reasoning.yaml",
+    )
+    explicit = _summary_metadata(
+        tmp_path / "explicit",
+        EVAL_FRAMEWORK="tool-use",
+        EVAL_SUITE="kimi_tool_call_schema",
+        EVAL_TASKS_DIR="/tmp/ignored.yaml",
+    )
+
+    assert from_task["eval_suite"] == "custom_reasoning"
+    assert explicit["eval_framework"] == "tool-use"
+    assert explicit["eval_suite"] == "kimi_tool_call_schema"
 
 
 
@@ -552,14 +1010,28 @@ _GENMODE_SCRIPT = r'''
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
-_run_swebench_agentic_generation() { echo "GEN=agentic"; return 42; }
-run_lm_eval() { echo "GEN=single-shot"; return 42; }
+_run_swebench_agentic_generation() {
+    echo "GEN=agentic"
+    echo "SUITE=$EVAL_SUITE"
+    return 42
+}
+run_lm_eval() {
+    echo "GEN=single-shot"
+    echo "SUITE=$EVAL_SUITE"
+    return 42
+}
 run_swebench_eval --port 8888
 echo "RC=$?"
 '''
 
 
-def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
+def _gen_mode(
+    tmp_path: Path,
+    *,
+    is_agentic,
+    gen_mode=None,
+    eval_suite=None,
+) -> str:
     env = {**os.environ,
            "BENCHMARK_LIB": str(BENCHMARK_LIB),
            "KV_OFFLOADING": "none",
@@ -567,8 +1039,11 @@ def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
            "EVAL_RESULT_DIR": str(tmp_path / "out")}
     env.pop("SWEBENCH_GEN_MODE", None)
     env.pop("SCENARIO_TYPE", None)
+    env.pop("EVAL_SUITE", None)
     if gen_mode is not None:
         env["SWEBENCH_GEN_MODE"] = gen_mode
+    if eval_suite is not None:
+        env["EVAL_SUITE"] = eval_suite
     res = subprocess.run(["bash", "-c", _GENMODE_SCRIPT], env=env,
                          text=True, capture_output=True,
                          cwd=BENCHMARK_LIB.parents[1])
@@ -577,7 +1052,9 @@ def _gen_mode(tmp_path, *, is_agentic, gen_mode=None) -> str:
 
 
 def test_gen_mode_defaults_to_agentic(tmp_path):
-    assert "GEN=agentic" in _gen_mode(tmp_path, is_agentic="1")
+    output = _gen_mode(tmp_path, is_agentic="1")
+    assert "GEN=agentic" in output
+    assert "SUITE=swebench_lite" in output
 
 
 def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
@@ -585,7 +1062,20 @@ def test_gen_mode_agentic_even_without_agentic_scenario(tmp_path):
 
 
 def test_explicit_single_shot_escape_hatch(tmp_path):
-    assert "GEN=single-shot" in _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")
+    output = _gen_mode(tmp_path, is_agentic="1", gen_mode="single-shot")
+    assert "GEN=single-shot" in output
+    assert "SUITE=swebench_lite" in output
+
+
+def test_swebench_generation_modes_preserve_explicit_suite(tmp_path):
+    for gen_mode in ("agentic", "single-shot"):
+        output = _gen_mode(
+            tmp_path / gen_mode,
+            is_agentic="1",
+            gen_mode=gen_mode,
+            eval_suite="explicit_swebench",
+        )
+        assert "SUITE=explicit_swebench" in output
 
 
 def test_agent_sandbox_cpu_knob(tmp_path):

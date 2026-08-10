@@ -39,9 +39,85 @@ malformed metadata, duplicates, or raw/aggregate mismatches are not. See
 [workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
-`run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
+`run_eval` in `benchmarks/benchmark_lib.sh` dispatches to the selected eval
+framework against the server's OpenAI-compatible endpoint. The default is
+[lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness)
+(`lm-eval`) with GSM8K. Existing fixed-sequence and agentic paths preserve that
+default, and explicit agentic runs can still select SWE-bench.
 
-The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k; explicit agentic runs can still select SWE-bench.
+The Phase 1 tool-use suite is opt-in. The Kimi-K3 B300 vLLM agentic launcher,
+like every existing launcher, continues to select lm-eval/GSM8K by default. To
+run the suite after its server is ready, use the existing entrypoint:
+
+```bash
+EVAL_FRAMEWORK=tool-use EVAL_SUITE=kimi_tool_call_schema \
+    run_eval --port "$PORT"
+```
+
+`run_tool_use_eval` supplies `kimi_tool_call_schema` when `EVAL_SUITE` is unset
+for a manual `run_eval --framework tool-use` call and rejects every other suite.
+The compatibility result continues through the existing collector, suite-aware
+artifact identity, and strict `1.0` threshold.
+Phase 1 is single-node only and rejects `IS_MULTINODE=true` or `1`; the
+multi-node workflow does not yet preserve the stock native report.
+
+### Stock Kimi tool-call schema smoke
+
+This suite runs the unmodified
+[MoonshotAI/Kimi-Vendor-Verifier](https://github.com/MoonshotAI/Kimi-Vendor-Verifier)
+at commit `b9ed3a6665bdff2c943246f7d2903cd003d6ddd6`. Its bundled Walle
+schema corpus is sourced from MoonshotAI/walle commit
+`cc1c6b7dab5496d5184677ecf4c3b95fc1bd1606` (`v0.1.10`). The upstream
+prompt, schema loading and selection, request construction, non-stream and
+stream assembly, argument validation, and report generation are all stock.
+InferenceX owns only the subprocess invocation and compatibility projection.
+
+Python 3.12 or newer is required; the runner fails with a version error before
+installing or checking out anything on older Python. At runtime it installs only
+`httpx[http2]==0.28.1`, `openai==2.14.0`, `jsonschema==4.25.1`, and
+`pytest==8.4.2`. It then makes a network checkout from GitHub using a sparse,
+detached checkout of the pinned verifier commit containing only:
+
+- `LICENSE` and `pyproject.toml`;
+- `tests/__init__.py`, `tests/conftest.py`, and
+  `tests/tool_call_json_schema/`;
+- `testdata/walle_validator_cases/`.
+
+An explicitly supplied `KIMI_VENDOR_VERIFIER_DIR` is reused only when it is at
+that exact commit, required sources are unmodified, and no extra checkout files
+can override the verifier (root `.pytest_cache/` is ignored). The verifier
+project and its unrelated benchmark dependencies are not installed.
+
+The thin `utils/evals/kimi_vendor_eval.py` wrapper runs upstream
+`tests/tool_call_json_schema/test_tool_call_json_schema.py` with:
+
+- base URL `http://127.0.0.1:${PORT}/v1`, API key `EMPTY`, and model
+  `${MODEL_NAME:-$MODEL}`;
+- `--case-dir testdata/walle_validator_cases/validator_cases`,
+  `--think-mode none --selection object --max-cases 1 --max-tokens 2048`;
+- `--tool-json-report <output>/kimi_vendor_report.json`.
+
+That stock selection chooses Walle case `TestAdditionalProperties:1` and
+upstream parametrizes it in both `non-stream` and `stream` modes, for two
+results. Requests use upstream's `openai.Client(timeout=120)` unchanged, so
+OpenAI SDK 2.14.0's stock retry policy remains in effect, including its default
+two retries for eligible connection, timeout, 408, 409, 429, and 5xx failures.
+InferenceX does not add request retries or make the two modes concurrent.
+`EVAL_CONCURRENT_REQUESTS` remains matrix metadata; multi-value batched
+concurrency remains supported only by `lm-eval`.
+
+The unchanged native `kimi_vendor_report.json` is uploaded alongside the
+collector-compatible `results_kimi_vendor_<UTC timestamp>.json`. The
+compatibility score is `passed / 2` for task `kimi_tool_call_schema`, primary metric
+`exact_match,strict-match`, and effective sample count two. Success requires
+pytest to exit zero and exactly two upstream mode results to pass. A setup or
+collection failure still produces a zero-score compatibility result with
+integration error metadata; the native report can be absent when upstream
+cannot collect.
+
+Phase 1 intentionally covers one stock object-schema case only. It does not
+measure broader schema coverage, tool selection among multiple tools, parallel
+tool calls, multi-turn tool execution, or general agent quality.
 
 ### Benchmark script flow
 
@@ -72,8 +148,11 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 |----------|-------------|
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
+| `run_tool_use_eval` | Runs the pinned stock verifier in non-stream and stream modes |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
+| `_install_tool_use_eval_deps` | Installs the minimal pinned stock-verifier runtime |
+| `_prepare_kimi_vendor_verifier` | Prepares or validates the pinned sparse checkout |
 | `_patch_lm_eval` | Patches lm-eval for reasoning tokens and TRT compatibility |
 | `compute_eval_context_length` | Computes eval context length (requested benchmark context, capped at model native max) |
 | `get_native_max_context_length` | Extracts model's native max context length from HF config |
@@ -141,6 +220,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `em_flexible` | Flexible extraction (looser number matching) |
 | `n_eff` | Number of samples evaluated |
 | `task` | Eval task name (e.g., `gsm8k`) |
+| `eval_framework` | Eval runner identity (for example, `lm-eval` or `tool-use`) |
+| `eval_suite` | Explicit suite identity used for collection and artifact reuse |
 
 ### Environment variables
 
@@ -149,8 +230,10 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `RUN_EVAL` | `false` | Enable eval after throughput benchmark |
 | `EVAL_ONLY` | `false` | Skip throughput, only run evals (set by workflow) |
 | `EVAL_FRAMEWORK` | `lm-eval` | Eval framework to use |
+| `EVAL_SUITE` | basename of `EVAL_TASKS_DIR`, else `gsm8k` | Eval suite metadata; explicit values take precedence |
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
+| `KIMI_VENDOR_VERIFIER_DIR` | generated pinned checkout | Optional pre-existing verifier checkout; exact ref and required paths are validated |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 | `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |

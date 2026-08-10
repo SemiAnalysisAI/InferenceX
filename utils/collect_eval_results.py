@@ -284,6 +284,10 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'source': m.get('source'),
     }
 
+    for metadata_field in ('eval_framework', 'eval_suite'):
+        if metadata_field in meta:
+            row[metadata_field] = meta[metadata_field]
+
     # Add universal score field (primary metric for unified comparison)
     if m.get('strict') is not None:
         row['score'] = m.get('strict')

@@ -21,6 +21,21 @@ def test_build_row_preserves_sequence_lengths() -> None:
 
     assert row["isl"] == 1024
     assert row["osl"] == 1024
+    assert "eval_framework" not in row
+    assert "eval_suite" not in row
+
+
+def test_build_row_preserves_explicit_eval_metadata() -> None:
+    row = build_row(
+        {
+            "eval_framework": "tool-use",
+            "eval_suite": "kimi_tool_call_schema",
+        },
+        {"task": "kimi_tool_call_schema"},
+    )
+
+    assert row["eval_framework"] == "tool-use"
+    assert row["eval_suite"] == "kimi_tool_call_schema"
 
 
 def _write_lm_eval_result(path: Path, score: float) -> None:
@@ -67,6 +82,8 @@ def test_collect_eval_rows_expands_batched_concurrencies(
         "completed_eval_concs": [4, 16],
         "failed_eval_concs": [],
         "conc": 4,
+        "eval_framework": "lm-eval",
+        "eval_suite": "gsm8k",
     }))
     _write_lm_eval_result(
         artifact_dir / "results_test_conc4.json",
@@ -81,6 +98,8 @@ def test_collect_eval_rows_expands_batched_concurrencies(
 
     assert [row["conc"] for row in rows] == [4, 16]
     assert [row["score"] for row in rows] == [0.90, 0.91]
+    assert {row["eval_framework"] for row in rows} == {"lm-eval"}
+    assert {row["eval_suite"] for row in rows} == {"gsm8k"}
 
 
 def test_collect_eval_rows_ignores_failed_batch_points(

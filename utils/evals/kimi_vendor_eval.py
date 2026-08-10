@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Run the stock Kimi Vendor Verifier and project its native report."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+TASK_NAME = "kimi_tool_call_schema"
+NATIVE_REPORT_FILENAME = "kimi_vendor_report.json"
+COMPATIBILITY_GLOB = "results_kimi_vendor_*.json"
+EXPECTED_MODES = {"non-stream", "stream"}
+
+
+def prepare_compatibility_path(output_dir: Path) -> Path:
+    """Remove stale projections and return a timestamped collector artifact path."""
+    for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
+        stale_path.unlink()
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
+    return output_dir / f"results_kimi_vendor_{timestamp}.json"
+
+
+def build_pytest_command(
+    *, base_url: str, api_key: str, model: str, report_path: Path
+) -> list[str]:
+    """Build the fixed Phase 1 invocation of the upstream verifier."""
+    return [
+        sys.executable,
+        "-m",
+        "pytest",
+        "tests/tool_call_json_schema/test_tool_call_json_schema.py",
+        "--base-url",
+        base_url,
+        "--api-key",
+        api_key,
+        "--smoke-model",
+        model,
+        "--think-mode",
+        "none",
+        "--selection",
+        "object",
+        "--max-cases",
+        "1",
+        "--case-dir",
+        "testdata/walle_validator_cases/validator_cases",
+        "--max-tokens",
+        "2048",
+        "--tool-json-report",
+        str(report_path),
+    ]
+
+
+def _mapping(value: Any, name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{name} must be an object")
+    return value
+
+
+def _project_report(model: str, report: Any) -> tuple[dict[str, Any], bool]:
+    root = _mapping(report, "report")
+    summary = _mapping(root.get("summary"), "report.summary")
+    results = root.get("results")
+    if not isinstance(results, list):
+        raise ValueError("report.results must be an array")
+
+    total = summary.get("total")
+    by_status = _mapping(summary.get("by_status"), "report.summary.by_status")
+    passed = by_status.get("passed", 0)
+    if (
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or not isinstance(passed, int)
+        or isinstance(passed, bool)
+        or passed < 0
+        or passed > 2
+    ):
+        raise ValueError("report summary contains invalid counts")
+
+    modes: list[str] = []
+    result_passes = 0
+    for index, result in enumerate(results):
+        record = _mapping(result, f"report.results[{index}]")
+        mode = record.get("mode")
+        status = record.get("status")
+        if not isinstance(mode, str) or not isinstance(status, str):
+            raise ValueError(f"report.results[{index}] has invalid mode or status")
+        modes.append(mode)
+        result_passes += status == "passed"
+
+    if total != len(results) or passed != result_passes:
+        raise ValueError("report summary does not match result records")
+
+    score = passed / 2.0
+    compatibility = _compatibility_result(model, score)
+    complete_pass = (
+        total == 2
+        and passed == 2
+        and len(results) == 2
+        and set(modes) == EXPECTED_MODES
+        and len(modes) == len(set(modes))
+    )
+    return compatibility, complete_pass
+
+
+def _compatibility_result(
+    model: str, score: float, integration_error: BaseException | None = None
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "lm_eval_version": "kimi-vendor-verifier",
+        "model_name": model,
+        "model_args": f"pretrained={model}",
+        "results": {
+            TASK_NAME: {
+                "exact_match,strict-match": score,
+                "exact_match_stderr,strict-match": 0.0,
+            }
+        },
+        "configs": {
+            TASK_NAME: {
+                "task": TASK_NAME,
+                "output_type": "generate_until",
+                "num_fewshot": 0,
+                "repeats": 1,
+                "metric_list": [
+                    {
+                        "metric": "exact_match",
+                        "aggregation": "mean",
+                        "higher_is_better": True,
+                    }
+                ],
+                "filter_list": [
+                    {"name": "strict-match", "filter": [{"function": "identity"}]}
+                ],
+            }
+        },
+        "versions": {TASK_NAME: 1},
+        "n-shot": {TASK_NAME: 0},
+        "higher_is_better": {TASK_NAME: {"exact_match": True}},
+        "n-samples": {TASK_NAME: {"original": 2, "effective": 2}},
+    }
+    if integration_error is not None:
+        result["integration_error"] = {
+            "type": type(integration_error).__name__,
+            "message": str(integration_error),
+        }
+    return result
+
+
+def _write_compatibility(path: Path, result: Mapping[str, Any]) -> None:
+    path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+
+
+def run_evaluation(
+    *,
+    verifier_dir: Path,
+    base_url: str,
+    api_key: str,
+    model: str,
+    output_dir: Path,
+) -> bool:
+    """Run upstream pytest and always attempt to publish a compatibility result."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    native_report = output_dir / NATIVE_REPORT_FILENAME
+    compatibility_path = prepare_compatibility_path(output_dir)
+    subprocess_rc: int | None = None
+    integration_error: BaseException | None = None
+    compatibility = _compatibility_result(model, 0.0)
+    complete_pass = False
+
+    try:
+        native_report.unlink(missing_ok=True)
+        completed = subprocess.run(
+            build_pytest_command(
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                report_path=native_report.resolve(),
+            ),
+            cwd=verifier_dir,
+            check=False,
+        )
+        subprocess_rc = completed.returncode
+        report = json.loads(native_report.read_text(encoding="utf-8"))
+        compatibility, complete_pass = _project_report(model, report)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        integration_error = exc
+        compatibility = _compatibility_result(model, 0.0, exc)
+    finally:
+        try:
+            _write_compatibility(compatibility_path, compatibility)
+        except OSError as exc:
+            if integration_error is not None:
+                exc.add_note(f"Earlier integration error: {integration_error}")
+            raise
+
+    return subprocess_rc == 0 and complete_pass and integration_error is None
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the pinned stock Kimi Vendor Verifier tool-schema smoke test."
+    )
+    parser.add_argument("--verifier-dir", type=Path)
+    parser.add_argument("--base-url")
+    parser.add_argument("--api-key", default="EMPTY")
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--integration-error")
+    args = parser.parse_args(argv)
+    if args.integration_error is None:
+        missing = [
+            option
+            for option, value in (
+                ("--verifier-dir", args.verifier_dir),
+                ("--base-url", args.base_url),
+            )
+            if value is None
+        ]
+        if missing:
+            parser.error(
+                f"{', '.join(missing)} required unless --integration-error is provided"
+            )
+    return args
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.integration_error is not None:
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        (args.output_dir / NATIVE_REPORT_FILENAME).unlink(missing_ok=True)
+        _write_compatibility(
+            prepare_compatibility_path(args.output_dir),
+            _compatibility_result(
+                args.model, 0.0, RuntimeError(args.integration_error)
+            ),
+        )
+        return 1
+    passed = run_evaluation(
+        verifier_dir=args.verifier_dir,
+        base_url=args.base_url,
+        api_key=args.api_key,
+        model=args.model,
+        output_dir=args.output_dir,
+    )
+    return 0 if passed else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

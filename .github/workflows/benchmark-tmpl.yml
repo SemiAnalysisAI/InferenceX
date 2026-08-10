@@ -392,6 +392,7 @@ jobs:
           path: |
             meta_env.json
             results*.json
+            kimi_vendor_report.json
             sample*.jsonl
             agent_preds.json
             predictions.jsonl
@@ -409,6 +410,7 @@ jobs:
           rm -f meta_env.json || true
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
+          rm -f kimi_vendor_report.json || true
           rm -f sample*.jsonl || true
           rm -f agent_preds.json predictions.jsonl swebench_report_*.json *.traj* || true
           

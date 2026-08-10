@@ -8,6 +8,9 @@
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
+INFERENCEX_BENCHMARK_LIB_DIR="$(
+    cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
+)"
 
 # Inference server port shared by every benchmark recipe. Launchers that need
 # a non-default value (e.g. launch_mi355x-amds.sh derives PORT from RUNNER_NAME
@@ -816,6 +819,230 @@ _install_lm_eval_deps() {
     fi
 }
 
+_require_tool_use_python() {
+    if python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 12))'; then
+        return 0
+    fi
+
+    local python_version
+    python_version="$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null || printf 'unavailable')"
+    echo "ERROR: tool-use requires Python >=3.12 (python3 is ${python_version})" >&2
+    return 2
+}
+
+_install_tool_use_eval_deps() {
+    python3 -m pip install -q --no-cache-dir --break-system-packages \
+        "httpx[http2]==0.28.1" \
+        "openai==2.14.0" \
+        "jsonschema==4.25.1" \
+        "pytest==8.4.2"
+}
+
+_kimi_vendor_checkout_is_valid() {
+    local checkout_dir="$1"
+    local expected_ref="$2"
+    local checkout_ref checkout_status tracked_status untracked_files ignored_files
+
+    [ -f "${checkout_dir}/LICENSE" ] \
+        && [ -f "${checkout_dir}/pyproject.toml" ] \
+        && [ -f "${checkout_dir}/tests/conftest.py" ] \
+        && [ -f "${checkout_dir}/tests/__init__.py" ] \
+        && [ -f "${checkout_dir}/tests/tool_call_json_schema/conftest.py" ] \
+        && [ -f "${checkout_dir}/tests/tool_call_json_schema/validator.py" ] \
+        && [ -f "${checkout_dir}/tests/tool_call_json_schema/test_tool_call_json_schema.py" ] \
+        && [ -d "${checkout_dir}/testdata/walle_validator_cases/validator_cases" ] \
+        || return 1
+    checkout_ref="$(git -C "$checkout_dir" rev-parse HEAD 2>/dev/null)" \
+        || return 1
+    [ "$checkout_ref" = "$expected_ref" ] || return 1
+    checkout_status="$(
+        git -C "$checkout_dir" status --porcelain --untracked-files=all -- \
+            LICENSE \
+            pyproject.toml \
+            tests/conftest.py \
+            tests/__init__.py \
+            tests/tool_call_json_schema \
+            testdata/walle_validator_cases
+    )" || return 1
+    [ -z "$checkout_status" ] || return 1
+    tracked_status="$(
+        git -C "$checkout_dir" status --porcelain --untracked-files=no
+    )" || return 1
+    [ -z "$tracked_status" ] || return 1
+    untracked_files="$(
+        git -C "$checkout_dir" ls-files --others --exclude-standard -- \
+            . ':(exclude,top,glob).pytest_cache/**'
+    )" || return 1
+    [ -z "$untracked_files" ] || return 1
+    ignored_files="$(
+        git -C "$checkout_dir" ls-files --others --ignored --exclude-standard -- \
+            . ':(exclude,top,glob).pytest_cache/**'
+    )" || return 1
+    [ -z "$ignored_files" ]
+}
+
+_prepare_kimi_vendor_verifier() {
+    local repo_url="$1"
+    local verifier_ref="$2"
+    local checkout_dir
+
+    if [ -n "${KIMI_VENDOR_VERIFIER_DIR:-}" ]; then
+        checkout_dir="$KIMI_VENDOR_VERIFIER_DIR"
+        if ! _kimi_vendor_checkout_is_valid "$checkout_dir" "$verifier_ref"; then
+            echo "ERROR: KIMI_VENDOR_VERIFIER_DIR must be at ${verifier_ref}" >&2
+            echo "ERROR: required verifier sources must be present and unmodified" >&2
+            return 2
+        fi
+        KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
+        return 0
+    fi
+
+    checkout_dir="/tmp/kimi-vendor-verifier-${verifier_ref}"
+    if _kimi_vendor_checkout_is_valid "$checkout_dir" "$verifier_ref"; then
+        KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
+        return 0
+    fi
+
+    command -v git >/dev/null 2>&1 || {
+        echo "ERROR: git is required to fetch Kimi-Vendor-Verifier" >&2
+        return 1
+    }
+    rm -rf "$checkout_dir"
+    mkdir -p "$(dirname "$checkout_dir")" || return $?
+    if ! (
+        git init -q "$checkout_dir" \
+            && git -C "$checkout_dir" remote add origin "$repo_url" \
+            && git -C "$checkout_dir" config remote.origin.promisor true \
+            && git -C "$checkout_dir" config remote.origin.partialclonefilter blob:none \
+            && git -C "$checkout_dir" fetch -q --filter=blob:none --depth=1 \
+                origin "$verifier_ref" \
+            && git -C "$checkout_dir" update-ref HEAD FETCH_HEAD \
+            && git -C "$checkout_dir" sparse-checkout set --no-cone \
+                /LICENSE \
+                /pyproject.toml \
+                /tests/conftest.py \
+                /tests/__init__.py \
+                /tests/tool_call_json_schema/ \
+                /testdata/walle_validator_cases/ \
+            && git -C "$checkout_dir" checkout -q --detach HEAD
+    ); then
+        rm -rf "$checkout_dir"
+        echo "ERROR: failed to fetch Kimi-Vendor-Verifier at ${verifier_ref}" >&2
+        return 1
+    fi
+    if ! _kimi_vendor_checkout_is_valid "$checkout_dir" "$verifier_ref"; then
+        rm -rf "$checkout_dir"
+        echo "ERROR: fetched Kimi-Vendor-Verifier checkout is incomplete" >&2
+        return 1
+    fi
+    KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
+}
+
+_write_tool_use_integration_error() {
+    local adapter_path="$1"
+    local model_name="$2"
+    local results_dir="$3"
+    local message="$4"
+
+    python3 "$adapter_path" \
+        --model "$model_name" \
+        --output-dir "$results_dir" \
+        --integration-error "$message" \
+        || true
+}
+
+run_tool_use_eval() {
+    local port="${PORT:-8888}"
+    local results_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
+    local verifier_repo="https://github.com/MoonshotAI/Kimi-Vendor-Verifier.git"
+    local verifier_ref="b9ed3a6665bdff2c943246f7d2903cd003d6ddd6"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port|--results-dir)
+                if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == --* ]]; then
+                    echo "ERROR: $1 requires a value" >&2
+                    return 2
+                fi
+                case "$1" in
+                    --port)        port="$2" ;;
+                    --results-dir) results_dir="$2" ;;
+                esac
+                shift 2
+                ;;
+            *)
+                echo "Unknown parameter: $1" >&2
+                return 2
+                ;;
+        esac
+    done
+
+    local eval_suite="${EVAL_SUITE:-kimi_tool_call_schema}"
+    if [ "$eval_suite" != "kimi_tool_call_schema" ]; then
+        echo "ERROR: tool-use supports only EVAL_SUITE=kimi_tool_call_schema" >&2
+        export EVAL_RESULT_DIR=""
+        return 2
+    fi
+    case "${IS_MULTINODE:-false}" in
+        true|1)
+            echo "ERROR: tool-use Phase 1 supports single-node evals only" >&2
+            export EVAL_RESULT_DIR=""
+            return 2
+            ;;
+    esac
+    export EVAL_FRAMEWORK=tool-use
+    export EVAL_SUITE="$eval_suite"
+
+    local _repo_root
+    _repo_root="$(cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd)"
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
+    local adapter_path="${_repo_root}/utils/evals/kimi_vendor_eval.py"
+
+    mkdir -p "$results_dir" || return $?
+    export EVAL_RESULT_DIR="$results_dir"
+
+    local setup_rc integration_error
+    if _require_tool_use_python; then
+        :
+    else
+        setup_rc=$?
+        integration_error="tool-use Python version check failed with exit code ${setup_rc}"
+        echo "ERROR: ${integration_error}" >&2
+        _write_tool_use_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error"
+        return "$setup_rc"
+    fi
+    if [ "${INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY:-false}" != "true" ]; then
+        if _install_tool_use_eval_deps; then
+            export INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY=true
+        else
+            setup_rc=$?
+            integration_error="tool-use dependency installation failed with exit code ${setup_rc}"
+            echo "ERROR: ${integration_error}" >&2
+            _write_tool_use_integration_error \
+                "$adapter_path" "$model_name" "$results_dir" "$integration_error"
+            return "$setup_rc"
+        fi
+    fi
+    if _prepare_kimi_vendor_verifier "$verifier_repo" "$verifier_ref"; then
+        :
+    else
+        setup_rc=$?
+        integration_error="tool-use verifier checkout failed with exit code ${setup_rc}"
+        echo "ERROR: ${integration_error}" >&2
+        _write_tool_use_integration_error \
+            "$adapter_path" "$model_name" "$results_dir" "$integration_error"
+        return "$setup_rc"
+    fi
+
+    python3 "$adapter_path" \
+        --verifier-dir "$KIMI_VENDOR_VERIFIER_CHECKOUT_DIR" \
+        --base-url "http://127.0.0.1:${port}/v1" \
+        --api-key EMPTY \
+        --model "$model_name" \
+        --output-dir "$results_dir"
+}
+
 _eval_patches_dir() {
     cd "$(dirname "${BASH_SOURCE[0]}")/../utils/evals/patches" && pwd
 }
@@ -933,6 +1160,15 @@ run_lm_eval() {
         echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"
         tasks_dir="$_repo_root/$tasks_dir"
     fi
+
+    local effective_suite="${EVAL_SUITE:-}"
+    local task_basename
+    if [ -z "$effective_suite" ]; then
+        task_basename="${tasks_dir##*/}"
+        effective_suite="${task_basename%.yaml}"
+        effective_suite="${effective_suite%.yml}"
+    fi
+    export EVAL_SUITE="$effective_suite"
 
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
@@ -1141,12 +1377,22 @@ append_lm_eval_summary() {
             fi
         fi
     fi
+    local eval_framework="${EVAL_FRAMEWORK:-lm-eval}"
+    local eval_suite="${EVAL_SUITE:-}"
+    if [ -z "$eval_suite" ] && [ -n "${EVAL_TASKS_DIR:-}" ]; then
+        eval_suite="$(basename "${EVAL_TASKS_DIR}")"
+        eval_suite="${eval_suite%.yaml}"
+        eval_suite="${eval_suite%.yml}"
+    fi
+    eval_suite="${eval_suite:-gsm8k}"
     cat > "${meta_json}" <<META
 {
   "is_multinode": ${is_multinode_json},
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
+  "eval_framework": "${eval_framework}",
+  "eval_suite": "${eval_suite}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
   "dcp_size": ${DCP_SIZE:-1},
@@ -1422,6 +1668,7 @@ PYSWEEP
 run_swebench_eval() {
     local out_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local task_name="${SWEBENCH_TASK_NAME:-swebench_lite}"
+    export EVAL_SUITE="${EVAL_SUITE:-$task_name}"
     local gen_dir
     gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
 
@@ -1562,9 +1809,14 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
+    if [ "$framework" = "lm_eval" ]; then
+        framework="lm-eval"
+    fi
+    export EVAL_FRAMEWORK="$framework"
 
-    # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
-    if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
+    # Tool-use uses the verifier's fixed request budget and does not consume
+    # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for that path.
+    if [ "$framework" != "tool-use" ] && [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
         compute_eval_context_length "$MODEL" "${MAX_MODEL_LEN:-0}" > /dev/null
     fi
 
@@ -1635,6 +1887,7 @@ run_eval() {
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
         swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
+        tool-use)        run_tool_use_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 

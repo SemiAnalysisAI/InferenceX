@@ -313,6 +313,16 @@ def normalized_runner(value: Any) -> str:
     return str(value or "").lower()
 
 
+LEGACY_EVAL_SUITE = "<legacy-eval-suite>"
+
+
+def eval_suite_identity(row: dict[str, Any]) -> Any:
+    """Return an explicit suite or the compatibility identity for old artifacts."""
+    if "eval_suite" in row:
+        return row["eval_suite"]
+    return LEGACY_EVAL_SUITE
+
+
 def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
     """Build an eval identity from one aggregate row."""
     if as_bool(row.get("is_multinode", False)):
@@ -322,6 +332,7 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
             row.get("model_prefix", row.get("infmax_model_prefix")),
             row.get("framework"),
             row.get("precision"),
+            eval_suite_identity(row),
             row.get("spec_decoding", "none"),
             as_int(row.get("isl", 8192), 8192),
             as_int(row.get("osl", 1024), 1024),
@@ -347,6 +358,7 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("model_prefix", row.get("infmax_model_prefix")),
         row.get("framework"),
         row.get("precision"),
+        eval_suite_identity(row),
         row.get("spec_decoding", "none"),
         as_int(row.get("isl", 8192), 8192),
         as_int(row.get("osl", 1024), 1024),
