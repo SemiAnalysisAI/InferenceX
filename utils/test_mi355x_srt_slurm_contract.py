@@ -182,13 +182,16 @@ def test_production_disagg_recipe_uses_two_full_nodes_and_the_existing_workload(
     }
     assert recipe["frontend"]["type"] == "sgl-router"
     for role in ("prefill", "decode"):
+        environment = recipe["backend"][f"{role}_environment"]
+        assert environment["HF_HOME"] == "/hf_hub_cache"
+        assert environment["HF_HUB_CACHE"] == "/hf_hub_cache/hub"
+        assert environment["HUGGINGFACE_HUB_CACHE"] == "/hf_hub_cache/hub"
+    for role in ("prefill", "decode"):
         config = recipe["backend"]["sglang_config"][role]
         assert config["tensor-parallel-size"] == 8
         assert config["disaggregation-transfer-backend"] == "mori"
         assert config["attention-backend"] == "aiter"
-        assert config["json-model-override-args"] == (
-            '{"architectures":["Qwen3_5MoeForCausalLM"]}'
-        )
+        assert "json-model-override-args" not in config
     command = recipe["benchmark"]["command"]
     assert "utils/bench_serving/benchmark_serving.py" in command
     assert "--random-input-len 8192" in command
