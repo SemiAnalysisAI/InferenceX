@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+from dataclasses import dataclass, field
 import json
 import math
 import os
@@ -45,6 +46,12 @@ CONDITIONING_ROUNDS_PER_SHAPE = 8
 # residual is the accumulation-order ambiguity the model cannot pin down: at most
 # topk (8) BF16 stores at one ulp (2^-8) each. Below the magnitude floor the gate
 # is effectively absolute (cancellation makes relative error meaningless there).
+#
+# The same bound covers the topk-slot-tree model (FlashInfer below 0.6.16, which rounds at
+# every level of the reduction tree) without widening: a pairwise tree over topk=8 leaves is
+# depth 3, so it compounds at most 3 roundings against the 8 this budget was sized for --
+# treewise summation is provably no worse than sequential. Both models are gated against this
+# one constant, so a future model must be checked against it rather than assumed to fit.
 COMBINE_REL_TOL = 8 * 2.0 ** -8
 COMBINE_MAG_FLOOR = 2e-2
 
@@ -60,6 +67,16 @@ COMBINE_MAG_FLOOR = 2e-2
 MODE_ALLOWED_SEMANTICS = {
     "normal": {"unweighted-rank-sum"},
     "low-latency": {"weighted-kernel-sum", "unweighted-rank-sum"},
+}
+
+# The (receive_layout, combine_weight_semantics) pairs the correctness oracles model.
+# The two axes are independent declarations, but only these combinations have an
+# expected-combine model; run_sweep fails closed on any other pairing. A backend
+# declaring an unmodeled pair may be correctly implemented -- it needs an oracle
+# written for it, not a silent verification against the wrong expectation.
+ORACLE_MODELED_CONTRACTS = {
+    ("token-rank", "unweighted-rank-sum"),
+    ("token-expert", "weighted-kernel-sum"),
 }
 
 def logical_byte_provenance(
@@ -134,6 +151,15 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="timed iterations per trial")
     ap.add_argument("--trials", type=int, required=True,
                     help="timed trials")
+    # Chain sampling on its own knobs: one call already yields chain_iters free-running pairs, so
+    # it converges in far fewer trials than the fresh-entry components. The matrix bakes these from
+    # configs/sweep.json `timing:`; the defaults match it, for cases scheduled before the fields.
+    ap.add_argument("--chain-iters", type=int, default=128,
+                    help="free-running dispatch->combine pairs per chain trial")
+    ap.add_argument("--chain-trials", type=int, default=4,
+                    help="chain trials per ladder point")
+    ap.add_argument("--chain-drop", type=int, default=16,
+                    help="head pairs discarded per chain trial (pipeline fill, not period)")
     # provenance / output
     ap.add_argument("--runner", required=True)
     ap.add_argument("--topology-class", required=True)
@@ -180,13 +206,25 @@ def _pcts(xs):
              "p95": percentile(xs, 95), "p99": percentile(xs, 99)} if xs else None)
 
 
-def _component(percentiles, count, *, derived=False):
+# Consumer contract, not labels: the frontend and durable store key the headline on
+# `components.pair_period` carrying exactly CHAIN_PERIOD_ORIGIN, so a typo fails silently.
+CHAIN_PERIOD_ORIGIN = "chained-median"
+CHAIN_FLOOR_ORIGIN = "chained-cross-rank-min"
+
+
+def _component(percentiles, count, *, derived=False, origin=None):
+    """One component block: availability, the reduction behind it, percentiles, sample count.
+
+    `origin` names that reduction wherever it is not this suite's default per-iteration cross-rank
+    MAX. The chained families set it, because they share this block shape while being
+    differently-reduced statistics a consumer must not have to infer from the field name.
+    """
     if percentiles is None:
         return {"availability": "unavailable", "origin": None,
                 "percentiles_us": None, "sample_count": 0}
     return {
         "availability": "derived" if derived else "measured",
-        "origin": "derived-percentile-sum" if derived else "measured",
+        "origin": origin or ("derived-percentile-sum" if derived else "measured"),
         "percentiles_us": percentiles,
         "sample_count": 0 if derived else count,
     }
@@ -237,13 +275,13 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[flo
 
     There is deliberately NO host sync between `pre()` and the start event. Stream ordering
     already keeps pre()'s work out of the s->e window: `s` is enqueued behind pre()'s kernels,
-    so the event timestamps when the stream REACHES it, not when the host recorded it. The sync
-    that used to sit here did not add that guarantee -- it drained the GPU, which put the host's
-    launch of `fn` inside the measured window and, because `fn` is a collective, let per-rank
-    launch jitter desynchronise ranks that pre() had just aligned. Each rank then blocked on the
-    slowest peer and run_sweep's cross-rank MAX reported that stagger as latency. Measured on
-    b200 uccl-ep low-latency combine: 113.4us -> 87.4us at T=1 with the ranks aligned, and no
-    change at T=32, which is what produced a *falling* latency curve as tokens grew.
+    so the event timestamps when the stream REACHES it, not when the host recorded it. A sync
+    here adds no guarantee and costs correctness: it drains the GPU, which puts the host's launch
+    of `fn` inside the measured window and, because `fn` is a collective, lets per-rank launch
+    jitter desynchronise ranks that pre() had just aligned. Each rank then blocks on the slowest
+    peer and run_sweep's cross-rank MAX reports that stagger as latency. Measured on b200 uccl-ep
+    low-latency combine: 113.4us with a sync against 87.4us without, at T=1, and no difference at
+    T=32 -- which is what produces a *falling* latency curve as tokens grow.
 
     The end-of-iteration sync stays: the warmup note below documents why iterations must not
     overlap (iter N+1's dispatch races iter N's combine on the persistent comm buffer), so only
@@ -287,6 +325,37 @@ def _reduce_vec(torch, dist, device, vals, op):
     t = torch.tensor(vals, device=device, dtype=torch.float64)
     dist.all_reduce(t, op=op)
     return [float(x) for x in t.tolist()]
+
+
+def _reduce_vec_median_spread(torch, dist, device, vals):
+    """Per-element cross-rank (MEDIAN, MAX-MIN) for a chained series, from one all_gather.
+
+    The pair period is a RATE, not a completion cost: every rank runs the same phase-locked
+    free-running loop, so MAX would publish whichever rank hiccuped as the pipeline's speed. The
+    median is the agreed cadence; a spread large next to it means one rank was paced -- distrust.
+
+    One gather rather than three reductions, so the two cannot disagree about which iterations
+    they describe (and MEDIAN is not a `ReduceOp`); every rank gathers the same matrix in rank
+    order, so the artifact does not depend on which rank wrote it.
+    """
+    local = torch.tensor(vals, device=device, dtype=torch.float64)
+    gathered = [torch.empty_like(local) for _ in range(dist.get_world_size())]
+    dist.all_gather(gathered, local)
+    stacked = torch.stack(gathered)
+    median = stacked.median(dim=0).values
+    spread = stacked.max(dim=0).values - stacked.min(dim=0).values
+    return [float(x) for x in median.tolist()], [float(x) for x in spread.tolist()]
+
+
+def _gather_scalar(torch, dist, device, val):
+    """Every rank's copy of one per-rank scalar, in rank order, identical on every rank.
+
+    The chain-health caller reduces it two ways (median and max-magnitude) from this one list.
+    """
+    local = torch.tensor([float(val)], device=device, dtype=torch.float64)
+    gathered = [torch.empty_like(local) for _ in range(dist.get_world_size())]
+    dist.all_gather(gathered, local)
+    return [float(g.item()) for g in gathered]
 
 
 def _reduce_int(torch, dist, device, v: int, op) -> int:
@@ -532,6 +601,59 @@ def _oracle_report(**fields):
     return report
 
 
+@dataclass
+class PointSamples:
+    """Every sample series for one ladder point.
+
+    Fresh-entry components carry one value per timed iteration, pooled across trials;
+    `spread` is the per-iteration cross-rank max-minus-min of the roundtrip; the `_min`
+    fields are the same iterations reduced by cross-rank MIN (the last rank into a
+    collective waited least, so its duration is the operation with entry skew excluded).
+    The chained family runs on its own much smaller trial count: `chain` and `chain_spread`
+    are per-iteration, while `gap` and `settle` are one scalar per trial.
+    """
+
+    dispatch: list = field(default_factory=list)
+    stage: list = field(default_factory=list)
+    combine: list = field(default_factory=list)
+    roundtrip: list = field(default_factory=list)
+    spread: list = field(default_factory=list)
+    dispatch_min: list = field(default_factory=list)
+    combine_min: list = field(default_factory=list)
+    roundtrip_min: list = field(default_factory=list)
+    chain: list = field(default_factory=list)
+    chain_spread: list = field(default_factory=list)
+    dispatch_floor: list = field(default_factory=list)
+    combine_floor: list = field(default_factory=list)
+    gap: list = field(default_factory=list)
+    settle: list = field(default_factory=list)
+
+
+def _chain_output_matches(chained, drained):
+    """Whether the chain's final combined output matches a drained pair, same code path.
+
+    A regime A/B, not an oracle: both tensors come from the backend's own dispatch->combine,
+    differing only in whether the pair ran free-running or drained, so a mismatch is corruption
+    that only manifests under back-to-back pairs (the stale-parity / aliased-signal class) --
+    invisible to the drained oracles and to the fresh post-chain check alike. Judged with the
+    oracle's elementwise tolerance rather than bit equality because a combine kernel is not
+    required to be order-deterministic across invocations; a regime defect produces errors
+    orders of magnitude past COMBINE_REL_TOL, never inside it -- an assumption the returned
+    magnitude exists to CHECK rather than assert, since a verdict alone cannot distinguish a
+    corrupt result from one that merely landed just outside the tolerance.
+
+    Returns (within_tolerance, worst_relative_error).
+    """
+    if chained.shape != drained.shape:
+        return False, float("inf")
+    if not chained.numel():
+        return True, 0.0
+    error = (chained.float() - drained.float()).abs()
+    relative = error / drained.float().abs().clamp_min(COMBINE_MAG_FLOOR)
+    worst = float(relative.max().item())
+    return worst < COMBINE_REL_TOL, worst
+
+
 def _run_expert_oracle(
     torch,
     routing,
@@ -545,11 +667,11 @@ def _run_expert_oracle(
     seed: int,
 ):
     """Verify one real dispatch/transform/combine without entering a timed region."""
-    # The low-latency decode kernels deliver a per-(source, expert) slot layout with a
-    # gate-weighted combine, which breaks this oracle's rank-deduplicated, unweighted
-    # assumptions. Route those cases to the dedicated per-slot oracle; keying on the
-    # declared combine semantics keeps the normal-mode path below untouched.
-    if getattr(backend, "combine_weight_semantics", None) == "weighted-kernel-sum":
+    # A per-(source, expert) slot receive breaks this oracle's rank-deduplicated
+    # assumptions. Route those layouts to the dedicated per-slot oracle; keying on the
+    # declared receive layout -- not the combine weighting, which is an independent
+    # declaration -- keeps the token-rank path below untouched.
+    if getattr(backend, "receive_layout", "token-rank") == "token-expert":
         return _run_ll_expert_oracle(
             torch, routing, backend, problem, global_idx, global_weights,
             rank, experts_per_rank, scale_up_domain, seed,
@@ -857,6 +979,17 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(f"ERROR: iters/trials/warmup must be positive; got "
                   f"{args.iters}:{args.trials}:{args.warmup}")
         return 2
+    # Fail closed: a drop within one pair of the iteration count leaves nothing (or a single
+    # pair, whose start-to-start series is empty) and would publish `pair_period` degenerate and
+    # `chain_health` as "unavailable", indistinguishable from a backend that cannot be chained.
+    # Requiring two kept pairs here is what lets Pass 2b compute the health scalars
+    # unconditionally and Pass 3 assert the chained oracle ran.
+    if (min(args.chain_iters, args.chain_trials) <= 0
+            or not 0 <= args.chain_drop <= args.chain_iters - 2):
+        if rank == 0:
+            print(f"ERROR: chain iters/trials must be positive and 0 <= drop <= iters - 2; got "
+                  f"{args.chain_iters}:{args.chain_trials}:{args.chain_drop}")
+        return 2
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
 
     ep_size = world_size
@@ -879,6 +1012,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print(
                 f"ERROR: {mode} requires combine semantics in {sorted(allowed_semantics)}; "
                 f"backend declares {getattr(backend, 'combine_weight_semantics', None)!r}"
+            )
+        return 2
+    # Layout and weighting are declared independently; only two pairings have a
+    # correctness oracle (ORACLE_MODELED_CONTRACTS). Fail closed on the rest, so a
+    # backend whose declarations diverge errors with the missing model named instead
+    # of being verified against the wrong oracle and publishing the wrong wire basis.
+    declared_contract = (
+        getattr(backend, "receive_layout", "token-rank"),
+        getattr(backend, "combine_weight_semantics", None),
+    )
+    if declared_contract not in ORACLE_MODELED_CONTRACTS:
+        if rank == 0:
+            print(
+                "ERROR: no correctness oracle models receive_layout="
+                f"{declared_contract[0]!r} with combine semantics {declared_contract[1]!r}"
             )
         return 2
     # A non-control precision must realize a non-BF16 dispatch wire format. Otherwise a
@@ -953,46 +1101,57 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "max_rel": oracle["max_elementwise_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
+            # Filled by Pass 2b after that point's last chain trial; the budget gate above
+            # guarantees at least one trial, so Pass 3 asserts this is no longer None.
+            "oracle_chain": None,
+            # ANDed across chain trials by Pass 2b: each trial's final chained output against
+            # a drained pair through the same code path.
+            "chain_output_local_ok": 1,
+            # Worst chained-vs-drained relative error seen at this point, kept even when the
+            # verdict passes: a magnitude creeping toward the tolerance is the early warning a
+            # bool cannot give, and the only way to tell a real corruption from a tight gate.
+            "chain_output_error": 0.0,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
+    # The chained-output A/B is only defined when the chain stages per pair. Under the hoist
+    # (every FP8 adapter by default, since stage_device_work IS the fp8 flag) the staged
+    # stand-in is decoupled from each pair's dispatch, so chained and drained are not
+    # comparable -- see the call site for the measurement that established this.
+    chain_output_applicable = not backend.stage_excluded_from_roundtrip
+
     # ---- Pass 2: every backend uses the same rotated point order.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
-    disp_pool = {T: [] for T in ladder}     # pooled per-iteration cross-rank MAX (dispatch)
-    stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
-    comb_pool = {T: [] for T in ladder}     # ... combine
-    rt_pool = {T: [] for T in ladder}       # independently measured round trip
-    spread_pool = {T: [] for T in ladder}   # cross-rank (max-min) of the round trip, per iter
-    # Cross-rank MIN per component. The LAST rank to enter a collective is the one that waited
-    # least -- it started when its peers were already there -- so its duration is the closest
-    # estimate of the operation's cost with entry skew excluded. MAX (reported as the latency)
-    # is that cost PLUS the skew, i.e. what the earliest-entering rank observed.
-    dmin_pool = {T: [] for T in ladder}
-    cmin_pool = {T: [] for T in ladder}
-    rtmin_pool = {T: [] for T in ladder}
+    # One object per ladder point, so a point's sample series travel together instead of as
+    # fourteen parallel dicts that must be kept in step by hand. Every list is per-iteration
+    # cross-rank reduced and pooled across trials; the reduction differs per field and is what
+    # the field name records (MAX for the published latencies, MIN for the skew-excluded floors,
+    # MEDIAN for the chained period -- see the reduction sites below).
+    samples = {T: PointSamples() for T in ladder}
+
     for trial_index in range(args.trials):
         order = trial_order(list(ladder), trial_index)
         for T in order:
             problem = problems[T]
-            # timed_components() encodes the roundtrip-only vs full-component contract
-            # (and whether stage launches device work) once, in the base class.
+            # timed_components() encodes whether stage launches device work once, in
+            # the base class.
             component_order = trial_order(backend.timed_components(), trial_index)
             measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
             for component_name in component_order:
                 # The base template gives every component the same synchronized
-                # full-roundtrip warm-up before its timed trial and encodes the two
-                # branch rules (dispatch cleanup, combine re-dispatch) internally.
+                # full-roundtrip warm-up before its timed trial and encodes the
+                # fresh-pair rule (dispatch drain, combine re-dispatch) internally.
                 measured[component_name] = backend.benchmark_component(
                     component_name, problem, args.warmup, args.iters
                 )
             # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
             if measured["dispatch"]:
-                disp_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MAX)
-                comb_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MAX)
+                samples[T].dispatch += _reduce_vec(torch, dist, device, measured["dispatch"], MAX)
+                samples[T].combine += _reduce_vec(torch, dist, device, measured["combine"], MAX)
             if measured["stage"]:
-                stage_pool[T] += _reduce_vec(torch, dist, device, measured["stage"], MAX)
+                samples[T].stage += _reduce_vec(torch, dist, device, measured["stage"], MAX)
             rt_max = _reduce_vec(torch, dist, device, measured["roundtrip"], MAX)
-            rt_pool[T] += rt_max
+            samples[T].roundtrip += rt_max
             # Cross-rank SPREAD (max-min) of the same iterations. A collective cannot finish
             # before its slowest participant, so when ranks enter together every rank measures
             # nearly the same duration and the spread is small; a large spread means the ranks
@@ -1000,11 +1159,88 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # Emitted as a diagnostic so a skew-inflated point is visible in the artifact
             # instead of being mistaken for the operation getting slower.
             rt_min = _reduce_vec(torch, dist, device, measured["roundtrip"], MIN)
-            spread_pool[T] += [hi - lo for hi, lo in zip(rt_max, rt_min)]
-            rtmin_pool[T] += rt_min
+            samples[T].spread += [hi - lo for hi, lo in zip(rt_max, rt_min)]
+            samples[T].roundtrip_min += rt_min
             if measured["dispatch"]:
-                dmin_pool[T] += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
-                cmin_pool[T] += _reduce_vec(torch, dist, device, measured["combine"], MIN)
+                samples[T].dispatch_min += _reduce_vec(torch, dist, device, measured["dispatch"], MIN)
+                samples[T].combine_min += _reduce_vec(torch, dist, device, measured["combine"], MIN)
+
+    # ---- Pass 2b: the chained family, on its own trial count. A separate loop because one call
+    # already yields chain_iters free-running pairs, so a handful of trials out-samples the
+    # fresh-entry components' 256 for a fraction of the wall clock. Ladder order still rotates
+    # per trial, as above. ----
+    for trial_index in range(args.chain_trials):
+        final_chain_trial = trial_index == args.chain_trials - 1
+        for T in trial_order(list(ladder), trial_index):
+            chained = backend.benchmark_chain(
+                problems[T], args.warmup, args.chain_iters, args.chain_drop
+            )
+            # The chain's OWN final output against a drained pair through the identical
+            # dispatch->combine path, outside every timed region. This is the only chained
+            # output the run can inspect without putting device work inside the timed loops:
+            # each pair overwrites its predecessor's, so interior pairs are unvalidated by
+            # design (see methodology, Correctness). The drained pair is collective, issued in
+            # the same (trial, T) order on every rank, so the group stays aligned.
+            #
+            # Skipped entirely where staging is HOISTED, because there the comparison has no
+            # meaning. The hoist captures one warm-up dispatch's staged stand-in and reuses it
+            # for every pair, so neither the chain's final combine nor the drained reference
+            # consumes an input matching its OWN dispatch -- they are two differently
+            # mismatched pairs, and nothing requires them to agree. Measured, not assumed:
+            # h100/deepep-v2/EP8, identical in every other respect, native (hoisted) vs
+            # dequant (staged per pair) --
+            #     hoisted:   chain_last_output_error 31..93   (1000x-2966x tolerance)
+            #     per-pair:  chain_last_output_error 0.0      (bit-identical, every rung)
+            # in BOTH normal and low-latency mode (runs 31180411148, 31185184372, 31185233991).
+            # Passing the chain's staged input to the drained pair was tried first and is NOT
+            # enough -- it makes the two share an input, but a shared input that matches
+            # neither dispatch. Only per-pair staging makes the regimes comparable, which is
+            # exactly the case this guard admits, so the drained pair stages inline here and
+            # `benchmark_chain`'s staged value has no consumer. Gating under the hoist reddened
+            # every FP8 leg fleet-wide for a harness artifact.
+            drained = backend.run_roundtrip(problems[T])
+            torch.cuda.synchronize()
+            if chain_output_applicable:
+                output_ok, output_error = _chain_output_matches(chained["combined"], drained)
+                gate[T]["chain_output_local_ok"] &= int(output_ok)
+                gate[T]["chain_output_error"] = max(
+                    gate[T]["chain_output_error"], output_error
+                )
+            pair = chained["pair"]
+            pair_median, pair_spread = _reduce_vec_median_spread(torch, dist, device, pair)
+            samples[T].chain += pair_median
+            samples[T].chain_spread += pair_spread
+            # Per-op: cross-rank MIN only, from the FLOORS sibling chain (the period chain carries
+            # no per-op events). The chained windows park each rank's inter-rank wait, so only the
+            # minimum -- the last-entering rank's -- is the operation with the wait excluded.
+            samples[T].dispatch_floor += _reduce_vec(torch, dist, device, chained["dispatch"], MIN)
+            samples[T].combine_floor += _reduce_vec(torch, dist, device, chained["combine"], MIN)
+            # Chain-health scalars, one per trial. `interpair_gap_us` = start-to-start minus pair
+            # window: the per-pair cost outside the published window, the in-artifact guard against
+            # instrumentation self-charging. `settle_drift_us` = late-half minus early-half period.
+            # Median across ranks for the gap; signed max-magnitude for the drift. Unconditional:
+            # the budget gate guarantees two kept pairs, so both series are non-degenerate.
+            s2s_p50 = _pcts(chained["start_to_start"])["p50"]
+            gaps = _gather_scalar(
+                torch, dist, device, s2s_p50 - _pcts(pair)["p50"]
+            )
+            samples[T].gap.append(_pcts(gaps)["p50"])
+            half = len(pair) // 2
+            drifts = _gather_scalar(
+                torch, dist, device,
+                _pcts(pair[half:])["p50"] - _pcts(pair[:half])["p50"],
+            )
+            samples[T].settle.append(max(drifts, key=abs))
+            if final_chain_trial:
+                # Gate the regime we publish: Passes 1 and 3 only check drained calls, so without
+                # this a backend that corrupts under free-running pairs would present as the
+                # fastest in the suite. Pass 3's machinery against the state this point's chain
+                # left behind, once per ladder point -- the failure mode is all-or-nothing.
+                idx_g, w_g = global_traces[T]
+                gate[T]["oracle_chain"] = _run_expert_oracle(
+                    torch, routing, backend, problems[T], idx_g, w_g, rank,
+                    experts_per_rank, scale_up_domain, args.seed,
+                )
 
     # ---- Pass 3: prove timed inputs were immutable and repeat the full oracle. ----
     for T in ladder:
@@ -1021,12 +1257,35 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             scale_up_domain, args.seed,
         )
         pre = gate[T]["oracle_pre"]
+        # The chained ORACLE is ANDed in like the other two, so a chained-regime failure reds the
+        # leg. The budget gate rejects chain_trials=0 up front, so a missing chained oracle is a
+        # harness bug, not a configuration.
+        chain_oracle = gate[T]["oracle_chain"]
+        assert chain_oracle is not None, "chained oracle missing despite a validated budget"
+        chain_ok = bool(chain_oracle["passed"])
+        # The chained-OUTPUT check gates again, on a measured magnitude rather than a verdict.
+        # It was briefly demoted on the theory its tolerance was too tight for FP8; probe
+        # 31180411148 (h100, deepep-v2, EP8, low-latency) falsified that:
+        #   bf16  chain_last_output_error = 0.0 at every rung -- bit-identical
+        #   fp8   chain_last_output_error = 31..93 -- 1000x to 2966x COMBINE_REL_TOL
+        # A mis-set tolerance lands JUST outside; this is three orders of magnitude past, and
+        # the bf16 control proves the comparison itself is exact. Meanwhile every oracle passes
+        # (max_relative_error ~0.0039), which is precisely the signature this check exists for:
+        # a difference invisible to drained oracles. So FP8's chained output really does
+        # disagree with a drained pair, and a leg that cannot reproduce its own chained result
+        # should not publish a period from it.
+        chain_output_ok = bool(gate[T]["chain_output_local_ok"])
         gate[T].update({
             "input_unchanged": input_unchanged,
-            "local_ok": int(pre["passed"] and post["passed"] and input_unchanged),
+            "local_ok": int(
+                pre["passed"] and post["passed"] and chain_ok and input_unchanged
+                and (chain_output_ok or not chain_output_applicable)
+            ),
+            "chain_local_ok": int(chain_ok),
             "max_rel": max(
                 pre["max_elementwise_relative_error"] or 0.0,
                 post["max_elementwise_relative_error"] or 0.0,
+                chain_oracle["max_elementwise_relative_error"] or 0.0,
             ),
             "oracle_post": post,
         })
@@ -1037,7 +1296,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gt = gts[T]
         g = gate[T]
         rstats = g["rstats"]
-        d, s, c, rt = disp_pool[T], stage_pool[T], comb_pool[T], rt_pool[T]
+        d, s, c, rt = samples[T].dispatch, samples[T].stage, samples[T].combine, samples[T].roundtrip
         dp, sp, cp, rtp = _pcts(d), _pcts(s), _pcts(c), _pcts(rt)
         # isolated_sum = SUM of the isolated dispatch+stage+combine percentiles. Stage contributes
         # zero when it is explicitly not applicable. This is NOT a measured chained operation
@@ -1051,6 +1310,24 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
+        # Agreed across ranks like `passed`, not rank 0's local view.
+        post_chain_state_passed = bool(
+            _reduce_int(torch, dist, device, g["chain_local_ok"], MIN)
+        )
+        # null where the check does not apply (staging hoisted): the artifact says "not
+        # asked", never a bare False that a reader would mistake for a failed comparison.
+        # The reduce still runs on every rank so the collective stays aligned.
+        chain_last_output_passed = bool(
+            _reduce_int(torch, dist, device, g["chain_output_local_ok"], MIN)
+        )
+        # Published whether or not the verdict passed. Without it the artifact records THAT the
+        # chained output differed but never BY HOW MUCH, which is the difference between a
+        # transport corruption and a tolerance set too tight for a backend's accumulator.
+        chain_output_error = _reduce_vec(
+            torch, dist, device, [g["chain_output_error"]], MAX
+        )[0]
+        if not chain_output_applicable:
+            chain_last_output_passed, chain_output_error = None, None
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
         throughput = {
@@ -1066,33 +1343,92 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             backend.dispatch_value_bytes, backend.dispatch_scale_bytes_per_copy,
         )
         combine_bytes = logical_byte_provenance(rstats["routed_copies"], args.hidden)
+        # Second byte basis, for backends whose wire carries one copy per (token, expert). Which
+        # applies is a property of the RECEIVE, not the mode -- MoRI's IntraNodeLL deduplicates
+        # where the other low-latency kernels do not -- so key it on the declared
+        # receive layout. `routed_copies` stays the canonical comparable basis.
+        assignment_copies = int(sum(rstats["expert_assignments_per_rank"]))
+        wire_basis = (
+            "per-assignment"
+            if backend.receive_layout == "token-expert"
+            else "rank-deduplicated"
+        )
         roundtrip_bytes = {
             field: dispatch_bytes[field] + combine_bytes[field] for field in dispatch_bytes
         }
         stage_bytes = dict.fromkeys(dispatch_bytes, 0)
-        spread = spread_pool[T]
+        spread = samples[T].spread
+        chain = samples[T].chain
+        chain_spread = samples[T].chain_spread
+        dfloor = samples[T].dispatch_floor
+        cfloor = samples[T].combine_floor
+        chain_gap = samples[T].gap
+        chain_settle = samples[T].settle
+        chainp = _pcts(chain)
         rows.append({
             "components": {
                 "combine": _component(cp, len(c)),
                 "dispatch": _component(dp, len(d)),
                 "isolated_sum": _component(isum, 0, derived=True),
+                # What a serving decode loop pays per MoE layer: the steady-state period of
+                # back-to-back dispatch->combine pairs, every backend, cross-rank median. Not
+                # `roundtrip` (drained around every pair, an idle-pipeline latency). Do not sum it.
+                "pair_period": _component(chainp, len(chain), origin=CHAIN_PERIOD_ORIGIN),
                 "roundtrip": _component(rtp, len(rt)),
                 "stage": _component(sp, len(s)),
+            },
+            # Per-op floors from the FLOORS sibling chain: cross-rank MINIMUM of each op's window,
+            # the last-entering rank's. Not the chained cost of dispatch/combine -- only the
+            # minimum excludes the parked wait. Tracks profiler kernel time to ~10%.
+            "chain_floor_us": {
+                "combine": _component(_pcts(cfloor), len(cfloor), origin=CHAIN_FLOOR_ORIGIN),
+                "dispatch": _component(_pcts(dfloor), len(dfloor), origin=CHAIN_FLOOR_ORIGIN),
+            },
+            # Whether the chain was the steady state the period claims. `pair_spread_us` large
+            # next to `pair_period` means a paced rank; `interpair_gap_us` growth is the
+            # measurement loop contaminating the chain, not the fabric; `settle_drift_us` is the
+            # convergence proof `chain_drop` assumes but cannot show. Pass 2b has the reductions.
+            "chain_health": {
+                "interpair_gap_us": _component(_pcts(chain_gap), len(chain_gap)),
+                "pair_spread_us": _component(_pcts(chain_spread), len(chain_spread)),
+                "settle_drift_us": _component(_pcts(chain_settle), len(chain_settle)),
             },
             # Skew-excluded companion to `components`: same iterations reduced with cross-rank
             # MIN instead of MAX. Compare against `components` to see how much of a point is the
             # operation and how much is rank stagger; a curve that dips in MAX but not in MIN was
             # never the operation getting faster.
             "cross_rank_min_us": {
-                "combine": _component(_pcts(cmin_pool[T]), len(cmin_pool[T])),
-                "dispatch": _component(_pcts(dmin_pool[T]), len(dmin_pool[T])),
-                "roundtrip": _component(_pcts(rtmin_pool[T]), len(rtmin_pool[T])),
+                "combine": _component(_pcts(samples[T].combine_min), len(samples[T].combine_min)),
+                "dispatch": _component(_pcts(samples[T].dispatch_min), len(samples[T].dispatch_min)),
+                "roundtrip": _component(_pcts(samples[T].roundtrip_min), len(samples[T].roundtrip_min)),
             },
             # Diagnostic, NOT a latency: per-iteration cross-rank (max-min) of the round trip.
             # Small => ranks entered together and the reported MAX is the operation's cost.
             # Large relative to the roundtrip => the point is skew-inflated; read it with care.
             "cross_rank_spread_us": _component(_pcts(spread), len(spread)),
             "correctness": {
+                # Whether the free-running chain's OWN final combined output (per trial)
+                # matched a drained pair through the identical code path, within the combine
+                # tolerance. Proves the last pair of each chain, not every interior pair --
+                # validating those would put device work inside the timed loops.
+                # Folded into `passed` WHERE IT APPLIES; null where it does not, which is
+                # wherever staging is hoisted out of the chain (every FP8 adapter by default).
+                # There the staged stand-in is decoupled from each pair's dispatch, so chained
+                # and drained are not comparable and the question is not asked -- see the Pass
+                # 2b call site for the A/B that established that. Read it beside
+                # `chain_last_output_error`, never alone.
+                "chain_last_output_passed": chain_last_output_passed,
+                # How far apart they actually were (cross-rank MAX), published whether or not
+                # the verdict passed. A bool alone cannot separate a transport corruption from
+                # a tolerance too tight for a backend's accumulator, and reading it as the
+                # former without this number is a mistake this field exists to prevent.
+                "chain_last_output_error": chain_output_error,
+                # Whether the full oracle also passed against the state the free-running chain
+                # left behind (a FRESH dispatch+combine after the final trial). Renamed from
+                # `chain_regime_passed`, which overclaimed: older artifacts carry that name,
+                # and `null` there meant the chain never ran (a state the budget gate has since
+                # made impossible). Folded into `passed`.
+                "post_chain_state_passed": post_chain_state_passed,
                 # Max elementwise relative error (COMBINE_MAG_FLOOR-clamped)
                 # against the BF16-faithful expected combine.
                 "max_relative_error": max_rel,
@@ -1104,6 +1440,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "dispatch": dispatch_bytes,
                 "roundtrip": roundtrip_bytes,
                 "stage": stage_bytes,
+            },
+            # Copy counts behind the byte figures above, so a reader can rebase them: `routed` is
+            # the basis they use, `assignments` the per-(token, expert) count, `wire` which the
+            # kernels move. Kept out of `byte_provenance`, whose values are all per-component.
+            "logical_copies": {
+                "routed": int(rstats["routed_copies"]),
+                "assignments": assignment_copies,
+                "wire": wire_basis,
             },
             "receive": {
                 "max": recv_max,
@@ -1119,7 +1463,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             component_log = (f"disp p50/p99={dp['p50']:7.1f}/{dp['p99']:7.1f} "
                              f"comb {cp['p50']:6.1f}/{cp['p99']:6.1f} " if dp and cp
                              else "components=unavailable ")
-            print(f"  T={T:<5} {component_log}"
+            period_log = f"period={chainp['p50']:7.1f}us " if chainp else "period=n/a "
+            print(f"  T={T:<5} {component_log}{period_log}"
                   f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(rt)} fanout={rstats['fanout_mean']:.2f} "
                   f"recv[min/mean/max]={recv_min}/{recv_total // world_size}/{recv_max} "
                   f"correct={point_ok}")
@@ -1181,6 +1526,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "workload": {
             "cross_rank_consistent": routing_consistent,
+            # The ladder actually measured, plus any requested point the backend's cap excluded.
+            # In stdout only, a clamped ladder was invisible to anyone reading the artifact.
+            "ladder_measured": list(ladder),
+            "ladder_dropped": list(dropped),
+            "ladder_cap": cap,
         },
         "measurement": {
             "combine_dtype": backend.combine_dtype,
@@ -1189,10 +1539,17 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "payload_unit": "token-rank",
             "rows": rows,
             "sampling": {
+                # The fresh-entry family. The chained family below is sampled separately and its
+                # counts are not derivable from these.
                 "iterations_per_trial": args.iters,
                 "samples_per_component": args.iters * args.trials,
                 "trials": args.trials,
                 "warmup_iterations": args.warmup,
+                # `pair_period`, `chain_floor_us` and `chain_health` sampling. Emitted because
+                # `sample_count` cannot be decomposed back into them: 128x4 is not 512x1.
+                "chain_drop": args.chain_drop,
+                "chain_iterations_per_trial": args.chain_iters,
+                "chain_trials": args.chain_trials,
             },
         },
         "implementation": {
@@ -1204,6 +1561,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # pick this per installed library version (flashinfer-ep does), so without it
             # a wheel bump silently changes the arithmetic behind `passed` with no trace.
             "combine_reduction": getattr(backend, "combine_reduction", "domain-fp32"),
+            # The library version the line above was decided FROM: without it a reader cannot tell
+            # a correct selection from a mis-parse. None where a backend does not report one.
+            "library_version": getattr(backend, "library_version", None),
+            # Whether `roundtrip` excludes expert-output staging. It always does now, unless the
+            # CX_FP8_CONSUME=dequant hatch is set; older rows carried the staging copy inside the
+            # chain for MoRI and FlashInfer BF16, and without this field they look identical.
+            "stage_excluded_from_roundtrip": bool(
+                getattr(backend, "stage_excluded_from_roundtrip", False)
+            ),
+            # Whether this document's rows carry the chained family. Consumers key the headline on
+            # presence, as for `stage_excluded_from_roundtrip`; the sweep `version` does not move.
+            "chained_period": True,
             # See EPBackend.maturity: a "candidate" row measures the library, not a deployment.
             "maturity": getattr(backend, "maturity", None) or "unknown",
             "name": backend.name,
@@ -1242,10 +1611,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 summary_rows.append(row)
 
         def _point_summary(row):
+            period = row["components"]["pair_period"]["percentiles_us"]
+            period_summary = f" period_p50={period['p50']:.1f}us" if period else ""
             percentiles = row["components"]["dispatch"]["percentiles_us"]
             if not percentiles:
-                return f"T={row['tokens_per_rank']}:n/a"
-            return f"T={row['tokens_per_rank']}:disp_p99={percentiles['p99']:.1f}us"
+                return f"T={row['tokens_per_rank']}:n/a{period_summary}"
+            return (f"T={row['tokens_per_rank']}:disp_p99={percentiles['p99']:.1f}us"
+                    f"{period_summary}")
 
         component_summary = " ".join(_point_summary(row) for row in summary_rows)
         print(f"{backend.name} ep-dispatch-combine [{args.phase}/{mode}]: "

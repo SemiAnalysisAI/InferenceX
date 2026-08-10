@@ -41,11 +41,18 @@ BACKEND_PRECISIONS = {
     # NCCL EP is BF16-only on the strength of RELEASE.md's "No FP8 support" row, which is
     # worth re-testing — see the note in bench/ep_nccl.py.
     "nccl-ep": ("bf16",),
-    # FlashInfer one-sided is BF16-only this pass: the combine side accepts FP8 output
-    # dtypes, but an FP8 dispatch needs the scale payload plumbed as a second
-    # input_payload and validated against the oracle cast round-trip.
-    "flashinfer-ep": ("bf16",),
+    # FlashInfer FP8 is dispatch-side only (scales as a fourth payload, combine stays BF16),
+    # and uses the same per-128-block e4m3 recipe as deepep-v2/uccl-ep so the axis is
+    # comparable. Realizable, but off every deployed path -- see OFF_PATH_PRECISIONS.
+    "flashinfer-ep": ("bf16", "fp8"),
 }
+# Precisions a backend REALIZES but that no serving engine can select on that transport. Kept
+# out of the default matrix so a production sweep measures deployable configurations, and still
+# reachable by naming the precision explicitly (`--precisions fp8`) for transport comparison.
+# vLLM accepts only nvfp4/mxfp8/bf16 on FlashInfer's one-sided all-to-all, so its FP8 row
+# measures the collective off any path an engine selects. Declared here rather than on the
+# adapter because this generator must resolve the matrix with no vendor imports.
+OFF_PATH_PRECISIONS = {"flashinfer-ep": ("fp8",)}
 # Short shard-ID slug per non-normal mode. Normal-mode shard IDs carry no mode
 # segment so existing references stay valid; a low-latency shard adds "-ll".
 _MODE_SLUG = {"low-latency": "ll"}
@@ -135,11 +142,23 @@ def resolve_matrix(
         raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     timing = SWEEP["timing"]
-    timing_profile = ":".join(str(timing[key]) for key in (
+    # Passed through as an object keyed by the sweep.json names. runtime/config.py maps each
+    # key to its run_ep flag and holds the legacy colon-string decode in one migration function.
+    timing_profile = {key: int(timing[key]) for key in (
         "iters_per_trial", "trials_per_point", "warmup_iters_per_trial",
-    ))
+        "chain_iters_per_trial", "chain_trials_per_point", "chain_drop",
+    )}
     workload = SWEEP["workload"]
     targets = _selected_backends(backend)
+    # Fail closed on a backend with no declared precisions: defaulting to BF16 would drop its
+    # fp8 cases from the matrix entirely, and a case that never ran is invisible to every
+    # downstream gate (run_sweep's non-bf16-dispatch guard only sees cases that did run).
+    undeclared = [target for target in targets if target not in BACKEND_PRECISIONS]
+    if undeclared:
+        raise SystemExit(
+            f"backends {undeclared} have no BACKEND_PRECISIONS entry; declare their dispatch "
+            "precisions rather than silently defaulting to bf16"
+        )
     requested_cases: list[dict[str, Any]] = []
     shards: dict[tuple[str, str, str, int, str], list[dict[str, Any]]] = {}
 
@@ -157,10 +176,14 @@ def resolve_matrix(
                     if runnable_eps is None:
                         continue
                     runnable = ep in runnable_eps
-                    backend_precisions = BACKEND_PRECISIONS.get(target, ("bf16",))
+                    backend_precisions = BACKEND_PRECISIONS[target]
+                    # Off-path precisions are dropped unless the caller named the precision
+                    # explicitly, so the default matrix carries only deployable configurations.
+                    off_path = OFF_PATH_PRECISIONS.get(target, ())
                     supported = [
                         precision for precision in SWEEP["precisions"]
                         if precision in backend_precisions
+                        and (precision not in off_path or precision in selected_precisions)
                     ]
                     if runnable:
                         # A runnable cell fans out over the modes it realizes at this
