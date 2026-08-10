@@ -70,6 +70,11 @@ backend:
   sglang_config:
     prefill: &common_config
       served-model-name: "Qwen/Qwen3.5-397B-A17B-FP8"
+      # The published FP8 checkpoint is text-only (model_type=qwen3_5_moe_text,
+      # no vision_config), but its top-level architecture still names the
+      # multimodal conditional-generation class. Select SGLang's matching
+      # built-in text loader so it does not initialize a Qwen-VL processor.
+      json-model-override-args: '{"architectures":["Qwen3_5MoeForCausalLM"]}'
       tensor-parallel-size: 8
       disaggregation-transfer-backend: mori
       disaggregation-ib-device: "rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"

@@ -182,6 +182,9 @@ def test_production_disagg_recipe_uses_two_full_nodes_and_the_existing_workload(
         assert config["tensor-parallel-size"] == 8
         assert config["disaggregation-transfer-backend"] == "mori"
         assert config["attention-backend"] == "aiter"
+        assert config["json-model-override-args"] == (
+            '{"architectures":["Qwen3_5MoeForCausalLM"]}'
+        )
     command = recipe["benchmark"]["command"]
     assert "utils/bench_serving/benchmark_serving.py" in command
     assert "--random-input-len 8192" in command
