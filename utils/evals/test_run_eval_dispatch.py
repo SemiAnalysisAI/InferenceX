@@ -1013,3 +1013,16 @@ def test_agentic_eval_workflow_forwards_runner_contract() -> None:
     assert forwarded["spec-decoding"] == "${{ matrix.config.spec-decoding }}"
     assert forwarded["eval-framework"] == "${{ inputs.eval-framework }}"
     assert forwarded["eval-suite"] == "${{ inputs.eval-suite }}"
+
+
+def test_eval_only_workflow_completes_throughput_collection_dependency() -> None:
+    workflow = yaml.safe_load(E2E_WORKFLOW.read_text())
+    collect_results = workflow["jobs"]["collect-results"]
+
+    for eval_job in (
+        "test-sweep-evals",
+        "test-sweep-multi-node-evals",
+        "test-sweep-agentic-evals",
+    ):
+        assert eval_job in collect_results["needs"]
+        assert f"needs.{eval_job}.result != 'skipped'" in collect_results["if"]
