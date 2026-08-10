@@ -6,13 +6,13 @@ description: Debug long-running AgentX benchmark jobs from live cluster logs and
 # Debug AgentX runs from the cluster
 
 AgentX runs have long model-load, warmup, drain, and profiling phases. Treat GitHub Actions
-as the orchestration and final-status view; use the cluster as the primary source of live
+as the orchestration and final-status view. Use the cluster as the primary source of live
 diagnostic signal. Compose with `$debug-runs` when it is available for the general
 full-sweep and reproduction workflow.
 
 Cluster login addresses, users, jumpboxes, runner directories, and storage paths belong in
 the access-controlled InferenceX Clusters Slack canvas, not this repository. Ask the user
-for the canvas link or the intended SSH alias when access is not already configured; never
+for the canvas link or the intended SSH alias when access is not already configured. Never
 guess or publish private infrastructure details. Read-only SSH inspection is allowed.
 Before editing cluster files, restarting or killing processes, draining nodes, cancelling
 Slurm jobs, or otherwise mutating shared infrastructure, stop and ask for approval unless
@@ -55,7 +55,7 @@ scontrol show job -o <SLURM_JOB_ID> | tr " " "\n" |
   grep -E "^(JobId|JobState|RunTime|TimeLimit|NodeList|WorkDir)="
 ```
 
-Derive paths from `WorkDir`; do not guess or hardcode a cluster path. For an srt-slurm
+Derive paths from `WorkDir`. Do not guess or hardcode a cluster path. For an srt-slurm
 job, logs normally live under:
 
 ```text
@@ -129,11 +129,11 @@ curl -fsS "<METRICS_URL>" |
 Prefer the metric names actually exposed by the running image instead of assuming a
 specific vLLM, SGLang, or Dynamo version. Track at least:
 
-- active/running and waiting requests;
-- KV-cache usage and prefix-cache hit rate;
-- input and output token rates;
-- completed, cancelled, and errored requests;
-- frontend active requests and per-worker routing balance;
+- active/running and waiting requests
+- KV-cache usage and prefix-cache hit rate
+- input and output token rates
+- completed, cancelled, and errored requests
+- frontend active requests and per-worker routing balance
 - KV-transfer activity and failures for disaggregated runs.
 
 Interpret trends, not one scrape:
@@ -164,10 +164,10 @@ calculate the nominal end from the `Phase profiling started` timestamp plus the 
 duration. Then allow a few minutes for cutoff drain, aggregation, staging, and artifact
 upload. State separately:
 
-1. phase elapsed and remaining time;
-2. whether logs are still updating;
-3. errors observed;
-4. expected benchmark completion;
+1. phase elapsed and remaining time
+2. whether logs are still updating
+3. errors observed
+4. expected benchmark completion
 5. expected GitHub job completion.
 
 For warmup drains, report returned, sent, in-flight, errors, elapsed time, and the
@@ -179,10 +179,10 @@ when validating a timeout change.
 Do not burn hours waiting for final JSON when direct signals already disqualify a config.
 Use server logs and metrics to make the decision early. Examples include:
 
-- deterministic OOM, NCCL/RCCL failure, parser crash, or missing worker;
-- no forward progress across repeated samples;
-- persistent KV saturation and queue growth with unusable latency;
-- throughput that has plateaued while added concurrency only increases latency;
+- deterministic OOM, NCCL/RCCL failure, parser crash, or missing worker
+- no forward progress across repeated samples
+- persistent KV saturation and queue growth with unusable latency
+- throughput that has plateaued while added concurrency only increases latency
 - a disaggregated pool or metrics source that never registered.
 
 Before cancellation, capture the relevant log lines, timestamps, topology, and metric
@@ -196,7 +196,7 @@ gh run cancel <RUN_ID> --repo SemiAnalysisAI/InferenceX
 ```
 
 Use `scancel` or direct process termination only with explicit approval and a concrete
-reason; doing so can bypass cleanup or strand shared-cluster state. Never kill only the
+reason. Doing so can bypass cleanup or strand shared-cluster state. Never kill only the
 backend and leave the workflow silently occupying a runner.
 
 After a recipe/config fix, use a targeted e2e dispatch for fast feedback. Reserve another
@@ -206,13 +206,13 @@ official full sweep for the candidate that has passed direct cluster inspection.
 
 For each active point, report:
 
-- GitHub job and Slurm job links/IDs;
-- aggregate versus disaggregated topology;
-- phase, elapsed time, remaining time, and last log update;
-- log files and metrics sources inspected;
-- request, queue, KV-cache, cache-hit, and token-rate trends;
-- errors and the likely root cause;
-- whether to continue, short-circuit, or rerun;
+- GitHub job and Slurm job links/IDs
+- aggregate versus disaggregated topology
+- phase, elapsed time, remaining time, and last log update
+- log files and metrics sources inspected
+- request, queue, KV-cache, cache-hit, and token-rate trends
+- errors and the likely root cause
+- whether to continue, short-circuit, or rerun
 - which points are fully green versus merely healthy in progress.
 
 Do not call a run successful until GitHub has accepted its result artifacts and the
