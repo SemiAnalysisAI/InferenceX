@@ -1250,6 +1250,41 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
       # while MTP creates two. Restore these points after the upstream hybrid
       # KV recovery fix lands: https://github.com/vllm-project/vllm/pull/45497
 
+kimik3-fp4-mi355x-vllm-agentic-dspark:
+  # AMD MI355X (gfx950) sister of kimik3-fp4-b300-vllm-agentic-dspark: DSpark
+  # speculative decoding on the Inferact/Kimi-K3-DSpark draft head at level 2
+  # (num_speculative_tokens 2), probabilistic drafting with synthetic acceptance
+  # pinned to the committed golden AL 2.51 (golden_al_distribution/
+  # kimik3_dspark_probabilistic_sample_method_block_rejection_sample_method.yaml),
+  # per the AgentX policy: draft length is the submission's choice, the
+  # acceptance target is not.
+  #
+  # Validated serve config on rocm/pytorch-private:hy-kk-08092026 (vLLM
+  # 0.26.1rc1.dev, TP8), agentic-coding at native 1M context:
+  #   VLLM_ROCM_USE_AITER=1 / _MOE=1 / _MLA=1, asm-padded MLA
+  #     (VLLM_ROCM_AITER_MLA_ASM_PADDING=asm)
+  #   --kv-cache-dtype fp8            # halves KV; required for a stable 1M warmup
+  #   --max-model-len 1048576         # model native max_position_embeddings
+  #   --gpu-memory-utilization 0.95   # asm-MLA 1M warmup only converges at 0.95
+  #   --max-num-batched-tokens 4096   # chunked prefill
+  #   --max-num-seqs 8                # bounds concurrent long-context prefills so
+  #                                   # MoE/linear activations stay within the
+  #                                   # ~15 GB/GPU headroom left after fp8 KV
+  # GPU-resident KV only (no DRAM offload): fp8 KV at 0.95 util holds ~4.3M
+  # tokens on 8x gfx950. TP8-only -- the MXFP4 checkpoint does not fit below 8
+  # GPUs. conc 1/2/4/8 verification sweep.
+  image: rocm/pytorch-private:hy-kk-08092026
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 8] }
+
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
