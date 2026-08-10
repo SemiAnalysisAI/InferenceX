@@ -242,6 +242,9 @@ case "${KV_OFFLOAD_BACKEND:-}" in
   "enable_offload": false
 }
 EOF
+        # Mooncake v0.3.11.post1 emits its transfer polling loop at VLOG(1).
+        # Keep normal INFO diagnostics while suppressing that unbounded hot-loop output.
+        export GLOG_v=0
         export MOONCAKE_CONFIG_PATH
         export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         export PYTHONHASHSEED=0
