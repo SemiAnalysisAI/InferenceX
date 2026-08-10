@@ -7,11 +7,11 @@ Bump the container image tag for single-node benchmark recipes that use a given
 inference engine, opening **one PR per recipe family** with the grouping rules below.
 
 Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
-- `engine` — `vllm` or `sglang`
-- `target-tag` — e.g. `v0.22.0` (NVIDIA/CUDA) ; for SGLang the NVIDIA and AMD tag
+- `engine`. Choose `vllm` or `sglang`.
+- `target-tag`. For example, use `v0.22.0` for NVIDIA/CUDA. For SGLang, the NVIDIA and AMD tag
   strings usually differ (CUDA `…-cu130` vs ROCm `…-rocm720-mi35x-…`), so confirm
   the exact tag per image repo with the user before editing.
-- `filter` (optional) — restrict to a model and/or SKU substring (e.g. `kimik2.5`,
+- `filter` (optional). Restrict the scope to a model and/or SKU substring (e.g. `kimik2.5`,
   `b300`, `minimaxm2.5 mi355x`). If omitted, all matching recipes are in scope.
 
 ## Image repos by engine + vendor
@@ -29,14 +29,14 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
    This is the *only* thing you may combine.
 3. **Never** put two different models, two different precisions, or two different
    SKUs in the same PR. (fp4 vs fp8 vs int4 are different precisions → separate PRs.)
-4. Skip `*-agentic` recipes unless the user explicitly opts in — they are
+4. Skip `*-agentic` recipes unless the user explicitly opts in. They are
    deliberately diverged/pinned.
 
 ## Step 1 — discover candidate recipes
 
 Parse both master YAMLs for top-level keys whose `framework:` matches `engine`, and
 record each key's current `image:`. Keep only single-node keys (they carry a SKU like
-`b200/b300/h100/h200/mi300x/mi325x/mi355x` and map to `benchmarks/single_node/*`); drop
+`b200/b300/h100/h200/mi300x/mi325x/mi355x` and map to `benchmarks/single_node/*`). Drop
 multi-node/disagg keys. Apply the `filter` if given. Then collapse `-mtp` siblings into
 their base family.
 
@@ -67,7 +67,7 @@ Each PR triggers a full GPU sweep, so surface the total PR count explicitly.
 
 ## Step 4 — create one PR per family
 
-Use these helpers (write them to /tmp) for precise, per-config-key edits — a blind
+Use these helpers (write them to /tmp) for precise, per-config-key edits. A blind
 `sed` is unsafe because the same old tag appears under many keys.
 
 `/tmp/edit_image.py`:
@@ -104,7 +104,7 @@ block += ["  description:", f'    - "{desc}"', "  pr-link: PRLINK_PLACEHOLDER"]
 open(f,'w').write(content + '\n' + '\n'.join(block) + '\n')
 ```
 
-For each family (run strictly sequentially — git checkouts can't be parallel):
+For each family, run strictly sequentially because git checkouts can't be parallel:
 
 ```bash
 git checkout main -q && git reset --hard origin/main -q

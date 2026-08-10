@@ -21,12 +21,12 @@
 - **[2026/03]** 🔥 Qwen3.5 397B：自 Day 0 起持续进行基准测试 [仪表盘](https://inferencex.semianalysis.com/)
 - **[2026/03]** 新增 Kimi K2.5（与 Kimi 2.7-Code 架构相同）、GLM5（与 GLM5.1 架构相同）、MiniMax M2.5（与 MiniMax M2.7 架构相同）[仪表盘](https://inferencex.semianalysis.com/)
 - **[2026/02]** GB300 NVL72：已加入 InferenceX 并持续进行基准测试 [SGLang 维护者 LMSYS 博客](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)
-- **[2026/02]** 🔥 InferenceX v2 发布——NVIDIA Blackwell 对比 AMD 对比 Hopper [文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
+- **[2026/02]** 🔥 InferenceX v2 发布，NVIDIA Blackwell 对比 AMD 对比 Hopper [文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
 - **[2025/10]** 🔥 InferenceX（前身为 InferenceMAX）v1 发布 [文章](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
 
 ## 简介
 
-InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致力于持续分析与基准测试全球最受欢迎的开源推理框架——这些框架被各大 Token 工厂与模型广泛采用，以实时追踪其真实性能。随着这些软件栈不断改进，InferenceX™ 会以近乎实时的方式捕捉这些进展，提供一个反映推理性能进步的实时指标。我们在 https://inferencex.com/ 上免费公开提供了一个[开源](https://github.com/SemiAnalysisAI/InferenceX-app)的实时仪表盘。
+InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致力于持续分析与基准测试全球最受欢迎的开源推理框架。这些框架被各大 Token 工厂与模型广泛采用，以实时追踪其真实性能。随着这些软件栈不断改进，InferenceX™ 会以近乎实时的方式捕捉这些进展，提供一个反映推理性能进步的实时指标。我们在 https://inferencex.com/ 上免费公开提供了一个[开源](https://github.com/SemiAnalysisAI/InferenceX-app)的实时仪表盘。
 
 > [!IMPORTANT]
 > 只有 [SemiAnalysisAI/InferenceX](https://github.com/SemiAnalysisAI/InferenceX) 仓库才包含官方的 InferenceX™ 结果，所有其他派生（fork）与仓库均为非官方。非官方仓库的基准测试设置以及机器/云环境的质量可能存在差异，从而导致基准测试结果欠佳。非官方仓库必须明确标注为“非官方（Unofficial）”。
@@ -73,6 +73,7 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 ## 参与贡献
 
 欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](./docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](./CONTRIBUTING_zh.md)。
+维护者与 Agent 的文档导航请从 [`docs/index_zh.md`](./docs/index_zh.md) 开始，其中集中链接架构、配置、Workflow、评估、Runner 与故障排查参考。
 
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
