@@ -1,4 +1,4 @@
-name: "dsr1-gb200-vllm-router-agg-2xdep4-agentic"
+name: "dsr1-gb200-vllm-router-disagg-1p2d-dep4-agentic"
 
 model:
   path: "dsr1-nvfp4"
@@ -17,9 +17,12 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  agg_nodes: 2
-  agg_workers: 2
-  gpus_per_agg: 4
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 4
+  decode_nodes: 2
+  decode_workers: 2
+  gpus_per_decode: 4
 
 infra:
   etcd_nats_dedicated_node: false
@@ -27,29 +30,25 @@ infra:
 frontend:
   type: vllm-router
   enable_multiple_frontends: false
+  args:
+    policy: cache_aware
+    prefill-policy: cache_aware
+    decode-policy: cache_aware
 
 backend:
   type: vllm
   connector: null
   dp_launch_mode: per_node
-  aggregated_environment:
+  prefill_environment: &vllm_environment
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_USE_FLASHINFER_MOE_FP4: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
-    TORCH_SYMMMEM: "NVSHMEM"
-    NCCL_CUMEM_ENABLE: "1"
-    NCCL_MNNVL_ENABLE: "1"
-    NCCL_NVLS_ENABLE: "1"
-    UCX_MEMTYPE_CACHE: "n"
-    UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
-    NCCL_P2P_LEVEL: "NVL"
+  decode_environment: *vllm_environment
   vllm_config:
-    aggregated:
+    prefill: &vllm_config
+      kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       served-model-name: "nvidia/DeepSeek-R1-0528-NVFP4-v2"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 1
@@ -66,6 +65,7 @@ backend:
       block-size: 128
       gpu-memory-utilization: 0.90
       stream-interval: 10
+    decode: *vllm_config
 
 sbatch_directives:
   cpus-per-task: "144"
