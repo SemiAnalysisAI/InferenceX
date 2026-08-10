@@ -52,7 +52,7 @@ and waits for the PR checks automatically.
 
 **Fix:** in `benchmarks/single_node/<recipe>.sh`, either:
 1. **Lower `--gpu-memory-utilization`** (`0.95 → 0.90`, sometimes 0.85). Matches the H100/H200/B200 NVIDIA pattern. Smallest blast radius.
-2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/kimik2.5_fp4_b200.sh:65`.
+2. **Disable the profiler entirely** for cases where lowering isn't enough: `export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` before `vllm serve`. Matches `benchmarks/single_node/agentic/deprecated/kimik2.5_fp4_b200.sh:65`.
 
 Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi300x-vllm — needed 0.90), #1461 (dsv4-fp8-h200-vllm — needed 0.90).
 
@@ -230,7 +230,7 @@ between the PR sweep and merge therefore does not require another GPU sweep.
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Add the `full-sweep-enabled` label so a canary-gated full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-enabled`). Use `non-canary-full-sweep-enabled` instead only when the single-node canary is flaky or unrepresentative; it runs the full sweep without the canary gate. Without one of the sweep labels, the sweep is mostly SKIPPED.
+- Add the `full-sweep-fail-fast` label so a canary-gated full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-fail-fast`). This is the default for image bumps: the first failure cancels the rest of that matrix instead of wasting GPU time. Use `full-sweep-enabled` only when a flaky job must not cancel its matrix's in-flight work, or `full-sweep-fail-fast-no-canary` when the single-node canary is flaky or unrepresentative. Without a primary sweep label, the sweep is mostly SKIPPED.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body` — `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint; it handles the `perf-changelog.yaml` auto-append.
 

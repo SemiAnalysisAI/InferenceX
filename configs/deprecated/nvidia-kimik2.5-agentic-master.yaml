@@ -1,0 +1,111 @@
+# Deprecated Kimi-K2.5/2.6/2.7-Code agentic-coding entries archived from
+# nvidia-master.yaml. Deprecated after Monday, August 3, 2026 (see the
+# Deprecation Notice in MODELS.md). Single-turn 8k1k stays active until
+# August 6, 2026.
+# Removed from the active master config so sweep generation no longer selects them.
+
+
+kimik2.5-int4-b200-vllm-agentic:
+  image: vllm/vllm-openai:v0.22.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: cluster:b200-dgxc
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [32, 64, 96, 128] }
+
+kimik2.5-int4-h200-vllm-agentic:
+  image: vllm/vllm-openai:v0.22.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: cluster:h200-dgxc
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
+
+kimik2.5-fp4-b300-vllm-agentic:
+  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
+  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
+  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
+  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
+  # INT4 B300 sister already uses successfully.
+  image: vllm/vllm-openai:v0.22.0
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+
+kimik2.5-fp4-b300-vllm-agentic-mtp:
+  image: vllm/vllm-openai:nightly-94c0ef300180f8fd1071d9cbe7270a8348155f94
+  model: Kimi-K2.6-NVFP4
+  model-prefix: kimik2.5
+  runner: cluster:b300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: none, conc-list: [2, 4, 8] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [8, 16, 32] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, dcp-size: 4, kv-offloading: none, conc-list: [32, 64, 80, 96, 112, 128] }
+      - { tp: 4, ep: 1, spec-decoding: mtp, dcp-size: 4, kv-offloading: dram, kv-offload-backend: { name: native }, conc-list: [64, 80, 96, 112, 128, 144, 160] }
+
+kimik2.5-fp4-b200-vllm-agentic-lmcache:
+  image: vllm/vllm-openai:v0.22.0
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: cluster:b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [16, 24, 32, 36] }
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: { name: lmcache, version: "0.5.1" }, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+
+# Left behind by #2493: this key stayed in nvidia-master.yaml while its script
+# moved to benchmarks/single_node/agentic/deprecated/, so the config pointed at
+# a path that no longer existed. Archived here with its siblings.
+kimik2.5-int4-h100-vllm:
+  image: vllm/vllm-openai:v0.22.0
+  model: moonshotai/Kimi-K2.5
+  model-prefix: kimik2.5
+  runner: cluster:h100-dgxc
+  precision: int4
+  framework: vllm
+  multinode: false
+  scenarios:
+    # H100 has 80 GB HBM per GPU (smallest in this set); the KV cliff arrives
+    # early. Sweep saturates conc=20 to keep total HBM headroom.
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: { name: vllm-simple }, conc-list: [1, 2, 4, 8, 12, 16, 20] }
