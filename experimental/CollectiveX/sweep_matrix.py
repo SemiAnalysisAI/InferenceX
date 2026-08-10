@@ -98,8 +98,25 @@ def _topology(platform: dict[str, Any], ep: int) -> dict[str, Any]:
     }
 
 
+def _kv_backend_spec(value: Any) -> dict[str, Any]:
+    """kv_backends values are a fabric list (library runs the full sweep) or an
+    object carrying restrictions: `ops` (a backend that cannot serve one
+    direction on a fabric, e.g. mooncake on Pollara where ionic RDMA READ is
+    broken upstream), `image_ref` (a backend only shipped inside a specific
+    image, e.g. AMD's atom-dev mooncake build), and `device` (an engine NIC
+    filter template; `{gpu}` expands to the physical GPU index at runtime)."""
+    if isinstance(value, list):
+        return {"fabrics": value, "ops": None, "image_ref": None, "device": None}
+    return {
+        "fabrics": value["fabrics"],
+        "ops": value.get("ops"),
+        "image_ref": value.get("image_ref"),
+        "device": value.get("device"),
+    }
+
+
 def _kv_cases(sku: str, platform: dict[str, Any], fabric: str, backend: str,
-              selected_precisions: set[str]) -> list[dict[str, Any]]:
+              selected_precisions: set[str], spec: dict[str, Any]) -> list[dict[str, Any]]:
     """The kv-transfer cases one (sku, backend, fabric) shard runs.
 
     A KV leg is 2 nodes x 1 GPU: the per-worker transfer pair an engine
@@ -131,7 +148,8 @@ def _kv_cases(sku: str, platform: dict[str, Any], fabric: str, backend: str,
                 "isl_ladder": " ".join(map(str, KV_SWEEP["isl_ladder"])),
                 "page_tokens": " ".join(map(str, KV_SWEEP["page_tokens"])),
                 "batch_sizes": " ".join(map(str, KV_SWEEP["batch_sizes"])),
-                "ops": " ".join(KV_SWEEP["ops"]),
+                "ops": spec["ops"] or " ".join(KV_SWEEP["ops"]),
+                "kv_device": spec["device"] or "",
                 "pool_slack": KV_SWEEP["pool_slack"],
                 "seed": KV_SWEEP["seed"],
                 "timing": timing_profile,
@@ -313,24 +331,27 @@ def resolve_matrix(
             if (only_sku and sku != only_sku) or sku in excluded:
                 continue
             platform = PLATFORMS[sku]
-            for kv_backend, fabrics in sorted(platform.get("kv_backends", {}).items()):
-                for fabric in fabrics:
-                    cases = _kv_cases(sku, platform, fabric, kv_backend, selected_precisions)
+            for kv_backend, raw_spec in sorted(platform.get("kv_backends", {}).items()):
+                spec = _kv_backend_spec(raw_spec)
+                for fabric in spec["fabrics"]:
+                    cases = _kv_cases(sku, platform, fabric, kv_backend,
+                                      selected_precisions, spec)
                     for case in cases:
                         requested_cases.append({
                             "sku": sku, "case": case, "disposition": "runnable",
                             "reason": None, "detail": None,
                         })
                     if cases:
-                        kv_shards[(sku, kv_backend, fabric)] = cases
+                        kv_shards[(sku, kv_backend, fabric)] = (cases, spec)
 
     shards_by_sku: dict[str, list[dict[str, Any]]] = {}
-    for (sku, kv_backend, fabric), cases in sorted(kv_shards.items()):
+    for (sku, kv_backend, fabric), (cases, spec) in sorted(kv_shards.items()):
         shards_by_sku.setdefault(sku, []).append({
             "id": f"{sku}-kv-{kv_backend}-{fabric}",
             "sku": sku,
             "backend": kv_backend,
             "mode": fabric,
+            "image_ref": spec["image_ref"] or "",
             "launcher": PLATFORMS[sku]["launcher"],
             "nodes": 2,
             "gpus_per_node": 1,

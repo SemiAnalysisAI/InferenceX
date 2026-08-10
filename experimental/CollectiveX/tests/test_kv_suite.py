@@ -41,6 +41,15 @@ class KVMatrix(unittest.TestCase):
             self.assertEqual(
                 {(c["workload"], c["precision"]) for c in shard["cases"]},
                 {("kv-dsv4", "fp8")})
+            if shard["sku"] == "mi355x" and shard["backend"] == "mooncake":
+                # AMD's atom-dev build: push-only (upstream ionic RDMA READ is
+                # broken), GPU-paired NIC filter, shipped inside a pinned image.
+                self.assertEqual({c["ops"] for c in shard["cases"]}, {"push"})
+                self.assertEqual({c["kv_device"] for c in shard["cases"]}, {"rdma{gpu}"})
+                self.assertTrue(shard["image_ref"].startswith("rocm/atom-dev:"))
+            else:
+                self.assertEqual({c["ops"] for c in shard["cases"]}, {"pull push"})
+                self.assertEqual(shard["image_ref"], "")
             for case in shard["cases"]:
                 self.assertEqual(case["suite"], "kv-transfer")
                 self.assertEqual(case["ep"], 2)
@@ -116,6 +125,8 @@ class KVArgvCodec(unittest.TestCase):
             (pairs["--warmup"], pairs["--reps"], pairs["--trials"]),
             tuple(case["timing"].split(":")))
         self.assertEqual(pairs["--batch-sizes"], case["batch_sizes"])
+        self.assertEqual(pairs["--kv-device"], case["kv_device"])
+        self.assertEqual(pairs["--ops"], case["ops"])
         self.assertIn(shard["sku"], pairs["--out"])
         self.assertTrue(pairs["--out"].startswith("results/"))
 
@@ -285,7 +296,15 @@ class KVSummary(unittest.TestCase):
     def test_kv_documents_render_their_own_table(self):
         text = summarize.render([_kv_document()])
         self.assertIn("KV-transfer results", text)
-        self.assertIn("| 43.4 | 96.2 | 12.4 | 48.3 | 53.1 |", text)
+        self.assertIn("| pull | 43.4 | 96.2 | 12.4 | 48.3 | 53.1 |", text)
+
+    def test_a_push_only_document_reads_its_push_lane(self):
+        doc = _kv_document()
+        doc["measurement"]["rows"] = [
+            row for row in doc["measurement"]["rows"] if row["op"] == "push"
+        ]
+        text = summarize.render([doc])
+        self.assertIn("| push | 48.4 |", text)
         self.assertNotIn("INVALID", text)
 
     def test_kv_invalid_counts_in_the_banner(self):

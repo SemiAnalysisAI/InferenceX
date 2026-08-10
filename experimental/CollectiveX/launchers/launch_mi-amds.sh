@@ -35,7 +35,7 @@ MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 case "$COLLX_BENCH" in
   mori | uccl-ep) ;;
-  mori-io) ;;  # kv-transfer suite
+  mori-io | mooncake) ;;  # kv-transfer suite
   *) collx_die "unsupported AMD backend: $COLLX_BENCH" ;;
 esac
 

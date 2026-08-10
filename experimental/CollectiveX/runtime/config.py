@@ -155,6 +155,7 @@ def _emit_kv_argv(case: dict, version: object, runner: str, ts: str, index: int)
         "--isl-ladder", str(case["isl_ladder"]),
         "--page-tokens", str(case["page_tokens"]),
         "--batch-sizes", str(case["batch_sizes"]),
+        "--kv-device", str(case.get("kv_device", "")),
         "--ops", str(case["ops"]),
         "--warmup", timing[0], "--reps", timing[1], "--trials", timing[2],
         "--pool-slack", str(case["pool_slack"]),

@@ -631,14 +631,21 @@ main() {
     flashinfer-ep) flashinfer_ep_prepare || return 1 ;;
     nixl) nixl_prepare || return 1 ;;
     mooncake)
-      # The wheel links libcudart.so.12; the adapter dlopens it from the
-      # runtime package at import, so no LD_LIBRARY_PATH seam is needed.
-      { python3 -m pip install -q --disable-pip-version-check --no-input \
-          'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
-          || python3 -m pip install -q --disable-pip-version-check --no-input \
-               --break-system-packages \
-               'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12; } \
-        || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
+      # ROCm builds ship inside the image (upstream wheels link libcuda.so.1;
+      # AMD's atom-dev image carries a working build), so an importable
+      # mooncake.engine wins. Otherwise install the pinned CUDA wheel; it
+      # links libcudart.so.12, which the adapter dlopens from the runtime
+      # package at import, so no LD_LIBRARY_PATH seam is needed.
+      if python3 -c "import mooncake.engine" 2>/dev/null; then
+        collx_log "mooncake provided by the image"
+      else
+        { python3 -m pip install -q --disable-pip-version-check --no-input \
+            'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12 \
+            || python3 -m pip install -q --disable-pip-version-check --no-input \
+                 --break-system-packages \
+                 'mooncake-transfer-engine==0.3.12.post1' nvidia-cuda-runtime-cu12; } \
+          || { collx_log "ERROR: mooncake wheel install failed"; return 1; }
+      fi
       ;;
     mori-io)
       python3 -c "import mori.io" \

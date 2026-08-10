@@ -494,6 +494,15 @@ pattern-checked after `pull` on the initiator and after `push` on the target (an
 byte pattern makes any page's expected contents computable from its offset alone), and both pools
 are repainted between points. A failed verify flips the document `invalid` and the leg red.
 
+A registry backend can carry restrictions: `ops` when a fabric serves one direction only
+(mooncake on mi355x runs `push` — AMD's atom-dev build moves WRITE at wire speed over the
+GPU-paired Pollara NIC, while upstream ionic RDMA READ completes with retry-exceeded and one
+failed READ poisons the engine, which is also why ATOM's production connector is write-only),
+`image_ref` when the build ships only inside a specific image, and `device` for engine NIC
+filters (`{gpu}` expands to the physical GPU index; registering GPU memory on a non-paired
+NIC fails and cross-rail pairs are unroutable). The summary's `op` column names the measured
+direction.
+
 Fabrics are a case dimension. `rdma` runs on torch (cudaMalloc) pools. `mnnvl` allocates the
 pools with cuMem FABRIC handles (kv_pool.FabricPool; needs a live nvidia-imex domain), because
 UCX's cross-node cuda_ipc only engages on fabric-mappable memory: on cudaMalloc pools the flag

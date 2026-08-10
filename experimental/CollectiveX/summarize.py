@@ -129,29 +129,36 @@ def render_kv(documents: list[dict]) -> list[str]:
     page sizes plus the bulk ceiling, and the paged-64 pull latency. Verify
     failures flip the outcome column (and the leg already failed in CI)."""
     lines = ["", "## CollectiveX KV-transfer results", "",
-             "| ver | sku | backend | fabric | workload | precision | outcome "
-             "| pull p64 GB/s b1 | pull p64 GB/s bmax | pull p16 GB/s b1 "
-             "| bulk GB/s | pull p64 ms b1 |",
-             "|--:|---|---|---|---|---|---|--:|--:|--:|--:|--:|"]
+             "| ver | sku | backend | fabric | workload | precision | outcome | op "
+             "| p64 GB/s b1 | p64 GB/s bmax | p16 GB/s b1 "
+             "| bulk GB/s | p64 ms b1 |",
+             "|--:|---|---|---|---|---|---|---|--:|--:|--:|--:|--:|"]
     for document in documents:
         factors = document["identity"]["case_factors"]
         case = factors["case"]
         rows = document["measurement"]["rows"]
-        p64_gbps, p64_ms = _kv_cell(rows, "paged", 64, "pull")
-        p64_bmax, _ = _kv_cell(rows, "paged", 64, "pull", batch="max")
-        p16_gbps, _ = _kv_cell(rows, "paged", 16, "pull")
-        bulk_gbps, _ = _kv_cell(rows, "bulk", None, "pull")
+        # Cells read the pull lane when measured, else the push lane (a
+        # backend may serve one direction only, e.g. mooncake on Pollara
+        # where upstream ionic RDMA READ is broken); the op column names
+        # which lane the row's numbers come from.
+        op = next((candidate for candidate in ("pull", "push")
+                   if _kv_cell(rows, "paged", 64, candidate)[0] != "-"), "pull")
+        p64_gbps, p64_ms = _kv_cell(rows, "paged", 64, op)
+        p64_bmax, _ = _kv_cell(rows, "paged", 64, op, batch="max")
+        p16_gbps, _ = _kv_cell(rows, "paged", 16, op)
+        bulk_gbps, _ = _kv_cell(rows, "bulk", None, op)
         lines.append(
             f"| {document['version']} | {factors['sku']} | `{case['backend']}` | "
             f"{case['mode']} | {case['workload']} | {case['precision']} | "
-            f"{document['outcome']['status']} | {p64_gbps} | {p64_bmax} | {p16_gbps} | "
-            f"{bulk_gbps} | {p64_ms} |"
+            f"{document['outcome']['status']} | {op} | {p64_gbps} | {p64_bmax} | "
+            f"{p16_gbps} | {bulk_gbps} | {p64_ms} |"
         )
     lines.append("")
     lines.append("> Paged rows move requests' KV as layer-major descriptor lists over "
                  "randomized block tables (p16/p64 = tokens per page); b1/bmax = requests "
                  "posted per burst (GB/s is burst-aggregate); bulk is the single-descriptor "
-                 "wire ceiling. GB/s at the largest ISL (bandwidth-bound).")
+                 "wire ceiling; op names the measured direction. GB/s at the largest ISL "
+                 "(bandwidth-bound).")
     return lines
 
 

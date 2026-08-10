@@ -5,11 +5,12 @@ P2PHANDSHAKE metadata (no etcd); the peer session id is ip:rpc_port. The
 binding is sync-only in the shape production uses it: SGLang's mooncake
 connector posts blocking calls from a transfer thread pool (the binding
 releases the GIL), so post() here hands the sync call to a worker thread and
-wait() joins it. The wheel links libcudart.so.12, which cu13
-images do not carry; the adapter dlopens it from the nvidia-cuda-runtime-cu12
-package before the import so no launcher-side LD_LIBRARY_PATH seam is needed.
-The wheel also links libcuda.so.1 itself, which is why this backend is
-NVIDIA-only (import fails on ROCm nodes, measured on mi355x).
+wait() joins it. On CUDA images the wheel links libcudart.so.12, which cu13
+images do not carry; when the plain import fails the adapter dlopens it from
+the nvidia-cuda-runtime-cu12 package and retries, so no launcher-side
+LD_LIBRARY_PATH seam is needed. ROCm runs the image-provided build (AMD's
+atom-dev tree; upstream wheels link libcuda.so.1), where transfers require
+the GPU-paired NIC filter the registry passes through --kv-device.
 """
 
 from __future__ import annotations
@@ -41,14 +42,35 @@ def _preload_cudart() -> None:
     raise RuntimeError("libcudart.so.12 unavailable; install nvidia-cuda-runtime-cu12")
 
 
+def _import_engine():
+    """Plain import first (ROCm images ship a self-contained build); dlopen
+    the CUDA runtime and retry only when the wheel's link fails."""
+    try:
+        from mooncake.engine import TransferEngine
+    except ImportError:
+        _preload_cudart()
+        from mooncake.engine import TransferEngine
+    return TransferEngine
+
+
+def _physical_gpu_index() -> int:
+    """The physical GPU index behind this rank's visible device 0: GPU-paired
+    NIC selection (rdma{gpu}) needs the host-level index, which the Slurm
+    visibility mask carries."""
+    for var in ("ROCR_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES"):
+        first = os.environ.get(var, "").split(",")[0].strip()
+        if first.isdigit():
+            return int(first)
+    return 0
+
+
 class MooncakeBackend(KVBackend):
     name = "mooncake"
     maturity = "production"
 
     def __init__(self, args, role, device):
         super().__init__(args, role, device)
-        _preload_cudart()
-        from mooncake.engine import TransferEngine
+        TransferEngine = _import_engine()
 
         try:
             import importlib.metadata as md
@@ -65,9 +87,12 @@ class MooncakeBackend(KVBackend):
         self._engine = TransferEngine()
         self._ip = kv_workload.iface_ipv4(args.socket_ifname)
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
-        rc = self._engine.initialize(local, "P2PHANDSHAKE", "rdma", "")
+        nic_filter = (getattr(args, "kv_device", "") or "").replace(
+            "{gpu}", str(_physical_gpu_index()))
+        rc = self._engine.initialize(local, "P2PHANDSHAKE", "rdma", nic_filter)
         if rc != 0:
-            raise RuntimeError(f"mooncake initialize failed rc={rc}")
+            raise RuntimeError(f"mooncake initialize failed rc={rc} "
+                               f"nic_filter={nic_filter!r}")
         self._pool = None
         self._bulk = None
         self._peer = None

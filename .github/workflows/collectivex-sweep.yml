@@ -137,6 +137,7 @@ jobs:
     env:
       COLLX_BENCH: ${{ matrix.backend }}
       COLLX_MODE: ${{ matrix.mode }}
+      COLLX_IMAGE_OVERRIDE: ${{ matrix.image_ref || '' }}
       COLLX_NODES: ${{ matrix.nodes }}
       COLLX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
       COLLX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}

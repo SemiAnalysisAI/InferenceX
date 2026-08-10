@@ -71,6 +71,9 @@ def add_kv_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--socket-ifname", default=os.environ.get("COLLX_SOCKET_IFNAME", ""))
     ap.add_argument("--kv-mori-qp", type=int, default=1)
     ap.add_argument("--kv-mori-chunking", action="store_true")
+    ap.add_argument("--kv-device", default="",
+                    help="engine NIC filter template; {gpu} expands to the "
+                         "physical GPU index (GPU-paired NICs, e.g. Pollara)")
     ap.add_argument("--kv-mori-port", type=int, default=48810)
     ap.add_argument("--kv-mc-port", type=int, default=48830)
 
