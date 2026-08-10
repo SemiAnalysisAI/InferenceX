@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # DeepSeek-V4-Pro FP8 AgentX replay on one 8xMI325X node. The checkpoint is
-# dequantized to FP8 because gfx942 has no native MXFP4 support. Both supported
-# one-node layouts retain MTP: TP8 for the latency frontier, and DP8+EP8 for the
-# high-throughput frontier.
+# dequantized to FP8 because gfx942 has no native MXFP4 support. The published
+# path is pure TP8: current stable and nightly vLLM builds both return invalid
+# empty-content responses with expert parallelism on this model/SKU.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -74,10 +74,8 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
 fi
 
 MAX_NUM_SEQS=$((2 * CONC))
-# The first AgentX-fast pass used K=3 and exposed empty-content responses on
-# the exploratory gfx942 deepseek_v4_fp8 path.  The existing MI300X/MI325X
-# fixed-sequence recipes use K=2; screen that supported shape independently
-# before changing the stable vLLM image.
+# The existing MI300X/MI325X fixed-sequence recipes use K=2. Keep that MTP
+# depth and its measured golden acceptance length for every AgentX point.
 NUM_SPEC_TOKENS=2
 SYNTHETIC_ACCEPT_LEN=2.27
 if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
