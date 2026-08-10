@@ -7910,7 +7910,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic:
 # parallelism. Split the same serving topology into latency, balanced,
 # throughput, and CPU KV-offloaded capacity tiers.
 kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
-  image: vllm/vllm-openai:kimi-k3
+  image: vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21
   model: moonshotai/Kimi-K3
   model-prefix: kimik3
   runner: cluster:b200-dgxc

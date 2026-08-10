@@ -5,14 +5,14 @@ name: "kimik3-vllm-agg-b200-tp16-latency-dspark-agentic"
 # https://recipes.vllm.ai/moonshotai/Kimi-K3?hardware=b200&nodes=2&strategy=multi_node_tp
 model:
   path: "kimik3"
-  container: "vllm/vllm-openai:kimi-k3"
+  container: "vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21"
   precision: "fp4"
 
 identity:
   model:
     repo: "moonshotai/Kimi-K3"
   container:
-    image: "vllm/vllm-openai:kimi-k3"
+    image: "vllm/vllm-openai:nightly-b22afe45ac797ae58e67a7a3ad79ee5714024420@sha256:144356af876edbb3a4bfee23e1444b196cc3fdadd0a0c1a7f11f721756972a21"
 
 dynamo:
   install: false

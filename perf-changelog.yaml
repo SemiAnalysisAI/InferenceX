@@ -5717,4 +5717,5 @@
     - "Add Kimi K3 B200 AgentX latency, balanced, and throughput tiers on the PP-free TP16 DSpark topology"
     - "Add a TP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
     - "Run DSpark level 7 with probabilistic drafting and the committed synthetic acceptance length 3.84"
+    - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
