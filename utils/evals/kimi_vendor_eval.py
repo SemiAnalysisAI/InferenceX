@@ -245,7 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.model, 0.0, RuntimeError(args.integration_error)
             ),
         )
-        return 1
+        return 0
     passed = run_evaluation(
         verifier_dir=args.verifier_dir,
         base_url=args.base_url,

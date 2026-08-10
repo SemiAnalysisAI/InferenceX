@@ -196,7 +196,7 @@ def test_failure_cannot_reuse_stale_outputs(
     assert foreign_result.exists()
 
 
-def test_cli_setup_failure_clears_stale_outputs(tmp_path: Path) -> None:
+def test_cli_setup_failure_writes_zero_score_artifact(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     output_dir.mkdir()
     (output_dir / kve.NATIVE_REPORT_FILENAME).write_text(json.dumps(_report()))
@@ -215,7 +215,7 @@ def test_cli_setup_failure_clears_stale_outputs(tmp_path: Path) -> None:
                 "checkout failed",
             ]
         )
-        == 1
+        == 0
     )
     projected = _result(output_dir)
     assert not (output_dir / kve.NATIVE_REPORT_FILENAME).exists()

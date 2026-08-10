@@ -209,6 +209,7 @@ printf 'SETUP_RC=%s\n' "$?"
 
     assert "SETUP_RC=12" in result.stdout
     assert message in result.stderr
+    assert "failed to write Kimi verifier failure artifact" not in result.stderr
     assert len(score_files) == 1
     score_result = json.loads(score_files[0].read_text())
     assert (
