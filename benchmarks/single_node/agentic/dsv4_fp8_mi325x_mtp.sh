@@ -187,7 +187,7 @@ EOF
     kill -0 "$MOONCAKE_MASTER_PID"
     OFFLOAD_ARGS=(
         --kv-transfer-config
-        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+        '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_load_failure_policy":"recompute","kv_connector_extra_config":{"load_async":true}}'
     )
 else
     require_agentic_kv_offload_none
