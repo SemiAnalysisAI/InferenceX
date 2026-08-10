@@ -38,7 +38,10 @@ backend:
     VLLM_LOG_STATS_INTERVAL: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
     TILELANG_CLEANUP_TEMP_FILES: "1"
-    VLLM_USE_NCCL_SYMM_MEM: "1"
+    # The released B200 DSV4 DEP path uses PYNCCL for local DP/EP collectives.
+    # NCCL symmetric-memory window registration fails during dummy profiling on
+    # this cluster, before the router can receive traffic.
+    VLLM_USE_NCCL_SYMM_MEM: "0"
     TORCH_SYMMMEM: "NVSHMEM"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
