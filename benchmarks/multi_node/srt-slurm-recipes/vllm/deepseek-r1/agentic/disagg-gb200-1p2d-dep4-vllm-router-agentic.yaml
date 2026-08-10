@@ -58,7 +58,7 @@ backend:
       enable-expert-parallel: true
       enable-prefix-caching: true
       enable-prompt-tokens-details: true
-      max-model-len: 163840
+      max-model-len: 262144
       max-num-seqs: 128
       max-num-batched-tokens: 8192
       trust-remote-code: true
@@ -84,6 +84,7 @@ benchmark:
     IS_MULTINODE: "true"
     AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "vllm:"
     AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID: "1"
+    MAX_MODEL_LEN: "262144"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126_256k"
