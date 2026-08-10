@@ -1491,7 +1491,7 @@ dsv4-fp8-mi325x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
