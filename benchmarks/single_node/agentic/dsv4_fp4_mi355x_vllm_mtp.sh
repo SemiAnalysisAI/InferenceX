@@ -2,7 +2,8 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using vLLM.
+# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using vLLM,
+# with MTP speculative decoding and golden synthetic acceptance for throughput.
 # Mirrors the fixed-seq-len parallelism options (pure TP and DEP) so the
 # agentic sweep can probe both interactivity and throughput regimes:
 #   pure TP (DP_ATTENTION=false, EP_SIZE=1):  attention TP-sharded across
@@ -21,7 +22,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires one of these. 
+# KV_OFFLOADING=dram requires one of these.
 #   KV_OFFLOAD_BACKEND=vllm-native.
 #   KV_OFFLOAD_BACKEND=mooncake.
 #   KV_OFFLOAD_BACKEND=lmcache.
@@ -76,8 +77,17 @@ if [ "$DP_ATTENTION" = "true" ]; then
     agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
-# DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
-export VLLM_ENGINE_READY_TIMEOUT_S=3600
+# AIPerf automatically scrapes the public endpoint's /metrics URL. That is the
+# vLLM engine for pure TP, but the native router for DP-attention. Explicitly
+# add the engine endpoint so every topology captures vLLM metrics; AIPerf
+# deduplicates it against the automatic endpoint in pure-TP runs.
+export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
+export AIPERF_REQUIRED_SERVER_METRIC_PREFIX="vllm:"
+
+# DeepSeek-V4-Pro is an 805 GiB checkpoint. Cold Weka loads on MI355X take
+# roughly two hours for the 64 shards, so allow the engine core to finish
+# loading instead of timing out halfway through a healthy startup.
+export VLLM_ENGINE_READY_TIMEOUT_S=10800
 
 # vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
 # vllm-project/vllm#44774 applies the same reachability policy to Mooncake's
@@ -366,6 +376,17 @@ fi
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS=$((2 * CONC))
 
+# DeepSeek-V4-Pro ships a native MTP head. AgentX throughput pins its
+# three-token draft to the committed thinking-on golden acceptance length;
+# eval-only runs use real target verification so accuracy remains meaningful.
+NUM_SPEC_TOKENS=3
+SYNTHETIC_ACCEPT_LEN=2.49
+if [ "${EVAL_ONLY:-false}" = "true" ]; then
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}"
+else
+    SPEC_CONFIG="{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+fi
+
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
@@ -373,10 +394,6 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 
 sleep 180
-
-# https://github.com/vllm-project/vllm/pull/45497
-git clone https://gist.github.com/seungrokj/a37ff4d9a52db31752e2d5fa5b192e00
-cp a37ff4d9a52db31752e2d5fa5b192e00/gistfile1.txt /usr/local/lib/python3.12/dist-packages/vllm/v1/core/sched/scheduler.py
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -389,9 +406,10 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.8 
+    --gpu-memory-utilization 0.8
     --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --speculative-config "$SPEC_CONFIG"
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --reasoning-parser deepseek_v4
