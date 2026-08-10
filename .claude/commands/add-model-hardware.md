@@ -6,37 +6,37 @@ argument-hint: <model-link> <gpu-sku> [recipes-link] [draft-model-link] [mtp]
 Add a new single-node benchmark recipe for a `model × hardware` combination, basing it on the
 closest existing sibling recipe, then ship it as one `[Klaud Cold]` PR with a full GPU sweep.
 
-Inputs from `$ARGUMENTS` (links first, then SKU; the rest optional and order-tolerant):
+Inputs from `$ARGUMENTS` (links first, then SKU. The rest are optional and order-tolerant):
 
-- **model-link** (required) — HuggingFace URL of the exact checkpoint to benchmark, e.g.
+- **model-link** (required). HuggingFace URL of the exact checkpoint to benchmark, e.g.
   `https://huggingface.co/MiniMaxAI/MiniMax-M3-MXFP8`. Derive from it: the `model:` id
-  (`org/repo`), the **precision** (from the repo name — `MXFP8`/`FP8`→`fp8`, `NVFP4`/`FP4`→`fp4`,
+  (`org/repo`), the **precision** (from the repo name, where `MXFP8`/`FP8`→`fp8`, `NVFP4`/`FP4`→`fp4`,
   `INT4`→`int4`, else `bf16`), and the **model-prefix** (e.g. `minimaxm3`).
-- **gpu-sku** (required) — `b200 | b300 | h100 | h200 | gb200 | mi300x | mi325x | mi355x`.
+- **gpu-sku** (required). Choose from `b200 | b300 | h100 | h200 | gb200 | mi300x | mi325x | mi355x`.
   Determines the master config (`mi*`→`amd-master.yaml`, else `nvidia-master.yaml`), the image
   repo (`vllm/vllm-openai` vs `vllm/vllm-openai-rocm`), and the launcher.
-- **recipes-link** (optional) — the model's `recipes.vllm.ai` page (or a vendor recipe commit).
+- **recipes-link** (optional). The model's `recipes.vllm.ai` page (or a vendor recipe commit).
   Consult it for the authoritative serve flags (block size, parsers, attention backend,
   parallelism guidance). If omitted, copy the sibling recipe's flags.
-- **draft-model-link** (optional) — HF URL of a speculative-decoding draft (e.g.
+- **draft-model-link** (optional). HF URL of a speculative-decoding draft (e.g.
   `https://huggingface.co/Inferact/MiniMax-M3-EAGLE3`). Its presence means **build the MTP
-  variant** (EAGLE3 with this draft); see the MTP appendix.
-- **mtp** (optional) — force the `spec-decoding: mtp` variant even without a draft link (use
+  variant** (EAGLE3 with this draft). See the MTP appendix.
+- **mtp** (optional). Force the `spec-decoding: mtp` variant even without a draft link (use
   native MTP if the checkpoint ships `num_mtp_modules > 0`).
 
-**engine** defaults to `vllm`; infer otherwise from the sibling / recipes page.
+**engine** defaults to `vllm`. Infer otherwise from the sibling / recipes page.
 
-Standing prefs: PR title prefixed `[Klaud Cold]`; add `full-sweep-fail-fast` (strongly recommended over `full-sweep-enabled`) via the REST API
-(`gh pr edit` hits the projects-classic GraphQL bug); fill the perf-changelog `pr-link` after
-the PR exists; then monitor the sweep to a fail/success conclusion and report the job
-breakdown. Do **not** invent image tags — verify on the registry first.
+Standing prefs: Prefix the PR title with `[Klaud Cold]`. Add `full-sweep-fail-fast` (strongly recommended over `full-sweep-enabled`) through the REST API
+because `gh pr edit` hits the projects-classic GraphQL bug. Fill the perf-changelog `pr-link` after
+the PR exists. Then monitor the sweep to a fail/success conclusion and report the job
+breakdown. Do **not** invent image tags. Verify them on the registry first.
 
 ## Step 0 — deep-research the recipe (do this thoroughly before writing anything)
 
-Don't guess flags or concurrencies — **deep-research the InferenceX codebase first**, then
+Don't guess flags or concurrencies. **Deep-research the InferenceX codebase first**, then
 the external sources. Read *several* similar files, not just one, and copy what actually runs.
 
-**A. In-codebase research (primary — the repo is the source of truth):**
+**A. In-codebase research (primary because this repo is the source of truth):**
 ```bash
 # similar benchmark scripts: same model on other SKUs, AND same SKU on other models
 ls benchmarks/single_node/fixed_seq_len/<model>_*.sh benchmarks/single_node/fixed_seq_len/*_<sku>*.sh
@@ -52,17 +52,17 @@ grep -nE "run_benchmark_serving|setup_eval_context|wait_for_server_ready|start_g
   KV-cache dtype, attention/MoE backend, parsers). These are the truth for each runner.
 - **Compare several master-config search spaces** (e.g. `dsv4`, `glm5`, the same model on a
   sibling SKU) to choose `{tp, ep, dp-attn} × concurrency` combos that fit *this* hardware's
-  memory (small-mem SKUs like h100/mi300x go TP8-only; bigger SKUs add tp4/tp2/DEP).
+  memory. Small-memory SKUs like h100/mi300x go TP8-only, while bigger SKUs add tp4/tp2/DEP.
 - **Internalize the fixed-seq-len nuances from the existing configs**: `8k1k`/`1k8k` do **not**
   need the full `MAX_MODEL_LEN` (the matrix supplies `isl + osl + slack`), and graph-capture
-  batch sizes are scaled to concurrency/scenario (and spec-token count for MTP), not maxed —
-  copy how sibling scripts/configs already do it.
+  batch sizes are scaled to concurrency/scenario (and spec-token count for MTP), not maxed.
+  Copy how sibling scripts/configs already do it.
 
 **B. External research (confirm against upstream guidance):**
 - **`WebFetch` the model-link card + its `config.json`** → confirm `model:` id, precision, max
   context, architecture, spec-decode fields (`num_mtp_modules`, etc.).
-- **`WebFetch` the recipes-link** (if given) → canonical `vllm serve` flags + troubleshooting;
-  reconcile with what the sibling scripts do (the repo wins if they conflict — note why).
+- **`WebFetch` the recipes-link** (if given) → canonical `vllm serve` flags + troubleshooting.
+  Reconcile with what the sibling scripts do. If they conflict, follow the repo and note why.
 - If a **draft-model-link** is given, note its id for `--speculative-config` and check the card
   for method (`eagle3` vs native `mtp`) and recommended token count.
 - Pick the **image tag** from the sibling's master-config entry (or recipes page) and **verify
@@ -73,7 +73,7 @@ This research directly feeds Step 2 (script flags/env) and Step 3 (search space)
 ## What you're producing (4–5 files)
 
 1. `benchmarks/single_node/fixed_seq_len/<model>_<precision>_<sku>[_<engine>][_mtp].sh`
-2. an entry in the master config — **`configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
+2. an entry in either master config, **`configs/nvidia-master.yaml`** (b*/h*/gb* SKUs) or
    **`configs/amd-master.yaml`** (mi* SKUs)
 3. a `perf-changelog.yaml` entry (this diff vs main is what selects the sweep)
 4. (if missing) `SPEC_SUFFIX`/framework-suffix routing in `runners/launch_<sku>*.sh`
@@ -88,7 +88,7 @@ ls benchmarks/single_node/fixed_seq_len/<model>_*           # same model, other 
 ls benchmarks/single_node/fixed_seq_len/*_<sku>*.sh         # same hardware, other model
 grep -n "<model>-<precision>-<sku>" configs/{nvidia,amd}-master.yaml
 ```
-Read the closest sibling script **and** its master-config entry — copy their flag shapes and
+Read the closest sibling script **and** its master-config entry. Copy their flag shapes and
 search-space structure rather than inventing. The right model is "same model on a sibling SKU,
 adjusted for this hardware's quirks."
 
@@ -99,16 +99,16 @@ the model's `recipes.vllm.ai` page:
 - **Mandatory model flags** (carry from the sibling): block size, parser flags
   (`--tool-call-parser` / `--reasoning-parser`), `--language-model-only` for text-only sweeps,
   `--trust-remote-code` where the model needs it.
-- **Per-hardware deltas** — KV cache dtype (e.g. mi300x/gfx942 keeps **BF16**: no calibrated
-  ROCm FP8 attn scales; most others use `fp8`), attention backend (CUDA: FlashInfer default;
-  ROCm: `--attention-backend TRITON_ATTN`), and graph capture vs `--enforce-eager` (several
+- **Per-hardware deltas.** KV cache dtype (e.g. mi300x/gfx942 keeps **BF16** because it has no calibrated
+  ROCm FP8 attn scales, while most others use `fp8`), attention backend (CUDA uses FlashInfer by default,
+  while ROCm uses `--attention-backend TRITON_ATTN`), and graph capture vs `--enforce-eager` (several
   AMD recipes use eager).
-- **Capture sizing** — fixed-seq-len runs don't need graphs past the request concurrency:
-  capture up to the next power of two ≥ `CONC` (≥ `CONC * (1 + NUM_SPEC_TOKENS)` with spec
+- **Capture sizing.** Fixed-seq-len runs don't need graphs past the request concurrency.
+  Capture up to the next power of two ≥ `CONC` (≥ `CONC * (1 + NUM_SPEC_TOKENS)` with spec
   decoding), capped at vLLM's 2048.
-- **`MAX_MODEL_LEN`** is the matrix-supplied scenario value (`isl + osl + slack`) — never
+- **`MAX_MODEL_LEN`** is the matrix-supplied scenario value (`isl + osl + slack`). Never
   hardcode the full context for 8k1k / 1k8k.
-- **Memory headroom** — bigger checkpoints constrain TP/EP; if the sibling on a smaller-memory
+- **Memory headroom.** Bigger checkpoints constrain TP/EP. If the sibling on a smaller-memory
   SKU is TP8-only (e.g. h100), match that.
 
 Validate as you go: `bash -n <script>`.
@@ -118,9 +118,9 @@ Validate as you go: `bash -n <script>`.
 Append `<model>-<precision>-<sku>[-<engine>][-mtp]` after the sibling, with the correct
 `image`, `model`, `model-prefix`, `runner`, `precision`, `framework`. The **search space** is
 `{tp, ep, dp-attn} × concurrency` per scenario (1k1k, 8k1k):
-- Mirror a sibling's parallelism layouts; trim concurrency ranges to what the SKU's memory
+- Mirror a sibling's parallelism layouts. Trim concurrency ranges to what the SKU's memory
   supports (small-mem SKUs → TP8-only, drop tp2/tp4 and DEP).
-- Latency (TP-only) rows should start at conc 1; TEP/DEP rows start higher (they only pay off
+- Latency (TP-only) rows should start at conc 1. TEP/DEP rows start higher (they only pay off
   at scale).
 
 Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else → `nvidia-master.yaml`.
@@ -129,8 +129,8 @@ Confirm which master file by SKU: `mi*` → `amd-master.yaml`, everything else �
 
 The runner's launcher must resolve your script name. Most build it as
 `<model>_<precision>_<sku>[_<framework>][_mtp].sh`. h200 launchers already carry the framework
-+ `SPEC_SUFFIX`; **h100 and mi300x/mi355x launchers have historically hardcoded the bare
-`_<sku>.sh`** — check and fix if you added a framework-tagged or `_mtp` script:
++ `SPEC_SUFFIX`. **h100 and mi300x/mi355x launchers have historically hardcoded the bare
+`_<sku>.sh`**. Check and fix this if you added a framework-tagged or `_mtp` script:
 ```bash
 grep -n 'SPEC_SUFFIX\|FRAMEWORK_SUFFIX\|bash benchmarks\|EXP_NAME%%' runners/launch_<sku>*.sh
 ```
@@ -182,16 +182,16 @@ external **`Inferact/MiniMax-M3-EAGLE3`** draft, `method: eagle3`, **3 speculati
 ```
 --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": 3<CUDA: , \"attention_backend\": \"FLASH_ATTN\">}"
 ```
-- **CUDA (b*/h*)**: pin the drafter to `FLASH_ATTN` — FlashInfer can't run the MHA EAGLE3 head
+- **CUDA (b*/h*).** Pin the drafter to `FLASH_ATTN` because FlashInfer can't run the MHA EAGLE3 head
   at the mandatory page-size 128. Scale cudagraph capture to `CONC * (1 + NUM_SPEC_TOKENS)`.
 - **ROCm (mi*)**: no backend pin (server runs `TRITON_ATTN`). The shipped
   `vllm/vllm-openai-rocm:minimax-m3` image's AMD model lacks `SupportsEagle3`, so until the
   upstream fix (`vllm-project/vllm#45546`) is in the image, patch the installed
-  `models/minimax_m3/amd/model.py` in-place before serving — copy the idempotent, drift-checked
+  `models/minimax_m3/amd/model.py` in-place before serving. Copy the idempotent, drift-checked
   `python3 - <<'PYEOF' ... PYEOF` block verbatim from `minimaxm3_fp8_mi355x_mtp.sh` (adds
   `EagleModelMixin` + aux-hidden-state emission + `SupportsEagle3` on the two outer classes).
 - **All**: route benchmark prompts through `--use-chat-template` (+ `pip install -q datasets
-  pandas`) — raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
+  pandas`). Raw random tokens tank spec-decode acceptance. Search space mirrors the non-MTP
   entry trimmed at the extreme-conc end, latency rows starting at conc 1, `tp2-ep2` dropped.
 - Other models may instead use **native MTP** (`method: mtp`, no external draft) when the
   checkpoint ships MTP modules (`num_mtp_modules > 0`), e.g. the DeepSeek-V4 recipes.

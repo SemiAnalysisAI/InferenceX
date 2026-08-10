@@ -19,6 +19,5 @@ Fixes #
 
 - [ ] I have tested my changes locally
 - [ ] I have updated documentation if necessary
-- [ ] **If I changed a container image or config, I have already updated `perf-changelog.yaml`**
-  - [ ] New `perf-changelog.yaml` entries are **appended to the end** of the file (the file is chronological: oldest at top, newest at bottom)
-- [ ] **Before merging via reuse, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) has commented `/reuse-sweep-run` on this PR** — do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the sweep label will no longer automatically kick off new sweeps (remove and re-add the label to force one)
+- [ ] **For every change that can affect benchmark performance and every recipe addition or modification, I have appended a new entry to the physical end of `perf-changelog.yaml` and have not edited historical entries**
+- [ ] **Before merging via reuse, an authorized maintainer (`OWNER`/`MEMBER`/`COLLABORATOR`) has commented `/reuse-sweep-run` on this PR**. Do this **only once there is a final full sweep that is all green with evals passing**, since after this comment the sweep label will no longer automatically kick off new sweeps. Remove and re-add the label to force one.
