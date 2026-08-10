@@ -3,15 +3,31 @@
 # apply_k3_cb8104839c_fp8_embedded.sh   (PINNED / offline)
 #
 # Reproduces, BYTE-FOR-BYTE, the patched Python source of the working Kimi-K3
-# fp8-KV FULL_AND_PIECEWISE cudagraph container `k3_srok_cb810_0810` on a FRESH
-# container of:
+# fp8-KV FULL_AND_PIECEWISE cudagraph container `k3_srok_cb810_0810_replay` on a
+# FRESH container of:
 #   vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
 #
-# Unlike the PR-fetching variant, the code changes are EMBEDDED as diffs taken
-# directly from the container (pristine image -> container), so there is no
-# GitHub dependency and no drift from open PRs (#51011/#51171/#51040 etc.).
-# The embedded diffs are the NET effect of, in the container:
-#   aiter #4474 + #4494  and  vllm #51171 + #50578 + #51011 + #51040.
+# Code changes are EMBEDDED as pristine->container diffs (no GitHub / no PR
+# drift). Net effect of, in the container:
+#   aiter #4474  int64 KV stride (mla_gluon >2GB global_load)
+#   aiter #4494  a16w16 GEMM fresh split-K semaphore under cudagraph capture
+#   vllm  #51171 FULL cudagraphs for AITER MLA speculative decoding
+#   vllm  #50578 asm decode for non-divisor small head counts (12->16 @ TP8)
+#   vllm  #51011 fix fp8 KV cache decode on the AITER MLA backend
+#   vllm  #51040 extend FP8 asm MLA prefill to non-divisor small head counts
+#   vllm  #50619 (PARTIAL) cudagraph-exclude draft-attn layers + nvidia MLA
+#                fallback gate: gpu/attn_utils.py, gpu/model_runner.py,
+#                kimi_k3/nvidia/mla.py  (rocm_aiter_mla.py hunks NOT taken --
+#                they conflict with the #50578/#51011 asm strategy)
+#   KDA state_indices coercion (kimi_k3 KDA fused_recurrent): flatten a
+#                non-contiguous/[B,1] state_indices instead of raising (needed
+#                for eager/piecewise warmup)
+#   HYBRID verify: route small-head fp8 DSpark verify to the Gluon flatten
+#                (use_gluon_verify) + mla_gluon bh16bn128 batch<=256 relax +
+#                fp8-query dequant. Fixes the asm fp8 q-row-fold verify HSA
+#                0x1016 fault seen during DSpark agentic serving; decode
+#                (qlen==1) stays on the asm path.
+#   triton 3.7.0 (AMD ROCm 7.2.0) + tabulate + lm_eval[api]==0.4.12
 #
 # Run INSIDE a fresh container of that image:
 #   docker exec -i <container> bash < apply_k3_cb8104839c_fp8_embedded.sh
@@ -25,11 +41,10 @@
 #   * env: VLLM_ROCM_USE_AITER=1, VLLM_ROCM_AITER_MLA_ASM_PADDING=asm,
 #     VLLM_ROCM_USE_AITER_MOE_SITUV2_A8W4=1, --kv-cache-dtype fp8,
 #     --enable-prefix-caching, DSpark spec-decode attention_backend=TRITON_MLA.
-#   Validated 2026-08-10: gsm8k(LIMIT=20, 5-shot) = 0.90 flexible / 0.85 strict.
 # =============================================================================
 set -uo pipefail
 
-# Resolve the install root WITHOUT importing (importing aiter runs rocminfo and
+# Resolve install root WITHOUT importing (importing aiter runs rocminfo and
 # aborts on a GPU-less container). vllm and aiter share one dist-packages dir.
 ROOT="$(python -c 'import importlib.util as u, os; print(os.path.dirname(os.path.dirname(u.find_spec("vllm").origin)))')"
 if [ -z "$ROOT" ] || [ ! -d "$ROOT/vllm" ] || [ ! -d "$ROOT/aiter" ]; then
@@ -39,20 +54,14 @@ echo "[embed] ROOT=$ROOT"
 WS="${WS:-/tmp/k3_embed}"; mkdir -p "$WS"
 say(){ echo; echo "=================== $* ==================="; }
 
-say "1/3 triton 3.7.0 + tabulate"
+say "1/3 triton 3.7.0 + tabulate + lm_eval"
 python -m pip install --extra-index-url https://pypi.amd.com/triton/release/rocm-7.2.0/simple/ triton==3.7.0 2>&1 | tail -2
 python -m pip install tabulate 2>&1 | tail -1
-
-# Optional: the lm-eval-harness + its deps. The reference container had these
-# because lm_eval.sh (which pip-installs "lm_eval[api]" on first run) was run in
-# it; they are CLIENT eval tooling, not part of the serving stack. Included so a
-# replay matches the reference container's package set. Set WITH_LM_EVAL=0 to skip.
 if [ "${WITH_LM_EVAL:-1}" = "1" ]; then
   python -m pip install "lm_eval[api]==0.4.12" 2>&1 | tail -2
 fi
 
-# Marker-gated apply: skip if already present (idempotent); git apply (exact)
-# with a patch --fuzz fallback.
+# Marker-gated apply: skip if the post-state marker is already present.
 apply_one(){ # $1=relpath  $2=marker  $3=difffile
   local f="$ROOT/$1"
   if grep -qF "$2" "$f" 2>/dev/null; then echo "  $1: already present (skip)"; return; fi
@@ -81,8 +90,35 @@ diff --git a/aiter/ops/triton/gluon/mla_gluon.py b/aiter/ops/triton/gluon/mla_gl
      # early return with empty kv slice to save compute
      if split_kv_start >= split_kv_end:
          return
+@@ -861,6 +866,11 @@
+         kv_pe_offset = 0
+         use_2d_view = False
+ 
++    if q_nope.dtype == torch.float8_e4m3fn:
++        q_nope = q_nope.to(torch.bfloat16)
++    if q_pe is not None and q_pe.dtype == torch.float8_e4m3fn:
++        q_pe = q_pe.to(torch.bfloat16)
++
+     assert (
+         arch_info.get_arch() == "gfx950"
+     ), f"mla_gluon requires gfx950 (CDNA4), got {arch_info.get_arch()}"
+@@ -931,9 +941,11 @@
+         # NUM_KV_SPLITS >= 1). Each clamp below keeps NUM_KV_SPLITS <= min_kv_seq_len,
+         if REGIME == "bh16bn128":
+             assert (
+-                batch_size == 1
+-            ), f"mla_gluon[bh16bn128] requires batch_size=1, got {batch_size}"
+-            NUM_KV_SPLITS = max(1, min(256 // (batch_size * qlen), min_kv_seq_len))
++                1 <= batch_size <= 256
++            ), f"mla_gluon[bh16bn128] requires 1 <= batch_size <= 256, got {batch_size}"
++            NUM_KV_SPLITS = max(
++                1, min(256 // (batch_size * qlen), triton.cdiv(min_kv_seq_len, BLOCK_N))
++            )
+         else:  # bh16bn64
+             # Fill ~256 WGs (total WGs = B * NUM_KV_SPLITS <= 256, one MI350 wave),
+             # but never split a sequence into more blocks than it has: bound by the
 DIFF_MLA_GLUON
-apply_one "aiter/ops/triton/gluon/mla_gluon.py" "to(gl.int64)" "$WS/MLA_GLUON.diff"
+apply_one "aiter/ops/triton/gluon/mla_gluon.py" "1 <= batch_size <= 256" "$WS/MLA_GLUON.diff"
 
 cat > "$WS/GEMM_A16W16.diff" <<'DIFF_GEMM_A16W16'
 diff --git a/aiter/ops/gemm_op_a16w16.py b/aiter/ops/gemm_op_a16w16.py
@@ -557,7 +593,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
              f"Try adjusting tensor_parallel_size value."
          )
  
-@@ -809,25 +1042,88 @@
+@@ -809,25 +1042,87 @@
  
      @staticmethod
      def get_mla_padded_q(num_heads: int, q: torch.Tensor) -> torch.Tensor:
@@ -651,16 +687,15 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
 +        """
 +        if num_heads >= AiterMLAHelper._AITER_MIN_MLA_HEADS or max_qo_len <= 1:
 +            return False
-+        if is_quantized_kv_cache(kv_cache_dtype):
-+            return False
-+        # Same arch and mode gating as use_gluon_decode: Gluon only has a gfx950
-+        # build, and VLLM_ROCM_AITER_MLA_ASM_PADDING=asm forces the asm path,
-+        # which pads to 16 heads and handles qlen>1 verify directly.
-+        return _aiter_mla_small_head_mode() != "asm" and _gluon_mla_decode_supported()
++        # HYBRID: small-head multi-token verify always uses the Gluon flatten,
++        # independent of kv dtype and VLLM_ROCM_AITER_MLA_ASM_PADDING. fp8 KV is
++        # served by the batch<=256 + fp8-query-dequant mla_gluon relaxation; the
++        # asm fp8 q-row-fold verify faults on gfx950 (HSA 0x1016 in DSpark).
++        return _gluon_mla_decode_supported()
  
  
  class AiterMLAImpl(MLACommonImpl[AiterMLAMetadata]):
-@@ -873,10 +1169,13 @@
+@@ -873,10 +1168,13 @@
          self.flash_attn_varlen_func = flash_attn_varlen_func
  
          # FP8 MLA prefill kernel imports (lazy, only when enabled).
@@ -678,7 +713,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
          )
          if self._fp8_prefill_enabled:
              from aiter import mla_prefill_ps_asm_fwd, mla_reduce_v1
-@@ -919,7 +1218,19 @@
+@@ -919,7 +1217,19 @@
  
          fp8_dtype = current_platform.fp8_dtype()
          total_q = q.shape[0]
@@ -699,7 +734,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
          v_head_dim = self.v_head_dim
          tile_q = _FP8_PREFILL_TILE_Q
  
-@@ -946,7 +1257,13 @@
+@@ -946,7 +1256,13 @@
          # Reuse the caller's output buffer to skip the per-call alloc + copy.
          # The ASM and reduce kernels both write to a [total_q, nhead, v_head_dim]
          # view, which aliases the [total_q, nhead * v_head_dim] storage of out.
@@ -714,7 +749,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
  
          # Per-call scratch (logits, attn_lse, final_lse) is served from the
          # workspace manager so allocator churn in the prefill hot path is
-@@ -993,6 +1310,11 @@
+@@ -993,6 +1309,11 @@
              final_lse,
          )
  
@@ -726,7 +761,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
      def forward_mha(
          self,
          q: torch.Tensor,
-@@ -1113,11 +1435,12 @@
+@@ -1113,11 +1434,12 @@
          # target is checking draft tokens, so position t must not see t+1 --
          # and attention rows are independent, so giving row t the KV range
          # [0, context + t] is exactly causal multi-token attention.
@@ -743,7 +778,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
              if type(q) is tuple:
                  q_nope, q_pe = q
              else:
-@@ -1133,56 +1456,35 @@
+@@ -1133,56 +1455,35 @@
                  device=q_nope.device,
              )
              kv_buffer = kv_c_and_k_pe_cache.reshape(-1, kv_c_and_k_pe_cache.shape[-1])
@@ -819,7 +854,7 @@ diff --git a/vllm/v1/attention/backends/mla/rocm_aiter_mla.py b/vllm/v1/attentio
              return o, None
  
 DIFF_ROCM_AITER_MLA
-apply_one "vllm/v1/attention/backends/mla/rocm_aiter_mla.py" "_pad16 = _real_nhead < 16" "$WS/ROCM_AITER_MLA.diff"
+apply_one "vllm/v1/attention/backends/mla/rocm_aiter_mla.py" "asm fp8 q-row-fold verify faults" "$WS/ROCM_AITER_MLA.diff"
 
 cat > "$WS/TRITON_MLA.diff" <<'DIFF_TRITON_MLA'
 diff --git a/vllm/v1/attention/backends/mla/triton_mla.py b/vllm/v1/attention/backends/mla/triton_mla.py
@@ -950,32 +985,155 @@ diff --git a/vllm/envs.py b/vllm/envs.py
 DIFF_VLLM_ENVS
 apply_one "vllm/envs.py" "VLLM_ROCM_AITER_MLA_ASM_PADDING" "$WS/VLLM_ENVS.diff"
 
+cat > "$WS/KIMI_NVIDIA_MLA.diff" <<'DIFF_KIMI_NVIDIA_MLA'
+diff --git a/vllm/models/kimi_k3/nvidia/mla.py b/vllm/models/kimi_k3/nvidia/mla.py
+--- a/vllm/models/kimi_k3/nvidia/mla.py
++++ b/vllm/models/kimi_k3/nvidia/mla.py
+@@ -594,8 +594,7 @@
+         cos_sin_cache: torch.Tensor | None,
+         slot_mapping: torch.Tensor,
+     ) -> torch.Tensor:
+-        """Fused decode query-concat + latent cache insert, dispatched by cache
+-        dtype (same policy as prefill: fp8 cache -> fp8 query)."""
++        """Build the decode query and update the cache for its dtype/backend."""
+         if self.kv_cache_dtype == "fp8_ds_mla":
+             cache = self.kv_cache
+             if cache.dtype != torch.uint8:
+@@ -612,10 +611,21 @@
+                 cos_sin_cache=cos_sin_cache,
+             )
+         if is_quantized_kv_cache(self.kv_cache_dtype):
+-            assert self.impl.supports_quant_query_input, (  # type: ignore[attr-defined]
+-                "Kimi-K3 fp8 KV cache decode requires a backend that accepts an "
+-                "fp8 (quantized) query input."
+-            )
++            if not self.impl.supports_quant_query_input:  # type: ignore[attr-defined]
++                if positions is not None:
++                    assert self.rotary_emb is not None
++                    q_pe, k_pe = self.rotary_emb(positions, q_pe, k_pe)
++                    q_pe = q_pe.to(ql_nope.dtype)
++                    k_pe = k_pe.to(kv_c_normed.dtype)
++                self.impl.do_kv_cache_update(  # type: ignore[attr-defined]
++                    kv_c_normed,
++                    k_pe,
++                    self.kv_cache,
++                    slot_mapping,
++                    self.kv_cache_dtype,
++                    self._k_scale,
++                )
++                return torch.cat((ql_nope, q_pe), dim=-1)
+             cache = self.kv_cache
+             if cache.dtype != torch.float8_e4m3fn:
+                 cache = cache.view(torch.float8_e4m3fn)
+DIFF_KIMI_NVIDIA_MLA
+apply_one "vllm/models/kimi_k3/nvidia/mla.py" "if not self.impl.supports_quant_query_input" "$WS/KIMI_NVIDIA_MLA.diff"
+
+cat > "$WS/ATTN_UTILS.diff" <<'DIFF_ATTN_UTILS'
+diff --git a/vllm/v1/worker/gpu/attn_utils.py b/vllm/v1/worker/gpu/attn_utils.py
+--- a/vllm/v1/worker/gpu/attn_utils.py
++++ b/vllm/v1/worker/gpu/attn_utils.py
+@@ -92,6 +92,7 @@
+     kv_cache_config: KVCacheConfig,
+     vllm_config: VllmConfig,
+     device: torch.device,
++    cg_support_exclude_layers: set[str] | None = None,
+     active_layer_names: set[str] | None = None,
+ ) -> tuple[list[list[AttentionGroup]], AttentionCGSupportInfo, list[int]]:
+     # Phase 1: discover attention groups for each kv cache group.
+@@ -165,6 +166,15 @@
+             else:
+                 if hasattr(builder, "set_workspace_buffer"):
+                     builder.set_workspace_buffer(attn_backend_workspace)
++            # A group owned entirely by a separately-managed model part must
++            # not constrain this runner: a spec-decode draft gets its own
++            # CudaGraphManager and has a first-class eager fallback, so letting
++            # it in here downgrades the target for a decision it does not share.
++            if (
++                cg_support_exclude_layers is not None
++                and set(group.layer_names) <= cg_support_exclude_layers
++            ):
++                continue
+             # Check cudagraph support for the attention backend
+             cg_support = builder.get_cudagraph_support(
+                 vllm_config,
+DIFF_ATTN_UTILS
+apply_one "vllm/v1/worker/gpu/attn_utils.py" "cg_support_exclude_layers" "$WS/ATTN_UTILS.diff"
+
+cat > "$WS/MODEL_RUNNER.diff" <<'DIFF_MODEL_RUNNER'
+diff --git a/vllm/v1/worker/gpu/model_runner.py b/vllm/v1/worker/gpu/model_runner.py
+--- a/vllm/v1/worker/gpu/model_runner.py
++++ b/vllm/v1/worker/gpu/model_runner.py
+@@ -488,7 +488,14 @@
+             max_num_blocks_per_group.append(max_num_blocks)
+ 
+         self.attn_groups, attn_cg_support, self.kernel_block_sizes = init_attn_backend(
+-            self.kv_cache_config, self.vllm_config, self.device
++            self.kv_cache_config,
++            self.vllm_config,
++            self.device,
++            cg_support_exclude_layers=(
++                self.speculator.draft_attn_layer_names
++                if isinstance(self.speculator, DraftModelSpeculator)
++                else None
++            ),
+         )
+         attn_cg_support = attn_cg_support.narrow(
+             *self.model_state.get_additional_cg_support()
+DIFF_MODEL_RUNNER
+apply_one "vllm/v1/worker/gpu/model_runner.py" "cg_support_exclude_layers" "$WS/MODEL_RUNNER.diff"
+
+cat > "$WS/KDA_FUSED_RECURRENT.diff" <<'DIFF_KDA_FUSED_RECURRENT'
+diff --git a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
+--- a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
++++ b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
+@@ -561,7 +561,7 @@
+     if initial_state.stride()[1:] != (V * K, K, 1):
+         raise ValueError("`initial_state` must be contiguous within each cache slot.")
+     if state_indices.ndim != 1 or state_indices.stride(0) != 1:
+-        raise ValueError("`state_indices` must be contiguous and one-dimensional.")
++        state_indices = state_indices.reshape(-1).contiguous()
+     if A_log.ndim != 1 or not A_log.is_contiguous():
+         raise ValueError("`A_log` must be contiguous and one-dimensional.")
+     if not dt_bias.is_contiguous():
+DIFF_KDA_FUSED_RECURRENT
+apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "reshape(-1).contiguous()" "$WS/KDA_FUSED_RECURRENT.diff"
+
 
 say "3/3 verify markers + py_compile + import"
-echo "chk mla_gluon.py           = $(grep -c 'to(gl.int64)' "$ROOT/aiter/ops/triton/gluon/mla_gluon.py") (marker: to(gl.int64))"
-echo "chk gemm_op_a16w16.py      = $(grep -c 'is_current_stream_capturing' "$ROOT/aiter/ops/gemm_op_a16w16.py") (marker: is_current_stream_capturing)"
-echo "chk rocm_aiter_mla.py      = $(grep -c '_pad16 = _real_nhead < 16' "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py") (marker: _pad16 = _real_nhead < 16)"
-echo "chk triton_mla.py          = $(grep -c 'get_cudagraph_support' "$ROOT/vllm/v1/attention/backends/mla/triton_mla.py") (marker: get_cudagraph_support)"
-echo "chk gpu_worker.py          = $(grep -c 'import get_kv_cache_capacity' "$ROOT/vllm/v1/worker/gpu_worker.py") (marker: import get_kv_cache_capacity)"
-echo "chk envs.py                = $(grep -c 'VLLM_ROCM_AITER_MLA_ASM_PADDING' "$ROOT/vllm/envs.py") (marker: VLLM_ROCM_AITER_MLA_ASM_PADDING)"
+echo "chk mla_gluon.py               = $(grep -c '1 <= batch_size <= 256' "$ROOT/aiter/ops/triton/gluon/mla_gluon.py")"
+echo "chk gemm_op_a16w16.py          = $(grep -c 'is_current_stream_capturing' "$ROOT/aiter/ops/gemm_op_a16w16.py")"
+echo "chk rocm_aiter_mla.py          = $(grep -c 'asm fp8 q-row-fold verify faults' "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py")"
+echo "chk triton_mla.py              = $(grep -c 'get_cudagraph_support' "$ROOT/vllm/v1/attention/backends/mla/triton_mla.py")"
+echo "chk gpu_worker.py              = $(grep -c 'import get_kv_cache_capacity' "$ROOT/vllm/v1/worker/gpu_worker.py")"
+echo "chk envs.py                    = $(grep -c 'VLLM_ROCM_AITER_MLA_ASM_PADDING' "$ROOT/vllm/envs.py")"
+echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quant_query_input' "$ROOT/vllm/models/kimi_k3/nvidia/mla.py")"
+echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
+echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
+echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
   "$ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py" \
   "$ROOT/vllm/v1/attention/backends/mla/triton_mla.py" \
   "$ROOT/vllm/v1/worker/gpu_worker.py" \
-  "$ROOT/vllm/envs.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
-# Runtime import needs a GPU (aiter probes rocminfo); best-effort so this script
-# also runs file-only on a GPU-less box.
+  "$ROOT/vllm/envs.py" \
+  "$ROOT/vllm/models/kimi_k3/nvidia/mla.py" \
+  "$ROOT/vllm/v1/worker/gpu/attn_utils.py" \
+  "$ROOT/vllm/v1/worker/gpu/model_runner.py" \
+  "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" && echo "PY_COMPILE_OK" || { echo "PY_COMPILE_FAIL"; exit 1; }
+# Runtime import needs a GPU (aiter probes rocminfo); best-effort.
 python - <<'PYEOF'
 import importlib, traceback
 mods = ("vllm.envs",
         "vllm.v1.attention.backends.mla.rocm_aiter_mla",
         "vllm.v1.attention.backends.mla.triton_mla",
-        "vllm.v1.worker.gpu_worker")
+        "vllm.v1.worker.gpu_worker",
+        "vllm.v1.worker.gpu.attn_utils",
+        "vllm.v1.worker.gpu.model_runner")
 try:
     for m in mods: importlib.import_module(m)
     import aiter.ops.gemm_op_a16w16  # noqa: F401
+    import aiter.ops.triton.gluon.mla_gluon  # noqa: F401
     print("IMPORT_OK")
 except Exception as e:
     print("IMPORT_SKIPPED (needs GPU?):", type(e).__name__, str(e).splitlines()[-1] if str(e) else "")
