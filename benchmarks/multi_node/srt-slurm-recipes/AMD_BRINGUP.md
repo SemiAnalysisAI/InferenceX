@@ -11,6 +11,12 @@ Current development pin:
 - branch: `agent/amd-multinode-runtime`
 - commit: `105824810a67d52b58761077ad3b94d4a05eb3ac`
 
+The MI300X launcher uses srt-slurm's supported `--no-preflight` submission mode
+because the immutable squashfs files live on compute-node-local RAID rather
+than the login node. Before submission, the launcher stages the benchmark
+runtime across the same eligible node pool; missing container files still fail
+loudly when Pyxis starts the allocation.
+
 ## Scope
 
 1. Prove a single-node aggregate vLLM deployment on MI300X.

@@ -51,6 +51,8 @@ srun --ntasks-per-node=1 bash -c '
   set -euo pipefail
   runtime="${REMOTE_RUNTIME}"
   mkdir -p "\$runtime" "${REMOTE_RESULTS}"
+  test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh
+  test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '
@@ -99,6 +101,7 @@ export INFMAX_WORKSPACE="$REMOTE_RUNTIME"
 echo "Submitting ${CONFIG_PATH} with srt-slurm ${SRT_SLURM_COMMIT}"
 set +e
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" \
+    --no-preflight \
     --tags "mi300x,inferencex,github-actions,${RUN_KEY}" 2>&1)
 SRTCTL_RC=$?
 set -e

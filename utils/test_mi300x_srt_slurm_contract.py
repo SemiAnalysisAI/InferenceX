@@ -94,6 +94,9 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     ]
     assert "105824810a67d52b58761077ad3b94d4a05eb3ac" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
+    assert "--no-preflight" in launcher
+    assert "test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh" in launcher
+    assert "test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh" in launcher
     assert "scancel" not in launcher
 
 
