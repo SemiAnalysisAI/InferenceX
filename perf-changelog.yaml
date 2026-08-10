@@ -5461,6 +5461,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2328
   
 - config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Decode: gpu-memory-utilization 0.85->0.9, add max-model-len 9280, disable NCCL symmetric memory, add no-enable-flashinfer-autotune, drop stream-interval (unsupported by rust frontend)"
+    - "Prefill: gpu-memory-utilization 0.9->0.95, add max-model-len 9280, add max-num-seqs 16 + max-num-batched-tokens 32768, enable rust frontend, enable randomize-dp-dummy-inputs"
+    - "EPP: switch from max-score-picker to weighted-random-picker for better load distribution under high concurrency"
+    - "Low-latency recipe: same prefill optimizations, decode NCCL symmetric memory disabled + rust frontend enabled, drop stream-interval"
+    - "Sweep: drop low-middle point (c256/512, 1P×4D) from llmd-vllm key; low-latency recipe runs at c1 only"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
+
+- config-keys:
     - qwen3.5-fp4-mi355x-sglang
     - qwen3.5-fp4-mi355x-sglang-mtp
   description:
@@ -5621,6 +5631,12 @@
   description:
     - "Kimi K2.5 NVFP4 B300 vLLM: nightly image, TP/DEP/TEP sweep, TP8 conc-1 only, DEP gmu 0.85"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2513
+
+- config-keys:
+    - dsv4-fp4-gb200-llmd-vllm
+  description:
+    - "Sweep: drop 2P×1D DEP8 conc=4096; j-llm-d characterized 2P at c512/1024/2048 with Pareto at c1024, and c4096 hit DeepGEMM NVLink barrier timeouts under sustained load"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2498
 
 - config-keys:
     - minimaxm3-fp4-b200-vllm-agentic-mtp
