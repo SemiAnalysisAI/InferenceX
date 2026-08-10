@@ -699,6 +699,35 @@ run_benchmark_serving() {
 # Profiling trace helpers
 # --------------------------------
 
+# Emit the `vllm serve` flags that arm the torch profiler, echoing nothing when
+# PROFILE is not 1.
+#
+# vLLM moved profiler enablement out of the environment and into a
+# ProfilerConfig dataclass (present in v0.25.0+). On those builds
+# VLLM_TORCH_PROFILER_DIR is silently ignored -- the server logs "Unknown vLLM
+# environment variable detected" and /start_profile then fails, so the
+# benchmark completes normally but no trace is ever written. Detect the
+# dataclass and pass --profiler-config.* instead; fall back to the env-var
+# mechanism on older images, which still honour VLLM_TORCH_PROFILER_DIR.
+#
+# Usage:  PROFILER_ARGS=(); mapfile -t PROFILER_ARGS < <(vllm_profiler_serve_args)
+vllm_profiler_serve_args() {
+    [[ "${PROFILE:-}" == "1" ]] || return 0
+
+    local prof_dir="${VLLM_TORCH_PROFILER_DIR:-${SGLANG_TORCH_PROFILER_DIR:-/workspace/}}"
+    # ProfilerConfig requires an absolute path and rejects a bare trailing slash
+    # form only when relative, so normalise here rather than at each call site.
+    prof_dir="$(cd "$prof_dir" 2>/dev/null && pwd || echo "$prof_dir")"
+
+    if python3 -c 'from vllm.config import ProfilerConfig' 2>/dev/null; then
+        printf '%s\n' "--profiler-config.profiler=torch" \
+                      "--profiler-config.torch_profiler_dir=$prof_dir"
+    fi
+    # Older builds need no flags: they read VLLM_TORCH_PROFILER_DIR straight
+    # from the environment, which the caller has already exported. (Nothing can
+    # be exported from here -- this runs in a command-substitution subshell.)
+}
+
 _find_latest_profile_trace() {
     local latest=""
     local dir="" candidate="" base=""
@@ -782,12 +811,29 @@ move_profile_trace_for_relay() {
         return 0
     fi
 
-    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    # PROFILE_RELAY_DIR lets the caller stage onto a large node-local disk.
+    # Traces run to multiple GB per rank uncompressed, so staging into the repo
+    # bind mount silently truncates them on a full or quota-bound shared /home.
+    local relay_dir="${PROFILE_RELAY_DIR:-/workspace}"
+    mkdir -p "$relay_dir" 2>/dev/null || true
+    local dest_trace="$relay_dir/profile_${RESULT_FILENAME}.trace.json.gz"
     if [[ "$trace_file" == *.gz ]]; then
         cp -f "$trace_file" "$dest_trace"
     else
         gzip -c "$trace_file" > "$dest_trace"
     fi
+
+    # Verify the staged trace is a complete gzip stream. A truncated write (disk
+    # full) still leaves a plausible-looking file with a valid magic number, so
+    # without this the relay reports success on an unusable trace.
+    if ! gzip -t "$dest_trace" 2>/dev/null; then
+        echo "[PROFILE] ERROR: staged trace is a TRUNCATED/corrupt gzip stream: $dest_trace" >&2
+        echo "[PROFILE] ERROR: source was $trace_file ($(stat -c%s "$trace_file" 2>/dev/null) bytes)" >&2
+        echo "[PROFILE] ERROR: free space on relay dir:" >&2
+        df -h "$relay_dir" >&2 2>/dev/null || true
+        return 1
+    fi
+    echo "[PROFILE] Verified staged trace is a complete gzip stream."
 
     echo "[PROFILE] Relay trace prepared: $dest_trace (source: $trace_file)"
 }
