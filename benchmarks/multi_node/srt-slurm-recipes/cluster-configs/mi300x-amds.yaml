@@ -7,7 +7,7 @@ default_time_limit: "01:00:00"
 
 gpus_per_node: 8
 accelerator_vendor: amd
-network_interface: ens51f1np1
+network_interface: ens61f1np1
 
 # This cluster allocates accelerators through GRES and does not implement the
 # NVIDIA cluster's topology-segment directive.

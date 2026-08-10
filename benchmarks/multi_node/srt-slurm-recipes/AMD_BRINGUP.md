@@ -9,7 +9,7 @@ Current development pin:
 
 - repository: `SemiAnalysisAI/srt-slurm`
 - branch: `agent/amd-multinode-runtime`
-- commit: `c459a45bdeb0efd713bc63d5e4bd357c5ec9c510`
+- commit: `9fdb303e3564ede93c192b28a62397bbaeaad09d`
 
 ## Scope
 
@@ -79,4 +79,7 @@ the default. It also supports `gpu_sbatch_directive: gres` without changing the
 legacy NVIDIA `--gpus-per-node` default. The initial MI300X cluster profile and
 small-model aggregate recipe are checked in alongside this document. A two-node
 1-prefill/1-decode recipe uses stable Dynamo 1.3.1 and vLLM's NIXL connector as
-the first disaggregated validation target.
+the first disaggregated validation target. Stable Dynamo releases install into
+a writable job-local overlay instead of the immutable container root, and the
+control-plane endpoints use the cluster-selected private interface
+(`ens61f1np1`) rather than Slurm hostnames or the public default route.
