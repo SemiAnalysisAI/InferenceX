@@ -1015,6 +1015,40 @@ kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-c8:
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [8], spec-decoding: mtp}
 
+kimik3-fp4-mi355x-vllm-agentic-mtp-asm-fp8-k3-cgcap-syn-piecewise-sweep:
+  # Concurrency curve for the config that passed at c8 in run 31176203674:
+  # synthetic acceptance 2.51, capture ceiling mns*(k+1) = 64, cudagraph_mode
+  # FULL_AND_PIECEWISE. That cell landed at 1276.30 total tok/s/GPU. This key
+  # holds the recipe byte-identical and only moves client concurrency.
+  #
+  # THE SERVER CONFIG IS THE SAME IN ALL FOUR CELLS. MNS_PIN=16 pins
+  # max_num_seqs to 16 and the capture ceiling to 64 for every cell with
+  # 2*CONC >= 4, so c4 runs 4x scheduler headroom, c10 1.6x, c14 1.14x and c16
+  # 1x. This is a client-side concurrency curve against a fixed server, NOT a
+  # sweep of matched configurations -- say so when comparing cells.
+  #
+  # Throughput is SIMULATED: rejection_sample_method=synthetic accepts a fixed
+  # 2.51 tokens per step rather than verifying them, so these numbers are
+  # comparable to each other and to 31176203674 and to nothing else. Acceptance
+  # and any eval on this arm are void by construction.
+  #
+  # Risk on the high cells: c16 GPU-only has failed 2/2 pre-MNS_PIN with the
+  # hipErrorIllegalAddress in KimiGDNLinearAttention._forward, and c4 failed
+  # 3/3 before the pin. Both are believed to be allocation-layout faults that
+  # mns 16 dodges; that belief is exactly what c4 and c16 test here.
+  image: vllm/vllm-openai-rocm:nightly-cb8104839c141609d99f1254459ef3a4f1bd4263
+  model: moonshotai/Kimi-K3
+  model-prefix: kimik3
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [4, 10, 14, 16], spec-decoding: mtp}
+
 kimik3-fp4-mi355x-vllm-agentic-mtp-asm-k3-c8:
   # bf16 + asm + DSpark: route the multi-token VERIFY step to the PS ASM kernel.
   #
