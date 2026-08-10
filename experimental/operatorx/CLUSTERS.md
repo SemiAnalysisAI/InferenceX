@@ -3,16 +3,16 @@
 Reference for the clusters operatorx targets: hardware, how the runner is
 launched per platform, and the per-platform quirks. Access details
 (hostnames, credentials, checkout paths) are deployment-specific and are not
-included here — fill them in for your own environment.
+included here. Fill them in for your own environment.
 
-Platform → cluster routing lives in `operatorx/clusters.py` (`CLUSTER_PLATFORMS`);
+Platform → cluster routing lives in `operatorx/clusters.py` (`CLUSTER_PLATFORMS`).
 SLURM/env defaults live in `scripts/submit_run.py` (`DEFAULT_CLUSTER`).
 
 ## Conventions
 
-- `submit_run.py` is **SLURM-only** — it submits `sbatch`/`srun` jobs and is
-  used on the NVIDIA and AMD clusters. On TPU / Trainium hosts there is no
-  SLURM; run `python -m operatorx` directly inside the appropriate venv/image.
+- `submit_run.py` is **SLURM-only**. It submits `sbatch`/`srun` jobs and is
+  used on the NVIDIA and AMD clusters. TPU and Trainium hosts do not use
+  SLURM. Run `python -m operatorx` directly inside the appropriate venv/image.
 - Point `OPERATORX_SQUASH_DIR` at your container squash directory, and set
   `OPERATORX_PARTITION` / `OPERATORX_ACCOUNT` / `OPERATORX_QOS` to your
   cluster's SLURM values (see the env-var table at the bottom).
@@ -53,7 +53,7 @@ OPERATORX_JOB_NAME=<job-name> python3 scripts/submit_run.py nvidia
 |-------------------|--------------------------------------------------------------|
 | Hardware          | 8× B300 per node                                             |
 | OS note           | If the login node runs Python 3.10, `submit_run.py` falls back to `tomli` for TOML parsing |
-| Excluded backends | DeepEP — known IBGDA hangs on this fabric, so exclude it     |
+| Excluded backends | Exclude DeepEP because IBGDA is known to hang on this fabric |
 
 Override the SLURM knobs for your cluster and drop DeepEP:
 
@@ -70,7 +70,7 @@ python3 scripts/submit_run.py nvidia
 
 ### `b200_nvl72`
 
-Present in `CLUSTER_PLATFORMS` (routes to nvidia) as a placeholder; no
+Present in `CLUSTER_PLATFORMS` (routes to nvidia) as a placeholder. There is no
 hardware-specific guidance yet.
 
 ## AMD — `mi355x_8x`
@@ -91,14 +91,14 @@ python3 scripts/submit_run.py amd
 
 ## TPU
 
-No SLURM — run `python -m operatorx` directly on the TPU VM. Access a VM with
+No SLURM is available. Run `python -m operatorx` directly on the TPU VM. Access a VM with
 `gcloud compute tpus tpu-vm ssh <vm-name> --zone=<zone>`.
 
 | Cluster id | Topology | Chips | ws range | Use for                                             |
 |------------|----------|-------|----------|-----------------------------------------------------|
 | `v6e_1x`   | 1×1      | 1     | 1        | Single-chip tests (gemm, moe_gemm). No collectives. |
 | `v6e_4x`   | 2×2      | 4     | 1–4      | Collectives + MoE-EP up to ws=4.                    |
-| `v6e_pod`  | pod      | pod   | —        | Multi-host v6e pod slice.                           |
+| `v6e_pod`  | pod      | pod   | auto     | Multi-host v6e pod slice. Device count is auto-detected. |
 
 ```bash
 OPERATORX_CLUSTER=v6e_4x python -m operatorx
@@ -114,22 +114,22 @@ pip install -e ~/maxtext
 
 ## Trainium — `trn3_16x`
 
-No SLURM — run `python -m operatorx` directly on the instance.
+No SLURM is available. Run `python -m operatorx` directly on the instance.
 
 | Setting             | Value                                                             |
 |---------------------|-------------------------------------------------------------------|
 | Hardware            | 16 Neuron devices × 4 cores (64 physical NCs, 8 LNC=2 logical units) |
 | Per-device HBM      | 144 GiB                                                           |
-| Cluster ids         | `trn3_16x` (full host); `trn3_8x`, `trn3_1x` are subset configs   |
+| Cluster ids         | `trn3_16x` (full host). `trn3_8x` and `trn3_1x` are subset configs |
 | Device topology cmd | `/opt/aws/neuron/bin/neuron-ls` (may not be on `PATH`)            |
 
 Neuron venvs (standard AWS Neuron paths under `/opt/`):
 
-- `aws_neuronx_venv_pytorch_2_9` — base PyTorch + NeuronX
-- `aws_neuronx_venv_pytorch_2_9_nxd_inference` — adds NeuronX Distributed Inference
-- `aws_neuronx_venv_pytorch_2_9_nxd_training` — adds NXD training
-- `aws_neuronx_venv_pytorch_inference_vllm_0_16` — vLLM build
-- `aws_neuronx_venv_jax_0_7` — Jax (not used by operatorx)
+- `aws_neuronx_venv_pytorch_2_9` provides base PyTorch and NeuronX
+- `aws_neuronx_venv_pytorch_2_9_nxd_inference` adds NeuronX Distributed Inference
+- `aws_neuronx_venv_pytorch_2_9_nxd_training` adds NXD training
+- `aws_neuronx_venv_pytorch_inference_vllm_0_16` provides the vLLM build
+- `aws_neuronx_venv_jax_0_7` provides Jax (not used by operatorx)
 
 ```bash
 source /opt/aws_neuronx_venv_pytorch_2_9/bin/activate
@@ -172,6 +172,6 @@ CLUSTER_PLATFORMS = {
 | `OPERATORX_TESTLISTS`  | all under `testlists/`        | CSV of testlist stems to run                                        |
 | `OPERATORX_TIME_MIN`   | `30`                          | `--time` (minutes)                                                  |
 
-`WORLD_SIZES = [1, 2, 4, 8]` — single-node only; multi-node NCCL IB bring-up
+`WORLD_SIZES = [1, 2, 4, 8]` supports single-node runs only. Multi-node NCCL IB bring-up
 currently hangs on the B200/B300 fabrics. `MASTER_ADDR` is derived by parsing
 `SLURM_NODELIST`.
