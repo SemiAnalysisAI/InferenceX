@@ -21,7 +21,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ $FRAMEWORK == "dynamo-sglang" || $FRAMEWORK == "sgl-router" ]]; then
         if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
             export MODEL_PATH="/models/DeepSeek-R1-0528"
             export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
@@ -32,7 +32,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             fi
             export SRT_SLURM_MODEL_PREFIX="glm5.2-fp8"
         else
-            echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
+            echo "Unsupported model prefix/precision for SGLang: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
@@ -44,16 +44,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
-    elif [[ $FRAMEWORK == "vllm" ]]; then
+    elif [[ $FRAMEWORK == "vllm" || $FRAMEWORK == "vllm-router" ]]; then
         if [[ $MODEL_PREFIX == "kimik3" && $PRECISION == "fp4" ]]; then
             export MODEL_PATH="/models/gharunners/hf-hub-cache/Kimi-K3"
             export SRT_SLURM_MODEL_PREFIX="kimik3"
         else
-            echo "Unsupported model prefix/precision for vllm: $MODEL_PREFIX/$PRECISION"
+            echo "Unsupported model prefix/precision for vLLM: $MODEL_PREFIX/$PRECISION"
             exit 1
         fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, vllm"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, vllm, sgl-router, vllm-router"
         exit 1
     fi
 
@@ -64,7 +64,21 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    if [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
+    if [[ -n "${SRT_SLURM_REPOSITORY:-}" || -n "${SRT_SLURM_REF:-}" ]]; then
+        if [[ -z "${SRT_SLURM_REPOSITORY:-}" || -z "${SRT_SLURM_REF:-}" ]]; then
+            echo "SRT_SLURM_REPOSITORY and SRT_SLURM_REF must be set together" >&2
+            exit 1
+        fi
+        git clone "$SRT_SLURM_REPOSITORY" "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR"
+        git checkout --detach "$SRT_SLURM_REF"
+        if [[ "$(git rev-parse HEAD)" != "$SRT_SLURM_REF" ]]; then
+            echo "srt-slurm checkout does not match requested exact commit: $SRT_SLURM_REF" >&2
+            exit 1
+        fi
+        mkdir -p configs
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs" configs
+    elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.2" ]]; then
         # v1.0.44 includes the AgentX custom benchmark integration and passes
         # every logical SGLang worker's Prometheus URL to AIPerf.
         git clone --branch v1.0.44 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
@@ -103,7 +117,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Map container images to local squash files based on framework
     NGINX_SQUASH_FILE="/data/containers/nginx+1.27.4.sqsh"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ $FRAMEWORK == "dynamo-sglang" || $FRAMEWORK == "sgl-router" ]]; then
         # SGLang container mapping
         if [[ $MODEL_PREFIX == "glm5.2" ]]; then
             SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -115,7 +129,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
         SQUASH_FILE="/data/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
-    elif [[ $FRAMEWORK == "vllm" ]]; then
+    elif [[ $FRAMEWORK == "vllm" || $FRAMEWORK == "vllm-router" ]]; then
         CONTAINER_KEY="$IMAGE"
         SQUASH_FILE="/data/gharunners/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     fi
@@ -150,10 +164,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$IS_AGENTIC" == "1" ]]; then
         AIPERF_MMAP_CACHE_HOST_PATH="/home/sa-shared/gharunners/ai-perf-cache"
         HF_HUB_CACHE_HOST_PATH="/models/gharunners/hf-hub-cache"
+        ROUTER_WHEEL_CACHE_HOST_PATH="/home/sa-shared/gharunners/router-wheels"
         mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH"
+        mkdir -p "$ROUTER_WHEEL_CACHE_HOST_PATH"
         DEFAULT_MOUNTS_BLOCK="default_mounts:
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
-  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache
+  ${ROUTER_WHEEL_CACHE_HOST_PATH}: /router_wheels"
     fi
     echo "Creating srtslurm.yaml configuration..."
     cat > srtslurm.yaml <<EOF
@@ -176,6 +193,8 @@ containers:
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   dynamo-vllm: "${SQUASH_FILE}"
+  sgl-router: "${SQUASH_FILE}"
+  vllm-router: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
   latest: "${SQUASH_FILE}"
   "${CONTAINER_KEY}": "${SQUASH_FILE}"
@@ -232,6 +251,12 @@ EOF
     trap 'rc=$?; bundle_server_logs "$LOGS_DIR" "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz"; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT INT TERM HUP
 
     stream_slurm_job_log "$JOB_ID" "$LOG_FILE" || exit 1
+    # Native router validation is all-or-nothing. Keep the shared log helper's
+    # legacy behavior for unrelated launchers that intentionally retain
+    # partial results from timed-out allocations.
+    if [[ "$FRAMEWORK" == "sgl-router" || "$FRAMEWORK" == "vllm-router" ]]; then
+        wait_for_slurm_job_success "$JOB_ID" || exit 1
+    fi
 
     set -x
 
