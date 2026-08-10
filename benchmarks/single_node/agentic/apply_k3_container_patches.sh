@@ -19,9 +19,12 @@
 #                fallback gate: gpu/attn_utils.py, gpu/model_runner.py,
 #                kimi_k3/nvidia/mla.py  (rocm_aiter_mla.py hunks NOT taken --
 #                they conflict with the #50578/#51011 asm strategy)
-#   KDA state_indices coercion (kimi_k3 KDA fused_recurrent): flatten a
-#                non-contiguous/[B,1] state_indices instead of raising (needed
-#                for eager/piecewise warmup)
+#   vllm  #51682 give the AMD packed KDA decode kernel the state-index stride:
+#                pass stride_state_indices and load state_indices with it
+#                (matches the NVIDIA copy). With spec decode the KDA slot is
+#                block_table[:, 0], a strided view (1+num_spec_blocks wide) --
+#                the unit-stride assumption OOB-faulted; replaces the earlier
+#                reshape(-1) coercion.
 #   HYBRID verify: route small-head fp8 DSpark verify to the Gluon flatten
 #                (use_gluon_verify) + mla_gluon bh16bn128 batch<=256 relax +
 #                fp8-query dequant. Fixes the asm fp8 q-row-fold verify HSA
@@ -1086,17 +1089,43 @@ cat > "$WS/KDA_FUSED_RECURRENT.diff" <<'DIFF_KDA_FUSED_RECURRENT'
 diff --git a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
 --- a/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
 +++ b/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py
-@@ -561,7 +561,7 @@
+@@ -459,6 +459,7 @@
+     stride_g_token: tl.constexpr,
+     stride_beta_token: tl.constexpr,
+     stride_state_token: tl.constexpr,
++    stride_state_indices,
+     H: tl.constexpr,
+     K: tl.constexpr,
+     V: tl.constexpr,
+@@ -476,7 +477,7 @@
+     mask_v = o_v < V
+     mask_state = mask_v[:, None] & mask_k[None, :]
+
+-    state_idx = tl.load(state_indices + i_n).to(tl.int64)
++    state_idx = tl.load(state_indices + i_n * stride_state_indices).to(tl.int64)
+     p_out = out + (i_n * H + i_h) * V + o_v
+     if state_idx <= 0:
+         tl.store(p_out, tl.zeros([BV], dtype=tl.float32), mask=mask_v)
+@@ -560,7 +561,7 @@
      if initial_state.stride()[1:] != (V * K, K, 1):
          raise ValueError("`initial_state` must be contiguous within each cache slot.")
-     if state_indices.ndim != 1 or state_indices.stride(0) != 1:
+-    if state_indices.ndim != 1 or state_indices.stride(0) != 1:
 -        raise ValueError("`state_indices` must be contiguous and one-dimensional.")
-+        state_indices = state_indices.reshape(-1).contiguous()
++    if state_indices.ndim != 1:
++        raise ValueError("`state_indices` must be one-dimensional.")
      if A_log.ndim != 1 or not A_log.is_contiguous():
          raise ValueError("`A_log` must be contiguous and one-dimensional.")
      if not dt_bias.is_contiguous():
+@@ -608,6 +609,7 @@
+         stride_g_token=raw_g.stride(1),
+         stride_beta_token=raw_beta.stride(1),
+         stride_state_token=initial_state.stride(0),
++        stride_state_indices=state_indices.stride(0),
+         H=H,
+         K=K,
+         V=V,
 DIFF_KDA_FUSED_RECURRENT
-apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "reshape(-1).contiguous()" "$WS/KDA_FUSED_RECURRENT.diff"
+apply_one "vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py" "stride_state_indices" "$WS/KDA_FUSED_RECURRENT.diff"
 
 
 say "3/3 verify markers + py_compile + import"
@@ -1109,7 +1138,7 @@ echo "chk envs.py                    = $(grep -c 'VLLM_ROCM_AITER_MLA_ASM_PADDIN
 echo "chk mla.py                     = $(grep -c 'if not self.impl.supports_quant_query_input' "$ROOT/vllm/models/kimi_k3/nvidia/mla.py")"
 echo "chk attn_utils.py              = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/attn_utils.py")"
 echo "chk model_runner.py            = $(grep -c 'cg_support_exclude_layers' "$ROOT/vllm/v1/worker/gpu/model_runner.py")"
-echo "chk fused_recurrent.py         = $(grep -c 'reshape(-1).contiguous()' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
+echo "chk fused_recurrent.py         = $(grep -c 'stride_state_indices' "$ROOT/vllm/models/kimi_k3/amd/ops/third_party/kda/fused_recurrent.py")"
 echo "triton          = $(python -c 'import triton; print(triton.__version__)')  (expect 3.7.0*)"
 python -m py_compile "$ROOT/aiter/ops/triton/gluon/mla_gluon.py" \
   "$ROOT/aiter/ops/gemm_op_a16w16.py" \
