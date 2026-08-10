@@ -104,6 +104,45 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert "scancel" not in launcher
 
 
+def test_official_matrix_routes_aggregate_through_the_pinned_srt_launcher():
+    config = yaml.safe_load(MASTER_CONFIG_PATH.read_text())[
+        "qwen3-0.6b-fp16-mi300x-vllm-srt-agg"
+    ]
+    search = config["scenarios"]["fixed-seq-len"][0]["search-space"]
+    launcher = SRT_LAUNCHER_PATH.read_text()
+
+    assert config["runner"] == "mi300x-disagg"
+    assert config["multinode"] is False
+    assert search == [{"tp": 1, "conc-list": [1]}]
+    assert (
+        'CONFIG_FILE="recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"'
+        in launcher
+    )
+    assert 'JOB_BATCH_HOST=$(scontrol show job "$JOB_ID" -dd' in launcher
+    assert '--nodelist="$JOB_BATCH_HOST"' in launcher
+
+
+def test_aggregate_recipe_uses_direct_vllm_without_dynamo_or_a_router():
+    recipe = yaml.safe_load(RECIPE_PATH.read_text())
+
+    assert recipe["resources"] == {
+        "gpu_type": "mi300x",
+        "gpus_per_node": 1,
+        "agg_nodes": 1,
+        "agg_workers": 1,
+        "gpus_per_agg": 1,
+    }
+    assert recipe["frontend"] == {
+        "type": "vllm",
+        "enable_multiple_frontends": False,
+    }
+    assert recipe["backend"]["connector"] is None
+    serialized = RECIPE_PATH.read_text().lower()
+    assert "dynamo" not in serialized
+    assert "nixl" not in serialized
+    assert "moriio" not in serialized
+
+
 def test_fixed_sequence_recipe_uses_inferencex_custom_benchmark():
     recipe = yaml.safe_load(RECIPE_PATH.read_text())
     benchmark = recipe["benchmark"]

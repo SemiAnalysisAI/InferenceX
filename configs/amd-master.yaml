@@ -1499,6 +1499,23 @@ minimaxm3-fp8-mi325x-vllm-agentic:
 
 # Small-model orchestration validation for SemiAnalysisAI/srt-slurm on AMD.
 # This is intentionally a correctness lane, not a performance submission.
+qwen3-0.6b-fp16-mi300x-vllm-srt-agg:
+  image: vllm/vllm-openai-rocm:v0.26.0
+  model: Qwen/Qwen3-0.6B
+  model-prefix: qwen3-0.6b
+  runner: mi300x-disagg
+  precision: fp16
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 128
+      osl: 32
+      search-space:
+      # The srt-slurm custom benchmark exercises both c1 and c4 in one
+      # allocation; keep one matrix point so the server is launched once.
+      - { tp: 1, conc-list: [1] }
+
 qwen3-0.6b-fp16-mi300x-vllm-srt-disagg:
   image: vllm/vllm-openai-rocm:v0.26.0
   model: Qwen/Qwen3-0.6B

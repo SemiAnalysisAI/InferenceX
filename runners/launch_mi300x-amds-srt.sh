@@ -9,9 +9,16 @@ SLURM_PARTITION="compute"
 EXCLUDED_NODES="chi-mi300x-049,chi-mi300x-121"
 REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
 
-: "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
+
+# The existing MI300X orchestration-capable runner pool defaults to the
+# aggregate recipe. Multinode rows continue to pass their recipe explicitly
+# through the existing worker additional-settings contract.
+if [[ -z "${CONFIG_FILE:-}" && "${RUNNER_TYPE:-}" == "mi300x-disagg" ]]; then
+    CONFIG_FILE="recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"
+fi
+: "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 LOCAL_RECIPE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/${CONFIG_PATH#recipes/}"
@@ -129,18 +136,23 @@ while squeue --noheader --jobs "$JOB_ID" | grep -q .; do
     sleep 15
 done
 
-read -r JOB_STATE JOB_EXIT JOB_NODE < <(
+read -r JOB_STATE JOB_EXIT JOB_NODELIST < <(
     sacct -X --noheader --parsable2 --jobs "$JOB_ID" \
         --format=State,ExitCode,NodeList | head -1 | tr '|' ' '
 )
-echo "srt-slurm job ${JOB_ID}: state=${JOB_STATE} exit=${JOB_EXIT} node=${JOB_NODE}"
+JOB_BATCH_HOST=$(scontrol show job "$JOB_ID" -dd | sed -n 's/.*BatchHost=\([^ ]*\).*/\1/p' | head -1)
+[[ -n "$JOB_BATCH_HOST" ]] || {
+    echo "Unable to resolve BatchHost for srt-slurm job ${JOB_ID}" >&2
+    exit 1
+}
+echo "srt-slurm job ${JOB_ID}: state=${JOB_STATE} exit=${JOB_EXIT} nodes=${JOB_NODELIST} batch_host=${JOB_BATCH_HOST}"
 
 # Results live on the allocation's node-local RAID. Retrieve the small result
 # bundle with a separate completed Slurm job on the batch node.
 RETRIEVE_DIR="${WORK_DIR}/retrieved"
 mkdir -p "$RETRIEVE_DIR"
 RESULT_PAYLOAD=$(srun --partition="$SLURM_PARTITION" --nodes=1 --ntasks=1 \
-    --cpus-per-task=1 --time=00:05:00 --nodelist="$JOB_NODE" \
+    --cpus-per-task=1 --time=00:05:00 --nodelist="$JOB_BATCH_HOST" \
     bash -c "tar -C '${REMOTE_RESULTS}/${JOB_ID}' -czf - . | base64 -w0")
 printf '%s' "$RESULT_PAYLOAD" | base64 -d | tar -xzf - -C "$RETRIEVE_DIR"
 
@@ -150,9 +162,13 @@ if [[ -f "$RETRIEVE_DIR/runtime-logs.tar.gz" ]]; then
 fi
 cp -R "$RETRIEVE_DIR/." "$GITHUB_WORKSPACE/LOGS/"
 
-PREFILL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP))
-DECODE_GPUS=$((DECODE_NUM_WORKERS * DECODE_TP))
-TOTAL_GPUS=$((PREFILL_GPUS + DECODE_GPUS))
+if [[ "${DISAGG:-false}" == "true" ]]; then
+    PREFILL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP))
+    DECODE_GPUS=$((DECODE_NUM_WORKERS * DECODE_TP))
+    TOTAL_GPUS=$((PREFILL_GPUS + DECODE_GPUS))
+else
+    TOTAL_GPUS=$((TP * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+fi
 shopt -s nullglob
 RESULTS=("$RETRIEVE_DIR"/fixed-seq/*.json)
 shopt -u nullglob
@@ -160,7 +176,11 @@ shopt -u nullglob
 for result in "${RESULTS[@]}"; do
     concurrency=$(basename "$result" | sed -n 's/.*-c\([0-9][0-9]*\)\.json/\1/p')
     [[ -n "$concurrency" ]] || { echo "Cannot parse concurrency from $result" >&2; exit 1; }
-    output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}_ctx_${PREFILL_GPUS}_gen_${DECODE_GPUS}.json"
+    if [[ "${DISAGG:-false}" == "true" ]]; then
+        output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}_ctx_${PREFILL_GPUS}_gen_${DECODE_GPUS}.json"
+    else
+        output="${GITHUB_WORKSPACE}/${RESULT_FILENAME}_srt-${JOB_ID}_conc${concurrency}_gpus_${TOTAL_GPUS}.json"
+    fi
     cp "$result" "$output"
     echo "Collected $output"
 done
