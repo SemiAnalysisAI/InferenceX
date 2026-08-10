@@ -5736,3 +5736,15 @@
     - "Upgrade SGLang from nightly-dev-cu13-20260711-7de33ce8 to nightly-dev-cu13-20260719-99f5a6f4, the latest nightly before the scheduler WAR-barrier regression in SGLang #31687"
     - "Restore the pre-watchdog AgentX concurrency grid and use AIPerf's default 300-second per-trajectory idle-gap cap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2319
+
+- config-keys:
+    - kimik3-fp4-mi355x-vllm-agentic-dspark
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Add Kimi-K3 (MXFP4) agentic-coding recipe on MI355X (gfx950), TP8, concurrency sweep [1, 2, 4, 8]"
+    - "Enable DSpark speculative decoding at level 2 (num_speculative_tokens=2) on the Inferact/Kimi-K3-DSpark draft head, probabilistic drafting with synthetic acceptance pinned to golden AL 2.51"
+    - "Enable AITER MLA on the asm-padded persistent route (VLLM_ROCM_AITER_MLA_ASM_PADDING=asm) plus AITER MoE"
+    - "Enable fp8 KV cache (--kv-cache-dtype fp8) at native 1M context (--max-model-len 1048576)"
+    - "Set --gpu-memory-utilization 0.95, --max-num-batched-tokens 4096, and cap --max-num-seqs at 8 to bound long-context prefill activations"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2551
