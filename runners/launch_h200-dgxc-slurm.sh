@@ -89,7 +89,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     elif [[ $IS_AGENTIC == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
         # Overlay the single H200 aggregated recipe on the upstream release
         # that provides custom benchmarks, Dynamo wheels, and affinity config.
-        git clone --branch v1.0.10 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        # v1.0.38 also injects every logical SGLang worker leader's /metrics URL
+        # into AIPERF_SERVER_METRICS_URLS for custom benchmarks; v1.0.10 wired
+        # that only for built-in AIPerf runners, so the AgentX trace artifacts
+        # came back with no backend engine series behind them.
+        git clone --branch v1.0.38 --single-branch https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR"
         mkdir -p recipes/sglang/deepseek-v4/agentic
         cp "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/agentic/agg-h200-tp8-mtp-kvoffload.yaml" \
