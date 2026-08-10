@@ -66,7 +66,7 @@ docs/<topic>.md
 docs/<topic>_zh.md
 ```
 
-简体中文页面必须使用 `_zh.md` 后缀。仅面向 agent 的说明文件（`AGENTS.md`、`CLAUDE.md`、`KLAUD_DEBUG.md`）以及 `.github/` 或 `utils/` 下的内部参考资料是已规定的仅英文例外；不要自行增加例外。
+简体中文页面必须使用 `_zh.md` 后缀。仅面向 Agent 的说明文件（`AGENTS.md`、`CLAUDE.md`、`KLAUD_DEBUG.md`）、`.github/` 或 `utils/` 下的内部参考资料，以及 `configs/CONFIGS.md` 和 `experimental/README.md` 等贴近实现的参考资料，是已规定的仅英文例外。不要自行增加例外。
 
 ### 2. 添加双向语言切换器
 

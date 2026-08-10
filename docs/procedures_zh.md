@@ -51,7 +51,7 @@
 | [`debug-mi300-enroot-pyxis.md`](../.claude/commands/debug-mi300-enroot-pyxis.md) | MI300X 集群初始化调试 |
 | [`merge-prs.md`](../.claude/commands/merge-prs.md) | 维护者 PR 合并协调 |
 | [`fix-klaud-cron-prs.md`](../.claude/commands/fix-klaud-cron-prs.md) | 自动镜像更新 PR 修复 |
-| [`nuke.md`](../.claude/commands/nuke.md) | 破坏性清理，必须明确授权 |
+| [`nuke.md`](../.claude/commands/nuke.md) | 自动更新镜像标签，每个 Recipe 系列创建一个 PR |
 
 聚焦页面是可发现的流程层。这些源 Playbook 保留为实现细节或特权维护路径，只有在聚焦指南明确链接时才打开。
 

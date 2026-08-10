@@ -66,7 +66,7 @@ docs/<topic>.md
 docs/<topic>_zh.md
 ```
 
-The `_zh.md` suffix is required for the Simplified Chinese page. Agent-only instructions (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`) and internal references under `.github/` or `utils/` are the documented English-only exceptions. Do not invent new exceptions.
+The `_zh.md` suffix is required for the Simplified Chinese page. Agent-only instructions (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`), internal references under `.github/` or `utils/`, and implementation-local references such as `configs/CONFIGS.md` and `experimental/README.md` are the documented English-only exceptions. Do not invent new exceptions.
 
 ### 2. Add reciprocal switchers
 

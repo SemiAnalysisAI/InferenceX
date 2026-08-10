@@ -188,7 +188,7 @@ gh workflow run e2e-tests.yml \
   -f duration-override=''
 ```
 
-Use only inputs shown by `gh workflow view ... --ref main --yaml`. For example, `agentx-fast` exists in both audited definitions, but `fail-fast` and trusted-changelog inputs do not exist in the branch-local definition. Do not pass target-ref-specific options by assumption.
+Use only inputs shown by `gh workflow view ... --ref main --yaml`. Inputs can differ across dispatch refs, so do not pass target-ref-specific options by assumption.
 
 Dispatch is asynchronous and may not immediately appear. Find the run by exact display title instead of assuming the newest run belongs to you:
 
@@ -245,7 +245,7 @@ Canary and fail-fast solve different problems:
 5. Non-fail-fast labels leave matrix fail-fast false so other points continue and preserve broader diagnostic coverage.
 6. A fail-fast run can conclude `cancelled` because sibling points were cancelled after a failure. Classify the first real failure before treating cancellation as an infrastructure event.
 
-Manual `e2e-tests.yml` has no canary. In this branch snapshot, its matrix families hard-code fail-fast false. The audited `origin/main` workflow exposes a `fail-fast` input. Always use the definition from the dispatch ref.
+Manual `e2e-tests.yml` has no canary. Its `fail-fast` input defaults to false and is passed to every matrix job family. Always use the definition from the dispatch ref.
 
 ## Monitoring and reruns
 

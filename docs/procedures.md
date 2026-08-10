@@ -51,7 +51,7 @@ Focused guides intentionally link these existing playbooks instead of copying th
 | [`debug-mi300-enroot-pyxis.md`](../.claude/commands/debug-mi300-enroot-pyxis.md) | MI300X cluster setup debugging |
 | [`merge-prs.md`](../.claude/commands/merge-prs.md) | Maintainer PR merge coordination |
 | [`fix-klaud-cron-prs.md`](../.claude/commands/fix-klaud-cron-prs.md) | Automated image-bump PR repair |
-| [`nuke.md`](../.claude/commands/nuke.md) | Destructive cleanup, explicit authorization required |
+| [`nuke.md`](../.claude/commands/nuke.md) | Automated image-tag bump, one PR per recipe family |
 
 The focused pages are the discoverable procedure layer. These source playbooks remain implementation detail or privileged maintenance paths and should be opened only when the focused guide links them.
 

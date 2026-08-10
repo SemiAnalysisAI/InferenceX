@@ -188,7 +188,7 @@ gh workflow run e2e-tests.yml \
   -f duration-override=''
 ```
 
-只使用 `gh workflow view ... --ref main --yaml` 展示的输入。例如，两个审计定义都包含 `agentx-fast`，但分支本地定义没有 `fail-fast` 与受信任 Changelog 输入。不得凭假设传入目标 Ref 特有的选项。
+只使用 `gh workflow view ... --ref main --yaml` 展示的输入。不同派发 Ref 的输入可能不同，不得凭假设传入目标 Ref 特有的选项。
 
 派发是异步的，Run 可能不会立刻出现。应按准确 Display Title 查找，而不是假定最新 Run 属于自己：
 
@@ -245,7 +245,7 @@ Canary 和 Fail-fast 解决不同问题：
 5. 非 Fail-fast 标签会保持矩阵 Fail-fast 为 false，使其他点继续运行并保留更广泛的诊断覆盖。
 6. Fail-fast Run 可能因失败后兄弟项被取消而最终显示 `cancelled`。将取消归类为基础设施事件前，必须先识别第一个真实失败。
 
-手动 `e2e-tests.yml` 没有 Canary。在本分支快照中，其矩阵 Family 将 Fail-fast 硬编码为 false；审计过的 `origin/main` Workflow 则公开 `fail-fast` 输入。始终使用派发 Ref 对应的定义。
+手动 `e2e-tests.yml` 没有 Canary。它的 `fail-fast` 输入默认为 false，并传递给每个矩阵 Job Family。始终使用派发 Ref 对应的定义。
 
 ## 监控与重跑
 

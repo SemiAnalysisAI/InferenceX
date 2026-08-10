@@ -56,7 +56,7 @@ python3 utils/process_result.py
 
 应用既能摄取聚合行，也能摄取逐配置评测目录。两种输入最终落到相同的自然键，而 sample 文件把详细数据附加到已经解析的评测行。因此，仅有聚合文件只能证明完成了收集，不能证明 sample 完整；当逐 sample 输出很重要时，必须核对逐配置制品。
 
-来源：[单节点评测上传/验证](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L362-L388)、[多节点评测上传/验证](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L416-L441)、[评测收集器](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-evals.yml#L24-L46)、[应用侧评测制品处理](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts#L738-L792)。
+来源：[单节点评测上传/验证](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-tmpl.yml#L362-L385)、[多节点评测上传/验证](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/benchmark-multinode-tmpl.yml#L416-L434)、[评测收集器](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/collect-evals.yml#L24-L46)、[应用侧评测制品处理](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/ingest-ci-run.ts#L738-L792)。
 
 ### 在不改变 run 的情况下检查结果制品
 
@@ -103,7 +103,7 @@ push 到 `main` 时，`run-sweep.yml` 只会在 setup 和适用的收集路径�
 
 之后，应用工作流依次运行：制品准备、迁移、数据库摄取、run overrides、数据库验证、缓存失效和 unmapped entity 检查。数据库写入具有幂等性（`ON CONFLICT DO UPDATE` 或 `DO NOTHING`），因此指向正确目标的摄取在部分失败后可以安全恢复。
 
-来源：[dispatch 负载与关卡](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L972-L1015)、[制品选择](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48)、[应用摄取阶段](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124)、[幂等性设计理由](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34)。
+来源：[dispatch 负载与关卡](https://github.com/SemiAnalysisAI/InferenceX/blob/0c28706b33d4a796b82f6f9c3594c19c46365575/.github/workflows/run-sweep.yml#L978-L1021)、[制品选择](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/packages/db/src/lib/ci-artifact-preparation.ts#L10-L48)、[应用摄取阶段](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/.github/workflows/ingest-results.yml#L50-L124)、[幂等性设计理由](https://github.com/SemiAnalysisAI/InferenceX-app/blob/3be1c34a174f62fea2194f1133210e692e5bf415/docs/data-pipeline.md#L26-L34)。
 
 ### 验证准确的下游摄取
 
