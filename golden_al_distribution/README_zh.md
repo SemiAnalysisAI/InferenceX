@@ -6,7 +6,7 @@
 
 ## 为什么选择 SPEED-Bench
 
-[SPEED-Bench](https://arxiv.org/abs/2604.09557) 是一个统一的推测解码基准，覆盖多样的语义领域和真实的服务场景。其 Qualitative split 包含 880 个语义多样的提示词——11 个类别各 80 个——用于测量接受率（AR）和接受长度（AL）。其 Throughput splits 覆盖固定的 1K–32K 输入长度和多种熵区间，用于系统级评估。该基准使用真实提示词，因为随机 token 输入会扭曲接受行为、专家路由和吞吐量测量结果。
+[SPEED-Bench](https://arxiv.org/abs/2604.09557) 是一个统一的推测解码基准，覆盖多样的语义领域和真实的服务场景。其 Qualitative split 包含 880 个语义多样的提示词，分为 11 个类别，每类 80 个。该 split 用于测量接受率（AR）和接受长度（AL）。其 Throughput splits 覆盖固定的 1K–32K 输入长度和多种熵区间，用于系统级评估。该基准使用真实提示词，因为随机 token 输入会扭曲接受行为、专家路由和吞吐量测量结果。
 
 SPEED-Bench 是一个实用的跨引擎标准，而不是 InferenceX 独有的工作负载：
 
@@ -22,7 +22,7 @@ AL 取决于工作负载：草稿模型的预测在某些领域比其他领域�
 
 ## AgentX 公平性指南
 
-根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线；所有评估同一模型和模式的提交都使用同一条曲线。
+根据 AgentX 指南，每个模型、思考模式和草稿长度都有一个已提交的黄金 AL。当某个基准场景启用合成接受后，提交可以选择任意受支持的草稿长度，但不能替换为其他接受目标。不同模型保留各自基于 SPEED-Bench 测得的曲线。所有评估同一模型和模式的提交都使用同一条曲线。
 
 vLLM 通过合成拒绝采样支持这一策略。例如，EAGLE3 运行可以通过 `synthetic_acceptance_length` 注入所选 YAML 值：
 
@@ -47,7 +47,7 @@ SGLANG_SIMULATE_ACC_METHOD: match-expected
 SGLANG_SIMULATE_ACC_TOKEN_MODE: real-draft-token
 ```
 
-TensorRT-LLM 通过 [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078) 支持该策略。**注意存在差一（off-by-one）：** 该变量只统计被接受的*草稿* token，不包括 bonus/验证 token，因此应设置为黄金 AL **减 1**。支持小数值——整数部分在每次迭代中始终被接受，小数部分是额外接受一个草稿 token 的概率。例如，黄金 AL 为 `3.5` 时应设置：
+TensorRT-LLM 通过 [`TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS`](https://github.com/NVIDIA/TensorRT-LLM/blob/2cbdaa0ffa36fbef7960a0ad9f0458373025fa9f/tensorrt_llm/_torch/speculative/interface.py#L1065-L1078) 支持该策略。**注意存在差一（off-by-one）：** 该变量只统计被接受的*草稿* token，不包括 bonus/验证 token，因此应设置为黄金 AL **减 1**。小数值也受支持。整数部分在每次迭代中始终被接受，小数部分是额外接受一个草稿 token 的概率。例如，黄金 AL 为 `3.5` 时应设置：
 
 ```bash
 TLLM_SPEC_DECODE_FORCE_NUM_ACCEPTED_TOKENS=2.5
@@ -97,11 +97,11 @@ gh workflow run speedbench-al.yml \
 
 在接受更新后的曲线之前，审阅者应验证：
 
-- 所有请求的草稿长度和思考模式均已完成；
-- 详细输出内容连贯，并使用预期的思考模式；
-- 服务日志中没有回退、禁用草稿或聊天模板错误；
-- YAML 元数据与触发时使用的镜像、采样设置、模型和推测方法一致；
-- YAML 第一行链接了源 Actions run；并且
+- 所有请求的草稿长度和思考模式均已完成。
+- 详细输出内容连贯，并使用预期的思考模式。
+- 服务日志中没有回退、禁用草稿或聊天模板错误。
+- YAML 元数据与触发时使用的镜像、采样设置、模型和推测方法一致。
+- YAML 第一行链接了源 Actions run。
 - 提交的数值与工作流 artifact 完全一致。
 
 ## 当前黄金曲线
@@ -112,6 +112,7 @@ gh workflow run speedbench-al.yml \
 | Qwen3.5 397B-A17B | MTP | [`qwen3.5_mtp.yaml`](qwen3.5_mtp.yaml) | [27317114007](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27317114007) |
 | Kimi K2.5 | EAGLE3 | [`kimik2.5_eagle3.yaml`](kimik2.5_eagle3.yaml) | [28122195822](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28122195822) |
 | MiniMax-M3 | EAGLE3 | [`minimaxm3_eagle3.yaml`](minimaxm3_eagle3.yaml) | [28061204145](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28061204145) |
+| GLM-5.2 | MTP | [`glm5.2_mtp.yaml`](glm5.2_mtp.yaml) | [28058352479](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/28058352479) |
 
 ## 主要参考资料
 

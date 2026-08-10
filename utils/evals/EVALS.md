@@ -2,14 +2,14 @@
 
 Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
 concurrency, kernels, and other throughput optimizations. They run separately
-from throughput; selection lives in `mark_eval_entries()` in
+from throughput. Selection lives in `mark_eval_entries()` in
 `utils/matrix_logic/generate_sweep_configs.py`.
 
 ## Selection
 
-- **Single-node:** 8k1k only; highest and median concurrency for every model,
+- **Single-node:** 8k1k only, at the highest and median concurrency for every model,
   runner, framework, precision, TP, and decoding configuration.
-- **Multi-node:** 8k1k only; one job per parallelism topology at its highest
+- **Multi-node:** 8k1k only, with one job per parallelism topology at its highest
   eligible concurrency. Rows differing only by concurrency share a topology.
 
 Generator eval modes:
@@ -17,13 +17,13 @@ Generator eval modes:
 - Default: throughput plus the selected eval subset.
 - `--no-evals`: throughput only.
 - `--evals-only`: selected evals only.
-- `--all-evals`: every fixed-sequence eval only; equivalent to
+- `--all-evals`: every fixed-sequence eval only. This is equivalent to
   `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
   sequentially on one engine. Agentic-coding configs are included and run
-  SWE-bench (they are excluded only from the default, non-eval sweep).
+  GSM8K (they are excluded only from the default, non-eval sweep).
 
-Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
-implies eval-only there. On PRs, the same names are modifier labels:
+Changelog entries use `evals-only: true` and `all-evals: true`. The `all-evals`
+setting implies eval-only there. On PRs, the same names are modifier labels:
 `all-evals` expands coverage without suppressing throughput, while `evals-only`
 suppresses it. Modifier runs cannot be reused.
 
@@ -33,15 +33,15 @@ agentic coverage, and `all-evals` wins over default eval coverage.
 ### Artifact reuse
 
 Default full sweeps may reuse their eval subset. Source coverage is
-authoritative: raw `meta_env.json` identities must match `eval_results_all`,
-and batched evals use `completed_eval_concs`. Policy drift is allowed;
-malformed metadata, duplicates, or raw/aggregate mismatches are not. See
+authoritative. Raw `meta_env.json` identities must match `eval_results_all`,
+and batched evals use `completed_eval_concs`. Policy drift is allowed, but
+malformed metadata, duplicates, and raw/aggregate mismatches are not. See
 [workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
 `run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
 
-The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`).
+The default eval framework is [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) (`lm-eval`). Agentic eval-only matrix jobs inherit this default and therefore run the same GSM8K task as 8k1k. Explicit agentic runs can still select SWE-bench.
 
 ### Benchmark script flow
 
@@ -84,14 +84,14 @@ In eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MO
 ### Multi-node
 Multi-node evals support two hardware paths:
 
-**MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server.sh`
+**MI355X (AMD)** uses `benchmarks/multi_node/amd_utils/server.sh`.
 - Skips `bench.sh` when `EVAL_ONLY=true`
 - Runs lm-eval via `run_eval` against the router on port 30000
 - Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
 - Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
 - `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
 
-**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** — via [srt-slurm](https://github.com/NVIDIA/srt-slurm) (`sa-submission-q2-2026` branch)
+**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** runs through [srt-slurm](https://github.com/NVIDIA/srt-slurm) on the `sa-submission-q2-2026` branch.
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
 - `lm-eval` runner (`benchmarks/lm_eval.py`) is invoked by `do_sweep.py` as a post/eval-only step and sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`)
@@ -105,7 +105,7 @@ For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it conta
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
 - `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
 - Both use their respective benchmark templates with `eval-only: true`, `run-eval: true`
-- `collect-evals` depends on both eval jobs; `collect-results` only runs when benchmark jobs ran
+- `collect-evals` depends on both eval jobs, while `collect-results` only runs when benchmark jobs ran
 - `process_changelog.py` splits eval results into `evals` (single-node) and `multinode_evals`
 
 ### Result collection
@@ -152,8 +152,8 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
-| `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests); empty = full set |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval. A space-separated list enables sequential batched evals against one live engine |
+| `EVAL_LIMIT` | empty | Limit eval to first N instances (smoke tests). Empty means the full set |
 
 ### Score validation
 `utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.yaml`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
@@ -196,31 +196,32 @@ append_lm_eval_summary
 - Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
-- Generation modes (`SWEBENCH_GEN_MODE`): `agentic` (default; mini-swe-agent loop against the
-  local endpoint, each instance's shell running in a Modal sandbox via swe-rex — the real
-  SWE-bench setting) or `single-shot` (lm-eval, one prompt per instance — a ~10% floor baseline,
-  kept only as an explicit debugging escape hatch). Agentic knobs: `SWEBENCH_AGENT_WORKERS`
+- Generation modes (`SWEBENCH_GEN_MODE`) include `agentic`, the default, which runs the
+  mini-swe-agent loop against the local endpoint. Each instance's shell runs in a Modal
+  sandbox via swe-rex, matching the real SWE-bench setting. The `single-shot` mode uses
+  lm-eval with one prompt per instance. It provides a roughly 10% floor baseline and is
+  kept only as an explicit debugging escape hatch. Agentic knobs include `SWEBENCH_AGENT_WORKERS`
   (default: the config's `CONC`, else 64), `SWEBENCH_AGENT_STEP_LIMIT` (250),
   `SWEBENCH_AGENT_CMD_TIMEOUT` (per command, 300s), `SWEBENCH_AGENT_TIMEOUT` (6h),
   `SWEBENCH_AGENT_SANDBOX_CPU` (unset = Modal default), and `SWEBENCH_MODAL_APP_NAME`
   (`infx-evals-swe`).
-- Run size: `EVAL_LIMIT` empty runs the full ~300-instance split; a positive integer runs the
+- Run size: an empty `EVAL_LIMIT` runs the full split of roughly 300 instances. A positive integer runs the
   first N as an explicit smoke-test slice. `EVAL_LIMIT=full` (or `0`) also selects the full split.
 - Scoring knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
   `SWEBENCH_EVAL_SANDBOX_CPU` (cores per scoring sandbox, default 2), `SWEBENCH_EVAL_TIMEOUT`
   (per-instance test timeout, default 900s), `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac),
   `SWEBENCH_SKIP_SCORE=true` (generate-only), `SWEBENCH_USE_MODAL=true` (score on Modal remote
-  sandboxes instead of local Docker — the CI path). Modal credentials: set
-  `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide `~/.modal.toml`;
-  if the file is absent the env vars are bootstrapped into it automatically. The scoring dataset
-  is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
-  `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
+  sandboxes instead of local Docker, as used in CI). For Modal credentials, set
+  `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide `~/.modal.toml`.
+  If the file is absent, the env vars are bootstrapped into it automatically. The scoring dataset
+  is derived from the YAML's `dataset_path`, which keeps generation and scoring aligned.
+  If `SWEBENCH_DATASET` is set, it must match or the run fails fast.
 - Scoring runs on Modal remote sandboxes in CI (`SWEBENCH_USE_MODAL=true`, no Docker on the GPU
-  nodes); local Docker scoring needs ~120 GB disk. The `thresholds.yaml` gate is `0.50`, calibrated
-  from full-split runs (54%); historical 50-instance slices scored 62–76%.
+  nodes). Local Docker scoring needs about 120 GB of disk. The `thresholds.yaml` gate is `0.50`,
+  calibrated from full-split runs that scored 54%. Historical 50-instance slices scored 62–76%.
 
 ## Task files
-The following files are task definitions from lm-eval; more information on changes lives within the files:
+The following files are task definitions from lm-eval. More information on changes lives within the files:
 - `utils/evals/gsm8k.yaml`
 - `utils/evals/gpqa_diamond.yaml`
-- `utils/evals/swebench_lite.yaml` (generation only; scored by `swebench_score.py`)
+- `utils/evals/swebench_lite.yaml` (generation only, scored by `swebench_score.py`)

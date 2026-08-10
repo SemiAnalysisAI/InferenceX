@@ -10,7 +10,7 @@ on:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
         default: all
-        options: [all, deepep-v2, mori, uccl-ep, nccl-ep]
+        options: [all, deepep-v2, mori, uccl-ep, nccl-ep, flashinfer-ep]
       only_sku:
         description: Restrict to one GHA runner pool; blank = all
         type: string
@@ -27,6 +27,11 @@ on:
         description: "Keep only shards in this comma-list of modes (normal, low-latency); low-latency is a decode-only EP8 addition; blank = all"
         type: string
         default: ''
+      fp8_consume:
+        description: "DIAGNOSTIC ONLY. 'dequant' puts the FP8 dequant back inside the chain, so staging is no longer hoisted; changes what is measured. Blank = native (the production model)."
+        type: choice
+        default: ''
+        options: ['', dequant]
 concurrency:
   group: cx-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
@@ -132,6 +137,12 @@ jobs:
       COLLX_SHARD_SKU: ${{ matrix.sku }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      # Diagnostic hatch, "native" on every normal run. Reaches the ranks because the container
+      # srun exports the submitting environment; EPBackend reads it at class-body evaluation.
+      # Defaulted here rather than passed through empty: the harness fails closed on an
+      # unrecognised value, and a blank input would set the variable to "" -- which is not
+      # "unset", so os.environ.get's default never applies and every leg would die at import.
+      CX_FP8_CONSUME: ${{ inputs.fp8_consume || 'native' }}
       # Consolidated shards run one bounded build-group in one Slurm allocation;
       # every production pool accepts 300 minutes. Allocations release as soon as
       # the shard finishes.
@@ -223,6 +234,11 @@ jobs:
           collx_cleanup_allocation "$COLLX_JOB_ROOT" \
             || { echo "CollectiveX allocation cleanup failed; results may still be changing" >&2; exit 1; }
           python3 experimental/CollectiveX/summarize.py \
+            --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
+          # Second view over the same documents: latency answers how long a point took,
+          # this answers how fast it moved its payload. Both are renderers over the staged
+          # JSON and neither gates the leg, so both are `|| true`.
+          python3 experimental/CollectiveX/bandwidth.py \
             --results-dir experimental/CollectiveX/results >> "$GITHUB_STEP_SUMMARY" || true
           shopt -s nullglob
           results=(experimental/CollectiveX/results/*.json)

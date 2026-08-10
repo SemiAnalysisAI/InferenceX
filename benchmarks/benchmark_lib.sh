@@ -109,7 +109,10 @@ unset _benchmark_caller
 # --------------------------------
 
 GPU_MONITOR_PID=""
-GPU_METRICS_CSV="/workspace/gpu_metrics.csv"
+GPU_MONITOR_VENDOR=""
+GPU_MONITOR_INTERVAL=1
+GPU_METRICS_CSV="${GPU_METRICS_CSV:-gpu_metrics.csv}"
+NVIDIA_GPU_MONITOR_QUERY="timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory"
 export GPU_METRICS_CSV
 
 # Start background GPU monitoring that logs metrics every second to CSV.
@@ -128,21 +131,33 @@ start_gpu_monitor() {
     done
 
     GPU_METRICS_CSV="$output"
+    GPU_MONITOR_INTERVAL="$interval"
     export GPU_METRICS_CSV
 
     if command -v nvidia-smi &>/dev/null; then
-        nvidia-smi --query-gpu=timestamp,index,power.draw,temperature.gpu,clocks.current.sm,clocks.current.memory,utilization.gpu,utilization.memory \
+        GPU_MONITOR_VENDOR="nvidia"
+        nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
             --format=csv -l "$interval" > "$output" 2>/dev/null &
         GPU_MONITOR_PID=$!
         echo "[GPU Monitor] Started NVIDIA (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     elif command -v amd-smi &>/dev/null; then
+        GPU_MONITOR_VENDOR="amd"
         # Use amd-smi native watch mode (-w) which includes timestamps automatically.
-        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated headers.
-        amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
-            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print}' > "$output" &
+        # PYTHONUNBUFFERED defeats the tool's own stdout block buffering (amd-smi is
+        # Python; measured on MI355X: trailing ticks were lost at kill without it).
+        # Pipe through awk to: skip preamble lines, keep first CSV header, skip repeated
+        # headers, and flush every row so killing the pipe cannot discard buffered samples.
+        PYTHONUNBUFFERED=1 amd-smi metric -p -c -t -u -w "$interval" --csv 2>/dev/null \
+            | awk '/^timestamp,/{if(!h){print;h=1};next} h{print;fflush()}' > "$output" &
         GPU_MONITOR_PID=$!
+        # Hardware energy-accumulator + identity snapshots; the end-side twin in
+        # stop_gpu_monitor lets auditors cross-check the integrated energy
+        # against the accumulator delta.
+        _write_amd_smi_sidecar "${output%.csv}_energy_start.csv" metric -E --csv
+        _write_amd_smi_sidecar "${output%.csv}_identity.json" static --json
         echo "[GPU Monitor] Started AMD (PID=$GPU_MONITOR_PID, interval=${interval}s, output=$output)"
     else
+        GPU_MONITOR_VENDOR=""
         echo "[GPU Monitor] No GPU monitoring tool found (nvidia-smi or amd-smi), skipping"
         return 0
     fi
@@ -151,8 +166,33 @@ start_gpu_monitor() {
 # Stop the background GPU monitor and report file size.
 stop_gpu_monitor() {
     if [[ -n "$GPU_MONITOR_PID" ]] && kill -0 "$GPU_MONITOR_PID" 2>/dev/null; then
+        # benchmark_end_time_unix is recorded shortly before the benchmark
+        # process exits, so the stream must cover one more sample past it for
+        # deterministic boundary interpolation. NVIDIA appends a one-shot
+        # post-exit sample below; amd-smi one-shot CSV has no timestamp column,
+        # so the AMD path instead lets the watch stream emit final ticks before
+        # the kill. Two extra intervals: amd-smi stamps integer seconds, so a
+        # tick in the same second as the window end still fails bracketing —
+        # the stream needs a tick at the NEXT whole second (measured on MI355X:
+        # end=...153.325 vs last sample ...153.0).
+        if [[ "$GPU_MONITOR_VENDOR" == "amd" ]]; then
+            sleep $(( ${GPU_MONITOR_INTERVAL:-1} + 2 ))
+        fi
         kill "$GPU_MONITOR_PID" 2>/dev/null
         wait "$GPU_MONITOR_PID" 2>/dev/null || true
+        case "$GPU_MONITOR_VENDOR" in
+            nvidia)
+                if _repair_truncated_gpu_metrics_tail; then
+                    nvidia-smi --query-gpu="$NVIDIA_GPU_MONITOR_QUERY" \
+                        --format=csv,noheader >> "$GPU_METRICS_CSV" 2>/dev/null ||
+                        echo "[GPU Monitor] Warning: final NVIDIA sample failed" >&2
+                fi
+                ;;
+            amd)
+                _repair_truncated_gpu_metrics_tail || true
+                _write_amd_smi_sidecar "${GPU_METRICS_CSV%.csv}_energy_end.csv" metric -E --csv
+                ;;
+        esac
         echo "[GPU Monitor] Stopped (PID=$GPU_MONITOR_PID)"
         if [[ -f "$GPU_METRICS_CSV" ]]; then
             local lines
@@ -161,6 +201,60 @@ stop_gpu_monitor() {
         fi
     fi
     GPU_MONITOR_PID=""
+    GPU_MONITOR_VENDOR=""
+}
+
+# Drop a partial trailing row left behind when the monitor dies mid-write.
+# Returns non-zero when a truncated row was detected but could not be removed.
+_repair_truncated_gpu_metrics_tail() {
+    local repaired_metrics="${GPU_METRICS_CSV}.repair.$$"
+    if [[ -s "$GPU_METRICS_CSV" ]] &&
+        ! tail -c 1 "$GPU_METRICS_CSV" | grep -q '^$'; then
+        if sed '$d' "$GPU_METRICS_CSV" > "$repaired_metrics" &&
+            mv "$repaired_metrics" "$GPU_METRICS_CSV"; then
+            echo "[GPU Monitor] Dropped truncated trailing sample"
+        else
+            rm -f "$repaired_metrics"
+            echo "[GPU Monitor] Warning: could not repair truncated trailing sample" >&2
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Write one best-effort amd-smi snapshot; remove the file rather than keep a
+# partial one when the invocation fails.
+_write_amd_smi_sidecar() {
+    local out="$1"
+    shift
+    if ! amd-smi "$@" > "$out" 2>/dev/null; then
+        rm -f "$out"
+        echo "[GPU Monitor] Warning: amd-smi $1 sidecar failed" >&2
+    fi
+}
+
+# Block until the GPUs have released a prior job's memory before starting a run.
+# Polls rocm-smi VRAM% every 10s for up to 15 minutes; succeeds once the busiest
+# GPU is at <=10% VRAM, otherwise returns 1 so the caller aborts rather than
+# starting a benchmark on GPUs still draining the previous run's memory.
+wait_for_amd_gpu_clean() {
+    local gpu_clean=false vram_max i
+    for i in $(seq 1 90); do
+        vram_max=$(rocm-smi --showmemuse 2>/dev/null \
+            | grep -oE "GPU Memory Allocated \(VRAM%\): [0-9]+" \
+            | awk '{if ($NF > m) m = $NF} END {print m+0}')
+        if [ "${vram_max:-0}" -le 10 ]; then
+            echo "GPUs clean (vram%max=$vram_max after $((i * 10))s)"
+            gpu_clean=true
+            break
+        fi
+        echo "waiting for prior-job GPU memory reclaim: vram%max=$vram_max"
+        sleep 10
+    done
+    if [ "$gpu_clean" != "true" ]; then
+        echo "Error: GPUs still draining prior job's memory after 15min" >&2
+        return 1
+    fi
 }
 
 # Return success only while a PID exists and is not a zombie waiting to be
@@ -1464,7 +1558,6 @@ run_eval() {
     local scenario_default="lm-eval"
     local scenario_is_agentic=0
     if [ "${IS_AGENTIC:-0}" = "1" ] || [ "${SCENARIO_TYPE:-}" = "agentic-coding" ]; then
-        scenario_default="swebench"
         scenario_is_agentic=1
     fi
 
@@ -1577,6 +1670,8 @@ AIPERF_CLI="${AIPERF_VENV}/bin/aiperf"
 AIPERF_HF_CLI="${AIPERF_VENV}/bin/hf"
 AIPERF_DEPS_READY=0
 AIPERF_FAILED_REQUEST_THRESHOLD="${AIPERF_FAILED_REQUEST_THRESHOLD:-0.10}"
+AIPERF_LIVE_FAILED_REQUEST_THRESHOLD="${AIPERF_LIVE_FAILED_REQUEST_THRESHOLD:-$AIPERF_FAILED_REQUEST_THRESHOLD}"
+AIPERF_TRACE_IDLE_GAP_CAP_SECONDS="${AIPERF_TRACE_IDLE_GAP_CAP_SECONDS:-300}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -1624,7 +1719,7 @@ install_agentic_deps() {
     mkdir -p "$AIPERF_UV_CACHE_DIR"
 
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
-        "$AIPERF_UV_BIN" venv --python "$(command -v python3)" "$AIPERF_VENV"
+        "$AIPERF_UV_BIN" venv --python "${AIPERF_PYTHON_VERSION:-3.11}" "$AIPERF_VENV"
     UV_CACHE_DIR="$AIPERF_UV_CACHE_DIR" \
         "$AIPERF_UV_BIN" pip install --python "$AIPERF_PYTHON" \
         -r "$AGENTIC_DIR/requirements.txt" \
@@ -1736,22 +1831,20 @@ build_replay_cmd() {
     # the worker threads the server's live assistant response back into the
     # session.
     #
-    # The scenario plugin locks: --cache-bust first_turn_prefix and
-    # --trace-idle-gap-cap-seconds 10 (per-trace idle-gap compression
-    # against parent + subagent request-start timestamps; supersedes the
-    # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
-    # and auto-injects them — so we do not pass them. See
+    # The scenario plugin locks --cache-bust first_turn_prefix and a 10-second
+    # whole-system idle cap. InferenceX also applies a 300-second per-trajectory
+    # runtime idle cap below. Source end-to-start delays remain intact; either
+    # cap advances pending timers only while its scope is idle. See
     # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
     local duration="$DURATION"
-    local cache_warmup_duration="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-600}"
+    local warmup_requests_per_lane="${AIPERF_WARMUP_REQUESTS_PER_LANE:-10}"
 
-    # Fast mode is an e2e-only feedback preset used before canonical one-hour
-    # sweeps. AIPerf already exposes both controls, so no AIPerf patch is
-    # required.
+    # Fast mode minimizes setup by advancing each trajectory lane only once
+    # and shortens profiling to 20 minutes.
     if [[ "${AIPERF_EXPERIMENTAL_FAST:-0}" == "1" ]]; then
         duration=1200
-        cache_warmup_duration=300
+        warmup_requests_per_lane=1
     fi
 
     export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
@@ -1765,6 +1858,9 @@ build_replay_cmd() {
     # aiperf validates that SERVICE_PROFILE_CONFIGURE_TIMEOUT >=
     # DATASET_CONFIGURATION_TIMEOUT at startup. Bump it in lockstep.
     export AIPERF_SERVICE_PROFILE_CONFIGURE_TIMEOUT=1800
+    # Headless realtime metrics are opt-in on current AIPerf main. Enable the
+    # rolling TTFT/ITL/throughput block and emit it every 30 seconds.
+    export AIPERF_UI_REALTIME_METRICS_ENABLED=true
     REPLAY_CMD="$AIPERF_CLI profile --scenario inferencex-agentx-mvp"
     REPLAY_CMD+=" --url http://localhost:$PORT"
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
@@ -1773,21 +1869,29 @@ build_replay_cmd() {
     REPLAY_CMD+=" --model $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    REPLAY_CMD+=" --stats-interval 30"
     REPLAY_CMD+=" --random-seed 42"
-    # Fail runs once more than 10% of requests error. This keeps known
-    # transient low-rate failures from killing long sweeps while still
-    # catching malformed payloads or server crashes before they get aggregated
-    # as benchmarkable data.
-    REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
+    # Fail runs early once the live error ratio crosses the configured limit.
+    # Recipes with correlated low-concurrency trajectories may allow a larger
+    # live sample while retaining AIPERF_FAILED_REQUEST_THRESHOLD as the strict
+    # post-run validity gate below.
+    REPLAY_CMD+=" --failed-request-threshold $AIPERF_LIVE_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
     # least one profile turn after warmup.
     REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
     REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
-    # After the normal t* snapshot warmup, continue those exact trajectories
-    # with one-token outputs and no idle delays. Profiling begins only after
-    # those requests drain and resumes from the resulting live state.
-    REPLAY_CMD+=" --agentic-cache-warmup-duration $cache_warmup_duration"
+    # After the normal t* snapshot primers, advance every trajectory lane by
+    # this many additional one-token requests with no idle delay. Profiling
+    # begins after those requests drain and resumes from the resulting live
+    # state. Do not pass --burst-phase-starts: AIPerf main's spread default
+    # preserves each lane's recorded phase-start offset.
+    REPLAY_CMD+=" --warmup-requests-per-lane $warmup_requests_per_lane"
+    # Limit observed end-to-start idle time across each complete trajectory
+    # tree, including root and subagent streams. AIPerf advances that tree's
+    # pending timers uniformly without bypassing spawn/join dependencies or
+    # changing request order.
+    REPLAY_CMD+=" --trace-idle-gap-cap-seconds $AIPERF_TRACE_IDLE_GAP_CAP_SECONDS"
     # Give long-context warmup requests up to 30 minutes to drain before
     # declaring warmup failed. Recipes whose saturation arms carry a larger
     # in-flight working set may override via AGENTIC_WARMUP_GRACE_PERIOD
@@ -1903,6 +2007,36 @@ write_agentic_result_json() {
     "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
 }
 
+validate_required_agentic_server_metrics() {
+    local result_dir="$1"
+    local required_prefix="${AIPERF_REQUIRED_SERVER_METRIC_PREFIX:-}"
+    local metrics_dir="$result_dir/aiperf_artifacts"
+    local metrics_json="$metrics_dir/server_metrics_export.json"
+    local metrics_csv="$metrics_dir/server_metrics_export.csv"
+
+    # Opt-in so existing AgentX configurations retain their current contract.
+    # Recipes that require trace charts set a metric prefix (for example
+    # `sglang:`) and fail loudly instead of publishing a partial trace artifact.
+    if [ -z "$required_prefix" ]; then
+        return 0
+    fi
+
+    if [ ! -s "$metrics_json" ] || [ ! -s "$metrics_csv" ]; then
+        echo "ERROR: required AIPerf server metrics artifacts are missing or empty in $metrics_dir" >&2
+        return 1
+    fi
+
+    # Avoid parsing the potentially multi-GiB JSON into memory. AIPerf writes
+    # metric names as JSON object keys, so a fixed-string scan establishes that
+    # backend engine metrics—not only frontend/router metrics—were captured.
+    if ! grep -F -m 1 -q "\"${required_prefix}" "$metrics_json"; then
+        echo "ERROR: $metrics_json contains no metric with required prefix '$required_prefix'" >&2
+        return 1
+    fi
+
+    echo "Validated required AIPerf server metrics prefix '$required_prefix'"
+}
+
 run_agentic_replay_and_write_outputs() {
     local result_dir="$1"
     local replay_rc
@@ -1941,4 +2075,6 @@ run_agentic_replay_and_write_outputs() {
         echo "ERROR: agentic trace replay produced invalid results after writing available artifacts" >&2
         return "$validation_rc"
     fi
+
+    validate_required_agentic_server_metrics "$result_dir"
 }
