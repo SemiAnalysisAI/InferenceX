@@ -1227,11 +1227,11 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: { name: hicache }, conc-list: [16, 32, 48, 64] }
 
-# DeepSeek-V4-Pro FP4 MTP refresh for MI355X. The TP8, fit-validated TP4, and
-# DP8+EP8 bands mirror the B200/B300 MTP grids, with extra intermediate cells to
-# resolve the MI355X knee. TP8+EP8 isolates expert-sharding without changing the
-# attention topology. GPU-resident KV remains the only supported MTP path until
-# vLLM's multi-KV-group recovery fix lands.
+# DeepSeek-V4-Pro FP4 MTP refresh for MI355X. This second agentx-fast pass keeps
+# only the six unresolved cells from the broad B200/B300-shaped discovery grid:
+# low-concurrency TP guards and the high-end TP8+EP8 crossover. The first pass
+# established that DP8+EP8 is dominated and TP4 collapses above c12, so those
+# known-bad tails are intentionally excluded before the full-duration sweep.
 dsv4-fp4-mi355x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.26.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1244,10 +1244,9 @@ dsv4-fp4-mi355x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.60
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32, 36, 40] }
-      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 12, 16, 20] }
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 16, 24, 32, 40, 48, 56] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 6, 12] }
+      - { tp: 4, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 6] }
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [56] }
       # DP4+EP4 is not fit-safe at the required 1,048,576-token model length:
       # a direct c56 probe left 12.09 GiB KV memory versus 14.88 GiB required.
       # LMCache invalid-block recovery currently assumes one KV-cache group,
