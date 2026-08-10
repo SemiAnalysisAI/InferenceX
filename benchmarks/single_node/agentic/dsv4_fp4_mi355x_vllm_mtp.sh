@@ -406,7 +406,7 @@ VLLM_CMD=(
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.9
     --block-size 256
-    --max-num-batched-tokens 8192
+    --max-num-batched-tokens 16384
     --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_DECODE_ONLY"}'
     --speculative-config "$SPEC_CONFIG"
