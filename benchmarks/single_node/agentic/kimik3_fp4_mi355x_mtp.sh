@@ -776,35 +776,15 @@ SPEC_NUM_TOKENS="${SPEC_NUM_TOKENS:-2}"
 
 SYNTHETIC_ACCEPT_LEN=2.51
 
-# ---- DSpark draft model: stage locally and patch architectures --------------
-# vLLM would otherwise pull RadixArk/Kimi-K3-DSpark straight from the Hub, whose
-# config.json advertises a different architecture. Stage it locally (mirroring
-# the main-model hf download above) and rewrite architectures ->
-# Qwen3DSparkModel so the draft loads under the Qwen3 DSpark model class.
-DRAFT_MODEL="RadixArk/Kimi-K3-DSpark"
-DRAFT_MODEL_PATH="${DRAFT_MODEL_PATH:-${MODEL_PATH%/}-dspark-draft}"
-if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
-    hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
-fi
-python3 - "$DRAFT_MODEL_PATH/config.json" <<'PY'
-import json, sys
-path = sys.argv[1]
-with open(path) as f:
-    cfg = json.load(f)
-cfg["architectures"] = ["Qwen3DSparkModel"]
-with open(path, "w") as f:
-    json.dump(cfg, f, indent=2)
-PY
-
 if [ "${EVAL_ONLY:-false}" = "true" ]; then
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"block\"}"
     )
 else
     SPEC_ARGS=(
         --speculative-config
-        "{\"model\":\"$DRAFT_MODEL_PATH\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
+        "{\"model\":\"Inferact/Kimi-K3-DSpark\",\"num_speculative_tokens\":$SPEC_NUM_TOKENS,\"method\":\"dspark\",\"attention_backend\":\"TRITON_ATTN\",\"kv_cache_dtype\":\"auto\",\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\": \"synthetic\", \"synthetic_acceptance_length\": $SYNTHETIC_ACCEPT_LEN}"
     )
 fi
 
