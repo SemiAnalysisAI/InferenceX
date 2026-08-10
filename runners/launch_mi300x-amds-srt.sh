@@ -12,12 +12,6 @@ REMOTE_BASE="/raid/hf-hub-cache/inferencex/srt-slurm"
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set by Actions}"
 : "${RESULT_FILENAME:?RESULT_FILENAME must be set by the benchmark workflow}"
 
-# The existing MI300X orchestration-capable runner pool defaults to the
-# aggregate recipe. Multinode rows continue to pass their recipe explicitly
-# through the existing worker additional-settings contract.
-if [[ -z "${CONFIG_FILE:-}" && "${RUNNER_TYPE:-}" == "mi300x-disagg" ]]; then
-    CONFIG_FILE="recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"
-fi
 : "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"
 
 CONFIG_PATH="${CONFIG_FILE%%:*}"

@@ -122,6 +122,10 @@ def test_official_matrix_routes_aggregate_through_the_pinned_srt_launcher():
                 "tp": 1,
                 "ep": 1,
                 "dp-attn": False,
+                "additional-settings": [
+                    "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/"
+                    "agg-fixed-seq.yaml"
+                ],
             },
             "decode": {
                 "num-worker": 0,
@@ -131,10 +135,7 @@ def test_official_matrix_routes_aggregate_through_the_pinned_srt_launcher():
             },
         }
     ]
-    assert (
-        'CONFIG_FILE="recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"'
-        in launcher
-    )
+    assert ': "${CONFIG_FILE:?CONFIG_FILE must name an srt-slurm recipe}"' in launcher
     assert 'JOB_BATCH_HOST=$(scontrol show job "$JOB_ID" -dd' in launcher
     assert '--nodelist="$JOB_BATCH_HOST"' in launcher
     assert "TOTAL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP" in launcher

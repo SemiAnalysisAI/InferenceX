@@ -1525,6 +1525,8 @@ qwen3-0.6b-fp16-mi300x-vllm-srt-agg:
           tp: 1
           ep: 1
           dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"
         decode:
           num-worker: 0
           tp: 1
