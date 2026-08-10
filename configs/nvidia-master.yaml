@@ -1027,6 +1027,67 @@ dsv4-fp4-b200-vllm-router-agentic-disagg:
           ep: 8
           dp-attn: true
 
+dsr1-fp4-gb200-vllm-router-agentic-agg:
+  image: vllm/vllm-openai:v0.25.1
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm-router
+  router: { name: vllm-router, version: "0.1.15" }
+  multinode: true
+  disagg: false
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        conc-list: [16]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
+          - "SRT_SLURM_REF=ab98030f0993bdb1595acc25e883b59d76ad7791"
+          - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/agg-gb200-2xdep4-vllm-router-agentic.yaml"
+        decode:
+          num-worker: 0
+          tp: 1
+          ep: 4
+          dp-attn: true
+
+dsr1-fp4-gb200-vllm-router-agentic-disagg:
+  image: vllm/vllm-openai:v0.25.1
+  model: nvidia/DeepSeek-R1-0528-NVFP4-v2
+  model-prefix: dsr1
+  runner: cluster:gb200-nv
+  precision: fp4
+  framework: vllm-router
+  router: { name: vllm-router, version: "0.1.15" }
+  kv-p2p-transfer: nixl
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - search-space:
+      - spec-decoding: none
+        conc-list: [16]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "SRT_SLURM_REPOSITORY=https://github.com/SemiAnalysisAI/srt-slurm.git"
+          - "SRT_SLURM_REF=ab98030f0993bdb1595acc25e883b59d76ad7791"
+          - "CONFIG_FILE=recipes/vllm/deepseek-r1/agentic/disagg-gb200-1p1d-dep4-vllm-router-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+
 dsv4-fp4-b200-sgl-router-agentic-agg:
   image: lmsysorg/sglang:v0.5.16-cu130
   model: deepseek-ai/DeepSeek-V4-Pro

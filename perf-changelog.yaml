@@ -5711,13 +5711,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2520
 
 - config-keys:
-    - dsv4-fp4-b200-vllm-router-agentic-agg
-    - dsv4-fp4-b200-vllm-router-agentic-disagg
+    - dsr1-fp4-gb200-vllm-router-agentic-agg
+    - dsr1-fp4-gb200-vllm-router-agentic-disagg
   scenario-type:
     - agentic-coding
   description:
-    - "Validate first-class vLLM Router 0.1.15 through srt-slurm on B200 without a Dynamo request plane."
-    - "Exercise vLLM Router with two-worker aggregate DEP8 and one-prefill/one-decode DEP8 DeepSeek V4 FP4 deployments on B200. Both validations use MTP and the AgentX trace workload."
+    - "Validate first-class vLLM Router 0.1.15 through srt-slurm on GB200 without a Dynamo request plane."
+    - "Exercise vLLM Router with two-worker aggregate DEP4 and one-prefill/one-decode DEP4 DeepSeek R1 NVFP4 deployments on GB200 using the AgentX trace workload."
+    - "Follow the official vLLM DeepSeek R1 Blackwell recipe: the staged nvidia/DeepSeek-R1-0528-NVFP4-v2 checkpoint, vLLM 0.25.1, DEP4 with expert parallelism, FP8 KV cache, and explicit prefix caching."
     - "Pin the test deployment to exact SemiAnalysisAI/srt-slurm PR head ab98030f0993bdb1595acc25e883b59d76ad7791, preserve each logical backend Prometheus endpoint for AIPerf, and require the vllm: metric family before accepting results."
     - "Enable vLLM prompt-token details on both native Router deployments so AgentX captures response-level prompt-cache usage in addition to each logical backend's Prometheus metrics."
     - "Verify the terminal Slurm state and exit code after log streaming so a failed benchmark cannot be reported as a successful GitHub job merely because its log tail ended cleanly."
