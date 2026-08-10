@@ -1474,11 +1474,11 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
 # DeepSeek-V4-Pro FP8 full-context AgentX frontier on one MI325X node. The
 # dequantized checkpoint is roughly 1.05 TB, so TP8 fits comfortably in the
 # node's 2 TB of HBM while TP4 does not have enough per-rank model headroom.
-# Stable v0.26.0 and the current immutable nightly both produce empty-content
-# responses on expert-parallel topologies. Upstream also marks MI325X
-# unsupported for this model, while the proposed cross-node TP16 FP8 support is
-# still unmerged. Publish the measured, fit-safe, semantically clean TP8 band;
-# do not publish an EP or patched multi-node workaround.
+# Stable v0.26.0 and the current immutable nightly both produced empty-content
+# responses on earlier expert-parallel probes. Retain c4-c6 TEP8 explicitly in
+# this collection sweep so that behavior is represented beside the pure-TP
+# points. Mooncake uses the standard generated aggregate host-DRAM cap and the
+# pinned ROCm build convention already exercised by MI325X AgentX recipes.
 dsv4-fp8-mi325x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:nightly-f8d03e77416bf90c49acbe50e233275722f02c4b
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1491,8 +1491,9 @@ dsv4-fp8-mi325x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      # Isolated agentx-fast INT4 Quick Reduce probe at the retained upper point.
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [3] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 3, 4, 5, 6] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: { name: mooncake, version: "0.3.11.post1" }, spec-decoding: mtp, conc-list: [4, 5, 6] }
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 5, 6] }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
