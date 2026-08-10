@@ -15,7 +15,7 @@ identity:
   container:
     image: "vllm/vllm-openai-rocm:v0.26.0"
   frameworks:
-    vllm: "0.26.0"
+    vllm: "0.26.0+rocm723"
 
 slurm:
   time_limit: "00:30:00"
@@ -58,11 +58,32 @@ health_check:
   interval_seconds: 5
 
 benchmark:
-  type: sa-bench
-  isl: 128
-  osl: 32
-  concurrencies: [1, 4]
-  req_rate: inf
-  random_range_ratio: 0.0
-  num_warmup_mult: 1
-  num_prompts_mult: 2
+  type: custom
+  command: >-
+    set -euo pipefail;
+    mkdir -p /logs/fixed-seq;
+    for concurrency in 1 4; do
+      python3 /infmax-workspace/utils/bench_serving/benchmark_serving.py
+      --backend openai-chat
+      --base-url "http://${SRT_FRONTEND_HOST}:${SRT_FRONTEND_PORT}"
+      --endpoint /v1/chat/completions
+      --model Qwen/Qwen3-0.6B
+      --tokenizer Qwen/Qwen3-0.6B
+      --dataset-name random
+      --random-input-len 128
+      --random-output-len 32
+      --random-range-ratio 1.0
+      --random-num-workers 1
+      --num-warmups "${concurrency}"
+      --num-prompts "$((concurrency * 4))"
+      --max-concurrency "${concurrency}"
+      --request-rate inf
+      --ignore-eos
+      --disable-tqdm
+      --save-result
+      --result-dir /logs/fixed-seq
+      --result-filename "qwen3-0.6b-isl128-osl32-c${concurrency}.json";
+    done
+  env:
+    HF_HUB_CACHE: /hf_hub_cache
+    HUGGINGFACE_HUB_CACHE: /hf_hub_cache

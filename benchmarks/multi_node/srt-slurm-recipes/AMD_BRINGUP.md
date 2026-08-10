@@ -32,6 +32,10 @@ Current development pin:
 - Pyxis/Enroot writable, remap-root, and mount-home behavior matching the
   established MI300X launcher;
 - the shared Hugging Face cache and runner workspace remain user-owned;
+- fixed-sequence validation runs InferenceX's existing
+  `utils/bench_serving/benchmark_serving.py` through srt-slurm's `custom`
+  benchmark hook rather than maintaining a second benchmark copy in
+  srt-slurm;
 - the routable inter-node network interface is selected from live cluster
   evidence rather than copied from an NVIDIA recipe.
 
