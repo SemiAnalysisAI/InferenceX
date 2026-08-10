@@ -1053,6 +1053,54 @@ else
     echo "MLA_FORCE_PS=0: leaving small-head decode on Gluon (upstream default)"
 fi
 
+# ---- upstream PRs under test: #51011 and #51040 ------------------------------
+# Both are OPEN and neither is merged. They are ported as anchor-matched
+# patchers rather than context diffs for the reason documented on
+# vllm_dspark_ps_enable.py: the installed file drifts from the GitHub source for
+# the same image tag. Each patcher verified offline against the exact file
+# GitHub serves for cb8104839c, applied after #51088 + vllm_dspark_ps_enable.py,
+# and is idempotent.
+#
+# Default OFF. Each arm of the c8 A/B flips exactly one of these, so a branch
+# diff is one line and the cell it produces is attributable.
+PR51011="${PR51011:-0}"
+PR51040="${PR51040:-0}"
+PATCH_DIR="${PATCH_DIR:-$(cd "$(dirname "$0")/patches" && pwd)}"
+VLLM_ROOT="${VLLM_ROOT:-$(python3 -c 'import vllm,os;print(os.path.dirname(os.path.dirname(vllm.__file__)))')}"
+
+# vllm#51011 -- size _mtp_decode_qlen from reorder_batch_threshold. For DSpark
+# at k=3 that is 1 + 2*3 = 7, where vllm_dspark_ps_enable.py hardcodes 4. The
+# only behavioral surface of #51011 under MLA_FORCE_PS=1; see the patcher.
+if [ "$PR51011" = "1" ]; then
+    PR51011_PY="$PATCH_DIR/vllm_pr51011_reorder_qlen.py"
+    [ -f "$PR51011_PY" ] || { echo "ERROR: $PR51011_PY missing" >&2; exit 1; }
+    # No `|| true`: an unpatched run would be a silent baseline republished
+    # under this experiment's name.
+    python3 "$PR51011_PY" --diff-out "$RESULT_DIR/vllm_pr51011.diff" \
+        2>&1 | tee "$RESULT_DIR/vllm_pr51011.log"
+    echo "PR51011=1: _mtp_decode_qlen <- reorder_batch_threshold"
+else
+    echo "PR51011=0: _mtp_decode_qlen left at the whitelist value (k+1)"
+fi
+
+# vllm#51040 -- fp8 asm MLA prefill for non-divisor head counts (K3 = 12/rank at
+# TP8). MAY BE INERT ON THIS TRACE: forward_mha bails to the bf16 route whenever
+# chunked_context is set, and at ISL p50 ~60K with ~90% prefix hit most prefills
+# are chunked. Grep server.log for "LOCAL PATCH vllm#51040" to see whether the
+# gate actually opened before reading anything into the throughput.
+if [ "$PR51040" = "1" ]; then
+    PR51040_PY="$PATCH_DIR/vllm_pr51040_fp8_prefill_pad16.py"
+    [ -f "$PR51040_PY" ] || { echo "ERROR: $PR51040_PY missing" >&2; exit 1; }
+    python3 "$PR51040_PY" --diff-out "$RESULT_DIR/vllm_pr51040.diff" \
+        2>&1 | tee "$RESULT_DIR/vllm_pr51040.log"
+    echo "PR51040=1: fp8 asm prefill extended to 12 heads via pad-to-16"
+else
+    echo "PR51040=0: fp8 asm prefill stays gated on num_heads % 16 == 0"
+fi
+
+python3 -c "import ast,sys;ast.parse(open(sys.argv[1]).read())" \
+    "$VLLM_ROOT/vllm/v1/attention/backends/mla/rocm_aiter_mla.py"
+
 # vllm-project/vllm#51171 -- "[ROCm][MLA] Reach FULL cudagraphs for AITER MLA
 # speculative decoding". ONLY the triton_mla.py hunk is taken.
 #
