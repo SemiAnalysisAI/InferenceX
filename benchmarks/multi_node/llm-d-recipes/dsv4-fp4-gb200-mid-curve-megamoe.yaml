@@ -88,7 +88,7 @@ prefill:
   extra-args: >-
     --kv-cache-dtype fp8
     --enforce-eager
-    --gpu-memory-utilization 0.95
+    --gpu-memory-utilization 0.92
     --max-model-len 9280
     --max-num-seqs 16
     --max-num-batched-tokens 32768
