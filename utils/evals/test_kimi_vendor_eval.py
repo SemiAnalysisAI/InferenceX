@@ -39,6 +39,10 @@ def _score(output_dir: Path) -> float:
     return _result(output_dir)["results"][kve.TASK_NAME]["exact_match,strict-match"]
 
 
+def _n_eff(output_dir: Path) -> int:
+    return _result(output_dir)["n-samples"][kve.TASK_NAME]["effective"]
+
+
 def test_builds_fixed_upstream_pytest_command(tmp_path: Path) -> None:
     report = tmp_path / kve.NATIVE_REPORT_FILENAME
 
@@ -116,6 +120,7 @@ def test_projects_upstream_outcomes(
     assert invocation["check"] is False
     assert invocation["timeout"] == kve.DEFAULT_TIMEOUT_SECONDS
     assert _score(output_dir) == expected_score
+    assert _n_eff(output_dir) == 2
     projected = _result(output_dir)
     assert projected["result_format"] == kve.RESULT_FORMAT
     assert projected["eval_adapter"] == kve.ADAPTER_NAME
@@ -163,6 +168,7 @@ def test_collection_failures_write_zero_score(
     projected = _result(output_dir)
     assert _score(output_dir) == 0.0
     assert projected["integration_error"]["type"] == error_type
+    assert _n_eff(output_dir) == 0
 
 
 def test_failure_cannot_reuse_stale_outputs(
@@ -221,3 +227,4 @@ def test_cli_setup_failure_writes_zero_score_artifact(tmp_path: Path) -> None:
     assert not (output_dir / kve.NATIVE_REPORT_FILENAME).exists()
     assert _score(output_dir) == 0.0
     assert projected["integration_error"]["message"] == "checkout failed"
+    assert _n_eff(output_dir) == 0

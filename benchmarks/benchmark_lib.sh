@@ -11,6 +11,9 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 INFERENCEX_BENCHMARK_LIB_DIR="$(
     cd "$(dirname "${BASH_SOURCE[0]}")" && pwd
 )"
+INFERENCEX_REPO_ROOT="$(
+    cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd
+)"
 
 # Inference server port shared by every benchmark recipe. Launchers that need
 # a non-default value (e.g. launch_mi355x-amds.sh derives PORT from RUNNER_NAME
@@ -934,10 +937,8 @@ _run_kimi_tool_call_schema_eval() {
             ;;
     esac
 
-    local repo_root
-    repo_root="$(cd "$INFERENCEX_BENCHMARK_LIB_DIR/.." && pwd)"
     local model_name="${MODEL_NAME:-${MODEL:-}}"
-    local adapter_path="${repo_root}/utils/evals/kimi_vendor_eval.py"
+    local adapter_path="${INFERENCEX_REPO_ROOT}/utils/evals/kimi_vendor_eval.py"
     local runtime_dir=""
     local checkout_dir=""
 
@@ -1006,7 +1007,7 @@ run_kimi_vendor_eval() {
 }
 
 _eval_patches_dir() {
-    cd "$(dirname "${BASH_SOURCE[0]}")/../utils/evals/patches" && pwd
+    printf '%s\n' "${INFERENCEX_REPO_ROOT}/utils/evals/patches"
 }
 
 _patch_lm_eval() {
@@ -1115,8 +1116,7 @@ run_lm_eval() {
     done
 
     # Serving images may use a different WORKDIR.
-    local _repo_root
-    _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local _repo_root="$INFERENCEX_REPO_ROOT"
     if [[ "$tasks_dir" == *.yaml && "$tasks_dir" != /* \
           && ! -f "$tasks_dir" && -f "$_repo_root/$tasks_dir" ]]; then
         echo "run_lm_eval: anchoring relative task '$tasks_dir' to repo root -> $_repo_root/$tasks_dir"

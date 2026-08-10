@@ -107,11 +107,15 @@ def _project_report(model: str, report: Any) -> tuple[dict[str, Any], bool]:
     ):
         raise ValueError("report does not contain the expected stream modes")
     score = passed / 2.0
-    return _compatibility_result(model, score), passed == 2
+    return _compatibility_result(model, score, n_samples=2), passed == 2
 
 
 def _compatibility_result(
-    model: str, score: float, integration_error: BaseException | None = None
+    model: str,
+    score: float,
+    *,
+    n_samples: int,
+    integration_error: BaseException | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "result_format": RESULT_FORMAT,
@@ -129,7 +133,7 @@ def _compatibility_result(
                 "filter_list": [{"name": "strict-match"}],
             }
         },
-        "n-samples": {TASK_NAME: {"original": 2, "effective": 2}},
+        "n-samples": {TASK_NAME: {"original": n_samples, "effective": n_samples}},
     }
     if integration_error is not None:
         result["integration_error"] = {
@@ -158,7 +162,7 @@ def run_evaluation(
     compatibility_path = prepare_compatibility_path(output_dir)
     subprocess_rc: int | None = None
     integration_error: BaseException | None = None
-    compatibility = _compatibility_result(model, 0.0)
+    compatibility = _compatibility_result(model, 0.0, n_samples=0)
     complete_pass = False
 
     try:
@@ -181,11 +185,15 @@ def run_evaluation(
             integration_error = RuntimeError(
                 f"upstream verifier exited with code {subprocess_rc}"
             )
-            compatibility = _compatibility_result(model, 0.0, integration_error)
+            compatibility = _compatibility_result(
+                model, 0.0, n_samples=2, integration_error=integration_error
+            )
             complete_pass = False
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         integration_error = exc
-        compatibility = _compatibility_result(model, 0.0, exc)
+        compatibility = _compatibility_result(
+            model, 0.0, n_samples=0, integration_error=exc
+        )
     finally:
         try:
             _write_compatibility(compatibility_path, compatibility)
@@ -242,7 +250,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         _write_compatibility(
             prepare_compatibility_path(args.output_dir),
             _compatibility_result(
-                args.model, 0.0, RuntimeError(args.integration_error)
+                args.model,
+                0.0,
+                n_samples=0,
+                integration_error=RuntimeError(args.integration_error),
             ),
         )
         return 0
