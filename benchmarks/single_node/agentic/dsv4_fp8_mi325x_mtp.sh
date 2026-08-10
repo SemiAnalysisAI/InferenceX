@@ -74,8 +74,12 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
 fi
 
 MAX_NUM_SEQS=$((2 * CONC))
-NUM_SPEC_TOKENS=3
-SYNTHETIC_ACCEPT_LEN=2.49
+# The first AgentX-fast pass used K=3 and exposed empty-content responses on
+# the exploratory gfx942 deepseek_v4_fp8 path.  The existing MI300X/MI325X
+# fixed-sequence recipes use K=2; screen that supported shape independently
+# before changing the stable vLLM image.
+NUM_SPEC_TOKENS=2
+SYNTHETIC_ACCEPT_LEN=2.27
 if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
     SPEC_CONFIG="{\"method\":\"mtp\",\"num_speculative_tokens\":${NUM_SPEC_TOKENS}}"
 else

@@ -5715,8 +5715,9 @@
   scenario-type:
     - agentic-coding
   description:
-    - "Add the first DeepSeek-V4-Pro FP8 vLLM AgentX submission on MI325X, with MTP enabled for every published point and the committed three-token golden synthetic acceptance length of 2.49; eval-only runs retain real target verification."
+    - "Add the first DeepSeek-V4-Pro FP8 vLLM AgentX submission on MI325X, with MTP enabled for every published point; the current diagnostic pass uses two draft tokens and the committed K=2 golden synthetic acceptance length of 2.27, while eval-only runs retain real target verification."
     - "Use one 8xMI325X node: the roughly 1.05 TB FP8-dequantized checkpoint fits in the node's 2 TB HBM at TP8, so multi-node execution would add communication without solving a capacity constraint; TP4 is excluded because its per-rank model footprint is not fit-safe."
-    - "Cover the full one-node frontier with dense TP8, TP8+EP8 and DP8+EP8 bands through concurrency 80. The DP-attention arm requires EP8 so the FP8 expert set remains sharded instead of being replicated on every 256 GB GPU."
+    - "The first broad agentx-fast pass covered dense TP8, TP8+EP8 and DP8+EP8 bands through concurrency 80. It found clean-server duration-coverage failures on slow TP points, repeated empty-content semantic responses on TP8+EP8 and DP8+EP8, and a DP c40 warmup request that did not drain within 1800 seconds."
+    - "Run a second seven-point agentx-fast diagnostic on stable vLLM v0.26.0 at TP8 c8/c12/c16, TP8+EP8 c20/c32, and DP8+EP8 c24/c48. This changes only MTP depth from K=3 to K=2 (and golden AL 2.49 to 2.27) so speculative depth is isolated before considering a nightly image or publishing the final dense frontier."
     - "Start from the latest stable ROCm vLLM v0.26.0 release, use FP8 KV, 90% GPU-memory utilization, block size 256, an 8192-token scheduler budget and FULL_DECODE_ONLY graph capture. Enable prompt-token details for request-level cache accounting, and require a nonempty vllm: server-metrics export from AIPerf."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2541

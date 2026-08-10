@@ -1474,9 +1474,10 @@ glm5.2-fp8-mi325x-sglang-agentic-mtp:
 # DeepSeek-V4-Pro FP8 full-context AgentX frontier on one MI325X node. The
 # dequantized checkpoint is roughly 1.05 TB, so TP8 fits comfortably in the
 # node's 2 TB of HBM while TP4 does not have enough per-rank model headroom.
-# Sample the latency layouts densely around the estimated 20-30 live-tree KV
-# knee, then use DP-attention + EP8 to probe aggregate throughput without
-# replicating the full FP8 expert set on every GPU.
+# The broad K=3 AgentX-fast pass established the topology boundaries but also
+# exposed empty-content responses on TEP/DPA.  This K=2 diagnostic pass keeps
+# representative points from each topology so the speculative-depth effect is
+# isolated before a final dense frontier is published.
 dsv4-fp8-mi325x-vllm-agentic-mtp:
   image: vllm/vllm-openai-rocm:v0.26.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1489,9 +1490,9 @@ dsv4-fp8-mi325x-vllm-agentic-mtp:
     agentic-coding:
     - dram-utilization: 0.90
       search-space:
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32] }
-      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [4, 8, 12, 16, 20, 24, 28, 32, 36, 40] }
-      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [16, 24, 32, 40, 48, 56, 64, 72, 80], router: { name: vllm-router, version: "0.1.14" } }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [8, 12, 16] }
+      - { tp: 8, ep: 8, dp-attn: false, kv-offloading: none, spec-decoding: mtp, conc-list: [20, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, spec-decoding: mtp, conc-list: [24, 48], router: { name: vllm-router, version: "0.1.14" } }
 
 minimaxm3-fp8-mi325x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
