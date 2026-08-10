@@ -7920,7 +7920,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
   disagg: false
   scenarios:
     agentic-coding:
-    - dram-utilization: 0.61
+    - dram-utilization: 0.63
       search-space:
       # Low-latency and high-interactivity points.
       - spec-decoding: mtp
