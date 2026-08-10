@@ -145,6 +145,8 @@ benchmark:
     # Stamp X-Dynamo-Session-ID on every turn so both nginx and Dynamo's
     # router keep the session on the worker that owns its KV prefix.
     AIPERF_HTTP_X_DYNAMO_SESSION_ID_FROM_CORRELATION_ID: "true"
+    AIPERF_USE_DYNAMO_CONV_AWARE_ROUTING: "0"
+    AIPERF_REQUIRED_SERVER_METRIC_PREFIX: "sglang:"
     # Container-side path of the aiperf mmap dataset cache; host-side mount
     # wired via launch_gb300-*.sh srtslurm.yaml default_mounts. Without it,
     # aiperf re-tokenizes + re-writes the dataset mmap on every run.

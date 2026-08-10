@@ -19,7 +19,9 @@ def default_route_interface(route_path: Path = Path("/proc/net/route")) -> str:
 
 def prepare_cache(parent_path: str) -> str:
     path = Path(parent_path).resolve() / f".collectivex-backend-cache-{os.getuid()}"
-    path.mkdir(mode=0o700, exist_ok=True)
+    # parents=True: this runs before the first container import, so a fresh pool's squash_dir may
+    # not exist yet (b200-nscale run 31092445934). 0o700 applies to the cache dir, not its parents.
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path, 0o700)
     return str(path)
 
@@ -29,6 +31,96 @@ def validate_cuda_context(expected: int) -> None:
     count = ctypes.c_int()
     if cuda.cuInit(0) != 0 or cuda.cuDeviceGetCount(ctypes.byref(count)) != 0 or count.value != expected:
         raise SystemExit(1)
+
+
+_GPU_HEALTH_FIELDS = ("index", "clocks_event_reasons.sw_thermal_slowdown",
+                      "clocks_event_reasons.hw_thermal_slowdown", "temperature.gpu")
+
+
+def gpu_health_faults(output: str, max_temperature_c: int = 90) -> list[str]:
+    """Throttled or overheating GPUs in an `nvidia-smi --format=csv,noheader` block.
+
+    Split out from the I/O so parsing is testable without hardware; see
+    tests/test_runtime.py::GpuHealthProbe. Returns [] for anything unreadable -- the caller treats
+    an unreadable probe as healthy rather than blocking a leg on it.
+    """
+    faults = []
+    for line in output.splitlines():
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) != len(_GPU_HEALTH_FIELDS):
+            continue
+        index, software, hardware, temperature = cells
+        # "Not Active" is the healthy reading, so compare exactly -- a substring test for
+        # "Active" passes the fault straight through.
+        throttled = "Active" in (software, hardware)
+        try:
+            too_hot = int(temperature.split()[0]) > max_temperature_c
+        except (IndexError, ValueError):
+            too_hot = False
+        if throttled or too_hot:
+            faults.append(
+                f"gpu {index}: sw_thermal={software} hw_thermal={hardware} temp={temperature}"
+            )
+    return faults
+
+
+def gpu_temperature_spread(output: str) -> tuple[int, int, int] | None:
+    """`(hottest, median, spread)` GPU temperature, or None if unreadable.
+
+    Reported, not gated on: the absolute threshold in `gpu_health_faults` can be unreachable (an
+    H100 clamps at ~86-87 C, under the 90 C gate), and in the one measured fault the only
+    pre-flight signal was relative -- the sick GPU idled at 55 C against ~30 C for its siblings.
+    Healthy references: 50-66 C under load on h100, 34-39 C on b200.
+    """
+    temperatures = []
+    for line in output.splitlines():
+        cells = [cell.strip() for cell in line.split(",")]
+        if len(cells) != len(_GPU_HEALTH_FIELDS):
+            continue
+        try:
+            temperatures.append(int(cells[3].split()[0]))
+        except (IndexError, ValueError):
+            continue
+    if not temperatures:
+        return None
+    temperatures.sort()
+    median = temperatures[len(temperatures) // 2]
+    return temperatures[-1], median, temperatures[-1] - median
+
+
+def validate_gpu_health(max_temperature_c: int = 90) -> None:
+    """Reject an allocation holding a thermally throttled GPU.
+
+    Every collective is a barrier, so one clamped device paces every rank: a B200 with GPU 7 at
+    120 MHz ran a case 17x slower and was killed twice by the wall-clock guard. Gate on the throttle
+    flag, not the clock -- an idle B200 also reads 120 MHz -- with temperature as an independent
+    second signal. Fails open on anything unreadable: no `nvidia-smi`, non-zero exit, bad output.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("nvidia-smi") is None:
+        return
+    try:
+        output = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={','.join(_GPU_HEALTH_FIELDS)}",
+             "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=60, check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    faults = gpu_health_faults(output, max_temperature_c)
+    for fault in faults:
+        _emit(f"gpu-health-fault {fault}")
+    if faults:
+        raise SystemExit(1)
+    # Positive control: without it a blind gate -- no visible devices, or a driver spelling these
+    # fields `clocks_throttle_reasons.*` -- is indistinguishable from a healthy pass.
+    spread = gpu_temperature_spread(output)
+    detail = "" if spread is None else f" hottest={spread[0]}C median={spread[1]}C spread={spread[2]}C"
+    _emit(
+        f"gpu-health-checked gpus={sum(1 for line in output.splitlines() if line.strip())}{detail}"
+    )
 
 
 def _emit(marker: str) -> None:
@@ -113,11 +205,13 @@ def main() -> None:
     commands.add_parser("default-route-interface")
     command = commands.add_parser("prepare-cache"); command.add_argument("parent")
     command = commands.add_parser("cuda-context"); command.add_argument("expected", type=int)
+    commands.add_parser("gpu-health")
     command = commands.add_parser("network-profile"); command.add_argument("socket_names"); command.add_argument("rdma_devices"); command.add_argument("gid_index")
     args = parser.parse_args()
     if args.command == "default-route-interface": print(default_route_interface(), end="")
     elif args.command == "prepare-cache": print(prepare_cache(args.parent), end="")
     elif args.command == "cuda-context": validate_cuda_context(args.expected)
+    elif args.command == "gpu-health": validate_gpu_health()
     else: validate_network_profile(args.socket_names, args.rdma_devices, args.gid_index)
 
 

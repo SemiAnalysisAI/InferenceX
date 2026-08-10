@@ -206,10 +206,12 @@ if [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == 
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" \
         recipes/sglang/qwen3.5
 elif [[ "$IS_AGENTIC" == "1" && $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # DSv4 GB300 sglang agentic uses NVIDIA/srt-slurm v1.0.38. In addition to
-    # the nginx session-affinity and custom-benchmark support, this release
-    # injects AIPERF_SERVER_METRICS_URLS for every logical SGLang worker leader
-    # so AgentX captures aggregate or disaggregated backend metrics.
+    # DSv4 GB300 SGLang agentic uses NVIDIA/srt-slurm v1.0.38. In addition to
+    # the nginx body-size fix, session-affinity frontend, and custom benchmark
+    # schema required by these recipes, this release injects every logical
+    # SGLang worker leader's /metrics URL into AIPERF_SERVER_METRICS_URLS.
+    # AgentX forwards that list to aiperf's --server-metrics argument so its
+    # trace artifacts include backend metrics for every engine.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout v1.0.38
