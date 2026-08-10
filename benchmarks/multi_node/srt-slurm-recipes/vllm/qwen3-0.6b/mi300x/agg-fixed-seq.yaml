@@ -48,7 +48,6 @@ backend:
       max-num-seqs: 8
 
 srun_options:
-  container-mount-home: ""
   container-writable: ""
   container-remap-root: ""
   mem: "0"
