@@ -145,10 +145,22 @@ EOF
     # Mooncake v0.3.11.post1 emits its transfer polling loop at VLOG(1).
     # Keep normal INFO diagnostics while suppressing that unbounded hot-loop output.
     export GLOG_v=0
-    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
-    export MC_TCP_ENABLE_CONNECTION_POOL=1
+    export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576
+    # Match the proven MI355X TCP-store convention. Mooncake 0.3.11's pooled
+    # TCP path retained thousands of simultaneous sockets on this workload and
+    # timed out 60-second transfers; the unpooled path plus eight workers keeps
+    # transfer concurrency bounded by the store workers instead.
+    export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+    export MC_WORKERS_PER_CTX=8
+    unset MC_TCP_ENABLE_CONNECTION_POOL
+    MOONCAKE_KV_LEASE_TTL=120s
+    # A full-context transfer can starve a rank's client heartbeat beyond the
+    # master's 10-second default even while that rank remains healthy. Keep the
+    # client registered long enough for the bounded transfer timeout to resolve.
+    MOONCAKE_CLIENT_TTL=120
     mooncake_master --port "$MOONCAKE_MASTER_PORT" \
-        --default_kv_lease_ttl=120s \
+        --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
+        --client_ttl="$MOONCAKE_CLIENT_TTL" \
         --eviction_high_watermark_ratio=0.80 \
         --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
     MOONCAKE_MASTER_PID=$!
@@ -184,6 +196,14 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     export AIPERF_SERVER_METRICS_URLS="http://localhost:${VLLM_BACKEND_PORT}/metrics"
     agentic_pip_install --quiet 'vllm-router==0.1.14'
+fi
+
+if (( EP_SIZE > 1 )) && [[ "$DP_ATTENTION" != "true" ]]; then
+    # TEP's correlated low-concurrency trajectories contain a few deterministic
+    # metadata-only turns. Do not let three early turns abort a one-hour run
+    # before the sample is representative; the unchanged strict 10% post-run
+    # validator remains authoritative for the completed result.
+    AIPERF_LIVE_FAILED_REQUEST_THRESHOLD=0.50
 fi
 
 # The 16K prefill budget and 4*CONC sequence-cap probes were neutral, while
