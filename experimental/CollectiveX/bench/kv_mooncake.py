@@ -84,6 +84,12 @@ class MooncakeBackend(KVBackend):
         # gb200). This row measures the rdma lane, so pin the transport off;
         # the ROCm twin (MC_USE_HIP_IPC) misclaims the same way on mi355x.
         os.environ.setdefault("MC_USE_NVLINK_IPC", "0")
+        # The engine fails any single sync call after 30 s. Under measured
+        # contention (the x86 high-batch collapse this suite publishes) a
+        # chunked call on a thrashing lane can legitimately exceed that, so
+        # give the library guard 4x headroom; the runtime's per-case guard
+        # still bounds a truly wedged transfer.
+        os.environ.setdefault("MC_TRANSFER_TIMEOUT", "120")
         self._engine = TransferEngine()
         self._ip = kv_workload.iface_ipv4(args.socket_ifname)
         local = f"{self._ip}:{args.kv_mc_port + (0 if role == 'target' else 1)}"
