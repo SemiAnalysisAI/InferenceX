@@ -21,6 +21,7 @@ CLUSTER_PROFILE="${GITHUB_WORKSPACE}/benchmarks/multi_node/srt-slurm-recipes/clu
 
 RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-runner}"
 REMOTE_RUNTIME="${REMOTE_BASE}/runtime/inferencex-${RUN_KEY}"
+REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"
 REMOTE_RESULTS="${REMOTE_BASE}/results"
 WORK_DIR="${GITHUB_WORKSPACE}/.srt-slurm-${RUN_KEY}"
 SRT_REPO_DIR="${WORK_DIR}/srt-slurm"
@@ -50,9 +51,17 @@ sbcast --force "\$source_archive" "\$node_archive"
 srun --ntasks-per-node=1 bash -c '
   set -euo pipefail
   runtime="${REMOTE_RUNTIME}"
+  srt_runtime="${REMOTE_SRT_RUNTIME}"
   mkdir -p "\$runtime" "${REMOTE_RESULTS}"
   test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh
   test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh
+  if [[ ! -d "\$srt_runtime/.git" ]]; then
+    git clone --quiet "${SRT_SLURM_REPOSITORY}" "\$srt_runtime"
+  fi
+  git -C "\$srt_runtime" fetch --quiet origin "${SRT_SLURM_COMMIT}"
+  git -C "\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"
+  test "\$(git -C "\$srt_runtime" rev-parse HEAD)" = "${SRT_SLURM_COMMIT}"
+  make -C "\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64
   tar -xzf "/tmp/inferencex-benchmark-\${SLURM_JOB_ID}.tar.gz" -C "\$runtime"
   printf "%s\\n" "${GITHUB_SHA:-unknown}" > "\$runtime/.inferencex-source-head"
 '
@@ -96,6 +105,7 @@ uv pip install -e .
 make setup-compute ARCH=x86_64
 source .venv/bin/activate
 export SRTSLURM_CONFIG="${WORK_DIR}/srtslurm.yaml"
+export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"
 export INFMAX_WORKSPACE="$REMOTE_RUNTIME"
 
 echo "Submitting ${CONFIG_PATH} with srt-slurm ${SRT_SLURM_COMMIT}"

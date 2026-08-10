@@ -17,6 +17,12 @@ than the login node. Before submission, the launcher stages the benchmark
 runtime across the same eligible node pool; missing container files still fail
 loudly when Pyxis starts the allocation.
 
+The MI300X login and compute nodes also do not share the Actions checkout. The
+staging allocation checks out the exact pinned srt-slurm commit on every
+eligible compute node, installs its compute-only runtime, and injects that
+node-local path through srt-slurm's `SRTCTL_RUNTIME_SOURCE_DIR` transport
+override. The submitter continues to validate against its local pinned checkout.
+
 ## Scope
 
 1. Prove a single-node aggregate vLLM deployment on MI300X.

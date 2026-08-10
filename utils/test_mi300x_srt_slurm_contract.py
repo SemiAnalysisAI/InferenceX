@@ -97,6 +97,10 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert "--no-preflight" in launcher
     assert "test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-openai-rocm-v0.26.0.sqsh" in launcher
     assert "test -r /raid/hf-hub-cache/inferencex/srt-slurm/containers/vllm-router-nightly-20260809-d2ba586.sqsh" in launcher
+    assert 'REMOTE_SRT_RUNTIME="${REMOTE_BASE}/runtime/srt-slurm-${SRT_SLURM_COMMIT}"' in launcher
+    assert 'git -C "\\$srt_runtime" checkout --quiet --detach "${SRT_SLURM_COMMIT}"' in launcher
+    assert 'make -C "\\$srt_runtime" --no-print-directory setup-compute ARCH=x86_64' in launcher
+    assert 'export SRTCTL_RUNTIME_SOURCE_DIR="$REMOTE_SRT_RUNTIME"' in launcher
     assert "scancel" not in launcher
 
 
