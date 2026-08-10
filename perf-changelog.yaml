@@ -5738,6 +5738,7 @@
     - "Pin the test deployment to exact SemiAnalysisAI/srt-slurm PR head cebe610b92eae59fa4220bd9d455e520ef805c3c, preserve each node-local backend Prometheus endpoint for AIPerf, and require the vllm: metric family before accepting results."
     - "Launch one native vLLM hybrid data-parallel server per node-local pool and let the official Router expand each base URL into DP ranks through intra-node-data-parallel-size, matching vLLM's supported X-Data-Parallel-Rank contract."
     - "Use consistent-hash routing for aggregate traffic and for both prefill and decode selection in the 1P/2D case; map AIPerf's stable conversation correlation ID to X-Session-ID so every turn returns to the same DP rank and reuses its conversation KV cache."
+    - "Use the 062126-256k AgentX corpus and enforce the same 262,144-token maximum in both vLLM and AIPerf so trace selection cannot dispatch a context the server must reject."
     - "Remove unsupported NCCL symmetric-memory and UCX overrides that invalidated CUDA graph capture before the Router could be exercised; retain the official FlashInfer FP4 MoE path."
     - "Enable vLLM prompt-token details on both native Router deployments so AgentX captures response-level prompt-cache usage in addition to each logical backend's Prometheus metrics."
     - "Verify the terminal Slurm state and exit code after log streaming so a failed benchmark cannot be reported as a successful GitHub job merely because its log tail ended cleanly."
