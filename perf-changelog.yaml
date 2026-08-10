@@ -5739,6 +5739,7 @@
     - "Launch one native vLLM hybrid data-parallel server per node-local pool and let the official Router expand each base URL into DP ranks through intra-node-data-parallel-size, matching vLLM's supported X-Data-Parallel-Rank contract."
     - "Use consistent-hash routing for aggregate traffic and for both prefill and decode selection in the 1P/2D case; map AIPerf's stable conversation correlation ID to X-Session-ID so every turn returns to the same DP rank and reuses its conversation KV cache."
     - "Use the 062126-256k AgentX corpus while enforcing the checkpoint's supported 163,840-token maximum in vLLM and through an explicit AIPERF_MAX_CONTEXT_LENGTH recipe contract, so trace selection cannot dispatch a context the server must reject."
+    - "Reserve 15% of GB200 HBM outside vLLM's KV-cache budget so long-context AgentX prefills retain activation workspace; the initial 0.90 setting left only 0.9-2.1 GiB free and reproducibly OOMed on 2.4-4.0 GiB runtime allocations."
     - "Remove unsupported NCCL symmetric-memory and UCX overrides that invalidated CUDA graph capture before the Router could be exercised; retain the official FlashInfer FP4 MoE path."
     - "Enable vLLM prompt-token details on both native Router deployments so AgentX captures response-level prompt-cache usage in addition to each logical backend's Prometheus metrics."
     - "Verify the terminal Slurm state and exit code after log streaming so a failed benchmark cannot be reported as a successful GitHub job merely because its log tail ended cleanly."

@@ -56,7 +56,7 @@ backend:
       max-num-batched-tokens: 8192
       trust-remote-code: true
       block-size: 128
-      gpu-memory-utilization: 0.90
+      gpu-memory-utilization: 0.85
       stream-interval: 10
 
 sbatch_directives:
