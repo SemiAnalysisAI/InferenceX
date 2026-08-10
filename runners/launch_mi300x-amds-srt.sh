@@ -167,7 +167,10 @@ if [[ "${DISAGG:-false}" == "true" ]]; then
     DECODE_GPUS=$((DECODE_NUM_WORKERS * DECODE_TP))
     TOTAL_GPUS=$((PREFILL_GPUS + DECODE_GPUS))
 else
-    TOTAL_GPUS=$((TP * ${PP_SIZE:-1} * ${PCP_SIZE:-1}))
+    # Aggregate srt-slurm rows intentionally use the multinode workflow so
+    # this launcher owns orchestration. The aggregate worker is represented
+    # by the prefill-shaped matrix fields; decode workers are zero.
+    TOTAL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP * ${PREFILL_PP_SIZE:-1} * ${PREFILL_PCP_SIZE:-1}))
 fi
 shopt -s nullglob
 RESULTS=("$RETRIEVE_DIR"/fixed-seq/*.json)

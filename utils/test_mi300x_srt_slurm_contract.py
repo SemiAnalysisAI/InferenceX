@@ -112,14 +112,32 @@ def test_official_matrix_routes_aggregate_through_the_pinned_srt_launcher():
     launcher = SRT_LAUNCHER_PATH.read_text()
 
     assert config["runner"] == "mi300x-disagg"
-    assert config["multinode"] is False
-    assert search == [{"tp": 1, "conc-list": [1]}]
+    assert config["multinode"] is True
+    assert config["disagg"] is False
+    assert search == [
+        {
+            "conc-list": [1],
+            "prefill": {
+                "num-worker": 1,
+                "tp": 1,
+                "ep": 1,
+                "dp-attn": False,
+            },
+            "decode": {
+                "num-worker": 0,
+                "tp": 1,
+                "ep": 1,
+                "dp-attn": False,
+            },
+        }
+    ]
     assert (
         'CONFIG_FILE="recipes/vllm/qwen3-0.6b/mi300x/agg-fixed-seq.yaml"'
         in launcher
     )
     assert 'JOB_BATCH_HOST=$(scontrol show job "$JOB_ID" -dd' in launcher
     assert '--nodelist="$JOB_BATCH_HOST"' in launcher
+    assert "TOTAL_GPUS=$((PREFILL_NUM_WORKERS * PREFILL_TP" in launcher
 
 
 def test_aggregate_recipe_uses_direct_vllm_without_dynamo_or_a_router():

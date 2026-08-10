@@ -1506,7 +1506,12 @@ qwen3-0.6b-fp16-mi300x-vllm-srt-agg:
   runner: mi300x-disagg
   precision: fp16
   framework: vllm
-  multinode: false
+  # Route through the multinode workflow even though the recipe itself owns a
+  # single aggregate node. That workflow is the srt-slurm orchestration entry
+  # point; disagg remains false and the decode worker count stays zero so the
+  # aggregate GPU is counted exactly once.
+  multinode: true
+  disagg: false
   scenarios:
     fixed-seq-len:
     - isl: 128
@@ -1514,7 +1519,17 @@ qwen3-0.6b-fp16-mi300x-vllm-srt-agg:
       search-space:
       # The srt-slurm custom benchmark exercises both c1 and c4 in one
       # allocation; keep one matrix point so the server is launched once.
-      - { tp: 1, conc-list: [1] }
+      - conc-list: [1]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 1
+          dp-attn: false
+        decode:
+          num-worker: 0
+          tp: 1
+          ep: 1
+          dp-attn: false
 
 qwen3-0.6b-fp16-mi300x-vllm-srt-disagg:
   image: vllm/vllm-openai-rocm:v0.26.0
