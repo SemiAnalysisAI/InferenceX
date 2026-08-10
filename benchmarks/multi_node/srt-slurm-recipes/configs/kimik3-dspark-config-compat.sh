@@ -1,6 +1,51 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# The pinned vLLM nightly unconditionally enables Kimi K3's SM100 latent-MoE
+# tail fusion. That kernel uses torch symmetric memory, whose file-descriptor
+# rendezvous is node-local and fails for TP16 across two B200 nodes. Patch the
+# pinned implementation to honor the explicit portable-path opt-out below.
+python3 - <<'PY'
+import importlib.util
+import os
+from pathlib import Path
+
+flag = "INFERENCEX_DISABLE_K3_LATENT_MOE_TAIL_FUSION"
+spec = importlib.util.find_spec("vllm")
+if spec is None or spec.submodule_search_locations is None:
+    raise RuntimeError("Cannot locate the installed vLLM package")
+
+package = Path(next(iter(spec.submodule_search_locations)))
+runner = package / "models/kimi_k3/nvidia/latent_moe_runner.py"
+source = runner.read_text()
+
+if flag not in source:
+    import_needle = "from enum import IntEnum\n\nimport torch"
+    import_replacement = "from enum import IntEnum\n\nimport os\n\nimport torch"
+    if source.count(import_needle) != 1:
+        raise RuntimeError(f"Unexpected import layout in {runner}")
+    source = source.replace(import_needle, import_replacement, 1)
+
+    condition_needle = """        self.enable_k3_latent_moe_tail_fusion = (
+            current_platform.is_cuda()
+            and current_platform.is_device_capability_family(100)
+        )"""
+    condition_replacement = f"""        self.enable_k3_latent_moe_tail_fusion = (
+            current_platform.is_cuda()
+            and current_platform.is_device_capability_family(100)
+            and os.getenv("{flag}", "0") != "1"
+        )"""
+    if source.count(condition_needle) != 1:
+        raise RuntimeError(f"Unexpected latent-MoE fusion condition in {runner}")
+    source = source.replace(condition_needle, condition_replacement, 1)
+
+    temporary = runner.with_suffix(".py.tmp")
+    temporary.write_text(source)
+    os.replace(temporary, runner)
+
+print(f"Prepared portable Kimi K3 latent-MoE path in {runner}")
+PY
+
 # The Kimi K3 DSpark checkpoint publishes its parallel-drafting token as
 # `mask_token_id`. Dynamo's serialized draft config reaches vLLM without the
 # K3 config-class alias, while vLLM's parallel drafter accepts `pard_token`.

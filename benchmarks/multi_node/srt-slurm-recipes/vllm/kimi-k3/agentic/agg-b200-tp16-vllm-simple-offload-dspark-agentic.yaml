@@ -44,8 +44,9 @@ backend:
   connector: null
   aggregated_environment:
     # K3's fused tail uses torch symmetric memory, which cannot exchange file
-    # descriptors across this two-node TP group.
-    VLLM_ENABLE_K3_LATENT_MOE_TAIL_FUSION: "0"
+    # descriptors across this two-node TP group. The compatibility script
+    # makes this explicit opt-out effective in the pinned vLLM nightly.
+    INFERENCEX_DISABLE_K3_LATENT_MOE_TAIL_FUSION: "1"
     # Cross-node B200 groups lack the MNNVL multicast FlashInfer requires.
     VLLM_ALLREDUCE_USE_FLASHINFER: "0"
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"

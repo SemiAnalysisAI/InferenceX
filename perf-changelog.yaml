@@ -5718,4 +5718,5 @@
     - "Add a TP16 SimpleCPUOffloadConnector capacity tier with 220 GiB of host KV per rank"
     - "Run DSpark level 7 with probabilistic drafting and the committed synthetic acceptance length 3.84"
     - "Use the pinned 2026-08-10 vLLM nightly with upstream Kimi K3 and DSpark support"
+    - "Use the portable PyNCCL latent-MoE path because cross-node B200 cannot rendezvous the SM100 fused tail"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2475
