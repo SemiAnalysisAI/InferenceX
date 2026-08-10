@@ -7971,7 +7971,7 @@ kimik3-fp4-b200-dynamo-vllm-agentic-dspark:
       - spec-decoding: mtp
         kv-offloading: dram
         kv-offload-backend: { name: vllm-simple, version: "13c59a3" }
-        conc-list: [32, 48, 64]
+        conc-list: [32, 48]
         prefill:
           num-worker: 1
           tp: 16
