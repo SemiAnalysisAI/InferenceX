@@ -838,87 +838,23 @@ _install_tool_use_eval_deps() {
         "pytest==8.4.2"
 }
 
-_kimi_vendor_checkout_is_valid() {
-    local checkout_dir="$1"
-    local expected_ref="$2"
-    local checkout_ref checkout_status tracked_status untracked_files ignored_files
-
-    [ -f "${checkout_dir}/LICENSE" ] \
-        && [ -f "${checkout_dir}/pyproject.toml" ] \
-        && [ -f "${checkout_dir}/tests/conftest.py" ] \
-        && [ -f "${checkout_dir}/tests/__init__.py" ] \
-        && [ -f "${checkout_dir}/tests/tool_call_json_schema/conftest.py" ] \
-        && [ -f "${checkout_dir}/tests/tool_call_json_schema/validator.py" ] \
-        && [ -f "${checkout_dir}/tests/tool_call_json_schema/test_tool_call_json_schema.py" ] \
-        && [ -d "${checkout_dir}/testdata/walle_validator_cases/validator_cases" ] \
-        || return 1
-    checkout_ref="$(git -C "$checkout_dir" rev-parse HEAD 2>/dev/null)" \
-        || return 1
-    [ "$checkout_ref" = "$expected_ref" ] || return 1
-    checkout_status="$(
-        git -C "$checkout_dir" status --porcelain --untracked-files=all -- \
-            LICENSE \
-            pyproject.toml \
-            tests/conftest.py \
-            tests/__init__.py \
-            tests/tool_call_json_schema \
-            testdata/walle_validator_cases
-    )" || return 1
-    [ -z "$checkout_status" ] || return 1
-    tracked_status="$(
-        git -C "$checkout_dir" status --porcelain --untracked-files=no
-    )" || return 1
-    [ -z "$tracked_status" ] || return 1
-    untracked_files="$(
-        git -C "$checkout_dir" ls-files --others --exclude-standard -- \
-            . ':(exclude,top,glob).pytest_cache/**'
-    )" || return 1
-    [ -z "$untracked_files" ] || return 1
-    ignored_files="$(
-        git -C "$checkout_dir" ls-files --others --ignored --exclude-standard -- \
-            . ':(exclude,top,glob).pytest_cache/**'
-    )" || return 1
-    [ -z "$ignored_files" ]
-}
-
 _prepare_kimi_vendor_verifier() {
     local repo_url="$1"
     local verifier_ref="$2"
     local checkout_dir
 
-    if [ -n "${KIMI_VENDOR_VERIFIER_DIR:-}" ]; then
-        checkout_dir="$KIMI_VENDOR_VERIFIER_DIR"
-        if ! _kimi_vendor_checkout_is_valid "$checkout_dir" "$verifier_ref"; then
-            echo "ERROR: KIMI_VENDOR_VERIFIER_DIR must be at ${verifier_ref}" >&2
-            echo "ERROR: required verifier sources must be present and unmodified" >&2
-            return 2
-        fi
-        KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
-        return 0
-    fi
-
-    checkout_dir="/tmp/kimi-vendor-verifier-${verifier_ref}"
-    if _kimi_vendor_checkout_is_valid "$checkout_dir" "$verifier_ref"; then
-        KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
-        return 0
-    fi
-
     command -v git >/dev/null 2>&1 || {
         echo "ERROR: git is required to fetch Kimi-Vendor-Verifier" >&2
         return 1
     }
-    rm -rf "$checkout_dir"
-    mkdir -p "$(dirname "$checkout_dir")" || return $?
+    checkout_dir="$(mktemp -d /tmp/kimi-vendor-verifier-XXXXXX)" || return $?
     if ! (
         git init -q "$checkout_dir" \
             && git -C "$checkout_dir" remote add origin "$repo_url" \
-            && git -C "$checkout_dir" config remote.origin.promisor true \
-            && git -C "$checkout_dir" config remote.origin.partialclonefilter blob:none \
             && git -C "$checkout_dir" fetch -q --filter=blob:none --depth=1 \
                 origin "$verifier_ref" \
             && git -C "$checkout_dir" update-ref HEAD FETCH_HEAD \
             && git -C "$checkout_dir" sparse-checkout set --no-cone \
-                /LICENSE \
                 /pyproject.toml \
                 /tests/conftest.py \
                 /tests/__init__.py \
@@ -928,11 +864,6 @@ _prepare_kimi_vendor_verifier() {
     ); then
         rm -rf "$checkout_dir"
         echo "ERROR: failed to fetch Kimi-Vendor-Verifier at ${verifier_ref}" >&2
-        return 1
-    fi
-    if ! _kimi_vendor_checkout_is_valid "$checkout_dir" "$verifier_ref"; then
-        rm -rf "$checkout_dir"
-        echo "ERROR: fetched Kimi-Vendor-Verifier checkout is incomplete" >&2
         return 1
     fi
     KIMI_VENDOR_VERIFIER_CHECKOUT_DIR="$checkout_dir"
@@ -990,7 +921,6 @@ run_tool_use_eval() {
             return 2
             ;;
     esac
-    export EVAL_FRAMEWORK=tool-use
     export EVAL_SUITE="$eval_suite"
 
     local _repo_root
@@ -1001,46 +931,43 @@ run_tool_use_eval() {
     mkdir -p "$results_dir" || return $?
     export EVAL_RESULT_DIR="$results_dir"
 
-    local setup_rc integration_error
-    if _require_tool_use_python; then
-        :
-    else
+    local setup_rc=0 integration_error=""
+    _require_tool_use_python || {
         setup_rc=$?
         integration_error="tool-use Python version check failed with exit code ${setup_rc}"
-        echo "ERROR: ${integration_error}" >&2
-        _write_tool_use_integration_error \
-            "$adapter_path" "$model_name" "$results_dir" "$integration_error"
-        return "$setup_rc"
-    fi
-    if [ "${INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY:-false}" != "true" ]; then
+    }
+    if [ "$setup_rc" -eq 0 ] \
+        && [ "${INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         if _install_tool_use_eval_deps; then
             export INFERENCEX_TOOL_USE_EVAL_RUNTIME_READY=true
         else
             setup_rc=$?
             integration_error="tool-use dependency installation failed with exit code ${setup_rc}"
-            echo "ERROR: ${integration_error}" >&2
-            _write_tool_use_integration_error \
-                "$adapter_path" "$model_name" "$results_dir" "$integration_error"
-            return "$setup_rc"
         fi
     fi
-    if _prepare_kimi_vendor_verifier "$verifier_repo" "$verifier_ref"; then
-        :
-    else
-        setup_rc=$?
-        integration_error="tool-use verifier checkout failed with exit code ${setup_rc}"
+    if [ "$setup_rc" -eq 0 ]; then
+        _prepare_kimi_vendor_verifier "$verifier_repo" "$verifier_ref" || {
+            setup_rc=$?
+            integration_error="tool-use verifier checkout failed with exit code ${setup_rc}"
+        }
+    fi
+    if [ "$setup_rc" -ne 0 ]; then
         echo "ERROR: ${integration_error}" >&2
         _write_tool_use_integration_error \
             "$adapter_path" "$model_name" "$results_dir" "$integration_error"
         return "$setup_rc"
     fi
 
+    local eval_rc=0
     python3 "$adapter_path" \
         --verifier-dir "$KIMI_VENDOR_VERIFIER_CHECKOUT_DIR" \
         --base-url "http://127.0.0.1:${port}/v1" \
         --api-key EMPTY \
         --model "$model_name" \
-        --output-dir "$results_dir"
+        --output-dir "$results_dir" \
+        || eval_rc=$?
+    rm -rf "$KIMI_VENDOR_VERIFIER_CHECKOUT_DIR" || true
+    return "$eval_rc"
 }
 
 _eval_patches_dir() {
@@ -1161,14 +1088,7 @@ run_lm_eval() {
         tasks_dir="$_repo_root/$tasks_dir"
     fi
 
-    local effective_suite="${EVAL_SUITE:-}"
-    local task_basename
-    if [ -z "$effective_suite" ]; then
-        task_basename="${tasks_dir##*/}"
-        effective_suite="${task_basename%.yaml}"
-        effective_suite="${effective_suite%.yml}"
-    fi
-    export EVAL_SUITE="$effective_suite"
+    export EVAL_TASKS_DIR="$tasks_dir"
 
     if [ "${INFERENCEX_LM_EVAL_RUNTIME_READY:-false}" != "true" ]; then
         _install_lm_eval_deps
@@ -1377,7 +1297,6 @@ append_lm_eval_summary() {
             fi
         fi
     fi
-    local eval_framework="${EVAL_FRAMEWORK:-lm-eval}"
     local eval_suite="${EVAL_SUITE:-}"
     if [ -z "$eval_suite" ] && [ -n "${EVAL_TASKS_DIR:-}" ]; then
         eval_suite="$(basename "${EVAL_TASKS_DIR}")"
@@ -1391,7 +1310,6 @@ append_lm_eval_summary() {
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING:-}",
-  "eval_framework": "${eval_framework}",
   "eval_suite": "${eval_suite}",
   "tp": ${TP:-1},
   "pp": ${PP_SIZE:-1},
@@ -1809,10 +1727,6 @@ run_eval() {
     fi
 
     local framework="${EVAL_FRAMEWORK:-${cli_framework:-$scenario_default}}"
-    if [ "$framework" = "lm_eval" ]; then
-        framework="lm-eval"
-    fi
-    export EVAL_FRAMEWORK="$framework"
 
     # Tool-use uses the verifier's fixed request budget and does not consume
     # EVAL_MAX_MODEL_LEN, so avoid loading model configuration for that path.

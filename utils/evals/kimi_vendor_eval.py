@@ -14,7 +14,7 @@ from typing import Any
 
 TASK_NAME = "kimi_tool_call_schema"
 NATIVE_REPORT_FILENAME = "kimi_vendor_report.json"
-COMPATIBILITY_GLOB = "results_kimi_vendor_*.json"
+COMPATIBILITY_GLOB = "results_*.json"
 EXPECTED_MODES = {"non-stream", "stream"}
 
 
@@ -23,7 +23,7 @@ def prepare_compatibility_path(output_dir: Path) -> Path:
     for stale_path in output_dir.glob(COMPATIBILITY_GLOB):
         stale_path.unlink()
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%f")
-    return output_dir / f"results_kimi_vendor_{timestamp}.json"
+    return output_dir / f"results_{timestamp}.json"
 
 
 def build_pytest_command(
@@ -96,16 +96,15 @@ def _project_report(model: str, report: Any) -> tuple[dict[str, Any], bool]:
     if total != len(results) or passed != result_passes:
         raise ValueError("report summary does not match result records")
 
+    if (
+        total != 2
+        or len(results) != 2
+        or set(modes) != EXPECTED_MODES
+        or len(modes) != len(set(modes))
+    ):
+        raise ValueError("report does not contain the expected stream modes")
     score = passed / 2.0
-    compatibility = _compatibility_result(model, score)
-    complete_pass = (
-        total == 2
-        and passed == 2
-        and len(results) == 2
-        and set(modes) == EXPECTED_MODES
-        and len(modes) == len(set(modes))
-    )
-    return compatibility, complete_pass
+    return _compatibility_result(model, score), passed == 2
 
 
 def _compatibility_result(
@@ -114,7 +113,6 @@ def _compatibility_result(
     result: dict[str, Any] = {
         "lm_eval_version": "kimi-vendor-verifier",
         "model_name": model,
-        "model_args": f"pretrained={model}",
         "results": {
             TASK_NAME: {
                 "exact_match,strict-match": score,
@@ -123,25 +121,10 @@ def _compatibility_result(
         },
         "configs": {
             TASK_NAME: {
-                "task": TASK_NAME,
-                "output_type": "generate_until",
-                "num_fewshot": 0,
-                "repeats": 1,
-                "metric_list": [
-                    {
-                        "metric": "exact_match",
-                        "aggregation": "mean",
-                        "higher_is_better": True,
-                    }
-                ],
-                "filter_list": [
-                    {"name": "strict-match", "filter": [{"function": "identity"}]}
-                ],
+                "metric_list": [{"metric": "exact_match"}],
+                "filter_list": [{"name": "strict-match"}],
             }
         },
-        "versions": {TASK_NAME: 1},
-        "n-shot": {TASK_NAME: 0},
-        "higher_is_better": {TASK_NAME: {"exact_match": True}},
         "n-samples": {TASK_NAME: {"original": 2, "effective": 2}},
     }
     if integration_error is not None:

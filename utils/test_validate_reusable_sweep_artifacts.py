@@ -673,23 +673,18 @@ def _dd_write_aggregate(root: Path, rows: list[dict]) -> Path:
 
 
 def _dd_write_legacy_raw(
-    root: Path,
-    name: str,
-    conc: int,
-    timestamp: str | None,
-    result_prefix: str = "results_",
+    root: Path, name: str, conc: int, timestamp: str | None
 ) -> None:
     artifact_dir = root / name
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(json.dumps(_dd_meta(conc)))
     if timestamp is not None:
-        (artifact_dir / f"{result_prefix}{timestamp}.json").write_text("{}")
+        (artifact_dir / f"results_{timestamp}.json").write_text("{}")
 
 
 def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
     # Three reruns of one eval plus a result-less attempt, mirroring a flaky
     # config retried until it passed.
-    # The latest rerun uses the tool-use adapter's timestamped result prefix.
     old, mid, new, empty = (
         "eval_minimaxm3_conc4096_b300-nv_15",
         "eval_minimaxm3_conc4096_b300-nv_16",
@@ -698,23 +693,13 @@ def test_dedupe_keeps_latest_legacy_rerun(tmp_path: Path) -> None:
     )
     _dd_write_legacy_raw(tmp_path, old, 4096, "2026-06-26T13-00-22.596040")
     _dd_write_legacy_raw(tmp_path, mid, 4096, "2026-06-26T19-00-52.356121")
-    _dd_write_legacy_raw(
-        tmp_path,
-        new,
-        4096,
-        "2026-06-27T04-28-31.838775",
-        result_prefix="results_kimi_vendor_",
-    )
+    _dd_write_legacy_raw(tmp_path, new, 4096, "2026-06-27T04-28-31.838775")
     _dd_write_legacy_raw(tmp_path, empty, 4096, None)
     _dd_write_aggregate(
         tmp_path,
         [
             _dd_agg_row(4096, f"eval_results/{old}/results_2026-06-26T13-00-22.596040.json", 0.83),
-            _dd_agg_row(
-                4096,
-                f"eval_results/{new}/results_kimi_vendor_2026-06-27T04-28-31.838775.json",
-                0.95,
-            ),
+            _dd_agg_row(4096, f"eval_results/{new}/results_2026-06-27T04-28-31.838775.json", 0.95),
             _dd_agg_row(4096, f"eval_results/{mid}/results_2026-06-26T19-00-52.356121.json", 0.78),
         ],
     )
