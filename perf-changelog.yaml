@@ -5724,4 +5724,4 @@
     - "Verify the terminal Slurm state and exit code after log streaming so a failed benchmark cannot be reported as a successful GitHub job merely because its log tail ended cleanly."
     - "Classify sgl-router and vllm-router as explicit runtime criteria in the CI scheduler, matching the router-specific framework keys before their broader engine prefixes."
     - "Drain sequential native-router AgentX points from all explicit logical worker metrics without requiring a Dynamo frontend gauge; recognize both vllm:num_requests_* and sglang:num_requests_* worker families."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2543
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2549
