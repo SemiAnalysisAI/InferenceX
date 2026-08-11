@@ -14,8 +14,8 @@ identity:
   container:
     image: "rocm/infera:atom-v0.1.1"
   frameworks:
-    atom: "0.1.1"
-    infera: "0.1.1"
+    atom: "0.1.4.dev113+g5837907f3"
+    infera: "0.0.0"
 
 slurm:
   time_limit: "00:45:00"

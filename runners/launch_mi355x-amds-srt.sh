@@ -5,7 +5,7 @@ set -euo pipefail
 # in explicitly with CONFIG_FILE; all existing MI355X launch behavior remains
 # unchanged for every other row.
 SRT_SLURM_REPOSITORY="https://github.com/SemiAnalysisAI/srt-slurm.git"
-SRT_SLURM_COMMIT="83ef50ba6bf0bf4a91341d31fdcded141fdaa1b4"
+SRT_SLURM_COMMIT="141f035b5539fa8bbc1b4018ae4817283093092d"
 INFERA_REPOSITORY="https://github.com/cquil11/Infera.git"
 INFERA_COMMIT="8ed8f1728c745d4e91ba9eaa09ed81159aa57e41"
 SLURM_PARTITION="compute"
