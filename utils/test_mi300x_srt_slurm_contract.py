@@ -100,6 +100,7 @@ def test_official_matrix_routes_disagg_through_the_pinned_srt_launcher():
     assert "d93b48165ff60c6441feb5dd04504337f0bd7bc5" in launcher
     assert "make setup-compute ARCH=x86_64" in launcher
     assert "--no-preflight" in launcher
+    assert 'ENROOT_RUNTIME_PATH="\\${TMPDIR:-/tmp}/enroot-runtime-\\${UID}"' in launcher
     assert 'VLLM_IMAGE="vllm/vllm-openai-rocm:v0.26.0"' in launcher
     assert (
         'VLLM_ROUTER_IMAGE="vllm/vllm-router:nightly-20260809-d2ba586"'

@@ -79,7 +79,9 @@ srun --ntasks-per-node=1 bash -c '
   set -euo pipefail
   runtime="${REMOTE_RUNTIME}"
   srt_runtime="${REMOTE_SRT_RUNTIME}"
-  mkdir -p "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
+  export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
+  mkdir -p "\$ENROOT_RUNTIME_PATH" "\$runtime" "${REMOTE_RESULTS}" "${REMOTE_BASE}/containers"
+  chmod 700 "\$ENROOT_RUNTIME_PATH"
   ensure_container_image() {
     local target="\$1"
     local image="\$2"

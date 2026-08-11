@@ -60,7 +60,9 @@ cat > "$STAGE_SCRIPT" <<EOF
 #SBATCH --time=00:45:00
 #SBATCH --job-name=${RUNNER_NAME:-mi355x-srt}-stage
 set -euo pipefail
-mkdir -p "$(dirname "$SHARED_IMAGE")" "$SHARED_HF_CACHE"
+export ENROOT_RUNTIME_PATH="\${TMPDIR:-/tmp}/enroot-runtime-\${UID}"
+mkdir -p "\$ENROOT_RUNTIME_PATH" "$(dirname "$SHARED_IMAGE")" "$SHARED_HF_CACHE"
+chmod 700 "\$ENROOT_RUNTIME_PATH"
 exec 9>"${SHARED_IMAGE}.lock"
 flock -w 2400 9
 if ! unsquashfs -s "$SHARED_IMAGE" >/dev/null 2>&1; then
