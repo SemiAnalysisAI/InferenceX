@@ -5777,3 +5777,10 @@
     - "Update the B300 DSV4 AgentX MTP image and SimpleCPU sweep through c576."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2536
   
+- config-keys:
+    - dsv4-fp4-b200-dynamo-sglang
+  description:
+    - "Add a DeepSeek-V4-Pro FP4 Dynamo-SGLang STP configuration for B200 with ten 8k/1k disaggregated topologies."
+    - "Use Mooncake for KV transfer with chat-formatted benchmark inputs."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260708-b3632494"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
