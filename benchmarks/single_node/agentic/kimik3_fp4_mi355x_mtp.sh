@@ -157,6 +157,15 @@ if k3_patches_preapplied; then
     # needed: the harness never sets this, so unsetting restores the default.
     unset AIPERF_RUNTIME_DIR
 
+    # AGENTIC_OUTPUT_DIR=/workspace/results is the same story again, and it is
+    # the one that throws away a finished run. benchmark_lib defaults it to
+    # $INFMAX_CONTAINER_WORKSPACE (the workspace ROOT), which is exactly where
+    # the workflow's wait loop looks for $RESULT_FILENAME.json. The image's
+    # value buries the aggregate one level down in results/, so the loop times
+    # out and the cell is marked failed after a full 3600 s benchmark has
+    # already produced a valid number.
+    unset AGENTIC_OUTPUT_DIR INFMAX_CONTAINER_WORKSPACE
+
     # Clear both and let the harness decide, as it does for every other key.
     unset MODEL_PATH DRAFT_MODEL_PATH
     unset SPEC_REJECTION_METHOD SPEC_SYNTHETIC_ACCEPTANCE_LENGTH
